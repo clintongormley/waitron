@@ -9,9 +9,9 @@ describe("tablesCreatedBy", () => {
     expect(
       tablesCreatedBy([
         'CREATE TABLE "public"."devices" (id uuid);',
-        "CREATE TABLE IF NOT EXISTS tills (id uuid);",
+        "CREATE TABLE IF NOT EXISTS printers (id uuid);",
       ]),
-    ).toEqual(new Set(["devices", "tills"]));
+    ).toEqual(new Set(["devices", "printers"]));
   });
 
   it("removes a table a later migration drops", () => {
@@ -49,10 +49,10 @@ describe("tablesCreatedBy", () => {
     expect(
       tablesCreatedBy([
         'CREATE TABLE "Devices" (id text);',
-        "CREATE TABLE Tills (id text);",
+        "CREATE TABLE Printers (id text);",
         "DROP TABLE devices;",
       ]),
-    ).toEqual(new Set(["tills"]));
+    ).toEqual(new Set(["printers"]));
   });
 
   it("accepts DROP TABLE IF EXISTS and a schema qualifier", () => {

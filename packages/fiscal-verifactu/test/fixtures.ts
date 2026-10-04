@@ -5,16 +5,12 @@ import {
   nodes,
   sales,
   tenants,
-  tills,
   type Database,
   type Transaction,
 } from "@waitron/db";
-import {
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  tillId as brandTillId,
-} from "@waitron/shared";
-import type { NodeId, SeriesId, TillId } from "@waitron/shared";
+import { nodeId as brandNodeId, seriesId as brandSeriesId } from "@waitron/shared";
+import type { DeviceId, NodeId, SeriesId } from "@waitron/shared";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { registrosFacturacion } from "../src/schema/registros.js";
 import { registroSif } from "../src/schema/sif.js";
 import { registerSif } from "../src/registro-sif.js";
@@ -30,20 +26,17 @@ import { nifWithControlLetter } from "../src/testing/seed.js";
 const ISSUED_AT = "2026-07-20T19:20:30+01:00";
 
 /**
- * Fixed ids for one venue's till/SIF-identity/sale, reused across `inmutabilidad.test.ts`'s
- * separate `it` blocks. Literal UUIDs, so a failing assertion's id is recognisable rather than a
+ * Fixed ids for one venue's SIF-identity/sale, reused across `inmutabilidad.test.ts`'s separate
+ * `it` blocks. Literal UUIDs, so a failing assertion's id is recognisable rather than a
  * freshly-random one printed once and never seen again. The `A`/`B` namespaces are kept as two
- * NIFs, two nodes and two tills of one taxpayer — the counter tests need distinct SIF identities,
- * never distinct tenants.
+ * NIFs and two nodes of one taxpayer — the counter tests need distinct SIF identities, never
+ * distinct tenants.
  */
 export const TENANT_A = {
   locationId: "a0000000-0000-4000-8000-000000000002",
-  tillId: brandTillId("a0000000-0000-4000-8000-000000000003"),
   seriesId: "a0000000-0000-4000-8000-000000000004",
   saleId: "a0000000-0000-4000-8000-000000000005",
   sifId: "a0000000-0000-4000-8000-000000000006",
-  // A second till of the SAME obligado.
-  tillId2: brandTillId("a0000000-0000-4000-8000-000000000007"),
   // The SIF/chain/series owner. `nodeId2` is a second node of the SAME obligado — proving the
   // installation-number counter is per (NIF, IdSIF), not per node.
   nodeId: brandNodeId("a0000000-0000-4000-8000-000000000008"),
@@ -57,12 +50,11 @@ export const TENANT_A = {
  */
 export const TENANT_B = {
   locationId: "b0000000-0000-4000-8000-000000000002",
-  tillId: brandTillId("b0000000-0000-4000-8000-000000000003"),
   nodeId: brandNodeId("b0000000-0000-4000-8000-000000000004"),
 };
 
 /**
- * Seed the foreign-key parents needed by insertRegistro: the taxpayer row, location, till, node,
+ * Seed the foreign-key parents needed by insertRegistro: the taxpayer row, location, device, node,
  * invoice series, sale and SIF identity. The zero-total sale remains unsettled; settlement
  * coverage is checked on settlement.
  */
@@ -78,17 +70,16 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
     operationDescription: "Venta en establecimiento",
   });
   await db
-    .insert(tills)
-    .values({ id: TENANT_A.tillId, locationId: TENANT_A.locationId, name: "Caja 1" });
-  await db
     .insert(nodes)
     .values({ id: TENANT_A.nodeId, locationId: TENANT_A.locationId, name: "Node 1" });
   await db
     .insert(invoiceSeries)
     .values({ id: TENANT_A.seriesId, nodeId: TENANT_A.nodeId, code: "A" });
+  const { deviceId } = await seedDevice(db, { locationId: TENANT_A.locationId });
   await db.insert(sales).values({
     id: TENANT_A.saleId,
-    tillId: TENANT_A.tillId,
+    source: "device",
+    deviceId,
     nodeId: TENANT_A.nodeId,
     seriesId: TENANT_A.seriesId,
     invoiceNumber: 1,
@@ -119,8 +110,7 @@ export async function seedTenantTillSif(db: Database): Promise<void> {
  * Deliberately narrower than `seedTenantTillSif` above: no invoice series, no sale, no
  * pre-existing `registro_sif` row. `registerSif` is exactly what mints that row under test, so
  * seeding one here would make every "first registration" assertion false before the test body
- * even runs. The SIF is the node, so `registerSif` keys on these nodes. The tills are kept so the
- * sale-ringing snapshot has a real till to reference.
+ * even runs. The SIF is the node, so `registerSif` keys on these nodes.
  */
 export async function seedTenants(db: Database): Promise<void> {
   await db
@@ -135,11 +125,6 @@ export async function seedTenants(db: Database): Promise<void> {
       operationDescription: "Venta en establecimiento",
     })),
   );
-  await db.insert(tills).values([
-    { id: TENANT_A.tillId, locationId: TENANT_A.locationId, name: "Caja 1" },
-    { id: TENANT_A.tillId2, locationId: TENANT_A.locationId, name: "Caja 2" },
-    { id: TENANT_B.tillId, locationId: TENANT_B.locationId, name: "Caja 1" },
-  ]);
   await db.insert(nodes).values([
     { id: TENANT_A.nodeId, locationId: TENANT_A.locationId, name: "Node 1" },
     { id: TENANT_A.nodeId2, locationId: TENANT_A.locationId, name: "Node 2" },
@@ -163,7 +148,7 @@ export async function seedTenants(db: Database): Promise<void> {
 export async function seedSoldRegistro(
   db: Database,
   params: {
-    tillId: string;
+    locationId: string;
     nodeId: string;
     sifId: string;
     nif: string;
@@ -174,6 +159,7 @@ export async function seedSoldRegistro(
   },
 ): Promise<void> {
   const entorno = params.entorno === undefined ? "production" : params.entorno;
+  const { deviceId } = await seedDevice(db, { locationId: params.locationId });
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId: params.nodeId, code: `S${String(params.secuencia)}` })
@@ -182,7 +168,8 @@ export async function seedSoldRegistro(
   const [sale] = await db
     .insert(sales)
     .values({
-      tillId: params.tillId,
+      source: "device",
+      deviceId,
       nodeId: params.nodeId,
       seriesId,
       invoiceNumber: params.secuencia,
@@ -199,7 +186,8 @@ export async function seedSoldRegistro(
   const [registro] = await db
     .insert(registrosFacturacion)
     .values({
-      tillId: params.tillId,
+      source: "device",
+      deviceId,
       nodeId: params.nodeId,
       sifId: params.sifId,
       saleId: sale!.id,
@@ -227,7 +215,9 @@ export async function seedSoldRegistro(
 }
 
 export interface SeededTillWithSif {
-  tillId: TillId;
+  locationId: string;
+  /** A till device at that location, for a sale recorded with a device origin. */
+  deviceId: DeviceId;
   nodeId: NodeId;
   seriesId: SeriesId;
 }
@@ -244,7 +234,7 @@ function freshNif(): string {
 
 async function insertLocationTillSeries(
   tx: Transaction,
-): Promise<{ tillId: TillId; nodeId: NodeId; seriesId: SeriesId }> {
+): Promise<{ locationId: string; nodeId: NodeId; seriesId: SeriesId }> {
   const [location] = await tx
     .insert(locations)
     .values({
@@ -253,11 +243,6 @@ async function insertLocationTillSeries(
       operationDescription: "Venta en establecimiento",
     })
     .returning({ id: locations.id });
-  const [till] = await tx
-    .insert(tills)
-    .values({ locationId: location!.id, name: "Caja 1" })
-    .returning({ id: tills.id });
-  const tillId = brandTillId(till!.id);
   const [node] = await tx
     .insert(nodes)
     .values({ locationId: location!.id, name: "Node 1" })
@@ -267,11 +252,11 @@ async function insertLocationTillSeries(
     .insert(invoiceSeries)
     .values({ nodeId, code: "A" })
     .returning({ id: invoiceSeries.id });
-  return { tillId, nodeId, seriesId: brandSeriesId(series!.id) };
+  return { locationId: location!.id, nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
 /**
- * Seeds location -> till -> invoice series, makes sure the one taxpayer row exists, and registers a
+ * Seeds location -> node -> invoice series and a till device, makes sure the one taxpayer row exists, and registers a
  * LIVE Veri*Factu SIF identity (via `registerSif`) — everything `write-path.e2e.test.ts` needs for
  * `VerifactuBackend.recordSale`'s own `currentSif` lookup to succeed. `seedTenantTillSif` above is
  * deliberately not reused for this: it seeds a ready-made SALE too (for `inmutabilidad.test.ts`'s
@@ -300,18 +285,20 @@ export async function seedTenantWithSif(
   options: { nif?: string } = {},
 ): Promise<SeededTillWithSif> {
   const nif = options.nif ?? freshNif();
-  return db.transaction(async (tx) => {
+  const seeded = await db.transaction(async (tx) => {
     // The target is named rather than left bare so a `tenants_country_tax_id_key` collision — a
     // DIFFERENT cause — still raises.
     await tx
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: nif, legalName: "Waitron SL" })
       .onConflictDoNothing({ target: tenants.id });
-    const { tillId, nodeId, seriesId } = await insertLocationTillSeries(tx);
+    const { locationId, nodeId, seriesId } = await insertLocationTillSeries(tx);
     await registerSif(tx, { nodeId, nif, idSistemaInformatico: "WT" });
     // No `working_orders` row and no `workingOrderId`: `recordSale` writes `input.workingOrderId`
     // to `sales.working_order_id`, a real FK onto `working_orders`, so the write-path suites here
     // record walk-up sales that omit it.
-    return { tillId, nodeId, seriesId };
+    return { locationId, nodeId, seriesId };
   });
+  const { deviceId } = await seedDevice(db, { locationId: seeded.locationId });
+  return { ...seeded, deviceId };
 }

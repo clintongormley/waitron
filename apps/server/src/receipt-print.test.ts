@@ -3,6 +3,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 import {
+  devices,
   diningTables,
   drawerOpens,
   locations,
@@ -13,7 +14,6 @@ import {
   sales,
   tenantReceipts,
   tenants,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -45,15 +45,21 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
+  deviceOrigin,
+  jobOrigin,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { OrderFlow, TillConfig } from "./till-config.js";
+import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
 import { collectOrder, printSaleReceipt, recordTillSale, reprintSale } from "./till-sale.js";
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { createTable } from "./tables.js";
-import { DRAWER_KICK, enqueueReceiptReprint } from "./receipt-print.js";
+import {
+  DRAWER_KICK,
+  enqueueReceiptReprint,
+  resolvePaymentSlipPrinter,
+  resolveReceiptPrinter,
+} from "./receipt-print.js";
 import { decodeTicket, opensDrawer, printedLines } from "./testing/decode-ticket.js";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import { venueModuleConfig } from "./provision.js";
@@ -72,6 +78,9 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { printingAlertSource } from "./alert-sources.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
+import { CAPABILITY_FLAGS } from "@waitron/layouts";
 
 /**
  * The auto-print hook: a `print_jobs` outbox row and a `drawer_opens` audit row written atomically
@@ -126,7 +135,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConfig {
   return {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -138,7 +146,7 @@ function tillConfigFromVenue(venue: VenueResult, orderFlow: OrderFlow): TillConf
   };
 }
 
-function printCfg(cfg: TillConfig): PrintConfig {
+function printCfg(cfg: DeviceRequestConfig): PrintConfig {
   return { locationId: cfg.locationId };
 }
 
@@ -147,7 +155,7 @@ function printCfg(cfg: TillConfig): PrintConfig {
  * the counter zone under `orderFlow`.
  */
 async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   each: AvailableProduct & { menuItemId: string };
   zoneId: string;
 }> {
@@ -170,7 +178,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -185,7 +192,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
     { db: suite.db, modules: ALL_MODULES },
   );
 
-  const cfg = tillConfigFromVenue(venue, orderFlow);
+  const cfg = await deviceRequestCfg(suite.db, tillConfigFromVenue(venue, orderFlow));
   const { available, offers } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -213,7 +220,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
  * 5737, unroutable).
  */
 async function makePrinter(
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   {
     active = true,
     transport = "cloud_poll" as "cloud_poll" | "network_tcp",
@@ -238,10 +245,10 @@ async function makePrinter(
   });
 }
 
-/** Set the location's `receipt_print_mode` and/or the till's `receipt_printer_id`. Pass
- *  `printerId: null` to leave the till with no printer. */
+/** Set the location's `receipt_print_mode` and/or the printer `cfg`'s device prints its receipts
+ *  and payment slips on. Pass `printerId: null` to leave the device with no printer. */
 async function configureReceipt(
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   opts: { mode?: "auto" | "on_request" | "never"; printerId?: string | null },
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
@@ -253,15 +260,30 @@ async function configureReceipt(
     }
     if (opts.printerId !== undefined) {
       await tx
-        .update(tills)
-        .set({ receiptPrinterId: opts.printerId })
-        .where(eq(tills.id, cfg.tillId));
+        .update(devices)
+        .set({ receiptPrinterId: opts.printerId, paymentSlipPrinterId: opts.printerId })
+        .where(eq(devices.id, cfg.origin.deviceId));
     }
   });
 }
 
+/** Every capability but the drawer. */
+const NO_DRAWER_CAPABILITY = CAPABILITY_FLAGS.filter((flag) => flag !== "open-cash-drawer");
+
+/** `cfg` as a request from a new device at its location whose profile lacks `capability`. */
+async function deviceWithout(
+  cfg: DeviceRequestConfig,
+  capability: string,
+): Promise<DeviceRequestConfig> {
+  const { deviceId } = await seedDevice(suite.db, {
+    locationId: cfg.locationId,
+    capabilities: CAPABILITY_FLAGS.filter((flag) => flag !== capability),
+  });
+  return { ...cfg, origin: deviceOrigin(deviceId) };
+}
+
 async function printJobsFor(
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
 ): Promise<{ printerId: string; status: string; payload: Uint8Array }[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
@@ -275,12 +297,12 @@ async function printJobsFor(
   });
 }
 
-async function drawerOpensFor(cfg: TillConfig): Promise<
+async function drawerOpensFor(cfg: DeviceRequestConfig): Promise<
   {
     reason: string;
     saleId: string | null;
     personId: string;
-    tillId: string | null;
+    deviceId: string | null;
     printerId: string | null;
   }[]
 > {
@@ -291,14 +313,14 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
         reason: drawerOpens.reason,
         saleId: drawerOpens.saleId,
         personId: drawerOpens.personId,
-        tillId: drawerOpens.tillId,
+        deviceId: drawerOpens.deviceId,
         printerId: drawerOpens.printerId,
       })
       .from(drawerOpens);
   });
 }
 
-async function registroCount(cfg: TillConfig): Promise<number> {
+async function registroCount(cfg: DeviceRequestConfig): Promise<number> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx.select().from(registrosFacturacion);
@@ -307,7 +329,7 @@ async function registroCount(cfg: TillConfig): Promise<number> {
 }
 
 /** The one filed sale's id; the database is emptied after each test. */
-async function onlySaleId(cfg: TillConfig): Promise<string> {
+async function onlySaleId(cfg: DeviceRequestConfig): Promise<string> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx.select({ id: sales.id }).from(sales);
@@ -394,7 +416,7 @@ describe("receipt grouping after table changes", () => {
     "%s freezes the table label at issuance across renaming, collection and table turnover",
     async (orderFlow) => {
       const base = await setupVenue(orderFlow);
-      const cfg: TillConfig = { ...base.cfg, orderFlow };
+      const cfg = await deviceRequestCfg(suite.db, { ...base.cfg, orderFlow });
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode: "auto", printerId });
       // A tab opens only in a table_tab zone, so the order that carries the table here is a counter
@@ -424,7 +446,7 @@ describe("receipt grouping after table changes", () => {
           OPERATOR,
         );
       } else {
-        await placeOrder(deps(), cfg, orderId, OPERATOR, cfg.tillId);
+        await placeOrder(deps(), cfg, orderId, OPERATOR);
         if (orderFlow === "ticket_then_pay") {
           await collectOrder(
             deps(),
@@ -533,7 +555,7 @@ describe("cash payment drawer separation", () => {
 });
 
 describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbox)", () => {
-  it("lays the automatic receipt out for the till printer's paper width and resolution", async () => {
+  it("lays the automatic receipt out for the device printer's paper width and resolution", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await withTransaction(suite.db, async (tx) => {
@@ -616,7 +638,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     expect(opens[0]).toMatchObject({
       reason: "cash_sale",
       personId: OPERATOR,
-      tillId: cfg.tillId,
+      deviceId: cfg.origin.deviceId,
       printerId,
     });
     expect(opens[0]!.saleId).toBe(await onlySaleId(cfg));
@@ -705,7 +727,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
         reason: "card_slip",
         saleId: await onlySaleId(cfg),
         personId: OPERATOR,
-        tillId: cfg.tillId,
+        deviceId: cfg.origin.deviceId,
         printerId,
       },
     ]);
@@ -713,7 +735,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
   it("hand-keyed CARD on a device that may not open the drawer: the receipt prints, and no drawer job or audit row", async () => {
     const { cfg: base, each, zoneId } = await setupVenue();
-    const cfg: TillConfig = { ...base, allowCashDrawer: false };
+    const cfg = await deviceWithout(base, "open-cash-drawer");
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "auto", printerId });
 
@@ -796,7 +818,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
         reason: "card_slip",
         saleId: await onlySaleId(cfg),
         personId: OPERATOR,
-        tillId: cfg.tillId,
+        deviceId: cfg.origin.deviceId,
         printerId,
       },
     ]);
@@ -907,29 +929,19 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   });
 
   it.each(["auto", "on_request", "never"] as const)(
-    "invoice-first placement routes the original to the issuing device's till printer in %s mode",
+    "invoice-first placement routes the original to the issuing device's printer in %s mode",
     async (mode) => {
       const base = await setupVenue("invoice_first");
-      const cfg: TillConfig = { ...base.cfg, orderFlow: "invoice_first" };
-      const deviceTillId = await withTransaction(suite.db, async (tx) => {
-        const [till] = await tx
-          .insert(tills)
-          .values({
-            locationId: cfg.locationId,
-            name: "Issuing counter",
-          })
-          .returning({ id: tills.id });
-        return brandTillId(till!.id);
-      });
+      const { cfg } = base;
       const printerId = await makePrinter(cfg);
-      await configureReceipt({ ...cfg, tillId: deviceTillId }, { mode, printerId });
+      await configureReceipt(cfg, { mode, printerId });
       const id = randomUUID();
       await parkOrder({ db: suite.db }, cfg, {
         id,
         zoneId: base.zoneId,
         lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
       });
-      await placeOrder(deps(), cfg, id, OPERATOR, deviceTillId);
+      await placeOrder(deps(), cfg, id, OPERATOR);
       const jobs = await printJobsFor(cfg);
       expect(jobs).toHaveLength(1);
       expect(jobs[0]!.printerId).toBe(printerId);
@@ -948,7 +960,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
           .set({ orderFlow: "invoice_first" })
           .where(eq(locations.id, base.cfg.locationId));
       });
-      const cfg: TillConfig = { ...base.cfg, orderFlow: "invoice_first" };
+      const { cfg } = base;
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode, printerId });
 
@@ -958,7 +970,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
         zoneId: base.zoneId,
         lines: [{ menuItemId: base.each.menuItemId, quantity: "1" }],
       });
-      await placeOrder(deps(), cfg, id, OPERATOR, cfg.tillId);
+      await placeOrder(deps(), cfg, id, OPERATOR);
       const issuedJobs = await printJobsFor(cfg);
       expect(issuedJobs).toHaveLength(1);
       const original = new Uint8Array(issuedJobs[0]!.payload);
@@ -1000,27 +1012,23 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   );
 });
 
-describe("every till switched to open its receipt printer's drawer opens it", () => {
-  /** Another till at the venue's location, and the config a sale on it runs under. */
-  async function addTill(cfg: TillConfig, name: string): Promise<TillConfig> {
-    const id = await withTransaction(suite.db, async (tx) => {
-      const [till] = await tx
-        .insert(tills)
-        .values({ locationId: cfg.locationId, name })
-        .returning({ id: tills.id });
-      return till!.id;
+describe("every device whose profile allows the drawer opens its receipt printer's drawer", () => {
+  /** Another till device at the venue's location, and the config a sale there runs under. */
+  async function addTill(
+    cfg: DeviceRequestConfig,
+    name: string,
+    capabilities: string[] = [...CAPABILITY_FLAGS],
+  ): Promise<DeviceRequestConfig> {
+    const { deviceId } = await seedDevice(suite.db, {
+      locationId: cfg.locationId,
+      label: name,
+      capabilities,
     });
-    return { ...cfg, tillId: brandTillId(id) };
-  }
-
-  async function setOpensDrawer(cfg: TillConfig, opensDrawer: boolean): Promise<void> {
-    await withTransaction(suite.db, (tx) =>
-      tx.update(tills).set({ opensDrawer }).where(eq(tills.id, cfg.tillId)),
-    );
+    return { ...cfg, origin: deviceOrigin(deviceId) };
   }
 
   async function sale(
-    cfg: TillConfig,
+    cfg: DeviceRequestConfig,
     product: { zoneId: string; menuItemId: string },
     method: "cash" | "card" = "cash",
   ): Promise<void> {
@@ -1037,18 +1045,24 @@ describe("every till switched to open its receipt printer's drawer opens it", ()
   }
 
   /** Each job's printer, and whether it is a drawer kick or a document. */
-  async function jobKinds(cfg: TillConfig): Promise<{ printerId: string; kick: boolean }[]> {
+  async function jobKinds(
+    cfg: DeviceRequestConfig,
+  ): Promise<{ printerId: string; kick: boolean }[]> {
     return (await printJobsFor(cfg)).map((job) => ({
       printerId: job.printerId,
       kick: Buffer.from(job.payload).equals(Buffer.from(DRAWER_KICK)),
     }));
   }
 
-  /** Two tills at one location, both printing their receipts on one drawer printer. */
-  async function sharedDrawer(orderFlow: OrderFlow = "prepay") {
+  /** Two till devices at one location, both printing their receipts on one drawer printer; the other's
+   *  device has `otherCapabilities`. */
+  async function sharedDrawer(
+    orderFlow: OrderFlow = "prepay",
+    otherCapabilities: string[] = [...CAPABILITY_FLAGS],
+  ) {
     const base = await setupVenue(orderFlow);
-    const cfg: TillConfig = { ...base.cfg, orderFlow };
-    const other = await addTill(cfg, "Caja 2");
+    const cfg = await deviceRequestCfg(suite.db, { ...base.cfg, orderFlow });
+    const other = await addTill(cfg, "Caja 2", otherCapabilities);
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "auto", printerId });
     await configureReceipt(other, { printerId });
@@ -1061,16 +1075,8 @@ describe("every till switched to open its receipt printer's drawer opens it", ()
     };
   }
 
-  it("a new till is switched on", async () => {
-    const { cfg } = await setupVenue();
-    const [till] = await withTransaction(suite.db, (tx) =>
-      tx.select({ opensDrawer: tills.opensDrawer }).from(tills).where(eq(tills.id, cfg.tillId)),
-    );
-    expect(till).toEqual({ opensDrawer: true });
-  });
-
   it.each(["cash", "card"] as const)(
-    "two tills sharing one drawer printer, neither switch touched: a %s sale on each opens the drawer, naming that till",
+    "two tills sharing one drawer printer, both allowed the drawer: a %s sale on each opens the drawer, naming that device",
     async (method) => {
       const { cfg, other, printerId, product } = await sharedDrawer();
 
@@ -1083,19 +1089,18 @@ describe("every till switched to open its receipt printer's drawer opens it", ()
         { printerId, kick: true },
       ]);
       expect(
-        (await drawerOpensFor(cfg)).map((row) => [row.reason, row.tillId, row.printerId]),
+        (await drawerOpensFor(cfg)).map((row) => [row.reason, row.deviceId, row.printerId]),
       ).toEqual([
-        [method === "cash" ? "cash_sale" : "card_slip", cfg.tillId, printerId],
-        [method === "cash" ? "cash_sale" : "card_slip", other.tillId, printerId],
+        [method === "cash" ? "cash_sale" : "card_slip", cfg.origin.deviceId, printerId],
+        [method === "cash" ? "cash_sale" : "card_slip", other.origin.deviceId, printerId],
       ]);
     },
   );
 
   it.each(["cash", "card"] as const)(
-    "with one of them switched off, its %s sale prints its receipt there and opens nothing, while the other's still opens it",
+    "with one of them on a profile without the drawer, its %s sale prints its receipt there and opens nothing, while the other's still opens it",
     async (method) => {
-      const { cfg, other, printerId, product } = await sharedDrawer();
-      await setOpensDrawer(other, false);
+      const { cfg, other, printerId, product } = await sharedDrawer("prepay", NO_DRAWER_CAPABILITY);
 
       await sale(other, product, method);
       expect(await jobKinds(cfg)).toEqual([{ printerId, kick: false }]);
@@ -1108,7 +1113,7 @@ describe("every till switched to open its receipt printer's drawer opens it", ()
           reason: method === "cash" ? "cash_sale" : "card_slip",
           saleId: expect.any(String),
           personId: OPERATOR,
-          tillId: cfg.tillId,
+          deviceId: cfg.origin.deviceId,
           printerId,
         },
       ]);
@@ -1116,22 +1121,24 @@ describe("every till switched to open its receipt printer's drawer opens it", ()
   );
 
   it.each(["ticket_then_pay", "invoice_first"] as const)(
-    "collecting a placed %s order in cash opens the drawer only on the till switched on",
+    "collecting a placed %s order in cash opens the drawer only on the till allowed the drawer",
     async (orderFlow) => {
-      const { cfg, other, printerId, zoneId, each } = await sharedDrawer(orderFlow);
+      const { cfg, other, printerId, zoneId, each } = await sharedDrawer(
+        orderFlow,
+        NO_DRAWER_CAPABILITY,
+      );
       await withTransaction(suite.db, async (tx) => {
         await tx.update(locations).set({ orderFlow }).where(eq(locations.id, cfg.locationId));
       });
-      await setOpensDrawer(other, false);
 
-      const collectOn = async (till: TillConfig): Promise<void> => {
+      const collectOn = async (till: DeviceRequestConfig): Promise<void> => {
         const id = randomUUID();
         await parkOrder({ db: suite.db }, till, {
           id,
           zoneId,
           lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
         });
-        await placeOrder(deps(), till, id, OPERATOR, till.tillId);
+        await placeOrder(deps(), till, id, OPERATOR);
         await collectOrder(
           deps(),
           till,
@@ -1146,8 +1153,8 @@ describe("every till switched to open its receipt printer's drawer opens it", ()
 
       await collectOn(cfg);
       expect((await jobKinds(cfg)).filter((job) => job.kick)).toEqual([{ printerId, kick: true }]);
-      expect((await drawerOpensFor(cfg)).map((row) => [row.reason, row.tillId])).toEqual([
-        ["cash_sale", cfg.tillId],
+      expect((await drawerOpensFor(cfg)).map((row) => [row.reason, row.deviceId])).toEqual([
+        ["cash_sale", cfg.origin.deviceId],
       ]);
     },
   );
@@ -1335,6 +1342,25 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
 
     expect(await waitingAt(printerId)).toBe(1);
   });
+});
+
+describe("a record with no device prints nothing", () => {
+  it.each(["demo_seed", "readiness_test", "payment_check"] as const)(
+    "finds no receipt or payment slip printer for the %s source",
+    async (source) => {
+      const { cfg } = await setupVenue();
+      await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+      const found = await withTransaction(suite.db, async (tx) => [
+        await resolveReceiptPrinter(tx, jobOrigin(source)),
+        await resolvePaymentSlipPrinter(tx, jobOrigin(source)),
+      ]);
+      expect(found).toEqual([undefined, undefined]);
+      // The control: the same venue's device does find its printer.
+      expect(
+        await withTransaction(suite.db, (tx) => resolveReceiptPrinter(tx, cfg.origin)),
+      ).toBeDefined();
+    },
+  );
 });
 
 describe("receipt issuer", () => {

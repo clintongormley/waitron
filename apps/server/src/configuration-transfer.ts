@@ -51,7 +51,6 @@ export interface PreparedVenue {
     drawerOpenPolicy: string;
     catalogueId: string | null;
   };
-  tillName: string;
   seriesCode: string;
   rectificativeSeriesCode: string;
 }
@@ -60,7 +59,6 @@ export async function buildConfigurationBundle(
   db: Database | Transaction,
   source: {
     locationId: string;
-    tillId: string;
     nodeId: string;
     sourceOperatorId?: string;
   },
@@ -74,7 +72,6 @@ export async function buildConfigurationBundle(
       country: string;
       taxId: string;
       legalName: string;
-      tillName: string;
       seriesCode: string | null;
       rectificativeSeriesCode: string | null;
     }
@@ -88,15 +85,13 @@ export async function buildConfigurationBundle(
       l.day_cutover as "dayCutover", l.order_flow as "orderFlow", l.bump_mode as "bumpMode",
       l.fire_control as "fireControl", l.receipt_print_mode as "receiptPrintMode",
       l.drawer_open_policy as "drawerOpenPolicy", l.catalogue_id as "catalogueId",
-      till.name as "tillName",
       max(s.code) filter (where s.purpose = 'standard') as "seriesCode",
       max(s.code) filter (where s.purpose = 'rectificative') as "rectificativeSeriesCode"
     from tenants t
     join locations l on l.id = ${source.locationId}
-    join tills till on till.id = ${source.tillId}
     join nodes n on n.id = ${source.nodeId}
     join invoice_series s on s.node_id = n.id and s.retired_at is null
-    group by t.id, l.id, till.id
+    group by t.id, l.id
   `);
   const row = venue.rows[0];
   if (row === undefined || row.seriesCode === null || row.rectificativeSeriesCode === null) {
@@ -106,7 +101,6 @@ export async function buildConfigurationBundle(
     country,
     taxId,
     legalName,
-    tillName,
     seriesCode,
     rectificativeSeriesCode,
     invoiceLocales,
@@ -123,7 +117,6 @@ export async function buildConfigurationBundle(
       taxId,
       legalName,
       location,
-      tillName,
       seriesCode,
       rectificativeSeriesCode,
     },
@@ -286,14 +279,7 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   ) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
-  const venueStrings = [
-    "country",
-    "taxId",
-    "legalName",
-    "tillName",
-    "seriesCode",
-    "rectificativeSeriesCode",
-  ];
+  const venueStrings = ["country", "taxId", "legalName", "seriesCode", "rectificativeSeriesCode"];
   const locationStrings = [
     "id",
     "name",

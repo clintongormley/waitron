@@ -1,10 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
-import { AppError, saleId as brandSaleId, tillId as brandTillId } from "@waitron/shared";
+import { AppError, jobOrigin, saleId as brandSaleId } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { workingOrders } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
 import type {
   CollectParams,
@@ -91,6 +89,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     });
 
     const common = {
+      origin: params.origin,
       workingOrderId: params.workingOrderId,
       provider: PROVIDER,
       paymentRef,
@@ -185,12 +184,8 @@ export class StripeOnDeviceProvider implements PaymentProvider {
         } else if (declinedSet.has(p.paymentRef)) {
           await declineForwarded(tx, key);
           declinedCount += 1;
-          const [wo] = await tx
-            .select({ tillId: workingOrders.tillId })
-            .from(workingOrders)
-            .where(eq(workingOrders.id, p.workingOrderId));
           const raised = await recordIncidentOnce(tx, {
-            tillId: brandTillId(wo.tillId),
+            origin: jobOrigin("payment_check"),
             ...(p.saleId === null ? {} : { saleId: brandSaleId(p.saleId) }),
             error: new AppError("payment.offline_forward_declined", {
               paymentRef: p.paymentRef,

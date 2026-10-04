@@ -99,7 +99,6 @@ describe("mountSetup — setup-mode routes for an unprovisioned box", () => {
 });
 
 const LOCATION_ID = "22222222-2222-2222-2222-222222222222";
-const TILL_ID = "33333333-3333-3333-3333-333333333333";
 const NODE_ID = "44444444-4444-4444-4444-444444444444";
 const SERIES_ID_0 = "66666666-6666-6666-6666-666666666666";
 const SERIES_ID_1 = "77777777-7777-7777-7777-777777777777";
@@ -107,7 +106,6 @@ const SERIES_ID_1 = "77777777-7777-7777-7777-777777777777";
 function makeVenueResult(): VenueResult {
   return {
     locationId: LOCATION_ID,
-    tillId: TILL_ID,
     nodeId: NODE_ID,
     seriesIds: [SERIES_ID_0, SERIES_ID_1],
     seeded: [
@@ -140,7 +138,6 @@ function demoBody(): Record<string, unknown> {
         timeZone: "Europe/Madrid",
         dayCutover: "05:00",
       },
-      tillName: "Caja 1",
       seriesCode: "A",
       rectificativeSeriesCode: "R",
       admin: {
@@ -456,7 +453,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(await verifyPassword("correct-horse-battery", req.venue.admin.passwordHash)).toBe(true);
 
     expect(persistTrading.mock.calls[0][0]).toEqual({
-      tillId: TILL_ID,
       nodeId: NODE_ID,
       seriesId: SERIES_ID_0,
       locationId: LOCATION_ID,

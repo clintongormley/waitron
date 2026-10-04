@@ -25,10 +25,10 @@ function codeOfThrow(fn: () => unknown): unknown {
 
 describe("requireUuidParam (branded-id screen → shared.invalid_id)", () => {
   it("returns a well-formed UUID unchanged", () => {
-    expect(requireUuidParam(UUID, "tillId")).toBe(UUID);
+    expect(requireUuidParam(UUID, "deviceId")).toBe(UUID);
   });
   it("throws shared.invalid_id for a malformed id", () => {
-    expect(codeOfThrow(() => requireUuidParam("not-a-uuid", "tillId"))).toBe("shared.invalid_id");
+    expect(codeOfThrow(() => requireUuidParam("not-a-uuid", "deviceId"))).toBe("shared.invalid_id");
   });
 });
 

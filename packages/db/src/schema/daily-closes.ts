@@ -8,14 +8,14 @@ import { nodes } from "./nodes.js";
  * predecessor's `entry_hash`, "" for the genesis close) and its own `entry_hash`, computed over the
  * identity fields plus the `snapshot`. A deleted or tampered close breaks the chain.
  *
- * The whole close is ONE frozen document: the per-till cash reconciliation and the VAT-exact
+ * The whole close is ONE frozen document: the per-device cash reconciliation and the VAT-exact
  * figures live inside `snapshot`, not in a child table. That keeps the immutability recipe to one
  * table rather than two.
  *
  * `snapshot` is typed structurally here, NOT imported from `@waitron/reporting`: reporting depends
  * on this package, so the dependency cannot run the other way. `close` is the `computeDailyClose`
  * output (VAT summary, cash-up, counts) — opaque `unknown` here, reporting owns its precise type —
- * and `cashReconciliation` is the per-till/per-node cash-variance block reporting builds at close time.
+ * and `cashReconciliation` is the per-device/per-node cash-variance block reporting builds at close time.
  * The money inside `snapshot` is `Decimal` strings, NOT the whole cents a money COLUMN
  * holds (`money()` in columns.ts): the document is above the cents boundary, so reporting
  * writes and reads it in decimals with no conversion.
@@ -24,8 +24,8 @@ export interface DailyCloseSnapshot {
   /** The VAT-exact `computeDailyClose` output (vat, cash, counts). Reporting owns the precise type. */
   close: unknown;
   cashReconciliation: {
-    byTill: {
-      tillId: string;
+    byDevice: {
+      deviceId: string;
       /** Opening cash float in the drawer (supplied). */
       openingFloat: string;
       /** Cash removed during the day (supplied). */
@@ -33,12 +33,12 @@ export interface DailyCloseSnapshot {
       /** Physical drawer count at close (supplied). */
       countedCash: string;
       /** Net cash the day moved through the drawer, taken less refunded, so it can be negative
-       * (from `close.cash.byTill[].cashTakings`). */
+       * (from `close.cash.byOrigin[].cashTakings`). */
       cashTakings: string;
       /** countedCash − (openingFloat + cashTakings − payouts). */
       cashVariance: string;
     }[];
-    /** Σ per-till `cashVariance`. */
+    /** Σ per-device `cashVariance`. */
     nodeVariance: string;
   };
 }

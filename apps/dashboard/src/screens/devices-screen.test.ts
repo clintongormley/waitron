@@ -14,7 +14,6 @@ import type {
   Printer,
   ReaderRow,
   Station,
-  Till,
   Watcher,
 } from "../api/client.js";
 import { DevicesScreen } from "./devices-screen.js";
@@ -94,6 +93,8 @@ const devices: DeviceRow[] = [
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     enrolledAt: "2026-08-20T09:00:00.000Z",
     deviceProfileId: "dp1",
+    receiptPrinterId: "pr1",
+    paymentSlipPrinterId: null,
   },
   {
     id: "d2",
@@ -106,6 +107,8 @@ const devices: DeviceRow[] = [
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
     deviceProfileId: null,
+    receiptPrinterId: null,
+    paymentSlipPrinterId: null,
   },
 ];
 
@@ -117,6 +120,8 @@ const deviceProfiles: DeviceProfile[] = [
     capabilities: [],
     formFactor: "till",
     inactivityTimeoutSeconds: null,
+    receiptPrinterIds: [],
+    paymentSlipPrinterIds: [],
   },
   {
     id: "dp2",
@@ -125,6 +130,8 @@ const deviceProfiles: DeviceProfile[] = [
     capabilities: [],
     formFactor: "phone-portrait",
     inactivityTimeoutSeconds: null,
+    receiptPrinterIds: [],
+    paymentSlipPrinterIds: [],
   },
   {
     id: "dp3",
@@ -133,11 +140,9 @@ const deviceProfiles: DeviceProfile[] = [
     capabilities: [],
     formFactor: "kds",
     inactivityTimeoutSeconds: null,
+    receiptPrinterIds: [],
+    paymentSlipPrinterIds: [],
   },
-];
-
-const tills: Till[] = [
-  { id: "t1", label: "Caja 1", locationId: "l1", receiptPrinterId: null, opensDrawer: true },
 ];
 
 const pending: JoinRequestRow[] = [
@@ -201,7 +206,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listWatchers: vi.fn().mockResolvedValue(watchers),
     listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
     listPrinters: vi.fn().mockResolvedValue(printers),
-    listTills: vi.fn().mockResolvedValue(tills),
     pairingMode: vi.fn().mockResolvedValue(SHUT),
     openPairingMode: vi.fn().mockResolvedValue({ openUntil: OPEN.openUntil }),
     closePairingMode: vi.fn().mockResolvedValue(undefined),
@@ -217,20 +221,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     // No device carries a default reader unless a test says otherwise.
     getDeviceReader: vi.fn().mockResolvedValue({ readerId: null }),
     setDeviceReader: vi.fn().mockResolvedValue(undefined),
-    // Reflect back the patched fields (the way the server returns the updated device) so the editor's
-    // controls can show what took.
-    patchDeviceHardware: vi.fn().mockImplementation(
-      (
-        id: string,
-        patch: {
-          receiptPrinterId?: string | null;
-        },
-      ) =>
-        Promise.resolve({
-          id,
-          receiptPrinterId: patch.receiptPrinterId ?? null,
-        }),
-    ),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -413,11 +403,10 @@ describe("devices-screen", () => {
 
     expect(api.listDevices).toHaveBeenCalledTimes(1);
     expect(api.listStations).toHaveBeenCalledTimes(1);
-    // Profiles/printers feed the row labelling and the hardware editor; stations and tills are also
-    // the accept dialog's binding pickers, so they are one load, not two.
+    // Profiles and printers name what each row shows; stations are also the accept dialog's
+    // binding picker, so they are one load, not two.
     expect(api.listDeviceProfiles).toHaveBeenCalledTimes(1);
     expect(api.listPrinters).toHaveBeenCalledTimes(1);
-    expect(api.listTills).toHaveBeenCalledTimes(1);
     expect(api.pairingMode).toHaveBeenCalledTimes(1);
     expect(api.joinRequests).toHaveBeenCalledTimes(1);
     expect(q(el, "[data-test=device-row-d1]")).toBeTruthy();
@@ -756,8 +745,7 @@ describe("devices-screen", () => {
     expect(el.shadowRoot!.querySelectorAll('[role="alert"]')).toHaveLength(1);
   });
 
-  // A till profile binds NEITHER picker — the server creates the register the device rings against.
-  it("shows no station or register picker for a till profile", async () => {
+  it("shows no station picker for a till profile", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
@@ -774,7 +762,7 @@ describe("devices-screen", () => {
     ).toBe(false);
   });
 
-  it("offers the register picker for a handheld profile and posts the chosen register", async () => {
+  it("accepting a handheld shows no till picker and sends no registerId", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
@@ -784,16 +772,33 @@ describe("devices-screen", () => {
     pickSelect(el, "join-profile", "dp2");
     await el.updateComplete;
     expect(q(el, "[data-test=join-binding]")).toBeNull();
-    pickSelect(el, "join-register", "t1");
-    await el.updateComplete;
+    expect(q(el, "[data-test=join-register]")).toBeNull();
     q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
     await flush(el);
 
     expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("j1", {
       choice: REAL_NUMBER,
       profileId: "dp2",
-      registerId: "t1",
     });
+  });
+
+  it("shows a taken device name at the bottom of the open dialog, in the person's language", async () => {
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi.fn().mockRejectedValue({ code: "device.name_taken" }),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    q(el, "[data-test=join-review-j1]")!.click();
+    await flush(el);
+    pickSelect(el, "join-profile", "dp1");
+    await el.updateComplete;
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+    await flush(el);
+
+    const alert = q(el, "[data-test=join-dialog]")!.querySelector("[role=alert]");
+    expect(alert?.textContent?.trim()).toBe(
+      "Ya hay un dispositivo activo con ese nombre aquí. Cambia el nombre del dispositivo y que lo solicite de nuevo",
+    );
   });
 
   it("accepts with the tapped number, then closes the dialog and reloads both lists", async () => {
@@ -1007,50 +1012,56 @@ describe("devices-screen", () => {
     expect(select.value).toBe("dp1");
   });
 
-  // ── Per-device hardware editor ─────────────────────────────────────────────────────────────────
+  // ── Per-device printers ────────────────────────────────────────────────────────────────────────
 
-  it("saves a row's edited hardware and reflects the update", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    pickSelect(el, "hw-printer-d1", "pr1");
-    await el.updateComplete;
-    q(el, "[data-test=hw-save-d1]")!.click();
-    await flush(el);
-
-    expect(api.patchDeviceHardware).toHaveBeenCalledWith("d1", {
-      receiptPrinterId: "pr1",
-    });
-    expect((q(el, "[data-test=hw-printer-d1]") as Dropdown).value).toBe("pr1");
-  });
-
-  it("saves cleared hardware (nulls) when the editor is left at its defaults", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    q(el, "[data-test=hw-save-d1]")!.click();
-    await flush(el);
-
-    expect(api.patchDeviceHardware).toHaveBeenCalledWith("d1", {
-      receiptPrinterId: null,
-    });
-  });
-
-  it("shows an error banner when a hardware save is rejected", async () => {
+  it("shows each active device's current receipt and payment slip printers", async () => {
     const api = stubApi({
-      patchDeviceHardware: vi.fn().mockRejectedValue({ code: "device.binding_invalid" }),
+      listDevices: vi
+        .fn()
+        .mockResolvedValue([
+          devices[0],
+          { ...devices[0], id: "d3", receiptPrinterId: "pr2", paymentSlipPrinterId: "pr1" },
+          devices[1],
+        ]),
+      listPrinters: vi
+        .fn()
+        .mockResolvedValue([
+          ...printers,
+          { ...printers[0], id: "pr2", name: "Terraza", active: false },
+        ]),
     });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
 
-    q(el, "[data-test=hw-save-d1]")!.click();
-    await flush(el);
+    expect(text(el, "[data-test=device-receipt-printer-d1]")).toBe("Cocina");
+    expect(text(el, "[data-test=device-slip-printer-d1]")).toBe(t("devices.no_printer"));
+    // A device may stay on a printer that has since been switched off.
+    expect(text(el, "[data-test=device-receipt-printer-d3]")).toBe(
+      `Terraza (${t("printers.status_inactive")})`,
+    );
+    expect(text(el, "[data-test=device-slip-printer-d3]")).toBe("Cocina");
+    expect(q(el, "[data-test=device-receipt-printer-d2]")).toBeNull();
+  });
 
-    expect((el as unknown as { errorKey: string | null }).errorKey).toBe("device.binding_invalid");
-    const banner = q(el, "[role=alert]")?.textContent;
-    expect(banner).toContain(codeMessage("device.binding_invalid", "es-ES"));
+  it("labels each printer it shows", async () => {
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    const label = (test: string) =>
+      q(el, `[data-test=${test}]`)!.closest("div")!.querySelector("dt")!.textContent!.trim();
+    expect(label("device-receipt-printer-d1")).toBe(t("devices.receipt_printer_now"));
+    expect(label("device-slip-printer-d1")).toBe(t("devices.slip_printer_now"));
+  });
+
+  it("offers no printer picker and no hardware save: a device picks its printers itself", async () => {
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    expect(q(el, "[data-test=hardware-d1]")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector("[data-test^=hw-printer-]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test^=hw-save-]")).toBeNull();
   });
 
   // ── Per-device default reader ──────────────────────────────────────────────────────────────────
@@ -1181,27 +1192,13 @@ describe("devices-screen fields", () => {
   const box = (el: DevicesScreen, testId: string) =>
     q(el, `wt-combobox[data-test=${testId}]`) as Combobox;
 
-  it("picks a device's receipt printer and card reader from labelled dropdowns showing the stored ones", async () => {
+  it("picks a device's card reader from a labelled dropdown showing the stored one", async () => {
     const api = stubApi({ getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r2" }) });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
       api,
       panels: PANELS,
     });
     await flush(el);
-
-    const printer = box(el, "hw-printer-d1");
-    expect(printer.name).toBe("receiptPrinterId");
-    expect(printer.label).toBe(t("devices.receipt_printer"));
-    expect(printer.placeholder).toBe(t("devices.receipt_printer_none"));
-    expect(printer.options).toEqual([
-      { value: "", label: t("devices.receipt_printer_none") },
-      { value: "pr1", label: "Cocina" },
-    ]);
-    expect(printer.value).toBe("");
-    await chooseOption(printer, "pr1");
-    q(el, "[data-test=hw-save-d1]")!.click();
-    await flush(el);
-    expect(api.patchDeviceHardware).toHaveBeenCalledWith("d1", { receiptPrinterId: "pr1" });
 
     const reader = box(el, "hw-reader-d1");
     expect(reader.name).toBe("defaultReaderId");
@@ -1230,7 +1227,7 @@ describe("devices-screen fields", () => {
     expect(api.reassignDeviceProfile).toHaveBeenCalledWith("d1", "dp2");
   });
 
-  it("picks the joining device's profile, station and register from labelled dropdowns", async () => {
+  it("picks the joining device's profile and station from labelled dropdowns", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
@@ -1265,22 +1262,12 @@ describe("devices-screen fields", () => {
 
     await chooseOption(profile, "dp2");
     await el.updateComplete;
-    const register = box(el, "join-register");
-    expect(register.name).toBe("registerId");
-    expect(register.label).toBe(t("devices.till"));
-    expect(register.placeholder).toBe(t("devices.join_pick_register"));
-    expect(register.options).toEqual([
-      { value: "", label: t("devices.join_pick_register") },
-      { value: "t1", label: "Caja 1" },
-    ]);
-    await chooseOption(register, "t1");
-    await el.updateComplete;
+    expect(q(el, "[data-test=join-register]")).toBeNull();
     q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
     await flush(el);
     expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("j1", {
       choice: REAL_NUMBER,
       profileId: "dp2",
-      registerId: "t1",
     });
   });
 });

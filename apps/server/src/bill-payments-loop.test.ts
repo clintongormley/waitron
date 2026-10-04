@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billPaymentRefunds, billPayments, incidents, type SingletonRole } from "@waitron/db";
 import { insertCapturedPayment, insertFailedPayment, payments } from "@waitron/payments";
+import { createPrinter } from "@waitron/printing";
 import {
   centsToDecimal,
   decimal,
@@ -44,6 +45,15 @@ useVenueDb({
   },
 });
 
+function receiptPrinter(name: string) {
+  return {
+    name,
+    transport: "cloud_poll" as const,
+    pollId: `poll-${randomUUID()}`,
+    hasCashDrawer: false,
+  };
+}
+
 const settle = () =>
   settlePendingBillPayments({
     db: venue.db,
@@ -69,7 +79,12 @@ function balance(billId: string) {
 }
 
 /** What a crash straight after P1 leaves: a pending card payment no provider was asked about. */
-async function strandedPending(billId: string, applied: number, tip = 0): Promise<string> {
+async function strandedPending(
+  billId: string,
+  applied: number,
+  tip = 0,
+  device = { deviceId: venue.device2Id },
+): Promise<string> {
   const [row] = await inTx(venue, (tx) =>
     tx
       .insert(billPayments)
@@ -83,7 +98,8 @@ async function strandedPending(billId: string, applied: number, tip = 0): Promis
         tip,
         state: "pending",
         requestedBy: venue.operatorId,
-        tillId: venue.device2TillId,
+        source: "device",
+        deviceId: device.deviceId,
       })
       .returning({ id: billPayments.id }),
   );
@@ -110,10 +126,15 @@ async function stateOf(billPaymentId: string): Promise<string> {
 }
 
 /** A pending card payment of `applied` cents whose provider row captured that amount. */
-async function capturedPending(billId: string, applied: number): Promise<string> {
-  const id = await strandedPending(billId, applied);
+async function capturedPending(
+  billId: string,
+  applied: number,
+  device?: { deviceId: string },
+): Promise<string> {
+  const id = await strandedPending(billId, applied, 0, device);
   await inTx(venue, (tx) =>
     insertCapturedPayment(tx, {
+      origin: venue.cfg.origin,
       workingOrderId: brandWorkingOrderId(billId),
       provider: "fake",
       paymentRef: `captured-${randomUUID()}`,
@@ -141,24 +162,53 @@ async function refusingSalesOf<T>(billId: string, fn: () => Promise<T>): Promise
   }
 }
 
-async function incidentsOf(code: string, tillId: string) {
-  return inTx(venue, (tx) =>
-    tx
-      .select({ params: incidents.params })
-      .from(incidents)
-      .where(and(eq(incidents.code, code), eq(incidents.tillId, tillId))),
-  );
-}
-
-async function mismatchIncidents(tillId: string) {
+/** The loop's alerts name the payment check, never the device that took the payment. */
+async function incidentsOf(code: string) {
   return inTx(venue, (tx) =>
     tx
       .select({ params: incidents.params })
       .from(incidents)
       .where(
-        and(eq(incidents.code, "payment.bill_capture_mismatch"), eq(incidents.tillId, tillId)),
+        and(
+          eq(incidents.code, code),
+          eq(incidents.source, "payment_check"),
+          isNull(incidents.deviceId),
+        ),
       ),
   );
+}
+
+async function openMismatchIncidents() {
+  return inTx(venue, (tx) =>
+    tx
+      .select({ params: incidents.params })
+      .from(incidents)
+      .where(
+        and(
+          eq(incidents.code, "payment.bill_capture_mismatch"),
+          eq(incidents.source, "payment_check"),
+          isNull(incidents.deviceId),
+          isNull(incidents.acknowledgedAt),
+        ),
+      ),
+  );
+}
+
+/** A pending card payment whose provider row captured 30.00 against the 35.00 it was for. */
+async function mismatchedPending(billId: string, device?: { deviceId: string }): Promise<string> {
+  const id = await strandedPending(billId, 3000, 500, device);
+  await inTx(venue, (tx) =>
+    insertCapturedPayment(tx, {
+      origin: venue.cfg.origin,
+      workingOrderId: brandWorkingOrderId(billId),
+      provider: "fake",
+      paymentRef: `mismatch-${randomUUID()}`,
+      amount: decimal("30.00"),
+      settledAt: new Date(),
+      billPaymentId: id,
+    }),
+  );
+  return id;
 }
 
 describe("recovery after a crash (design §8 test 13)", () => {
@@ -179,7 +229,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
     expect(await statusOf(venue, billId)).toBe("settled");
     expect(registroCount(venue, billId)).toBe(1);
     expect(await tendersOfBill(venue, billId)).toMatchObject([
-      { method: "card", amount: 3500, billPaymentId: payment!.id, saleTillId: venue.deviceTillId },
+      { method: "card", amount: 3500, billPaymentId: payment!.id, saleDeviceId: venue.deviceId },
     ]);
     const [provided] = await inTx(venue, (tx) =>
       tx
@@ -188,6 +238,18 @@ describe("recovery after a crash (design §8 test 13)", () => {
         .where(eq(payments.billPaymentId, payment!.id)),
     );
     expect(provided!.saleId).not.toBeNull();
+  });
+
+  it("files the invoice under the device that took the payment, not the loop's", async () => {
+    const billId = await tabWith(venue, "Paella");
+    await capturedPending(billId, 3500);
+    expect(venue.device2Id).not.toBe(venue.cfg.origin.deviceId);
+
+    await settle();
+
+    expect(
+      venue.db.all(sql`select source, device_id from sales where working_order_id = ${billId}`),
+    ).toEqual([{ source: "device", device_id: venue.device2Id }]);
   });
 
   it("leaves a card whose provider row is still attempting pending, holding the bill", async () => {
@@ -217,17 +279,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
 
   it("files nothing for a capture of another amount, keeps it pending, and raises one alert", async () => {
     const billId = await tabWith(venue, "Paella");
-    const id = await strandedPending(billId, 3000, 500);
-    await inTx(venue, (tx) =>
-      insertCapturedPayment(tx, {
-        workingOrderId: brandWorkingOrderId(billId),
-        provider: "fake",
-        paymentRef: `mismatch-${randomUUID()}`,
-        amount: decimal("30.00"),
-        settledAt: new Date(),
-        billPaymentId: id,
-      }),
-    );
+    const id = await mismatchedPending(billId);
 
     const first = await settle();
     const second = await settle();
@@ -236,7 +288,7 @@ describe("recovery after a crash (design §8 test 13)", () => {
     expect(second).toMatchObject({ received: 0, mismatched: 1 });
     expect(await stateOf(id)).toBe("pending");
     expect(registroCount(venue, billId)).toBe(0);
-    const raised = await mismatchIncidents(venue.device2TillId);
+    const raised = await openMismatchIncidents();
     expect(raised).toHaveLength(1);
     expect(raised[0]!.params).toMatchObject({
       billPaymentId: id,
@@ -244,6 +296,31 @@ describe("recovery after a crash (design §8 test 13)", () => {
       captured: "30.00",
       expected: "35.00",
     });
+  });
+
+  it("keeps one open alert for two captures of another amount on two bills (no sale behind either)", async () => {
+    // Earlier cases leave their own pending payments and open alerts in this shared venue.
+    venue.db.run(
+      sql`update bill_payments set state = 'failed', failed_at = ${new Date().toISOString()}
+          where state = 'pending'`,
+    );
+    await inTx(venue, (tx) =>
+      tx
+        .update(incidents)
+        .set({ acknowledgedAt: new Date().toISOString(), acknowledgedBy: venue.operatorId })
+        .where(eq(incidents.code, "payment.bill_capture_mismatch")),
+    );
+    const first = await mismatchedPending(await tabWith(venue, "Paella"));
+    const second = await mismatchedPending(await tabWith(venue, "Paella"), {
+      deviceId: venue.deviceId,
+    });
+
+    const pass = await settle();
+
+    expect(pass.mismatched).toBe(2);
+    expect([await stateOf(first), await stateOf(second)]).toEqual(["pending", "pending"]);
+    const open = await openMismatchIncidents();
+    expect(open.map((row) => row.params.billPaymentId)).toEqual([first]);
   });
 });
 
@@ -254,6 +331,7 @@ describe("the loop's own edges", () => {
     const paymentRef = `untimed-${randomUUID()}`;
     await inTx(venue, (tx) =>
       insertCapturedPayment(tx, {
+        origin: venue.cfg.origin,
         workingOrderId: brandWorkingOrderId(billId),
         provider: "fake",
         paymentRef,
@@ -319,7 +397,7 @@ describe("the loop's own edges", () => {
     expect(second!.errors).toHaveLength(1);
     expect(await stateOf(id)).toBe("pending");
     expect(registroCount(venue, billId)).toBe(0);
-    const raised = await incidentsOf("payment.bill_settle_failed", venue.device2TillId);
+    const raised = await incidentsOf("payment.bill_settle_failed");
     expect(raised).toEqual([
       {
         params: {
@@ -337,7 +415,7 @@ describe("the loop's own edges", () => {
   it("raises no such alert for a payment no card was charged for", async () => {
     const billId = await tabWith(venue, "Paella");
     const id = await strandedPending(billId, 1000);
-    const before = await incidentsOf("payment.bill_settle_failed", venue.device2TillId);
+    const before = await incidentsOf("payment.bill_settle_failed");
     venue.db.run(
       sql.raw(
         `create trigger refuse_one_bill_payment before update on bill_payments ` +
@@ -350,7 +428,7 @@ describe("the loop's own edges", () => {
       venue.db.run(sql`drop trigger refuse_one_bill_payment`);
     }
 
-    expect(await incidentsOf("payment.bill_settle_failed", venue.device2TillId)).toEqual(before);
+    expect(await incidentsOf("payment.bill_settle_failed")).toEqual(before);
     await settle();
   });
 
@@ -382,6 +460,49 @@ describe("the loop's own edges", () => {
   });
 });
 
+describe("the invoice a finished card payment issues", () => {
+  it("prints its receipt on the receipt printer of the device that started the payment", async () => {
+    const [r1, r2] = await inTx(venue, async (tx) => [
+      await createPrinter(tx, { locationId: venue.cfg.locationId }, receiptPrinter("R1")),
+      await createPrinter(tx, { locationId: venue.cfg.locationId }, receiptPrinter("R2")),
+    ]);
+    const a = { deviceId: venue.deviceId };
+    const b = { deviceId: venue.device2Id };
+    const held = venue.db.all<{ id: string; receipt_printer_id: string | null }>(
+      sql`select id, receipt_printer_id from devices where id in (${a.deviceId}, ${b.deviceId})`,
+    );
+    venue.db.run(sql`update devices set receipt_printer_id = ${r1!.id} where id = ${a.deviceId}`);
+    venue.db.run(sql`update devices set receipt_printer_id = ${r2!.id} where id = ${b.deviceId}`);
+    try {
+      const onA = await tabWith(venue, "Paella");
+      const onB = await tabWith(venue, "Paella");
+      await capturedPending(onA, 3500, a);
+      await capturedPending(onB, 3500, b);
+
+      expect(await settle()).toMatchObject({ received: 2 });
+
+      const printed = venue.db.all<{ printer_id: string; kind: string; bill_id: string }>(
+        sql`select print_jobs.printer_id, print_jobs.kind, sales.working_order_id as bill_id
+            from print_jobs join sales on sales.id = print_jobs.sale_id
+            where sales.working_order_id in (${onA}, ${onB})`,
+      );
+      expect(printed).toEqual(
+        expect.arrayContaining([
+          { printer_id: r1!.id, kind: "document", bill_id: onA },
+          { printer_id: r2!.id, kind: "document", bill_id: onB },
+        ]),
+      );
+      expect(printed).toHaveLength(2);
+    } finally {
+      for (const row of held) {
+        venue.db.run(
+          sql`update devices set receipt_printer_id = ${row.receipt_printer_id} where id = ${row.id}`,
+        );
+      }
+    }
+  });
+});
+
 describe("a pending card with no provider row (design §8 test 16)", () => {
   it("is failed by the loop, releasing its reservation", async () => {
     const billId = await tabWith(venue, "Paella");
@@ -399,6 +520,7 @@ describe("a pending card with no provider row (design §8 test 16)", () => {
     const id = await strandedPending(billId, 2000);
     await inTx(venue, (tx) =>
       insertFailedPayment(tx, {
+        origin: venue.cfg.origin,
         workingOrderId: brandWorkingOrderId(billId),
         provider: "fake",
         paymentRef: `failed-${randomUUID()}`,
@@ -471,7 +593,8 @@ describe("rows written within one millisecond", () => {
             state,
             receivedAt: state === "received" ? at : null,
             requestedBy: venue.operatorId,
-            tillId: venue.device2TillId,
+            source: "device",
+            deviceId: venue.device2Id,
             createdAt: at,
           })
           .returning({ id: billPayments.id }),
@@ -520,7 +643,8 @@ describe("rows written within one millisecond", () => {
             reason: "error",
             authorizedBy: venue.operatorId,
             requestedBy: venue.operatorId,
-            tillId: venue.device2TillId,
+            source: "device",
+            deviceId: venue.device2Id,
             state: "pending",
             createdAt: at,
           })

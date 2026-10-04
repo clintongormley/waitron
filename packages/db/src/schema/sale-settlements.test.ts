@@ -8,11 +8,11 @@ import { TRIGGER_ABORT } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError, engineErrorMessage } from "../testing/errors.js";
-import { seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { saleLines, saleSettlements, sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 /**
  * What this file does NOT check:
@@ -23,11 +23,11 @@ import { locations, tenants, tills } from "./tenants.js";
  */
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
 let seriesA = "";
 let nodeA = "";
+let deviceA = "";
 
 async function seed(db: Database): Promise<void> {
   await db
@@ -39,8 +39,8 @@ async function seed(db: Database): Promise<void> {
     invoiceLocales: ["es", "ca"],
     operationDescription: "Hostelería",
   });
-  await db.insert(tills).values({ id: TILL_A1, locationId: LOCATION_A, name: "A1" });
   nodeA = await seedNode(db, brandLocationId(LOCATION_A));
+  ({ deviceId: deviceA } = await seedDevice(db, { locationId: LOCATION_A }));
   const [a] = await db
     .insert(invoiceSeries)
     .values({ nodeId: nodeA, code: "FA", purpose: "standard" })
@@ -61,7 +61,8 @@ async function recordSale(
     const [sale] = await tx
       .insert(sales)
       .values({
-        tillId: TILL_A1,
+        source: "device",
+        deviceId: deviceA,
         nodeId: nodeA,
         seriesId: seriesA,
         invoiceNumber: 1,

@@ -6,7 +6,6 @@ import {
   deviceProfiles,
   workingOrders,
   locations,
-  tills,
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
@@ -27,13 +26,13 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig } from "./till-config.js";
 import { addTabRound, createOpenOrder, parkOrder } from "./working-order.js";
 import { createTable } from "./tables.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -53,7 +52,7 @@ const suite = useVenueDb({
 });
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: OriginConfig;
   cookie: string;
   water: string;
   // Its only variant is Inactive, so it sells as itself.
@@ -73,16 +72,12 @@ async function seedVenue(db: Database): Promise<Venue> {
     .returning({ id: locations.id });
   const locationId = brandLocationId(loc!.id);
   await seedKitchenStation(db, { locationId });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Till 1" })
-    .returning({ id: tills.id });
   const [person] = await db
     .insert(persons)
     .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
     .returning({ id: persons.id });
-  const cfg: TillConfig = {
-    tillId: brandTillId(till!.id),
+  const cfg: OriginConfig = {
+    origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(await seedNode(db, locationId)),
     seriesId: brandSeriesId(randomUUID()),
     locationId,
@@ -145,12 +140,12 @@ async function seedVenue(db: Database): Promise<Venue> {
       name: "Card till",
       formFactor: "till",
       canvasId: null,
-      capabilities: ["integrated-card-payment"],
+      capabilities: ["integrated-card-payment", "take-cash"],
     })
     .returning({ id: deviceProfiles.id });
   const device = await enrolDeviceForTest(db, cfg, { name: "Card till", profileId: profile!.id });
   const session = await withTransaction(db, (tx) =>
-    loginWithPin(tx, { tillId: cfg.tillId, personId: person!.id, pin: "5555" }),
+    loginWithPin(tx, { deviceId: device.deviceId, personId: person!.id, pin: "5555" }),
   );
   return {
     cfg,

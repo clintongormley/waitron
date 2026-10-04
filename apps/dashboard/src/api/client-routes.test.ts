@@ -31,6 +31,11 @@ function callsOf(fetchImpl: ReturnType<typeof vi.fn>): Call[] {
 }
 
 describe("DashboardApi routes", () => {
+  it("offers no route that names tills", () => {
+    const methods = Object.getOwnPropertyNames(DashboardApi.prototype);
+    expect(methods.filter((name) => /tills/i.test(name))).toEqual([]);
+  });
+
   it("passes Orders filters and the chosen printer to the management routes", async () => {
     const page = { rows: [], next: null, from: null, to: null };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(page));
@@ -504,8 +509,9 @@ describe("DashboardApi routes", () => {
         workingOrderId: "wo-1",
         orderNumber: 12,
         label: null,
-        tillId: "till-1",
-        tillName: "Bar",
+        source: "device",
+        deviceId: "device-1",
+        deviceName: "Bar",
         provider: "stripe-terminal",
         amount: "12.50",
         startedAt: "2026-09-26T10:00:00.000Z",

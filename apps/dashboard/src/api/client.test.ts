@@ -2100,7 +2100,10 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(stored, true, 201));
     const api = new DashboardApi("", fetchImpl);
     expect(
-      await api.createDeviceProfile("Counter", "c1", ["open-cash-drawer"], "till", 300),
+      await api.createDeviceProfile("Counter", "c1", ["open-cash-drawer"], "till", 300, {
+        receiptPrinterIds: ["pr2", "pr1"],
+        paymentSlipPrinterIds: ["pr3"],
+      }),
     ).toEqual(stored);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-profiles", {
       method: "POST",
@@ -2112,6 +2115,8 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
         capabilities: ["open-cash-drawer"],
         formFactor: "till",
         inactivityTimeoutSeconds: 300,
+        receiptPrinterIds: ["pr2", "pr1"],
+        paymentSlipPrinterIds: ["pr3"],
       }),
     });
   });
@@ -2128,7 +2133,10 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(stored));
     const api = new DashboardApi("", fetchImpl);
     expect(
-      await api.updateDeviceProfile("p1", "Kitchen", null, ["act-as-kds"], "kds", null),
+      await api.updateDeviceProfile("p1", "Kitchen", null, ["act-as-kds"], "kds", null, {
+        receiptPrinterIds: [],
+        paymentSlipPrinterIds: ["pr1"],
+      }),
     ).toEqual(stored);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-profiles/p1", {
       method: "PUT",
@@ -2140,6 +2148,8 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
         capabilities: ["act-as-kds"],
         formFactor: "kds",
         inactivityTimeoutSeconds: null,
+        receiptPrinterIds: [],
+        paymentSlipPrinterIds: ["pr1"],
       }),
     });
   });
@@ -2154,35 +2164,6 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ deviceProfileId: "dp1" }),
     });
-  });
-
-  it("patchDeviceHardware PATCHes the hardware body and returns the updated device (200)", async () => {
-    const updated = {
-      id: "d1",
-      receiptPrinterId: "pr1",
-    };
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(updated));
-    const api = new DashboardApi("", fetchImpl);
-    const body = {
-      receiptPrinterId: "pr1",
-    };
-    expect(await api.patchDeviceHardware("d1", body)).toEqual(updated);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/hardware", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  });
-
-  it("patchDeviceHardware rejects with { code } on a non-2xx (binding invalid)", async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "device.binding_invalid" } }, false, 400));
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.patchDeviceHardware("d1", { receiptPrinterId: "nope" })).rejects.toMatchObject(
-      { code: "device.binding_invalid" },
-    );
   });
 
   it("reassignDeviceProfile sends { deviceProfileId: null } to clear the assignment", async () => {
@@ -2417,6 +2398,18 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     const api = new DashboardApi("", fetchImpl);
     expect(await api.listPrinters()).toEqual(printers);
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/printers", {
+      method: "GET",
+      credentials: "include",
+      signal: expect.any(AbortSignal),
+    });
+  });
+
+  it("listPrinterProfiles GETs /management-api/printer-profiles with credentials", async () => {
+    const offers = [{ printerId: "p1", profileId: "dp1", profileName: "Mostrador" }];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(offers));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.listPrinterProfiles()).toEqual(offers);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printer-profiles", {
       method: "GET",
       credentials: "include",
       signal: expect.any(AbortSignal),
@@ -2748,64 +2741,6 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
   });
 
   // ── Receipt printer + print mode ───────────────────────────────────────────────────────────────
-  it("listTills GETs /management-api/tills and decodes the rows", async () => {
-    const tills = [
-      { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1" },
-      { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null },
-    ];
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(tills));
-    const api = new DashboardApi("", fetchImpl);
-    expect(await api.listTills()).toEqual(tills);
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/tills", {
-      method: "GET",
-      credentials: "include",
-      signal: expect.any(AbortSignal),
-    });
-  });
-
-  it("setTillReceiptPrinter PATCHes the till's receipt-printer route with { printerId } (set + clear)", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.setTillReceiptPrinter("t1", "p1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenLastCalledWith("/management-api/tills/t1/receipt-printer", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ printerId: "p1" }),
-    });
-    await expect(api.setTillReceiptPrinter("t1", null)).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenLastCalledWith("/management-api/tills/t1/receipt-printer", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ printerId: null }),
-    });
-  });
-
-  it("setTillOpensDrawer PATCHes the till's opens-drawer route with { opensDrawer }", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    for (const opensDrawer of [false, true]) {
-      await expect(api.setTillOpensDrawer("t1", opensDrawer)).resolves.toBeUndefined();
-      expect(fetchImpl).toHaveBeenLastCalledWith("/management-api/tills/t1/opens-drawer", {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ opensDrawer }),
-      });
-    }
-  });
-
-  it("setTillReceiptPrinter rejects with { code } on a non-2xx (printer not in the till's location)", async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "printer.not_found" } }, false, 404));
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.setTillReceiptPrinter("t1", "p-foreign")).rejects.toMatchObject({
-      code: "printer.not_found",
-    });
-  });
-
   it("setReceiptPrintMode PATCHes the location's print-mode route with { mode }", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
@@ -2860,9 +2795,11 @@ describe("DashboardApi — reporting (sales & takings)", () => {
         grossTotal: "121.00",
       },
       cash: {
-        byTill: [
+        byOrigin: [
           {
-            tillId: "till-1",
+            source: "device",
+            deviceId: "device-1",
+            deviceName: "Barra 1",
             byMethod: [
               { method: "cash", amount: "80.00", tip: "5.00" },
               { method: "card", amount: "41.00", tip: "0.00" },

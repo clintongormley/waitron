@@ -54,7 +54,6 @@ describe("device_profiles form-factor drift guard (locked while an active device
       locationId,
       deviceProfileId: profileId,
       stationId,
-      tillId: null,
       label,
       tokenHash: TOKEN_HASH,
       active,

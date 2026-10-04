@@ -4,13 +4,14 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  deviceProfilePrinters,
+  deviceProfiles,
   kitchenStations,
   locations,
   nowIso,
   printAgents,
   printJobs,
   tenants,
-  tills,
   withTransaction,
   installChangeFeed,
   subscribeToChanges,
@@ -24,7 +25,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { mountPrintApi } from "./print-api.js";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
@@ -35,9 +35,9 @@ import type { Logger } from "./logger.js";
 import "./errors.js";
 
 /**
- * The routes only this half of the pair drives: the station ↔ printer mapping, a till's receipt
- * printer, a location's print mode and drawer-open policy, the tills list, the change events and the
- * job resend, plus the `printer.manage` gate and the key-scoped claim eligibility.
+ * The routes only this half of the pair drives: the station ↔ printer mapping, a location's print
+ * mode and drawer-open policy, the change events and the job resend, plus the `printer.manage` gate
+ * and the key-scoped claim eligibility.
  */
 const noopLog: Logger = () => {};
 
@@ -107,7 +107,6 @@ const venueNodeId = brandNodeId(randomUUID());
 
 function cfgOf(tenant: Tenant): TillConfig {
   return {
-    tillId: brandTillId(randomUUID()),
     nodeId: venueNodeId,
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(tenant.locationId),
@@ -592,21 +591,6 @@ describe("Station ↔ printer mapping routes (printer.manage)", () => {
   });
 });
 
-async function seedTill(tenant: Tenant, name: string): Promise<string> {
-  const [row] = await suite.db
-    .insert(tills)
-    .values({ locationId: tenant.locationId, name })
-    .returning({ id: tills.id });
-  return row!.id;
-}
-
-async function tillReceiptPrinterId(tillId: string): Promise<string | null> {
-  const row = await suite.db.execute<{ receipt_printer_id: string | null }>(
-    sql`select receipt_printer_id from tills where id = ${tillId}`,
-  );
-  return row.rows[0]!.receipt_printer_id;
-}
-
 async function locationPrintMode(locationId: string): Promise<string> {
   const row = await suite.db.execute<{ receipt_print_mode: string }>(
     sql`select receipt_print_mode from locations where id = ${locationId}`,
@@ -622,68 +606,17 @@ async function locationDrawerPolicy(locationId: string): Promise<string> {
 }
 
 describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
-  it("sets, then clears, a till's receipt printer as a manager (persists both ways)", async () => {
+  it("has no till list, and no per-till receipt printer or drawer route", async () => {
     const app = mountApp(tenantA);
-    const agent = await joinAndAccept(app, "Recibos agent");
-    const printerId = await createPrinter(app, agent.agentId, "Recibos");
-    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
-
-    const set = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
-      cookie: managerCookie,
-      body: { printerId },
-    });
-    expect(set.status).toBe(204);
-    expect(await tillReceiptPrinterId(tillId)).toBe(printerId);
-
-    const cleared = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
-      cookie: managerCookie,
-      body: { printerId: null },
-    });
-    expect(cleared.status).toBe(204);
-    expect(await tillReceiptPrinterId(tillId)).toBeNull();
-  });
-
-  it("404s a printer that is not one of the till's location's printers (printer.not_found, not the foreign-key 500)", async () => {
-    const app = mountApp(tenantA);
-    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
-    const res = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
-      cookie: managerCookie,
-      body: { printerId: randomUUID() },
-    });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "printer.not_found" } });
-    expect(await tillReceiptPrinterId(tillId)).toBeNull();
-  });
-
-  it("400s an unknown till and a malformed printerId body", async () => {
-    const app = mountApp(tenantA);
-    // There is no `till.*` code.
-    const unknown = await send(
-      app,
-      "PATCH",
-      `/management-api/tills/${randomUUID()}/receipt-printer`,
-      {
-        cookie: managerCookie,
-        body: { printerId: null },
-      },
-    );
-    expect(unknown.status).toBe(400);
-    expect(await unknown.json()).toMatchObject({ error: { code: "management.request_invalid" } });
-
-    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
-    const noField = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
-      cookie: managerCookie,
-      body: {},
-    });
-    expect(noField.status).toBe(400);
-    expect(await noField.json()).toMatchObject({ error: { code: "management.request_invalid" } });
-
-    const badUuid = await send(app, "PATCH", `/management-api/tills/${tillId}/receipt-printer`, {
-      cookie: managerCookie,
-      body: { printerId: "not-a-uuid" },
-    });
-    expect(badUuid.status).toBe(400);
-    expect(await badUuid.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+    const tillId = randomUUID();
+    for (const [method, route, body] of [
+      ["GET", "/management-api/tills", undefined],
+      ["PATCH", `/management-api/tills/${tillId}/receipt-printer`, { printerId: null }],
+      ["PATCH", `/management-api/tills/${tillId}/opens-drawer`, { opensDrawer: false }],
+    ] as const) {
+      const res = await send(app, method, route, { cookie: managerCookie, body });
+      expect(res.status).toBe(404);
+    }
   });
 
   it("sets a location's receipt print mode as a manager (persists)", async () => {
@@ -756,80 +689,72 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
     expect(await badPolicy.json()).toMatchObject({ error: { code: "management.request_invalid" } });
   });
 
-  it("GET /management-api/tills lists the venue's tills as { id, label, locationId, receiptPrinterId, opensDrawer } (printer set + unset)", async () => {
+  it("GET /management-api/printer-profiles names each profile offering a printer on either list, once, ordered by profile name then printer id", async () => {
     const app = mountApp(tenantA);
-    const agent = await joinAndAccept(app, "Recibos agent 2");
-    const printerId = await createPrinter(app, agent.agentId, "Recibos 2");
-    const withPrinterName = `Caja ${randomUUID()}`;
-    const withoutPrinterName = `Caja ${randomUUID()}`;
-    const tillWith = await seedTill(tenantA, withPrinterName);
-    const tillWithout = await seedTill(tenantA, withoutPrinterName);
+    const agent = await joinAndAccept(app, "Offers agent");
+    const counter = await createPrinter(app, agent.agentId, "Counter");
+    const portable = await createPrinter(app, agent.agentId, "Portable");
+    const profileRows = await suite.db
+      .insert(deviceProfiles)
+      .values([
+        { name: `Waiters ${randomUUID()}`, formFactor: "phone-portrait" },
+        { name: `Bar ${randomUUID()}`, formFactor: "till" },
+        { name: `Kitchen ${randomUUID()}`, formFactor: "kds" },
+      ])
+      .returning({ id: deviceProfiles.id, name: deviceProfiles.name });
+    const [waiters, bar] = profileRows;
+    await suite.db.insert(deviceProfilePrinters).values([
+      { deviceProfileId: bar!.id, printerId: counter, role: "receipt", position: 0 },
+      // The same printer on both of one profile's lists is one offer.
+      { deviceProfileId: bar!.id, printerId: counter, role: "payment_slip", position: 0 },
+      { deviceProfileId: waiters!.id, printerId: portable, role: "payment_slip", position: 0 },
+      { deviceProfileId: waiters!.id, printerId: counter, role: "payment_slip", position: 1 },
+    ]);
 
-    const set = await send(app, "PATCH", `/management-api/tills/${tillWith}/receipt-printer`, {
+    const res = await send(app, "GET", "/management-api/printer-profiles", {
       cookie: managerCookie,
-      body: { printerId },
     });
-    expect(set.status).toBe(204);
-
-    const res = await send(app, "GET", "/management-api/tills", { cookie: managerCookie });
     expect(res.status).toBe(200);
-    const rows = (await res.json()) as Array<{
-      id: string;
-      label: string;
-      locationId: string;
-      receiptPrinterId: string | null;
-    }>;
-    expect(rows.find((r) => r.id === tillWith)).toEqual({
-      id: tillWith,
-      label: withPrinterName,
-      locationId: tenantA.locationId,
-      receiptPrinterId: printerId,
-      opensDrawer: true,
-    });
-    expect(rows.find((r) => r.id === tillWithout)).toEqual({
-      id: tillWithout,
-      label: withoutPrinterName,
-      locationId: tenantA.locationId,
-      receiptPrinterId: null,
-      opensDrawer: true,
-    });
+    const mine = new Set([counter, portable]);
+    const offers = ((await res.json()) as { printerId: string }[]).filter((o) =>
+      mine.has(o.printerId),
+    );
+    expect(offers).toEqual([
+      { printerId: counter, profileId: bar!.id, profileName: bar!.name },
+      ...[counter, portable]
+        .sort()
+        .map((printerId) => ({ printerId, profileId: waiters!.id, profileName: waiters!.name })),
+    ]);
   });
 
-  it("GET /management-api/tills requires printer.manage — 401 unauth, 403 staff, 200 manager (gate proven by deletion via the shared `gated`)", async () => {
+  it("GET /management-api/printer-profiles requires printer.manage — 401 unauth, 403 staff, 200 manager", async () => {
     const app = mountApp(tenantA);
-    const unauth = await send(app, "GET", "/management-api/tills");
+    const unauth = await send(app, "GET", "/management-api/printer-profiles");
     expect(unauth.status).toBe(401);
-    expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
-    const staff = await send(app, "GET", "/management-api/tills", { cookie: staffCookie });
+    const staff = await send(app, "GET", "/management-api/printer-profiles", {
+      cookie: staffCookie,
+    });
     expect(staff.status).toBe(403);
     expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-    const manager = await send(app, "GET", "/management-api/tills", { cookie: managerCookie });
+    const manager = await send(app, "GET", "/management-api/printer-profiles", {
+      cookie: managerCookie,
+    });
     expect(manager.status).toBe(200);
   });
 
   it("require printer.manage on ALL config routes — 401 unauth, 403 staff, 2xx manager (gate proven by deletion via the shared `gated`)", async () => {
     const app = mountApp(tenantA);
-    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
-    const tillRoute = `/management-api/tills/${tillId}/receipt-printer`;
     const modeRoute = `/management-api/locations/${tenantA.locationId}/receipt-print-mode`;
     const policyRoute = `/management-api/locations/${tenantA.locationId}/drawer-open-policy`;
 
-    for (const route of [tillRoute, modeRoute, policyRoute]) {
+    for (const route of [modeRoute, policyRoute]) {
       const unauth = await send(app, "PATCH", route, {
-        body: { printerId: null, mode: "auto", policy: "gated" },
+        body: { mode: "auto", policy: "gated" },
       });
       expect(unauth.status).toBe(401);
       expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
     }
 
-    const staffTill = await send(app, "PATCH", tillRoute, {
-      cookie: staffCookie,
-      body: { printerId: null },
-    });
-    expect(staffTill.status).toBe(403);
-    expect(await staffTill.json()).toMatchObject({
-      error: { code: "authorization.not_permitted" },
-    });
     const staffMode = await send(app, "PATCH", modeRoute, {
       cookie: staffCookie,
       body: { mode: "never" },
@@ -848,10 +773,6 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
     });
 
     expect(
-      (await send(app, "PATCH", tillRoute, { cookie: managerCookie, body: { printerId: null } }))
-        .status,
-    ).toBe(204);
-    expect(
       (await send(app, "PATCH", modeRoute, { cookie: managerCookie, body: { mode: "auto" } }))
         .status,
     ).toBe(204);
@@ -863,82 +784,6 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
         })
       ).status,
     ).toBe(204);
-  });
-
-  it("switches a till's drawer off and on again as a manager, and the till list shows it", async () => {
-    const app = mountApp(tenantA);
-    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
-    const listed = async () => {
-      const res = await send(app, "GET", "/management-api/tills", { cookie: managerCookie });
-      const rows = (await res.json()) as Array<{ id: string; opensDrawer: boolean }>;
-      return rows.find((r) => r.id === tillId)!.opensDrawer;
-    };
-    const route = `/management-api/tills/${tillId}/opens-drawer`;
-    expect(await listed()).toBe(true);
-
-    const off = await send(app, "PATCH", route, {
-      cookie: managerCookie,
-      body: { opensDrawer: false },
-    });
-    expect(off.status).toBe(204);
-    expect(await listed()).toBe(false);
-
-    const on = await send(app, "PATCH", route, {
-      cookie: managerCookie,
-      body: { opensDrawer: true },
-    });
-    expect(on.status).toBe(204);
-    expect(await listed()).toBe(true);
-  });
-
-  it("refuses a drawer switch that is not a boolean, and an unknown till, changing nothing", async () => {
-    const app = mountApp(tenantA);
-    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
-    const route = `/management-api/tills/${tillId}/opens-drawer`;
-
-    for (const body of [{}, { opensDrawer: null }, { opensDrawer: "false" }, { opensDrawer: 0 }]) {
-      const res = await send(app, "PATCH", route, { cookie: managerCookie, body });
-      expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({
-        error: { code: "management.request_invalid", params: { field: "opensDrawer" } },
-      });
-    }
-    const unknown = await send(app, "PATCH", `/management-api/tills/${randomUUID()}/opens-drawer`, {
-      cookie: managerCookie,
-      body: { opensDrawer: false },
-    });
-    expect(unknown.status).toBe(400);
-    expect(await unknown.json()).toEqual({
-      error: { code: "management.request_invalid", params: { field: "tillId" } },
-    });
-
-    const [row] = await suite.db
-      .select({ opensDrawer: tills.opensDrawer })
-      .from(tills)
-      .where(eq(tills.id, tillId));
-    expect(row).toEqual({ opensDrawer: true });
-  });
-
-  it("requires printer.manage to switch a till's drawer — 401 unauth, 403 staff", async () => {
-    const app = mountApp(tenantA);
-    const tillId = await seedTill(tenantA, `Caja ${randomUUID()}`);
-    const route = `/management-api/tills/${tillId}/opens-drawer`;
-
-    const unauth = await send(app, "PATCH", route, { body: { opensDrawer: false } });
-    expect(unauth.status).toBe(401);
-    expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
-    const staff = await send(app, "PATCH", route, {
-      cookie: staffCookie,
-      body: { opensDrawer: false },
-    });
-    expect(staff.status).toBe(403);
-    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-
-    const [row] = await suite.db
-      .select({ opensDrawer: tills.opensDrawer })
-      .from(tills)
-      .where(eq(tills.id, tillId));
-    expect(row).toEqual({ opensDrawer: true });
   });
 });
 

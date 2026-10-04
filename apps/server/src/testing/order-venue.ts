@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
-import { invoiceSeries, sales, tills } from "@waitron/db";
+import { devices, invoiceSeries, sales } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recordCorrection, recordSale, recordVoid } from "@waitron/core";
 import { hashPin, loginWithPin, persons, startManagementSession } from "@waitron/identity";
@@ -42,9 +42,9 @@ const quiet: Logger = () => {};
 export async function provisionOrderVenue(db: Database): Promise<OrderVenue> {
   const venue = await provisionBillVenue(db);
   const [assigned] = await db
-    .select({ id: tills.receiptPrinterId })
-    .from(tills)
-    .where(eq(tills.id, venue.cfg.tillId));
+    .select({ id: devices.receiptPrinterId })
+    .from(devices)
+    .where(eq(devices.id, venue.deviceId));
   const invoiceFirstZone = (
     await inTx(venue, (tx) =>
       offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
@@ -56,7 +56,7 @@ export async function provisionOrderVenue(db: Database): Promise<OrderVenue> {
       .values({ displayName: "Sofía", pinHash: hashPin("7777"), role: "supervisor" })
       .returning({ id: persons.id });
     const till = await loginWithPin(tx, {
-      tillId: venue.cfg.tillId,
+      deviceId: venue.deviceId,
       personId: person!.id,
       pin: "7777",
     });
@@ -101,7 +101,7 @@ export async function placedInvoiceFirst(venue: OrderVenue, ...names: string[]):
     zoneId: venue.invoiceFirstZone,
     operatorId: venue.operatorId,
   });
-  await placeOrder(deps, venue.cfg, id, venue.operatorId, venue.cfg.tillId);
+  await placeOrder(deps, venue.cfg, id, venue.operatorId);
   return id;
 }
 
@@ -157,7 +157,7 @@ async function invoiceOf(venue: OrderVenue, billId: string): Promise<string> {
 }
 
 function adminSession(venue: OrderVenue, tx: Transaction) {
-  return loginWithPin(tx, { tillId: venue.cfg.tillId, personId: venue.adminId, pin: "1234" });
+  return loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" });
 }
 
 /** A credit note of `base` at 21% totalling `total` against the bill's invoice, through `recordCorrection`. */
@@ -177,7 +177,7 @@ export async function credit(
       );
     const session = await adminSession(venue, tx);
     await recordCorrection(tx, venue.backend, {
-      tillId: venue.cfg.tillId,
+      origin: venue.cfg.origin,
       nodeId: venue.cfg.nodeId,
       seriesId: brandSeriesId(series!.id),
       correctsSaleId: brandSaleId(saleId),
@@ -235,7 +235,7 @@ export async function contribute(venue: OrderVenue, billId: string, amount: stri
 export async function billlessSale(venue: OrderVenue): Promise<string> {
   const { saleId } = await inTx(venue, (tx) =>
     recordSale(tx, venue.backend, {
-      tillId: venue.cfg.tillId,
+      origin: venue.cfg.origin,
       nodeId: venue.cfg.nodeId,
       seriesId: venue.cfg.seriesId,
       locale: venue.cfg.locale,

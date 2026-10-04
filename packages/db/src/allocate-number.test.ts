@@ -4,15 +4,13 @@ import { allocateInvoiceNumber } from "./allocate-number.js";
 import type { Database } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { invoiceSeries } from "./schema/series.js";
-import { locations, tenants, tills } from "./schema/tenants.js";
+import { locations, tenants } from "./schema/tenants.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { seedNode } from "./testing/seed.js";
 import { withTransaction } from "./tenancy.js";
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
-const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
-const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 const UNKNOWN_SERIES = "00000000-0000-4000-8000-000000000000";
 
 let nodeA1 = "";
@@ -34,10 +32,6 @@ async function seed(db: Database): Promise<void> {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     },
-  ]);
-  await db.insert(tills).values([
-    { id: TILL_A1, locationId: LOCATION_A, name: "A1" },
-    { id: TILL_B1, locationId: LOCATION_B, name: "B1" },
   ]);
   nodeA1 = await seedNode(db, brandLocationId(LOCATION_A));
   await seedNode(db, brandLocationId(LOCATION_B));

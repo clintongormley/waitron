@@ -16,12 +16,14 @@ import {
   tsString,
 } from "./columns.js";
 import { products } from "./catalogue.js";
+import { devices } from "./devices.js";
 import { diningTables } from "./dining-tables.js";
 import { kitchenCourses } from "./kitchen-courses.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { nodes } from "./nodes.js";
 import { orderGroups } from "./order-groups.js";
-import { tills } from "./tenants.js";
+import { originChecks, sourceColumn } from "./origin.js";
+import { locations } from "./tenants.js";
 import { parties } from "./parties.js";
 
 export const workingOrderStatus = enumType([
@@ -50,19 +52,21 @@ export const workingOrderStatus = enumType([
  * Each of those three exceptions lists every column of this table it holds
  * unchanged, so a column added here goes into every list too, by a migration
  * that re-creates the trigger from the latest text,
- * `drizzle/0056_placed_order_handover.sql`.
+ * `drizzle/0086_working_orders_recreate_triggers.sql`.
  */
 export const workingOrders = table(
   "working_orders",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    tillId: id("till_id")
+    source: sourceColumn("source").notNull(),
+    /* v8 ignore start */
+    deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
+    locationId: id("location_id")
       .notNull()
-      /* v8 ignore start */
-      .references(() => tills.id, { onDelete: "restrict" }),
+      .references(() => locations.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
     // Nullable although `createOpenOrder` always sets it: a NULL node_id skips the FK check below,
-    // leaving room for a future non-till writer to omit it.
+    // leaving room for a future writer with no node to omit it.
     nodeId: id("node_id"),
     // The human-facing order number: allocated per node from working_order_counters, printed on
     // the ticket, and typed back in to retrieve the order at any register. No UNIQUE here: the
@@ -99,6 +103,7 @@ export const workingOrders = table(
     }),
     index("working_orders_party_idx").on(t.partyId),
     check("working_orders_status_ck", enumCheck(t.status)),
+    ...originChecks("working_orders", t.source, t.deviceId),
     // Biconditional, not two one-way checks: a settled order always carries a
     // timestamp and a non-settled one never does.
     check(

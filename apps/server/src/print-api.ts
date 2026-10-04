@@ -9,6 +9,8 @@ import { AppError } from "@waitron/shared";
 import type { SupportedLocale } from "@waitron/shared";
 import type { ReceiptQrText } from "@waitron/fiscal";
 import {
+  deviceProfilePrinters,
+  deviceProfiles,
   drawerOpenPolicy,
   drawerOpens,
   locations,
@@ -19,7 +21,6 @@ import {
   printers,
   printTransport,
   receiptPrintMode,
-  tills,
   withTransaction,
   type Database,
   type Transaction,
@@ -64,7 +65,7 @@ import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limi
 import type { PairingMode } from "./pairing-mode.js";
 import { isUuid } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
-import { requireBodyUuid, requireEnum, requireString, requireUuidParam } from "@waitron/server-kit";
+import { requireEnum, requireString, requireUuidParam } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { previewPrintJob } from "./print-job-preview.js";
 import { formatTestPage } from "./test-page.js";
@@ -1229,84 +1230,22 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
-  app.get("/management-api/tills", (c) =>
+  // The printer detail page's "offered on profiles", under the printers screen's own permission.
+  app.get("/management-api/printer-profiles", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const rows = await gated(sessionId, (tx) =>
         tx
-          .select({
-            id: tills.id,
-            label: tills.name,
-            locationId: tills.locationId,
-            receiptPrinterId: tills.receiptPrinterId,
-            opensDrawer: tills.opensDrawer,
+          .selectDistinct({
+            printerId: deviceProfilePrinters.printerId,
+            profileId: deviceProfiles.id,
+            profileName: deviceProfiles.name,
           })
-          .from(tills)
-          .orderBy(tills.name),
+          .from(deviceProfilePrinters)
+          .innerJoin(deviceProfiles, eq(deviceProfiles.id, deviceProfilePrinters.deviceProfileId))
+          .orderBy(deviceProfiles.name, deviceProfilePrinters.printerId),
       );
       return c.json(rows);
-    }),
-  );
-
-  // An unknown till is `management.request_invalid`: there is no `till.*` code.
-  app.patch("/management-api/tills/:id/receipt-printer", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const tillId = requireUuidParam(c.req.param("id"), "TillId");
-      const body = await readJsonBody<{ printerId?: unknown }>(c);
-      // Required: a printer id sets, an explicit null clears.
-      if (!("printerId" in body)) {
-        throw new AppError("management.request_invalid", { field: "printerId" });
-      }
-      const printerId =
-        body.printerId === null ? null : requireBodyUuid(body.printerId, "printerId");
-      await gated(sessionId, async (tx) => {
-        const [till] = await tx
-          .select({ locationId: tills.locationId })
-          .from(tills)
-          .where(eq(tills.id, tillId));
-        if (till === undefined) {
-          throw new AppError("management.request_invalid", { field: "tillId" });
-        }
-        if (printerId !== null) {
-          const [printer] = await tx
-            .select({ id: printers.id })
-            .from(printers)
-            .where(
-              and(
-                eq(printers.id, printerId),
-                eq(printers.locationId, till.locationId),
-                eq(printers.active, true),
-              ),
-            );
-          if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
-        }
-        await tx.update(tills).set({ receiptPrinterId: printerId }).where(eq(tills.id, tillId));
-      });
-      return c.body(null, 204);
-    }),
-  );
-
-  app.patch("/management-api/tills/:id/opens-drawer", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const tillId = requireUuidParam(c.req.param("id"), "TillId");
-      const body = await readJsonBody<{ opensDrawer?: unknown }>(c);
-      if (typeof body.opensDrawer !== "boolean") {
-        throw new AppError("management.request_invalid", { field: "opensDrawer" });
-      }
-      const opensDrawer = body.opensDrawer;
-      await gated(sessionId, async (tx) => {
-        const [till] = await tx
-          .update(tills)
-          .set({ opensDrawer })
-          .where(eq(tills.id, tillId))
-          .returning({ id: tills.id });
-        if (till === undefined) {
-          throw new AppError("management.request_invalid", { field: "tillId" });
-        }
-      });
-      return c.body(null, 204);
     }),
   );
 

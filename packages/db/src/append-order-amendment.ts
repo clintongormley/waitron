@@ -1,4 +1,5 @@
 import { desc, eq } from "drizzle-orm";
+import type { Origin } from "@waitron/shared";
 import type { Transaction } from "./client.js";
 import { computeAmendmentHash } from "./order-amendment-hash.js";
 import { orderAmendments } from "./schema/order-amendments.js";
@@ -23,7 +24,8 @@ export interface AppendAmendmentInput {
   actorId: string;
   /** The contestable reason (art. 29.2.j) — null on the genesis `order_placed`. */
   reason: string | null;
-  capturedByTillId: string;
+  /** Where the amendment was captured: the device, or the job that wrote it. */
+  origin: Origin;
   capturedByNodeId: string;
   /** The trusted event instant. Truncated to whole seconds here, at the single write choke point. */
   eventAt: Date;
@@ -65,7 +67,8 @@ export async function appendOrderAmendment(
     kind: input.kind,
     actorId: input.actorId,
     reason: input.reason,
-    capturedByTillId: input.capturedByTillId,
+    capturedBySource: input.origin.source,
+    capturedByDeviceId: input.origin.deviceId,
     capturedByNodeId: input.capturedByNodeId,
     eventAt,
     eventOffsetMinutes: input.eventOffsetMinutes,
@@ -80,7 +83,8 @@ export async function appendOrderAmendment(
       kind: input.kind,
       actorId: input.actorId,
       reason: input.reason,
-      capturedByTillId: input.capturedByTillId,
+      capturedBySource: input.origin.source,
+      capturedByDeviceId: input.origin.deviceId,
       capturedByNodeId: input.capturedByNodeId,
       eventAt,
       eventOffsetMinutes: input.eventOffsetMinutes,

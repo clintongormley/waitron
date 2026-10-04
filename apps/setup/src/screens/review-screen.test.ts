@@ -50,7 +50,6 @@ afterEach(cleanupWidgets);
 function everyRowDraft(mode: "demo" | "live"): DeepPartial<ProvisionBody> {
   const draft = fullDraft();
   draft.mode = mode;
-  draft.venue!.tillName = "Caja 1";
   Object.assign(draft.venue!.location!, {
     operationDescription: "Venta en establecimiento",
     dayCutover: "04:00",
@@ -250,7 +249,6 @@ describe("setup-review-screen", () => {
     const rowHelp = [
       ["summary-invoiceLocales", "Receipts use this language for their fixed words."],
       ["summary-dayCutover", "Sales after this time belong to the next business day."],
-      ["summary-tillName", "This is the name of the first till at this location."],
       ["summary-seriesCode", "Every invoice number starts with this: FS-000001, FS-000002…"],
       ["summary-rectificativeSeriesCode", "Credit notes use this separate numbering series."],
       [
@@ -376,7 +374,6 @@ describe("setup-review-screen", () => {
 it("shows the generated demo choices and full location details for review", async () => {
   const draft = fullDraft();
   draft.mode = "demo";
-  draft.venue!.tillName = "Caja 1";
   Object.assign(draft.venue!.location!, {
     operationDescription: "Venta en establecimiento",
     dayCutover: "04:00",
@@ -388,7 +385,8 @@ it("shows the generated demo choices and full location details for review", asyn
   const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
   expect(text(el, "[data-test=demo-defaults]")).toContain("generated");
   expect(text(el, "[data-test=summary-operationDescription]")).toBe("Venta en establecimiento");
-  expect(text(el, "[data-test=summary-tillName]")).toBe("Caja 1");
+  expect(q(el, "[data-test=summary-tillName]")).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toMatch(/\btill\b/i);
   expect(text(el, "[data-test=summary-address]")).toContain("Calle Mayor 1");
   expect(text(el, "[data-test=summary-dayCutover]")).toBe("04:00");
 });

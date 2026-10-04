@@ -12,7 +12,7 @@ import type {
   PrintAgentRow,
   PrintJobRow,
   Printer,
-  Till,
+  PrinterProfileOffer,
 } from "../api/client.js";
 
 const agents: PrintAgentRow[] = [
@@ -105,9 +105,10 @@ const jobs: PrintJobRow[] = [
   },
 ];
 
-const tills: Till[] = [
-  { id: "t1", label: "Caja 1", locationId: "loc-1", receiptPrinterId: "p1", opensDrawer: true },
-  { id: "t2", label: "Caja 2", locationId: "loc-1", receiptPrinterId: null, opensDrawer: true },
+const printerProfiles: PrinterProfileOffer[] = [
+  { printerId: "p1", profileId: "dp1", profileName: "Camareros" },
+  { printerId: "p2", profileId: "dp1", profileName: "Camareros" },
+  { printerId: "p1", profileId: "dp2", profileName: "Mostrador" },
 ];
 
 // An unregistered USB device, a disabled registration offered for adding again, and an office printer.
@@ -182,7 +183,7 @@ function stubApi(pairingOpen = false, overrides: Partial<DashboardApi> = {}): Da
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
     renewPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 180_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
-    listTills: vi.fn().mockResolvedValue(tills),
+    listPrinterProfiles: vi.fn().mockResolvedValue(printerProfiles),
     ...overrides,
   } as unknown as DashboardApi;
 }

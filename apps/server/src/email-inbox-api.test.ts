@@ -41,7 +41,6 @@ async function setupVenue(): Promise<{ manager: string; staff: string }> {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {

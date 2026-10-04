@@ -22,6 +22,7 @@ export class FakeAsyncProvider implements AsyncPaymentProvider {
     const externalRef = nextHostedId();
     await this.db.transaction((tx) =>
       insertInitiated(tx, {
+        origin: params.origin,
         workingOrderId: params.workingOrderId,
         provider: this.provider,
         paymentRef: params.paymentRef,

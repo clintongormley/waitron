@@ -5,7 +5,6 @@ import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   locations,
-  tills,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -407,13 +406,15 @@ describe("adjustment report routes", () => {
     const fx = await fixture(location!.id);
     const people = await db.select({ id: persons.id, role: persons.role }).from(persons);
     const idOf = (role: PersonRoleValue) => people.find((p) => p.role === role)!.id;
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: location!.id, name: "Till 1" })
-      .returning({ id: tills.id });
     const [bill] = await db
       .insert(workingOrders)
-      .values({ tillId: till!.id, orderNumber: 41, openedAt: "2026-09-15T18:00:00.000Z" })
+      .values({
+        source: "dashboard",
+        deviceId: null,
+        locationId: location!.id,
+        orderNumber: 41,
+        openedAt: "2026-09-15T18:00:00.000Z",
+      })
       .returning({ id: workingOrders.id });
     await db.insert(workingOrderLines).values({
       workingOrderId: bill!.id,

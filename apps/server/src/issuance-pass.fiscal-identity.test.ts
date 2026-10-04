@@ -20,12 +20,12 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type {} from "./till-config.js";
 import { recordTillSale } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // Review Focus 5 of the sales classification plan: the issuance pass adds to the new `sale_lines`
 // columns and changes nothing that was filed before it. The same sale is filed in two fresh
@@ -120,7 +120,6 @@ async function fileOneSale(db: Database) {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -134,8 +133,7 @@ async function fileOneSale(db: Database) {
     ),
     { db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
-    tillId: brandTillId(venue.tillId),
+  const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -144,7 +142,7 @@ async function fileOneSale(db: Database) {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  });
   const seeded = await withTransaction(db, async (tx) => {
     const menu = await createCatalogue(tx, { name: "Carta" });
     const bebidas = await createCategory(tx, { name: "Drinks" });

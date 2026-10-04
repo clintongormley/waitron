@@ -42,7 +42,7 @@ let invoiceNumber = 0;
  */
 export function sellLines(
   db: Database,
-  venue: Pick<SeededVenue, "tillId" | "nodeId" | "seriesId">,
+  venue: Pick<SeededVenue, "deviceId" | "nodeId" | "seriesId">,
   issuedAt: string,
   lines: LineSpec[],
   correctsSaleId?: SaleId,

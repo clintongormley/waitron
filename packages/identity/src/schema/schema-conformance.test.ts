@@ -5,16 +5,15 @@
 // `persons_tenant_pending_email_uq` are each over a folded-key expression, so a declaration and a
 // migration that disagree about how a key is folded pass here. Each index's name, uniqueness,
 // filter and the position of its expression among its parts are still compared.
+import { CORE_MIGRATIONS } from "@waitron/db";
 import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";
 import { IDENTITY_MIGRATIONS } from "../migrations.js";
 import * as barrel from "./index.js";
 
 describeSchemaConformance({
   subjectName: "identity",
-  // No prerequisites: every foreign key in `drizzle/` points at this set's own `persons`, and no
-  // migration creates a trigger. The package's other database suites apply core first, and the
-  // ones that seed need it: `seedTenant` writes core's `tenants`, and `test/fixtures.ts`'s
-  // `seedTill` writes core's `locations` and `tills`.
+  // `sessions.device_id` points at core's `devices`. No migration in this set creates a trigger.
+  prerequisites: [CORE_MIGRATIONS],
   subject: IDENTITY_MIGRATIONS,
   declarations: barrel,
   // True: `persons.role` and `persons.status` carry the `enumText`/`enumCheck` pair, through

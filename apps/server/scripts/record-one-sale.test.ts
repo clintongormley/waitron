@@ -64,7 +64,6 @@ describe("record-one-sale against a real venue directory", () => {
   it("records the sale into the directory WAITRON_VENUE_DIR names, and nowhere else", async () => {
     const result = await recordOneSale(
       {
-        tillId: preproduction.venue.tillId,
         nodeId: preproduction.venue.nodeId,
         seriesId: preproduction.venue.seriesId,
         description: "Café con leche",
@@ -92,7 +91,6 @@ describe("record-one-sale against a real venue directory", () => {
     expect(process.env.WAITRON_ENV).toBeUndefined();
     await recordOneSale(
       {
-        tillId: production.venue.tillId,
         nodeId: production.venue.nodeId,
         seriesId: production.venue.seriesId,
         description: "Menú del día",
@@ -115,7 +113,6 @@ describe("record-one-sale against a real venue directory", () => {
     // reached the real venue.
     await recordOneSale(
       {
-        tillId: preproduction.venue.tillId,
         nodeId: preproduction.venue.nodeId,
         seriesId: preproduction.venue.seriesId,
         description: "Tostada",
@@ -134,7 +131,6 @@ describe("record-one-sale against a real venue directory", () => {
     await expect(
       recordOneSale(
         {
-          tillId: preproduction.venue.tillId,
           nodeId: preproduction.venue.nodeId,
           seriesId: "00000000-0000-4000-8000-000000000000",
           description: "Nada",

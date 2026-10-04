@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locations, tills, withTransaction } from "@waitron/db";
+import { locations, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -15,17 +15,17 @@ import {
 } from "@waitron/identity";
 import { BOOKINGS_PERMISSIONS, BOOKINGS_ROUTES } from "@waitron/bookings";
 import {
+  jobOrigin,
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { writeClearingWorkflow } from "@waitron/venue-service";
 import type { ModuleRouteContext } from "@waitron/module";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { finishTable, seatTable } from "./parties.js";
+import { finishTable, moduleCoreServices, seatTable } from "./parties.js";
 import "./errors.js";
 
 // The `seatBooking ↔ seatTable` edge with the REAL `apps/server` `seatTable` — the one seam the
@@ -57,8 +57,8 @@ interface Venue {
 
 async function setupVenue(): Promise<Venue> {
   await seedTenant(db);
-  // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are NOT NULL
-  // `$defaultFn` generators a raw insert never reaches.
+  // Through the table definitions: `locations.id` is a NOT NULL `$defaultFn`
+  // generator a raw insert never reaches.
   const [location] = await db
     .insert(locations)
     .values({
@@ -68,13 +68,8 @@ async function setupVenue(): Promise<Venue> {
     })
     .returning({ id: locations.id });
   const locationId = location!.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const tillCfg: TillConfig = {
-    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -96,8 +91,8 @@ async function setupVenue(): Promise<Venue> {
   const ctx: ModuleRouteContext = {
     db,
     cfg: { locationId: tillCfg.locationId },
-    // The EXACT closure boot wires (boot.ts): the module reaches the seat verb ONLY through this seat.
-    core: { seatTable: (tx, req) => seatTable(tx, tillCfg, req) },
+    // What boot wires (boot.ts): the module reaches the seat verb ONLY through this seat.
+    core: moduleCoreServices(tillCfg),
   };
   return {
     tillCfg,
@@ -167,17 +162,62 @@ describe("bookings seat route → real seatTable", () => {
     });
   });
 
+  it("opens the booking's tab as the dashboard, at the booking's location", async () => {
+    const v = await setupVenue();
+    const app = mountApp(v.ctx);
+    const tableId = await withTransaction(db, async (tx: Transaction) => {
+      const { id } = await createTable(tx, v.tillCfg, { label: "9" });
+      return id;
+    });
+    const created = await post(app, "/management-api/bookings", v.managerCookie, {
+      bookingDate: "2026-08-20",
+      bookingTime: "20:30",
+      partySize: 2,
+      contactName: "Ruiz",
+      tableId,
+    });
+    expect(created.status).toBe(201);
+    const bookingId = ((await created.json()) as { id: string }).id;
+
+    const res = await post(app, `/management-api/bookings/${bookingId}/seat`, v.managerCookie);
+    expect(res.status).toBe(200);
+    const { tabId } = (await res.json()) as { tabId: string };
+
+    const order = await db.execute<{
+      source: string;
+      device_id: string | null;
+      location_id: string;
+      booking_location_id: string;
+    }>(
+      sql`select wo.source, wo.device_id, wo.location_id, b.location_id as booking_location_id
+            from working_orders wo join bookings b on b.tab_id = wo.id
+           where wo.id = ${tabId}`,
+    );
+    expect(order.rows).toEqual([
+      {
+        source: "dashboard",
+        device_id: null,
+        location_id: v.tillCfg.locationId,
+        booking_location_id: v.tillCfg.locationId,
+      },
+    ]);
+  });
+
   it("refuses seating a booking at a table that needs clearing with 409 table.needs_clearing", async () => {
     const v = await setupVenue();
     const app = mountApp(v.ctx);
     const tableId = await withTransaction(db, async (tx: Transaction) => {
       await writeClearingWorkflow(tx, true);
       const { id } = await createTable(tx, v.tillCfg, { label: "8" });
-      const seated = await seatTable(tx, v.tillCfg, {
-        tableId: id,
-        guestCount: 2,
-        operatorId: v.managerId,
-      });
+      const seated = await seatTable(
+        tx,
+        { ...v.tillCfg, origin: jobOrigin("dashboard") },
+        {
+          tableId: id,
+          guestCount: 2,
+          operatorId: v.managerId,
+        },
+      );
       await finishTable(tx, {
         partyId: seated.partyId,
         expectedPartyRevision: seated.revision,

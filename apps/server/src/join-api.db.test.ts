@@ -15,6 +15,7 @@ import { createJoinRequest, type JoinRequestKind, PENDING_CAP } from "./join-req
 import { createPairingMode, PAIRING_WINDOW_MS, type PairingMode } from "./pairing-mode.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
 import { createWatcher, removeWatcher } from "./watchers.js";
@@ -600,10 +601,11 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect(await pendingCount()).toBe(1);
   });
 
-  it("a till profile auto-creates its register", async () => {
+  it("a name an active device here already has is 409 device.name_taken, and the request survives", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const profileId = await seedProfile("till");
+    await enrolDeviceForTest(suite.db, venue.cfg, { name: "Caja nueva", profileId });
     const made = await knock(venue, { kind: "device", label: "Caja nueva" });
     const res = await send(
       app,
@@ -614,13 +616,9 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
         body: { choice: made.verificationNumber, profileId },
       },
     );
-    expect(res.status).toBe(200);
-    expect((await res.json()) as Record<string, unknown>).toMatchObject({ formFactor: "till" });
-    const { rows } = await suite.db.execute<{ name: string }>(sql`
-      select t.name from tills t
-      join devices d on d.till_id = t.id
-      where d.id = ${made.joinId}`);
-    expect(rows[0]!.name).toBe("Caja nueva");
+    expect(res.status).toBe(409);
+    expect((await errorOf(res)).code).toBe("device.name_taken");
+    expect(await pendingCount()).toBe(1);
   });
 
   it("a kds profile with no station is 400, and the request survives for a genuine retry", async () => {
@@ -671,12 +669,6 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       body: { choice: made.verificationNumber, profileId: randomUUID(), stationId: "nope" },
     });
     expect((await errorOf(badStation)).params).toEqual({ field: "stationId" });
-
-    const badRegister = await send(app, "POST", path, {
-      cookie,
-      body: { choice: made.verificationNumber, profileId: randomUUID(), registerId: 7 },
-    });
-    expect((await errorOf(badRegister)).params).toEqual({ field: "registerId" });
 
     expect(await pendingCount()).toBe(1);
   });

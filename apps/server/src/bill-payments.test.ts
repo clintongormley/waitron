@@ -36,7 +36,6 @@ import {
   nodeId as brandNodeId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import {
   assertBillInvariant,
@@ -55,12 +54,13 @@ import { createTable } from "./tables.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./till-config.js";
 import { collectOrder, payWorkingOrder, readBillTenderLines } from "./till-sale.js";
 import { abandonHeldOrder, updateHeldOrder, moveOrderLines } from "./working-order.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { cancelLine } from "./testing/cancel-line.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // The bill payment guards at the level of the functions each route calls: the writers with no
 // route of their own, the orderings a route cannot show, and the payment slip of a bill paid by
@@ -81,7 +81,7 @@ let backend: FiscalBackend;
 let clock: TrustedClock;
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   offers: ZoneOffers;
   productIds: Map<string, string>;
 }
@@ -136,7 +136,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -150,8 +149,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     ),
     { db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
-    tillId: brandTillId(provisioned.tillId),
+  const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
     locationId: brandLocationId(provisioned.locationId),
@@ -160,7 +158,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  });
   return withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
     const platos = await createCategory(tx, { name: "Platos" });
@@ -184,7 +182,9 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       { locationId: cfg.locationId },
       { name: "Recibos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
     );
-    await tx.run(sql`update tills set receipt_printer_id = ${printer.id}`);
+    await tx.run(
+      sql`update devices set receipt_printer_id = ${printer.id}, payment_slip_printer_id = ${printer.id}`,
+    );
     return { cfg, offers: await offerProducts(tx, cfg, { zone: "tables" }), productIds };
   });
 }
@@ -274,7 +274,8 @@ async function insertPayment(
         applied: 1000,
         state: "pending",
         requestedBy: OPERATOR,
-        tillId: venue.cfg.tillId,
+        source: venue.cfg.origin.source,
+        deviceId: venue.cfg.origin.deviceId,
         ...values,
       })
       .returning({ id: billPayments.id }),
@@ -444,7 +445,8 @@ describe("a bill holding money", () => {
         reason: "error",
         authorizedBy: OPERATOR,
         requestedBy: OPERATOR,
-        tillId: venue.cfg.tillId,
+        source: venue.cfg.origin.source,
+        deviceId: venue.cfg.origin.deviceId,
         state: "completed",
         completedAt: new Date().toISOString(),
       }),
@@ -513,7 +515,8 @@ describe("the money a bill has received", () => {
         reason: "error",
         authorizedBy: OPERATOR,
         requestedBy: OPERATOR,
-        tillId: venue.cfg.tillId,
+        source: venue.cfg.origin.source,
+        deviceId: venue.cfg.origin.deviceId,
         state: "completed",
         completedAt: new Date().toISOString(),
       }),
@@ -578,7 +581,8 @@ describe("the invoice at full payment", () => {
         reason: "error",
         authorizedBy: OPERATOR,
         requestedBy: OPERATOR,
-        tillId: venue.cfg.tillId,
+        source: venue.cfg.origin.source,
+        deviceId: venue.cfg.origin.deviceId,
         state: "completed",
         completedAt: new Date().toISOString(),
       }),
@@ -637,6 +641,8 @@ describe("the invoice at full payment", () => {
         {
           id: "00000000-0000-4000-8000-000000000001",
           workingOrderId: billId,
+          source: venue.cfg.origin.source,
+          deviceId: venue.cfg.origin.deviceId,
           provider: "simulator",
           paymentRef: randomUUID(),
           amount: 2500,
@@ -647,6 +653,8 @@ describe("the invoice at full payment", () => {
         {
           id: "ffffffff-0000-4000-8000-000000000001",
           workingOrderId: billId,
+          source: venue.cfg.origin.source,
+          deviceId: venue.cfg.origin.deviceId,
           provider: "simulator",
           paymentRef: randomUUID(),
           amount: 2000,
@@ -780,7 +788,8 @@ describe("the receipt's payments, taken within one millisecond", () => {
           reason: "error",
           authorizedBy: OPERATOR,
           requestedBy: OPERATOR,
-          tillId: venue.cfg.tillId,
+          source: venue.cfg.origin.source,
+          deviceId: venue.cfg.origin.deviceId,
           state: "completed",
           completedAt,
         }),
@@ -840,7 +849,8 @@ describe("the bill's payments, taken within one millisecond", () => {
           reason: "error",
           authorizedBy: OPERATOR,
           requestedBy: OPERATOR,
-          tillId: venue.cfg.tillId,
+          source: venue.cfg.origin.source,
+          deviceId: venue.cfg.origin.deviceId,
           state: "completed",
           createdAt: at,
           completedAt: at,
@@ -875,6 +885,8 @@ describe("the bill's payments, taken within one millisecond", () => {
         {
           id: paymentId(),
           workingOrderId: billId,
+          source: venue.cfg.origin.source,
+          deviceId: venue.cfg.origin.deviceId,
           provider: "simulator",
           paymentRef: randomUUID(),
           amount: 2500,
@@ -885,6 +897,8 @@ describe("the bill's payments, taken within one millisecond", () => {
         {
           id: paymentId(),
           workingOrderId: billId,
+          source: venue.cfg.origin.source,
+          deviceId: venue.cfg.origin.deviceId,
           provider: "simulator",
           paymentRef: randomUUID(),
           amount: 2000,

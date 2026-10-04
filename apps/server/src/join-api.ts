@@ -45,8 +45,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "join_request.not_found": 404,
   "device.join_mismatch": 400,
   "device.station_required": 400,
-  "device.register_required": 400,
-  "device.register_name_taken": 409,
+  "device.name_taken": 409,
   "device.binding_invalid": 400,
   "device_profile.not_found": 404,
   "station.not_found": 404,
@@ -216,7 +215,6 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         profileId?: unknown;
         stationId?: unknown;
         watcherId?: unknown;
-        registerId?: unknown;
       }>(c);
       const result = await gated(sessionId, "device.manage", (tx) => {
         // Any string, not a two-digit screen: a value that is not the row's number must DENY.
@@ -224,14 +222,12 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         const profileId = requireBodyUuid(body.profileId, "profileId");
         const stationId = optionalBodyUuid(body.stationId, "stationId");
         const watcherId = optionalBodyUuid(body.watcherId, "watcherId");
-        const registerId = optionalBodyUuid(body.registerId, "registerId");
         if (!isUuid(id)) throw new AppError("join_request.not_found", {});
         return acceptDeviceJoinRequest(tx, deps.cfg, id, {
           choice,
           profileId,
           stationId,
           watcherId,
-          registerId,
         });
       });
       // THE MISMATCH IS THROWN AFTER THE TRANSACTION, NEVER INSIDE IT: thrown inside, it would roll

@@ -6,7 +6,6 @@ import {
   parties,
   partyTables,
   ticketItems,
-  tills,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -15,16 +14,13 @@ import {
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import {
-  locationId as brandLocationId,
-  seriesId as brandSeriesId,
-  tillId as brandTillId,
-} from "@waitron/shared";
+import { locationId as brandLocationId, seriesId as brandSeriesId } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { TillConfig } from "./till-config.js";
 import { listExpoQueue, listStationQueue, listTablesWithState } from "./working-order.js";
+import { dashboardOrderAt } from "./testing/session-device.js";
 
 /** The three kitchen/floor read models, run against a real migrated venue database. */
 
@@ -51,8 +47,6 @@ beforeAll(async () => {
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const tillId = randomUUID();
-  await db.insert(tills).values({ id: tillId, locationId, name: "Caja 1" });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   [{ id: stationId }] = await db
     .insert(kitchenStations)
@@ -64,9 +58,14 @@ beforeAll(async () => {
     .insert(parties)
     .values({ openedBy: randomUUID() })
     .returning({ id: parties.id });
-  await db
-    .insert(workingOrders)
-    .values({ id: orderId, tillId, nodeId, orderNumber: 1, status: "open", partyId: party!.id });
+  await db.insert(workingOrders).values({
+    id: orderId,
+    ...dashboardOrderAt(locationId),
+    nodeId,
+    orderNumber: 1,
+    status: "open",
+    partyId: party!.id,
+  });
   const lineId = randomUUID();
   await db.insert(workingOrderLines).values({
     id: lineId,
@@ -94,7 +93,6 @@ beforeAll(async () => {
   await db.insert(partyTables).values({ partyId: party!.id, tableId });
 
   cfg = {
-    tillId: brandTillId(tillId),
     nodeId,
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -201,7 +199,7 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
     const orderId = randomUUID();
     await db.insert(workingOrders).values({
       id: orderId,
-      tillId: cfg.tillId,
+      ...dashboardOrderAt(cfg.locationId),
       nodeId: cfg.nodeId,
       orderNumber: 2,
       status: "open",

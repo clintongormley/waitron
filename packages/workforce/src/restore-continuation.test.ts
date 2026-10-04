@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, captureError, constraintTarget, isUniqueViolation } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { appendToChain, readChain, type ChainKey, type TimeEntryAppend } from "./chain.js";
@@ -49,6 +49,7 @@ function inputAt(at: string): TimeEntryAppend {
     eventAt: at,
     eventOffsetMinutes: 0,
     recordedByPersonId: personId,
+    origin: jobOrigin("dashboard"),
   };
 }
 
@@ -74,9 +75,9 @@ async function readHead() {
 function rawForkInsertAt(position: number) {
   return suite.db.run(sql`
     insert into time_entries (
-      id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+      id, captured_by_source, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
       recorded_by_person_id, recorded_at, entry_hash, prev_entry_hash, sequence_no, is_first_entry
-    ) values (${globalThis.crypto.randomUUID()}, ${personId}, ${locationId}, ${nodeId}, 'in',
+    ) values (${globalThis.crypto.randomUUID()}, 'dashboard', ${personId}, ${locationId}, ${nodeId}, 'in',
       '2026-01-05T20:00:00.000Z', 0,
       ${personId}, '2026-01-05T20:00:00.000Z', ${"B".repeat(64)}, ${"A".repeat(64)}, ${position}, 0)`);
 }

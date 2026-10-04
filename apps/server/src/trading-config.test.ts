@@ -15,7 +15,6 @@ const newDir = async () => {
 };
 
 const cfg: TradingConfig = {
-  tillId: "till-2",
   nodeId: "node-3",
   seriesId: "series-4",
   locationId: "location-5",
@@ -37,8 +36,7 @@ describe("writeTradingEnv", () => {
     // the venue directory is derived from the state root, not handed forward by setup.
     const env = await readFile(await writeTradingEnv(d, cfg), "utf8");
     expect(env).toBe(
-      "WAITRON_TILL_TILL_ID=till-2\n" +
-        "WAITRON_TILL_NODE_ID=node-3\n" +
+      "WAITRON_TILL_NODE_ID=node-3\n" +
         "WAITRON_TILL_SERIES_ID=series-4\n" +
         "WAITRON_TILL_LOCATION_ID=location-5\n" +
         "WAITRON_ENV=production\n" +
@@ -62,8 +60,7 @@ describe("writeTradingEnv", () => {
     const d = await newDir();
     const env = await readFile(await writeTradingEnv(d, { ...cfg, accountKey: undefined }), "utf8");
     expect(env).toBe(
-      "WAITRON_TILL_TILL_ID=till-2\n" +
-        "WAITRON_TILL_NODE_ID=node-3\n" +
+      "WAITRON_TILL_NODE_ID=node-3\n" +
         "WAITRON_TILL_SERIES_ID=series-4\n" +
         "WAITRON_TILL_LOCATION_ID=location-5\n" +
         "WAITRON_ENV=production\n" +

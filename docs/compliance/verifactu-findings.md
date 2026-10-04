@@ -30,6 +30,9 @@ This is the single most important correction to the original design assumption.
 > language below is now stale against the code** — read every "per till" in this section as
 > **"per node"**, the node being the SIF. `till_id` survives only as an informational snapshot on
 > `registros_facturacion`/`sales`.
+>
+> **Update, 2026-10-04 (A238).** The till snapshot is gone too: those rows now name a `source` and,
+> for a sale made on a device, its `device_id` (`docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`).
 
 **Orden HAC/1177/2024 art. 7.c):**
 
@@ -828,7 +831,7 @@ server is its own SIF with its own chain (#33 §3, "two servers, two SIFs, one v
 genuinely *can* land on a different server-SIF than the original (across the two active servers, or
 after a failover). The FAQ permits that for the sibling correction records it names; a rectificativa
 follows *a fortiori* by the identity-linkage argument (see the provenance caveat below).
-`packages/core/src/record-correction.ts` therefore takes the issuing `tillId`/SIF as a caller input
+`packages/core/src/record-correction.ts` therefore takes the issuing node (the SIF, `nodeId`) as a caller input
 and does **not** require it to match the original's — by design, and correct **on that inference**
 (confirm with the asesor before a cross-SIF rectificativa is issued in anger).
 

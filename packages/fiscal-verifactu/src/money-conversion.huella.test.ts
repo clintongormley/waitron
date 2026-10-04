@@ -4,7 +4,7 @@ import { recordSale } from "@waitron/core";
 import { computeHuella } from "@waitron/verifactu";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import type { NodeId, SeriesId, TillId } from "@waitron/shared";
+import type { NodeId, SeriesId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
@@ -26,12 +26,11 @@ import type { RegistroRow } from "./registro-row.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let backend: VerifactuBackend;
-let tillId: TillId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
 beforeEach(async () => {
-  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
+  ({ nodeId, seriesId } = await seedTenantWithSif(suite.db));
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -42,7 +41,7 @@ beforeEach(async () => {
 
 async function sell(overrides: Record<string, unknown> = {}) {
   return withTransaction(suite.db, async (tx) => {
-    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId, ...overrides }));
+    return recordSale(tx, backend, saleInput({ nodeId, seriesId, ...overrides }));
   });
 }
 

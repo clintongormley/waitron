@@ -10,6 +10,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { metricStyles, renderMetric } from "../widgets/metric-row.js";
+import { sourceLabel } from "../widgets/alert-format.js";
 import {
   renderTopSellers,
   topSellersStyles,
@@ -49,9 +50,9 @@ function fill(template: string, key: string, value: string): string {
 
 /**
  * A single day (`from === to`) shows the full daily close; a range shows a period roll-up of VAT and
- * top sellers only, because per-till cash-up does not roll up across days. A `from > to` range is left
- * for the server to reject. The category report follows either range, and is not asked for over a
- * backwards one, whose refusal the banner already shows.
+ * top sellers only, because the per-device cash-up does not roll up across days. A `from > to`
+ * range is left for the server to reject. The category report follows either range, and is not
+ * asked for over a backwards one, whose refusal the banner already shows.
  */
 @customElement("dashboard-sales-screen")
 export class SalesScreen extends LitElement {
@@ -651,18 +652,20 @@ export class SalesScreen extends LitElement {
       <table data-test="tender-table">
         <thead>
           <tr>
-            <th scope="col">${t("sales.till")}</th>
+            <th scope="col">${t("sales.device")}</th>
             <th scope="col">${t("sales.method")}</th>
             <th scope="col" class="num">${t("sales.amount")}</th>
             <th scope="col" class="num">${t("sales.tip")}</th>
           </tr>
         </thead>
         <tbody>
-          ${cash.byTill.map((till) =>
-            till.byMethod.map(
+          ${cash.byOrigin.map((origin) =>
+            origin.byMethod.map(
               (line) =>
-                html`<tr data-test=${`tender-row-${till.tillId}-${line.method}`}>
-                  <th scope="row">${till.tillId}</th>
+                html`<tr
+                  data-test=${`tender-row-${origin.deviceId ?? origin.source}-${line.method}`}
+                >
+                  <th scope="row">${sourceLabel(origin)}</th>
                   <td>${line.method}</td>
                   <td class="num">${money(line.amount)}</td>
                   <td class="num">${money(line.tip)}</td>

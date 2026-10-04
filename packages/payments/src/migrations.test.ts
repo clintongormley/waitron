@@ -6,14 +6,9 @@ import {
   captureError,
   isRefusal,
   engineErrorMessage,
-  runMigrations,
-  openVenueDatabase,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 
 const suite = useVenueDb({
@@ -77,31 +72,6 @@ describe("payments migrations", () => {
       sql`select name from sqlite_master where type = 'table' and name = 'payments'`,
     );
     expect(rows.rows.map((r) => r.name)).toEqual(["payments"]);
-  });
-
-  // Nothing here catches a set applied before core; `applyMigrations`
-  // (`packages/migrations/src/apply.ts`) applies sets in the order its caller passes.
-  it("no longer fails when run before core — SQLite resolves an FK target at DML time", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "waitron-payments-order-"));
-    const store = await openVenueDatabase(directory);
-    try {
-      await runMigrations(store.venue, PAYMENTS_MIGRATIONS);
-      const tables = await store.venue.execute<{ name: string }>(
-        sql`select name from sqlite_master
-            where type = 'table' and name not glob '__drizzle_migrations*' order by name`,
-      );
-      expect(tables.rows.map((r) => r.name)).toEqual([
-        "card_readers",
-        "device_card_readers",
-        "payment_policy",
-        "payment_refunds",
-        "payment_resolutions",
-        "payments",
-      ]);
-    } finally {
-      await store.close();
-      await rm(directory, { recursive: true, force: true });
-    }
   });
 
   it("adds a nullable external_ref column to payments", async () => {

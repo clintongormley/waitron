@@ -110,7 +110,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       name: "Till 1",
       formFactor: "till",
       stationId: null,
-      tillId: "t1",
     }),
     ...overrides,
   } as unknown as TillApi;

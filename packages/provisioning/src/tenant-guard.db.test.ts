@@ -29,7 +29,6 @@ function request(): VenueRequest {
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
     },
-    tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
     admin: {

@@ -50,7 +50,7 @@ describe("appendToChain from many callers started together, keyed by node", () =
     const results = await Promise.all(
       sales.map((saleId, i) =>
         withTransaction(suite.db, (tx) =>
-          appendToChain(tx, node.nodeId, altaFor(node.tillId, saleId, i + 1, i)),
+          appendToChain(tx, node.nodeId, altaFor(node, saleId, i + 1, i)),
         ),
       ),
     );
@@ -88,18 +88,18 @@ describe("appendToChain from many callers started together, keyed by node", () =
       sec += 1;
       const saleId = await seedSale(suite.db, till, sec);
       await suite.db.transaction((tx) =>
-        appendToChain(tx, node.nodeId, altaFor(till.tillId, saleId, sec, sec)),
+        appendToChain(tx, node.nodeId, altaFor(till, saleId, sec, sec)),
       );
     }
 
-    const { rows } = await suite.db.execute<{ secuencia: number; till_id: string }>(sql`
-      select secuencia, till_id from registros_facturacion
+    const { rows } = await suite.db.execute<{ secuencia: number; device_id: string }>(sql`
+      select secuencia, device_id from registros_facturacion
       where node_id = ${node.nodeId} order by secuencia
     `);
     // One continuous per-node sequence spanning both tills...
     expect(rows.map((r) => r.secuencia)).toEqual([1, 2, 3, 4, 5, 6]);
-    // ...and both tills' snapshots are present (the chain is the node's, not either till's).
-    expect(new Set(rows.map((r) => r.till_id))).toEqual(new Set([node.tillId, tillB.tillId]));
+    // ...and both devices' snapshots are present (the chain is the node's, not either device's).
+    expect(new Set(rows.map((r) => r.device_id))).toEqual(new Set([node.deviceId, tillB.deviceId]));
   });
 });
 
@@ -123,7 +123,7 @@ describe("currentSif resolves per node", () => {
     // And distinct chains: an append on nodeA leaves the sibling's chain untouched.
     const saleId = await seedSale(suite.db, nodeA, 1);
     await suite.db.transaction((tx) =>
-      appendToChain(tx, nodeA.nodeId, altaFor(nodeA.tillId, saleId, 1, 1)),
+      appendToChain(tx, nodeA.nodeId, altaFor(nodeA, saleId, 1, 1)),
     );
     const counts = await suite.db.execute<{ node_id: string; count: number }>(sql`
       select node_id, cast(count(*) as int) as count from registros_facturacion group by node_id
@@ -190,7 +190,6 @@ describe("the series↔node guard (record-sale)", () => {
           tx,
           backend,
           saleInput({
-            tillId: node.tillId,
             nodeId: other.nodeId,
             seriesId: brandSeriesId(node.seriesId),
           }),
@@ -207,7 +206,6 @@ describe("the series↔node guard (record-sale)", () => {
         tx,
         backend,
         saleInput({
-          tillId: node.tillId,
           nodeId: node.nodeId,
           seriesId: brandSeriesId(node.seriesId),
         }),

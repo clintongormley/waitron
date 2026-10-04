@@ -29,7 +29,6 @@ function request(overrides: Partial<VenueRequest> = {}): VenueRequest {
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
     },
-    tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
     admin: {
@@ -43,14 +42,13 @@ function request(overrides: Partial<VenueRequest> = {}): VenueRequest {
 }
 
 describe("planVenue", () => {
-  it("emits ensure-tenant → seed-admin → seed-device-profiles → location → till → node → two series → module seeds, in order", () => {
+  it("emits ensure-tenant → seed-admin → seed-device-profiles → location → node → two series → module seeds, in order, and no till", () => {
     const actions = planVenue(request(), MODULES);
     expect(actions.map((a) => a.kind)).toEqual([
       "ensure-tenant",
       "seed-admin",
       "seed-device-profiles",
       "create-location",
-      "create-till",
       "create-node",
       "create-series",
       "create-series",
@@ -79,6 +77,7 @@ describe("planVenue", () => {
             "show-station",
             "show-expo",
             "show-schedule",
+            "take-cash",
           ],
           inactivityTimeoutSeconds: 300,
         },
@@ -317,7 +316,6 @@ describe("planVenue", () => {
       "seed-admin",
       "seed-device-profiles",
       "create-location",
-      "create-till",
       "create-node",
       "create-series",
       "create-series",
@@ -362,7 +360,6 @@ describe("describeVenueAction", () => {
       "seed admin Owner",
       "seed device profiles Mostrador, Cocina, Móvil",
       "create location Mostrador in ES-common (es-ES)",
-      "create till Caja 1",
       "create node Mostrador filing=verifactu tax=vat",
       "create standard series A",
       "create rectificative series R",

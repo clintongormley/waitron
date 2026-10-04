@@ -27,6 +27,7 @@ import {
 } from "@waitron/shared";
 import { money, ZERO } from "./bill-allocation.js";
 import { raiseRefundOutcomeConflict, refundAmountOf } from "./bill-refund-alerts.js";
+import { alertOrigin, type AlertOrigin } from "./request-config.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import {
   attestationColumns,
@@ -40,7 +41,7 @@ import type { Attestation, BillBalance, BillRefundView } from "./bill-payments.j
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { enqueueBillRefundDrawer } from "./receipt-print.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./till-config.js";
 import { fingerprint } from "./parties.js";
 import { refusePaymentInFlight } from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
@@ -204,6 +205,7 @@ async function recordRefundOutcome(
   deps: BillRefundDeps,
   refundId: string,
   evidence: RefundEvidence,
+  raisedBy: AlertOrigin,
   attestation?: Attestation,
 ): Promise<RefundRow> {
   return withTransaction(deps.db, async (tx) => {
@@ -214,7 +216,14 @@ async function recordRefundOutcome(
     const providerRefundRef = providerRefundRefOf(evidence);
     if (refund.state !== "pending") {
       if (refund.state === "failed" && outcome === "completed") {
-        await raiseRefundOutcomeConflict(tx, refund, target.workingOrderId, providerRefundRef, now);
+        await raiseRefundOutcomeConflict(
+          tx,
+          refund,
+          target.workingOrderId,
+          providerRefundRef,
+          now,
+          alertOrigin(raisedBy, refund),
+        );
       }
       return refund;
     }
@@ -267,6 +276,7 @@ async function sendCardRefund(
   deps: BillRefundDeps,
   provider: PaymentProvider,
   refundId: string,
+  raisedBy: AlertOrigin,
 ): Promise<RefundRow> {
   // The row is pending: this process claimed it, and every writer of its outcome claims it too.
   const before = await withTransaction(deps.db, (tx) => readCardRefund(tx, refundId));
@@ -308,7 +318,7 @@ async function sendCardRefund(
           lookup: await lookUp(deps, provider, refund, provided!.processorRef, refund.sentAt!),
         }
       : { kind: "answer", answer, sendCount: refund.sendCount };
-  return recordRefundOutcome(deps, refundId, evidence);
+  return recordRefundOutcome(deps, refundId, evidence, raisedBy);
 }
 
 /** The provider refund ids already attributed to the payment's other refunds, made or failed:
@@ -377,11 +387,13 @@ export type ResumedRefund =
  * first. With no `sent_at`, a retry sends it now and any other resolver fails it. With `sent_at`,
  * the provider is looked up first; only a retry or the manager, only when the lookup found
  * nothing, and only while the provider's key window is open, sends again under the same key.
+ * `raisedBy` is who an outcome-conflict alert names.
  */
 export async function resumeCardRefund(
   deps: BillRefundDeps,
   refundId: string,
   resolver: RefundResolver,
+  raisedBy: AlertOrigin,
 ): Promise<ResumedRefund> {
   const live = liveRefundsOf(deps.db);
   const target = await withTransaction(deps.db, async (tx) => {
@@ -394,7 +406,7 @@ export async function resumeCardRefund(
   const { refund, provided } = target.found;
   try {
     if (refund.sentAt === null && resolver !== "retry") {
-      const failed = await recordRefundOutcome(deps, refundId, { kind: "never_sent" });
+      const failed = await recordRefundOutcome(deps, refundId, { kind: "never_sent" }, raisedBy);
       return { claimed: true, refund: failed, lookup: null, resent: false };
     }
     const provider = await providerOf(deps, target.found);
@@ -402,7 +414,7 @@ export async function resumeCardRefund(
       const sent =
         provider?.sendRefund === undefined
           ? refund
-          : await sendCardRefund(deps, provider, refundId);
+          : await sendCardRefund(deps, provider, refundId, raisedBy);
       return { claimed: true, refund: sent, lookup: null, resent: false };
     }
     const lookup: RefundLookup =
@@ -418,10 +430,10 @@ export async function resumeCardRefund(
       window !== null &&
       age < window
     ) {
-      const resent = await sendCardRefund(deps, provider, refundId);
+      const resent = await sendCardRefund(deps, provider, refundId, raisedBy);
       return { claimed: true, refund: resent, lookup, resent: true };
     }
-    const settled = await recordRefundOutcome(deps, refundId, { kind: "lookup", lookup });
+    const settled = await recordRefundOutcome(deps, refundId, { kind: "lookup", lookup }, raisedBy);
     return { claimed: true, refund: settled, lookup, resent: false };
   } finally {
     target.release();
@@ -452,7 +464,13 @@ export async function attestCardRefund(
     return claimLive(live, refundId);
   });
   try {
-    return await recordRefundOutcome(deps, refundId, { kind: "attested", outcome }, attestation);
+    return await recordRefundOutcome(
+      deps,
+      refundId,
+      { kind: "attested", outcome },
+      "stored",
+      attestation,
+    );
   } finally {
     release();
   }
@@ -504,7 +522,7 @@ async function refundOverrideToCheck(
  */
 export async function refundBillPayment(
   deps: BillRefundDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   workingOrderId: string,
   paymentId: string,
   req: BillRefundRequest,
@@ -598,7 +616,8 @@ export async function refundBillPayment(
           reason: req.reason,
           authorizedBy: authorization.authorizedBy,
           requestedBy: operator.personId,
-          tillId: cfg.tillId,
+          source: cfg.origin.source,
+          deviceId: cfg.origin.deviceId,
           createdAt,
         };
         if (payment.method === "cash") {
@@ -670,9 +689,9 @@ export async function refundBillPayment(
     });
     if (begun.kind === "done") return begun.result;
     if (begun.kind === "send") {
-      await sendCardRefund(deps, begun.provider, begun.refundId);
+      await sendCardRefund(deps, begun.provider, begun.refundId, cfg.origin);
     } else {
-      await resumeCardRefund(deps, begun.refundId, "retry");
+      await resumeCardRefund(deps, begun.refundId, "retry", cfg.origin);
     }
     const refundId = begun.refundId;
     return await withTransaction(deps.db, async (tx) => {

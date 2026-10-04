@@ -79,9 +79,6 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
       const result = await deps.drain(now);
       let sawMissingCert = false;
       for (const skipped of result.skipped) {
-        // Due fiscal work this pass could not submit is an unmet legal obligation with no ledger row
-        // and no incident (`incidents.till_id` is NOT NULL and a drain has no till), so this line is
-        // the only place it exists.
         deps.log("warn", "drain.tenant_skipped", skipped);
         if (skipped.errorCode === AWAITING_CERT_ERROR) sawMissingCert = true;
       }

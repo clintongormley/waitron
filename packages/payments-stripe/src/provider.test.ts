@@ -9,8 +9,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   AppError,
   decimal,
-  tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
 } from "@waitron/shared";
 import {
   PAYMENTS_MIGRATIONS,
@@ -34,6 +34,7 @@ import {
   seedBillPayment,
   seedWorkingOrder,
 } from "@waitron/payments/test/seed.js";
+import type { DeviceOrigin } from "@waitron/shared";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
@@ -59,7 +60,7 @@ function providerFor(client: StripeClient): StripeTerminalProvider {
 async function collectParams(nif = freshNif()) {
   const s = await seedWorkingOrder(suite.db, nif);
   return {
-    tillId: brandTillId(s.tillId),
+    origin: deviceOrigin(s.deviceId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     amount: decimal("12.10"),
     readerRef: "reader_1",
@@ -76,6 +77,7 @@ async function capturedPayment(externalRef: string): Promise<{ paymentRef: strin
   const paymentRef = `ref-${externalRef}`;
   await withTransaction(suite.db, (tx) =>
     insertCapturedPayment(tx, {
+      origin: deviceOrigin(seeded.deviceId),
       workingOrderId: seeded.workingOrderId,
       provider: "stripe",
       paymentRef,
@@ -513,13 +515,15 @@ const AUDIT = { personId: MANAGER };
 /** An `attempting` stripe row as a crash leaves it, optionally stamped with a PaymentIntent. */
 async function abandonedRow(
   externalRef: string | null,
-  workingOrderId?: string,
+  on?: { workingOrderId: string; origin: DeviceOrigin },
 ): Promise<{ paymentRef: string; paymentId: string; workingOrderId: string }> {
-  const woId = workingOrderId ?? (await seedWorkingOrder(suite.db, freshNif())).workingOrderId;
+  const seeded = on === undefined ? await seedWorkingOrder(suite.db, freshNif()) : undefined;
+  const woId = on?.workingOrderId ?? seeded!.workingOrderId;
+  const origin = on?.origin ?? deviceOrigin(seeded!.deviceId);
   const paymentRef = `abandoned-${externalRef ?? "unstamped"}-${Math.random()}`;
   const key = { provider: "stripe", paymentRef };
   return withTransaction(suite.db, async (tx) => {
-    await insertAttempting(tx, { ...key, workingOrderId: woId, amount: decimal("12.10") });
+    await insertAttempting(tx, { ...key, origin, workingOrderId: woId, amount: decimal("12.10") });
     if (externalRef !== null) await stampAttemptingRef(tx, key, externalRef);
     const row = await getPaymentByRef(tx, key);
     return { paymentRef, paymentId: row!.id, workingOrderId: woId };
@@ -888,7 +892,7 @@ describe("the Stripe idempotency key after a PaymentIntent was cancelled at Stri
     const p = await collectParams();
     const provider = providerFor(fake);
     fake.setIntent("pi_first", { status: "requires_payment_method", amount: 1210 });
-    const stuck = await abandonedRow("pi_first", p.workingOrderId);
+    const stuck = await abandonedRow("pi_first", p);
     const outcome = await provider.resolveAbandonedAttempt(stuck.paymentRef, NOW, AUDIT);
     expect(outcome).toEqual({ outcome: "failed", cancelledAtProvider: true });
 
@@ -902,11 +906,11 @@ describe("the Stripe idempotency key after a PaymentIntent was cancelled at Stri
     const fake = new FakeStripe();
     const p = await collectParams();
     const provider = providerFor(fake);
-    await resolved(await abandonedRow("pi_a", p.workingOrderId), true);
-    await resolved(await abandonedRow(null, p.workingOrderId), false);
+    await resolved(await abandonedRow("pi_a", p), true);
+    await resolved(await abandonedRow(null, p), false);
     await provider.collect(p);
     expect(fake.lastCreateIntent?.idempotencyKey).toBe(`wo_${p.workingOrderId}_r1`);
-    await resolved(await abandonedRow("pi_b", p.workingOrderId), true);
+    await resolved(await abandonedRow("pi_b", p), true);
     await provider.collect(p);
     expect(fake.lastCreateIntent?.idempotencyKey).toBe(`wo_${p.workingOrderId}_r2`);
   });
@@ -917,6 +921,7 @@ describe("the Stripe idempotency key after a PaymentIntent was cancelled at Stri
     const other = await withTransaction(suite.db, async (tx) => {
       const key = { provider: "sumup", paymentRef: "sumup-ref" };
       await insertAttempting(tx, {
+        origin: p.origin,
         ...key,
         workingOrderId: p.workingOrderId,
         amount: decimal("12.10"),
@@ -957,7 +962,7 @@ describe("StripeTerminalProvider.collect for a bill payment", () => {
   it("keeps the bill payment's key when a PaymentIntent of the order was cancelled at Stripe", async () => {
     const fake = new FakeStripe();
     const p = await collectParams();
-    const stuck = await abandonedRow("pi_cancelled", p.workingOrderId);
+    const stuck = await abandonedRow("pi_cancelled", p);
     await withTransaction(suite.db, (tx) =>
       recordResolution(tx, {
         paymentId: stuck.paymentId,

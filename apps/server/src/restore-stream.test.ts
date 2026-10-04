@@ -12,7 +12,6 @@ import {
   nodes,
   openVenueDatabase,
   tenants,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -61,7 +60,6 @@ const suite = useVenueDb({
 
 const T = {
   locationId: "c0000000-0000-4000-8000-000000000002",
-  tillId: "c0000000-0000-4000-8000-000000000003",
   seriesId: "c0000000-0000-4000-8000-000000000004",
   nodeId: "c0000000-0000-4000-8000-000000000008",
 };
@@ -83,7 +81,6 @@ const ENTRIES: ArchiveEntry[] = [
     name: "secrets/trading.env",
     bytes: Buffer.from(
       formatEnvFile({
-        WAITRON_TILL_TILL_ID: T.tillId,
         WAITRON_TILL_NODE_ID: T.nodeId,
         WAITRON_TILL_SERIES_ID: T.seriesId,
         WAITRON_TILL_LOCATION_ID: T.locationId,
@@ -125,7 +122,6 @@ beforeAll(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
-  await db.insert(tills).values({ id: T.tillId, locationId: T.locationId, name: "Caja 1" });
   await db.insert(nodes).values({ id: T.nodeId, locationId: T.locationId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
   await writeSealedStateRow(db, T.nodeId, await sealNodeState(ENTRIES, RECOVERY_KEY), NOW);

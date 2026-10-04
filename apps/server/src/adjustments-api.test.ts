@@ -15,7 +15,7 @@ import {
   deactivateAdjustmentReason,
   createAdjustmentReason,
 } from "@waitron/adjustments";
-import { createPinThrottle, persons } from "@waitron/identity";
+import { createPinThrottle, loginWithPin, persons } from "@waitron/identity";
 import { send } from "./testing/bill-venue.js";
 import {
   billWith,
@@ -30,6 +30,7 @@ import {
 import { DEVICE_COOKIE } from "./device-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { mountTillApi } from "./till-api.js";
+import { SESSION_COOKIE } from "./till-session.js";
 import { parkOrder } from "./working-order.js";
 import "./errors.js";
 import { watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
@@ -444,7 +445,7 @@ describe("approval through the route (plan D6)", () => {
       expect(await recordedOn(billId)).toMatchObject([{ approvedBy: venue.managerId }]);
     });
 
-    it("counts wrong PINs sent to the cash drawer from the same till toward the same approver", async () => {
+    it("counts wrong PINs sent to the cash drawer from the same device toward the same approver", async () => {
       const { app } = throttledApp();
       const { billId } = await billWith(venue, [{ name: "Burger" }]);
       // The staff session on a second till device of the venue, whose profile may open a drawer.
@@ -458,7 +459,14 @@ describe("approval through the route (plan D6)", () => {
         name: "Drawer till device",
         profileId: drawerProfile!.id,
       });
-      const staffSession = `${venue.cookie.staff.split("; ")[0]!}; ${DEVICE_COOKIE}=${drawerDevice.deviceId}.${drawerDevice.token}`;
+      const onDrawerDevice = await inTx(venue, (tx) =>
+        loginWithPin(tx, {
+          deviceId: drawerDevice.deviceId,
+          personId: venue.staffId,
+          pin: PINS.staff,
+        }),
+      );
+      const staffSession = `${SESSION_COOKIE}=${onDrawerDevice.token}; ${DEVICE_COOKIE}=${drawerDevice.deviceId}.${drawerDevice.token}`;
 
       for (let i = 0; i < 4; i += 1) {
         const drawer = await send(app, staffSession, "POST", "/api/drawer/open", {
@@ -466,14 +474,72 @@ describe("approval through the route (plan D6)", () => {
         });
         expect(drawer.status).toBe(401);
       }
-      const throttled = await postOn(app, billId, {
-        ...(await comp(billId)),
-        ...approvedBy(PINS.manager),
-      });
+      const throttled = await send(
+        app,
+        staffSession,
+        "POST",
+        `/api/working-orders/${billId}/adjustments`,
+        {
+          submissionId: randomUUID(),
+          expectedRevision: await revisionOf(billId),
+          note: null,
+          ...(await comp(billId)),
+          ...approvedBy(PINS.manager),
+        },
+      );
 
       expect(throttled.status).toBe(429);
       expect(throttled.json).toMatchObject({ code: "pin.throttled" });
       expect(await recordedOn(billId)).toEqual([]);
+    });
+
+    it("counts wrong PINs per device: a session on another device of the same till starts its own count", async () => {
+      const { app } = throttledApp();
+      const { billId } = await billWith(venue, [{ name: "Burger" }]);
+      const [tillProfile, handheldProfile] = await inTx(venue, (tx) =>
+        tx
+          .insert(deviceProfiles)
+          .values([
+            { name: "Bucket till", formFactor: "till", capabilities: [] },
+            { name: "Bucket phone", formFactor: "phone-portrait", capabilities: [] },
+          ])
+          .returning({ id: deviceProfiles.id }),
+      );
+      const till = await enrolDeviceForTest(venue.db, venue.cfg, {
+        name: "Bucket till device",
+        profileId: tillProfile!.id,
+      });
+      // A handheld at the same location as `till`, so only the device tells their counts apart.
+      const handheld = await enrolDeviceForTest(venue.db, venue.cfg, {
+        name: "Bucket phone device",
+        profileId: handheldProfile!.id,
+      });
+      const sessionOn = async (deviceId: string) => {
+        const session = await inTx(venue, (tx) =>
+          loginWithPin(tx, { deviceId, personId: venue.staffId, pin: PINS.staff }),
+        );
+        return `${SESSION_COOKIE}=${session.token}`;
+      };
+      const adjustAs = async (cookie: string, pin: string) =>
+        send(app, cookie, "POST", `/api/working-orders/${billId}/adjustments`, {
+          submissionId: randomUUID(),
+          expectedRevision: await revisionOf(billId),
+          note: null,
+          ...(await comp(billId)),
+          ...approvedBy(pin),
+        });
+
+      const first = await sessionOn(till.deviceId);
+      for (let i = 0; i < 4; i += 1) {
+        expect((await adjustAs(first, "0000")).status).toBe(401);
+      }
+      const sameDevice = await adjustAs(await sessionOn(till.deviceId), PINS.manager);
+      expect(sameDevice.status).toBe(429);
+      expect(sameDevice.json).toMatchObject({ code: "pin.throttled" });
+
+      const otherDevice = await adjustAs(await sessionOn(handheld.deviceId), PINS.manager);
+      expect(otherDevice.status).toBe(200);
+      expect(await recordedOn(billId)).toMatchObject([{ approvedBy: venue.managerId }]);
     });
 
     it("an approver sent with an adjustment that needs none is never checked, so a wrong PIN there does not count", async () => {

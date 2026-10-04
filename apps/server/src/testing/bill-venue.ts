@@ -28,7 +28,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { CardProviderPool } from "../card-provider-pool.js";
 import { deploymentEnvironment } from "../config.js";
@@ -36,7 +35,7 @@ import { DEVICE_COOKIE } from "../device-session.js";
 import type { Logger } from "../logger.js";
 import { ALL_MODULES } from "../modules.js";
 import { createTable } from "../tables.js";
-import type { TillConfig } from "../till-config.js";
+import type { DeviceRequestConfig } from "../till-config.js";
 import { mountTillApi } from "../till-api.js";
 import { systemClock } from "../till-backend.js";
 import { SESSION_COOKIE } from "../till-session.js";
@@ -45,6 +44,7 @@ import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts } from "./zone-offers.js";
 import { partyRevisionOfOrder } from "../parties.js";
 import { parkOrder, placeOrder } from "../working-order.js";
+import { deviceRequestCfg } from "./session-device.js";
 
 /**
  * A provisioned venue for the bill payment suites that take a card on a reader: real Veri*Factu
@@ -70,7 +70,7 @@ export interface BillVenue {
   backend: FiscalBackend;
   clock: TrustedClock;
   /** The box's configuration, tips off. */
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   card: FakePaymentProvider;
   /** Serves the fake card provider as `fake`. */
   pool: CardProviderPool;
@@ -82,12 +82,14 @@ export interface BillVenue {
   appTipsOff: Hono;
   /** The first till's session and device. */
   cookie: string;
+  /** The first till's device: `cookie`'s. */
+  deviceId: string;
   /** The second till's session and device. */
   cookie2: string;
   /** A till whose profile does not declare `integrated-card-payment`. */
   cookieNoCard: string;
-  deviceTillId: string;
-  device2TillId: string;
+  /** The second till's device: `cookie2`'s. */
+  device2Id: string;
   operatorId: string;
   /** The provisioned administrator, PIN 1234. */
   adminId: string;
@@ -125,7 +127,6 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -139,8 +140,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     ),
     { db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
-    tillId: brandTillId(provisioned.tillId),
+  const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
     locationId: brandLocationId(provisioned.locationId),
@@ -149,7 +149,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  });
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
     const platos = await createCategory(tx, { name: "Platos" });
@@ -179,9 +179,9 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
         {
           name: "Counter till",
           formFactor: "till",
-          capabilities: ["integrated-card-payment", "open-cash-drawer"],
+          capabilities: ["integrated-card-payment", "open-cash-drawer", "take-cash"],
         },
-        { name: "Cash till", formFactor: "till", capabilities: ["open-cash-drawer"] },
+        { name: "Cash till", formFactor: "till", capabilities: ["open-cash-drawer", "take-cash"] },
       ])
       .returning({ id: deviceProfiles.id });
     const printer = await createPrinter(
@@ -211,25 +211,21 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
       readerIds: readers.map((reader) => reader.id),
     };
   });
-  const session = await withTransaction(db, (tx) =>
-    loginWithPin(tx, { tillId: cfg.tillId, personId: seeded.personId, pin: "5555" }),
-  );
   const devices = [];
   for (const [index, name] of ["Barra", "Terraza"].entries()) {
     const device = await enrolDeviceForTest(db, cfg, { name, profileId: seeded.profileId });
     await db
       .insert(deviceCardReaders)
       .values({ deviceId: device.deviceId, readerId: seeded.readerIds[index]! });
-    const [row] = db.all<{ till_id: string }>(
-      sql`select till_id from devices where id = ${device.deviceId}`,
-    );
-    devices.push({ ...device, tillId: row!.till_id });
+    devices.push(device);
   }
   const cashOnlyDevice = await enrolDeviceForTest(db, cfg, {
     name: "Caja efectivo",
     profileId: seeded.cashOnlyProfileId,
   });
-  db.run(sql`update tills set receipt_printer_id = ${seeded.printerId}`);
+  db.run(
+    sql`update devices set receipt_printer_id = ${seeded.printerId}, payment_slip_printer_id = ${seeded.printerId}`,
+  );
 
   const card = new FakePaymentProvider(db);
   const pool: CardProviderPool = {
@@ -256,8 +252,13 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     );
     return app;
   };
-  const cookieFor = (device: { deviceId: string; token: string }) =>
-    `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+  // The operator's shift on `device`, as signing in there opens it.
+  const cookieFor = async (device: { deviceId: string; token: string }) => {
+    const session = await withTransaction(db, (tx) =>
+      loginWithPin(tx, { deviceId: device.deviceId, personId: seeded.personId, pin: "5555" }),
+    );
+    return `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+  };
   return {
     db,
     backend,
@@ -268,11 +269,11 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
     app: mount(true),
     appAt: (at) => mount(true, at),
     appTipsOff: mount(false),
-    cookie: cookieFor(devices[0]!),
-    cookie2: cookieFor(devices[1]!),
-    cookieNoCard: cookieFor(cashOnlyDevice),
-    deviceTillId: devices[0]!.tillId,
-    device2TillId: devices[1]!.tillId,
+    cookie: await cookieFor(devices[0]!),
+    deviceId: devices[0]!.deviceId,
+    cookie2: await cookieFor(devices[1]!),
+    cookieNoCard: await cookieFor(cashOnlyDevice),
+    device2Id: devices[1]!.deviceId,
     operatorId: seeded.personId,
     adminId: db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!.id,
     offerFor: (name) => seeded.offers.offerFor(seeded.productIds.get(name)!),
@@ -369,7 +370,7 @@ export async function tendersOfBill(venue: BillVenue, billId: string) {
         amount: tenders.amount,
         tip: tenders.tipAmount,
         billPaymentId: tenders.billPaymentId,
-        saleTillId: sales.tillId,
+        saleDeviceId: sales.deviceId,
       })
       .from(tenders)
       .innerJoin(sales, eq(sales.id, tenders.saleId))
@@ -429,7 +430,7 @@ export async function placedCounterBillMovedTo(
     zoneId,
     operatorId: venue.operatorId,
   });
-  await placeOrder(deps, venue.cfg, id, venue.operatorId, venue.cfg.tillId);
+  await placeOrder(deps, venue.cfg, id, venue.operatorId);
   const [row] = venue.db.all<{ revision: number }>(
     sql`select revision from parties where id = ${party.partyId}`,
   );

@@ -6,7 +6,6 @@ import {
   kitchenPrintJobs,
   locations,
   printJobs,
-  tills,
   parties,
   withTransaction,
   workingOrderLines,
@@ -33,9 +32,9 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 import { createStation } from "./kitchen.js";
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
 import { createWatcher, setPrinterWatcher } from "./watchers.js";
@@ -91,7 +90,7 @@ const DISHES = {
 type Dish = keyof typeof DISHES;
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   cocina: string;
   barra: string;
   cocinaPrinter: string;
@@ -110,13 +109,8 @@ async function setupVenue(): Promise<Venue> {
     .returning({ id: locations.id });
   const locationId = location!.id;
   const cocina = await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
-  const cfg: TillConfig = {
-    tillId: brandTillId(till!.id),
+  const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -125,7 +119,7 @@ async function setupVenue(): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  } satisfies TillConfig);
   return inTx(async (tx) => {
     const { id: barra } = await createStation(tx, cfg, { name: "Barra" });
     const catalogue = await createCatalogue(tx, { name: "Carta" });

@@ -13,7 +13,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
@@ -81,7 +80,6 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -122,7 +120,6 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),

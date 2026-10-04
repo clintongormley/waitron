@@ -1,23 +1,23 @@
-import type { Decimal, NodeId, TillId } from "@waitron/shared";
+import type { Decimal, DeviceId, NodeId } from "@waitron/shared";
 import type { DailyClose } from "./types.js";
 
 /**
- * The per-till cash reconciliation for one till at close time. All money is `Decimal` strings.
+ * The cash reconciliation for one device at close time. All money is `Decimal` strings.
  *
  * `cashVariance = countedCash − (openingFloat + cashTakings − payouts)`: positive is an overage
  * (more cash in the drawer than the takings explain), negative a shortage. `cashTakings` is the
  * net cash the day's payments and refunds moved through the drawer — copied from
- * `close.cash.byTill[].cashTakings`, never a fresh derivation.
+ * `close.cash.byOrigin[].cashTakings`, never a fresh derivation.
  */
-export interface TillReconciliation {
-  tillId: TillId;
+export interface DeviceReconciliation {
+  deviceId: DeviceId;
   /** Opening cash float in the drawer (supplied by the counting operator). */
   openingFloat: Decimal;
   /** Cash removed from the drawer during the day (supplied). */
   payouts: Decimal;
   /** Physical drawer count at close (supplied). */
   countedCash: Decimal;
-  /** Net cash the day moved through the drawer, from `close.cash.byTill[].cashTakings`. */
+  /** Net cash the day moved through the drawer, from `close.cash.byOrigin[].cashTakings`. */
   cashTakings: Decimal;
   /** `countedCash − (openingFloat + cashTakings − payouts)`. */
   cashVariance: Decimal;
@@ -33,19 +33,20 @@ export interface DailyCloseSnapshot {
   /** The VAT-exact `computeDailyClose` output (vat summary, cash-up, counts). */
   close: DailyClose;
   cashReconciliation: {
-    byTill: TillReconciliation[];
-    /** Σ per-till `cashVariance` across the node. */
+    /** Device rows only: a job source has no drawer to count. */
+    byDevice: DeviceReconciliation[];
+    /** Σ per-device `cashVariance` across the node. */
     nodeVariance: string;
   };
 }
 
 /**
- * One till's supplied cash count — the raw operator input `recordDailyClose` reconciles. The money
+ * One device's supplied cash count — the raw operator input `recordDailyClose` reconciles. The money
  * fields are plain `string`, not `Decimal`, because nothing has validated them yet;
  * `recordDailyClose` refuses a negative or non-numeric one with `close.invalid_cash_input`.
  */
 export interface CashCountInput {
-  tillId: TillId;
+  deviceId: DeviceId;
   openingFloat: string;
   payouts: string;
   countedCash: string;
@@ -53,7 +54,7 @@ export interface CashCountInput {
 
 /**
  * The input to `recordDailyClose`: the same identity `computeDailyClose` takes, plus the counting
- * actor and the per-till physical cash counts. `closedBy` is an identity person id.
+ * actor and the per-device physical cash counts. `closedBy` is an identity person id.
  */
 export interface RecordDailyCloseInput {
   nodeId: NodeId;

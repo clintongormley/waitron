@@ -14,7 +14,6 @@ import {
   setSingletonRole,
   stampDeployment,
   tenants,
-  tills,
   workingOrders,
   writeMirrorConfig,
   type Database,
@@ -59,14 +58,12 @@ import { freePorts } from "./testing/free-ports.js";
 // cross-node, venue-wide read) each with its own series. Fixed ids so `/api/node.nodeId` is deterministic
 // and matches the committed fixture.
 const LOCATION = "55555555-5555-4555-8555-555555555555";
-const TILL = "22222222-2222-4222-8222-222222222222";
 const NODE_A = "33333333-3333-4333-8333-333333333333";
 const NODE_B = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const SERIES_A = "44444444-4444-4444-8444-444444444444";
 const SERIES_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const PERSON = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const DEVICE_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
-// A `till` profile means the binding rule requires a register (till_id), not a station.
 const DEVICE_PROFILE = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 const DEVICE_TOKEN = "reroute-e2e-device-token";
 // The venue's one open tab, tagged with A's node id, seeded straight into B's database because
@@ -145,10 +142,6 @@ async function seedVenue(db: Database): Promise<void> {
       .onConflictDoNothing({ target: nodes.id });
   }
   await db
-    .insert(tills)
-    .values({ id: TILL, locationId: LOCATION, name: "Till" })
-    .onConflictDoNothing({ target: tills.id });
-  await db
     .insert(invoiceSeries)
     .values({ id: SERIES_A, nodeId: NODE_A, code: "A" })
     .onConflictDoNothing({ target: invoiceSeries.id });
@@ -170,7 +163,6 @@ async function seedVenue(db: Database): Promise<void> {
       id: DEVICE_ID,
       locationId: LOCATION,
       deviceProfileId: DEVICE_PROFILE,
-      tillId: TILL,
       label: "Counter till",
       tokenHash: hashSecret(DEVICE_TOKEN),
     })
@@ -186,7 +178,6 @@ function primaryEnv(
 ): Record<string, string> {
   return {
     ...KEY_ENV,
-    WAITRON_TILL_TILL_ID: TILL,
     WAITRON_TILL_NODE_ID: nodeId,
     WAITRON_TILL_SERIES_ID: seriesId,
     WAITRON_TILL_LOCATION_ID: LOCATION,
@@ -202,7 +193,6 @@ function primaryEnv(
 function mirrorEnv(venueDir: string, port: number): Record<string, string> {
   return {
     ...KEY_ENV,
-    WAITRON_TILL_TILL_ID: TILL,
     WAITRON_TILL_NODE_ID: NODE_B,
     WAITRON_TILL_SERIES_ID: SERIES_B,
     WAITRON_TILL_LOCATION_ID: LOCATION,
@@ -279,7 +269,15 @@ beforeAll(async () => {
   // The inherited tab: an open working order in B's database tagged with the DEAD node's id (A's).
   await b
     .insert(workingOrders)
-    .values({ id: TAB_ID, tillId: TILL, nodeId: NODE_A, orderNumber: 1, status: "open" })
+    .values({
+      id: TAB_ID,
+      source: "dashboard",
+      deviceId: null,
+      locationId: LOCATION,
+      nodeId: NODE_A,
+      orderNumber: 1,
+      status: "open",
+    })
     .onConflictDoNothing({ target: workingOrders.id });
 }, 180_000);
 

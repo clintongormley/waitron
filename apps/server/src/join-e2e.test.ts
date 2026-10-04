@@ -139,8 +139,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     expect(choices).toContain(verificationNumber);
     for (const c of choices) expect(c).toMatch(/^\d{2}$/);
 
-    // 5. The admin matches the device's number and accepts (join-api route). A till profile auto-creates
-    //    the device's own register.
+    // 5. The admin matches the device's number and accepts (join-api route).
     const acceptRes = await send(
       app,
       "POST",
@@ -161,7 +160,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     expect(await statusRes.json()).toEqual({ status: "approved" });
     expect(statusRes.headers.get("set-cookie")).toBeNull();
 
-    // 7. And it is a working device cookie, carrying the register the accept created.
+    // 7. And it is a working device cookie.
     const meRes = await send(app, "GET", "/api/device/me", { cookie: jar });
     expect(meRes.status).toBe(200);
     expect(await meRes.json()).toMatchObject({
@@ -169,7 +168,6 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
       formFactor: "till",
       name: "Bar till",
       stationId: null,
-      tillId: expect.any(String),
     });
   });
 

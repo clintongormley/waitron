@@ -497,6 +497,7 @@ describe("the receipt (ruling R13)", () => {
     const billId = await compBurgerAndDiscountBottle();
     await inTx(venue, (tx) =>
       insertCapturedPayment(tx, {
+        origin: venue.cfg.origin,
         workingOrderId: billId,
         provider: "simulator",
         paymentRef: `sim-${randomUUID()}`,
@@ -3492,7 +3493,6 @@ describe("a counter order (B11c)", () => {
       venue.cfg,
       orderId,
       venue.staffId,
-      venue.cfg.tillId,
     );
     const before = await counterStateOf(orderId);
     expect(before.order).toMatchObject({ status: "placed", partyId: null });

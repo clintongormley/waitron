@@ -9,7 +9,7 @@
 //   pnpm --filter @waitron/server build
 //   WAITRON_ENV=production|preproduction \
 //     node apps/server/dist/record-one-sale.js \
-//     <tillId> <nodeId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]
+//     <nodeId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]
 //
 // `WAITRON_ENV` is required here rather than defaulted: it stamps `entorno` onto an append-only
 // fiscal record (CLAUDE.md §5), so a wrong default cannot be corrected afterwards.
@@ -28,7 +28,7 @@ import {
   percentOf,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
 
 const LOCALE = "es-ES";
@@ -38,7 +38,7 @@ function usageError(message: string): never {
   console.error(
     "usage: WAITRON_ENV=<production|preproduction> " +
       "node apps/server/dist/record-one-sale.js " +
-      "<tillId> <nodeId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]",
+      "<nodeId> <seriesId> <description> <baseAmount> <vatRate> [tipAmount]",
   );
   process.exit(1);
 }
@@ -63,9 +63,8 @@ function systemClock(): TrustedClock {
   };
 }
 
-/** The seven positional arguments, as the operator typed them: branded and parsed inside. */
+/** The six positional arguments, as the operator typed them: branded and parsed inside. */
 export interface RecordOneSaleArgs {
-  tillId: string;
   nodeId: string;
   seriesId: string;
   description: string;
@@ -84,7 +83,6 @@ export async function recordOneSale(
   args: RecordOneSaleArgs,
   env: NodeJS.ProcessEnv,
 ): Promise<RecordOneSaleResult> {
-  const till = brandTillId(args.tillId);
   const node = brandNodeId(args.nodeId);
   const series = brandSeriesId(args.seriesId);
 
@@ -116,7 +114,7 @@ export async function recordOneSale(
     });
 
     const input: RecordSaleInput = {
-      tillId: till,
+      origin: jobOrigin("demo_seed"),
       nodeId: node,
       seriesId: series,
       locale: LOCALE,
@@ -150,10 +148,10 @@ export async function recordOneSale(
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args.length !== 6 && args.length !== 7) {
-    usageError(`expected 6 or 7 arguments, got ${args.length}`);
+  if (args.length !== 5 && args.length !== 6) {
+    usageError(`expected 5 or 6 arguments, got ${args.length}`);
   }
-  const [tillArg, nodeArg, seriesArg, description, baseAmountArg, vatRateArg, tipArg] = args;
+  const [nodeArg, seriesArg, description, baseAmountArg, vatRateArg, tipArg] = args;
 
   const rawEnv = process.env.WAITRON_ENV;
   if (rawEnv === undefined || rawEnv === "") {
@@ -162,7 +160,6 @@ async function main(): Promise<void> {
 
   const result = await recordOneSale(
     {
-      tillId: tillArg,
       nodeId: nodeArg,
       seriesId: seriesArg,
       description,

@@ -2,6 +2,7 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
+import type { Origin } from "@waitron/shared";
 import { isUniqueViolation, type Database, type Transaction } from "@waitron/db";
 import { computeEntryHash, type VerifiableEntry } from "./chain-hash.js";
 import { timeEntries } from "./schema/time-entries.js";
@@ -29,7 +30,8 @@ export interface TimeEntryAppend {
   eventAt: string;
   eventOffsetMinutes: number;
   recordedByPersonId: string;
-  capturedByTillId?: string | null;
+  /** Where the entry was captured: the device, or the job that wrote it. */
+  origin: Origin;
   correctsEntryId?: string | null;
   correctionReason?: string | null;
   correctionStatus?: "requested" | "approved" | null;
@@ -127,7 +129,8 @@ async function attemptAppend(
     recordedAt,
     eventOffsetMinutes: entry.eventOffsetMinutes,
     recordedByPersonId: entry.recordedByPersonId,
-    capturedByTillId: entry.capturedByTillId ?? null,
+    capturedBySource: entry.origin.source,
+    capturedByDeviceId: entry.origin.deviceId,
     correctsEntryId: entry.correctsEntryId ?? null,
     correctionReason: entry.correctionReason ?? null,
     correctionStatus: entry.correctionStatus ?? null,
@@ -145,7 +148,8 @@ async function attemptAppend(
       eventAt,
       recordedAt,
       eventOffsetMinutes: entry.eventOffsetMinutes,
-      capturedByTillId: entry.capturedByTillId ?? null,
+      capturedBySource: entry.origin.source,
+      capturedByDeviceId: entry.origin.deviceId,
       recordedByPersonId: entry.recordedByPersonId,
       correctsEntryId: entry.correctsEntryId ?? null,
       correctionReason: entry.correctionReason ?? null,
@@ -225,7 +229,8 @@ export async function readChain(
       recordedAt: timeEntries.recordedAt,
       eventOffsetMinutes: timeEntries.eventOffsetMinutes,
       recordedByPersonId: timeEntries.recordedByPersonId,
-      capturedByTillId: timeEntries.capturedByTillId,
+      capturedBySource: timeEntries.capturedBySource,
+      capturedByDeviceId: timeEntries.capturedByDeviceId,
       correctsEntryId: timeEntries.correctsEntryId,
       correctionReason: timeEntries.correctionReason,
       correctionStatus: timeEntries.correctionStatus,

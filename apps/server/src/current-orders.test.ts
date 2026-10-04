@@ -29,7 +29,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { writeReleaseReminderMinutes } from "@waitron/venue-service";
 import { deploymentEnvironment } from "./config.js";
@@ -49,7 +48,7 @@ import {
   type GroupRelease,
 } from "./order-groups.js";
 import { createTable } from "./tables.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./till-config.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { finishTable, seatTable } from "./parties.js";
@@ -64,6 +63,7 @@ import "./errors.js";
 import { splitBill } from "./bill-actions.js";
 import { joinTables } from "./table-actions.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // The release reminder (spec §4 "Remind staff to release the next group"; plan D11), its snooze,
 // and the Current orders read a waiter serves from (spec §4; D8, D18, D19).
@@ -119,7 +119,7 @@ const DISHES = {
 type Dish = keyof typeof DISHES;
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   zoneId: string;
   offer(dish: Dish): string;
   extrasListId: string;
@@ -147,7 +147,6 @@ async function setupVenue(): Promise<Venue> {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -161,8 +160,7 @@ async function setupVenue(): Promise<Venue> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
-    tillId: brandTillId(venue.tillId),
+  const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -171,7 +169,7 @@ async function setupVenue(): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  });
   return inTx(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Carta" });
     const category = await createCategory(tx, { name: "Platos" });

@@ -387,7 +387,7 @@ export interface ReceiptPreview {
   marks: { headerSubtitle: BlockRange | null; footerMessage: BlockRange | null };
   /** The width drawn at. */
   paperWidth: PrintPaperWidth;
-  /** The widths of the location's tills' receipt printers, narrowest first; empty when none. */
+  /** The widths of the location's active devices' receipt printers, narrowest first; empty when none. */
   paperWidths: PrintPaperWidth[];
 }
 
@@ -517,6 +517,8 @@ export interface DeviceRow {
   lastSeenAt: string | null;
   enrolledAt: string;
   deviceProfileId: string | null;
+  receiptPrinterId: string | null;
+  paymentSlipPrinterId: string | null;
 }
 
 export interface Canvas {
@@ -534,7 +536,15 @@ export interface DeviceProfile {
   capabilities: string[];
   formFactor: FormFactor;
   inactivityTimeoutSeconds: number | null;
+  receiptPrinterIds: string[];
+  paymentSlipPrinterIds: string[];
 }
+
+/** In list order: a device joining the profile starts on the first printer in each that it can use. */
+export type ProfilePrinterLists = Pick<
+  DeviceProfile,
+  "receiptPrinterIds" | "paymentSlipPrinterIds"
+>;
 
 /** Carries no verification number, deliberately: the list must never show the answer beside the
  * question. `label` is the name the joiner asked for, so it is untrusted text. */
@@ -787,6 +797,13 @@ export interface Printer {
   active: boolean;
 }
 
+/** One profile offering one printer, on either of its lists. */
+export interface PrinterProfileOffer {
+  printerId: string;
+  profileId: string;
+  profileName: string;
+}
+
 export interface PrinterInput {
   name: string;
   transport: PrintTransport;
@@ -907,14 +924,6 @@ export type ReceiptPrintMode = "auto" | "on_request" | "never";
 
 export type DrawerOpenPolicy = "gated" | "open";
 
-export interface Till {
-  id: string;
-  label: string;
-  locationId: string;
-  receiptPrinterId: string | null;
-  opensDrawer: boolean;
-}
-
 // ── Reporting (sales & takings) types ────────────────────────────────────────────────────────────
 // Every decimal value crosses the wire as a string, never a number.
 
@@ -951,14 +960,18 @@ export interface TenderMethodRow {
   tip: string;
 }
 
-export interface TillCashUpRow {
-  tillId: string;
+/** The money one device took, or one job source such as the Demo seed with no device. */
+export interface OriginCashUpRow {
+  source: string;
+  deviceId: string | null;
+  /** The device's name, kept after the device is revoked; null for a job source. */
+  deviceName: string | null;
   byMethod: TenderMethodRow[];
   cashTakings: string;
 }
 
 export interface CashUpDto {
-  byTill: TillCashUpRow[];
+  byOrigin: OriginCashUpRow[];
   tenderTotal: string;
   tipTotal: string;
 }
@@ -1183,6 +1196,10 @@ export interface AlertView {
   screen?: string;
   handledAt?: string;
   handledBy?: string | null;
+  /** An event's source: `device`, or the job that raised it. Ongoing alerts carry none. */
+  source?: string;
+  deviceId?: string | null;
+  deviceName?: string | null;
 }
 
 export interface AlertsResponse {
@@ -1288,8 +1305,10 @@ export interface StuckPaymentRow {
   workingOrderId: string;
   orderNumber: number;
   label: string | null;
-  tillId: string;
-  tillName: string;
+  /** The device that started it, or the job source that did; the name outlives a revocation. */
+  source: string;
+  deviceId: string | null;
+  deviceName: string | null;
   provider: string;
   amount: string;
   startedAt: string;
@@ -1303,8 +1322,10 @@ export interface StuckBillPaymentRow {
   workingOrderId: string;
   orderNumber: number;
   label: string | null;
-  tillId: string;
-  tillName: string;
+  /** The device that started it, or the job source that did; the name outlives a revocation. */
+  source: string;
+  deviceId: string | null;
+  deviceName: string | null;
   method: "card";
   applied: string;
   tip: string;
@@ -1319,8 +1340,10 @@ export interface StuckBillRefundRow {
   workingOrderId: string;
   orderNumber: number;
   label: string | null;
-  tillId: string;
-  tillName: string;
+  /** The device that started it, or the job source that did; the name outlives a revocation. */
+  source: string;
+  deviceId: string | null;
+  deviceName: string | null;
   appliedAmount: string;
   tipAmount: string;
   reason: string;
@@ -2393,7 +2416,6 @@ export class DashboardApi {
       profileId: string;
       stationId?: string;
       watcherId?: string;
-      registerId?: string;
     },
   ): Promise<{ deviceId: string; name: string; formFactor: FormFactor }> {
     return this.#request<{ deviceId: string; name: string; formFactor: FormFactor }>(
@@ -2450,6 +2472,7 @@ export class DashboardApi {
     capabilities: string[],
     formFactor: FormFactor,
     inactivityTimeoutSeconds: number | null,
+    printerLists: ProfilePrinterLists,
   ): Promise<DeviceProfile> {
     return this.#request<DeviceProfile>("/management-api/device-profiles", "POST", {
       name,
@@ -2457,6 +2480,8 @@ export class DashboardApi {
       capabilities,
       formFactor,
       inactivityTimeoutSeconds,
+      receiptPrinterIds: printerLists.receiptPrinterIds,
+      paymentSlipPrinterIds: printerLists.paymentSlipPrinterIds,
     });
   }
 
@@ -2467,6 +2492,7 @@ export class DashboardApi {
     capabilities: string[],
     formFactor: FormFactor,
     inactivityTimeoutSeconds: number | null,
+    printerLists: ProfilePrinterLists,
   ): Promise<DeviceProfile> {
     return this.#request<DeviceProfile>(`/management-api/device-profiles/${id}`, "PUT", {
       name,
@@ -2474,6 +2500,8 @@ export class DashboardApi {
       capabilities,
       formFactor,
       inactivityTimeoutSeconds,
+      receiptPrinterIds: printerLists.receiptPrinterIds,
+      paymentSlipPrinterIds: printerLists.paymentSlipPrinterIds,
     });
   }
 
@@ -2508,18 +2536,6 @@ export class DashboardApi {
     });
   }
 
-  patchDeviceHardware(
-    id: string,
-    patch: {
-      receiptPrinterId?: string | null;
-    },
-  ): Promise<{
-    id: string;
-    receiptPrinterId: string | null;
-  }> {
-    return this.#request(`/management-api/devices/${id}/hardware`, "PATCH", patch);
-  }
-
   setDeviceMadeHere(id: string, stationIds: string[]): Promise<void> {
     return this.#request<void>(`/management-api/devices/${id}/made-here`, "PUT", { stationIds });
   }
@@ -2544,6 +2560,10 @@ export class DashboardApi {
 
   listPrinters(): Promise<Printer[]> {
     return this.#request<Printer[]>("/management-api/printers", "GET");
+  }
+
+  listPrinterProfiles(): Promise<PrinterProfileOffer[]> {
+    return this.#request<PrinterProfileOffer[]>("/management-api/printer-profiles", "GET");
   }
 
   createPrinter(input: PrinterInput): Promise<{ id: string }> {
@@ -2688,22 +2708,6 @@ export class DashboardApi {
   }
 
   // ── Receipt printer + print mode + drawer policy ───────────────────────────────────────────────
-
-  listTills(): Promise<Till[]> {
-    return this.#request<Till[]>("/management-api/tills", "GET");
-  }
-
-  setTillReceiptPrinter(tillId: string, printerId: string | null): Promise<void> {
-    return this.#request<void>(`/management-api/tills/${tillId}/receipt-printer`, "PATCH", {
-      printerId,
-    });
-  }
-
-  setTillOpensDrawer(tillId: string, opensDrawer: boolean): Promise<void> {
-    return this.#request<void>(`/management-api/tills/${tillId}/opens-drawer`, "PATCH", {
-      opensDrawer,
-    });
-  }
 
   setReceiptPrintMode(locationId: string, mode: ReceiptPrintMode): Promise<void> {
     return this.#request<void>(

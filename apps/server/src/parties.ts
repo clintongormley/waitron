@@ -13,9 +13,16 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, centsToDecimal, normalisePartyName, rawCentsToDecimal } from "@waitron/shared";
+import type { CoreServices } from "@waitron/module";
+import {
+  AppError,
+  centsToDecimal,
+  jobOrigin,
+  normalisePartyName,
+  rawCentsToDecimal,
+} from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig, TillConfig } from "./till-config.js";
 import { createOpenOrder, openTab } from "./working-order.js";
 import { outstandingOf, readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
 import { discardPartyDrafts } from "./order-drafts.js";
@@ -66,7 +73,7 @@ export interface PartyCommand {
  */
 export async function seatTable(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   args: {
     tableId: string;
     guestCount: number | null;
@@ -86,6 +93,12 @@ export async function seatTable(
   return { partyId, tabId, revision, orderNumber };
 }
 
+/** The core verbs a module's routes reach, bound to `cfg`. A module's routes are the dashboard's. */
+export function moduleCoreServices(cfg: TillConfig): CoreServices {
+  const dashboard: OriginConfig = { ...cfg, origin: jobOrigin("dashboard") };
+  return { seatTable: (tx, req) => seatTable(tx, dashboard, req) };
+}
+
 /**
  * The party's main bill, where an order that names no bill goes: always an open bill of the party.
  * When the party has none, an empty one is made on the party and becomes its main bill, moving the
@@ -95,7 +108,7 @@ export async function seatTable(
  */
 export async function partyMainBill(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   partyId: string,
   revision: "move" | "moved" = "move",
 ): Promise<string> {

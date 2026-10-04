@@ -31,7 +31,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "../config.js";
 import { DEVICE_COOKIE } from "../device-session.js";
@@ -43,10 +42,11 @@ import { attachPrinterToStation } from "../station-printers.js";
 import { createTable } from "../tables.js";
 import { mountTillApi } from "../till-api.js";
 import { systemClock } from "../till-backend.js";
-import type { TillConfig } from "../till-config.js";
+import type { DeviceRequestConfig } from "../till-config.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
+import { deviceRequestCfg } from "./session-device.js";
 
 /**
  * A provisioned venue for the adjustment suites: real Veri*Factu filing that never contacts AEAT, a
@@ -236,7 +236,7 @@ export interface AdjustmentVenue {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   /** The display language the till routes are mounted with; the same code as `cfg.locale`. */
   venueLocale: string;
   tables: ZoneOffers;
@@ -257,6 +257,8 @@ export interface AdjustmentVenue {
   app: Hono;
   /** A till device and the session of each person, by role. */
   cookie: { staff: string; supervisor: string; manager: string };
+  /** The till device each `cookie` session is on. */
+  deviceId: string;
 }
 
 export const PINS = { staff: "5555", supervisor: "6666", manager: "7777" } as const;
@@ -291,7 +293,6 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -305,8 +306,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     ),
     { db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
-    tillId: brandTillId(provisioned.tillId),
+  const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
     locationId: brandLocationId(provisioned.locationId),
@@ -315,7 +315,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  });
   const seeded = await withTransaction(db, async (tx) => {
     const [station] = await tx
       .select({ id: kitchenStations.id })
@@ -397,7 +397,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
       .returning({ id: persons.id });
     const [profile] = await tx
       .insert(deviceProfiles)
-      .values({ name: "Counter till", formFactor: "till", capabilities: [] })
+      .values({ name: "Counter till", formFactor: "till", capabilities: ["take-cash"] })
       .returning({ id: deviceProfiles.id });
     const reasonId = {} as Record<keyof typeof REASONS, string>;
     for (const [key, input] of Object.entries(REASONS)) {
@@ -419,7 +419,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
   const device = await enrolDeviceForTest(db, cfg, { name: "Barra", profileId: seeded.profileId });
   const cookieOf = async (personId: string, pin: string) => {
     const session = await withTransaction(db, (tx) =>
-      loginWithPin(tx, { tillId: cfg.tillId, personId, pin }),
+      loginWithPin(tx, { deviceId: device.deviceId, personId, pin }),
     );
     return `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
   };
@@ -443,6 +443,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     supervisorId,
     managerId,
     app,
+    deviceId: device.deviceId,
     cookie: {
       staff: await cookieOf(staffId, PINS.staff),
       supervisor: await cookieOf(supervisorId, PINS.supervisor),

@@ -34,13 +34,12 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { issuancePass } from "./issuance-pass.js";
 import { ALL_MODULES } from "./modules.js";
 import { systemClock } from "./till-backend.js";
-import type { OrderFlow, TillConfig } from "./till-config.js";
+import type { OrderFlow } from "./till-config.js";
 import {
   collectOrder,
   payWorkingOrder,
@@ -64,6 +63,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // Path by path: a line records its classification snapshot when it is added to the order, each
 // filing path copies it onto the sale line, and nothing after it re-classifies.
@@ -126,7 +126,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -140,8 +139,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
-    tillId: brandTillId(venue.tillId),
+  const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -150,7 +148,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow,
-  };
+  });
   suite.db.run(sql`update locations set order_flow = ${orderFlow} where id = ${cfg.locationId}`);
 
   const seeded = await withTransaction(suite.db, async (tx) => {
@@ -321,6 +319,7 @@ function stubProvider(onCollect: () => Promise<void>): PaymentProvider {
       const settledAt = new Date();
       await withTransaction(suite.db, (tx) =>
         insertCapturedPayment(tx, {
+          origin: params.origin,
           workingOrderId: params.workingOrderId,
           provider: "stripe",
           paymentRef,
@@ -590,7 +589,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       });
     await park(before);
     await park(parkedBefore);
-    await placeOrder(deps(), v.cfg, before, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, before, OPERATOR);
     await moveCocktailsToSpirits(v);
     await park(parkedAfter);
 
@@ -599,8 +598,8 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       lines: [],
       tender: { method: "cash", amount: "9.00" },
     });
-    await placeOrder(deps(), v.cfg, parkedBefore, OPERATOR, v.cfg.tillId);
-    await placeOrder(deps(), v.cfg, parkedAfter, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, parkedBefore, OPERATOR);
+    await placeOrder(deps(), v.cfg, parkedAfter, OPERATOR);
 
     expect(await reportingOf(before)).toEqual([underAlcoholic(v)]);
     expect(await reportingOf(parkedBefore)).toEqual([underAlcoholic(v)]);
@@ -615,7 +614,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       zoneId: v.counter.zoneId,
       lines: [{ menuItemId: v.counter.offerFor(v.products.negroni), quantity: "1" }],
     });
-    await placeOrder(deps(), v.cfg, id, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, id, OPERATOR);
     await moveCocktailsToSpirits(v);
 
     await collectOrder(deps(), v.cfg, {
@@ -662,6 +661,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
         { zoneId: v.counter.zoneId },
       );
       await insertCapturedPayment(tx, {
+        origin: v.cfg.origin,
         workingOrderId: id,
         provider: "stripe",
         paymentRef: `pi-${randomUUID()}`,

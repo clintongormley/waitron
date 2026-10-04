@@ -7,6 +7,7 @@ export { AppError, hasCode, isAppError } from "./errors.js";
 export type { ErrorCode, ErrorParams } from "./errors.js";
 export type {
   Branded,
+  DeviceId,
   FiscalRecordId,
   LocationId,
   NodeId,
@@ -14,11 +15,11 @@ export type {
   SaleLineId,
   SeriesId,
   TenderId,
-  TillId,
   WorkingOrderId,
   WorkingOrderLineId,
 } from "./ids.js";
 export {
+  deviceId,
   fiscalRecordId,
   isUuid,
   locationId,
@@ -28,10 +29,27 @@ export {
   saleLineId,
   seriesId,
   tenderId,
-  tillId,
   workingOrderId,
   workingOrderLineId,
 } from "./ids.js";
+export {
+  deviceOrigin,
+  isSaleOrigin,
+  jobOrigin,
+  readOrigin,
+  readSaleOrigin,
+  SALE_SOURCES,
+  SOURCES,
+} from "./origin.js";
+export type {
+  DeviceOrigin,
+  JobOrigin,
+  JobSource,
+  Origin,
+  SaleOrigin,
+  SaleSource,
+  Source,
+} from "./origin.js";
 export { centsToDecimal, decimalToCents, rawCentsToDecimal, stringToCents } from "./cents.js";
 export { currencySymbol, formatMoney, type CurrencySymbol } from "./money-format.js";
 export {

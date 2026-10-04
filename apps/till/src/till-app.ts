@@ -122,6 +122,8 @@ import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/tab-shell.js";
 import "./widgets/find-bill-dialog.js";
+import "./widgets/printers-dialog.js";
+import type { PrinterSlot } from "./widgets/printers-dialog.js";
 import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
 import "./widgets/card-grid.js";
 import type { StringKey } from "./i18n/strings.js";
@@ -212,7 +214,7 @@ import type { BasketRefusal, OrderLine } from "./state/working-order.js";
 import type { StoredLines } from "./widgets/basket.js";
 import { adjustableListing } from "./state/adjust-target.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
-import type { DevDeviceList } from "./api/client.js";
+import type { DevDeviceList, DeviceIdentity, DevicePrintersChange } from "./api/client.js";
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
 import type {
@@ -675,9 +677,7 @@ function lateChangeMessage(late: LateChange): string {
 
 /** A drawer refusal the operator can act on keeps its own sentence; anything else is a retry. */
 function drawerErrorKey(code: string | undefined): StringKey {
-  return code === "drawer.not_attached" || code === "drawer.till_switched_off"
-    ? code
-    : "drawer.error";
+  return code === "drawer.not_attached" ? code : "drawer.error";
 }
 
 /** A banner's string key, a refusal shown through its code's own message, a save refused because
@@ -1141,7 +1141,7 @@ export class TillApp extends LitElement {
   @state() private drill?: Drill;
   /** An enrolled KDS display: no login, boots straight into its queue. Set only by {@link #boot}. */
   @state() private deviceMode = false;
-  /** An enrolled handheld: narrower menu columns, and never the cash drawer. */
+  /** An enrolled handheld: narrower menu columns. */
   @state() private handheldMode = false;
   /**
    * The device front door {@link #boot} chose, shown ahead of the lock screen and shell: `"chooser"` in
@@ -1343,7 +1343,7 @@ export class TillApp extends LitElement {
   /** The schedule screen leaves the operator out of the colleague picker. */
   @state() private operatorPersonId = "";
   @state() private staff: StaffMember[] = [];
-  /** Every open working order in the venue, across tills. */
+  /** Every open working order in the venue, across devices. */
   @state() private heldOrders: HeldOrderSummary[] = [];
   @state() private counterWaiting: CounterWaitingOrder[] = [];
   @state() private findingBill = false;
@@ -1500,6 +1500,36 @@ export class TillApp extends LitElement {
   /** An error code shown inside the open override dialog; cleared before each attempt so a repeat
    * re-shows. */
   @state() private overrideError: string | null = null;
+  /** The device's current printers and its profile's choices, as the server last said. */
+  @state() private devicePrinters: { receipt: PrinterSlot; paymentSlip: PrinterSlot } = {
+    receipt: { current: null, choices: [] },
+    paymentSlip: { current: null, choices: [] },
+  };
+  @state() private printersOpen = false;
+  @state() private printersError: { code: string; field?: string } | null = null;
+  /** Printer switches are sent one at a time, each once the one before has answered or been cut
+   * off, so each answer is newer than the one before. A switch with no answer within
+   * `TABLE_REQUEST_LIMIT_MS` is cut off, so it cannot hold back the picks after it; a cut-off
+   * request may still reach the server after later ones, so the server stores this tab's switches
+   * in the order they were picked only while every switch answers. */
+  #printersQueue: Promise<void> = Promise.resolve();
+  #printersWaiting = 0;
+  /** A refusal is shown only in the dialog opening it was picked in. */
+  #printersOpenings = 0;
+  /** When a read of the device and a switch were out at once, either answer may be the older, so
+   * the one that comes back second is not shown: a switch's answer when a read came back while it
+   * was out, a read when a switch answered while it was out. A switch that failed with no HTTP
+   * status may have been stored too. The device is then read again once no switch waits, unless a
+   * later switch's answer is shown first; that read is tried once, and if it fails the next
+   * switch's answer or the next opening reads again. `#printersReads` counts reads answered with
+   * the device, the boot read included, shown or not; `#printersSwitched` counts switches answered
+   * with what the server stored. */
+  #printersReads = 0;
+  #printersSwitched = 0;
+  #printersStale = false;
+  /** The device as last read, leaving out reads set aside, with any printer switch shown since;
+   * the printers dialog is drawn from it. */
+  #heldIdentity?: DeviceIdentity;
   /** The open cancel, give-away or discount dialog, with what the server last answered it. */
   @state() private adjusting: Adjusting | null = null;
   /** The people who can approve the adjustment being confirmed; set, their PIN prompt is open. */
@@ -1725,6 +1755,7 @@ export class TillApp extends LitElement {
     this.initialDeviceWatcher = undefined;
     this.#deviceKind = "till";
     this.deviceName = undefined;
+    this.#heldIdentity = undefined;
     const previousDeviceId = this.deviceId;
     this.deviceId = undefined;
     this.frontDoor = undefined;
@@ -1751,6 +1782,7 @@ export class TillApp extends LitElement {
         this.makeNow = [];
       this.deviceName = identity.name;
       this.deviceId = identity.deviceId;
+      this.#holdIdentity(identity);
       this.#restoreMakeNow();
       const kind = kindOfFormFactor(identity.formFactor);
       this.#deviceKind = kind ?? "till";
@@ -3479,9 +3511,6 @@ export class TillApp extends LitElement {
    * policy changes mid-shift; `authorization.not_permitted` opens the supervisor override.
    */
   async #onOpenDrawer(): Promise<void> {
-    // A handheld carries a pocket float rather than a register. Keep this independent of its profile's
-    // print/drawer capabilities so a synthetic event cannot reach the manual drawer route.
-    if (this.handheldMode) return;
     this.errorKey = undefined;
     try {
       await this.api.openDrawer();
@@ -3492,6 +3521,110 @@ export class TillApp extends LitElement {
         this.errorKey = drawerErrorKey((error as { code?: string }).code);
       }
     }
+  }
+
+  /** Reads the device again first, so a profile list changed since boot is offered; a failed read
+   * opens on the printers last known. */
+  async #onOpenPrinters(): Promise<void> {
+    const session = this.#operatorSession;
+    this.#printersOpenings++;
+    await this.#readPrinters();
+    if (session !== this.#operatorSession) return;
+    this.printersError = null;
+    this.printersOpen = true;
+  }
+
+  /** Whether the device answered; either way the printers held are shown. */
+  async #readPrinters(): Promise<boolean> {
+    const switched = this.#printersSwitched;
+    let answered = true;
+    try {
+      const read = await this.api.getDeviceIdentity();
+      if (switched === this.#printersSwitched) {
+        this.#holdIdentity(read);
+      } else {
+        this.#printersReads++;
+        this.#printersStale = true;
+      }
+    } catch {
+      answered = false;
+    }
+    const identity = this.#heldIdentity;
+    if (identity !== undefined) {
+      this.devicePrinters = {
+        receipt: { current: identity.receiptPrinterId, choices: identity.printerChoices.receipt },
+        paymentSlip: {
+          current: identity.paymentSlipPrinterId,
+          choices: identity.printerChoices.paymentSlip,
+        },
+      };
+    }
+    // No retry while the server does not answer: the next switch's answer or opening reads again.
+    if (answered) await this.#rereadIfStale();
+    return answered;
+  }
+
+  /** Cleared while the read is out, so a second caller does not read too. */
+  async #rereadIfStale(): Promise<void> {
+    if (this.#printersWaiting > 0 || !this.#printersStale) return;
+    this.#printersStale = false;
+    if (!(await this.#readPrinters())) this.#printersStale = true;
+  }
+
+  #holdIdentity(identity: DeviceIdentity): void {
+    this.#printersReads++;
+    this.#heldIdentity = identity;
+  }
+
+  #onPrintersChange(event: CustomEvent<DevicePrintersChange>): Promise<void> {
+    const opening = this.#printersOpenings;
+    this.#printersWaiting++;
+    const step = () => this.#switchPrinters(event.detail, opening);
+    const run = this.#printersQueue.then(step, step);
+    this.#printersQueue = run;
+    return run;
+  }
+
+  /** A refusal stays shown until the next switch answers: clearing it before the request re-renders
+   * the list, dropping the retried pick while the request is in flight. */
+  async #switchPrinters(change: DevicePrintersChange, opening: number): Promise<void> {
+    const reads = this.#printersReads;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      const stored = await this.api.setDevicePrinters(change, { signal: limit.signal });
+      this.#printersSwitched++;
+      if (opening === this.#printersOpenings) this.printersError = null;
+      if (reads === this.#printersReads) {
+        this.#printersStale = false;
+        if (this.#heldIdentity !== undefined)
+          this.#heldIdentity = { ...this.#heldIdentity, ...stored };
+        this.devicePrinters = {
+          receipt: { ...this.devicePrinters.receipt, current: stored.receiptPrinterId },
+          paymentSlip: { ...this.devicePrinters.paymentSlip, current: stored.paymentSlipPrinterId },
+        };
+      } else {
+        this.#printersStale = true;
+      }
+    } catch (error) {
+      const { code, field, status } = (error ?? {}) as {
+        code?: unknown;
+        field?: unknown;
+        status?: unknown;
+      };
+      // An error with no HTTP status is not a refusal, so the server may have stored the switch.
+      if (typeof status !== "number") this.#printersStale = true;
+      if (opening === this.#printersOpenings) {
+        this.printersError = {
+          code: typeof code === "string" ? code : "server.internal",
+          ...(typeof field === "string" ? { field } : {}),
+        };
+      }
+    } finally {
+      limit.done();
+      this.#printersWaiting--;
+    }
+    // Not awaited: a read with no answer must not hold back the next switch.
+    void this.#rereadIfStale();
   }
 
   /** The picker is the server's list of authorizers; the client holds no policy or role knowledge. */
@@ -3575,6 +3708,7 @@ export class TillApp extends LitElement {
         .busy=${open.busy}
         .tipsEnabled=${this.tipsEnabled}
         .cardReader=${this.#cardReader()}
+        .takesCash=${this.#takesCash()}
         .readers=${this.activeReaders}
         .defaultReaderId=${this.defaultReaderId}
         @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
@@ -3677,6 +3811,10 @@ export class TillApp extends LitElement {
     } catch {
       // Non-fatal: the last-known floor stays.
     }
+  }
+
+  #takesCash(): boolean {
+    return this.capabilities.includes("take-cash");
   }
 
   #cardReader(): TillInfo["cardProvider"] {
@@ -6315,6 +6453,7 @@ export class TillApp extends LitElement {
     this.#closeDeparting();
     this.#closeCancelCrediting();
     this.findingBill = false;
+    this.printersOpen = false;
     this.#operatorSession++;
   }
 
@@ -7025,6 +7164,7 @@ export class TillApp extends LitElement {
         .payRest=${this.#basketPaidInPart()?.outstanding ?? null}
         .counterTab=${tab}
         .cardProvider=${this.#cardReader()}
+        .takesCash=${this.#takesCash()}
         .tipsEnabled=${this.tipsEnabled}
         .cardOutcome=${this.cardOutcome}
         .cardAttemptsOver=${this.cardAttemptsOver}
@@ -7058,6 +7198,7 @@ export class TillApp extends LitElement {
       .orderFlow=${this.#basketFlow()}
       .stage=${this.stage}
       .cardProvider=${this.#cardReader()}
+      .takesCash=${this.#takesCash()}
       .tipsEnabled=${this.tipsEnabled}
       .cardOutcome=${this.cardOutcome}
       .cardAttemptsOver=${this.cardAttemptsOver}
@@ -7143,6 +7284,7 @@ export class TillApp extends LitElement {
           .busy=${this.submitting}
           .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheldMode}
+          .takesCash=${this.#takesCash()}
         ></till-table-order-screen>`;
       }
       case "ticket":
@@ -7156,7 +7298,7 @@ export class TillApp extends LitElement {
           .canPrintReceipt=${
             this.deviceId === undefined || this.capabilities.includes("print-receipt")
           }
-          .canOpenDrawer=${!this.handheldMode}
+          .canOpenDrawer=${this.capabilities.includes("open-cash-drawer")}
           .simulated=${this.onboardingIntent === "demo" || this.onboardingIntent === "prepare"}
         ></till-ticket-view>`;
       case "schedule":
@@ -7316,6 +7458,7 @@ export class TillApp extends LitElement {
         @back-to-floor=${() => this.#onBackToFloor()}
         @back-to-counter=${() => this.#onBackToCounter()}
         @open-allergens=${() => this.#onOpenAllergens()}
+        @open-printers=${() => void this.#onOpenPrinters()}
         @close-allergens=${() => this.#onCloseAllergens()}
         @logout=${() => void this.#onLogout()}
         @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
@@ -7358,6 +7501,19 @@ export class TillApp extends LitElement {
           @wt-close=${() => (this.submittedNotice = null)}
         ></wt-toast>
         <till-make-now .items=${this.makeNow} @dismiss=${this.#dismissMakeNow}></till-make-now>
+        ${
+          this.printersOpen
+            ? html`<till-printers-dialog
+                .open=${true}
+                .receipt=${this.devicePrinters.receipt}
+                .paymentSlip=${this.devicePrinters.paymentSlip}
+                .error=${this.printersError}
+                @printers-change=${(event: CustomEvent<DevicePrintersChange>) =>
+                  void this.#onPrintersChange(event)}
+                @close=${() => (this.printersOpen = false)}
+              ></till-printers-dialog>`
+            : nothing
+        }
         ${
           this.findingBill
             ? html`<till-find-bill-dialog

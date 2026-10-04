@@ -29,7 +29,7 @@ and neither surviving command migrates anything.
 | `keyring` | nothing at all — no venue directory, no files | once per deployment |
 | `venue`   | a migrated venue directory                    | once per venue      |
 
-`venue` creates the taxpayer row, a location, a till, a node and its standard and rectificative
+`venue` creates the taxpayer row, a location, a node and its standard and rectificative
 invoice series, then runs each composed module's provisioning seed (the fiscal module's registers the
 node as a SIF and starts its chain) — replacing the retired `apps/server/sql/bootstrap-tenant.sql`
 (removed 2026-08-04, #57).
@@ -45,7 +45,7 @@ usage: waitron-provision <command> [options]
            [--location-name <name>] [--territory <t>] [--locale <l>]...
            [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]
            [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]
-           [--day-cutover <HH:MM>] [--till-name <name>] [--series-code <code>]
+           [--day-cutover <HH:MM>] [--series-code <code>]
            [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]
            [--admin-first-names <names>] [--admin-last-names <names>] [--yes]
 ```
@@ -71,7 +71,7 @@ tmux's own buffer under some configurations, still has it.
 ### `venue`
 
 Stands a sellable venue up in one transaction: the taxpayer row (`tenants` holds exactly one), an
-**admin person**, a location, a till, a node, a standard plus a rectificative invoice series, and
+**admin person**, a location, a node, a standard plus a rectificative invoice series, and
 then every composed module's provisioning seed — the fiscal module's registers the node as a
 Veri\*Factu SIF and starts its chain. It replaced the retired
 `apps/server/sql/bootstrap-tenant.sql`.

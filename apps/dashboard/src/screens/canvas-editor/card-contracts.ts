@@ -25,6 +25,7 @@ export const CAPABILITY_FLAGS = [
   "show-station",
   "show-expo",
   "show-schedule",
+  "take-cash",
 ] as const;
 export type CapabilityFlag = (typeof CAPABILITY_FLAGS)[number];
 

@@ -8,12 +8,11 @@ import {
   purchaseInvoiceVat,
   purchaseInvoices,
   sales,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedDevice } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import {
   addDecimal,
@@ -32,7 +31,7 @@ import "./errors.js";
 // Sales and received invoices are seeded directly because the report reads their stored values.
 const noopLog: Logger = () => {};
 
-let tillId: string;
+let deviceId: string;
 let nodeId: string;
 let locationId: string;
 let seriesId: string;
@@ -91,7 +90,8 @@ async function seedSale(db: Database, s: SeededSale | typeof Q1_SALE): Promise<v
   // `sales.total` stores a count of whole cents; `vat_breakdown` is a JSON column, not a money
   // column, and keeps the decimal literals the aggregate reads.
   await db.insert(sales).values({
-    tillId,
+    source: "device",
+    deviceId,
     nodeId,
     seriesId,
     invoiceNumber: s.invoiceNumber,
@@ -139,7 +139,7 @@ const suite = useVenueDb({
   setup: async (db) => {
     // seedTenant supplies the tax_id + legal_name the route reads back as the obligado identity.
     await seedTenant(db);
-    // The one venue's location/till/node/series, through the table definitions: the ids and
+    // The one venue's location/node/series, through the table definitions: the ids and
     // `created_at`s are JavaScript `$defaultFn` generators a raw insert never reaches, and
     // `invoice_locales` is encoded by the column's own write mapping.
     const [loc] = await db
@@ -151,11 +151,7 @@ const suite = useVenueDb({
       })
       .returning({ id: locations.id });
     locationId = loc!.id;
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId, name: "Caja 1" })
-      .returning({ id: tills.id });
-    tillId = till!.id;
+    ({ deviceId } = await seedDevice(db, { locationId }));
     const [node] = await db
       .insert(nodes)
       .values({ locationId, name: "Nodo 1" })

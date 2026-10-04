@@ -9,19 +9,19 @@ import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { captureError } from "../testing/errors.js";
 import { useVenueDb } from "../testing/venue-db.js";
-import { seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode } from "../testing/seed.js";
 import { catalogues, products } from "./catalogue.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const BOGUS_PRODUCT = "99999999-9999-4999-8999-999999999999";
 const AT = "2026-07-20T19:20:30+00:00";
 // The trigger checks description KEYS against the venue's invoice_locales (es, ca).
 const DESCRIPTIONS_A = JSON.stringify({ es: "Café solo", ca: "Cafè sol" });
 
 let nodeA = "";
+let deviceA = "";
 let seriesA = "";
 let productA = "";
 
@@ -31,7 +31,7 @@ function insertSaleSql(opts: {
 }): ReturnType<typeof sql> {
   // `id` is named explicitly because `sales.id` is `$defaultFn(newId)` — a JavaScript generator
   // rather than a SQL DEFAULT, which a raw insert never reaches.
-  return sql`insert into sales (id, till_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, working_order_id) values (${randomUUID()}, ${TILL_A1}, ${nodeA}, ${seriesA}, ${opts.invoiceNumber}, ${AT}, 120,
+  return sql`insert into sales (id, source, device_id, node_id, series_id, invoice_number, issued_at, issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend, fiscal_state, working_order_id) values (${randomUUID()}, 'device', ${deviceA}, ${nodeA}, ${seriesA}, ${opts.invoiceNumber}, ${AT}, 120,
       100, '[]', 'es', '["es","ca"]', 'verifactu', 'recorded', ${opts.workingOrderId}
     )`;
 }
@@ -39,7 +39,7 @@ function insertSaleSql(opts: {
 // `id` is supplied for the reason {@link insertSaleSql} records.
 async function openOrder(admin: Database, orderNumber: number): Promise<string> {
   const result = await admin.execute<{ id: string }>(
-    sql`insert into working_orders (id, till_id, order_number, status, opened_at) values (${randomUUID()}, ${TILL_A1}, ${orderNumber}, 'open', ${AT}) returning id`,
+    sql`insert into working_orders (id, source, device_id, location_id, order_number, status, opened_at) values (${randomUUID()}, 'device', ${deviceA}, ${LOCATION_A}, ${orderNumber}, 'open', ${AT}) returning id`,
   );
   return result.rows[0]!.id;
 }
@@ -60,8 +60,8 @@ describe("park & retrieve schema", () => {
         operationDescription: "Hostelería",
       },
     ]);
-    await admin.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
     nodeA = await seedNode(admin, brandLocationId(LOCATION_A));
+    ({ deviceId: deviceA } = await seedDevice(admin, { locationId: LOCATION_A }));
     const [series] = await admin
       .insert(invoiceSeries)
       .values({ nodeId: nodeA, code: "FA", purpose: "standard" })

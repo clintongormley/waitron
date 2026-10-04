@@ -6,7 +6,8 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { withTransaction } from "@waitron/db";
+import { deviceProfiles, withTransaction } from "@waitron/db";
+import { firstUsablePrinters } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -43,30 +44,42 @@ describe("seedDemoRestaurant", () => {
     vi.unstubAllEnvs();
   });
 
-  it("connects the demo printer to the till and preparation stations", async () => {
+  it("connects the demo printer to every device profile and the preparation stations", async () => {
     const venue = await provisionVenue();
     await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 0 });
 
     const { rows: printers } = await suite.db.execute<{
+      id: string;
       name: string;
       transport: string;
       has_cash_drawer: number;
-      receipt_tills: number;
       ticket_stations: number;
     }>(sql`
-      select p.name, p.transport, p.has_cash_drawer,
-        (select cast(count(*) as integer) from tills t where t.receipt_printer_id = p.id) as receipt_tills,
+      select p.id, p.name, p.transport, p.has_cash_drawer,
         (select cast(count(*) as integer) from station_printers sp where sp.printer_id = p.id) as ticket_stations
       from printers p where p.location_id = ${venue.locationId}`);
     expect(printers).toEqual([
       {
+        id: expect.any(String),
         name: "Demo printer",
         transport: "usb",
         has_cash_drawer: 1,
-        receipt_tills: 1,
         ticket_stations: 4,
       },
     ]);
+    // The seeded venue has no devices yet; one paired later starts on its profile's first printers.
+    const demoId = printers[0]!.id;
+    const firstPrinters = await withTransaction(suite.db, async (tx) => {
+      const found = [];
+      for (const p of await tx.select({ id: deviceProfiles.id }).from(deviceProfiles)) {
+        found.push(await firstUsablePrinters(tx, p.id, venue.locationId));
+      }
+      return found;
+    });
+    expect(firstPrinters.length).toBeGreaterThan(0);
+    expect(
+      new Set(firstPrinters.flatMap((p) => [p.receiptPrinterId, p.paymentSlipPrinterId])),
+    ).toEqual(new Set([demoId]));
   });
 
   it("refuses a production environment before writing anything", async () => {

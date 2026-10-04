@@ -2,11 +2,14 @@ import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   AppError,
+  locationId as brandLocationId,
   seriesId as brandSeriesId,
   workingOrderId as brandWorkingOrderId,
   decimal,
+  deviceOrigin,
+  jobOrigin,
 } from "@waitron/shared";
-import type { NodeId, SeriesId, TillId, WorkingOrderId } from "@waitron/shared";
+import type { DeviceId, LocationId, NodeId, SeriesId, WorkingOrderId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type {
   FiscalBackend,
@@ -21,6 +24,8 @@ import {
   constraintTarget,
   isUniqueViolation,
   invoiceSeries,
+  locations,
+  nodes,
   saleLines,
   saleSettlements,
   sales,
@@ -30,12 +35,14 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { formatInvoiceNumber, recordSale } from "./record-sale.js";
 import type { RecordSaleInput, RecordSaleTender } from "./record-sale.js";
 import { settleSale } from "./settle-sale.js";
 import { seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
-let tillId: TillId;
+let locationId: LocationId;
+let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 
@@ -46,7 +53,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ locationId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
 });
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
@@ -78,7 +85,7 @@ const DEFAULT_TENDERS: RecordSaleTender[] = [
 
 function input(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tillId,
+    origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
     locale: "es-ES",
@@ -169,6 +176,82 @@ describe("formatInvoiceNumber", () => {
     expect(formatInvoiceNumber("FA", 123)).toBe("FA/123");
   });
 });
+
+describe("recordSale — the sale's origin", () => {
+  it("stores the device a sale was rung on", async () => {
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), {
+      origin: deviceOrigin(deviceId),
+    });
+    const [row] = await rows<{ source: string; device_id: string | null }>(
+      sql`select source, device_id from sales where id = ${saleId}`,
+    );
+    expect(row).toEqual({ source: "device", device_id: deviceId });
+  });
+
+  it("stores a demo seed sale with no device", async () => {
+    const { saleId } = await run(new FakeFiscalBackend(suite.db), {
+      origin: jobOrigin("demo_seed"),
+    });
+    const [row] = await rows<{ source: string; device_id: string | null }>(
+      sql`select source, device_id from sales where id = ${saleId}`,
+    );
+    expect(row).toEqual({ source: "demo_seed", device_id: null });
+  });
+
+  it("hands the origin to the fiscal backend", async () => {
+    const fake = new FakeFiscalBackend(suite.db);
+    const seen: SaleForFiscalRecord[] = [];
+    const backend = wrapBackend(fake, {
+      recordSale: (tx, sale) => {
+        seen.push(sale);
+        return fake.recordSale(tx, sale);
+      },
+    });
+    await run(backend, { origin: jobOrigin("readiness_test") });
+    expect(seen.map((sale) => sale.origin)).toEqual([jobOrigin("readiness_test")]);
+  });
+
+  it("describes the operation from the location of the device the sale was rung on", async () => {
+    const [terrace] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Terraza",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Terrace service",
+      })
+      .returning({ id: locations.id });
+    const terraceDevice = await seedDevice(suite.db, { locationId: brandLocationId(terrace!.id) });
+    const seen = await descriptionsFiled({ origin: deviceOrigin(terraceDevice.deviceId) });
+    expect(seen).toEqual(["Terrace service"]);
+  });
+
+  it("describes a sale with no device from its node's location", async () => {
+    const [node] = await suite.db
+      .select({ locationId: nodes.locationId })
+      .from(nodes)
+      .where(eq(nodes.id, nodeId));
+    await suite.db
+      .update(locations)
+      .set({ operationDescription: "Counter service" })
+      .where(eq(locations.id, node!.locationId));
+    const seen = await descriptionsFiled({ origin: jobOrigin("readiness_test") });
+    expect(seen).toEqual(["Counter service"]);
+  });
+});
+
+/** The `descriptionOfOperation` each filed sale handed the fiscal backend. */
+async function descriptionsFiled(overrides: Partial<RecordSaleInput>): Promise<string[]> {
+  const fake = new FakeFiscalBackend(suite.db);
+  const seen: string[] = [];
+  const backend = wrapBackend(fake, {
+    recordSale: (tx, sale) => {
+      seen.push(sale.descriptionOfOperation);
+      return fake.recordSale(tx, sale);
+    },
+  });
+  await run(backend, overrides);
+  return seen;
+}
 
 describe("recordSale — the happy path", () => {
   it("allocates the next number from the series and stamps it on the sale", async () => {
@@ -622,7 +705,6 @@ describe("recordSale — settlement modes", () => {
         tx,
         backend,
         input({
-          tillId: other.tillId,
           nodeId: other.nodeId,
           seriesId: other.seriesId,
           settlement: { kind: "deferred" },
@@ -630,7 +712,10 @@ describe("recordSale — settlement modes", () => {
       );
     });
     await withTransaction(suite.db, async (tx) => {
-      await settleSale(tx, { saleId: b.saleId, tenders: tendersInput });
+      await settleSale(tx, {
+        saleId: b.saleId,
+        tenders: tendersInput,
+      });
     });
 
     // Tenders, modulo id/sale_id, sorted for a position-independent compare.
@@ -724,7 +809,8 @@ describe("recordSale — numbering", () => {
     const error = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
         await tx.insert(sales).values({
-          tillId,
+          source: "device",
+          deviceId,
           nodeId,
           seriesId,
           invoiceNumber: 1,
@@ -817,7 +903,7 @@ describe("recordSale — working order linkage", () => {
   async function seedOpenWorkingOrder(): Promise<WorkingOrderId> {
     const [row] = await suite.db
       .insert(workingOrders)
-      .values({ tillId, orderNumber: 1 })
+      .values({ source: "device", deviceId, locationId, orderNumber: 1 })
       .returning({ id: workingOrders.id });
     return brandWorkingOrderId(row!.id);
   }

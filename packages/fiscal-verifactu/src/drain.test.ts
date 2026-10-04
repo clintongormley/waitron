@@ -25,6 +25,7 @@ import {
 } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 // The full manifest: `recordVoid` authorizes through identity's persons and sessions.
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -106,7 +107,7 @@ describe("drain — happy path", () => {
  */
 describe("drain — happy path, an anulación row", () => {
   it("submits a voided sale's anulación through the same accept-and-persist path as an alta", async () => {
-    const { tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db);
+    const { locationId, nodeId, seriesId } = await seedTenantWithSif(suite.db);
     // `recordVoid` requires `sale.void`, so a manager's session authorizes it. `id` and
     // `created_at` are supplied because their defaults are drizzle `$defaultFn`s, which raw SQL
     // never runs.
@@ -114,8 +115,9 @@ describe("drain — happy path, an anulación row", () => {
       sql`insert into persons (id, created_at, display_name, pin_hash, role)
           values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
     );
+    const deviceId = (await seedDevice(suite.db, { locationId })).deviceId;
     const voidSession = await withTransaction(suite.db, (tx) =>
-      loginWithPin(tx, { tillId, personId: mgr[0]!.id, pin: "1234" }),
+      loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
     );
     const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
     const backend = new VerifactuBackend({
@@ -126,7 +128,7 @@ describe("drain — happy path, an anulación row", () => {
     });
 
     const sale = await withTransaction(suite.db, async (tx) => {
-      return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
+      return recordSale(tx, backend, saleInput({ nodeId, seriesId }));
     });
     await withTransaction(suite.db, async (tx) => {
       await recordVoid(tx, backend, sale.saleId, "staff error", { sessionId: voidSession.id });
@@ -585,6 +587,14 @@ describe("drain — per-record resolution: rejection, halting, incidents", () =>
     ).toBe(true);
     const rejected = inc.rows.find((i) => i.code === "fiscal.registro_rechazado");
     expect(rejected?.params).toMatchObject({ codigo: 1100, mensaje: "Campo obligatorio ausente" });
+
+    // The record was sold on a device; the alert names the filing pass that raised it.
+    const origins = await withTransaction(suite.db, (tx) =>
+      tx.execute<{ source: string; device_id: string | null }>(sql`
+        select source, device_id from incidents where code = 'fiscal.registro_rechazado'
+      `),
+    );
+    expect(origins.rows).toEqual([{ source: "fiscal_filing", device_id: null }]);
   });
 
   it("marks aceptado_con_errores and raises a warning incident, but the record still counts as accepted", async () => {
@@ -1121,8 +1131,9 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
       sql`insert into persons (id, created_at, display_name, pin_hash, role)
           values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
     );
+    const deviceId = (await seedDevice(suite.db, { locationId: venue.locationId })).deviceId;
     const session = await withTransaction(suite.db, (tx) =>
-      loginWithPin(tx, { tillId: venue.tillId, personId: mgr[0]!.id, pin: "1234" }),
+      loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
     );
     voidSessionId = session.id;
     aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z"), tiempoEsperaInicial: 5 });

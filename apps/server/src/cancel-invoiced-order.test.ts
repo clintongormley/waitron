@@ -33,7 +33,6 @@ import {
   negateDecimal,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
@@ -185,7 +184,7 @@ useVenueDb({
         .returning({ id: persons.id });
       supervisorId = person!.id;
       return loginWithPin(tx, {
-        tillId: venue.cfg.tillId,
+        deviceId: venue.deviceId,
         personId: supervisorId,
         pin: SUPERVISOR_PIN,
       });
@@ -361,9 +360,9 @@ describe("cancelling a placed order whose invoice was issued", () => {
     const id = await placed([{ name: "Caña", quantity: "1" }]);
     const original = await invoiceOf(id);
     expect(original.total).toBe(300);
-    // The device's till is not the box's configured one, so the two cannot be confused below.
-    expect(venue.deviceTillId).not.toBe(venue.cfg.tillId);
-    expect(original.tillId).toBe(venue.deviceTillId);
+    // The requesting device is not the configuration's own, so the two cannot be confused below.
+    expect(venue.deviceId).not.toBe(venue.cfg.origin.deviceId);
+    expect(original).toMatchObject({ source: "device", deviceId: venue.deviceId });
     const series = await activeRectificative();
 
     const answer = await cancel(id);
@@ -377,7 +376,8 @@ describe("cancelling a placed order whose invoice was issued", () => {
       seriesId: series!.id,
       invoiceNumber: series!.next,
       nodeId: venue.cfg.nodeId,
-      tillId: venue.deviceTillId,
+      source: "device",
+      deviceId: venue.deviceId,
       authorizedBy: supervisorId,
       workingOrderId: null,
     });
@@ -634,7 +634,8 @@ describe("cancelling a placed order whose invoice was issued", () => {
         state: "received",
         receivedAt: new Date().toISOString(),
         requestedBy: venue.operatorId,
-        tillId: venue.cfg.tillId,
+        source: venue.cfg.origin.source,
+        deviceId: venue.cfg.origin.deviceId,
       }),
     );
 
@@ -811,7 +812,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     // 0.83 at 21% is 1.00 of the Caña's 3.00, so a credit of the whole 3.00 would exceed it.
     await inTx(venue, (tx) =>
       recordCorrection(tx, venue.backend, {
-        tillId: brandTillId(venue.deviceTillId),
+        origin: venue.cfg.origin,
         nodeId: venue.cfg.nodeId,
         seriesId: brandSeriesId(series!.id),
         correctsSaleId: brandSaleId(original.id),
@@ -853,7 +854,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     // 0.83 at 21% is 1.00 added to the Caña's 3.00, so a credit of 3.00 would leave it 1.00.
     await inTx(venue, (tx) =>
       recordCorrection(tx, venue.backend, {
-        tillId: brandTillId(venue.deviceTillId),
+        origin: venue.cfg.origin,
         nodeId: venue.cfg.nodeId,
         seriesId: brandSeriesId(series!.id),
         correctsSaleId: brandSaleId(original.id),
@@ -1075,7 +1076,8 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     expect(credits).toEqual([
       expect.objectContaining({
         total: -300,
-        tillId: venue.deviceTillId,
+        source: "device",
+        deviceId: venue.deviceId,
         authorizedBy: supervisorId,
       }),
     ]);

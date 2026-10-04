@@ -676,8 +676,9 @@ declare module "@waitron/shared" {
     /**
      * A request to a device-authenticated route carried no usable device identity — the
      * `waitron_device` cookie was absent, malformed, named no device, carried a wrong token, or
-     * named a revoked device. One code for all, so the answer does not confirm a device's existence
-     * or revocation. NO params: the cookie is a bearer secret.
+     * named a revoked device — or a till sign-in session's device has been revoked
+     * (`requireSession`). One code for all, so the answer does not confirm a device's existence or
+     * revocation. NO params: the cookie is a bearer secret.
      */
     "device.unauthorized": Record<string, never>;
     /**
@@ -686,11 +687,13 @@ declare module "@waitron/shared" {
      */
     "device.forbidden_station": { stationId: string };
     /**
-     * A device tried an action it may not perform: a handheld (`assertNotHandheld`) or a device whose
-     * profile lacks the capability (`assertDeviceCapability`), both in `device-session.ts` and both
-     * enforced on the server. `action` names the refused operation, a symbol the route passes.
+     * A device whose profile lacks the capability tried an action that needs it
+     * (`assertDeviceCapability`, `device-session.ts`), enforced on the server. `action` names the
+     * refused operation, a symbol the route passes.
      */
     "device.forbidden_action": { action: string };
+    /** A cash payment from a device whose profile does not take cash (`assertTakesCash`). */
+    "device.cash_not_allowed": Record<string, never>;
     /**
      * The device-management surface named a device id that matches nothing. Unlike
      * `device.unauthorized`, this surface is for an authenticated manager, so the id is echoed.
@@ -701,36 +704,23 @@ declare module "@waitron/shared" {
      */
     "device.station_required": Record<string, never>;
     /**
-     * A device whose binding carries no `till_id` reached a path that requires one
-     * (`requireSaleTillId` in `device-session.ts`, and the roster-login guard in `till-api.ts`). In
-     * practice a `kds_station`: the `device_binding_rule_insert`/`_update` triggers refuse a null
-     * `till_id` for every other form factor.
+     * Accepting a device under a name an active device at its location already has
+     * (`devices_location_label_active_key`). The admin renames the device.
      */
-    "device.till_required": Record<string, never>;
-    /**
-     * A join request was accepted under a register-binding (handheld) profile with NO register. A
-     * handheld must name the `tills` row it files against; a `till`-form-factor device mints its own.
-     */
-    "device.register_required": Record<string, never>;
-    /**
-     * Accepting a `till`-form-factor device tried to create its register under a name another
-     * register at the venue already uses (`tills_tenant_location_name_key`). The admin renames the
-     * device.
-     */
-    "device.register_name_taken": Record<string, never>;
+    "device.name_taken": Record<string, never>;
     /** The venue's region fixes its receipt language; `language` is that fixed language, never the
      * caller's value. */
     "receipt.language_fixed": { field: "receiptLanguage"; language: string };
     /** A receipt-language change refused because `count` open orders at the location hold a line. */
     "receipt.language_orders_open": { field: "receiptLanguage"; count: number };
     /**
-     * A request named a device binding id that matches no row. Checked by a read before the write in
-     * `device.ts`, because this engine's foreign-key refusal does not say which key failed.
-     * `device.ts` states that reasoning where the read is taken. `field` carries the FIELD NAME
-     * only, never the id value.
+     * A request named a device binding id that matches no row, or a printer the device may not use
+     * (`chooseDevicePrinter`, `@waitron/layouts`). Checked by a read before the write, because this
+     * engine's foreign-key refusal does not say which key failed; `device.ts` states that reasoning
+     * where the read is taken. `field` carries the FIELD NAME only, never the id value.
      */
     "device.binding_invalid": {
-      field: "tillId" | "receiptPrinterId" | "deviceProfileId";
+      field: "receiptPrinterId" | "paymentSlipPrinterId" | "deviceProfileId";
     };
     /**
      * A knock arrived at `POST /api/device/join` while pairing mode is shut — the ordinary state, not
@@ -808,16 +798,11 @@ declare module "@waitron/shared" {
      */
     "setup.not_ready": Record<string, never>;
     /**
-     * A manual open-drawer request found no receipt printer set for the requesting till, so there is
-     * nothing to send the kick through. `tillId` names the misconfigured till.
+     * A manual open-drawer request found no active receipt printer on the requesting device, so
+     * there is nothing to send the kick through. `deviceId` names the device.
      */
-    "drawer.no_printer": { tillId: string };
+    "drawer.no_printer": { deviceId: string };
     "drawer.not_attached": { printerId: string };
-    /**
-     * A manual open-drawer request came from a till whose "opens the drawer" setting is off;
-     * `tillId` names it.
-     */
-    "drawer.till_switched_off": { tillId: string };
     /**
      * A promote was requested without the operator attesting that the OLD node is physically
      * neutralised. Software cannot verify a partitioned peer, and two submitters under one NIF is

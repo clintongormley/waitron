@@ -4,11 +4,11 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
+  devices,
   locations,
   printJobs,
   printers,
   sales,
-  tills,
   withTransaction,
   type Database,
 } from "@waitron/db";
@@ -16,7 +16,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";
@@ -27,13 +27,15 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { loadTillConfig } from "./till-config.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./till-config.js";
 import { payWorkingOrderIntegrated } from "./till-sale.js";
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
+import { seedSessionDevice, deviceRequestCfg } from "./testing/session-device.js";
+import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 
 // A receipt, and a copy that names no language, is printed in its location's saved language (the
@@ -65,8 +67,8 @@ const MADRID = { postalCode: "28013", city: "Madrid", province: "Madrid" };
 
 interface Venue {
   app: Hono;
-  cfg: TillConfig;
-  /** The logged-in operator's session cookie. */
+  cfg: DeviceRequestConfig;
+  /** The operator's session on a device allowed every capability, with no device cookie. */
   session: string;
   /** The session plus an enrolled till device, as a sale is sent. */
   till: string;
@@ -96,7 +98,6 @@ async function venueWith(
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -111,9 +112,8 @@ async function venueWith(
     { db, modules: ALL_MODULES },
   );
   // Built the way boot builds it, from the variables the box sets.
-  const cfg: TillConfig = {
+  const cfg = await deviceRequestCfg(suite.db, {
     ...loadTillConfig({
-      WAITRON_TILL_TILL_ID: venue.tillId,
       WAITRON_TILL_NODE_ID: venue.nodeId,
       WAITRON_TILL_SERIES_ID: venue.seriesIds[0]!,
       WAITRON_TILL_LOCATION_ID: venue.locationId,
@@ -121,7 +121,7 @@ async function venueWith(
     }),
     orderFlow: "prepay",
     simplifiedInvoiceLimit: null,
-  };
+  });
   const { menuItemId, staffId, profileId, printerId } = await withTransaction(db, async (tx) => {
     await tx.execute(
       sql`insert into content_languages (id, default_language, languages) values (1, 'es', '["es","ca","gl"]')
@@ -165,7 +165,11 @@ async function venueWith(
       .where(eq(locations.id, cfg.locationId));
     const [profile] = await tx
       .insert(deviceProfiles)
-      .values({ name: "Barra", formFactor: "till" })
+      .values({
+        name: "Barra",
+        formFactor: "till",
+        capabilities: ["open-cash-drawer", "take-cash"],
+      })
       .returning({ id: deviceProfiles.id });
     return {
       menuItemId: offers.offerFor(product.id),
@@ -189,15 +193,25 @@ async function venueWith(
   );
   const device = await enrolDeviceForTest(db, cfg, { name: "Barra", profileId });
   const deviceCookie = `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
-  // Enrolling made the device a till of its own; every till prints its receipts on the one printer.
-  await withTransaction(db, (tx) => tx.update(tills).set({ receiptPrinterId: printerId }));
   const login = await app.request("/api/session", {
     method: "POST",
     headers: { "content-type": "application/json", cookie: deviceCookie },
     body: JSON.stringify({ personId: staffId, pin: "5555" }),
   });
-  const session = login.headers.get("set-cookie")!.split(";")[0]!;
-  return { app, cfg, session, till: `${session}; ${deviceCookie}`, menuItemId };
+  const tillSession = login.headers.get("set-cookie")!.split(";")[0]!;
+  const sessionDeviceId = await seedSessionDevice(db, cfg);
+  const session = await withTransaction(db, (tx) =>
+    loginWithPin(tx, { deviceId: sessionDeviceId, personId: staffId, pin: "5555" }),
+  );
+  // Every device prints its receipts on the one printer.
+  await withTransaction(db, (tx) => tx.update(devices).set({ receiptPrinterId: printerId }));
+  return {
+    app,
+    cfg,
+    session: `${SESSION_COOKIE}=${session.token}`,
+    till: `${tillSession}; ${deviceCookie}`,
+    menuItemId,
+  };
 }
 
 async function sell(
@@ -419,7 +433,7 @@ describe("a bill paid in parts and an invoice issued at placing file the locatio
       operatorId: venue.operatorId,
     });
     await takePrinted(suite.db);
-    await placeOrder(deps, venue.cfg, id, venue.operatorId, venue.cfg.tillId);
+    await placeOrder(deps, venue.cfg, id, venue.operatorId);
     expect(await saleRow(suite.db, id)).toEqual({ locale: "ca-ES", invoiceLocales: ["ca-ES"] });
     const receipt = await takeReceipt(suite.db);
     expect(startsWith(receipt, "Data"), "Data").toBe(true);
@@ -471,6 +485,7 @@ describe("a card-reader sale files and prints in the location's language", () =>
     await inTx(venue, async (tx) => {
       await createOpenOrder(tx, venue.cfg, id, [{ menuItemId, quantity: "1" }], null, { zoneId });
       await insertCapturedPayment(tx, {
+        origin: venue.cfg.origin,
         workingOrderId: id,
         provider: "simulator",
         paymentRef: `sim-ref-${randomUUID()}`,

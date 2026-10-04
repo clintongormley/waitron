@@ -15,6 +15,11 @@ export interface Alert {
   readonly screen?: string;
   readonly handledAt?: string;
   readonly handledBy?: string | null;
+  /** An event's source: `device`, or the job that raised it. Ongoing alerts carry none. */
+  readonly source?: string;
+  readonly deviceId?: string | null;
+  /** The device's name when the source is `device`, else null. */
+  readonly deviceName?: string | null;
 }
 
 /** What a source returns; the registry stamps `kind` and `area` from the source itself. */

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { Source } from "@waitron/shared";
 
 /**
  * The per-order tamper-evidence chain over `order_amendments`. Pure and DB-free; the DB side — the
@@ -24,9 +25,10 @@ export interface AmendmentHashInput {
   /** The contestable reason (art. 29.2.j) — null on the genesis `order_placed`, required by the app
    * for `order_cancelled`. Hashed as the empty string when null. */
   reason: string | null;
-  /** Capture provenance — the capturing till and node, both hashed so neither can be re-pointed at a
-   * different device undetected. */
-  capturedByTillId: string;
+  /** Capture provenance — the source, its device (null for a job, hashed as the empty string) and
+   * the node, all hashed so none can be re-pointed undetected. */
+  capturedBySource: Source;
+  capturedByDeviceId: string | null;
   capturedByNodeId: string;
   /** The trusted event instant, an ISO-8601 string ALREADY TRUNCATED to whole seconds by
    * append-order-amendment.ts before it reaches here. Hashed as the INSTANT (epoch ms), not the
@@ -68,8 +70,9 @@ function joinFields(fields: ReadonlyArray<readonly [string, string]>): string {
 /**
  * The canonical string for one amendment — the exact bytes SHA-256 digests. The field ORDER is
  * FIXED and documented: identity (`SequenceNo`, `WorkingOrderId`, `Kind`), then the content the
- * amendment is accountable for (`ActorId`, `Reason`), then capture provenance (`CapturedByTillId`,
- * `CapturedByNodeId`), then the event, and `PrevEntryHash` last so the chain link reads at the end.
+ * amendment is accountable for (`ActorId`, `Reason`), then capture provenance (`CapturedBySource`,
+ * `CapturedByDeviceId`, `CapturedByNodeId`), then the event, and `PrevEntryHash` last so the chain
+ * link reads at the end.
  * Changing this order changes every digest, so it must not move once real chains exist.
  */
 function canonicalString(input: AmendmentHashInput): string {
@@ -79,7 +82,8 @@ function canonicalString(input: AmendmentHashInput): string {
     ["Kind", input.kind],
     ["ActorId", input.actorId],
     ["Reason", input.reason ?? ""],
-    ["CapturedByTillId", input.capturedByTillId],
+    ["CapturedBySource", input.capturedBySource],
+    ["CapturedByDeviceId", input.capturedByDeviceId ?? ""],
     ["CapturedByNodeId", input.capturedByNodeId],
     ["EventAtMs", String(Date.parse(input.eventAt))],
     ["EventOffsetMinutes", String(input.eventOffsetMinutes)],

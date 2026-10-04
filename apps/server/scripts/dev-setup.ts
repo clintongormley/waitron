@@ -10,7 +10,7 @@
 // by this flow, and `assertDeploymentMatches` (`src/deployment-guard.ts`) treats an unstamped
 // database as matching any host environment.
 //
-// Re-registering a till starts a new hash chain (CLAUDE.md §5), so this reuses a venue the `.env`
+// Re-registering a node starts a new hash chain (CLAUDE.md §5), so this reuses a venue the `.env`
 // names and refuses when the directory holds one it cannot account for. The only "start over" is
 // `pnpm dev:reset`, which removes the venue directory.
 import { randomBytes } from "node:crypto";
@@ -18,7 +18,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { and, eq, sql } from "drizzle-orm";
-import { openVenueDatabase, tills, watchers, withTransaction, type Database } from "@waitron/db";
+import { openVenueDatabase, watchers, withTransaction, type Database } from "@waitron/db";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { listDeviceProfiles } from "@waitron/layouts";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -28,7 +28,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { ALL_MODULES } from "../src/modules.js";
 import { venueModuleConfig } from "../src/provision.js";
@@ -87,7 +86,6 @@ export interface DevEnv {
   WAITRON_HTTP_PORT: string;
   WAITRON_CREDENTIALS_KEY: string;
   WAITRON_CREDENTIALS_KEY_VERSION: string;
-  WAITRON_TILL_TILL_ID: string;
   WAITRON_TILL_NODE_ID: string;
   WAITRON_TILL_SERIES_ID: string;
   WAITRON_TILL_LOCATION_ID: string;
@@ -101,7 +99,6 @@ const ENV_KEYS: readonly (keyof DevEnv)[] = [
   "WAITRON_HTTP_PORT",
   "WAITRON_CREDENTIALS_KEY",
   "WAITRON_CREDENTIALS_KEY_VERSION",
-  "WAITRON_TILL_TILL_ID",
   "WAITRON_TILL_NODE_ID",
   "WAITRON_TILL_SERIES_ID",
   "WAITRON_TILL_LOCATION_ID",
@@ -140,7 +137,6 @@ export interface DevSetupResult {
 }
 
 export interface DevVenueIds {
-  tillId: string;
   nodeId: string;
   seriesId: string;
   locationId: string;
@@ -161,7 +157,6 @@ export function buildDevEnv(input: {
     WAITRON_HTTP_PORT: input.httpPort || "8080",
     WAITRON_CREDENTIALS_KEY: credentialsKey,
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
-    WAITRON_TILL_TILL_ID: ids.tillId,
     WAITRON_TILL_NODE_ID: ids.nodeId,
     WAITRON_TILL_SERIES_ID: ids.seriesId,
     WAITRON_TILL_LOCATION_ID: ids.locationId,
@@ -177,8 +172,8 @@ function isCompleteDevEnv(rec: Record<string, string>): rec is Record<string, st
 }
 
 /**
- * Whether the venue directory holds the till this `.env` names, and whether it holds a venue at all
- * (the taxpayer row, which provisioning always writes).
+ * Whether the venue directory holds the location this `.env` names, and whether it holds a venue at
+ * all (the taxpayer row, which provisioning always writes).
  *
  * A virgin directory opens, so "no venue" is the absence of the tables, probed rather than caught:
  * every other failure propagates, so an incomplete read never reports "empty" and never lets a
@@ -186,19 +181,19 @@ function isCompleteDevEnv(rec: Record<string, string>): rec is Record<string, st
  */
 export async function inspectVenues(
   venueDir: string,
-  expectedTillId: string | null,
+  expectedLocationId: string | null,
 ): Promise<{ hasExpected: boolean; hasAny: boolean }> {
   const store = await openVenueDatabase(venueDir);
   try {
     const present = await store.venue.execute<{ name: string }>(
-      sql`select name from sqlite_master where type = 'table' and name in (${"tills"}, ${"tenants"})`,
+      sql`select name from sqlite_master where type = 'table' and name in (${"locations"}, ${"tenants"})`,
     );
     if (present.rows.length < 2) return { hasExpected: false, hasAny: false };
 
     // `exists(...)` answers 0 or 1 on this engine, not a boolean, so each is compared rather than
     // returned: handing a caller `0` where it expects `false` would make every `if` read true.
     const { rows } = await store.venue.execute<{ has_expected: number; has_any: number }>(
-      sql`select exists(select 1 from tills where id = ${expectedTillId}) as has_expected,
+      sql`select exists(select 1 from locations where id = ${expectedLocationId}) as has_expected,
                  exists(select 1 from tenants) as has_any`,
     );
     return { hasExpected: rows[0]?.has_expected === 1, hasAny: rows[0]?.has_any === 1 };
@@ -211,12 +206,7 @@ async function provisionVenue(
   db: Database,
   seedLocale: SeedLocale,
   salesDays: number,
-): Promise<{
-  tillId: string;
-  nodeId: string;
-  seriesId: string;
-  locationId: string;
-}> {
+): Promise<DevVenueIds> {
   const venue = await applyVenue(
     planVenue(
       {
@@ -236,7 +226,6 @@ async function provisionVenue(
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -254,7 +243,6 @@ async function provisionVenue(
   // planVenue emits the standard series first, then the rectificative one — seriesIds[0] is the
   // ordinary sale's series.
   const ids = {
-    tillId: venue.tillId,
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
     locationId: venue.locationId,
@@ -273,10 +261,8 @@ async function provisionVenue(
  * pairing window and number match, so `?dev`'s chooser lists them on first run. Each device is its own
  * transaction: a failure partway leaves the earlier devices enrolled.
  *
- * The till auto-creates a register named after the device, so it is "Mostrador", not "Caja 1" (which
- * provisioning already made and would be refused `device.register_name_taken`). The handheld rings
- * into that same register. The kitchen display binds the default station by `isDefault`, since the
- * demo may rename it. The pass display binds the demo's one active watcher.
+ * The kitchen display binds the default station by `isDefault`, since the demo may rename it. The
+ * pass display binds the demo's one active watcher.
  */
 async function seedDemoDevices(
   db: Database,
@@ -284,7 +270,6 @@ async function seedDemoDevices(
   seedLocale: SeedLocale,
 ): Promise<void> {
   const cfg: TillConfig = {
-    tillId: brandTillId(ids.tillId),
     nodeId: brandNodeId(ids.nodeId),
     seriesId: brandSeriesId(ids.seriesId),
     locationId: brandLocationId(ids.locationId),
@@ -322,23 +307,9 @@ async function seedDemoDevices(
   }
 
   await enrolDeviceForTest(db, cfg, { name: "Mostrador", profileId: profileFor("till") });
-
-  const counter = (
-    await withTransaction(db, async (tx) => {
-      return tx
-        .select({ id: tills.id })
-        .from(tills)
-        .where(and(eq(tills.locationId, cfg.locationId), eq(tills.name, "Mostrador")));
-    })
-  )[0];
-  if (counter === undefined) {
-    throw new Error('dev-setup: the till enrol did not create its "Mostrador" register');
-  }
-
   await enrolDeviceForTest(db, cfg, {
     name: "Camarero 1",
     profileId: profileFor("phone-portrait"),
-    registerId: counter.id,
   });
 
   await enrolDeviceForTest(db, cfg, {
@@ -381,9 +352,9 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   demoSeedEnvironment(process.env);
 
   const existing = existsSync(envPath) ? parseEnvFile(readFileSync(envPath, "utf8")) : undefined;
-  const expectedTillId =
-    existing !== undefined && isCompleteDevEnv(existing) ? existing.WAITRON_TILL_TILL_ID : null;
-  const { hasExpected, hasAny } = await inspectVenues(venueDir, expectedTillId);
+  const expectedLocationId =
+    existing !== undefined && isCompleteDevEnv(existing) ? existing.WAITRON_TILL_LOCATION_ID : null;
+  const { hasExpected, hasAny } = await inspectVenues(venueDir, expectedLocationId);
 
   if (existing !== undefined && isCompleteDevEnv(existing) && hasExpected) {
     log("dev-setup: reusing the already-provisioned venue (no new fiscal chain)");

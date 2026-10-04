@@ -20,13 +20,8 @@ import {
 } from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
-import { madeHereSinkFor, replayPrepayMadeHere } from "./made-here.js";
-import {
-  asObject,
-  optionalMoney,
-  submissionIdOf,
-  withSaleTillWhenIssuing,
-} from "./bill-payments-api.js";
+import { madeHereSinkFor, replayPrepayMadeHere, sendingCfg } from "./made-here.js";
+import { asObject, optionalMoney, submissionIdOf } from "./bill-payments-api.js";
 import type { Logger } from "./logger.js";
 import { withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { partyRevisionOfOrder } from "./parties.js";
@@ -38,6 +33,7 @@ import {
   type Run,
   type TillApiDeps,
 } from "./till-api.js";
+import { requestCfg } from "./request-config.js";
 import { requireSession } from "./till-session.js";
 import "./errors.js";
 
@@ -129,7 +125,9 @@ export function mountAdjustmentsApi(
   // One that leaves the bill exactly paid files its invoice on the requesting device's till.
   app.post("/api/working-orders/:id/adjustments", (c) =>
     run(c, log, async () => {
-      const { personId, tillId } = await requireSession(deps, c);
+      const session = await requireSession(deps, c);
+      const { personId } = session;
+      const cfg = requestCfg(deps.cfg, session);
       const id = requireBill(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const ask = parseAsk(id, personId, body);
@@ -137,24 +135,23 @@ export function mountAdjustmentsApi(
       const parsedApprover = parseDrawerOverride(
         body.approver as { personId?: unknown; pin?: unknown } | undefined,
       );
-      const attempts = overridePinAttempts(pinThrottle, tillId);
+      const attempts = overridePinAttempts(pinThrottle, session.deviceId);
       const toCheck = await approverToCheck(deps.db, ask, parsedApprover, deps.venueLocale);
       const answer = await withPinCheckAhead(deps.db, toCheck, attempts, (checked) => {
         const approver = withCheck(parsedApprover, checked);
-        return withSaleTillWhenIssuing(deps, c, (saleCfg) =>
-          withTransaction(deps.db, async (tx) => {
-            const applied = await applyAdjustment(
-              tx,
-              deps.cfg,
-              { ...ask, submissionId, ...(approver === undefined ? {} : { approver }) },
-              deps.venueLocale,
-              attempts,
-            );
-            await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
-            await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);
-            return { ...applied, party: await partyRevisionOfOrder(tx, id) };
-          }),
-        );
+        const saleCfg = sendingCfg(cfg, c, session.device);
+        return withTransaction(deps.db, async (tx) => {
+          const applied = await applyAdjustment(
+            tx,
+            cfg,
+            { ...ask, submissionId, ...(approver === undefined ? {} : { approver }) },
+            deps.venueLocale,
+            attempts,
+          );
+          await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
+          await replayPrepayMadeHere(tx, { madeHereSink: madeHereSinkFor(c) }, id);
+          return { ...applied, party: await partyRevisionOfOrder(tx, id) };
+        });
       });
       return c.json(answer);
     }),

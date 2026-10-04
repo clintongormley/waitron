@@ -10,7 +10,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
@@ -48,7 +47,6 @@ async function setupVenue(): Promise<TillConfig> {
   const locationId = location!.id;
   const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
-    tillId: brandTillId(randomUUID()),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),

@@ -419,7 +419,6 @@ describe("watcher paper", () => {
         .insert(devices)
         .values({
           locationId: cfg.locationId,
-          tillId: cfg.tillId,
           deviceProfileId: profile!.id,
           label: "Fryer till",
           tokenHash: `here-${randomUUID()}`,

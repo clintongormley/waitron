@@ -6,8 +6,9 @@ import { openIncidents } from "@waitron/core";
 import {
   AppError,
   decimal,
-  tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
+  jobOrigin,
 } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import {
@@ -49,7 +50,7 @@ async function collect(
   allowOffline?: boolean,
 ) {
   return provider.collect({
-    tillId: brandTillId(s.tillId),
+    origin: deviceOrigin(s.deviceId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
     amount: decimal(amount),
     ...(allowOffline === undefined ? {} : { allowOffline }),
@@ -137,7 +138,7 @@ describe("FakePaymentProvider.partialRefund", () => {
     const seeded = await seedTenant();
     const provider = new FakePaymentProvider(suite.db);
     const paid = await provider.collect({
-      tillId: brandTillId(seeded.tillId),
+      origin: deviceOrigin(seeded.deviceId),
       workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
       amount: decimal("20.00"),
     });
@@ -156,7 +157,7 @@ describe("FakePaymentProvider.capabilities", () => {
 describe("FakePaymentProvider.collect for a bill payment", () => {
   function collectFor(provider: FakePaymentProvider, s: Seeded, billPaymentId: string) {
     return provider.collect({
-      tillId: brandTillId(s.tillId),
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("10.00"),
       billPaymentId,
@@ -185,7 +186,7 @@ describe("FakePaymentProvider.collect for a bill payment", () => {
     provider.offlineNextCollect();
 
     const r = await provider.collect({
-      tillId: brandTillId(s.tillId),
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("10.00"),
       allowOffline: true,
@@ -371,7 +372,9 @@ describe("FakePaymentProvider.forward", () => {
     expect(result).toMatchObject({ forwarded: 0, declined: 1, incidentsRaised: 1 });
     const row = await suite.db.transaction((tx) => findPaymentByRef(tx, "fake", ref));
     expect(row?.state).toBe("declined");
-    const incidents = await suite.db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
+    const incidents = await suite.db.transaction((tx) =>
+      openIncidents(tx, jobOrigin("payment_check")),
+    );
     expect(incidents).toHaveLength(1);
     expect(incidents[0].code).toBe("payment.offline_forward_declined");
   });
@@ -386,7 +389,9 @@ describe("FakePaymentProvider.forward", () => {
     await provider.forward(new Date());
     const second = await provider.forward(new Date());
     expect(second).toMatchObject({ forwarded: 0, declined: 0, incidentsRaised: 0 });
-    const incidents = await suite.db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
+    const incidents = await suite.db.transaction((tx) =>
+      openIncidents(tx, jobOrigin("payment_check")),
+    );
     expect(incidents).toHaveLength(1);
   });
 
@@ -418,6 +423,7 @@ describe("FakePaymentProvider.resolveAbandonedAttempt", () => {
     const s = await seedTenant();
     await suite.db.transaction((tx) =>
       insertAttempting(tx, {
+        origin: deviceOrigin(s.deviceId),
         workingOrderId: s.workingOrderId,
         provider: "fake",
         paymentRef,

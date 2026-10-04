@@ -20,9 +20,7 @@ beforeEach(async () => {
 async function appendAltas(n: number): Promise<void> {
   for (let i = 1; i <= n; i++) {
     const saleId = await seedSale(suite.db, till, i);
-    await suite.db.transaction((tx) =>
-      appendToChain(tx, till.nodeId, altaFor(till.tillId, saleId, i, i)),
-    );
+    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, saleId, i, i)));
   }
 }
 
@@ -93,7 +91,7 @@ describe("verifyChain — normal states", () => {
     await appendAltas(1);
     const saleId = await seedSale(suite.db, till, 2);
     await suite.db.transaction((tx) =>
-      appendToChain(tx, till.nodeId, anulacionFor(till.tillId, saleId, 1, 5)),
+      appendToChain(tx, till.nodeId, anulacionFor(till, saleId, 1, 5)),
     );
     const result = await suite.db.transaction((tx) => verifyChain(tx, till.nodeId));
     expect(result.ok).toBe(true);
@@ -184,7 +182,7 @@ describe("verifyChain — detection", () => {
     for (const [i, number] of [500, 44, 7].entries()) {
       const saleId = await seedSale(suite.db, till, number);
       await suite.db.transaction((tx) =>
-        appendToChain(tx, till.nodeId, altaFor(till.tillId, saleId, number, i)),
+        appendToChain(tx, till.nodeId, altaFor(till, saleId, number, i)),
       );
     }
     const result = await suite.db.transaction((tx) => verifyChain(tx, till.nodeId));
@@ -212,7 +210,7 @@ describe("entorno is not part of the huella", () => {
     const fresh = await seedTill(db);
     const saleId = await seedSale(db, fresh, 1);
     const appended = await db.transaction((tx) =>
-      appendToChain(tx, fresh.nodeId, altaFor(fresh.tillId, saleId, 1, 1, entorno)),
+      appendToChain(tx, fresh.nodeId, altaFor(fresh, saleId, 1, 1, entorno)),
     );
     const row = await db.execute<{ entorno: string | null }>(
       sql`select entorno from registros_facturacion where id = ${appended.id}`,
@@ -254,7 +252,7 @@ describe("verifyChain — never blocks the sale", () => {
     const saleId = await seedSale(suite.db, till, 3);
     const { verification, appended } = await suite.db.transaction(async (tx) => {
       const verification = await verifyChain(tx, till.nodeId);
-      const appended = await appendToChain(tx, till.nodeId, altaFor(till.tillId, saleId, 3, 3));
+      const appended = await appendToChain(tx, till.nodeId, altaFor(till, saleId, 3, 3));
       return { verification, appended };
     });
 

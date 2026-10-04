@@ -6,8 +6,8 @@ import { computeHuella } from "@waitron/verifactu";
 import { invoiceSeries, newId, nowIso, saleLines, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
-import { centsToDecimal, seriesId as brandSeriesId } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import { centsToDecimal, seriesId as brandSeriesId, deviceOrigin } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId, DeviceId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
@@ -24,7 +24,7 @@ import type { RegistroRow } from "./registro-row.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let backend: VerifactuBackend;
-let tillId: TillId;
+let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 let rectSeriesId: SeriesId;
@@ -32,7 +32,9 @@ let rectifySessionId: string;
 
 beforeEach(async () => {
   // A pinned NIF: it is a huella input, and the control below pins a huella literal.
-  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db, { nif: "20009999E" }));
+  ({ deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db, {
+    nif: "20009999E",
+  }));
   const [series] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
@@ -44,7 +46,7 @@ beforeEach(async () => {
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'supervisor') returning id`,
   );
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tillId, personId: rows[0]!.id, pin: "1234" }),
+    loginWithPin(tx, { deviceId, personId: rows[0]!.id, pin: "1234" }),
   );
   rectifySessionId = session.id;
   backend = new VerifactuBackend({
@@ -57,7 +59,7 @@ beforeEach(async () => {
 
 async function sell(): Promise<SaleId> {
   const { saleId } = await withTransaction(suite.db, (tx) =>
-    recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId })),
+    recordSale(tx, backend, saleInput({ nodeId, seriesId })),
   );
   return saleId;
 }
@@ -70,7 +72,7 @@ async function correct(
   vatRate = "21.00",
 ): Promise<SaleId> {
   const input: RecordCorrectionInput = {
-    tillId,
+    origin: deviceOrigin(deviceId),
     nodeId,
     seriesId: rectSeriesId,
     correctsSaleId,

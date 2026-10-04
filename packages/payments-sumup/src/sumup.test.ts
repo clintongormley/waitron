@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  decimal,
-  tillId as brandTillId,
-  workingOrderId as brandWorkingOrderId,
-} from "@waitron/shared";
+import { decimal, workingOrderId as brandWorkingOrderId, deviceOrigin } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeSumUp } from "./testing/fake-sumup.js";
@@ -26,7 +22,7 @@ describe("the sumup cloud adapter's reader requirement", () => {
     });
     await expect(
       provider.collect({
-        tillId: brandTillId(t.tillId),
+        origin: deviceOrigin(t.deviceId),
         workingOrderId: brandWorkingOrderId(t.workingOrderId),
         amount: decimal("10.00"),
       }),

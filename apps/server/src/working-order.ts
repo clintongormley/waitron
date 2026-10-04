@@ -56,7 +56,6 @@ import {
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
-  type TillId,
   type TimingBand,
   toScale,
   workingOrderId as brandWorkingOrderId,
@@ -181,7 +180,7 @@ import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
 import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { enqueueOriginalReceipt } from "./receipt-print.js";
@@ -1028,7 +1027,7 @@ export interface ParkOrderResult {
  */
 export async function createOpenOrder(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   id: string,
   lines: ({
     menuItemId: string;
@@ -1086,7 +1085,9 @@ export async function createOpenOrder(
 
   await tx.insert(workingOrders).values({
     id,
-    tillId: cfg.tillId,
+    source: cfg.origin.source,
+    deviceId: cfg.origin.deviceId,
+    locationId: cfg.locationId,
     nodeId: cfg.nodeId,
     orderNumber,
     label,
@@ -1110,7 +1111,7 @@ export async function createOpenOrder(
 
 export async function parkOrder(
   deps: WorkingOrderDeps,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   req: ParkOrderRequest,
 ): Promise<ParkOrderResult> {
   if (req.lines.length === 0) {
@@ -1153,7 +1154,7 @@ export async function parkOrder(
  */
 export async function openTab(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   req: {
     tableId: string;
     lines?: { menuItemId: string; quantity: string }[];
@@ -1812,7 +1813,7 @@ export async function isOpenOrder(tx: Transaction, orderId: string): Promise<boo
  */
 export async function fireCourse(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   orderId: string,
   courseId: string,
   operatorId: string,
@@ -1840,7 +1841,7 @@ export async function fireCourse(
  */
 export async function fireOrderLines(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   orderId: string,
   lineIds: readonly string[],
   mark?: "FIRE",
@@ -1859,7 +1860,7 @@ export async function fireOrderLines(
 
 async function releaseHeld(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   orderId: string,
   ticketScope: SQL,
   noRouteScope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] },
@@ -1963,7 +1964,7 @@ async function finishRelease(
  */
 export async function sendLines(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   tabId: string,
   lineNos: number[],
 ): Promise<void> {
@@ -4066,7 +4067,7 @@ export interface UpdateHeldOrderRequest {
 /** What {@link updateHeldOrder} needs to issue the bill's invoice when the save leaves it fully paid. */
 interface IssueOnSave {
   fiscal: TillSaleDeps;
-  saleCfg: TillConfig | null;
+  saleCfg: DeviceRequestConfig;
 }
 
 /** What `PUT /api/working-orders/:id/lines/:lineNo` changes on one line; an absent field is kept. */
@@ -5388,18 +5389,16 @@ export interface PlaceOrderResult {
 
 /**
  * Place an open order, append its genesis amendment and fire kitchen items in one transaction.
- * invoice_first also files a deferred invoice from the stored prices. `saleTillId` is the
- * authenticated device's register on the fiscal record.
+ * invoice_first also files a deferred invoice from the stored prices, under the request's device.
  *
  * A second placement cannot file a second invoice: `withTransaction` IS the venue file's write lock,
  * so it reads `placed` and is refused before it reaches the file.
  */
 export async function placeOrder(
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   id: string,
   operatorId: string,
-  saleTillId: TillId,
 ): Promise<PlaceOrderResult> {
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
@@ -5434,14 +5433,7 @@ export async function placeOrder(
     let placeResult: PlaceOrderResult = { id, status: "placed" };
     if (orderFlow === "invoice_first") {
       const invoice = await priceForIssuance(tx, deps.clock, cfg, id);
-      const issued = await issueUnpaidInvoice(
-        tx,
-        deps.backend,
-        cfg,
-        invoice,
-        operatorId,
-        saleTillId,
-      );
+      const issued = await issueUnpaidInvoice(tx, deps.backend, cfg, invoice, operatorId);
       const { saleId } = issued;
       const ticket = await unpaidReceipt(tx, deps.backend, invoice, issued);
       placeResult = {
@@ -5454,7 +5446,7 @@ export async function placeOrder(
         ...(ticket.qrText === undefined ? {} : { qrText: ticket.qrText }),
         vatBreakdown: ticket.vatBreakdown,
       };
-      await enqueueOriginalReceipt(tx, { ...cfg, tillId: saleTillId }, ticket, saleId);
+      await enqueueOriginalReceipt(tx, cfg, ticket, saleId);
     }
 
     await markOrderPlaced(tx, deps.clock, cfg, id, operatorId);
@@ -5501,20 +5493,19 @@ export interface IssuedInvoice {
  * File the priced invoice with no tender and no settlement until `collectOrder` settles it, and,
  * on an order still open, save the label it was issued under. A placed order's label can change
  * only in the update that moves it to settled or abandoned (`working_orders_enforce_transition`).
- * Prints nothing. `saleTillId` is the device's register on the fiscal record.
+ * Prints nothing.
  */
 export async function issueUnpaidInvoice(
   tx: Transaction,
   backend: FiscalBackend,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   invoice: PricedInvoice,
   operatorId: string,
-  saleTillId: TillId,
 ): Promise<IssuedInvoice> {
   const { id, priced, clock } = invoice;
   const language = await readReceiptLanguage(tx, cfg.locationId);
   const { saleId, fiscal } = await recordSale(tx, backend, {
-    tillId: saleTillId,
+    origin: cfg.origin,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
     workingOrderId: brandWorkingOrderId(id),
@@ -5561,21 +5552,19 @@ async function unpaidReceipt(
 export async function markOrderPlaced(
   tx: Transaction,
   clock: TrustedClock,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   id: string,
   operatorId: string,
 ): Promise<void> {
   await tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id));
 
-  // `capturedByTillId` is the CONFIGURED register, as in `cancelPlacedOrder`, so one order's
-  // placed/cancelled pair stays on the same register.
   const now = clock.now();
   await appendOrderAmendment(tx, {
     workingOrderId: id,
     kind: "order_placed",
     actorId: operatorId,
     reason: null,
-    capturedByTillId: cfg.tillId,
+    origin: cfg.origin,
     capturedByNodeId: cfg.nodeId,
     eventAt: now.instant,
     eventOffsetMinutes: now.offsetMinutes,
@@ -5586,22 +5575,21 @@ export async function markOrderPlaced(
  * Cancel a placed order and append its reasoned amendment in one transaction. A second cancel reads
  * `abandoned` and is refused `working_order.not_placed`.
  *
- * An order whose invoice was issued has the whole invoice credited, on the till `saleTillId`
- * resolves, and settled owing nothing in the same transaction ({@link creditWholeInvoice}). It is
- * refused, writing nothing, while its bill holds a payment, or while a card payment of the invoice
- * is unresolved or captured and not yet filed. `saleTillId` is called only for such an order. Any
- * placed order is refused while an integrated card collection of it runs in this process.
+ * An order whose invoice was issued has the whole invoice credited, under the request's device, and
+ * settled owing nothing in the same transaction ({@link creditWholeInvoice}). It is refused,
+ * writing nothing, while its bill holds a payment, or while a card payment of the invoice is
+ * unresolved or captured and not yet filed. Any placed order is refused while an integrated card
+ * collection of it runs in this process.
  *
  * The credit needs `sale.rectify` from the operator or from `override`. Only when the operator lacks
  * it is the override's PIN checked, under `operator.attempts`, before the credit.
  */
 export async function cancelPlacedOrder(
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   id: string,
   reason: string,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
-  saleTillId: () => Promise<TillId>,
   override?: Override,
 ): Promise<void> {
   // The reason is the amendment's accountable content. Checked before the status, so a missing reason
@@ -5619,17 +5607,16 @@ export async function cancelPlacedOrder(
         );
 
   return withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) =>
-    cancelPlaced(deps, cfg, id, reason, operator, saleTillId, withCheck(override, checked)),
+    cancelPlaced(deps, cfg, id, reason, operator, withCheck(override, checked)),
   );
 }
 
 async function cancelPlaced(
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   id: string,
   reason: string,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
-  saleTillId: () => Promise<TillId>,
   override: Override | undefined,
 ): Promise<void> {
   const authz = { sessionId: operator.sessionId, override };
@@ -5655,7 +5642,7 @@ async function cancelPlaced(
     }
     if (invoice !== undefined) {
       await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
-      await creditWholeInvoice(tx, deps, cfg, invoice, authz, await saleTillId());
+      await creditWholeInvoice(tx, deps, cfg, invoice, authz);
     }
 
     await tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, id));
@@ -5666,7 +5653,7 @@ async function cancelPlaced(
       kind: "order_cancelled",
       actorId: operator.personId,
       reason,
-      capturedByTillId: cfg.tillId,
+      origin: cfg.origin,
       capturedByNodeId: cfg.nodeId,
       eventAt: now.instant,
       eventOffsetMinutes: now.offsetMinutes,

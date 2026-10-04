@@ -1,12 +1,10 @@
 import { eq } from "drizzle-orm";
-import { invoiceSeries, locations, nodes, sales, tenants, tills } from "@waitron/db";
+import { invoiceSeries, locations, nodes, sales, tenants } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import {
-  nodeId as brandNodeId,
-  saleId as brandSaleId,
-  tillId as brandTillId,
-} from "@waitron/shared";
-import type { NodeId, SaleId, TillId } from "@waitron/shared";
+import { nodeId as brandNodeId, saleId as brandSaleId } from "@waitron/shared";
+import { deviceOrigin } from "@waitron/shared";
+import type { DeviceId, NodeId, SaleId } from "@waitron/shared";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import type { AltaInput, AnulacionInput, SistemaInformatico } from "@waitron/verifactu";
 import { registerSif } from "../registro-sif.js";
 import type { PendingRegistro } from "../chain.js";
@@ -27,11 +25,11 @@ export const TEST_SISTEMA: SistemaInformatico = {
 };
 
 /**
- * A seeded fiscal fixture: one NODE (the SIF/chain/series owner) with one TILL under it, where a
- * sale rings.
+ * A seeded fiscal fixture: one NODE (the SIF/chain/series owner) and one till device at its
+ * location, where a sale rings.
  */
 export interface SeededTill {
-  tillId: TillId;
+  deviceId: DeviceId;
   nodeId: NodeId;
   seriesId: string;
   sifId: string;
@@ -69,7 +67,7 @@ async function ensureTaxpayer(tx: Transaction, nif: string): Promise<void> {
     .onConflictDoNothing();
 }
 
-/** Inserts one location and returns its id — the FK a node and a till both need. */
+/** Inserts one location and returns its id — the FK a node and a device both need. */
 async function insertLocation(tx: Transaction, label: string): Promise<string> {
   const [locationRow] = await tx
     .insert(locations)
@@ -93,21 +91,14 @@ async function insertNode(tx: Transaction, location: string, label: string): Pro
   return brandNodeId(nodeRow.id);
 }
 
-/** Inserts one till under an existing location and returns its id — where a sale rings. */
-async function insertTill(tx: Transaction, location: string, label: string): Promise<TillId> {
-  const [tillRow] = await tx
-    .insert(tills)
-    .values({ locationId: location, name: "Till " + label })
-    .returning({ id: tills.id });
-  if (tillRow === undefined) throw new Error("seedTill: till insert returned no row");
-  return brandTillId(tillRow.id);
-}
-
-/** Adds one node (+ location + till + a node-keyed series + a live SIF registration). */
-async function addTill(tx: Transaction, nif: string, label: string): Promise<SeededTill> {
+/** Adds one node (+ location + a node-keyed series + a live SIF registration). */
+async function addTill(
+  tx: Transaction,
+  nif: string,
+  label: string,
+): Promise<Omit<SeededTill, "deviceId"> & { locationId: string }> {
   const location = await insertLocation(tx, label);
   const node = await insertNode(tx, location, label);
-  const tillId = await insertTill(tx, location, label);
 
   const [seriesRow] = await tx
     .insert(invoiceSeries)
@@ -121,24 +112,27 @@ async function addTill(tx: Transaction, nif: string, label: string): Promise<See
     idSistemaInformatico: TEST_SISTEMA.IdSistemaInformatico,
   });
 
-  return { tillId, nodeId: node, seriesId: seriesRow.id, sifId: sif.id };
+  return { locationId: location, nodeId: node, seriesId: seriesRow.id, sifId: sif.id };
 }
 
 /**
- * Inserts location → node → till → node-keyed series and registers a live Veri*Factu SIF identity
+ * Inserts location → node → node-keyed series and registers a live Veri*Factu SIF identity
  * for the node, returning every id `appendToChain` needs. Each call gets its OWN fresh NIF and
  * node.
  */
 export async function seedTill(db: Database, label = "A"): Promise<SeededTill> {
   const nif = freshNif();
-  return db.transaction(async (tx) => {
+  const seeded = await db.transaction(async (tx) => {
     await ensureTaxpayer(tx, nif);
     return addTill(tx, nif, label);
   });
+  const { locationId, ...ids } = seeded;
+  const { deviceId } = await seedDevice(db, { locationId });
+  return { ...ids, deviceId };
 }
 
 /**
- * Adds a SECOND till (+ its own node-keyed series) under the SAME node of an already-seeded
+ * Adds a SECOND till device (+ its own node-keyed series) at the SAME node of an already-seeded
  * fixture, sharing the original's `nodeId`/`sifId`: for "two tills, one node → one chain".
  */
 export async function addTillToNode(
@@ -146,25 +140,27 @@ export async function addTillToNode(
   seed: SeededTill,
   label: string,
 ): Promise<SeededTill> {
-  return db.transaction(async (tx) => {
+  const added = await db.transaction(async (tx) => {
     const [locationRow] = await tx
       .select({ locationId: nodes.locationId })
       .from(nodes)
       .where(eq(nodes.id, seed.nodeId));
     if (locationRow === undefined) throw new Error("addTillToNode: node not found");
-    const tillId = await insertTill(tx, locationRow.locationId, label);
     const [seriesRow] = await tx
       .insert(invoiceSeries)
       .values({ nodeId: seed.nodeId, code: "G" + label, purpose: "standard", nextNumber: 1 })
       .returning({ id: invoiceSeries.id });
     if (seriesRow === undefined) throw new Error("addTillToNode: series insert returned no row");
     return {
-      tillId,
+      locationId: locationRow.locationId,
       nodeId: seed.nodeId,
       seriesId: seriesRow.id,
       sifId: seed.sifId,
     };
   });
+  const { locationId, ...ids } = added;
+  const { deviceId } = await seedDevice(db, { locationId });
+  return { ...ids, deviceId };
 }
 
 /** Inserts one location + node, deliberately WITHOUT registering a SIF. */
@@ -209,7 +205,8 @@ export async function seedSale(
   const [row] = await db
     .insert(sales)
     .values({
-      tillId: till.tillId,
+      source: "device",
+      deviceId: till.deviceId,
       nodeId: till.nodeId,
       seriesId: till.seriesId,
       invoiceNumber,
@@ -229,11 +226,12 @@ export async function seedSale(
 
 /**
  * A minimal alta ready for appendToChain — Encadenamiento is chain-owned, not this fixture's.
- * `tillId` rides beside `input`, never inside it: it is not an AEAT field and must never be hashed.
- * The return type is the NARROWED branch so a caller's `.input` is not the union of both shapes.
+ * The device's origin rides beside `input`, never inside it: it is not an AEAT field and may not
+ * be hashed. The return type is the NARROWED branch so a caller's `.input` is not
+ * the union of both shapes.
  */
 export function altaFor(
-  tillId: TillId,
+  till: Pick<SeededTill, "deviceId">,
   saleId: SaleId,
   invoiceNumber: number,
   seconds: number,
@@ -261,12 +259,18 @@ export function altaFor(
     generadoEn: new Date(Date.UTC(2026, 6, 20, 17, 20, seconds)),
     offsetMinutes: 120,
   };
-  return { tipo: "alta", saleId, tillId, entorno, input };
+  return {
+    tipo: "alta",
+    saleId,
+    origin: deviceOrigin(till.deviceId),
+    entorno,
+    input,
+  };
 }
 
 /** A minimal anulación against an already-issued invoice; see `altaFor`. */
 export function anulacionFor(
-  tillId: TillId,
+  till: Pick<SeededTill, "deviceId">,
   saleId: SaleId,
   invoiceNumber: number,
   seconds: number,
@@ -280,5 +284,11 @@ export function anulacionFor(
     generadoEn: new Date(Date.UTC(2026, 6, 20, 17, 20, seconds)),
     offsetMinutes: 120,
   };
-  return { tipo: "anulacion", saleId, tillId, entorno, input };
+  return {
+    tipo: "anulacion",
+    saleId,
+    origin: deviceOrigin(till.deviceId),
+    entorno,
+    input,
+  };
 }

@@ -4,19 +4,23 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   incidents,
   locations,
-  tills,
   withTransaction,
   type Database,
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
 import { listOpenIncidents, markIncidentHandled, recordIncident } from "@waitron/core";
 import { hashPin, persons } from "@waitron/identity";
 import type { AlertSource } from "@waitron/module";
 import type { Logger } from "@waitron/server-kit";
-import { AppError, tillId as brandTillId, type TillId } from "@waitron/shared";
+import {
+  AppError,
+  deviceOrigin,
+  locationId as brandLocationId,
+  type DeviceId,
+} from "@waitron/shared";
 import {
   HANDLED_WINDOW_MS,
   UNCLAIMED,
@@ -46,10 +50,10 @@ const registry = createAlertRegistry({
 });
 const EVERYTHING = new Set(["fiscal.view", "payments.manage", "diagnostics.view"]);
 
-async function seedVenue(): Promise<{ tillId: TillId }> {
+async function seedVenue(): Promise<{ deviceId: DeviceId }> {
   await seedTenant(db);
-  // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are NOT NULL
-  // `$defaultFn` generators a raw insert never reaches.
+  // Through the table definition: `locations.id` is a NOT NULL `$defaultFn` generator a raw insert
+  // never reaches.
   const [location] = await db
     .insert(locations)
     .values({
@@ -58,11 +62,11 @@ async function seedVenue(): Promise<{ tillId: TillId }> {
       operationDescription: "Venta en establecimiento",
     })
     .returning({ id: locations.id });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId: location!.id, name: "Caja 1" })
-    .returning({ id: tills.id });
-  return { tillId: brandTillId(till!.id) };
+  const { deviceId } = await seedDevice(db, {
+    locationId: brandLocationId(location!.id),
+    label: "Caja 1",
+  });
+  return { deviceId };
 }
 
 function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -73,14 +77,14 @@ function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 
 /** Records an incident with an arbitrary code; the registry is what is under test, not the code. */
 function raise(
-  v: { tillId: TillId },
+  v: { deviceId: DeviceId },
   code: string,
   severity: "warning" | "error",
   detectedAt: Date,
 ): Promise<void> {
   return asApp((tx) =>
     recordIncident(tx, {
-      tillId: v.tillId,
+      origin: deviceOrigin(v.deviceId),
       error: new AppError(code as never, {} as never),
       severity,
       detectedAt,
@@ -171,6 +175,9 @@ describe("readOpenAlerts", () => {
       severity: "error",
       since: NOW.toISOString(),
       area: "payments",
+      source: "device",
+      deviceId: v.deviceId,
+      deviceName: "Caja 1",
     });
   });
 

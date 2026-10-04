@@ -4,8 +4,8 @@ import type { Database, Transaction } from "@waitron/db";
 import { recordIncident } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
 import { emptyDrainResult, type DrainResult } from "@waitron/fiscal";
-import { AppError, isAppError } from "@waitron/shared";
-import type { SaleId, TillId } from "@waitron/shared";
+import { AppError, isAppError, jobOrigin } from "@waitron/shared";
+import type { SaleId } from "@waitron/shared";
 import { MAX_REGISTROS_POR_ENVIO, resolveEstadoEfectivo } from "@waitron/verifactu";
 import type {
   Cabecera,
@@ -743,7 +743,7 @@ async function raiseIncident(
   result: DrainResult,
 ): Promise<void> {
   await recordIncident(tx, {
-    tillId: row.till_id as TillId,
+    origin: jobOrigin("fiscal_filing"),
     saleId: row.sale_id as SaleId,
     error,
     severity,

@@ -1,13 +1,17 @@
 import { and, eq, isNull } from "drizzle-orm";
 import {
+  deviceProfilePrinters,
+  deviceProfiles,
+  devices,
   kitchenStations,
   printAgents,
   printers,
   stationPrinters,
-  tills,
   withTransaction,
   type Database,
+  type Transaction,
 } from "@waitron/db";
+import { readProfilePrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import { claimPrintJobs, reportPrintJob } from "@waitron/printing";
 
 export const DEMO_PRINTER_KEY = "WAITRON-DEMO-PRINTER";
@@ -30,10 +34,7 @@ export async function configureDemoPrinter(
       .where(and(eq(printers.locationId, locationId), eq(printers.localKey, DEMO_PRINTER_KEY)));
     if (!practiceMode) {
       if (existing !== undefined) {
-        await tx
-          .update(tills)
-          .set({ receiptPrinterId: null })
-          .where(eq(tills.receiptPrinterId, existing.id));
+        await unlistDemoPrinter(tx, existing.id);
         await tx.delete(stationPrinters).where(eq(stationPrinters.printerId, existing.id));
         await tx.update(printers).set({ active: false }).where(eq(printers.id, existing.id));
       }
@@ -79,22 +80,70 @@ export async function configureDemoPrinter(
           .returning({ id: printAgents.id })
       )[0]!.id;
 
-    await tx
-      .update(tills)
-      .set({ receiptPrinterId: printerId })
-      .where(and(eq(tills.locationId, locationId), isNull(tills.receiptPrinterId)));
-    const stations = await tx
-      .select({ id: kitchenStations.id })
-      .from(kitchenStations)
-      .where(eq(kitchenStations.locationId, locationId));
-    for (const station of stations) {
-      await tx
-        .insert(stationPrinters)
-        .values({ stationId: station.id, printerId })
-        .onConflictDoNothing();
-    }
+    await routeToDemoPrinter(tx, locationId, printerId);
     return { printerId, agentId };
   });
+}
+
+/** Takes the printer off every profile list; `setProfilePrinterLists` moves the devices on it. */
+async function unlistDemoPrinter(tx: Transaction, printerId: string): Promise<void> {
+  const listing = await tx
+    .selectDistinct({ id: deviceProfilePrinters.deviceProfileId })
+    .from(deviceProfilePrinters)
+    .where(eq(deviceProfilePrinters.printerId, printerId));
+  for (const { id: profileId } of listing) {
+    const lists = await readProfilePrinterLists(tx, profileId);
+    const without = (ids: string[]) => ids.filter((id) => id !== printerId);
+    await setProfilePrinterLists(tx, profileId, {
+      receiptPrinterIds: without(lists.receiptPrinterIds),
+      paymentSlipPrinterIds: without(lists.paymentSlipPrinterIds),
+    });
+  }
+}
+
+/**
+ * Lists the printer last on every profile's receipt and payment slip lists, puts each active device
+ * at the location on it for whichever of the two kinds it has no printer for, and gives it to every
+ * preparation station there. A printer a device already holds stays. Safe to repeat.
+ */
+export async function routeToDemoPrinter(
+  tx: Transaction,
+  locationId: string,
+  printerId: string,
+): Promise<void> {
+  const profiles = await tx.select({ id: deviceProfiles.id }).from(deviceProfiles);
+  for (const profile of profiles) {
+    const lists = await readProfilePrinterLists(tx, profile.id);
+    if (
+      lists.receiptPrinterIds.includes(printerId) &&
+      lists.paymentSlipPrinterIds.includes(printerId)
+    )
+      continue;
+    const append = (ids: string[]) => (ids.includes(printerId) ? ids : [...ids, printerId]);
+    await setProfilePrinterLists(tx, profile.id, {
+      receiptPrinterIds: append(lists.receiptPrinterIds),
+      paymentSlipPrinterIds: append(lists.paymentSlipPrinterIds),
+    });
+  }
+  const atLocation = and(eq(devices.locationId, locationId), eq(devices.active, true));
+  await tx
+    .update(devices)
+    .set({ receiptPrinterId: printerId })
+    .where(and(atLocation, isNull(devices.receiptPrinterId)));
+  await tx
+    .update(devices)
+    .set({ paymentSlipPrinterId: printerId })
+    .where(and(atLocation, isNull(devices.paymentSlipPrinterId)));
+  const stations = await tx
+    .select({ id: kitchenStations.id })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.locationId, locationId));
+  for (const station of stations) {
+    await tx
+      .insert(stationPrinters)
+      .values({ stationId: station.id, printerId })
+      .onConflictDoNothing();
+  }
 }
 
 export async function deliverDemoPrinterJobs(

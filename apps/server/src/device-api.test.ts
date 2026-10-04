@@ -1,9 +1,8 @@
 /**
  * The device join, enrolment and management surface end to end.
  *
- * `rejects a nonexistent or absent profile — device untouched` and `rejects a receiptPrinterId
- * naming no printer of this tenant with device.binding_invalid` are the only cases proving that a
- * device write naming a missing binding is refused as `device.binding_invalid` rather than as a 500.
+ * `rejects a nonexistent or absent profile — device untouched` is the only case proving that a
+ * device write naming a missing profile is refused as `device.binding_invalid` rather than as a 500.
  * A refusal on one of the OTHER foreign keys of `devices` is rethrown raw, and nothing here checks
  * that it cannot be mistaken for a binding fault.
  */
@@ -36,6 +35,7 @@ import {
   type EnrolRateLimiter,
 } from "./enrol-rate-limit.js";
 import { DEVICE_COOKIE } from "./device-session.js";
+import { SESSION_COOKIE } from "./till-session.js";
 import { PENDING_CAP, acceptDeviceJoinRequest, denyJoinRequest } from "./join-requests.js";
 import { createPairingMode, type PairingMode } from "./pairing-mode.js";
 import type { Logger } from "./logger.js";
@@ -43,9 +43,12 @@ import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { decimal } from "@waitron/shared";
+import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import { setProfilePrinterLists } from "@waitron/layouts";
 import "./errors.js";
 import { createWatcher } from "./watchers.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // Every test provisions its OWN tenant, and `tenants` is a singleton (id = 1), so the per-test reset
 // is what makes that legal twice in one file: `useVenueDb` empties every data table after each `it`.
@@ -109,10 +112,9 @@ async function fireOrder(venue: Venue): Promise<{ orderId: string; items: string
   });
   await placeOrder(
     { db: suite.db, backend, clock },
-    venue.cfg,
+    await deviceRequestCfg(suite.db, venue.cfg),
     orderId,
     OPERATOR,
-    venue.cfg.tillId,
   );
   const { rows } = await suite.db.execute<{ id: string }>(sql`
     select ti.id from ticket_items ti
@@ -147,19 +149,46 @@ async function seedPrinter(cfg: TillConfig): Promise<string> {
 }
 
 async function deviceBindings(deviceId: string): Promise<{
-  tillId: string | null;
   deviceProfileId: string;
   receiptPrinterId: string | null;
+  paymentSlipPrinterId: string | null;
 }> {
   const [row] = await suite.db
     .select({
-      tillId: devices.tillId,
       deviceProfileId: devices.deviceProfileId,
       receiptPrinterId: devices.receiptPrinterId,
+      paymentSlipPrinterId: devices.paymentSlipPrinterId,
     })
     .from(devices)
     .where(eq(devices.id, deviceId));
   return row!;
+}
+
+async function seedNamedPrinters(cfg: TillConfig, names: string[]): Promise<string[]> {
+  const rows = await suite.db
+    .insert(printers)
+    .values(
+      names.map((name) => ({
+        locationId: cfg.locationId,
+        name,
+        transport: "network_tcp" as const,
+        host: "10.0.0.7",
+      })),
+    )
+    .returning({ id: printers.id });
+  return rows.map((row) => row.id);
+}
+
+/** An open till session on `deviceId` for a new staff member, as the cookie the till sends. */
+async function openTillSession(deviceId: string): Promise<string> {
+  const [person] = await suite.db
+    .insert(persons)
+    .values({ displayName: "Server", pinHash: hashPin("4321"), role: "staff" })
+    .returning({ id: persons.id });
+  const session = await withTransaction(suite.db, (tx) =>
+    loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),
+  );
+  return `${SESSION_COOKIE}=${session.token}`;
 }
 
 /** The window each mounted app was given. A fixture opens the door on the app it was handed, so the
@@ -244,7 +273,7 @@ async function seedProfile(
 async function knockAndAccept(
   app: Hono,
   venue: Venue,
-  input: { name: string; profileId: string; stationId?: string; registerId?: string },
+  input: { name: string; profileId: string; stationId?: string },
 ): Promise<{ deviceId: string; jar: string; formFactor: string }> {
   windows.get(app)!.open();
   const res = await send(app, "POST", "/api/device/join", { body: { name: input.name } });
@@ -255,7 +284,6 @@ async function knockAndAccept(
       choice: knock.verificationNumber,
       profileId: input.profileId,
       stationId: input.stationId ?? null,
-      registerId: input.registerId ?? null,
     });
   });
   if (!accepted.ok) throw new Error("device-api.test: the fixture's own number mismatched");
@@ -271,18 +299,18 @@ async function enrolKds(
   app: Hono,
   venue: Venue,
   stationId: string,
+  name = "Pantalla Cocina",
 ): Promise<{ deviceId: string; jar: string; profileId: string }> {
   const profileId = await seedProfile("kds");
   const { deviceId, jar } = await knockAndAccept(app, venue, {
-    name: "Pantalla Cocina",
+    name,
     profileId,
     stationId,
   });
   return { deviceId, jar, profileId };
 }
 
-/** Enrol a `till` device (its profile auto-creates the register it rings against). Returns the device id
- *  + the cookie jar. */
+/** Enrol a `till` device. Returns the device id + the cookie jar. */
 async function enrolTill(
   app: Hono,
   venue: Venue,
@@ -293,17 +321,15 @@ async function enrolTill(
   return { deviceId, jar, profileId, formFactor };
 }
 
-/** Enrol a `handheld` device bound to an EXISTING register (`registerId`). Returns the device id + jar. */
+/** Enrol a `handheld` device. Returns the device id + jar. */
 async function enrolHandheld(
   app: Hono,
   venue: Venue,
-  registerId: string,
 ): Promise<{ deviceId: string; jar: string; profileId: string }> {
   const profileId = await seedProfile("phone-portrait");
   const { deviceId, jar } = await knockAndAccept(app, venue, {
     name: "Waiter phone",
     profileId,
-    registerId,
   });
   return { deviceId, jar, profileId };
 }
@@ -598,14 +624,10 @@ describe("GET /api/device/join/status", () => {
 });
 
 describe("Device API — the device-guarded routes", () => {
-  it("enrols, sets the cookie, auto-creates a till's register, and /me reports it", async () => {
+  it("enrols, sets the cookie, and /me reports the device", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId, jar } = await enrolTill(app, venue, "Caja del bar");
-
-    // The device row carries an auto-created register (a till device rings its own).
-    const tillId = (await deviceBindings(deviceId)).tillId;
-    expect(tillId).toEqual(expect.any(String));
 
     const me = await send(app, "GET", "/api/device/me", { cookie: jar });
     expect(me.status).toBe(200);
@@ -614,7 +636,6 @@ describe("Device API — the device-guarded routes", () => {
       formFactor: "till",
       name: "Caja del bar",
       stationId: null,
-      tillId,
     });
   });
 
@@ -701,7 +722,7 @@ describe("Device API — the device-guarded routes", () => {
     });
     expect(noCookie.status).toBe(401);
     // A handheld is bound to no station, so it has no notices to clear.
-    const handheld = await enrolHandheld(app, venue, venue.cfg.tillId);
+    const handheld = await enrolHandheld(app, venue);
     const fromHandheld = await send(
       app,
       "POST",
@@ -968,6 +989,73 @@ describe("Device management routes (device.manage)", () => {
       expect((await deviceBindings(deviceId)).deviceProfileId).toBe(target);
     });
 
+    it("moves the device onto the new profile's first usable printers", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const [p1, p2, p3] = await seedNamedPrinters(venue.cfg, ["Bar", "Counter", "Portable"]);
+      const from = await seedProfile("till");
+      const to = await seedProfile("till");
+      await withTransaction(suite.db, async (tx) => {
+        await setProfilePrinterLists(tx, from, {
+          receiptPrinterIds: [p1!],
+          paymentSlipPrinterIds: [p1!],
+        });
+        await setProfilePrinterLists(tx, to, {
+          receiptPrinterIds: [p2!, p1!],
+          paymentSlipPrinterIds: [p3!, p1!],
+        });
+      });
+      const { deviceId } = await knockAndAccept(app, venue, { name: "Caja", profileId: from });
+      expect(await deviceBindings(deviceId)).toMatchObject({
+        receiptPrinterId: p1,
+        paymentSlipPrinterId: p1,
+      });
+
+      const assign = await send(
+        app,
+        "POST",
+        `/management-api/devices/${deviceId}/assign-device-profile`,
+        { cookie: venue.managerCookie, body: { deviceProfileId: to } },
+      );
+      expect(assign.status).toBe(204);
+      expect(await deviceBindings(deviceId)).toMatchObject({
+        deviceProfileId: to,
+        receiptPrinterId: p2,
+        paymentSlipPrinterId: p3,
+      });
+    });
+
+    it("keeps the device's chosen printers when it is reassigned to the profile it already has", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const [p1, p2] = await seedNamedPrinters(venue.cfg, ["Bar", "Counter"]);
+      const profileId = await seedProfile("till");
+      await withTransaction(suite.db, (tx) =>
+        setProfilePrinterLists(tx, profileId, {
+          receiptPrinterIds: [p1!, p2!],
+          paymentSlipPrinterIds: [p1!, p2!],
+        }),
+      );
+      const { deviceId } = await knockAndAccept(app, venue, { name: "Caja", profileId });
+      await suite.db
+        .update(devices)
+        .set({ receiptPrinterId: p2!, paymentSlipPrinterId: null })
+        .where(eq(devices.id, deviceId));
+
+      const assign = await send(
+        app,
+        "POST",
+        `/management-api/devices/${deviceId}/assign-device-profile`,
+        { cookie: venue.managerCookie, body: { deviceProfileId: profileId } },
+      );
+      expect(assign.status).toBe(204);
+      expect(await deviceBindings(deviceId)).toMatchObject({
+        deviceProfileId: profileId,
+        receiptPrinterId: p2,
+        paymentSlipPrinterId: null,
+      });
+    });
+
     it("rejects a nonexistent or absent profile — device untouched", async () => {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
@@ -1112,113 +1200,6 @@ describe("PUT /management-api/devices/:id/made-here (device.manage)", () => {
   });
 });
 
-describe("PATCH /management-api/devices/:id/hardware (device.manage)", () => {
-  it("sets the receipt printer and returns the updated device", async () => {
-    const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
-    const printerId = await seedPrinter(venue.cfg);
-    const { deviceId } = await enrolTill(app, venue, "Caja hw");
-
-    const res = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
-      cookie: venue.managerCookie,
-      body: {
-        receiptPrinterId: printerId,
-      },
-    });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      id: deviceId,
-      receiptPrinterId: printerId,
-    });
-    // The row itself carries the new bindings, read straight off the row rather than the route.
-    expect(await deviceBindings(deviceId)).toMatchObject({
-      receiptPrinterId: printerId,
-    });
-  });
-
-  it("requires device.manage — 401 unauthenticated, 403 for a staff session", async () => {
-    const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
-    const { deviceId } = await enrolTill(app, venue, "Caja gate");
-
-    const unauth = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
-      body: { receiptPrinterId: null },
-    });
-    expect(unauth.status).toBe(401);
-    expect((await unauth.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "management_session.required" },
-    });
-
-    const staff = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
-      cookie: venue.staffCookie,
-      body: { receiptPrinterId: null },
-    });
-    expect(staff.status).toBe(403);
-    expect((await staff.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "authorization.not_permitted" },
-    });
-  });
-
-  it("404s an unknown or malformed device id", async () => {
-    const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
-    const unknown = randomUUID();
-    const res = await send(app, "PATCH", `/management-api/devices/${unknown}/hardware`, {
-      cookie: venue.managerCookie,
-      body: { receiptPrinterId: null },
-    });
-    expect(res.status).toBe(404);
-    expect(
-      (await res.json()) as { error: { code: string; params: { deviceId: string } } },
-    ).toMatchObject({ error: { code: "device.not_found", params: { deviceId: unknown } } });
-
-    const malformed = await send(app, "PATCH", "/management-api/devices/not-a-uuid/hardware", {
-      cookie: venue.managerCookie,
-      body: { receiptPrinterId: null },
-    });
-    expect(malformed.status).toBe(404);
-  });
-
-  it("rejects a receiptPrinterId naming no printer of this tenant with device.binding_invalid", async () => {
-    const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
-    const { deviceId } = await enrolTill(app, venue, "Caja fk");
-
-    const res = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
-      cookie: venue.managerCookie,
-      body: { receiptPrinterId: randomUUID() },
-    });
-    expect(res.status).toBe(400);
-    expect(
-      (await res.json()) as { error: { code: string; params: { field: string } } },
-    ).toMatchObject({
-      error: { code: "device.binding_invalid", params: { field: "receiptPrinterId" } },
-    });
-  });
-
-  it("refuses a body naming no hardware field, leaving the row as it was", async () => {
-    const venue = await setupVenue(suite.db);
-    const app = mountApp(venue.cfg);
-    const { deviceId } = await enrolTill(app, venue, "Caja screens");
-    const before = await deviceBindings(deviceId);
-
-    for (const [body, field] of [
-      [{}, "hardware"],
-      [{ somethingElse: true }, "hardware"],
-    ] as const) {
-      const res = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
-        cookie: venue.managerCookie,
-        body,
-      });
-      expect(res.status).toBe(400);
-      expect(await res.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field } },
-      });
-    }
-    expect(await deviceBindings(deviceId)).toEqual(before);
-  });
-});
-
 describe("GET /api/device/me + station (SP-A.2 §16)", () => {
   it("exposes a watcher's binding on the device and management surfaces", async () => {
     const venue = await setupVenue(suite.db);
@@ -1260,7 +1241,7 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
   it("reports an enrolled handheld's formFactor + name, station null", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const { deviceId, jar } = await enrolHandheld(app, venue, venue.cfg.tillId);
+    const { deviceId, jar } = await enrolHandheld(app, venue);
     const res = await send(app, "GET", "/api/device/me", { cookie: jar });
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
@@ -1268,11 +1249,10 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
       formFactor: "phone-portrait",
       name: "Waiter phone",
       stationId: null,
-      tillId: venue.cfg.tillId,
     });
   });
 
-  it("echoes the device's hardware bindings (set as the dashboard would)", async () => {
+  it("echoes the printer stored on the device", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const printerId = await seedPrinter(venue.cfg);
@@ -1281,7 +1261,6 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
       update devices
          set receipt_printer_id = ${printerId}
        where id = ${deviceId}`);
-    const tillId = (await deviceBindings(deviceId)).tillId;
 
     const res = await send(app, "GET", "/api/device/me", { cookie: jar });
     expect(res.status).toBe(200);
@@ -1291,15 +1270,17 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
       name: "Caja hw",
       stationId: null,
       watcherId: null,
-      tillId,
       receiptPrinterId: printerId,
+      paymentSlipPrinterId: null,
+      // The printer is stored on the device but is on none of its profile's lists.
+      printerChoices: { receipt: [], paymentSlip: [] },
     });
   });
 
   it("GET /api/device/station 401s an enrolled handheld — it is bound to no station", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const { jar } = await enrolHandheld(app, venue, venue.cfg.tillId);
+    const { jar } = await enrolHandheld(app, venue);
     const res = await send(app, "GET", "/api/device/station", { cookie: jar });
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -1312,6 +1293,149 @@ describe("GET /api/device/me + station (SP-A.2 §16)", () => {
     const app = mountApp(venue.cfg);
     const res = await send(app, "GET", "/api/device/me", { cookie: null });
     expect(res.status).toBe(401);
+  });
+});
+
+describe("a device's current printers", () => {
+  /** A till on a profile listing receipt [Counter, Bar] and slip [Portable, Bar]. */
+  async function listedTill(venue: Venue, app: Hono) {
+    const [bar, counter, portable] = await seedNamedPrinters(venue.cfg, [
+      "Bar",
+      "Counter",
+      "Portable",
+    ]);
+    const profileId = await seedProfile("till");
+    await withTransaction(suite.db, (tx) =>
+      setProfilePrinterLists(tx, profileId, {
+        receiptPrinterIds: [counter!, bar!],
+        paymentSlipPrinterIds: [portable!, bar!],
+      }),
+    );
+    const { deviceId, jar } = await knockAndAccept(app, venue, { name: "Caja", profileId });
+    const session = await openTillSession(deviceId);
+    return { bar: bar!, counter: counter!, portable: portable!, deviceId, jar, session };
+  }
+
+  it("switches the slip printer to another listed one", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await listedTill(venue, app);
+    const res = await send(app, "PUT", "/api/device/printers", {
+      cookie: `${t.jar}; ${t.session}`,
+      body: { paymentSlipPrinterId: t.bar },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ receiptPrinterId: t.counter, paymentSlipPrinterId: t.bar });
+    expect(await deviceBindings(t.deviceId)).toMatchObject({
+      receiptPrinterId: t.counter,
+      paymentSlipPrinterId: t.bar,
+    });
+
+    const off = await send(app, "PUT", "/api/device/printers", {
+      cookie: `${t.jar}; ${t.session}`,
+      body: { receiptPrinterId: null },
+    });
+    expect(await off.json()).toEqual({ receiptPrinterId: null, paymentSlipPrinterId: t.bar });
+  });
+
+  it("lists each device with its current receipt and slip printers", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await listedTill(venue, app);
+    const res = await send(app, "GET", "/management-api/devices", { cookie: venue.managerCookie });
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as { id: string }[];
+    expect(rows.find((r) => r.id === t.deviceId)).toMatchObject({
+      receiptPrinterId: t.counter,
+      paymentSlipPrinterId: t.portable,
+    });
+  });
+
+  it("refuses a printer not on the list, naming the field, and stores neither choice", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await listedTill(venue, app);
+    for (const [body, field] of [
+      [{ receiptPrinterId: t.portable }, "receiptPrinterId"],
+      [{ receiptPrinterId: t.bar, paymentSlipPrinterId: t.counter }, "paymentSlipPrinterId"],
+    ] as const) {
+      const res = await send(app, "PUT", "/api/device/printers", {
+        cookie: `${t.jar}; ${t.session}`,
+        body,
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "device.binding_invalid", params: { field } },
+      });
+    }
+    expect(await deviceBindings(t.deviceId)).toMatchObject({
+      receiptPrinterId: t.counter,
+      paymentSlipPrinterId: t.portable,
+    });
+  });
+
+  it("refuses a malformed printer id as a request fault", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await listedTill(venue, app);
+    const res = await send(app, "PUT", "/api/device/printers", {
+      cookie: `${t.jar}; ${t.session}`,
+      body: { paymentSlipPrinterId: "not-a-uuid" },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "paymentSlipPrinterId" } },
+    });
+  });
+
+  it("switches the session's device, and needs an open session on an active device", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await listedTill(venue, app);
+    const noSession = await send(app, "PUT", "/api/device/printers", {
+      cookie: t.jar,
+      body: { paymentSlipPrinterId: t.bar },
+    });
+    expect(noSession.status).toBe(401);
+    expect(await noSession.json()).toMatchObject({ error: { code: "session.required" } });
+    expect((await deviceBindings(t.deviceId)).paymentSlipPrinterId).toBe(t.portable);
+
+    // No device cookie: the session names the device.
+    const sessionOnly = await send(app, "PUT", "/api/device/printers", {
+      cookie: t.session,
+      body: { paymentSlipPrinterId: t.bar },
+    });
+    expect(sessionOnly.status).toBe(200);
+    expect((await deviceBindings(t.deviceId)).paymentSlipPrinterId).toBe(t.bar);
+
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, t.deviceId));
+    const revoked = await send(app, "PUT", "/api/device/printers", {
+      cookie: t.session,
+      body: { paymentSlipPrinterId: t.portable },
+    });
+    expect(revoked.status).toBe(401);
+    expect(await revoked.json()).toMatchObject({ error: { code: "device.unauthorized" } });
+    expect((await deviceBindings(t.deviceId)).paymentSlipPrinterId).toBe(t.bar);
+  });
+
+  it("GET /api/device/me reports the current printers and the active usable choices in list order", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await listedTill(venue, app);
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, t.portable));
+    const res = await send(app, "GET", "/api/device/me", { cookie: t.jar });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      receiptPrinterId: t.counter,
+      paymentSlipPrinterId: t.portable,
+      printerChoices: {
+        receipt: [
+          { id: t.counter, name: "Counter" },
+          { id: t.bar, name: "Bar" },
+        ],
+        paymentSlip: [{ id: t.bar, name: "Bar" }],
+      },
+    });
   });
 });
 
@@ -1382,7 +1506,7 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
     // Enrol through a non-dev mount: a devMode knock auto-accepts as a till.
     const enrolApp = mountApp(venue.cfg);
     const live = await enrolKds(enrolApp, venue, venue.defaultStationId);
-    const doomed = await enrolKds(enrolApp, venue, venue.defaultStationId);
+    const doomed = await enrolKds(enrolApp, venue, venue.defaultStationId, "Pantalla Pase");
     expect(
       (
         await send(app, "POST", `/management-api/devices/${doomed.deviceId}/revoke`, {
@@ -1415,6 +1539,17 @@ describe("deleted routes are gone (404)", () => {
     const prodApp = mountApp(venue.cfg);
     expect((await send(prodApp, "POST", "/api/dev/devices", { body: {} })).status).toBe(404);
     expect((await send(prodApp, "POST", "/api/device/reset", {})).status).toBe(404);
+  });
+
+  it("PATCH /management-api/devices/:id/hardware no longer exists", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolTill(app, venue, "Caja hw");
+    const res = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
+      cookie: venue.managerCookie,
+      body: { receiptPrinterId: null },
+    });
+    expect(res.status).toBe(404);
   });
 
   // The pairing-code flow's three routes. The mint route is the one a stale dashboard would still

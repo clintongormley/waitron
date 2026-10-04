@@ -1229,8 +1229,9 @@ const STUCK: StuckPaymentRow[] = [
     workingOrderId: "wo-1",
     orderNumber: 12,
     label: "Terrace 3",
-    tillId: "till-1",
-    tillName: "Bar till",
+    source: "device",
+    deviceId: "device-1",
+    deviceName: "Bar till",
     provider: "acme",
     amount: "12.50",
     startedAt: "2026-09-26T10:05:00.000Z",
@@ -1240,8 +1241,9 @@ const STUCK: StuckPaymentRow[] = [
     workingOrderId: "wo-2",
     orderNumber: 13,
     label: null,
-    tillId: "till-1",
-    tillName: "Bar till",
+    source: "device",
+    deviceId: "device-1",
+    deviceName: "Bar till",
     provider: "acme",
     amount: "8.00",
     startedAt: "2026-09-26T10:07:00.000Z",
@@ -1266,7 +1268,7 @@ describe("card payments stuck after a restart", () => {
     expect(section(el)).toBeNull();
   });
 
-  it("lists each stuck payment's order, till, provider, amount and start time", async () => {
+  it("lists each stuck payment's order, device, provider, amount and start time", async () => {
     const { el } = await mount(stubApi({ listStuckPayments: vi.fn().mockResolvedValue(STUCK) }));
 
     expect(section(el)!.querySelector("h2")!.textContent).toBe(
@@ -1283,6 +1285,19 @@ describe("card payments stuck after a restart", () => {
     expect(q(el, "[data-test=resolve-pay-1]")!.textContent).toContain(
       "Check with the card provider",
     );
+  });
+
+  it("names the device a payment started on, or the job that started one with no device", async () => {
+    const rows: StuckPaymentRow[] = [
+      { ...STUCK[0]!, deviceName: "Barra 2" },
+      { ...STUCK[1]!, source: "readiness_test", deviceId: null, deviceName: null },
+    ];
+    const { el } = await mount(stubApi({ listStuckPayments: vi.fn().mockResolvedValue(rows) }));
+
+    const device = (id: string) =>
+      q(el, `[data-test=stuck-${id}] [data-test=stuck-device]`)!.textContent!.trim();
+    expect(device("pay-1")).toBe("Barra 2");
+    expect(device("pay-2")).toBe("Readiness test");
   });
 
   it("reads in Spanish", async () => {

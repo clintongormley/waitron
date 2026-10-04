@@ -1,8 +1,8 @@
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
+import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { AppError, deviceOrigin, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { WorkforceBackend, type ClockEventInput } from "./clocking.js";
@@ -38,7 +38,7 @@ async function freshPerson(name: string): Promise<string> {
 }
 
 function event(personId: string, at: string): ClockEventInput {
-  return { nodeId, personId, locationId, at, offsetMinutes: 0 };
+  return { nodeId, personId, locationId, at, offsetMinutes: 0, origin: jobOrigin("dashboard") };
 }
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -125,9 +125,10 @@ describe("clock state machine", () => {
     expect(code).toBe("attendance.no_open_entry");
   });
 
-  it("records the till and the recorder when supplied", async () => {
+  it("records the device and the recorder when supplied", async () => {
     const p = await freshPerson("attribution");
     const supervisor = await freshPerson("supervisor");
+    const { deviceId } = await seedDevice(suite.db, { locationId: brandLocationId(locationId) });
     await run((tx) =>
       backend.clockIn(tx, {
         nodeId,
@@ -135,13 +136,23 @@ describe("clock state machine", () => {
         locationId,
         at: "2026-01-05T09:00:00Z",
         offsetMinutes: 0,
+        origin: deviceOrigin(deviceId),
         recordedByPersonId: supervisor,
       }),
     );
-    const rows = await suite.db.execute<{ recorded_by_person_id: string }>(
-      sql`select recorded_by_person_id from time_entries where person_id = ${p}`,
+    const rows = await suite.db.execute<{
+      recorded_by_person_id: string;
+      captured_by_source: string;
+      captured_by_device_id: string | null;
+    }>(
+      sql`select recorded_by_person_id, captured_by_source, captured_by_device_id
+          from time_entries where person_id = ${p}`,
     );
-    expect(rows.rows[0]?.recorded_by_person_id).toBe(supervisor);
+    expect(rows.rows[0]).toEqual({
+      recorded_by_person_id: supervisor,
+      captured_by_source: "device",
+      captured_by_device_id: deviceId,
+    });
   });
 });
 

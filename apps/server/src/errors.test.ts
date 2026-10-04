@@ -168,15 +168,15 @@ describe("the mirror error codes carry no params", () => {
 });
 
 describe("the drawer error code carries its declared params and maps to HTTP 400", () => {
-  it("constructs drawer.no_printer naming the misconfigured till, matching station.no_default's shape", () => {
-    const tillId = "99999999-9999-9999-9999-999999999999";
-    const error = new AppError("drawer.no_printer", { tillId });
+  it("constructs drawer.no_printer naming the device with no receipt printer", () => {
+    const deviceId = "99999999-9999-9999-9999-999999999999";
+    const error = new AppError("drawer.no_printer", { deviceId });
     expect(error.code).toBe("drawer.no_printer");
-    expect(error.params).toEqual({ tillId });
+    expect(error.params).toEqual({ deviceId });
   });
 
   it("maps drawer.no_printer to HTTP 400 via the default a status map takes when the code is absent", async () => {
-    const tillId = "99999999-9999-9999-9999-999999999999";
+    const deviceId = "99999999-9999-9999-9999-999999999999";
     // No entry for drawer.no_printer, so the assertion below exercises the `?? 400` fallback.
     const status: Record<string, never> = {};
     const boundary = createErrorBoundary(status, "drawer.failed");
@@ -185,12 +185,14 @@ describe("the drawer error code carries its declared params and maps to HTTP 400
       boundary(
         c,
         () => {},
-        () => Promise.reject(new AppError("drawer.no_printer", { tillId })),
+        () => Promise.reject(new AppError("drawer.no_printer", { deviceId })),
       ),
     );
 
     const res = await app.request("/boom");
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: { code: "drawer.no_printer", params: { tillId } } });
+    expect(await res.json()).toEqual({
+      error: { code: "drawer.no_printer", params: { deviceId } },
+    });
   });
 });

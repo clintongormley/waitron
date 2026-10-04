@@ -8,16 +8,18 @@ import {
   sales,
   tenants,
   tenders,
-  tills,
   withTransaction,
   workingOrders,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { paymentPolicy } from "../src/schema/payment-policy.js";
 import type { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 
 export interface Seeded {
-  tillId: string;
+  locationId: string;
+  /** A till device at that location: where the seeded order's payments are started. */
+  deviceId: string;
   nodeId: string;
   workingOrderId: string;
 }
@@ -35,7 +37,8 @@ export function freshNif(): string {
 }
 
 /**
- * Seeds tenant → location → till → node → open working_order and returns their ids.
+ * Seeds tenant → location → till device → node → open working_order and returns their
+ * ids.
  *
  * Written through the table definitions rather than as raw SQL: `id` and `created_at` are
  * `$defaultFn` generators only the insert BUILDER runs, and `invoice_locales` is a list the
@@ -51,19 +54,16 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
     .values({ name: "Counter", invoiceLocales: ["es"], operationDescription: "Retail" })
     .returning({ id: locations.id });
   const locationId = location!.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Till 1" })
-    .returning({ id: tills.id });
   const [node] = await db
     .insert(nodes)
     .values({ locationId, name: "Node 1" })
     .returning({ id: nodes.id });
+  const { deviceId } = await seedDevice(db, { locationId });
   const [wo] = await db
     .insert(workingOrders)
-    .values({ tillId: till!.id, orderNumber: 1 })
+    .values({ source: "device", deviceId, locationId, orderNumber: 1 })
     .returning({ id: workingOrders.id });
-  return { tillId: till!.id, nodeId: node!.id, workingOrderId: wo!.id };
+  return { locationId, deviceId, nodeId: node!.id, workingOrderId: wo!.id };
 }
 
 const SEEDED_AT = new Date("2026-07-01T12:00:00Z").toISOString();
@@ -84,7 +84,8 @@ export async function seedSale(db: Database, seeded: Seeded): Promise<string> {
     const [sale] = await tx
       .insert(sales)
       .values({
-        tillId: seeded.tillId,
+        source: "device",
+        deviceId: seeded.deviceId,
         nodeId: seeded.nodeId,
         seriesId: series!.id,
         invoiceNumber: 1,
@@ -151,7 +152,8 @@ export async function seedBillPayment(db: Database, seeded: Seeded): Promise<str
       applied: 1000,
       state: "pending",
       requestedBy: "11111111-1111-1111-1111-111111111111",
-      tillId: seeded.tillId,
+      source: "device",
+      deviceId: seeded.deviceId,
     })
     .returning({ id: billPayments.id });
   return row!.id;

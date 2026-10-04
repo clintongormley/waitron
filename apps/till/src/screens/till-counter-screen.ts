@@ -140,6 +140,8 @@ export class TillCounterScreen extends LitElement {
   /** When undefined the grid renders nothing. */
   @property({ attribute: false }) counterTab?: TabDef;
   @property() cardProvider: CardProvider = "none";
+  /** See the tender card's `takesCash`. */
+  @property({ type: Boolean }) takesCash = true;
   @property({ type: Boolean }) tipsEnabled = false;
   @property() cardOutcome?: CardOutcome;
   @property({ attribute: false }) cardAttemptsOver = 0;
@@ -287,6 +289,7 @@ export class TillCounterScreen extends LitElement {
         .orderFlow=${this.orderFlow}
         .stage=${this.stage}
         .cardProvider=${this.cardProvider}
+        .takesCash=${this.takesCash}
         .tipsEnabled=${this.tipsEnabled}
         .cardOutcome=${this.cardOutcome}
         .cardAttemptsOver=${this.cardAttemptsOver}
@@ -305,6 +308,16 @@ export class TillCounterScreen extends LitElement {
             : html`<div class="header">
                 <span class="brand">${BRAND}</span>
                 <div class="session">
+                  <wt-button
+                    class="printers"
+                    variant="secondary"
+                    @click=${() =>
+                      this.dispatchEvent(
+                        new CustomEvent("open-printers", { bubbles: true, composed: true }),
+                      )}
+                  >
+                    ${t("printers.open")}
+                  </wt-button>
                   <wt-button
                     class="allergens"
                     variant="secondary"

@@ -2,8 +2,8 @@
 // deferred sale, corrects it with a rectificativa, settles at the net, printing what is outstanding
 // after each step.
 //
-// Prerequisites: the taxpayer row, the till, the node, the standard and rectificative series must
-// exist, and the node's SIF be registered. The venue directory is resolved as the server resolves it
+// Prerequisites: the taxpayer row, the node, the standard and rectificative series must exist, and
+// the node's SIF be registered. The venue directory is resolved as the server resolves it
 // (`scripts/venue-dir.ts`). `WAITRON_ENV` is required: it stamps the unrecoverable `entorno` onto
 // the chain.
 //
@@ -12,7 +12,7 @@
 //   pnpm --filter @waitron/server build
 //   WAITRON_ENV=production|preproduction \
 //     node apps/server/dist/settle-invoice-first.js \
-//     <tillId> <nodeId> <standardSeriesId> <rectificativeSeriesId>
+//     <nodeId> <standardSeriesId> <rectificativeSeriesId>
 import { listOutstandingSales, recordCorrection, recordSale, settleSale } from "@waitron/core";
 import type { OutstandingSale, RecordCorrectionInput, RecordSaleInput } from "@waitron/core";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -30,9 +30,11 @@ import {
   percentOf,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
+import { nodeLocation } from "../src/provision-till.js";
+import { scriptSessionDevice } from "./script-device.js";
 
 const LOCALE = "es-ES";
 
@@ -41,7 +43,7 @@ function usageError(message: string): never {
   console.error(
     "usage: WAITRON_ENV=<production|preproduction> " +
       "node apps/server/dist/settle-invoice-first.js " +
-      "<tillId> <nodeId> <standardSeriesId> <rectificativeSeriesId>",
+      "<nodeId> <standardSeriesId> <rectificativeSeriesId>",
   );
   process.exit(1);
 }
@@ -66,7 +68,6 @@ function systemClock(): TrustedClock {
 }
 
 export interface SettleInvoiceFirstArgs {
-  tillId: string;
   nodeId: string;
   standardSeriesId: string;
   rectificativeSeriesId: string;
@@ -78,7 +79,6 @@ export async function settleInvoiceFirst(
   env: NodeJS.ProcessEnv,
   log: (line: string) => void,
 ): Promise<void> {
-  const till = brandTillId(args.tillId);
   const node = brandNodeId(args.nodeId);
   const stdSeries = brandSeriesId(args.standardSeriesId);
   const rectSeries = brandSeriesId(args.rectificativeSeriesId);
@@ -114,7 +114,7 @@ export async function settleInvoiceFirst(
     });
 
     const saleInput: RecordSaleInput = {
-      tillId: till,
+      origin: jobOrigin("demo_seed"),
       nodeId: node,
       seriesId: stdSeries,
       locale: LOCALE,
@@ -154,14 +154,18 @@ export async function settleInvoiceFirst(
         })
         .returning({ id: persons.id });
       return loginWithPin(tx, {
-        tillId: till,
+        deviceId: await scriptSessionDevice(
+          tx,
+          await nodeLocation(tx, node),
+          "Settle invoice first",
+        ),
         personId: person!.id,
         pin: "1234",
       });
     });
 
     const corrInput: RecordCorrectionInput = {
-      tillId: till,
+      origin: jobOrigin("demo_seed"),
       nodeId: node,
       seriesId: rectSeries,
       correctsSaleId: sale.saleId,
@@ -207,10 +211,10 @@ export async function settleInvoiceFirst(
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args.length !== 4) {
-    usageError(`expected 4 arguments, got ${args.length}`);
+  if (args.length !== 3) {
+    usageError(`expected 3 arguments, got ${args.length}`);
   }
-  const [tillArg, nodeArg, stdSeriesArg, rectSeriesArg] = args;
+  const [nodeArg, stdSeriesArg, rectSeriesArg] = args;
 
   const rawEnv = process.env.WAITRON_ENV;
   if (rawEnv === undefined || rawEnv === "") {
@@ -219,7 +223,6 @@ async function main(): Promise<void> {
 
   await settleInvoiceFirst(
     {
-      tillId: tillArg,
       nodeId: nodeArg,
       standardSeriesId: stdSeriesArg,
       rectificativeSeriesId: rectSeriesArg,

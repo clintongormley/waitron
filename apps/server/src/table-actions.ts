@@ -26,7 +26,7 @@ import {
   readMainBill,
   setMainBill,
 } from "./parties.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig, TillConfig } from "./till-config.js";
 import { serviceModesMatch } from "./working-order.js";
 import "./errors.js";
 
@@ -242,7 +242,7 @@ export async function combineParties(
  */
 export async function splitTable(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   partyId: string,
   tableId: string,
   billId: string | null,

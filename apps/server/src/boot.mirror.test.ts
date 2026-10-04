@@ -15,7 +15,6 @@ import {
   setDeploymentMode,
   stampDeployment,
   tenants,
-  tills,
   withTransaction,
   writeMirrorConfig,
   type Database,
@@ -45,7 +44,6 @@ const stores = {} as Record<VenueName, VenueDatabase>;
 const db = {} as Record<VenueName, Database>;
 
 const TILL_ENV = {
-  WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
@@ -101,14 +99,6 @@ async function seedIdentity(admin: Database): Promise<void> {
       id: TILL_ENV.WAITRON_TILL_NODE_ID,
       locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
       name: "Node",
-    })
-    .onConflictDoNothing();
-  await admin
-    .insert(tills)
-    .values({
-      id: TILL_ENV.WAITRON_TILL_TILL_ID,
-      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
-      name: "Till",
     })
     .onConflictDoNothing();
   await admin
@@ -257,7 +247,6 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
     const seeded = await seedFiscalRegistro(db.mirror, {
       ids: {
         locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
-        tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         seriesId: TILL_ENV.WAITRON_TILL_SERIES_ID,
       },

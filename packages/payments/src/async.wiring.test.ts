@@ -6,8 +6,8 @@ import {
   decimal,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
 } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
@@ -51,7 +51,7 @@ const steadyClock: TrustedClock = {
 
 function buildInput(s: SeededForSale, settledAt: Date | null): RecordSaleInput {
   return {
-    tillId: brandTillId(s.tillId),
+    origin: deviceOrigin(s.deviceId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
@@ -117,6 +117,7 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     const provider = new FakeAsyncProvider(suite.db);
 
     const minted = await provider.initiate({
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       paymentRef: "pay-1",
@@ -143,6 +144,7 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     const s = await seedForSale(suite.db, backend, freshNif());
     const provider = new FakeAsyncProvider(suite.db);
     const minted = await provider.initiate({
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       paymentRef: "pay-1",
@@ -171,6 +173,7 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     const s = await seedForSale(suite.db, backend, freshNif());
     const provider = new FakeAsyncProvider(suite.db);
     const minted = await provider.initiate({
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       paymentRef: "pay-1",

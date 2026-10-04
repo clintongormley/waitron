@@ -156,7 +156,6 @@ describe("till-cancel-credit-dialog: refusals", () => {
     "working_order.not_placed",
     "series.no_rectificative_for_node",
     "device.unauthorized",
-    "device.till_required",
     "sale.correction_exceeds_total",
     "sale.correction_not_whole",
     "server.internal",

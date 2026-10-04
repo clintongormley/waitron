@@ -3,7 +3,7 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import { recordIncident } from "@waitron/core";
 import { AppError } from "@waitron/shared";
-import type { NodeId, SaleId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SaleOrigin } from "@waitron/shared";
 import { isUniqueViolation, type Transaction } from "@waitron/db";
 import type {
   AltaInput,
@@ -47,24 +47,24 @@ const REFUSED_WARNINGS: ReadonlySet<ValidationCode> = new Set([
  * Inputs for one record, MINUS `Encadenamiento` — the huella depends on the predecessor, which is
  * unknown until `appendToChain` reads the chain head.
  *
- * `saleId`, `tillId` and `entorno` are this package's own metadata, not AEAT fields, so they
+ * `saleId`, `origin` and `entorno` are this package's own metadata, not AEAT fields, so they
  * travel beside `input`, never inside it: `input` is the one arm that reaches
- * `buildAltaRecord`/`buildAnulacionRecord` and, from there, `computeHuella`, and none of the three
- * may ever be hashed. The chain KEY is the node (`appendToChain`'s parameter); `till_id` is an
- * informational snapshot of where the sale rang.
+ * `buildAltaRecord`/`buildAnulacionRecord` and, from there, `computeHuella`, and none of them may
+ * ever be hashed. The chain KEY is the node (`appendToChain`'s parameter); `source` and `device_id`
+ * are informational snapshots of where the sale came from. An anulación's origin is its alta's.
  */
 export type PendingRegistro =
   | {
       tipo: "alta";
       saleId: SaleId;
-      tillId: TillId;
+      origin: SaleOrigin;
       entorno: Entorno;
       input: Omit<AltaInput, "Encadenamiento">;
     }
   | {
       tipo: "anulacion";
       saleId: SaleId;
-      tillId: TillId;
+      origin: SaleOrigin;
       entorno: Entorno;
       input: Omit<AnulacionInput, "Encadenamiento">;
     };
@@ -198,7 +198,7 @@ async function attemptAppend(
   }
 
   const row = toRegistroRow(record, {
-    tillId: registro.tillId,
+    origin: registro.origin,
     nodeId,
     sifId: resolvedSif.id,
     saleId: registro.saleId,
@@ -255,7 +255,7 @@ async function raiseWarning(
   error: AppError,
 ): Promise<void> {
   await recordIncident(tx, {
-    tillId: registro.tillId,
+    origin: registro.origin,
     saleId: registro.saleId,
     error,
     severity: "warning",

@@ -41,7 +41,7 @@ function warning(code: ValidationCode): ValidationIssue {
 }
 
 async function append(
-  alta = (saleId: Parameters<typeof altaFor>[1]) => altaFor(till.tillId, saleId, 1, 1),
+  alta = (saleId: Parameters<typeof altaFor>[1]) => altaFor(till, saleId, 1, 1),
 ) {
   const saleId = await seedSale(suite.db, till, 1);
   return withTransaction(suite.db, (tx) => appendToChain(tx, till.nodeId, alta(saleId)));
@@ -126,7 +126,7 @@ describe("any other warning files the record with its own incident, never as a t
 
   it("flags a real one too: an IPSI line with no regime code, which is a warning until 2027", async () => {
     await append((saleId) => {
-      const alta = altaFor(till.tillId, saleId, 1, 1);
+      const alta = altaFor(till, saleId, 1, 1);
       const ipsiLine = { ...alta.input.Desglose[0]!, Impuesto: "02" as const };
       delete ipsiLine.ClaveRegimen;
       return { ...alta, input: { ...alta.input, Desglose: [ipsiLine] } };

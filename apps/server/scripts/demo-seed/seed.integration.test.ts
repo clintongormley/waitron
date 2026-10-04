@@ -18,9 +18,9 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
-import type { TillConfig } from "../../src/till-config.js";
+import type { OriginConfig } from "../../src/till-config.js";
 import { getHeldOrder, parkOrder } from "../../src/working-order.js";
 import { MEDIA_FILENAME } from "@waitron/media";
 import { readImageBytes } from "@waitron/media";
@@ -45,15 +45,14 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
 });
 
 interface Venue {
-  tillId: string;
   nodeId: string;
   seriesId: string;
   locationId: string;
 }
 
-function tillConfigFor(venue: Venue): TillConfig {
+function tillConfigFor(venue: Venue): OriginConfig {
   return {
-    tillId: brandTillId(venue.tillId),
+    origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesId),
     locationId: brandLocationId(venue.locationId),
@@ -71,6 +70,13 @@ describe("demo seed end-to-end", () => {
     const start = Date.now();
 
     await seedDemoRestaurant(suite.db, { venue, locale: LOCALE, salesDays: 3 });
+
+    const paired = await suite.db.execute<{ n: number }>(sql`select count(*) as n from devices`);
+    expect(paired.rows[0]!.n).toBe(0);
+    const origins = await suite.db.execute<{ source: string; device_id: string | null }>(
+      sql`select distinct source, device_id from sales`,
+    );
+    expect(origins.rows).toEqual([{ source: "demo_seed", device_id: null }]);
 
     const read = await withTransaction(suite.db, async (tx) => {
       const menus = await listAccessibleCatalogues(tx, venue.locationId);
@@ -91,7 +97,7 @@ describe("demo seed end-to-end", () => {
 
     expect(read.close.vat.byRate.length).toBeGreaterThan(0);
     expect(compareDecimal(read.close.vat.taxTotal, decimal("0.00"))).toBeGreaterThan(0);
-    expect(read.close.cash.byTill.length).toBeGreaterThan(0);
+    expect(read.close.cash.byOrigin.length).toBeGreaterThan(0);
     expect(compareDecimal(read.close.cash.tenderTotal, decimal("0.00"))).toBeGreaterThan(0);
     expect(read.close.counts.sales).toBeGreaterThan(0);
 

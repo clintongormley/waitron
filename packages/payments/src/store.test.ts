@@ -9,11 +9,9 @@ import {
   engineErrorMessage,
   nodes,
   refusalOn,
-  tills,
-  workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { AppError, decimal } from "@waitron/shared";
+import { AppError, decimal, deviceOrigin } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { cardReaders } from "./schema/card-readers.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
@@ -49,7 +47,6 @@ import {
   settleForwarded,
   settleInitiated,
   stampAttemptingRef,
-  tillsForWorkingOrders,
 } from "./store.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
 import type { Seeded } from "../test/seed.js";
@@ -72,6 +69,7 @@ async function capture(seeded: Seeded, paymentRef: string, amount = "10.00") {
   const key = { provider: "fake", paymentRef };
   await suite.db.transaction((tx) =>
     insertCapturedPayment(tx, {
+      origin: deviceOrigin(seeded.deviceId),
       workingOrderId: seeded.workingOrderId,
       provider: "fake",
       paymentRef,
@@ -89,23 +87,23 @@ async function getRow(key: { provider: string; paymentRef: string }) {
 /** A second node, because `seedSale` always plants its `invoice_series` at code "A" for the node it
  * is given, and the series is keyed `(node_id, code)`. */
 async function seedSecondSale(seeded: Seeded): Promise<string> {
-  const [till] = (
-    await suite.db.execute<{ location_id: string }>(
-      sql`select location_id from tills where id = ${seeded.tillId}`,
-    )
-  ).rows;
-  const [till2] = await suite.db
-    .insert(tills)
-    .values({ locationId: till.location_id, name: "Till 2" })
-    .returning({ id: tills.id });
   const [node2] = await suite.db
     .insert(nodes)
-    .values({ locationId: till.location_id, name: "Node 2" })
+    .values({ locationId: seeded.locationId, name: "Node 2" })
     .returning({ id: nodes.id });
-  return seedSale(suite.db, { ...seeded, tillId: till2!.id, nodeId: node2!.id });
+  return seedSale(suite.db, { ...seeded, nodeId: node2!.id });
 }
 
 describe("insertCapturedPayment", () => {
+  it("stores the source and device the payment was started on", async () => {
+    const seeded = await seedTenant();
+    const key = await capture(seeded, "p-origin");
+    const rows = await suite.db.execute<{ source: string | null; device_id: string | null }>(
+      sql`select source, device_id from payments where payment_ref = ${key.paymentRef}`,
+    );
+    expect(rows.rows[0]).toEqual({ source: "device", device_id: seeded.deviceId });
+  });
+
   it("inserts state=captured with a non-null settledAt", async () => {
     const seeded = await seedTenant();
     const key = await capture(seeded, "p1");
@@ -123,6 +121,7 @@ describe("insertFailedPayment", () => {
     const key = { provider: "fake", paymentRef: "p2" };
     await suite.db.transaction((tx) =>
       insertFailedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "p2",
@@ -254,6 +253,7 @@ describe("recordRefund", () => {
     const key = { provider: "fake", paymentRef: "p10" };
     await suite.db.transaction((tx) =>
       insertFailedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "p10",
@@ -427,7 +427,11 @@ describe("findCapturedPaymentForWorkingOrder", () => {
   // `saleId`) is asserted in store.card-and-replay.test.ts.
   it("returns a captured payment for the working order, ignoring non-captured states", async () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
-    const key = { provider: "stripe", workingOrderId: s.workingOrderId };
+    const key = {
+      origin: deviceOrigin(s.deviceId),
+      provider: "stripe",
+      workingOrderId: s.workingOrderId,
+    };
     // A failed attempt must NOT match (a legitimately-declined card is re-chargeable).
     await suite.db.transaction((tx) =>
       insertFailedPayment(tx, { ...key, paymentRef: "f1", amount: decimal("5.00") }),
@@ -456,7 +460,11 @@ describe("findCapturedPaymentForWorkingOrder", () => {
 
   it("matches an accepted_offline payment that is still unassociated (saleId null)", async () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
-    const key = { provider: "stripe", workingOrderId: s.workingOrderId };
+    const key = {
+      origin: deviceOrigin(s.deviceId),
+      provider: "stripe",
+      workingOrderId: s.workingOrderId,
+    };
     await suite.db.transaction((tx) =>
       insertAcceptedOffline(tx, {
         ...key,
@@ -471,7 +479,11 @@ describe("findCapturedPaymentForWorkingOrder", () => {
 
   it("returns undefined when the only payment is attempting (the lost-T2 window is not yet captured)", async () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
-    const key = { provider: "stripe", workingOrderId: s.workingOrderId };
+    const key = {
+      origin: deviceOrigin(s.deviceId),
+      provider: "stripe",
+      workingOrderId: s.workingOrderId,
+    };
     await suite.db.transaction((tx) =>
       insertAttempting(tx, { ...key, paymentRef: "a1", amount: decimal("9.00") }),
     );
@@ -483,7 +495,11 @@ describe("findCapturedPaymentForWorkingOrder", () => {
   it("returns the MOST RECENT captured row if the one-capture-per-order invariant is ever violated", async () => {
     // No constraint stops two captured rows for one working order.
     const s = await seedWorkingOrder(suite.db, freshNif());
-    const key = { provider: "stripe", workingOrderId: s.workingOrderId };
+    const key = {
+      origin: deviceOrigin(s.deviceId),
+      provider: "stripe",
+      workingOrderId: s.workingOrderId,
+    };
     await suite.db.transaction((tx) =>
       insertCapturedPayment(tx, {
         ...key,
@@ -509,9 +525,15 @@ describe("findCapturedPaymentForWorkingOrder", () => {
     // seeds one directly. It does NOT pin `nulls last`: this engine already sorts NULL last under
     // `desc`, so the case passes without the clause.
     const s = await seedWorkingOrder(suite.db, freshNif());
-    const key = { provider: "stripe", workingOrderId: s.workingOrderId };
+    const key = {
+      origin: deviceOrigin(s.deviceId),
+      provider: "stripe",
+      workingOrderId: s.workingOrderId,
+    };
     await suite.db.insert(payments).values({
       workingOrderId: key.workingOrderId,
+      source: "device",
+      deviceId: s.deviceId,
       provider: key.provider,
       paymentRef: "null-settled",
       // Whole cents: 300 is 3.00.
@@ -537,6 +559,7 @@ describe("insertCapturedPayment external_ref", () => {
     const seeded = await seedTenant();
     await suite.db.transaction((tx) =>
       insertCapturedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "ext1",
@@ -566,6 +589,7 @@ describe("attempting lifecycle", () => {
     const seeded = await seedTenant();
     await suite.db.transaction((tx) =>
       insertAttempting(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "a1",
@@ -582,6 +606,7 @@ describe("attempting lifecycle", () => {
     const key = { provider: "fake", paymentRef: "a2" };
     await suite.db.transaction((tx) =>
       insertAttempting(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         ...key,
         workingOrderId: seeded.workingOrderId,
         amount: decimal("12.10"),
@@ -606,6 +631,7 @@ describe("attempting lifecycle", () => {
     const key = { provider: "fake", paymentRef: "a3" };
     await suite.db.transaction((tx) =>
       insertAttempting(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         ...key,
         workingOrderId: seeded.workingOrderId,
         amount: decimal("12.10"),
@@ -633,6 +659,7 @@ describe("externalRef on read-back + failed refunds", () => {
     const key = { provider: "fake", paymentRef: "e1" };
     await suite.db.transaction((tx) =>
       insertCapturedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         ...key,
         workingOrderId: seeded.workingOrderId,
         amount: decimal("10.00"),
@@ -704,6 +731,7 @@ describe("listAcceptedOffline", () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
     await suite.db.transaction((tx) =>
       insertAcceptedOffline(tx, {
+        origin: deviceOrigin(s.deviceId),
         workingOrderId: s.workingOrderId,
         provider: "fake",
         paymentRef: "lst-1",
@@ -720,7 +748,7 @@ describe("listAcceptedOffline", () => {
 describe("claimAcceptedOffline", () => {
   it("returns this provider's accepted_offline rows and writes nothing to any payment row", async () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
-    const order = { workingOrderId: s.workingOrderId };
+    const order = { origin: deviceOrigin(s.deviceId), workingOrderId: s.workingOrderId };
     await suite.db.transaction(async (tx) => {
       await insertAcceptedOffline(tx, {
         ...order,
@@ -762,6 +790,7 @@ describe("Mode 3 initiated lifecycle", () => {
   async function initiate(seeded: Seeded, externalRef = HOSTED, paymentRef = "pay-1") {
     await suite.db.transaction((tx) =>
       insertInitiated(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef,
@@ -849,6 +878,7 @@ describe("Mode 3 initiated lifecycle", () => {
     // Two manual rows sharing a hand-keyed external_ref: allowed (provider = 'manual' is excluded).
     await suite.db.transaction((tx) =>
       insertCapturedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "manual",
         paymentRef: "m-1",
@@ -860,6 +890,7 @@ describe("Mode 3 initiated lifecycle", () => {
     await expect(
       suite.db.transaction((tx) =>
         insertCapturedPayment(tx, {
+          origin: deviceOrigin(seeded.deviceId),
           workingOrderId: seeded.workingOrderId,
           provider: "manual",
           paymentRef: "m-2",
@@ -899,7 +930,6 @@ describe("listReconcilable", () => {
       saleId: null,
       workingOrderId: seeded.workingOrderId,
       workingOrderStatus: "open",
-      tillId: seeded.tillId,
       reconcileRemediatedAt: null,
     });
     expect(rows[0].auditedAt).toBe(rows[0].settledAt);
@@ -911,6 +941,7 @@ describe("listReconcilable", () => {
     const seeded = await seedTenant();
     await suite.db.transaction(async (tx) => {
       await insertAcceptedOffline(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "forwarded",
@@ -934,6 +965,7 @@ describe("listReconcilable", () => {
     const seeded = await seedTenant();
     await suite.db.transaction((tx) =>
       insertInitiated(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "first-pending",
@@ -943,6 +975,7 @@ describe("listReconcilable", () => {
     );
     await suite.db.transaction((tx) =>
       insertCapturedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "second-held",
@@ -972,6 +1005,7 @@ describe("listReconcilable", () => {
     const seeded = await seedTenant();
     await suite.db.transaction((tx) =>
       insertInitiated(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "pending",
@@ -991,12 +1025,14 @@ describe("listReconcilable", () => {
     const seeded = await seedTenant();
     await suite.db.transaction(async (tx) => {
       await insertFailedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "nope",
         amount: decimal("3.00"),
       });
       await insertAcceptedOffline(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "queued",
@@ -1022,6 +1058,7 @@ describe("existingReferences", () => {
   async function seedReference(seeded: Seeded, paymentRef: string, externalRef: string) {
     await suite.db.transaction((tx) =>
       insertInitiated(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef,
@@ -1108,76 +1145,12 @@ describe("markReconcileRemediated", () => {
   });
 });
 
-async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
-  const [till] = (
-    await suite.db.execute<{ location_id: string }>(
-      sql`select location_id from tills where id = ${seeded.tillId}`,
-    )
-  ).rows;
-  const [till2] = await suite.db
-    .insert(tills)
-    .values({ locationId: till.location_id, name: "Till 2" })
-    .returning({ id: tills.id });
-  const tillId = till2!.id;
-  const [node2] = await suite.db
-    .insert(nodes)
-    .values({ locationId: till.location_id, name: "Node 2" })
-    .returning({ id: nodes.id });
-  const [wo2] = await suite.db
-    .insert(workingOrders)
-    .values({ tillId, orderNumber: 1 })
-    .returning({ id: workingOrders.id });
-  return {
-    tillId,
-    nodeId: node2!.id,
-    workingOrderId: wo2!.id,
-  };
-}
-
-describe("tillsForWorkingOrders", () => {
-  it("resolves several working orders across two tills in one pass, skipping one that does not exist", async () => {
-    const seeded = await seedTenant();
-    const second = await seedSecondTill(seeded);
-    const tills = await suite.db.transaction((tx) =>
-      tillsForWorkingOrders(tx, [
-        seeded.workingOrderId,
-        second.workingOrderId,
-        "00000000-0000-0000-0000-000000000000",
-      ]),
-    );
-    expect(tills).toEqual(
-      new Map([
-        [seeded.workingOrderId, seeded.tillId],
-        [second.workingOrderId, second.tillId],
-      ]),
-    );
-  });
-
-  it("is empty for an empty input list", async () => {
-    expect(await suite.db.transaction((tx) => tillsForWorkingOrders(tx, []))).toEqual(new Map());
-  });
-
-  it("chunks the IN list — a match past the first chunk boundary is still found", async () => {
-    const seeded = await seedTenant();
-    // 1000 non-matching ids fill the first chunk exactly (CHUNK_SIZE); the real working order id
-    // lands in the second chunk, so this only passes if every chunk is actually queried.
-    const ids = [
-      ...Array.from(
-        { length: 1000 },
-        (_, i) => `00000000-0000-0000-0000-${String(i).padStart(12, "0")}`,
-      ),
-      seeded.workingOrderId,
-    ];
-    const tills = await suite.db.transaction((tx) => tillsForWorkingOrders(tx, ids));
-    expect(tills).toEqual(new Map([[seeded.workingOrderId, seeded.tillId]]));
-  });
-});
-
 describe("hasPaymentWithExternalRef", () => {
   it("is true for a (provider, external_ref) a payment row carries, in any state", async () => {
     const seeded = await seedTenant();
     await suite.db.transaction((tx) =>
       insertInitiated(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "res-1",
@@ -1197,6 +1170,7 @@ describe("hasPaymentWithExternalRef", () => {
     const seeded = await seedTenant();
     await suite.db.transaction((tx) =>
       insertInitiated(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "res-2",
@@ -1216,18 +1190,21 @@ describe("listAttempting / stampAttemptingRef", () => {
     const t = await seedWorkingOrder(suite.db, freshNif());
     await suite.db.transaction(async (tx) => {
       await insertAttempting(tx, {
+        origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
         provider: "sumup",
         paymentRef: "ref-a",
         amount: decimal("10.00"),
       });
       await insertAttempting(tx, {
+        origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
         provider: "sumup",
         paymentRef: "ref-b",
         amount: decimal("11.00"),
       });
       await insertAttempting(tx, {
+        origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
         provider: "stripe",
         paymentRef: "ref-c",
@@ -1254,6 +1231,7 @@ describe("listAttempting / stampAttemptingRef", () => {
     const key = { provider: "sumup", paymentRef: "ref-e" };
     await suite.db.transaction(async (tx) => {
       await insertAttempting(tx, {
+        origin: deviceOrigin(t.deviceId),
         ...key,
         workingOrderId: t.workingOrderId,
         amount: decimal("5.00"),
@@ -1269,6 +1247,7 @@ describe("listAttempting / stampAttemptingRef", () => {
     const key = { provider: "stripe", paymentRef: "ref-f" };
     const [stamped, late, missing] = await suite.db.transaction(async (tx) => {
       await insertAttempting(tx, {
+        origin: deviceOrigin(t.deviceId),
         ...key,
         workingOrderId: t.workingOrderId,
         amount: decimal("5.00"),
@@ -1294,6 +1273,8 @@ describe("the link from a provider payment to its bill payment", () => {
       .insert(billPayments)
       .values({
         workingOrderId: seeded.workingOrderId,
+        source: "device",
+        deviceId: seeded.deviceId,
         submissionId: `submission-${Math.random()}`,
         fingerprint: "fingerprint",
         kind: "contribution",
@@ -1301,7 +1282,6 @@ describe("the link from a provider payment to its bill payment", () => {
         applied: 1000,
         state: "pending",
         requestedBy: "11111111-1111-1111-1111-111111111111",
-        tillId: seeded.tillId,
       })
       .returning({ id: billPayments.id });
     return row!.id;
@@ -1324,6 +1304,7 @@ describe("the link from a provider payment to its bill payment", () => {
     const billPaymentId = await billPayment(seeded);
     await suite.db.transaction((tx) =>
       insert(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: name,
@@ -1348,6 +1329,7 @@ describe("the link from a provider payment to its bill payment", () => {
     await capture(seeded, "unlinked");
     await suite.db.transaction((tx) =>
       insertAttempting(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "linked",
@@ -1380,6 +1362,7 @@ describe("the link from a provider payment to its bill payment", () => {
     ] as const) {
       await suite.db.transaction((tx) =>
         insertAttempting(tx, {
+          origin: deviceOrigin(seeded.deviceId),
           workingOrderId: seeded.workingOrderId,
           provider: "fake",
           paymentRef,
@@ -1409,6 +1392,7 @@ describe("the link from a provider payment to its bill payment", () => {
     const attempt = (paymentRef: string) =>
       suite.db.transaction((tx) =>
         insertAttempting(tx, {
+          origin: deviceOrigin(seeded.deviceId),
           workingOrderId: seeded.workingOrderId,
           provider: "fake",
           paymentRef,
@@ -1428,6 +1412,7 @@ describe("the link from a provider payment to its bill payment", () => {
     const error = await captureError(() =>
       suite.db.transaction((tx) =>
         insertAttempting(tx, {
+          origin: deviceOrigin(seeded.deviceId),
           workingOrderId: seeded.workingOrderId,
           provider: "fake",
           paymentRef: "dangling",
@@ -1446,6 +1431,7 @@ describe("the link from a provider payment to its bill payment", () => {
     const linked = async (paymentRef: string, link: string | undefined) => {
       await suite.db.transaction((tx) =>
         insertCapturedPayment(tx, {
+          origin: deviceOrigin(seeded.deviceId),
           workingOrderId: seeded.workingOrderId,
           provider: "fake",
           paymentRef,
@@ -1533,6 +1519,8 @@ describe("rows written within one millisecond", () => {
       await suite.db.insert(payments).values({
         id: id(),
         workingOrderId: seeded.workingOrderId,
+        source: "device",
+        deviceId: seeded.deviceId,
         provider: "fake",
         paymentRef,
         amount: 100 * (written + 1),
@@ -1599,6 +1587,8 @@ describe("rows written within one millisecond", () => {
       .insert(billPayments)
       .values({
         workingOrderId: seeded.workingOrderId,
+        source: "device",
+        deviceId: seeded.deviceId,
         submissionId: randomUUID(),
         fingerprint: "fingerprint",
         kind: "contribution",
@@ -1606,13 +1596,14 @@ describe("rows written within one millisecond", () => {
         applied: 10_000,
         state: "pending",
         requestedBy: "11111111-1111-1111-1111-111111111111",
-        tillId: seeded.tillId,
       })
       .returning({ id: billPayments.id });
     const [payment] = await suite.db
       .insert(payments)
       .values({
         workingOrderId: seeded.workingOrderId,
+        source: "device",
+        deviceId: seeded.deviceId,
         provider: "fake",
         paymentRef: "refunded",
         amount: 10_000,

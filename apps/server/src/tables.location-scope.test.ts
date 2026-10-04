@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, tills, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -9,7 +9,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { clearPlacement, createTable, createZone, setTablePlacement } from "./tables.js";
@@ -34,8 +33,8 @@ function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise
 async function setupTwoVenues(): Promise<{ a: TillConfig; b: TillConfig }> {
   await seedTenant(db);
   const make = async (name: string): Promise<TillConfig> => {
-    // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are
-    // `$defaultFn` generators, which a raw insert does not reach.
+    // Through the table definitions: `locations.id` is a `$defaultFn` generator,
+    // which a raw insert does not reach.
     const [location] = await db
       .insert(locations)
       .values({
@@ -45,13 +44,8 @@ async function setupTwoVenues(): Promise<{ a: TillConfig; b: TillConfig }> {
       })
       .returning({ id: locations.id });
     const locationId = location!.id;
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId, name: `${name} Caja` })
-      .returning({ id: tills.id });
     const nodeId = await seedNode(db, brandLocationId(locationId));
     return {
-      tillId: brandTillId(till!.id),
       nodeId: brandNodeId(nodeId),
       seriesId: brandSeriesId(randomUUID()),
       locationId: brandLocationId(locationId),

@@ -50,7 +50,7 @@ describe("computeOverdueOrders", () => {
     const { orderId } = await seedFiredOrder(
       suite.db,
       {
-        tillId: venue.tillId,
+        deviceId: venue.deviceId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
         stationId: bar,
@@ -80,7 +80,7 @@ describe("computeOverdueOrders", () => {
     const overdue = await seedFiredOrder(
       suite.db,
       {
-        tillId: venue.tillId,
+        deviceId: venue.deviceId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
         stationId,
@@ -90,7 +90,7 @@ describe("computeOverdueOrders", () => {
     const forgotten = await seedFiredOrder(
       suite.db,
       {
-        tillId: venue.tillId,
+        deviceId: venue.deviceId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
         stationId,
@@ -100,7 +100,7 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tillId: venue.tillId,
+        deviceId: venue.deviceId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
         stationId,
@@ -112,7 +112,7 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tillId: venue.tillId,
+        deviceId: venue.deviceId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
         stationId,
@@ -145,7 +145,7 @@ describe("computeOverdueOrders", () => {
     const { orderId } = await seedFiredOrder(
       suite.db,
       {
-        tillId: venue.tillId,
+        deviceId: venue.deviceId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
         stationId,
@@ -169,7 +169,7 @@ describe("computeOverdueOrders", () => {
     const { orderId } = await seedFiredOrder(
       suite.db,
       {
-        tillId: venue.tillId,
+        deviceId: venue.deviceId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
         stationId,
@@ -202,7 +202,7 @@ describe("computeOverdueOrders", () => {
     });
     const { orderId } = await seedOpenOrder(
       suite.db,
-      { tillId: venue.tillId, nodeId: venue.nodeId },
+      { deviceId: venue.deviceId, locationId: venue.locationId, nodeId: venue.nodeId },
       1,
     );
     // ONE shared instant for BOTH lines, as lines fired together can share; two `seedFiredLine`
@@ -232,7 +232,7 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tillId: venue.tillId,
+        deviceId: venue.deviceId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
         stationId,
@@ -246,7 +246,7 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tillId: venue.tillId,
+        deviceId: venue.deviceId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
         stationId,
@@ -260,7 +260,7 @@ describe("computeOverdueOrders", () => {
     const seeded = await seedFiredOrder(
       suite.db,
       {
-        tillId: venue.tillId,
+        deviceId: venue.deviceId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
         stationId,
@@ -273,7 +273,7 @@ describe("computeOverdueOrders", () => {
 
   it("carries the order's own label with no delivery table, and the table's with one", async () => {
     const seed = {
-      tillId: venue.tillId,
+      deviceId: venue.deviceId,
       nodeId: venue.nodeId,
       locationId: venue.locationId,
       stationId,
@@ -300,7 +300,7 @@ describe("computeOverdueOrders", () => {
 
   it("names a party's bill after the party's active tables, in the order they joined (spec decision 9)", async () => {
     const seed = {
-      tillId: venue.tillId,
+      deviceId: venue.deviceId,
       nodeId: venue.nodeId,
       locationId: venue.locationId,
       stationId,
@@ -332,7 +332,7 @@ describe("computeOverdueOrders", () => {
 
   it("names a party's bill by its own label once the party holds no table", async () => {
     const seed = {
-      tillId: venue.tillId,
+      deviceId: venue.deviceId,
       nodeId: venue.nodeId,
       locationId: venue.locationId,
       stationId,
@@ -354,7 +354,7 @@ describe("computeOverdueOrders", () => {
 
   it("names a bill left on a party combined away after the tables of the party it ended in, as the pass does", async () => {
     const seed = {
-      tillId: venue.tillId,
+      deviceId: venue.deviceId,
       nodeId: venue.nodeId,
       locationId: venue.locationId,
       stationId,
@@ -409,7 +409,7 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tillId: venue.tillId,
+        deviceId: venue.deviceId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
         stationId,
@@ -430,7 +430,7 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tillId: venue.tillId,
+        deviceId: venue.deviceId,
         nodeId: nodeB.nodeId,
         locationId: venue.locationId,
         stationId: stationB,
@@ -451,7 +451,7 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tillId: venue.tillId,
+        deviceId: venue.deviceId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
         stationId,
@@ -461,7 +461,7 @@ describe("computeOverdueOrders", () => {
     await seedFiredOrder(
       suite.db,
       {
-        tillId: venue.tillId,
+        deviceId: venue.deviceId,
         nodeId: venue.nodeId,
         locationId: venue.locationId,
         stationId,

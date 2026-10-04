@@ -25,7 +25,6 @@ const preview: ConfigurationPreview = {
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
     },
-    tillName: "Till",
     seriesCode: "F",
     rectificativeSeriesCode: "R",
   },

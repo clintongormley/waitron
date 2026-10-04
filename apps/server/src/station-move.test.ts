@@ -19,6 +19,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
 import {
@@ -838,9 +839,8 @@ describe("release", () => {
         .insert(devices)
         .values({
           locationId: venue.cfg.locationId,
-          tillId: venue.cfg.tillId,
           deviceProfileId: profile!.id,
-          label: "Bar till",
+          label: `Bar till ${randomUUID()}`,
           tokenHash: randomUUID(),
         })
         .returning({ id: devices.id });
@@ -1793,6 +1793,32 @@ describe("moveDishesToStation", () => {
     }).toEqual(before);
   });
 
+  it("refuses an order of another location as not found, without writing", async () => {
+    const { tabId, item } = await burger();
+    const before = await snapshot(tabId, item.id);
+    const elsewhere = await inTx(venue, async (tx) => {
+      const [location] = await tx
+        .insert(locations)
+        .values({
+          name: `Elsewhere ${randomUUID()}`,
+          invoiceLocales: ["en-GB"],
+          operationDescription: "Other venue",
+        })
+        .returning({ id: locations.id });
+      return brandLocationId(location!.id);
+    });
+    await expect(
+      inTx(venue, (tx) =>
+        moveDishesToStation(tx, { ...venue.cfg, locationId: elsewhere }, tabId, {
+          submissionId: randomUUID(),
+          lineIds: [item.workingOrderLineId],
+          stationId: grill,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "working_order.not_found" });
+    expect(await snapshot(tabId, item.id)).toEqual(before);
+  });
+
   it("refuses an unowned line and an unknown destination", async () => {
     const one = await burger();
     const other = await burger();
@@ -2089,9 +2115,8 @@ describe("moveDishesToStation", () => {
           .insert(devices)
           .values({
             locationId: venue.cfg.locationId,
-            tillId: venue.cfg.tillId,
             deviceProfileId: profile!.id,
-            label: "Bar till",
+            label: `Bar till ${randomUUID()}`,
             tokenHash: randomUUID(),
           })
           .returning({ id: devices.id });

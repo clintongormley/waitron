@@ -32,7 +32,7 @@ export function venueModuleConfig(base: ModuleConfig, fiscalTerritory: string): 
 export interface ProvisionRequest {
   /** The fiscal environment this box is being stamped for. Demo and Prepare are preproduction. */
   environment: "production" | "preproduction";
-  /** country/taxId/legalName/location/tillName/series/admin(hashed) — every field the wizard collects. */
+  /** country/taxId/legalName/location/series/admin(hashed) — every field the wizard collects. */
   venue: VenueRequest;
   /** Server-derived from the selected Live journey; browser input cannot name a staged file directly. */
   configurationImport?: boolean;
@@ -50,7 +50,7 @@ export interface ProvisionDeps {
 
 /**
  * Recover the identifiers minted by a matching persisted setup operation. This is deliberately
- * narrower than a general "find venue" query: first boot creates one location, till and node for a
+ * narrower than a general "find venue" query: first boot creates one location and node for a
  * previously empty tenant, and both invoice series must still match the submitted codes. A shape
  * outside those invariants is refused instead of guessing which fiscal identity to publish.
  */
@@ -59,14 +59,12 @@ export async function recoverProvisionedVenue(
   req: ProvisionRequest,
 ): Promise<VenueResult> {
   const venue = await withTransaction(ownerDb, (tx) =>
-    tx.execute<{ locationId: string; tillId: string; nodeId: string }>(sql`
-      select l.id as "locationId", t.id as "tillId", n.id as "nodeId"
+    tx.execute<{ locationId: string; nodeId: string }>(sql`
+      select l.id as "locationId", n.id as "nodeId"
       from locations l
-      join tills t on t.location_id = l.id
       join nodes n on n.location_id = l.id
       where l.name = ${req.venue.location.name}
         and l.fiscal_territory = ${req.venue.location.fiscalTerritory}
-        and t.name = ${req.venue.tillName}
         and n.name = ${req.venue.location.name}`),
   );
   if (venue.rows.length !== 1) {
@@ -90,7 +88,6 @@ export async function recoverProvisionedVenue(
   }
   return {
     locationId: row.locationId,
-    tillId: row.tillId,
     nodeId: row.nodeId,
     seriesIds: [standard.id, rectificative.id],
     seeded: [],

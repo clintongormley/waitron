@@ -1,10 +1,6 @@
 import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import {
-  decimal,
-  tillId as brandTillId,
-  workingOrderId as brandWorkingOrderId,
-} from "@waitron/shared";
+import { decimal, workingOrderId as brandWorkingOrderId, deviceOrigin } from "@waitron/shared";
 import { getPaymentByRef } from "@waitron/payments";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeSumUp } from "./fake-sumup.js";
@@ -30,7 +26,7 @@ export async function setup(suite: { readonly db: Database }, tune?: (f: FakeSum
     });
   const provider = makeProvider();
   const params = {
-    tillId: brandTillId(t.tillId),
+    origin: deviceOrigin(t.deviceId),
     workingOrderId: brandWorkingOrderId(t.workingOrderId),
     amount: decimal("12.50"),
     readerRef: "rdr_1",

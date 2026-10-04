@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal } from "@waitron/shared";
+import { decimal, deviceOrigin } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import {
   associatePaymentWithSale,
@@ -30,6 +30,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
 
     await withTransaction(suite.db, (tx) =>
       insertCapturedPayment(tx, {
+        origin: deviceOrigin(tenant.deviceId),
         workingOrderId: tenant.workingOrderId,
         provider: "stripe",
         paymentRef: "replay-1",
@@ -63,6 +64,7 @@ describe("payments card columns", () => {
     const tenant = await seedWorkingOrder(suite.db, freshNif());
     const row = await withTransaction(suite.db, async (tx) => {
       await insertAttempting(tx, {
+        origin: deviceOrigin(tenant.deviceId),
         workingOrderId: tenant.workingOrderId,
         provider: "sumup_cloud",
         paymentRef: "card-ref-1",
@@ -87,6 +89,7 @@ describe("payments card columns", () => {
     await expect(
       withTransaction(suite.db, async (tx) => {
         await insertAttempting(tx, {
+          origin: deviceOrigin(tenant.deviceId),
           workingOrderId: tenant.workingOrderId,
           provider: "sumup_cloud",
           paymentRef: "card-ref-2",
@@ -108,6 +111,7 @@ describe("payments card columns", () => {
     await expect(
       withTransaction(suite.db, async (tx) => {
         await insertAttempting(tx, {
+          origin: deviceOrigin(tenant.deviceId),
           workingOrderId: tenant.workingOrderId,
           provider: "sumup_cloud",
           paymentRef: "card-ref-3",
@@ -130,6 +134,7 @@ describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
     const tenant = await seedWorkingOrder(suite.db, freshNif());
     await withTransaction(suite.db, async (tx) => {
       await insertAttempting(tx, {
+        origin: deviceOrigin(tenant.deviceId),
         workingOrderId: tenant.workingOrderId,
         provider: "sumup_cloud",
         paymentRef: "any-ref-1",

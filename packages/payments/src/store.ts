@@ -8,7 +8,7 @@ import {
   decimalToCents,
   sumDecimals,
 } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
+import type { Decimal, DeviceOrigin } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { nowIso, workingOrders } from "@waitron/db";
 import { payments } from "./schema/payments.js";
@@ -35,6 +35,8 @@ interface Key {
 }
 
 interface NewPayment {
+  /** The device the payment was started on. */
+  origin: DeviceOrigin;
   workingOrderId: string;
   provider: string;
   paymentRef: string;
@@ -72,6 +74,8 @@ async function insertPayment(
   settledAt: string | null,
 ): Promise<void> {
   await tx.insert(payments).values({
+    source: params.origin.source,
+    deviceId: params.origin.deviceId,
     workingOrderId: params.workingOrderId,
     provider: params.provider,
     paymentRef: params.paymentRef,
@@ -653,7 +657,6 @@ export interface ReconcilableRow {
   // auto-reverse gate (`!== "abandoned"`) treat `placed` as neither; whether that is right for a
   // placed order is not settled.
   workingOrderStatus: "open" | "placed" | "settled" | "abandoned";
-  tillId: string;
   reconcileRemediatedAt: string | null;
 }
 
@@ -683,7 +686,6 @@ export async function listReconcilable(
         auditedAt: sql<string>`coalesce(${payments.settledAt}, ${payments.createdAt})`,
         workingOrderId: payments.workingOrderId,
         workingOrderStatus: workingOrders.status,
-        tillId: workingOrders.tillId,
         reconcileRemediatedAt: payments.reconcileRemediatedAt,
       })
       .from(payments)
@@ -762,24 +764,6 @@ export async function markReconcileRemediated(
     .where(and(keyWhere(params), isNull(payments.reconcileRemediatedAt)))
     .returning({ id: payments.id });
   return row !== undefined;
-}
-
-/** Keyed by working-order id; an id that does not exist is absent from the map. */
-export async function tillsForWorkingOrders(
-  tx: Transaction,
-  workingOrderIds: string[],
-): Promise<Map<string, string>> {
-  if (workingOrderIds.length === 0) return new Map();
-  const tills = new Map<string, string>();
-  for (let i = 0; i < workingOrderIds.length; i += CHUNK_SIZE) {
-    const chunk = workingOrderIds.slice(i, i + CHUNK_SIZE);
-    const rows = await tx
-      .select({ id: workingOrders.id, tillId: workingOrders.tillId })
-      .from(workingOrders)
-      .where(inArray(workingOrders.id, chunk));
-    for (const row of rows) tills.set(row.id, row.tillId);
-  }
-  return tills;
 }
 
 /**

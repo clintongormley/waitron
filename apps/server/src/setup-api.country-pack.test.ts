@@ -45,7 +45,6 @@ vi.mock("@waitron/country-packs", async (importOriginal) => {
 
 const VENUE_RESULT: VenueResult = {
   locationId: "22222222-2222-2222-2222-222222222222",
-  tillId: "33333333-3333-3333-3333-333333333333",
   nodeId: "44444444-4444-4444-4444-444444444444",
   seriesIds: ["66666666-6666-6666-6666-666666666666", "77777777-7777-7777-7777-777777777777"],
   seeded: [],
@@ -92,7 +91,6 @@ function venue(country: string, overrides: Record<string, unknown> = {}) {
       dayCutover: "05:00",
       ...overrides,
     },
-    tillName: "Till 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
     admin: {

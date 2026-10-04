@@ -7,7 +7,6 @@ import {
   kitchenStations,
   locations,
   ticketItems,
-  tills,
   watcherItemMarks,
   workingOrderLines,
   workingOrders,
@@ -23,6 +22,7 @@ import { mountTillApi } from "./till-api.js";
 import { mountDeviceApi } from "./device-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { DEVICE_COOKIE } from "./device-session.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { inTx, orderForParty, seat, setupPartyVenue } from "./testing/party-venue.js";
@@ -35,9 +35,10 @@ const log = () => {};
 
 async function fixture() {
   const v = await setupPartyVenue(suite.db);
+  const sessionDeviceId = await seedSessionDevice(suite.db, v.cfg);
   const [person] = await inTx(v, (tx) => tx.select({ id: persons.id }).from(persons).limit(1));
   const session = await inTx(v, (tx) =>
-    loginWithPin(tx, { tillId: v.cfg.tillId, personId: person!.id, pin: "1234" }),
+    loginWithPin(tx, { deviceId: sessionDeviceId, personId: person!.id, pin: "1234" }),
   );
   const [profile] = await inTx(v, (tx) =>
     tx
@@ -249,10 +250,6 @@ describe("watcher routes", () => {
         operationDescription: "Restaurante",
       })
       .returning({ id: locations.id });
-    const [foreignTill] = await suite.db
-      .insert(tills)
-      .values({ locationId: foreignLocation!.id, name: "Other till" })
-      .returning({ id: tills.id });
     const foreignNode = await seedNode(suite.db, brandLocationId(foreignLocation!.id));
     const [foreignStation] = await suite.db
       .insert(kitchenStations)
@@ -260,7 +257,14 @@ describe("watcher routes", () => {
       .returning({ id: kitchenStations.id });
     const [foreignOrder] = await suite.db
       .insert(workingOrders)
-      .values({ tillId: foreignTill!.id, nodeId: foreignNode, orderNumber: 1, status: "open" })
+      .values({
+        source: "dashboard",
+        deviceId: null,
+        locationId: foreignLocation!.id,
+        nodeId: foreignNode,
+        orderNumber: 1,
+        status: "open",
+      })
       .returning({ id: workingOrders.id });
     const [foreignLine] = await suite.db
       .insert(workingOrderLines)

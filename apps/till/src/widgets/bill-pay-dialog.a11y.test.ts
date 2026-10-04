@@ -66,6 +66,11 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations on a device that does not take cash", async () => {
+    const { host } = await mount({ way: "contribution", takesCash: false });
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with every field marked after an empty submission", async () => {
     const { el, host } = await mount();
     await pressed(el, "[data-pay-continue]");

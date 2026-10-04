@@ -47,7 +47,6 @@ type TextField =
   | "city"
   | "province"
   | "dayCutover"
-  | "tillName"
   | "seriesCode"
   | "rectificativeSeriesCode";
 
@@ -67,7 +66,6 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   city: "off",
   province: "off",
   dayCutover: "off",
-  tillName: "off",
   seriesCode: "off",
   rectificativeSeriesCode: "off",
 };
@@ -81,7 +79,6 @@ const DEMO_HIDDEN: ReadonlySet<FieldKey> = new Set<FieldKey>([
   "operationDescription",
   "invoiceLocales",
   "dayCutover",
-  "tillName",
   "seriesCode",
   "rectificativeSeriesCode",
 ]);
@@ -97,7 +94,6 @@ const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
   "city",
   "province",
   "dayCutover",
-  "tillName",
   "seriesCode",
   "rectificativeSeriesCode",
 ];
@@ -123,7 +119,6 @@ const FIELD_HELP: Record<HelpedField, StringKey> = {
   operationDescription: "venue.help.operation_description",
   province: "venue.help.province",
   dayCutover: "venue.help.day_cutover",
-  tillName: "venue.help.till_name",
   seriesCode: "venue.help.series_code",
   rectificativeSeriesCode: "venue.help.rectificative_series_code",
 };
@@ -141,7 +136,6 @@ const FIELD_NOUNS: Record<TextField, StringKey> = {
   city: "venue.field.city",
   province: "venue.field.province",
   dayCutover: "venue.field.day_cutover",
-  tillName: "venue.field.till_name",
   seriesCode: "venue.field.series_code",
   rectificativeSeriesCode: "venue.field.rectificative_series_code",
 };
@@ -252,7 +246,6 @@ export class SetupVenueScreen extends LitElement {
     city: "",
     province: "",
     dayCutover: "04:00",
-    tillName: "Caja 1",
     seriesCode: "FS",
     rectificativeSeriesCode: "FR",
   };
@@ -332,7 +325,6 @@ export class SetupVenueScreen extends LitElement {
       city: loc.city ?? this.values.city,
       province: loc.province ?? this.values.province,
       dayCutover: loc.dayCutover ?? this.values.dayCutover,
-      tillName: venue.tillName ?? this.values.tillName,
       seriesCode: venue.seriesCode ?? this.values.seriesCode,
       rectificativeSeriesCode: venue.rectificativeSeriesCode ?? this.values.rectificativeSeriesCode,
     };
@@ -534,7 +526,6 @@ export class SetupVenueScreen extends LitElement {
           timeZone: area?.timeZone ?? selectedPack.defaultTimeZone,
           dayCutover: this.values.dayCutover,
         },
-        tillName: this.values.tillName,
         seriesCode: this.values.seriesCode,
         rectificativeSeriesCode: this.values.rectificativeSeriesCode,
       },
@@ -750,7 +741,6 @@ export class SetupVenueScreen extends LitElement {
           : html`${this.#field(t("venue.label.day_cutover"), "dayCutover", "time")}
 
               <h2>${t("venue.section.invoicing")}</h2>
-              ${this.#field(t("venue.label.till_name"), "tillName")}
               ${this.#field(t("venue.label.series_code"), "seriesCode")}
               ${this.#field(t("venue.label.rectificative_series_code"), "rectificativeSeriesCode")}`
       }

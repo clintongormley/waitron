@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal } from "@waitron/shared";
+import { decimal, deviceOrigin } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { getPaymentByRef, insertCapturedPayment, recordRefund } from "./store.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
@@ -24,6 +24,7 @@ describe("concurrent reversals of one payment", () => {
     const key = { provider: "fake", paymentRef: "c1" };
     await withTransaction(suite.db, (tx) =>
       insertCapturedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         ...key,
         workingOrderId: seeded.workingOrderId,
         amount: decimal("20.00"),

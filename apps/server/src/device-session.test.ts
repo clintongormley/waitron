@@ -17,7 +17,6 @@ import {
   devices,
   kitchenStations,
   locations,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -29,7 +28,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
@@ -39,12 +37,11 @@ import {
   DEV_DEVICE_HEADER,
   DEVICE_COOKIE,
   assertDeviceCapability,
-  assertNotHandheld,
+  assertTakesCash,
   clearDeviceCookie,
   cookieDomainFor,
   readDeviceCookie,
   requireDevice,
-  requireSaleTillId,
   setDeviceCookie,
   tryReadDevice,
   VERIFIED_TOKENS_LIMIT,
@@ -103,13 +100,8 @@ async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
-  const [till] = await admin
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const nodeId = await seedNode(admin, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -145,11 +137,11 @@ async function enrolDeviceFixture(): Promise<{
   return { cfg, deviceId: dev.deviceId, token: dev.token, stationId, deviceProfileId };
 }
 
-/** The bindings a station screen enrolled without a till, watcher, or hardware target carries. */
+/** The bindings a station screen enrolled without a watcher or hardware target carries. */
 const NO_BINDINGS = {
-  tillId: null,
   watcherId: null,
   receiptPrinterId: null,
+  paymentSlipPrinterId: null,
   // `enrolDeviceFixture`'s kds profile declares no capabilities, so the binding carries `[]`.
   capabilities: [],
 } as const;
@@ -179,7 +171,6 @@ async function enrolTillDeviceFixture(): Promise<{
   deviceId: string;
   token: string;
   deviceProfileId: string;
-  tillId: string;
 }> {
   const { cfg } = await setupStation();
   const [canvas] = await suite.db
@@ -188,7 +179,7 @@ async function enrolTillDeviceFixture(): Promise<{
     .returning({ id: canvases.id });
   const canvasId = canvas!.id;
   // This fixture explicitly grants reader and drawer access. The device binds the canvas SOLELY
-  // through this profile, and a `till` profile AUTO-CREATES the register the device rings against.
+  // through this profile.
   const deviceProfileId = await seedDeviceProfile(
     "Counter",
     "till",
@@ -199,15 +190,7 @@ async function enrolTillDeviceFixture(): Promise<{
     name: "Counter till",
     profileId: deviceProfileId,
   });
-  const { rows } = await suite.db.execute<{ till_id: string }>(sql`
-    select till_id from devices where id = ${dev.deviceId}`);
-  return {
-    cfg,
-    deviceId: dev.deviceId,
-    token: dev.token,
-    deviceProfileId,
-    tillId: rows[0]!.till_id,
-  };
+  return { cfg, deviceId: dev.deviceId, token: dev.token, deviceProfileId };
 }
 
 /**
@@ -265,26 +248,6 @@ async function probe(cookieValue: string | null): Promise<ProbeResult> {
   return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
 }
 
-/** Enrol a REAL handheld device — no station (a handheld form factor binds none) — so
- * `tryReadDevice` resolves its cookie to a `handheld` binding. Same enrol path as `enrolDeviceFixture`,
- * with the order-only kind. */
-async function enrolHandheldFixture(): Promise<{
-  cfg: TillConfig;
-  deviceId: string;
-  token: string;
-}> {
-  const { cfg } = await setupStation();
-  // A handheld is defined by a `phone-portrait`/`tablet-landscape` profile and, being sale-capable,
-  // binds an EXISTING register at enrol — the venue's own till.
-  const deviceProfileId = await seedDeviceProfile("Waiter phone profile", "phone-portrait", []);
-  const dev = await enrolDeviceForTest(suite.db, cfg, {
-    name: "Waiter phone",
-    profileId: deviceProfileId,
-    registerId: cfg.tillId,
-  });
-  return { cfg, deviceId: dev.deviceId, token: dev.token };
-}
-
 /** Run the NON-throwing `tryReadDevice` behind the shared scaffold, returning the binding or `null` it
  * resolves the cookie to — the `probe` shape, but reading the JSON-encoded value instead of catching a
  * throw (a `null` round-trips as `null`). */
@@ -293,19 +256,6 @@ async function probeTry(cookieValue: string | null): Promise<DeviceBinding | nul
     c.json((await tryReadDevice(deps, c)) ?? null),
   );
   return (await res.json()) as DeviceBinding | null;
-}
-
-/** Run `assertNotHandheld` behind the shared HTTP scaffold: `{ ok: true }` when it passes (no throw), or
- * the thrown code when it refuses. */
-async function probeAssert(
-  cookieValue: string | null,
-): Promise<{ ok: true } | { ok: false; code: string }> {
-  const { res, thrown } = await runProbe(cookieValue, async (deps, c) => {
-    await assertNotHandheld(deps, c, "record_sale");
-    return c.body(null, 204);
-  });
-  if (res.status === 204) return { ok: true };
-  return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
 }
 
 /**
@@ -323,12 +273,10 @@ async function enrolHandheldWithCanvasFixture(): Promise<{
     .values({ name: "Waiter phone", definition: DEFAULT_CANVASES["phone-portrait"] })
     .returning({ id: canvases.id });
   const canvasId = canvas!.id;
-  // A handheld (`phone-portrait`) binds an EXISTING register at enrol — the venue's own till.
   const deviceProfileId = await seedDeviceProfile("Waiter", "phone-portrait", [], canvasId);
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: "Waiter phone",
     profileId: deviceProfileId,
-    registerId: cfg.tillId,
   });
   return { cfg, deviceId: dev.deviceId, token: dev.token };
 }
@@ -475,7 +423,7 @@ describe("device cookie helpers", () => {
 
 describe("requireDevice (venue database)", () => {
   it("authenticates a valid cookie and touches last_seen_at", async () => {
-    const { deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
+    const { cfg, deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
     expect(await lastSeenAt(deviceId)).toBeNull(); // never seen yet
 
     const result = await probe(`${deviceId}.${token}`);
@@ -485,6 +433,7 @@ describe("requireDevice (venue database)", () => {
         deviceId,
         formFactor: "kds",
         label: "Pantalla",
+        locationId: cfg.locationId,
         stationId,
         deviceProfileId,
         ...NO_BINDINGS,
@@ -494,21 +443,21 @@ describe("requireDevice (venue database)", () => {
     expect(await lastSeenAt(deviceId)).not.toBeNull(); // the guard recorded the sighting
   });
 
-  it("carries the device's assigned profile + till + hardware bindings back on the binding (SP-A.2 §16, device-profile §5)", async () => {
-    const { deviceId, token, deviceProfileId, tillId } = await enrolTillDeviceFixture();
-    // The canvas is not a device field; it resolves THROUGH the profile at `/api/till`. The till is the
-    // register the `till` profile auto-created at enrol.
+  it("carries the device's assigned profile + hardware bindings back on the binding (SP-A.2 §16, device-profile §5)", async () => {
+    const { cfg, deviceId, token, deviceProfileId } = await enrolTillDeviceFixture();
+    // The canvas is not a device field; it resolves THROUGH the profile at `/api/till`.
     expect(await probe(`${deviceId}.${token}`)).toEqual({
       ok: true,
       binding: {
         deviceId,
         formFactor: "till",
         label: "Counter till",
+        locationId: cfg.locationId,
         stationId: null,
         watcherId: null,
-        tillId,
         deviceProfileId,
         receiptPrinterId: null,
+        paymentSlipPrinterId: null,
         // The `till` profile declares both fenced flags — carried on the binding by the profile join.
         capabilities: ["integrated-card-payment", "open-cash-drawer"],
       },
@@ -554,14 +503,15 @@ describe("requireDevice (venue database)", () => {
   });
 });
 
-describe("tryReadDevice and assertNotHandheld (venue database)", () => {
+describe("tryReadDevice (venue database)", () => {
   it("tryReadDevice returns the binding for a valid cookie and null at every miss", async () => {
-    const { deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
+    const { cfg, deviceId, token, stationId, deviceProfileId } = await enrolDeviceFixture();
     // Success resolves to the same binding `requireDevice` returns.
     expect(await probeTry(`${deviceId}.${token}`)).toEqual({
       deviceId,
       formFactor: "kds",
       label: "Pantalla",
+      locationId: cfg.locationId,
       stationId,
       deviceProfileId,
       ...NO_BINDINGS,
@@ -580,26 +530,6 @@ describe("tryReadDevice and assertNotHandheld (venue database)", () => {
       expect(await probeTry(bad)).toBeNull();
     }
     expect(await probeTry(null)).toBeNull(); // absent cookie
-  });
-
-  it("assertNotHandheld refuses an ACTIVE handheld with device.forbidden_action", async () => {
-    const { deviceId, token } = await enrolHandheldFixture();
-    expect(await probeAssert(`${deviceId}.${token}`)).toEqual({
-      ok: false,
-      code: "device.forbidden_action",
-    });
-  });
-
-  it("assertNotHandheld passes a non-handheld device, an absent cookie, and a failed device cookie", async () => {
-    const { deviceId, token } = await enrolDeviceFixture();
-    // A kds_station device is not order-only — it never posts to a sale route, and the firewall does
-    // not block it here.
-    expect(await probeAssert(`${deviceId}.${token}`)).toEqual({ ok: true });
-    // An ordinary till carries NO device cookie: `tryReadDevice` → null → the firewall passes.
-    expect(await probeAssert(null)).toEqual({ ok: true });
-    // A malformed/unauthenticated device cookie is a miss (null), not a handheld, so it passes too —
-    // the order-only rule blocks ONLY a verified handheld, never a non-device caller.
-    expect(await probeAssert("not-a-uuid.sometoken")).toEqual({ ok: true });
   });
 });
 
@@ -636,7 +566,7 @@ describe("assertDeviceCapability (venue database)", () => {
   });
 
   it("passes when there is NO device cookie (an env-configured / legacy till)", async () => {
-    // No `waitron_device` cookie ⇒ `tryReadDevice` → null ⇒ pass, exactly as `assertNotHandheld`.
+    // No `waitron_device` cookie ⇒ `tryReadDevice` → null ⇒ pass.
     // Nothing blocks a sale on a cookie-less till (CLAUDE.md §5).
     await enrolDeviceFixture();
     expect(await probeCapability(null, "integrated-card-payment", "pay")).toEqual({
@@ -684,8 +614,7 @@ async function enrolDevDevices(): Promise<{
   deviceBId: string;
 }> {
   const { cfg, stationId } = await setupStation();
-  // Device A — a `till` device (its profile auto-creates a register), whose cookie stands in for the
-  // current identity.
+  // Device A — a `till` device, whose cookie stands in for the current identity.
   const tillProfileId = await seedDeviceProfile("Till A profile", "till", []);
   const devA = await enrolDeviceForTest(suite.db, cfg, {
     name: "Till A",
@@ -705,6 +634,32 @@ async function enrolDevDevices(): Promise<{
     deviceBId: devB.deviceId,
   };
 }
+
+describe("assertTakesCash on a resolved device", () => {
+  const binding = (
+    capabilities: CapabilityFlag[],
+    formFactor: FormFactor = "phone-portrait",
+  ): DeviceBinding => ({
+    deviceId: randomUUID(),
+    formFactor,
+    label: "Waiter phone",
+    locationId: randomUUID(),
+    stationId: null,
+    watcherId: null,
+    deviceProfileId: randomUUID(),
+    receiptPrinterId: null,
+    paymentSlipPrinterId: null,
+    capabilities,
+  });
+
+  it("refuses a device whose profile lacks take-cash, and passes one that has it and no device", () => {
+    expect(() => assertTakesCash(binding(["open-cash-drawer"]))).toThrow(
+      expect.objectContaining({ code: "device.cash_not_allowed" }),
+    );
+    expect(() => assertTakesCash(binding(["take-cash"]))).not.toThrow();
+    expect(() => assertTakesCash(null)).not.toThrow();
+  });
+});
 
 describe("dev-override header (venue database)", () => {
   it("is IGNORED when devMode is false (fail-closed) — cookie wins", async () => {
@@ -794,36 +749,6 @@ describe("tryReadDevice dev override resolves a seeded device (venue database)",
     );
     expect(binding?.deviceId).toBe(deviceId);
     expect(binding?.formFactor).toBe("kds");
-  });
-});
-
-describe("requireSaleTillId reading the device cookie itself", () => {
-  async function probeSaleTill(
-    cookieValue: string | null,
-  ): Promise<{ ok: true; tillId: string } | { ok: false; code: string }> {
-    const { res, thrown } = await runProbe(cookieValue, async (deps, c) =>
-      c.json({ tillId: await requireSaleTillId(deps, c) }),
-    );
-    if (res.status === 200)
-      return { ok: true, tillId: ((await res.json()) as { tillId: string }).tillId };
-    return { ok: false, code: isAppError(thrown) ? thrown.code : String(thrown) };
-  }
-
-  it("returns the till an enrolled till device's cookie is bound to", async () => {
-    const { deviceId, token, tillId } = await enrolTillDeviceFixture();
-    expect(await probeSaleTill(`${deviceId}.${token}`)).toEqual({ ok: true, tillId });
-  });
-
-  it("refuses a request with no device cookie as device.unauthorized", async () => {
-    expect(await probeSaleTill(null)).toEqual({ ok: false, code: "device.unauthorized" });
-  });
-
-  it("refuses a kitchen display, which rings no sale, as device.till_required", async () => {
-    const { deviceId, token } = await enrolDeviceFixture();
-    expect(await probeSaleTill(`${deviceId}.${token}`)).toEqual({
-      ok: false,
-      code: "device.till_required",
-    });
   });
 });
 

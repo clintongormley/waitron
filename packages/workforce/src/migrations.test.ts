@@ -128,9 +128,9 @@ describe("the D1a time & attendance tables", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          id, captured_by_source, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'lunch',
+        ) values (${newId()}, 'dashboard', ${personId}, ${locationId}, ${nodeId}, 'lunch',
           '2026-01-05T09:00:00.000Z', 0, ${personId}, '2026-01-05T09:00:00.000Z',
           ${"A".repeat(64)}, 1, true)`),
     );
@@ -144,9 +144,9 @@ describe("the D1a time & attendance tables", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          id, captured_by_source, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.000Z', 900,
+        ) values (${newId()}, 'dashboard', ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.000Z', 900,
           ${personId}, '2026-01-05T09:00:00.000Z', ${"A".repeat(64)}, 1, true)`),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
@@ -193,9 +193,9 @@ describe("the D1b correction columns", () => {
     // time_entries_chain_position_uq. `.000Z` because the whole-second checks demand it.
     const rows = await suite.db.execute<{ id: string }>(sql`
       insert into time_entries (
-        id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+        id, captured_by_source, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
-      ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.000Z', 0,
+      ) values (${newId()}, 'dashboard', ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.000Z', 0,
         ${personId}, '2026-01-05T09:00:00.000Z', ${"A".repeat(64)}, 1, true
       ) returning id`);
     return { personId, locationId, nodeId, entryId: rows.rows[0]!.id };
@@ -205,10 +205,10 @@ describe("the D1b correction columns", () => {
     const { personId, locationId, nodeId, entryId } = await seedBaseEntry();
     await suite.db.execute(sql`
       insert into time_entries (
-        id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+        id, captured_by_source, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
         recorded_by_person_id, recorded_at, corrects_entry_id, correction_reason, correction_status,
         correction_actor_id, entry_hash, prev_entry_hash, sequence_no, is_first_entry
-      ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00.000Z', 0,
+      ) values (${newId()}, 'dashboard', ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00.000Z', 0,
         ${personId}, '2026-01-05T18:00:00.000Z', ${entryId}, 'forgot to clock out', 'approved', ${personId},
         ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`);
     const rows = await suite.db.execute<{ n: number }>(sql`
@@ -223,10 +223,10 @@ describe("the D1b correction columns", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          id, captured_by_source, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, corrects_entry_id, entry_hash, prev_entry_hash,
           sequence_no, is_first_entry
-        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00.000Z', 0,
+        ) values (${newId()}, 'dashboard', ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00.000Z', 0,
           ${personId}, '2026-01-05T18:00:00.000Z', ${entryId}, ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
@@ -238,10 +238,10 @@ describe("the D1b correction columns", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          id, captured_by_source, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, correction_status, entry_hash, prev_entry_hash,
           sequence_no, is_first_entry
-        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.000Z', 0,
+        ) values (${newId()}, 'dashboard', ${personId}, ${locationId}, ${nodeId}, 'in', '2026-01-05T09:00:00.000Z', 0,
           ${personId}, '2026-01-05T09:00:00.000Z', 'requested', ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
@@ -253,10 +253,10 @@ describe("the D1b correction columns", () => {
     const error = await captureError(() =>
       suite.db.execute(sql`
         insert into time_entries (
-          id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
+          id, captured_by_source, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
           recorded_by_person_id, recorded_at, corrects_entry_id, correction_reason, correction_status,
           correction_actor_id, entry_hash, prev_entry_hash, sequence_no, is_first_entry
-        ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00.000Z', 0,
+        ) values (${newId()}, 'dashboard', ${personId}, ${locationId}, ${nodeId}, 'correction', '2026-01-05T18:00:00.000Z', 0,
           ${personId}, '2026-01-05T18:00:00.000Z', ${crypto.randomUUID()}, 'dangling', 'approved', ${personId},
           ${"B".repeat(64)}, ${"A".repeat(64)}, 2, false)`),
     );

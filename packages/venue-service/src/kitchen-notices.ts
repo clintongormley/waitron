@@ -1,5 +1,5 @@
 import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
-import { kitchenStations, nowIso, tills, workingOrderLines, workingOrders } from "@waitron/db";
+import { kitchenStations, nowIso, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { kitchenPresentationName } from "@waitron/catalogue";
 import { businessDayStart, readLocationClock } from "@waitron/reporting";
@@ -94,8 +94,7 @@ export async function recordKitchenNotices(
   const [order] = await tx
     .select({ orderNumber: workingOrders.orderNumber, label: workingOrders.label })
     .from(workingOrders)
-    .innerJoin(tills, eq(tills.id, workingOrders.tillId))
-    .where(and(eq(workingOrders.id, orderId), eq(tills.locationId, cfg.locationId)));
+    .where(and(eq(workingOrders.id, orderId), eq(workingOrders.locationId, cfg.locationId)));
   if (order === undefined) {
     throw new AppError("working_order.not_found", { workingOrderId: orderId });
   }

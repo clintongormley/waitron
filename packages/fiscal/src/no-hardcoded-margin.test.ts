@@ -46,7 +46,7 @@ describe("no regulatory timestamp margin is encoded anywhere", () => {
 describe("the degraded threshold has no default", () => {
   it("is required by the options type", () => {
     // @ts-expect-error degradedAfterSeconds has no default and must be supplied
-    createTrustedClock({ tillId: "t", monotonic: () => 0, wallClock: () => 0 });
+    createTrustedClock({ deviceId: "d", monotonic: () => 0, wallClock: () => 0 });
     expect(true).toBe(true);
   });
 
@@ -56,13 +56,13 @@ describe("the degraded threshold has no default", () => {
     let monotonicMs = 10_000;
     const monotonic = () => monotonicMs;
     const strict = createTrustedClock({
-      tillId: "t",
+      deviceId: "d",
       monotonic,
       wallClock,
       degradedAfterSeconds: 1,
     });
     const lax = createTrustedClock({
-      tillId: "t",
+      deviceId: "d",
       monotonic,
       wallClock,
       degradedAfterSeconds: 100_000,

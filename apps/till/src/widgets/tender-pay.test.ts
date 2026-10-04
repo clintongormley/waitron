@@ -598,6 +598,31 @@ describe("till-tender-pay", () => {
     expect(store.lines).toHaveLength(1); // basket untouched
   });
 
+  it.each(["order", "collect"] as const)(
+    "offers no cash at the %s stage on a device that does not take cash, and says to take it at a till",
+    async (stage) => {
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "2");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        mode: "invoice_first",
+        stage,
+        takesCash: false,
+      });
+      expect(query(el, ".pay")).toBeNull();
+      expect(query(el, ".pay-card")).not.toBeNull();
+      expect(query(el, ".cash-at-till")?.textContent).toBe(t("tender.cash_at_till"));
+    },
+  );
+
+  it("offers cash by default, with no line about taking it at a till", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    expect(query(el, ".pay")).not.toBeNull();
+    expect(query(el, ".cash-at-till")).toBeNull();
+  });
+
   it("both idle views (pay + collect) render the Card button by default", async () => {
     const payStore = new WorkingOrderStore();
     payStore.addProduct(cafe, "2");

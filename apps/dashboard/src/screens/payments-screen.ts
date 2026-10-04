@@ -32,7 +32,7 @@ import type {
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { formatAlertTime } from "../widgets/alert-format.js";
+import { formatAlertTime, sourceLabel } from "../widgets/alert-format.js";
 
 /** The section's own wording for a refused check; any other code reads its shared message. */
 function stuckRefusalText(error: unknown): string {
@@ -807,8 +807,8 @@ export class PaymentsScreen extends LitElement {
       <div class="stuck-body">
         <p class="stuck-order">${this.#billOrder(target.row)}</p>
         <dl class="stuck-details">
-          <dt>${t("payments.stuck.till")}</dt>
-          <dd>${target.row.tillName}</dd>
+          <dt>${t("payments.stuck.device")}</dt>
+          <dd data-test="stuck-device">${sourceLabel(target.row)}</dd>
           <dt>${t("payments.stuck.provider")}</dt>
           <dd>
             ${target.row.provider ? this.#providerName(target.row.provider) : t("payments.bill.provider_unknown")}
@@ -1116,8 +1116,8 @@ export class PaymentsScreen extends LitElement {
       <div class="stuck-body">
         <p class="stuck-order">${order}</p>
         <dl class="stuck-details">
-          <dt>${t("payments.stuck.till")}</dt>
-          <dd>${row.tillName}</dd>
+          <dt>${t("payments.stuck.device")}</dt>
+          <dd data-test="stuck-device">${sourceLabel(row)}</dd>
           <dt>${t("payments.stuck.provider")}</dt>
           <dd>${this.#providerName(row.provider)}</dd>
           <dt>${t("payments.stuck.amount")}</dt>

@@ -1,20 +1,9 @@
 import { expect } from "vitest";
 import { eq } from "drizzle-orm";
-import {
-  CORE_MIGRATIONS,
-  invoiceSeries,
-  locations,
-  products,
-  tills,
-  withTransaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, locations, products, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  locationId as brandLocationId,
-  seriesId as brandSeriesId,
-  tillId as brandTillId,
-} from "@waitron/shared";
-import type { NodeId, SeriesId, TillId } from "@waitron/shared";
+import { locationId as brandLocationId, seriesId as brandSeriesId } from "@waitron/shared";
+import type { NodeId, SeriesId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -65,7 +54,6 @@ export async function plantStoredUnit(
 
 export interface SeededVenue {
   locationId: string;
-  tillId: TillId;
   nodeId: NodeId;
   seriesId: SeriesId;
 }
@@ -103,18 +91,13 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
     .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Test op" })
     .returning({ id: locations.id });
   const locationId = loc!.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Till 1" })
-    .returning({ id: tills.id });
-  const tillId = brandTillId(till!.id);
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId, code: "A" })
     .returning({ id: invoiceSeries.id });
   const seriesId = brandSeriesId(series!.id);
-  return { locationId, tillId, nodeId, seriesId };
+  return { locationId, nodeId, seriesId };
 }
 
 export interface SeededCatalogue {

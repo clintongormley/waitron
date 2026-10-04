@@ -53,7 +53,6 @@ export {
   settleForwarded,
   settleInitiated,
   stampAttemptingRef,
-  tillsForWorkingOrders,
 } from "./store.js";
 export type {
   AttemptingPayment,

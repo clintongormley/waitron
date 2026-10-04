@@ -22,7 +22,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { createTable, createZone, setTablePlacement } from "../../src/tables.js";
 import type { TillConfig } from "../../src/till-config.js";
@@ -39,7 +38,6 @@ export interface SeedFloorInput {
  *  a placeholder that satisfies the type. */
 function toTableCfg(locationId: string, locale: SeedLocale): TillConfig {
   return {
-    tillId: brandTillId(randomUUID()),
     nodeId: brandNodeId(randomUUID()),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),

@@ -11,14 +11,14 @@ import {
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
-import type { SaleId, TillId } from "@waitron/shared";
+import type { DeviceId, SaleId } from "@waitron/shared";
 import {
   seedBillPayment,
   seedBillRefund,
   seedOpenOrder,
   seedSale,
   seedTender,
-  seedTill,
+  seedVenueDevice,
   seedVenue,
   seedVoid,
 } from "../test/fixtures.js";
@@ -60,15 +60,15 @@ function runCompute(businessDay: string) {
   });
 }
 
-/** A cash sale settled at `till` on the business day, so the close's `cashTakings` for that till
+/** A cash sale settled on `device` on the business day, so the close's `cashTakings` for that device
  * equals `amount`. Distinct invoice numbers keep the per-series unique constraint happy. */
 let invoiceNo = 0;
-async function seedCashSale(till: TillId, amount: string): Promise<SaleId> {
+async function seedCashSale(device: DeviceId, amount: string): Promise<SaleId> {
   invoiceNo += 1;
   const at = "2026-08-04T10:00:00Z"; // 12:00 Madrid, after the 05:00 cutover → business day 2026-08-04
   const saleId = await seedSale(
     suite.db,
-    { tillId: till, nodeId: venue.nodeId, seriesId: venue.seriesId },
+    { deviceId: device, nodeId: venue.nodeId, seriesId: venue.seriesId },
     {
       invoiceNumber: invoiceNo,
       issuedAt: at,
@@ -91,43 +91,43 @@ async function captureCloseError(fn: () => Promise<unknown>): Promise<AppError> 
 }
 
 describe("recordDailyClose — snapshot, reconciliation, chain", () => {
-  it("snapshots the exact computeDailyClose figures and per-till variance (over, short, exact)", async () => {
-    // Three tills at one node, each with cash takings, crafted so the reconciliation exercises all
+  it("snapshots the exact computeDailyClose figures and per-device variance (over, short, exact)", async () => {
+    // Three devices at one node, each with cash takings, crafted so the reconciliation exercises all
     // three signs: A over, B short, C exact.
-    const tillA = venue.tillId;
-    const tillB = await seedTill(suite.db, venue.locationId);
-    const tillC = await seedTill(suite.db, venue.locationId);
-    await seedCashSale(tillA, "123.45");
-    await seedCashSale(tillB, "48.00");
-    await seedCashSale(tillC, "20.00");
+    const deviceA = venue.deviceId;
+    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
+    const deviceC = await seedVenueDevice(suite.db, venue.locationId);
+    await seedCashSale(deviceA, "123.45");
+    await seedCashSale(deviceB, "48.00");
+    await seedCashSale(deviceC, "20.00");
 
     const rec = await record("2026-08-04", [
       // expected drawer = openingFloat + cashTakings − payouts
-      { tillId: tillA, openingFloat: "50.00", payouts: "0.00", countedCash: "175.00" }, // 50+123.45−0 = 173.45 → +1.55 over
-      { tillId: tillB, openingFloat: "50.00", payouts: "10.00", countedCash: "85.00" }, // 50+48−10 = 88.00 → −3.00 short
-      { tillId: tillC, openingFloat: "30.00", payouts: "0.00", countedCash: "50.00" }, //  30+20−0 = 50.00 → 0.00 exact
+      { deviceId: deviceA, openingFloat: "50.00", payouts: "0.00", countedCash: "175.00" }, // 50+123.45−0 = 173.45 → +1.55 over
+      { deviceId: deviceB, openingFloat: "50.00", payouts: "10.00", countedCash: "85.00" }, // 50+48−10 = 88.00 → −3.00 short
+      { deviceId: deviceC, openingFloat: "30.00", payouts: "0.00", countedCash: "50.00" }, //  30+20−0 = 50.00 → 0.00 exact
     ]);
 
     // The frozen `close` is exactly what computeDailyClose returns, not a re-derivation.
     expect(rec.snapshot.close).toEqual(await runCompute("2026-08-04"));
 
-    const byTill = rec.snapshot.cashReconciliation.byTill;
-    const a = byTill.find((t) => t.tillId === tillA)!;
-    const b = byTill.find((t) => t.tillId === tillB)!;
-    const c = byTill.find((t) => t.tillId === tillC)!;
+    const byDevice = rec.snapshot.cashReconciliation.byDevice;
+    const a = byDevice.find((t) => t.deviceId === deviceA)!;
+    const b = byDevice.find((t) => t.deviceId === deviceB)!;
+    const c = byDevice.find((t) => t.deviceId === deviceC)!;
     expect(a).toMatchObject({ cashTakings: "123.45", cashVariance: "1.55" });
     expect(b).toMatchObject({ cashTakings: "48.00", cashVariance: "-3.00" });
     expect(c).toMatchObject({ cashTakings: "20.00", cashVariance: "0.00" });
     // Every supplied figure is preserved verbatim in the frozen document.
     expect(a).toMatchObject({ openingFloat: "50.00", payouts: "0.00", countedCash: "175.00" });
-    // Σ per-till variance = 1.55 − 3.00 + 0.00.
+    // Σ per-device variance = 1.55 − 3.00 + 0.00.
     expect(rec.snapshot.cashReconciliation.nodeVariance).toBe("-1.45");
   });
 
   it("re-derives a closed day equal to its snapshot after a void made the next day", async () => {
-    const saleId = await seedCashSale(venue.tillId, "121.00");
+    const saleId = await seedCashSale(venue.deviceId, "121.00");
     const rec = await record("2026-08-04", [
-      { tillId: venue.tillId, openingFloat: "0.00", payouts: "0.00", countedCash: "121.00" },
+      { deviceId: venue.deviceId, openingFloat: "0.00", payouts: "0.00", countedCash: "121.00" },
     ]);
     await seedVoid(suite.db, { saleId }, "2026-08-05T10:00:00.000Z");
 
@@ -136,7 +136,7 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     expect(voidDay.vat.grossTotal).toBe(`-${rec.snapshot.close.vat.grossTotal}`);
     expect(voidDay.counts).toEqual({ sales: 0, corrections: 0, voids: 1 });
     // A void writes no tender, so the cash settled on 2026-08-04 stays there.
-    expect(voidDay.cash).toEqual({ byTill: [], tenderTotal: "0.00", tipTotal: "0.00" });
+    expect(voidDay.cash).toEqual({ byOrigin: [], tenderTotal: "0.00", tipTotal: "0.00" });
   });
 
   it("assigns sequence 1 then 2 across two business days and chains prev_entry_hash", async () => {
@@ -177,25 +177,25 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
   });
 
   describe("rejects invalid cash input with close.invalid_cash_input", () => {
-    const A = () => venue.tillId;
+    const A = () => venue.deviceId;
 
     it("a negative opening float", async () => {
       const error = await captureCloseError(() =>
         record("2026-08-04", [
-          { tillId: A(), openingFloat: "-1.00", payouts: "0.00", countedCash: "0.00" },
+          { deviceId: A(), openingFloat: "-1.00", payouts: "0.00", countedCash: "0.00" },
         ]),
       );
       expect(error.code).toBe("close.invalid_cash_input");
       if (hasCode(error, "close.invalid_cash_input")) {
         expect(error.params.reason).toBe("opening_float_negative");
-        expect(error.params.tillId).toBe(A());
+        expect(error.params.deviceId).toBe(A());
       }
     });
 
     it("a negative payout", async () => {
       const error = await captureCloseError(() =>
         record("2026-08-04", [
-          { tillId: A(), openingFloat: "0.00", payouts: "-5.00", countedCash: "0.00" },
+          { deviceId: A(), openingFloat: "0.00", payouts: "-5.00", countedCash: "0.00" },
         ]),
       );
       if (hasCode(error, "close.invalid_cash_input"))
@@ -205,7 +205,7 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     it("a negative counted cash", async () => {
       const error = await captureCloseError(() =>
         record("2026-08-04", [
-          { tillId: A(), openingFloat: "0.00", payouts: "0.00", countedCash: "-0.01" },
+          { deviceId: A(), openingFloat: "0.00", payouts: "0.00", countedCash: "-0.01" },
         ]),
       );
       if (hasCode(error, "close.invalid_cash_input"))
@@ -215,57 +215,57 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     it("a non-numeric figure", async () => {
       const error = await captureCloseError(() =>
         record("2026-08-04", [
-          { tillId: A(), openingFloat: "not-a-number", payouts: "0.00", countedCash: "0.00" },
+          { deviceId: A(), openingFloat: "not-a-number", payouts: "0.00", countedCash: "0.00" },
         ]),
       );
       if (hasCode(error, "close.invalid_cash_input"))
         expect(error.params.reason).toBe("opening_float_not_a_number");
     });
 
-    it("the same till counted twice", async () => {
+    it("the same device counted twice", async () => {
       const error = await captureCloseError(() =>
         record("2026-08-04", [
-          { tillId: A(), openingFloat: "0.00", payouts: "0.00", countedCash: "0.00" },
-          { tillId: A(), openingFloat: "0.00", payouts: "0.00", countedCash: "0.00" },
+          { deviceId: A(), openingFloat: "0.00", payouts: "0.00", countedCash: "0.00" },
+          { deviceId: A(), openingFloat: "0.00", payouts: "0.00", countedCash: "0.00" },
         ]),
       );
       if (hasCode(error, "close.invalid_cash_input"))
-        expect(error.params.reason).toBe("duplicate_till");
+        expect(error.params.reason).toBe("duplicate_device");
     });
 
-    it("a cash-taking till left uncounted", async () => {
-      await seedCashSale(venue.tillId, "40.00"); // the till has cash takings…
+    it("a cash-taking device left uncounted", async () => {
+      await seedCashSale(venue.deviceId, "40.00"); // the device has cash takings…
       const error = await captureCloseError(() => record("2026-08-04", [])); // …but is not counted
       if (hasCode(error, "close.invalid_cash_input")) {
-        expect(error.params.reason).toBe("uncounted_cash_till");
-        expect(error.params.tillId).toBe(venue.tillId);
+        expect(error.params.reason).toBe("uncounted_cash_device");
+        expect(error.params.deviceId).toBe(venue.deviceId);
       }
     });
 
-    it("a count for a till with no activity in the close", async () => {
-      // No sales at all → the close has no tills, so counting one is an unknown-till fault.
+    it("a count for a device with no activity in the close", async () => {
+      // No sales at all → the close has no devices, so counting one is an unknown-device fault.
       const error = await captureCloseError(() =>
         record("2026-08-04", [
-          { tillId: A(), openingFloat: "10.00", payouts: "0.00", countedCash: "10.00" },
+          { deviceId: A(), openingFloat: "10.00", payouts: "0.00", countedCash: "10.00" },
         ]),
       );
       if (hasCode(error, "close.invalid_cash_input")) {
-        expect(error.params.reason).toBe("unknown_till");
-        expect(error.params.tillId).toBe(A());
+        expect(error.params.reason).toBe("unknown_device");
+        expect(error.params.deviceId).toBe(A());
       }
     });
   });
 
-  it("treats a card-only till as known: not required to be counted, but countable against 0.00 takings", async () => {
-    // A till present in the close only through CARD sales carries cashTakings 0.00. It is a KNOWN
-    // till (counting it is allowed, its variance then measured against 0.00) but is NOT one the
-    // uncounted-cash-till rule forces (that rule fires only for a till with a cash line).
+  it("treats a card-only device as known: not required to be counted, but countable against 0.00 takings", async () => {
+    // A device present in the close only through CARD sales carries cashTakings 0.00. It is a KNOWN
+    // device (counting it is allowed, its variance then measured against 0.00) but is NOT one the
+    // uncounted-cash-device rule forces (that rule fires only for a device with a cash line).
     invoiceNo += 1;
     const at = "2026-08-04T10:00:00Z";
     const saleId = await seedSale(
       suite.db,
       {
-        tillId: venue.tillId,
+        deviceId: venue.deviceId,
         nodeId: venue.nodeId,
         seriesId: venue.seriesId,
       },
@@ -285,11 +285,50 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
     // Counting it succeeds even though its cash takings are zero:
     //   expected drawer = 100.00 + 0.00 − 5.00 = 95.00; variance = 96.00 − 95.00 = 1.00.
     const rec = await record("2026-08-04", [
-      { tillId: venue.tillId, openingFloat: "100.00", payouts: "5.00", countedCash: "96.00" },
+      { deviceId: venue.deviceId, openingFloat: "100.00", payouts: "5.00", countedCash: "96.00" },
     ]);
-    const row = rec.snapshot.cashReconciliation.byTill.find((t) => t.tillId === venue.tillId)!;
+    const row = rec.snapshot.cashReconciliation.byDevice.find(
+      (t) => t.deviceId === venue.deviceId,
+    )!;
     expect(row.cashTakings).toBe("0.00");
     expect(row.cashVariance).toBe("1.00");
+  });
+
+  it("forces no count for the Demo seed's cash, and reconciles devices alone", async () => {
+    await seedCashSale(venue.deviceId, "30.00");
+    invoiceNo += 1;
+    const at = "2026-08-04T10:00:00Z";
+    const sample = await seedSale(suite.db, venue, {
+      invoiceNumber: invoiceNo,
+      issuedAt: at,
+      total: "15.00",
+      lines: [{ vatRate: "21.00", lineTotal: "15.00" }],
+      source: "demo_seed",
+    });
+    await seedTender(
+      suite.db,
+      { saleId: sample },
+      { method: "cash", amount: "15.00", tipAmount: "0.00", settledAt: at },
+    );
+
+    const rec = await record("2026-08-04", [
+      { deviceId: venue.deviceId, openingFloat: "0.00", payouts: "0.00", countedCash: "30.00" },
+    ]);
+
+    expect(rec.snapshot.close.cash.byOrigin.map((r) => [r.source, r.deviceId])).toEqual([
+      ["demo_seed", null],
+      ["device", venue.deviceId],
+    ]);
+    expect(rec.snapshot.cashReconciliation.byDevice).toEqual([
+      {
+        deviceId: venue.deviceId,
+        openingFloat: "0.00",
+        payouts: "0.00",
+        countedCash: "30.00",
+        cashTakings: "30.00",
+        cashVariance: "0.00",
+      },
+    ]);
   });
 
   it("surfaces a sequence-key collision RAW, not masked as close.already_closed", async () => {
@@ -338,8 +377,8 @@ describe("recordDailyClose — snapshot, reconciliation, chain", () => {
   });
 });
 
-// Bill payments design §8 tests 24, 25 and 27: every till whose drawer moved cash is counted,
-// whatever the day's net, and a till that took only cards is not.
+// Bill payments design §8 tests 24, 25 and 27: every device whose drawer moved cash is counted,
+// whatever the day's net, and a device that took only cards is not.
 describe("recordDailyClose — money taken against a bill before its invoice", () => {
   const day1Noon = "2026-08-04T10:00:00.000Z";
   const day2Noon = "2026-08-05T10:00:00.000Z";
@@ -350,32 +389,36 @@ describe("recordDailyClose — money taken against a bill before its invoice", (
     return (await seedOpenOrder(suite.db, venue, orderNo)).orderId;
   }
 
-  async function expectUncounted(businessDay: string, counts: CashCountInput[], tillId: TillId) {
+  async function expectUncounted(
+    businessDay: string,
+    counts: CashCountInput[],
+    deviceId: DeviceId,
+  ) {
     const error = await captureCloseError(() => record(businessDay, counts));
     expect(error).toMatchObject({
       code: "close.invalid_cash_input",
-      params: { tillId, reason: "uncounted_cash_till" },
+      params: { deviceId, reason: "uncounted_cash_device" },
     });
   }
 
-  it("counts day 1's cash contribution on its own till, unchanged by the invoice issued on day 2", async () => {
-    const tillA = venue.tillId;
-    const tillB = await seedTill(suite.db, venue.locationId);
+  it("counts day 1's cash contribution on its own device, unchanged by the invoice issued on day 2", async () => {
+    const deviceA = venue.deviceId;
+    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
     const bill = await openBill();
     const cash = await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: tillA },
+      { workingOrderId: bill, deviceId: deviceA },
       { method: "cash", applied: "50.00", state: "received", at: day1Noon },
     );
     const card = await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: tillB },
+      { workingOrderId: bill, deviceId: deviceB },
       { method: "card", applied: "70.00", state: "received", at: day2Noon },
     );
     invoiceNo += 1;
     const invoice = await seedSale(
       suite.db,
-      { ...venue, tillId: tillB },
+      { ...venue, deviceId: deviceB },
       {
         invoiceNumber: invoiceNo,
         issuedAt: day2Noon,
@@ -394,27 +437,28 @@ describe("recordDailyClose — money taken against a bill before its invoice", (
       { method: "card", amount: "70.00", settledAt: day2Noon, billPaymentId: card },
     );
 
-    await expectUncounted("2026-08-04", [], tillA);
+    await expectUncounted("2026-08-04", [], deviceA);
     const unknown = await captureCloseError(() =>
       record("2026-08-04", [
-        { tillId: tillA, openingFloat: "0.00", payouts: "0.00", countedCash: "50.00" },
-        { tillId: tillB, openingFloat: "0.00", payouts: "0.00", countedCash: "0.00" },
+        { deviceId: deviceA, openingFloat: "0.00", payouts: "0.00", countedCash: "50.00" },
+        { deviceId: deviceB, openingFloat: "0.00", payouts: "0.00", countedCash: "0.00" },
       ]),
     );
     expect(unknown).toMatchObject({
       code: "close.invalid_cash_input",
-      params: { tillId: tillB, reason: "unknown_till" },
+      params: { deviceId: deviceB, reason: "unknown_device" },
     });
 
     const rec = await record("2026-08-04", [
-      { tillId: tillA, openingFloat: "100.00", payouts: "0.00", countedCash: "150.00" },
+      { deviceId: deviceA, openingFloat: "100.00", payouts: "0.00", countedCash: "150.00" },
     ]);
     expect(rec.snapshot.close.vat.byRate).toEqual([]);
     expect(rec.snapshot.close.counts.sales).toBe(0);
     expect(rec.snapshot.close.cash).toEqual({
-      byTill: [
+      byOrigin: [
         {
-          tillId: tillA,
+          source: "device",
+          deviceId: deviceA,
           byMethod: [{ method: "cash", amount: "50.00", tip: "0.00" }],
           cashTakings: "50.00",
         },
@@ -422,65 +466,65 @@ describe("recordDailyClose — money taken against a bill before its invoice", (
       tenderTotal: "50.00",
       tipTotal: "0.00",
     });
-    expect(rec.snapshot.cashReconciliation.byTill).toMatchObject([
-      { tillId: tillA, cashTakings: "50.00", cashVariance: "0.00" },
+    expect(rec.snapshot.cashReconciliation.byDevice).toMatchObject([
+      { deviceId: deviceA, cashTakings: "50.00", cashVariance: "0.00" },
     ]);
   });
 
-  it("forces a count for a till that only gave cash back, reconciled against its negative takings", async () => {
-    const tillA = venue.tillId;
-    const tillB = await seedTill(suite.db, venue.locationId);
+  it("forces a count for a device that only gave cash back, reconciled against its negative takings", async () => {
+    const deviceA = venue.deviceId;
+    const deviceB = await seedVenueDevice(suite.db, venue.locationId);
     const bill = await openBill();
     const payment = await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: tillA },
+      { workingOrderId: bill, deviceId: deviceA },
       { method: "cash", applied: "50.00", state: "received", at: day1Noon },
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: payment, tillId: tillB },
+      { billPaymentId: payment, deviceId: deviceB },
       { applied: "20.00", state: "completed", at: day2Noon },
     );
 
-    await expectUncounted("2026-08-05", [], tillB);
+    await expectUncounted("2026-08-05", [], deviceB);
     // 100.00 float − 20.00 given back = 80.00 in the drawer.
     const rec = await record("2026-08-05", [
-      { tillId: tillB, openingFloat: "100.00", payouts: "0.00", countedCash: "80.00" },
+      { deviceId: deviceB, openingFloat: "100.00", payouts: "0.00", countedCash: "80.00" },
     ]);
-    expect(rec.snapshot.cashReconciliation.byTill).toMatchObject([
-      { tillId: tillB, cashTakings: "-20.00", cashVariance: "0.00" },
+    expect(rec.snapshot.cashReconciliation.byDevice).toMatchObject([
+      { deviceId: deviceB, cashTakings: "-20.00", cashVariance: "0.00" },
     ]);
   });
 
-  it("forces a count for a till whose cash nets to zero, and not for a till that took only cards", async () => {
-    const tillC = await seedTill(suite.db, venue.locationId);
-    const tillD = await seedTill(suite.db, venue.locationId);
+  it("forces a count for a device whose cash nets to zero, and not for a device that took only cards", async () => {
+    const deviceC = await seedVenueDevice(suite.db, venue.locationId);
+    const deviceD = await seedVenueDevice(suite.db, venue.locationId);
     const bill = await openBill();
     const payment = await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: tillC },
+      { workingOrderId: bill, deviceId: deviceC },
       { method: "cash", applied: "50.00", state: "received", at: day1Noon },
     );
     await seedBillRefund(
       suite.db,
-      { billPaymentId: payment, tillId: tillC },
+      { billPaymentId: payment, deviceId: deviceC },
       { applied: "50.00", state: "completed", at: day1Noon },
     );
     await seedBillPayment(
       suite.db,
-      { workingOrderId: bill, tillId: tillD },
+      { workingOrderId: bill, deviceId: deviceD },
       { method: "card", applied: "30.00", state: "received", at: day1Noon },
     );
 
-    await expectUncounted("2026-08-04", [], tillC);
+    await expectUncounted("2026-08-04", [], deviceC);
     const rec = await record("2026-08-04", [
-      { tillId: tillC, openingFloat: "100.00", payouts: "0.00", countedCash: "100.00" },
+      { deviceId: deviceC, openingFloat: "100.00", payouts: "0.00", countedCash: "100.00" },
     ]);
-    expect(rec.snapshot.cashReconciliation.byTill).toMatchObject([
-      { tillId: tillC, cashTakings: "0.00", cashVariance: "0.00" },
+    expect(rec.snapshot.cashReconciliation.byDevice).toMatchObject([
+      { deviceId: deviceC, cashTakings: "0.00", cashVariance: "0.00" },
     ]);
-    expect(rec.snapshot.close.cash.byTill.map((t) => t.tillId).sort()).toEqual(
-      [tillC, tillD].sort(),
+    expect(rec.snapshot.close.cash.byOrigin.map((t) => t.deviceId).sort()).toEqual(
+      [deviceC, deviceD].sort(),
     );
   });
 });

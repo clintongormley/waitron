@@ -10,6 +10,7 @@ import {
   markAlertHandled,
   screenTargetOf,
   severityLabel,
+  sourceLabel,
 } from "./alert-format.js";
 
 afterEach(() => setLocale("es-ES"));
@@ -17,6 +18,24 @@ afterEach(() => setLocale("es-ES"));
 it("reads the incident id only from an event key", () => {
   expect(incidentIdOf({ key: "incident:abc", kind: "event" })).toBe("abc");
   expect(incidentIdOf({ key: "backup.disabled:local", kind: "ongoing" })).toBeNull();
+});
+
+it("names a device alert by its device and a job alert by its source, in the chosen language", () => {
+  setLocale("en-GB");
+  expect(sourceLabel({ source: "device", deviceId: "d1", deviceName: "Caja 1" })).toBe("Caja 1");
+  expect(sourceLabel({ source: "device", deviceId: "d1", deviceName: null })).toBe("d1");
+  expect(sourceLabel({ source: "device" })).toBe("");
+  expect(sourceLabel({ source: "payment_check", deviceId: null, deviceName: null })).toBe(
+    "Payment check",
+  );
+  setLocale("es-ES");
+  expect(sourceLabel({ source: "payment_check", deviceId: null, deviceName: null })).toBe(
+    "Comprobación de pagos",
+  );
+  // A source this dashboard has no name for is shown as stored, rather than as a missing key.
+  expect(sourceLabel({ source: "new_job", deviceId: null, deviceName: null })).toBe("new_job");
+  // An ongoing alert comes from no device and no job.
+  expect(sourceLabel({})).toBe("");
 });
 
 it("offers an ongoing alert's screen only when the session may open it", () => {

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   computeEntryHash,
@@ -5,6 +6,9 @@ import {
   type EntryHashInput,
   type VerifiableEntry,
 } from "./chain-hash.js";
+
+const DEVICE_A = "77777777-7777-4777-8777-777777777777";
+const DEVICE_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
 function content(over: Partial<EntryHashInput> = {}): EntryHashInput {
   return {
@@ -17,7 +21,8 @@ function content(over: Partial<EntryHashInput> = {}): EntryHashInput {
     recordedAt: "2026-01-05T09:00:00Z",
     eventOffsetMinutes: 0,
     recordedByPersonId: "11111111-1111-4111-8111-111111111111",
-    capturedByTillId: null,
+    capturedBySource: "device",
+    capturedByDeviceId: DEVICE_A,
     correctsEntryId: null,
     correctionReason: null,
     correctionStatus: null,
@@ -76,7 +81,6 @@ describe("computeEntryHash", () => {
     ["recordedAt", { recordedAt: "2026-01-05T09:00:05Z" }],
     ["eventOffsetMinutes", { eventOffsetMinutes: 60 }],
     ["recordedByPersonId", { recordedByPersonId: "55555555-5555-4555-8555-555555555555" }],
-    ["capturedByTillId", { capturedByTillId: "77777777-7777-4777-8777-777777777777" }],
     ["correctsEntryId", { correctsEntryId: "66666666-6666-4666-8666-666666666666" }],
     ["correctionReason", { correctionReason: "forgot to clock out" }],
     ["correctionStatus", { correctionStatus: "approved" }],
@@ -99,7 +103,8 @@ describe("computeEntryHash", () => {
       recordedAt: "2026-09-07T08:00:01.000Z",
       eventOffsetMinutes: 120,
       recordedByPersonId: "p1",
-      capturedByTillId: null,
+      capturedBySource: "dashboard",
+      capturedByDeviceId: null,
       correctsEntryId: null,
       correctionReason: null,
       correctionStatus: null,
@@ -109,6 +114,36 @@ describe("computeEntryHash", () => {
     const h1 = computeEntryHash(base);
     expect(computeEntryHash({ ...base, nodeId: "N2" })).not.toBe(h1);
     expect(computeEntryHash({ ...base, recordedAt: "2026-09-07T09:00:00.000Z" })).not.toBe(h1);
+  });
+
+  it("changes when only the source changes", () => {
+    expect(
+      computeEntryHash(content({ capturedBySource: "dashboard", capturedByDeviceId: null })),
+    ).not.toBe(
+      computeEntryHash(content({ capturedBySource: "payment_check", capturedByDeviceId: null })),
+    );
+  });
+
+  it("changes when only the device changes", () => {
+    expect(computeEntryHash(content({ capturedByDeviceId: DEVICE_A }))).not.toBe(
+      computeEntryHash(content({ capturedByDeviceId: DEVICE_B })),
+    );
+  });
+
+  it("hashes a missing device as an empty field", () => {
+    // Written out by hand, so the case pins the field names, their order and the empty fallbacks
+    // rather than echoing the function.
+    const canonical =
+      "SequenceNo=1&PersonId=11111111-1111-4111-8111-111111111111" +
+      "&LocationId=22222222-2222-4222-8222-222222222222" +
+      "&NodeId=99999999-9999-4999-8999-999999999999&EntryKind=in" +
+      "&EventAtMs=1767603600000&RecordedAtMs=1767603600000&EventOffsetMinutes=0" +
+      "&RecordedByPersonId=11111111-1111-4111-8111-111111111111" +
+      "&CapturedBySource=dashboard&CapturedByDeviceId=" +
+      "&CorrectsEntryId=&CorrectionReason=&CorrectionStatus=&CorrectionActorId=&PrevEntryHash=";
+    expect(
+      computeEntryHash(content({ capturedBySource: "dashboard", capturedByDeviceId: null })),
+    ).toBe(createHash("sha256").update(canonical, "utf8").digest("hex").toUpperCase());
   });
 
   it("commits to the event instant, not its string form — the same instant hashes identically", () => {

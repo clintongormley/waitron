@@ -10,7 +10,6 @@ import {
   printJobs,
   sales,
   tenantReceipts,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import {
@@ -36,7 +35,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
@@ -46,6 +44,9 @@ import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
+import { CAPABILITY_FLAGS, setProfilePrinterLists } from "@waitron/layouts";
+import { mountDeviceApi } from "./device-api.js";
+import { createPairingMode } from "./pairing-mode.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { DRAWER_KICK } from "./receipt-print.js";
 import {
@@ -109,7 +110,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -154,7 +154,6 @@ async function setupVenue(): Promise<{
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -170,6 +169,7 @@ async function setupVenue(): Promise<{
   );
 
   const cfg = tillConfigFromVenue(venue);
+  venueReceiptPrinter = null;
   const { each, operatorId, supervisorId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -246,7 +246,12 @@ async function makePrinter(cfg: TillConfig, hasCashDrawer = true): Promise<strin
   });
 }
 
-/** Pass `printerId: null` to leave the till with no printer. */
+/** The printer {@link configureReceipt} last gave the venue's devices; a device enrolled later
+ *  starts on it too. */
+let venueReceiptPrinter: string | null = null;
+
+/** Puts every device of the venue, and each one enrolled after, on `printerId` for receipts and
+ *  payment slips; `null` leaves them with no printer. */
 async function configureReceipt(
   cfg: TillConfig,
   opts: { mode?: "auto" | "on_request" | "never"; printerId?: string | null },
@@ -259,12 +264,20 @@ async function configureReceipt(
         .where(eq(locations.id, cfg.locationId));
     }
     if (opts.printerId !== undefined) {
+      venueReceiptPrinter = opts.printerId;
       await tx
-        .update(tills)
-        .set({ receiptPrinterId: opts.printerId })
-        .where(eq(tills.id, cfg.tillId));
+        .update(devices)
+        .set({ receiptPrinterId: opts.printerId, paymentSlipPrinterId: opts.printerId })
+        .where(eq(devices.locationId, cfg.locationId));
     }
   });
+}
+
+async function startOnVenuePrinter(deviceId: string): Promise<void> {
+  await suite.db
+    .update(devices)
+    .set({ receiptPrinterId: venueReceiptPrinter, paymentSlipPrinterId: venueReceiptPrinter })
+    .where(eq(devices.id, deviceId));
 }
 
 async function printJobsFor(
@@ -287,7 +300,7 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
     reason: string;
     saleId: string | null;
     personId: string;
-    tillId: string | null;
+    deviceId: string | null;
     printerId: string | null;
     authorizedBy: string | null;
     viaOverride: boolean;
@@ -300,7 +313,7 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
         reason: drawerOpens.reason,
         saleId: drawerOpens.saleId,
         personId: drawerOpens.personId,
-        tillId: drawerOpens.tillId,
+        deviceId: drawerOpens.deviceId,
         printerId: drawerOpens.printerId,
         authorizedBy: drawerOpens.authorizedBy,
         viaOverride: drawerOpens.viaOverride,
@@ -334,9 +347,15 @@ async function saleCount(cfg: TillConfig): Promise<number> {
 }
 
 /** Log in as `operatorId` (PIN "5555") over HTTP. The login is device-gated, so it carries an
- *  enrolled `till` device cookie exactly as a sale does. */
+ *  enrolled `till` device cookie, on a profile allowed every capability but the drawer, so a cash
+ *  sale there queues documents only. */
 async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
-  const deviceCookie = await enrolTillCookie(cfg);
+  const capabilities = CAPABILITY_FLAGS.filter((flag) => flag !== "open-cash-drawer");
+  return loginOnDevice(app, await enrolTillCookie(cfg, capabilities), operatorId);
+}
+
+/** Log in as `operatorId` (PIN "5555") on `deviceCookie`'s device; answers the Set-Cookie. */
+async function loginOnDevice(app: Hono, deviceCookie: string, operatorId: string): Promise<string> {
   const res = await app.request("/api/session", {
     method: "POST",
     headers: { "content-type": "application/json", cookie: deviceCookie },
@@ -348,23 +367,27 @@ async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<st
 
 /** `POST /api/sales` resolves its till from the enrolled device. */
 let tillDeviceCounter = 0;
-async function enrolTillCookie(cfg: TillConfig): Promise<string> {
+async function enrolTillCookie(
+  cfg: TillConfig,
+  capabilities: string[] = ["take-cash"],
+): Promise<string> {
   // A login plus a sale both enrol a till device in the SAME database, so the profile name AND the
   // device name must be unique per call — both carry a unique index.
   tillDeviceCounter += 1;
   const n = tillDeviceCounter;
   const [profile] = await suite.db
     .insert(deviceProfiles)
-    .values({ name: `Counter till profile ${n}`, formFactor: "till" })
+    .values({ name: `Counter till profile ${n}`, formFactor: "till", capabilities })
     .returning({ id: deviceProfiles.id });
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: `Counter till ${n}`,
     profileId: profile!.id,
   });
+  await startOnVenuePrinter(dev.deviceId);
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
-/** A till device that may open a drawer, bound to the configured till `cfg.tillId`. */
+/** A till device that may open a drawer. */
 async function enrolConfiguredTillCookie(cfg: TillConfig): Promise<string> {
   tillDeviceCounter += 1;
   const n = tillDeviceCounter;
@@ -373,14 +396,14 @@ async function enrolConfiguredTillCookie(cfg: TillConfig): Promise<string> {
     .values({
       name: `Configured till profile ${n}`,
       formFactor: "till",
-      capabilities: ["open-cash-drawer"],
+      capabilities: ["open-cash-drawer", "take-cash"],
     })
     .returning({ id: deviceProfiles.id });
   const dev = await enrolDeviceForTest(suite.db, cfg, {
     name: `Configured till ${n}`,
     profileId: profile!.id,
   });
-  await suite.db.update(devices).set({ tillId: cfg.tillId }).where(eq(devices.id, dev.deviceId));
+  await startOnVenuePrinter(dev.deviceId);
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
@@ -394,6 +417,11 @@ async function loginAtTill(app: Hono, cfg: TillConfig, operatorId: string): Prom
   });
   expect(res.status).toBe(200);
   return `${res.headers.get("set-cookie")!.split(";")[0]!}; ${deviceCookie}`;
+}
+
+/** The device a {@link loginAtTill} cookie names. */
+function deviceIn(cookie: string): string {
+  return new RegExp(`${DEVICE_COOKIE}=([^.;]+)\\.`).exec(cookie)![1]!;
 }
 
 /** Ring a cash sale under a KNOWN client-minted `workingOrderId` (the reprint route keys on it). */
@@ -434,7 +462,7 @@ beforeAll(() => {
 });
 
 describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () => {
-  it("re-enqueues the filed receipt to the till's printer WITHOUT re-filing, bypassing the print mode", async () => {
+  it("re-enqueues the filed receipt to the device's printer WITHOUT re-filing, bypassing the print mode", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     // mode 'never' so the SALE itself auto-enqueues nothing — the reprint's job is the only one, and a
@@ -461,7 +489,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     expect(await registroCount(cfg)).toBe(1);
     expect(await saleCount(cfg)).toBe(1);
 
-    // Exactly ONE new outbox job, to the till's printer, carrying the full receipt and NO drawer kick
+    // Exactly ONE new outbox job, to the device's printer, carrying the full receipt and NO drawer kick
     // (a reprint never opens the drawer).
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1);
@@ -513,9 +541,9 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     expect(await printJobsFor(cfg)).toEqual([]);
   });
 
-  it("is a 200 no-op when the till has no receipt printer set (nothing to print to)", async () => {
+  it("is a 200 no-op when the device has no receipt printer set (nothing to print to)", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    // A real filed sale, but no printer on the till.
+    // A real filed sale, but no printer on the device.
     await configureReceipt(cfg, { mode: "never", printerId: null });
 
     const app = new Hono();
@@ -558,7 +586,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
 });
 
 describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", () => {
-  it("enqueues a KICK-ONLY job to the till's printer and records drawer_opens('manual')", async () => {
+  it("enqueues a KICK-ONLY job to the device's printer and records drawer_opens('manual')", async () => {
     const { cfg, operatorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { printerId });
@@ -581,14 +609,14 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
     expect([...payload]).toEqual([...DRAWER_KICK]);
     expect(decodeTicket(payload)).not.toContain("VERI*FACTU"); // no receipt, just the kick
 
-    // The manual open is audited: who, which till, no sale. Under 'open' the operator self-authorizes,
+    // The manual open is audited: who, which device, no sale. Under 'open' the operator self-authorizes,
     // so authorized_by is the operator and via_override is false.
     const opens = await drawerOpensFor(cfg);
     expect(opens).toHaveLength(1);
     expect(opens[0]).toMatchObject({
       reason: "manual",
       personId: operatorId,
-      tillId: cfg.tillId,
+      deviceId: deviceIn(cookie),
       printerId,
       authorizedBy: operatorId,
       viaOverride: false,
@@ -596,9 +624,9 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
     expect(opens[0]!.saleId).toBeNull();
   });
 
-  it("throws drawer.no_printer (400) and writes nothing when the till has no receipt printer", async () => {
+  it("throws drawer.no_printer (400) and writes nothing when the device has no receipt printer", async () => {
     const { cfg, operatorId } = await setupVenue();
-    // No printer on the till. 'open' policy so the (unpermitted) staff operator PASSES authorization
+    // No printer on the device. 'open' policy so the (unpermitted) staff operator PASSES authorization
     // and reaches the printer resolution — this test is about the no-printer refusal, not the gate.
     await setDrawerPolicy(cfg, "open");
     const app = new Hono();
@@ -640,13 +668,16 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
     expect(res.status).toBe(401);
   });
 
-  it("refuses an operator session presented without a device with device.unauthorized, writing nothing", async () => {
+  it("refuses an operator session whose device has been revoked with device.unauthorized, writing nothing", async () => {
     const { cfg, operatorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
     await setDrawerPolicy(cfg, "open");
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const sessionOnly = (await login(app, cfg, operatorId)).split(";")[0]!;
+    const deviceCookie = await enrolConfiguredTillCookie(cfg);
+    const sessionOnly = (await loginOnDevice(app, deviceCookie, operatorId)).split(";")[0]!;
+    const deviceId = /waitron_device=([^.]+)\./.exec(deviceCookie)![1]!;
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
 
     const res = await app.request("/api/drawer/open", {
       method: "POST",
@@ -660,9 +691,9 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
   });
 });
 
-describe("POST /api/drawer/open from a till device opens its own till's drawer while that till is switched to", () => {
-  /** A till device allowed to open a drawer, its cookie, and the register it minted at join. */
-  async function enrolDrawerTill(cfg: TillConfig): Promise<{ cookie: string; tillId: string }> {
+describe("POST /api/drawer/open from a device opens its own receipt printer's drawer", () => {
+  /** A till device allowed to open a drawer, and its cookie. */
+  async function enrolDrawerTill(cfg: TillConfig): Promise<{ cookie: string; deviceId: string }> {
     tillDeviceCounter += 1;
     const n = tillDeviceCounter;
     const [profile] = await suite.db
@@ -677,13 +708,15 @@ describe("POST /api/drawer/open from a till device opens its own till's drawer w
       name: `Drawer till ${n}`,
       profileId: profile!.id,
     });
-    const rows = await suite.db.execute<{ till_id: string }>(
-      sql`select till_id from devices where id = ${dev.deviceId}`,
-    );
-    return {
-      cookie: `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`,
-      tillId: rows.rows[0]!.till_id,
-    };
+    await startOnVenuePrinter(dev.deviceId);
+    return { cookie: `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`, deviceId: dev.deviceId };
+  }
+
+  async function setDevicePrinter(deviceId: string, printerId: string): Promise<void> {
+    await suite.db
+      .update(devices)
+      .set({ receiptPrinterId: printerId })
+      .where(eq(devices.id, deviceId));
   }
 
   async function venueWithOpenPolicy() {
@@ -691,20 +724,22 @@ describe("POST /api/drawer/open from a till device opens its own till's drawer w
     await setDrawerPolicy(venue.cfg, "open");
     const app = new Hono();
     mountTillApi(app, apiDeps(venue.cfg), noopLog);
-    const session = (await login(app, venue.cfg, venue.operatorId)).split(";")[0]!;
-    const press = (deviceCookie: string) =>
-      app.request("/api/drawer/open", {
+    // The operator signed in on the pressing device.
+    const press = async (deviceCookie: string) => {
+      const session = (await loginOnDevice(app, deviceCookie, venue.operatorId)).split(";")[0]!;
+      return app.request("/api/drawer/open", {
         method: "POST",
         headers: { cookie: `${session}; ${deviceCookie}` },
       });
-    return { ...venue, app, session, press };
+    };
+    return { ...venue, app, press };
   }
 
-  it("opens the drawer of the pressing till's own receipt printer, and the row names that till's register", async () => {
+  it("opens the drawer of the pressing device's own receipt printer, and the row names that device", async () => {
     const { cfg, operatorId, press } = await venueWithOpenPolicy();
     const till = await enrolDrawerTill(cfg);
     const printerId = await makePrinter(cfg);
-    await configureReceipt({ ...cfg, tillId: brandTillId(till.tillId) }, { printerId });
+    await setDevicePrinter(till.deviceId, printerId);
 
     const res = await press(till.cookie);
 
@@ -718,7 +753,7 @@ describe("POST /api/drawer/open from a till device opens its own till's drawer w
         reason: "manual",
         saleId: null,
         personId: operatorId,
-        tillId: till.tillId,
+        deviceId: till.deviceId,
         printerId,
         authorizedBy: operatorId,
         viaOverride: false,
@@ -726,85 +761,37 @@ describe("POST /api/drawer/open from a till device opens its own till's drawer w
     ]);
   });
 
-  it("a second till with its own drawer printer opens its own drawer, not the box-configured till's", async () => {
+  it("a device with its own drawer printer opens its own drawer, not the one the venue's other devices use", async () => {
     const { cfg, press } = await venueWithOpenPolicy();
     const boxPrinter = await makePrinter(cfg);
     await configureReceipt(cfg, { printerId: boxPrinter });
     const till = await enrolDrawerTill(cfg);
     const ownPrinter = await makePrinter(cfg);
-    await configureReceipt({ ...cfg, tillId: brandTillId(till.tillId) }, { printerId: ownPrinter });
+    await setDevicePrinter(till.deviceId, ownPrinter);
 
     const res = await press(till.cookie);
 
     expect(res.status).toBe(200);
     expect((await printJobsFor(cfg)).map((job) => job.printerId)).toEqual([ownPrinter]);
-    expect((await drawerOpensFor(cfg)).map((row) => [row.tillId, row.printerId])).toEqual([
-      [till.tillId, ownPrinter],
+    expect((await drawerOpensFor(cfg)).map((row) => [row.deviceId, row.printerId])).toEqual([
+      [till.deviceId, ownPrinter],
     ]);
   });
 
-  async function switchOff(tillId: string): Promise<void> {
-    await suite.db.update(tills).set({ opensDrawer: false }).where(eq(tills.id, tillId));
-  }
-
-  it("two tills sharing one drawer printer, neither switch touched: each opens it, naming itself", async () => {
+  it("two devices sharing one drawer printer: each opens it, naming itself", async () => {
     const { cfg, press } = await venueWithOpenPolicy();
     const first = await enrolDrawerTill(cfg);
     const second = await enrolDrawerTill(cfg);
     const printerId = await makePrinter(cfg);
-    for (const till of [first, second]) {
-      await configureReceipt({ ...cfg, tillId: brandTillId(till.tillId) }, { printerId });
-    }
+    for (const till of [first, second]) await setDevicePrinter(till.deviceId, printerId);
 
     for (const till of [first, second]) expect((await press(till.cookie)).status).toBe(200);
 
     expect((await printJobsFor(cfg)).map((job) => job.printerId)).toEqual([printerId, printerId]);
-    expect((await drawerOpensFor(cfg)).map((row) => [row.tillId, row.printerId])).toEqual([
-      [first.tillId, printerId],
-      [second.tillId, printerId],
+    expect((await drawerOpensFor(cfg)).map((row) => [row.deviceId, row.printerId])).toEqual([
+      [first.deviceId, printerId],
+      [second.deviceId, printerId],
     ]);
-  });
-
-  it("refuses drawer.till_switched_off, writing nothing, at a till switched off, while the other till sharing the printer opens it", async () => {
-    const { cfg, press } = await venueWithOpenPolicy();
-    const on = await enrolDrawerTill(cfg);
-    const off = await enrolDrawerTill(cfg);
-    const printerId = await makePrinter(cfg);
-    for (const till of [on, off]) {
-      await configureReceipt({ ...cfg, tillId: brandTillId(till.tillId) }, { printerId });
-    }
-    await switchOff(off.tillId);
-
-    const refused = await press(off.cookie);
-
-    expect(refused.status).toBe(400);
-    expect(await refused.json()).toEqual({
-      error: { code: "drawer.till_switched_off", params: { tillId: off.tillId } },
-    });
-    expect(await printJobsFor(cfg)).toEqual([]);
-    expect(await drawerOpensFor(cfg)).toEqual([]);
-
-    expect((await press(on.cookie)).status).toBe(200);
-    expect((await drawerOpensFor(cfg)).map((row) => row.tillId)).toEqual([on.tillId]);
-  });
-
-  it("gated: the gate runs before the switch check — an unpermitted operator at a till switched off is 403", async () => {
-    const { cfg, operatorId } = await setupVenue();
-    const app = new Hono();
-    mountTillApi(app, apiDeps(cfg), noopLog);
-    const session = (await login(app, cfg, operatorId)).split(";")[0]!;
-    const off = await enrolDrawerTill(cfg);
-    const printerId = await makePrinter(cfg);
-    await configureReceipt({ ...cfg, tillId: brandTillId(off.tillId) }, { printerId });
-    await switchOff(off.tillId);
-
-    const res = await app.request("/api/drawer/open", {
-      method: "POST",
-      headers: { cookie: `${session}; ${off.cookie}` },
-    });
-
-    expect(res.status).toBe(403);
-    expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
   });
 });
 
@@ -869,7 +856,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
       authorizedBy: supervisorId, // the supervisor who authorized it
       viaOverride: true,
     });
-    // The kick still fires to the till's receipt printer.
+    // The kick still fires to the device's receipt printer.
     const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1);
     expect(jobs[0]!.printerId).toBe(printerId);
@@ -1340,7 +1327,7 @@ describe("payment slip persisted capture facts", () => {
     ).toBe(200);
     expect(await printJobsFor(cfg)).toEqual([]);
   });
-  it("lays the payment slip out for the till printer's paper width and resolution", async () => {
+  it("lays the payment slip out for the device printer's paper width and resolution", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await withTransaction(suite.db, async (tx) => {
@@ -1379,7 +1366,7 @@ describe("payment slip persisted capture facts", () => {
 });
 
 describe("payment slip with nothing to print", () => {
-  it("prints nothing when the till has no receipt printer", async () => {
+  it("prints nothing when the device has no payment slip printer", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await configureReceipt(cfg, { mode: "never", printerId: null });
     const app = new Hono();
@@ -1657,6 +1644,271 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
 
     expect(res.status).toBe(429);
     expect(await watchedOrder()).toEqual([]);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+});
+
+describe("receipts, payment slips and the cash drawer follow the requesting device", () => {
+  /** A device on its own profile listing `receipt` and `slip`; it starts on the first of each. */
+  async function enrolPrintingDevice(
+    cfg: TillConfig,
+    opts: {
+      formFactor?: "till" | "phone-portrait";
+      capabilities: string[];
+      receipt: string[];
+      slip: string[];
+    },
+  ): Promise<{ deviceId: string; cookie: string }> {
+    tillDeviceCounter += 1;
+    const n = tillDeviceCounter;
+    const formFactor = opts.formFactor ?? "till";
+    const [profile] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: `Printing profile ${n}`, formFactor, capabilities: opts.capabilities })
+      .returning({ id: deviceProfiles.id });
+    await withTransaction(suite.db, (tx) =>
+      setProfilePrinterLists(tx, profile!.id, {
+        receiptPrinterIds: opts.receipt,
+        paymentSlipPrinterIds: opts.slip,
+      }),
+    );
+    const dev = await enrolDeviceForTest(suite.db, cfg, {
+      name: `Printing device ${n}`,
+      profileId: profile!.id,
+    });
+    return { deviceId: dev.deviceId, cookie: `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}` };
+  }
+
+  async function jobs(): Promise<{ printerId: string; kind: string; payload: number[] }[]> {
+    const rows = await suite.db
+      .select({ printerId: printJobs.printerId, kind: printJobs.kind, payload: printJobs.payload })
+      .from(printJobs);
+    return rows.map((row) => ({ ...row, payload: [...new Uint8Array(row.payload)] }));
+  }
+
+  async function venueWithPrinters() {
+    const venue = await setupVenue();
+    await configureReceipt(venue.cfg, { mode: "never" });
+    // No drawers, so a cash sale on these printers queues documents only.
+    const [r1, r2, s1] = [
+      await makePrinter(venue.cfg, false),
+      await makePrinter(venue.cfg, false),
+      await makePrinter(venue.cfg, false),
+    ];
+    const app = new Hono();
+    mountTillApi(app, apiDeps(venue.cfg), noopLog);
+    mountDeviceApi(
+      app,
+      {
+        db: suite.db,
+        cfg: venue.cfg,
+        secureCookies: false,
+        pairingMode: createPairingMode(),
+      },
+      noopLog,
+    );
+    const signIn = async (deviceCookie: string) =>
+      (await loginOnDevice(app, deviceCookie, venue.operatorId)).split(";")[0]!;
+    return { ...venue, app, signIn, r1: r1!, r2: r2!, s1: s1! };
+  }
+
+  async function post(app: Hono, cookie: string, path: string): Promise<Response> {
+    return app.request(path, { method: "POST", headers: { cookie } });
+  }
+
+  async function cardSaleWithCapture(app: Hono, cfg: TillConfig, cookie: string, item: string) {
+    const id = await ringSale(app, cfg, cookie, item, "card");
+    await suite.db.execute(
+      sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,
+    );
+    return id;
+  }
+
+  it("prints each device's receipt on its own receipt printer", async () => {
+    const { cfg, each, app, signIn, r1, r2, s1 } = await venueWithPrinters();
+    const a = await enrolPrintingDevice(cfg, {
+      capabilities: [...CAPABILITY_FLAGS],
+      receipt: [r1],
+      slip: [s1],
+    });
+    const b = await enrolPrintingDevice(cfg, {
+      capabilities: [...CAPABILITY_FLAGS],
+      receipt: [r2],
+      slip: [r2],
+    });
+    const onA = await signIn(a.cookie);
+    const onB = await signIn(b.cookie);
+    const id = await ringSale(app, cfg, onA, each.menuItemId);
+
+    expect((await post(app, onA, `/api/sales/${id}/receipt`)).status).toBe(200);
+    expect((await post(app, onB, `/api/sales/${id}/receipt`)).status).toBe(200);
+
+    const printed = await jobs();
+    expect(printed.map((job) => [job.printerId, job.kind])).toEqual([
+      [r1, "document"],
+      [r2, "document"],
+    ]);
+  });
+
+  it("prints a card sale's payment slip on the device's payment slip printer, not its receipt printer", async () => {
+    const { cfg, each, app, signIn, r1, s1 } = await venueWithPrinters();
+    const a = await enrolPrintingDevice(cfg, {
+      capabilities: [...CAPABILITY_FLAGS],
+      receipt: [r1],
+      slip: [s1],
+    });
+    const onA = await signIn(a.cookie);
+    const id = await cardSaleWithCapture(app, cfg, onA, each.menuItemId);
+
+    expect((await post(app, onA, `/api/sales/${id}/payment-slip`)).status).toBe(200);
+
+    expect((await jobs()).map((job) => job.printerId)).toEqual([s1]);
+  });
+
+  it("reprints on the device's receipt printer", async () => {
+    const { cfg, each, app, signIn, r1, s1 } = await venueWithPrinters();
+    const a = await enrolPrintingDevice(cfg, {
+      capabilities: [...CAPABILITY_FLAGS],
+      receipt: [r1],
+      slip: [s1],
+    });
+    const onA = await signIn(a.cookie);
+    const id = await ringSale(app, cfg, onA, each.menuItemId);
+
+    expect((await post(app, onA, `/api/sales/${id}/reprint`)).status).toBe(200);
+
+    expect((await jobs()).map((job) => job.printerId)).toEqual([r1]);
+  });
+
+  it("prints the next payment slip on the printer the device switched to", async () => {
+    const { cfg, each, app, signIn, r1, s1 } = await venueWithPrinters();
+    const a = await enrolPrintingDevice(cfg, {
+      capabilities: [...CAPABILITY_FLAGS],
+      receipt: [r1],
+      slip: [s1, r1],
+    });
+    const onA = await signIn(a.cookie);
+    const id = await cardSaleWithCapture(app, cfg, onA, each.menuItemId);
+
+    const switched = await app.request("/api/device/printers", {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: onA },
+      body: JSON.stringify({ paymentSlipPrinterId: r1 }),
+    });
+    expect(switched.status).toBe(200);
+    expect((await post(app, onA, `/api/sales/${id}/payment-slip`)).status).toBe(200);
+
+    expect((await jobs()).map((job) => job.printerId)).toEqual([r1]);
+  });
+
+  it("opens no drawer on a cash sale when the device's receipt printer has none, whatever another printer has", async () => {
+    const { cfg, each, app, signIn } = await venueWithPrinters();
+    const noDrawer = await makePrinter(cfg, false);
+    await makePrinter(cfg);
+    const device = await enrolPrintingDevice(cfg, {
+      capabilities: ["open-cash-drawer", "take-cash"],
+      receipt: [noDrawer],
+      slip: [],
+    });
+
+    await ringSale(app, cfg, await signIn(device.cookie), each.menuItemId);
+
+    expect(await jobs()).toEqual([]);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
+  it("opens a handheld's drawer on a cash sale when its profile allows the drawer", async () => {
+    const { cfg, each, app, signIn, operatorId } = await venueWithPrinters();
+    const drawer = await makePrinter(cfg);
+    const handheld = await enrolPrintingDevice(cfg, {
+      formFactor: "phone-portrait",
+      capabilities: ["open-cash-drawer", "take-cash"],
+      receipt: [drawer],
+      slip: [],
+    });
+
+    await ringSale(app, cfg, await signIn(handheld.cookie), each.menuItemId);
+
+    expect((await jobs()).map((job) => [job.printerId, job.kind, job.payload])).toEqual([
+      [drawer, "drawer", [...DRAWER_KICK]],
+    ]);
+    expect(
+      (await drawerOpensFor(cfg)).map((row) => [row.reason, row.printerId, row.personId]),
+    ).toEqual([["cash_sale", drawer, operatorId]]);
+  });
+
+  it("opens no drawer on a cash sale at a till whose profile does not allow the drawer", async () => {
+    const { cfg, each, app, signIn } = await venueWithPrinters();
+    const drawer = await makePrinter(cfg);
+    const till = await enrolPrintingDevice(cfg, {
+      capabilities: ["take-cash"],
+      receipt: [drawer],
+      slip: [],
+    });
+
+    await ringSale(app, cfg, await signIn(till.cookie), each.menuItemId);
+
+    expect(await jobs()).toEqual([]);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
+  it("opens the drawer by hand from a handheld whose profile allows it", async () => {
+    const { cfg, app, signIn, operatorId } = await venueWithPrinters();
+    await setDrawerPolicy(cfg, "open");
+    const drawer = await makePrinter(cfg);
+    const handheld = await enrolPrintingDevice(cfg, {
+      formFactor: "phone-portrait",
+      capabilities: ["open-cash-drawer"],
+      receipt: [drawer],
+      slip: [],
+    });
+
+    const res = await post(app, await signIn(handheld.cookie), "/api/drawer/open");
+
+    expect(res.status).toBe(200);
+    expect((await jobs()).map((job) => [job.printerId, job.kind])).toEqual([[drawer, "drawer"]]);
+    expect(
+      (await drawerOpensFor(cfg)).map((row) => [row.reason, row.printerId, row.personId]),
+    ).toEqual([["manual", drawer, operatorId]]);
+  });
+
+  it("refuses the drawer by hand from a profile that does not allow it", async () => {
+    const { cfg, app, signIn } = await venueWithPrinters();
+    await setDrawerPolicy(cfg, "open");
+    const drawer = await makePrinter(cfg);
+    const handheld = await enrolPrintingDevice(cfg, {
+      formFactor: "phone-portrait",
+      capabilities: [],
+      receipt: [drawer],
+      slip: [],
+    });
+
+    const res = await post(app, await signIn(handheld.cookie), "/api/drawer/open");
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      error: { code: "device.forbidden_action", params: { action: "drawer_open" } },
+    });
+    expect(await jobs()).toEqual([]);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
+  it("refuses the drawer by hand from a device with no receipt printer, naming the device", async () => {
+    const { cfg, app, signIn } = await venueWithPrinters();
+    await setDrawerPolicy(cfg, "open");
+    const device = await enrolPrintingDevice(cfg, {
+      capabilities: ["open-cash-drawer"],
+      receipt: [],
+      slip: [],
+    });
+
+    const res = await post(app, await signIn(device.cookie), "/api/drawer/open");
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "drawer.no_printer", params: { deviceId: device.deviceId } },
+    });
+    expect(await jobs()).toEqual([]);
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 });

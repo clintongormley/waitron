@@ -11,7 +11,8 @@ export interface ProvisionNodeParams {
   nodeId: NodeId;
 }
 
-async function nodeLocation(tx: Transaction, nodeId: NodeId): Promise<string> {
+/** The location `nodeId` sells at. */
+export async function nodeLocation(tx: Transaction, nodeId: NodeId): Promise<string> {
   const [row] = await tx
     .select({ locationId: nodes.locationId })
     .from(nodes)

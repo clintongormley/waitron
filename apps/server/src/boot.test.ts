@@ -50,14 +50,13 @@ import {
   writeNodeMembership,
   stampDeployment,
   tenants,
-  tills,
   withTransaction,
   workingOrders,
   billPayments,
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
-import { isAppError } from "@waitron/shared";
+import { isAppError, locationId as brandLocationId } from "@waitron/shared";
 import { deleteCredential, loadKeyRing, putCredential } from "@waitron/credentials";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
@@ -69,7 +68,14 @@ import {
   migrationOptionsFor,
 } from "@waitron/migrations";
 import { enabledModules, orderedMigrationSets, parseModuleConfig } from "@waitron/module";
-import { readContentLanguages, writeContentLanguages } from "@waitron/catalogue";
+import {
+  assignCatalogueToLocation,
+  createCatalogue,
+  createCategory,
+  createProduct,
+  readContentLanguages,
+  writeContentLanguages,
+} from "@waitron/catalogue";
 import { runTunnelClient } from "@waitron/tunnel";
 import {
   DEFAULT_MIGRATIONS_ROOT,
@@ -99,11 +105,14 @@ import { RECOVERY_FILES } from "./state-secrets.js";
 import { loadTillConfig } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { DEV_DEVICE_HEADER } from "./device-session.js";
+import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 import { enqueuePrintJob, esc } from "@waitron/printing";
+import { loadBoxEnv } from "./box-env.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import type { Turns } from "./backup-turns.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
 import { freePort, freePorts } from "./testing/free-ports.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 /**
  * The one test below that provisions a usable `fiscal.aeat` credential needs the AEAT transport to
@@ -246,11 +255,10 @@ beforeEach(() => {
  * write-ahead mode. A suite write beside a running server can make the server's pending-card-payment
  * sweep log `resolve_pending.failed` with `database is locked`; nothing here depends on that sweep.
  */
-// The till's fiscal identity. Boot's trading branch requires a till, so every trading boot carries
+// The venue's fiscal identity. Boot's trading branch requires it, so every trading boot carries
 // these through `KEY_ENV`; `beforeAll` seeds the tenant, location and node they name, which boot reads
 // at startup.
 const TILL_ENV = {
-  WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
@@ -315,11 +323,6 @@ beforeAll(async () => {
     locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
     name: "Boot Till",
     filingModule: "verifactu",
-  });
-  await sharedDb.insert(tills).values({
-    id: TILL_ENV.WAITRON_TILL_TILL_ID,
-    locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
-    name: "Boot Till",
   });
 
   // `boot.ts`'s default migrations root exists only beside the bundle, where
@@ -529,7 +532,6 @@ function provisionVenueBody(taxId: string) {
       timeZone: "Europe/Madrid",
       dayCutover: "05:00",
     },
-    tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
     admin: {
@@ -1085,7 +1087,7 @@ describe("startServer, against a migrated venue directory", () => {
       now: () => new Date(),
     });
     // The one required file `ensureBoxSecrets` does not write; only its presence matters here.
-    await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_TILL_ID=boot-sealed\n");
+    await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=boot-sealed\n");
     const server = await startServer(
       {
         ...KEY_ENV,
@@ -2046,7 +2048,6 @@ describe("startServer, against a migrated venue directory", () => {
           // Parsed, not substring-matched, so a missing key really fails.
           const trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
           for (const key of [
-            "WAITRON_TILL_TILL_ID",
             "WAITRON_TILL_NODE_ID",
             "WAITRON_TILL_SERIES_ID",
             "WAITRON_TILL_LOCATION_ID",
@@ -2713,7 +2714,7 @@ describe("startServer, against a migrated venue directory", () => {
     const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,
       identity: {
-        tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+        locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         nif: "90000000K",
       },
@@ -2768,7 +2769,7 @@ describe("startServer, against a migrated venue directory", () => {
     const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,
       identity: {
-        tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+        locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         nif: "90000000K",
       },
@@ -2813,7 +2814,9 @@ describe("startServer, against a migrated venue directory", () => {
     const orderId = randomUUID();
     await sharedDb.insert(workingOrders).values({
       id: orderId,
-      tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+      source: "dashboard",
+      deviceId: null,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
       orderNumber: 990_001,
       paymentAttemptAt: new Date(Date.now() - 1_000).toISOString(),
     });
@@ -2851,13 +2854,20 @@ describe("startServer, against a migrated venue directory", () => {
     const orderId = randomUUID();
     await sharedDb.insert(workingOrders).values({
       id: orderId,
-      tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+      source: "dashboard",
+      deviceId: null,
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
       orderNumber: 990_002,
+    });
+    const { deviceId } = await seedDevice(sharedDb, {
+      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
     });
     const [payment] = await sharedDb
       .insert(billPayments)
       .values({
         workingOrderId: orderId,
+        source: "device",
+        deviceId,
         submissionId: randomUUID(),
         fingerprint: "stranded",
         kind: "contribution",
@@ -2865,7 +2875,6 @@ describe("startServer, against a migrated venue directory", () => {
         applied: 500,
         state: "pending",
         requestedBy: randomUUID(),
-        tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
       })
       .returning({ id: billPayments.id });
 
@@ -2907,7 +2916,7 @@ describe("startServer, against a migrated venue directory", () => {
     const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,
       identity: {
-        tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
+        locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
         nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
         nif: "90000000K",
       },
@@ -3018,10 +3027,9 @@ describe("MAX_UPLOAD_BYTES", () => {
 describe("SP-C dev override reaches the live device routes only under devMode", () => {
   // `config.devMode` must reach the live device routes: under devMode the `x-waitron-dev-device`
   // header authenticates as the named device, and a non-dev boot must ignore it (fail closed). Two
-  // devices bound to different tills show the header selects a specific device.
+  // devices with different names show the header selects a specific device.
   let deviceId1: string;
   let deviceId2: string;
-  let till2: string;
 
   beforeAll(async () => {
     const cfg: TillConfig = {
@@ -3029,30 +3037,16 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
       orderFlow: "prepay",
       simplifiedInvoiceLimit: null,
     };
-    // The FK on `devices` needs a real `tills` row per bound device.
-    const insertTill = async (name: string): Promise<string> => {
-      const [row] = await sharedDb
-        .insert(tills)
-        .values({ locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID, name })
-        .returning({ id: tills.id });
-      return row!.id;
-    };
-    const till1 = await insertTill("SP-C dev override till 1");
-    till2 = await insertTill("SP-C dev override till 2");
-    const enrolTillDevice = async (boundTillId: string): Promise<string> => {
+    const enrolDevice = async (name: string): Promise<string> => {
       const [profile] = await sharedDb
         .insert(deviceProfiles)
-        .values({ name: `Override device ${boundTillId}`, formFactor: "phone-portrait" })
+        .values({ name: `Override profile ${name}`, formFactor: "phone-portrait" })
         .returning({ id: deviceProfiles.id });
-      const dev = await enrolDeviceForTest(sharedDb, cfg, {
-        name: "SP-C dev override device",
-        profileId: profile!.id,
-        registerId: boundTillId,
-      });
+      const dev = await enrolDeviceForTest(sharedDb, cfg, { name, profileId: profile!.id });
       return dev.deviceId;
     };
-    deviceId1 = await enrolTillDevice(till1);
-    deviceId2 = await enrolTillDevice(till2);
+    deviceId1 = await enrolDevice("SP-C dev override device 1");
+    deviceId2 = await enrolDevice("SP-C dev override device 2");
   }, 60_000);
 
   it("under devMode, the x-waitron-dev-device header authenticates AS that device on /api/device/me (no cookie)", async () => {
@@ -3076,9 +3070,9 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
           headers: { [DEV_DEVICE_HEADER]: deviceId2 },
         });
         expect(res.status).toBe(200);
-        const body = (await res.json()) as { deviceId: string; tillId: string | null };
+        const body = (await res.json()) as { deviceId: string; name: string };
         expect(body.deviceId).toBe(deviceId2);
-        expect(body.tillId).toBe(till2);
+        expect(body.name).toBe("SP-C dev override device 2");
       } finally {
         await server.close();
       }
@@ -3231,11 +3225,6 @@ async function seedTradingVenue(db: Database): Promise<void> {
     locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
     name: "Route Wiring Till",
     filingModule: "verifactu",
-  });
-  await db.insert(tills).values({
-    id: TILL_ENV.WAITRON_TILL_TILL_ID,
-    locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
-    name: "Route Wiring Till",
   });
 }
 
@@ -3691,7 +3680,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         expect(await response.json()).toEqual({ provisioned: true, restarting: true });
         const trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
         expect(trading.WAITRON_TILL_NODE_ID).toBe(committed.nodeId);
-        expect(trading.WAITRON_TILL_TILL_ID).toBe(committed.tillId);
+        expect(trading).not.toHaveProperty("WAITRON_TILL_TILL_ID");
         await poll(() => (kills.length > 0 ? kills.length : undefined));
         expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
       });
@@ -3705,6 +3694,112 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await rm(precommittedStateDir, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it("provisions no till, and the trading start that follows sells from a paired device with no WAITRON_TILL_TILL_ID", async () => {
+    const venue = await freshVenue();
+    const keptStateDir = await mkdtemp(join(tmpdir(), "waitron-boot-no-till-state-"));
+    try {
+      let trading: Record<string, string> = {};
+      await withSetupBoot(venue.directory, {}, async ({ post, kills, stateDir }) => {
+        const response = await post("/setup-api/provision", {
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ mode: "prepare", venue: provisionVenueBody("60000011A") }),
+        });
+        expect(response.status, await response.clone().text()).toBe(200);
+        await poll(() => (kills.length > 0 ? kills.length : undefined));
+        // The setup boot's state folder holds the keys the venue was sealed with; it is removed
+        // when the setup boot closes, so the trading start runs from a copy.
+        await cp(stateDir, keptStateDir, { recursive: true });
+        trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
+      });
+      expect(trading).not.toHaveProperty("WAITRON_TILL_TILL_ID");
+      const deviceRows = await venue.store.venue.execute<{ n: number }>(
+        sql`select cast(count(*) as int) as n from devices`,
+      );
+      expect(deviceRows.rows[0]!.n).toBe(0);
+
+      const cfg: TillConfig = {
+        ...loadTillConfig(trading),
+        orderFlow: "prepay",
+        simplifiedInvoiceLimit: null,
+      };
+      const [profile] = await venue.store.venue
+        .select({ id: deviceProfiles.id })
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.formFactor, "till"));
+      const paired = await enrolDeviceForTest(venue.store.venue, cfg, {
+        name: "Barra",
+        profileId: profile!.id,
+      });
+      const [admin] = await venue.store.venue
+        .select({ id: persons.id })
+        .from(persons)
+        .where(eq(persons.role, "admin"));
+      const offer = await withTransaction(venue.store.venue, async (tx) => {
+        const catalogue = await createCatalogue(tx, { name: "Carta" });
+        const drinks = await createCategory(tx, { name: "Bebidas" });
+        const water = await createProduct(tx, {
+          catalogueId: catalogue.id,
+          categoryId: drinks.id,
+          name: "Agua",
+          pricingUnit: "each",
+          unitPrice: "1.50",
+          vatClass: "general",
+        });
+        await assignCatalogueToLocation(tx, brandLocationId(cfg.locationId), catalogue.id);
+        const offers = await offerProducts(tx, { locationId: cfg.locationId, orderFlow: "prepay" });
+        return offers.offerFor(water.id);
+      });
+
+      const port = await freePort();
+      const server = await startServer(
+        await loadBoxEnv(
+          {
+            WAITRON_STATE_DIR: keptStateDir,
+            WAITRON_VENUE_DIR: venue.directory,
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_HTTP_LANDING_PORT: "0",
+          },
+          keptStateDir,
+        ),
+      );
+      const { via, close } = httpsVia(await readFile(join(keptStateDir, "tls", "ca.crt")));
+      try {
+        const base = `https://127.0.0.1:${port}`;
+        const deviceCookie = `${DEVICE_COOKIE}=${paired.deviceId}.${paired.token}`;
+        const login = await fetch(`${base}/api/session`, {
+          ...via,
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: deviceCookie },
+          body: JSON.stringify({ personId: admin!.id, pin: "1234" }),
+        });
+        expect(login.status, await login.clone().text()).toBe(200);
+        const cookies = `${login.headers.get("set-cookie")!.split(";")[0]!}; ${deviceCookie}`;
+        const sale = await fetch(`${base}/api/sales`, {
+          ...via,
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: cookies },
+          body: JSON.stringify({
+            lines: [{ menuItemId: offer, quantity: "1" }],
+            tender: { method: "cash", amount: "2.00" },
+          }),
+        });
+        expect(sale.status, await sale.clone().text()).toBe(200);
+        const recorded = await venue.store.venue.execute<{ source: string; device_id: string }>(
+          sql`select source, device_id from sales`,
+        );
+        expect(recorded.rows).toEqual([{ source: "device", device_id: paired.deviceId }]);
+      } finally {
+        await close();
+        await server.close();
+      }
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+      await rm(keptStateDir, { recursive: true, force: true });
+    }
+  }, 120_000);
 
   it("validates a restore artifact before staging it, refusing one the recovery key cannot open", async () => {
     const venue = await freshVenue();
@@ -4039,7 +4134,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
               name: "secrets/trading.env",
               bytes: Buffer.from(
                 [
-                  "WAITRON_TILL_TILL_ID=c0000000-0000-4000-8000-000000000003",
                   "WAITRON_TILL_NODE_ID=c0000000-0000-4000-8000-000000000008",
                   "WAITRON_TILL_SERIES_ID=c0000000-0000-4000-8000-000000000004",
                   "WAITRON_TILL_LOCATION_ID=c0000000-0000-4000-8000-000000000002",
@@ -4148,7 +4242,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     const bundle = {
       designated: {
         locationId: "22222222-2222-4222-8222-222222222222",
-        tillId: "33333333-3333-4333-8333-333333333333",
         nodeId: "44444444-4444-4444-8444-444444444444",
         seriesId: "55555555-5555-4555-8555-555555555555",
       },

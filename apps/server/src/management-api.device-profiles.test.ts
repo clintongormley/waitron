@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { devices, withTransaction } from "@waitron/db";
+import { devices, printers, withTransaction } from "@waitron/db";
 import {
   createCatalogue,
   createHomeLayout,
@@ -74,7 +74,6 @@ async function setupTenant(): Promise<void> {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -143,6 +142,8 @@ type ProfileRow = {
   canvasId: string | null;
   capabilities: string[];
   inactivityTimeoutSeconds: number | null;
+  receiptPrinterIds: string[];
+  paymentSlipPrinterIds: string[];
 };
 
 async function seedCanvas(app: Hono, cookie: string, name: string): Promise<string> {
@@ -188,6 +189,8 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       canvasId: null,
       capabilities: ["integrated-card-payment", "open-cash-drawer"],
       inactivityTimeoutSeconds: null,
+      receiptPrinterIds: [],
+      paymentSlipPrinterIds: [],
     });
     const { id } = row;
 
@@ -203,6 +206,8 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       canvasId: null,
       capabilities: ["integrated-card-payment", "open-cash-drawer"],
       inactivityTimeoutSeconds: null,
+      receiptPrinterIds: [],
+      paymentSlipPrinterIds: [],
     });
 
     // LIST includes it.
@@ -234,6 +239,8 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       capabilities: ["act-as-kds"],
       // A `kds` profile always coerces the timeout to null in the store, regardless of the body.
       inactivityTimeoutSeconds: null,
+      receiptPrinterIds: [],
+      paymentSlipPrinterIds: [],
     });
 
     // DELETE → 204, then GET → 404 device_profile.not_found.
@@ -530,12 +537,9 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     const { id } = (await created.json()) as ProfileRow;
 
     const location = await suite.db.execute<{ id: string }>(sql`select id from locations  limit 1`);
-    // A `till` profile's device must carry a till id (`device_binding_rule_insert`).
-    const till = await suite.db.execute<{ id: string }>(sql`select id from tills  limit 1`);
     // Through the table definition, whose `$defaultFn` generators a raw SQL insert never reaches.
     await suite.db.insert(devices).values({
       locationId: location.rows[0]!.id,
-      tillId: till.rows[0]!.id,
       label: uniqueName("Bound device"),
       tokenHash: "scrypt$00$00",
       deviceProfileId: id,
@@ -777,6 +781,187 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         error: { code: "authorization.not_permitted" },
       });
     }
+  });
+
+  async function seedPrinter(name: string): Promise<string> {
+    const location = await suite.db.execute<{ id: string }>(sql`select id from locations limit 1`);
+    const [row] = await suite.db
+      .insert(printers)
+      .values({
+        locationId: location.rows[0]!.id,
+        name,
+        transport: "network_tcp",
+        host: "10.0.0.9",
+      })
+      .returning({ id: printers.id });
+    return row!.id;
+  }
+
+  it("stores a profile's receipt and payment slip printer lists and reads them back", async () => {
+    const app = mountApp();
+    const p1 = await seedPrinter(uniqueName("Bar"));
+    const created = await app.request("/management-api/device-profiles", {
+      method: "POST",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({
+        name: uniqueName("Listed"),
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+        receiptPrinterIds: [p1],
+        paymentSlipPrinterIds: [],
+      }),
+    });
+    expect(created.status).toBe(201);
+    const row = (await created.json()) as ProfileRow;
+    expect(row.receiptPrinterIds).toEqual([p1]);
+    expect(row.paymentSlipPrinterIds).toEqual([]);
+    const got = await app.request(`/management-api/device-profiles/${row.id}`, {
+      headers: { cookie: managerCookie },
+    });
+    expect(await got.json()).toEqual(row);
+    const listed = await app.request("/management-api/device-profiles", {
+      headers: { cookie: managerCookie },
+    });
+    const { deviceProfiles } = (await listed.json()) as { deviceProfiles: ProfileRow[] };
+    expect(deviceProfiles.find((p) => p.id === row.id)).toEqual(row);
+  });
+
+  it("PUT without the lists keeps them; PUT with an empty receipt list empties it and moves the profile's devices to no receipt printer", async () => {
+    const app = mountApp();
+    const p1 = await seedPrinter(uniqueName("Counter"));
+    const p2 = await seedPrinter(uniqueName("Portable"));
+    const name = uniqueName("Kept");
+    const created = await app.request("/management-api/device-profiles", {
+      method: "POST",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({
+        name,
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+        receiptPrinterIds: [p1],
+        paymentSlipPrinterIds: [p2],
+      }),
+    });
+    const { id } = (await created.json()) as ProfileRow;
+    const location = await suite.db.execute<{ id: string }>(sql`select id from locations limit 1`);
+    const [device] = await suite.db
+      .insert(devices)
+      .values({
+        locationId: location.rows[0]!.id,
+        label: uniqueName("Listed device"),
+        tokenHash: "scrypt$00$00",
+        deviceProfileId: id,
+        receiptPrinterId: p1,
+        paymentSlipPrinterId: p2,
+      })
+      .returning({ id: devices.id });
+
+    const kept = await app.request(`/management-api/device-profiles/${id}`, {
+      method: "PUT",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({ name, formFactor: "till", canvasId: null, capabilities: [] }),
+    });
+    expect(kept.status).toBe(200);
+    const keptRow = (await kept.json()) as ProfileRow;
+    expect(keptRow.receiptPrinterIds).toEqual([p1]);
+    expect(keptRow.paymentSlipPrinterIds).toEqual([p2]);
+
+    const emptied = await app.request(`/management-api/device-profiles/${id}`, {
+      method: "PUT",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({
+        name,
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+        receiptPrinterIds: [],
+      }),
+    });
+    expect(emptied.status).toBe(200);
+    const emptiedRow = (await emptied.json()) as ProfileRow;
+    expect(emptiedRow.receiptPrinterIds).toEqual([]);
+    expect(emptiedRow.paymentSlipPrinterIds).toEqual([p2]);
+    const [stored] = await suite.db
+      .select({
+        receiptPrinterId: devices.receiptPrinterId,
+        paymentSlipPrinterId: devices.paymentSlipPrinterId,
+      })
+      .from(devices)
+      .where(eq(devices.id, device!.id));
+    expect(stored).toEqual({ receiptPrinterId: null, paymentSlipPrinterId: p2 });
+  });
+
+  it("refuses a printer list that is not an array of ids, and a printer that does not exist", async () => {
+    const app = mountApp();
+    const base = { formFactor: "till", canvasId: null, capabilities: [] };
+    const DUPLICATE = randomUUID();
+    for (const [field, value] of [
+      ["receiptPrinterIds", "x"],
+      ["paymentSlipPrinterIds", ["not-a-uuid"]],
+      ["receiptPrinterIds", null],
+      ["receiptPrinterIds", [DUPLICATE, DUPLICATE]],
+    ] as const) {
+      const res = await app.request("/management-api/device-profiles", {
+        method: "POST",
+        headers: { ...JSON_HEADERS, cookie: managerCookie },
+        body: JSON.stringify({ ...base, name: uniqueName("Bad list"), [field]: value }),
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+
+    const ghost = randomUUID();
+    const name = uniqueName("Ghost printer");
+    const res = await app.request("/management-api/device-profiles", {
+      method: "POST",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({ ...base, name, paymentSlipPrinterIds: [ghost] }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      error: { code: "printer.not_found", params: { id: ghost } },
+    });
+    const listed = await app.request("/management-api/device-profiles", {
+      headers: { cookie: managerCookie },
+    });
+    const { deviceProfiles } = (await listed.json()) as { deviceProfiles: ProfileRow[] };
+    expect(deviceProfiles.some((p) => p.name === name)).toBe(false);
+
+    const existing = await app.request("/management-api/device-profiles", {
+      method: "POST",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({ ...base, name: uniqueName("Ghost on update") }),
+    });
+    const { id, name: existingName } = (await existing.json()) as ProfileRow;
+    const update = await app.request(`/management-api/device-profiles/${id}`, {
+      method: "PUT",
+      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      body: JSON.stringify({ ...base, name: existingName, receiptPrinterIds: [ghost] }),
+    });
+    expect(update.status).toBe(404);
+    expect(await update.json()).toMatchObject({ error: { code: "printer.not_found" } });
+  });
+
+  it("answers a staff session 403 before looking at the printers it names", async () => {
+    const app = mountApp();
+    const staffCookie = await login(app, STAFF_EMAIL);
+    const res = await app.request("/management-api/device-profiles", {
+      method: "POST",
+      headers: { ...JSON_HEADERS, cookie: staffCookie },
+      body: JSON.stringify({
+        name: uniqueName("Staff"),
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+        receiptPrinterIds: [randomUUID()],
+      }),
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
   });
 
   it("refuses the device-profile routes unauthenticated with 401", async () => {

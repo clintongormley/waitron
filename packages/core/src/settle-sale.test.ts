@@ -21,7 +21,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { AppError, saleId as brandSaleId, stringToCents } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
 import { settleSale } from "./settle-sale.js";
 import type { SettleSaleInput } from "./settle-sale.js";
@@ -36,13 +36,14 @@ const SETTLED_AT = new Date("2026-08-01T12:00:00Z");
  */
 async function seedSale(
   db: Database,
-  seed: { tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
+  seed: { deviceId: DeviceId; nodeId: NodeId; seriesId: SeriesId },
   overrides: { total?: string; invoiceNumber?: number; correctsSaleId?: SaleId } = {},
 ): Promise<SaleId> {
   const [row] = await db
     .insert(sales)
     .values({
-      tillId: seed.tillId,
+      source: "device",
+      deviceId: seed.deviceId,
       nodeId: seed.nodeId,
       seriesId: seed.seriesId,
       invoiceNumber: overrides.invoiceNumber ?? 1,
@@ -194,7 +195,9 @@ describe("settleSale — a bill paid in parts", () => {
     const [order] = await suite.db
       .insert(workingOrders)
       .values({
-        tillId: seed.tillId,
+        source: "device",
+        deviceId: seed.deviceId,
+        locationId: seed.locationId,
         nodeId: seed.nodeId,
         orderNumber: 1,
         status: "open",
@@ -213,7 +216,8 @@ describe("settleSale — a bill paid in parts", () => {
         tendered: 5000,
         state: "received",
         requestedBy: "cccccccc-0000-4000-8000-000000000001",
-        tillId: seed.tillId,
+        source: "device",
+        deviceId: seed.deviceId,
         receivedAt: SETTLED_AT.toISOString(),
       })
       .returning({ id: billPayments.id });
@@ -266,6 +270,20 @@ describe("settleSale — guards", () => {
       .from(saleSettlements)
       .where(eq(saleSettlements.saleId, saleId));
     expect(settled).toHaveLength(0);
+  });
+
+  it("names the device the sale was rung on in a refusal", async () => {
+    const seed = await seedTenant(suite.db);
+    const saleId = await seedSale(suite.db, seed, { total: "65.00" });
+    await expect(
+      settle(suite.db, {
+        saleId,
+        tenders: [{ method: "cash", amount: "60.00", tipAmount: "0.00", settledAt: SETTLED_AT }],
+      }),
+    ).rejects.toMatchObject({
+      code: "sale.tender_shortfall",
+      params: { deviceId: seed.deviceId, saleId },
+    });
   });
 
   it("throws sale.tender_shortfall when sum(amount) != total + sum(tip)", async () => {
@@ -385,7 +403,7 @@ describe("settleSale — error propagation", () => {
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: 0, corrections: "0" }])
+              ? Promise.resolve([{ source: "device", deviceId: "d", total: 0, corrections: "0" }])
               : Promise.resolve([]);
           },
         }),
@@ -418,7 +436,9 @@ describe("settleSale — error propagation", () => {
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: 6500, corrections: "0" }])
+              ? Promise.resolve([
+                  { source: "device", deviceId: "d", total: 6500, corrections: "0" },
+                ])
               : Promise.resolve([]);
           },
         }),
@@ -458,7 +478,9 @@ describe("settleSale — error propagation", () => {
           where: () => {
             selects += 1;
             return selects === 1
-              ? Promise.resolve([{ tillId: "t", total: 6500, corrections: "0" }])
+              ? Promise.resolve([
+                  { source: "device", deviceId: "d", total: 6500, corrections: "0" },
+                ])
               : Promise.resolve([]);
           },
         }),

@@ -22,7 +22,6 @@ import {
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
-  tillId as brandTillId,
   toScale,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
@@ -61,7 +60,8 @@ import {
   enqueueBillPaymentDrawer,
   enqueueSaleReceipt,
 } from "./receipt-print.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
+import { storedDeviceOrigin } from "./request-config.js";
 import {
   fireDishesAtPayment,
   readBillTenderLines,
@@ -616,23 +616,13 @@ export async function readBillBalance(
 }
 
 /**
- * Thrown by {@link issueIfFullyPaid} given no till when the bill is due its invoice: the caller
- * reads the requesting device's till and runs its write again.
- */
-export class SaleTillRequired extends Error {
-  constructor() {
-    super("a bill's invoice is due and no till was given to file it on");
-  }
-}
-
-/**
  * {@link issueIfFullyPaid}, answering also the bill's total when it priced the bill. `total` is the
  * bill's total when the caller has priced its current lines in this transaction already.
  */
 async function issueWhenFullyPaid(
   tx: Transaction,
   deps: TillSaleDeps,
-  cfg: TillConfig | null,
+  cfg: DeviceRequestConfig,
   workingOrderId: string,
   operatorId: string | undefined,
   options: { moneyMoved?: boolean; total?: Decimal },
@@ -654,8 +644,6 @@ async function issueWhenFullyPaid(
   if (compareDecimal(fundsOf(workingOrderId, total, held).received, total) !== 0) {
     return { invoice: null, total };
   }
-  if (cfg === null) throw new SaleTillRequired();
-
   // A card already captured cannot be undone by refusing its invoice, so a line whose product has
   // since gone off sale is filed as it stands, as a whole-order card recovery files it.
   const stored = await priceStoredOrderForIssuance(tx, workingOrderId, {
@@ -682,7 +670,7 @@ async function issueWhenFullyPaid(
   // an immediate sale files, and settlement is what writes each tender's bill payment.
   const language = await readReceiptLanguage(tx, cfg.locationId);
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-    tillId: cfg.tillId,
+    origin: cfg.origin,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
     workingOrderId: brandWorkingOrderId(workingOrderId),
@@ -763,7 +751,7 @@ async function issueWhenFullyPaid(
 export async function issueIfFullyPaid(
   tx: Transaction,
   deps: TillSaleDeps,
-  cfg: TillConfig | null,
+  cfg: DeviceRequestConfig,
   workingOrderId: string,
   operatorId?: string,
   options: { moneyMoved: boolean } = { moneyMoved: false },
@@ -995,7 +983,7 @@ export async function findSubmission(
  */
 async function beginBillPayment(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
   operatorId: string,
@@ -1043,7 +1031,8 @@ async function beginBillPayment(
       tendered: req.method === "cash" ? decimalToCents(decimal(req.tendered!)) : null,
       state,
       requestedBy: operatorId,
-      tillId: cfg.tillId,
+      source: cfg.origin.source,
+      deviceId: cfg.origin.deviceId,
       receivedAt: state === "received" ? now.toISOString() : null,
     })
     .returning();
@@ -1061,7 +1050,7 @@ async function beginBillPayment(
  */
 export async function takeBillPayment(
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
   operatorId: string,
@@ -1081,6 +1070,7 @@ export async function takeBillPayment(
     const { payment } = begun;
     if (req.method === "card") {
       await recordManualCardPayment(tx, {
+        origin: cfg.origin,
         workingOrderId,
         amount: centsToDecimal(payment.applied + payment.tip),
         settledAt: receivedAt,
@@ -1154,7 +1144,8 @@ export async function completeBillPayment(
   const issued = await issueWhenFullyPaid(
     tx,
     deps,
-    { ...cfg, tillId: brandTillId(payment!.tillId) },
+    // The invoice is filed under the device that took the payment, whoever completes it.
+    { ...cfg, origin: storedDeviceOrigin(payment!) },
     payment!.workingOrderId,
     payment!.requestedBy,
     { moneyMoved: true },
@@ -1203,7 +1194,7 @@ const NOT_CHARGED: ReadonlySet<PaymentResultState> = new Set([
  */
 export async function takeReaderBillPayment(
   deps: ReaderBillPaymentDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
   operatorId: string,
@@ -1234,7 +1225,7 @@ export async function takeReaderBillPayment(
     const { payment } = begun;
 
     const result: PaymentResult = await deps.provider.collect({
-      tillId: cfg.tillId,
+      origin: cfg.origin,
       workingOrderId: brandWorkingOrderId(workingOrderId),
       amount: centsToDecimal(payment.applied + payment.tip),
       ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),

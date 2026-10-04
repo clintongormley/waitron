@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WORKFORCE_MIGRATIONS } from "./migrations.js";
 import { appendToChain, readChain, type ChainKey, type TimeEntryAppend } from "./chain.js";
@@ -46,6 +46,7 @@ function inputAt(at: string): TimeEntryAppend {
     eventAt: at,
     eventOffsetMinutes: 0,
     recordedByPersonId: personId,
+    origin: jobOrigin("dashboard"),
   };
 }
 

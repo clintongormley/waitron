@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locations, tableServiceStatuses, tills, withTransaction } from "@waitron/db";
+import { locations, tableServiceStatuses, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -11,7 +11,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createTable } from "./tables.js";
@@ -21,6 +20,7 @@ import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP wiring of `POST /api/tables/:id/status`: session guard, isUuid screen and STATUS mapping.
 // The `setTableStatus` verb is pinned in `set-table-status.test.ts`; the clearing of the status
@@ -50,17 +50,13 @@ const suite = useVenueDb({
       })
       .returning({ id: locations.id });
     const locationId = loc!.id;
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: locationId, name: "Caja 1" })
-      .returning({ id: tills.id });
     const nodeId = await seedNode(db, brandLocationId(locationId));
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    cfg = makeCfg(till!.id, locationId, nodeId);
+    cfg = makeCfg(locationId, nodeId);
     const seeded = await withTransaction(db, async (tx) => {
       const { id: tableId } = await createTable(tx, cfg, { label: "T1" });
       const [active] = await tx
@@ -90,9 +86,8 @@ function collect(
 }
 
 /** `seriesId` is unused by this route (no fiscal write on the status path), so it carries a fresh uuid. */
-function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
+function makeCfg(locationId: string, nodeId: string): TillConfig {
   return {
-    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -136,9 +131,10 @@ function deps(db: Database): TillApiDeps {
 }
 
 async function openSession(db: Database): Promise<string> {
+  const deviceId = await seedSessionDevice(db, cfg);
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
-      tillId: cfg.tillId,
+      deviceId,
       personId: ana.id,
       pin: "5555",
     });

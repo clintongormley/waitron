@@ -11,7 +11,6 @@ import {
   isRefusal,
   locations,
   tenants,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
@@ -40,10 +39,6 @@ async function seedDeviceAndReader(db: Database): Promise<Seeded> {
     .insert(locations)
     .values({ name: "Counter", invoiceLocales: ["es"], operationDescription: "Hostelería" })
     .returning({ id: locations.id });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId: location!.id, name: "Till 1" })
-    .returning({ id: tills.id });
   const [profile] = await db
     .insert(deviceProfiles)
     .values({ name: "Profile", formFactor: "till" })
@@ -53,7 +48,6 @@ async function seedDeviceAndReader(db: Database): Promise<Seeded> {
     .values({
       locationId: location!.id,
       deviceProfileId: profile!.id,
-      tillId: till!.id,
       label: "Counter till",
       tokenHash: "scrypt$00$00",
     })

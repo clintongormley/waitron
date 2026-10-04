@@ -84,11 +84,11 @@ describe("registros_facturacion.node_id", () => {
     const secuencia = nextSecuencia();
     const { rows } = await suite.db.execute<{ node_id: string | null }>(sql`
       insert into registros_facturacion (
-        id, till_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
+        id, source, device_id, node_id, sif_id, sale_id, secuencia, tipo_registro,
         id_emisor_factura, num_serie_factura, fecha_expedicion_factura, nombre_razon_emisor,
         primer_registro, sistema_informatico,
         fecha_hora_huso_gen_registro, offset_minutos, tipo_huella, huella, creado_en
-      ) values (${newId()}, ${TENANT_A.tillId}, ${nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
+      ) values (${newId()}, 'device', (select id from devices where location_id = ${TENANT_A.locationId}), ${nodeId}, ${TENANT_A.sifId}, ${TENANT_A.saleId},
         ${secuencia}, 'alta',
         '89890001K', ${"R/" + String(secuencia)}, '2026-07-20', 'Waitron SL',
         true, '{}',

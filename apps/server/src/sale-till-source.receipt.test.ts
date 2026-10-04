@@ -3,7 +3,7 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, sales, tills, withTransaction } from "@waitron/db";
+import { deviceProfiles, sales, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -25,7 +25,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
@@ -40,8 +39,7 @@ import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed
 
 /**
  * Exercise device authentication through the sale route to a fiscal record.
- * till_id comes from the enrolled device; node_id and series_id remain the configured chain keys.
- * The fiscal write-path suite separately checks that changing only till_id preserves the huella.
+ * device_id comes from the enrolled device; node_id and series_id remain the configured chain keys.
  */
 const LOCALE = "es-ES";
 
@@ -86,7 +84,6 @@ function nextNif(): string {
 
 function tillConfigFromVenue(venue: VenueResult): TillConfig {
   return {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -99,7 +96,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
 }
 
 /** Provision a fresh chained venue, seed a catalogue + an `each` product and a login person with a
- *  known PIN. Returns the cfg (whose `tillId` is the venue's own till X), the venue's `locationId`,
+ *  known PIN. Returns the cfg, the venue's `locationId`,
  *  the sellable product, and the operator to attribute the sale to. */
 async function setupVenue(): Promise<{
   cfg: TillConfig;
@@ -126,7 +123,6 @@ async function setupVenue(): Promise<{
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -198,21 +194,8 @@ async function setupVenue(): Promise<{
   return { cfg, locationId: venue.locationId, product, operatorId };
 }
 
-/** A SECOND `tills` row in the SAME tenant and location as the venue's own till — the register a
- *  re-homed / second device would ring against. Inserted directly (fixture setup, not the code
- *  under test), returning its id. */
-async function insertTill(locationId: string, name: string): Promise<string> {
-  // Through the table definition: `tills.id` and `tills.created_at` are `$defaultFn` generators
-  // (`tills` in `packages/db/src/schema/tenants.ts`), which a raw statement never reaches.
-  const [till] = await suite.db
-    .insert(tills)
-    .values({ locationId, name })
-    .returning({ id: tills.id });
-  return till!.id;
-}
-
-/** Seed a `phone-portrait` (handheld) `device_profiles` row — the sale-capable form factor that
- *  binds an EXISTING register at enrol. A per-call counter keeps the venue-unique name apart. */
+/** Seed a `phone-portrait` (handheld) `device_profiles` row. A per-call counter keeps the
+ *  venue-unique name apart. */
 let profileCounter = 0;
 async function seedHandheldProfile(): Promise<string> {
   profileCounter += 1;
@@ -221,38 +204,32 @@ async function seedHandheldProfile(): Promise<string> {
   // raw SQL.
   const [profile] = await suite.db
     .insert(deviceProfiles)
-    .values({ name: `Handheld ${profileCounter}`, formFactor: "phone-portrait" })
+    .values({
+      name: `Handheld ${profileCounter}`,
+      formFactor: "phone-portrait",
+      capabilities: ["take-cash"],
+    })
     .returning({ id: deviceProfiles.id });
   return profile!.id;
 }
 
 /**
- * Enrol a REAL sale-capable device BOUND TO an existing register (`boundTillId`) through the
- * production join-and-accept path, and return its `waitron_device=<id>.<token>` cookie. A `till`
- * device creates its own register, so binding a SPECIFIC one is the handheld leg (`registerId`);
- * the sale route resolves `till_id` from THIS device (`requireSaleTillId`) either way.
+ * Enrol a REAL sale-capable device named `name` through the production join-and-accept path, and
+ * return its `waitron_device=<id>.<token>` cookie.
  */
-async function enrolTillCookie(cfg: TillConfig, boundTillId: string): Promise<string> {
+async function enrolTillCookie(cfg: TillConfig, name: string): Promise<string> {
   const profileId = await seedHandheldProfile();
-  const dev = await enrolDeviceForTest(suite.db, cfg, {
-    name: "Counter device",
-    profileId,
-    registerId: boundTillId,
-  });
+  const dev = await enrolDeviceForTest(suite.db, cfg, { name, profileId });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
 /**
- * Enrol a REAL device bound to `boundTillId` and return its raw `deviceId` — the id the
- * dev-override header (`x-waitron-dev-device`) carries in place of the cookie.
+ * Enrol a REAL device named `name` and return its raw `deviceId` — the id the dev-override header
+ * (`x-waitron-dev-device`) carries in place of the cookie.
  */
-async function enrolTillDeviceId(cfg: TillConfig, boundTillId: string): Promise<string> {
+async function enrolTillDeviceId(cfg: TillConfig, name: string): Promise<string> {
   const profileId = await seedHandheldProfile();
-  const dev = await enrolDeviceForTest(suite.db, cfg, {
-    name: "Dev-override device",
-    profileId,
-    registerId: boundTillId,
-  });
+  const dev = await enrolDeviceForTest(suite.db, cfg, { name, profileId });
   return dev.deviceId;
 }
 
@@ -267,14 +244,21 @@ function apiDeps(cfg: TillConfig): TillApiDeps {
   };
 }
 
-/** Log in through the HTTP surface and return the session cookie the route sets. */
-async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
-  // The login is DEVICE-GATED: this throwaway device binds to the venue's own register; each sale
-  // below carries its OWN device cookie bound to the till that case exercises.
-  const deviceCookie = await enrolTillCookie(cfg, cfg.tillId);
+/** Log in through the HTTP surface on the device `device` names (a cookie, or the dev-override
+ *  header) and return the session cookie the route sets. */
+async function login(
+  app: Hono,
+  operatorId: string,
+  device: { cookie: string } | { devHeader: string },
+): Promise<string> {
   const res = await app.request("/api/session", {
     method: "POST",
-    headers: { "content-type": "application/json", cookie: deviceCookie },
+    headers: {
+      "content-type": "application/json",
+      ...("cookie" in device
+        ? { cookie: device.cookie }
+        : { [DEV_DEVICE_HEADER]: device.devHeader }),
+    },
     body: JSON.stringify({ personId: operatorId, pin: "5555" }),
   });
   expect(res.status).toBe(200);
@@ -282,7 +266,7 @@ async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<st
 }
 
 /** Ring one cash sale of two units of `menuItemId`, carrying the session + device cookies, and assert
- *  the route returned a ticket (200). The device cookie is what `requireSaleTillId` reads. */
+ *  the route returned a ticket (200). */
 async function ringSale(
   app: Hono,
   sessionCookie: string,
@@ -301,7 +285,7 @@ async function ringSale(
 }
 
 interface Registro {
-  tillId: string;
+  deviceId: string | null;
   nodeId: string;
   secuencia: number;
   huella: string;
@@ -316,7 +300,7 @@ async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx
       .select({
-        tillId: registrosFacturacion.tillId,
+        deviceId: registrosFacturacion.deviceId,
         nodeId: registrosFacturacion.nodeId,
         secuencia: registrosFacturacion.secuencia,
         huella: registrosFacturacion.huella,
@@ -329,17 +313,19 @@ async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
   });
 }
 
-/** Each sale's stored `sales.till_id`, ordered by the per-series `invoice_number` (1, 2, …) so it
+/** Each sale's stored `sales.device_id`, ordered by the per-series `invoice_number` (1, 2, …) so it
  *  lines up with the registros ordered by `secuencia`. */
-async function saleTillIds(cfg: TillConfig): Promise<string[]> {
+async function saleDeviceIds(cfg: TillConfig): Promise<(string | null)[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx
-      .select({ tillId: sales.tillId, invoiceNumber: sales.invoiceNumber })
+      .select({ deviceId: sales.deviceId, invoiceNumber: sales.invoiceNumber })
       .from(sales);
-    return rows.sort((a, b) => a.invoiceNumber - b.invoiceNumber).map((r) => r.tillId);
+    return rows.sort((a, b) => a.invoiceNumber - b.invoiceNumber).map((r) => r.deviceId);
   });
 }
+
+const deviceIdOf = (cookie: string) => cookie.slice(`${DEVICE_COOKIE}=`.length).split(".")[0];
 
 beforeAll(() => {
   clock = systemClock();
@@ -355,39 +341,43 @@ beforeAll(() => {
   });
 });
 
-describe("H2 receipt: sale-time till_id resolves from the device, the chain does not (SP-A.2 §16.4)", () => {
-  it("files each sale under the AUTHENTICATED device's till, changing ONLY till_id — node/series/chain untouched", async () => {
-    // Two `till`-kind devices on ONE node, bound to two DIFFERENT tills X and Y. Ringing a sale via
-    // device-X then device-Y files two records on the SAME chain (secuencia 1, 2) whose ONLY
-    // difference is the `till_id` snapshot: nothing device-derived touches `node_id`, the series or
-    // the hash chain.
-    const { cfg, locationId, product, operatorId } = await setupVenue();
-    const tillX = cfg.tillId;
-    const tillY = await insertTill(locationId, "Caja 2");
-    expect(tillY).not.toBe(tillX);
+describe("H2 receipt: a sale's device resolves from the request, the chain does not (SP-A.2 §16.4)", () => {
+  it("files each sale under the AUTHENTICATED device, changing ONLY device_id — node/series/chain untouched", async () => {
+    // Two `till`-kind devices on ONE node. Ringing a sale via device-X then device-Y files two
+    // records on the SAME chain (secuencia 1, 2) whose ONLY difference is the `device_id` snapshot:
+    // nothing device-derived touches `node_id`, the series or the hash chain.
+    const { cfg, product, operatorId } = await setupVenue();
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const sessionCookie = await login(app, cfg, operatorId);
+    // Sale 1 via device X, signed in on it.
+    const deviceX = await enrolTillCookie(cfg, "Caja 1");
+    await ringSale(
+      app,
+      await login(app, operatorId, { cookie: deviceX }),
+      deviceX,
+      product.menuItemId,
+    );
 
-    // Sale 1 via a device bound to till X (the venue's own till).
-    const deviceX = await enrolTillCookie(cfg, tillX);
-    await ringSale(app, sessionCookie, deviceX, product.menuItemId);
-
-    // Sale 2 via a device bound to till Y — same tenant, same node, same operator, same basket.
-    const deviceY = await enrolTillCookie(cfg, tillY);
-    await ringSale(app, sessionCookie, deviceY, product.menuItemId);
+    // Sale 2 via device Y — same tenant, same node, same operator, same basket.
+    const deviceY = await enrolTillCookie(cfg, "Caja 2");
+    await ringSale(
+      app,
+      await login(app, operatorId, { cookie: deviceY }),
+      deviceY,
+      product.menuItemId,
+    );
 
     const registros = await registrosFor(cfg);
     expect(registros).toHaveLength(2);
     const [first, second] = registros;
 
-    // Each record's till_id is the till its ringing DEVICE was bound to — X then Y.
-    expect(first!.tillId).toBe(tillX);
-    expect(second!.tillId).toBe(tillY);
-    expect(first!.tillId).not.toBe(second!.tillId);
+    // Each record names its ringing DEVICE — X then Y.
+    expect(first!.deviceId).toBe(deviceIdOf(deviceX));
+    expect(second!.deviceId).toBe(deviceIdOf(deviceY));
+    expect(first!.deviceId).not.toBe(second!.deviceId);
     // The same movement on the `sales` row itself.
-    expect(await saleTillIds(cfg)).toEqual([tillX, tillY]);
+    expect(await saleDeviceIds(cfg)).toEqual([deviceIdOf(deviceX), deviceIdOf(deviceY)]);
 
     // BOTH records file under `cfg.nodeId` — the SIF anchor — whichever device rang them; a device
     // that influenced `nodeId` would silently fork the SIF.
@@ -395,7 +385,7 @@ describe("H2 receipt: sale-time till_id resolves from the device, the chain does
     expect(second!.nodeId).toBe(cfg.nodeId);
 
     // ONE continuous chain under the same node: the second's predecessor IS the first's huella,
-    // sequence 1 -> 2, both in series A. Only the till_id moved.
+    // sequence 1 -> 2, both in series A. Only the device_id moved.
     expect(first!.secuencia).toBe(1);
     expect(first!.anteriorHuella).toBeNull();
     expect(second!.secuencia).toBe(2);
@@ -406,24 +396,19 @@ describe("H2 receipt: sale-time till_id resolves from the device, the chain does
   });
 });
 
-describe("SP-C: a sale posted with the dev-override header files under THAT device's till (devMode)", () => {
-  it("resolves sale-time till_id from the x-waitron-dev-device header, not the env/cfg till", async () => {
-    // Under `devMode`, a `POST /api/sales` carrying the `x-waitron-dev-device: <id>` header (no
-    // `waitron_device` cookie) must resolve `sales.till_id` from THAT device's binding. The device
-    // is bound to till Y, not the venue's own till X, so a pass shows the override drove the till;
-    // were it ignored the route would answer `device.unauthorized` (401).
-    const { cfg, locationId, product, operatorId } = await setupVenue();
-    const tillX = cfg.tillId;
-    const tillY = await insertTill(locationId, "Caja override");
-    expect(tillY).not.toBe(tillX);
+describe("SP-C: a sale posted with the dev-override header files under THAT device (devMode)", () => {
+  it("resolves the sale's device from the x-waitron-dev-device header", async () => {
+    // Under `devMode`, a session signed in with the `x-waitron-dev-device: <id>` header (no
+    // `waitron_device` cookie) is that device's, and its `POST /api/sales` files under THAT device;
+    // were the header ignored the sign-in would answer `device.unauthorized` (401).
+    const { cfg, product, operatorId } = await setupVenue();
 
-    // devMode ON: `mountTillApi` forwards it to `requireSaleTillId`, which makes the override
-    // header live.
+    // devMode ON makes the override header live.
     const app = new Hono();
     mountTillApi(app, { ...apiDeps(cfg), devMode: true }, noopLog);
-    const sessionCookie = await login(app, cfg, operatorId);
-
-    const deviceY = await enrolTillDeviceId(cfg, tillY);
+    const deviceY = await enrolTillDeviceId(cfg, "Caja override");
+    // Signed in through the same header, as a dev tab running that device does.
+    const sessionCookie = await login(app, operatorId, { devHeader: deviceY });
     const res = await app.request("/api/sales", {
       method: "POST",
       headers: {
@@ -438,7 +423,35 @@ describe("SP-C: a sale posted with the dev-override header files under THAT devi
     });
     expect(res.status).toBe(200);
 
-    // The one sale filed under till Y (the overridden device's binding), NOT the venue's own till X.
-    expect(await saleTillIds(cfg)).toEqual([tillY]);
+    // The one sale filed under the overridden device.
+    expect(await saleDeviceIds(cfg)).toEqual([deviceY]);
+  });
+});
+
+describe("a sale names the device it was rung on", () => {
+  it("files the sale and its fiscal record under the ringing device's source and device", async () => {
+    // Two devices at one location, so only the device can tell the two sales apart.
+    const { cfg, product, operatorId } = await setupVenue();
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const deviceX = await enrolTillCookie(cfg, "Caja 1");
+    const deviceY = await enrolTillCookie(cfg, "Caja 2");
+    for (const cookie of [deviceX, deviceY]) {
+      await ringSale(app, await login(app, operatorId, { cookie }), cookie, product.menuItemId);
+    }
+    const expected = [deviceX, deviceY].map((cookie) => ({
+      source: "device",
+      device_id: deviceIdOf(cookie),
+    }));
+
+    const saleRows = await suite.db.execute<{ source: string | null; device_id: string | null }>(
+      sql`select source, device_id from sales order by invoice_number`,
+    );
+    expect(saleRows.rows).toEqual(expected);
+    const registroRows = await suite.db.execute<{
+      source: string | null;
+      device_id: string | null;
+    }>(sql`select source, device_id from registros_facturacion order by secuencia`);
+    expect(registroRows.rows).toEqual(expected);
   });
 });

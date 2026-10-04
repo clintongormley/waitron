@@ -482,6 +482,16 @@ describe("till-counter-screen", () => {
     expect(el.shadowRoot!.querySelector("till-allergen-screen")).toBeNull();
   });
 
+  it("offers Printers in its own header, emitting open-printers", async () => {
+    const { el } = await mount();
+    const printers = el.shadowRoot!.querySelector<HTMLElement>("wt-button.printers")!;
+    expect(printers.textContent).toContain(t("printers.open"));
+    let fired = 0;
+    el.addEventListener("open-printers", () => (fired += 1));
+    printers.click();
+    expect(fired).toBe(1);
+  });
+
   it("tapping Allergens swaps the sale body for the allergen screen, passing products/locale/invoiceLocale", async () => {
     const { el } = await mount({ invoiceLocale: "en" });
     el.shadowRoot!.querySelector<HTMLElement>("wt-button.allergens")!.click();

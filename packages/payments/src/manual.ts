@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Decimal } from "@waitron/shared";
+import type { Decimal, DeviceOrigin } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { insertCapturedPayment, recordRefund } from "./store.js";
 import type { PaymentRow } from "./store.js";
@@ -13,6 +13,8 @@ import type { PaymentRow } from "./store.js";
 export const MANUAL_PROVIDER = "manual";
 
 export interface ManualCardPaymentParams {
+  /** The device the card payment was keyed on. */
+  origin: DeviceOrigin;
   workingOrderId: string;
   /** Tax-inclusive. */
   amount: Decimal;
@@ -41,6 +43,7 @@ export async function recordManualCardPayment(
 ): Promise<ManualCardPaymentResult> {
   const paymentRef = `manual-${randomUUID()}`;
   await insertCapturedPayment(tx, {
+    origin: params.origin,
     workingOrderId: params.workingOrderId,
     provider: MANUAL_PROVIDER,
     paymentRef,

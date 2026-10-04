@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { generateSync } from "otplib";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { codeOf, seedManager, seedTill, TOTP_KEY_RING } from "../test/fixtures.js";
+import { codeOf, seedManager, seedSessionDevice, TOTP_KEY_RING } from "../test/fixtures.js";
 import { startManagementSession } from "./management-session.js";
 import { hashSessionToken } from "./session-token.js";
 import { issueAccountAction, completeAccountAction } from "./account-action.js";
@@ -297,10 +297,10 @@ describe("your profile", () => {
 
   it("changes the PIN and ends open till sessions", async () => {
     const f = await fixture();
-    const tillId = await seedTill(suite.db);
+    const deviceId = await seedSessionDevice(suite.db);
     // `id` and `opened_at` are `$defaultFn` generators, not column DEFAULTs, so a raw insert names them.
     const till = await suite.db.execute<{ id: string }>(
-      sql`insert into sessions (id, token_hash, person_id, till_id, opened_at) values (${randomUUID()}, ${hashSessionToken(randomUUID())}, ${f.personId}, ${tillId}, ${new Date().toISOString()}) returning id`,
+      sql`insert into sessions (id, token_hash, person_id, device_id, opened_at) values (${randomUUID()}, ${hashSessionToken(randomUUID())}, ${f.personId}, ${deviceId}, ${new Date().toISOString()}) returning id`,
     );
     await expect(
       withTransaction(suite.db, (tx) =>

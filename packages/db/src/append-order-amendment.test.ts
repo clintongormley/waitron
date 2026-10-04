@@ -15,31 +15,32 @@
  */
 import { asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { deviceOrigin, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import type { Origin } from "@waitron/shared";
 import { appendOrderAmendment, type AppendAmendmentInput } from "./append-order-amendment.js";
 import type { Transaction } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { verifyAmendmentChain, type VerifiableAmendment } from "./order-amendment-hash.js";
-import { TRIGGER_ABORT } from "./sql-state.js";
+import { FOREIGN_KEY_VIOLATION, TRIGGER_ABORT } from "./sql-state.js";
 import { isRefusal } from "./unique-violation.js";
 import { captureError, engineErrorMessage } from "./testing/errors.js";
-import { seedNode } from "./testing/seed.js";
+import { seedDevice, seedNode } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
 import { orderAmendments } from "./schema/order-amendments.js";
 import { workingOrders } from "./schema/orders.js";
-import { locations, tenants, tills } from "./schema/tenants.js";
+import { locations, tenants } from "./schema/tenants.js";
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 const LOCATION_B = "bbbbbbbb-0000-4000-8000-000000000001";
-const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
-const TILL_B1 = "bbbbbbbb-1111-4000-8000-000000000001";
 const OPERATOR_A = "aaaaaaaa-2222-4000-8000-000000000001";
 const OTHER_ACTOR = "cccccccc-2222-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 
-// Captured at seed time — the node ids the amendments attribute to.
+// Captured at seed time — the node and device ids the amendments attribute to.
 let nodeA = "";
+let deviceA1 = "";
+let deviceA2 = "";
 let nodeB = "";
 // A fresh order number per seeded working order, so no two collide on the counter's uniqueness.
 let orderNumberSeq = 0;
@@ -47,7 +48,7 @@ let orderNumberSeq = 0;
 describe("order_amendments append helper", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
-  // Pure setup: the one taxpayer row, then two locations, each with a till and a node.
+  // Pure setup: the one taxpayer row, then two locations, each with a node, and two devices at A.
   // Working orders are seeded per-test (see openOrder).
   beforeAll(async () => {
     const admin = suite.db;
@@ -68,23 +69,23 @@ describe("order_amendments append helper", () => {
         operationDescription: "Hostelería",
       },
     ]);
-    await admin.insert(tills).values([
-      { id: TILL_A1, locationId: LOCATION_A, name: "A1" },
-      { id: TILL_B1, locationId: LOCATION_B, name: "B1" },
-    ]);
     nodeA = await seedNode(admin, brandLocationId(LOCATION_A));
     nodeB = await seedNode(admin, brandLocationId(LOCATION_B));
+    ({ deviceId: deviceA1 } = await seedDevice(admin, { locationId: brandLocationId(LOCATION_A) }));
+    ({ deviceId: deviceA2 } = await seedDevice(admin, { locationId: brandLocationId(LOCATION_A) }));
   });
 
   /** Seeds one fresh open working order and returns its id. A fresh chain per test so sequence
    * numbers are predictable and one test's rows never interleave with another's. Through the
    * Drizzle builder, since `id` is a `$defaultFn` column applied CLIENT-side. */
-  async function openOrder(till: string, node: string): Promise<string> {
+  async function openOrder(node: string): Promise<string> {
     orderNumberSeq += 1;
     const [row] = await suite.db
       .insert(workingOrders)
       .values({
-        tillId: till,
+        source: "dashboard",
+        deviceId: null,
+        locationId: LOCATION_A,
         nodeId: node,
         orderNumber: orderNumberSeq,
         status: "open",
@@ -105,7 +106,7 @@ describe("order_amendments append helper", () => {
       kind: "order_placed",
       actorId: OPERATOR_A,
       reason: null,
-      capturedByTillId: TILL_A1,
+      origin: deviceOrigin(deviceA1),
       capturedByNodeId: nodeA,
       eventAt: new Date("2026-08-06T10:00:00.500Z"),
       eventOffsetMinutes: 120,
@@ -126,7 +127,8 @@ describe("order_amendments append helper", () => {
         kind: orderAmendments.kind,
         actorId: orderAmendments.actorId,
         reason: orderAmendments.reason,
-        capturedByTillId: orderAmendments.capturedByTillId,
+        capturedBySource: orderAmendments.capturedBySource,
+        capturedByDeviceId: orderAmendments.capturedByDeviceId,
         capturedByNodeId: orderAmendments.capturedByNodeId,
         eventAt: orderAmendments.eventAt,
         eventOffsetMinutes: orderAmendments.eventOffsetMinutes,
@@ -140,7 +142,7 @@ describe("order_amendments append helper", () => {
   }
 
   it("appends a hashed per-order sequence, genesis first then linked", async () => {
-    const order = await openOrder(TILL_A1, nodeA);
+    const order = await openOrder(nodeA);
     const first = await inTx((tx) => appendOrderAmendment(tx, genesisA(order)));
     expect(first.sequenceNo).toBe(1);
     const second = await inTx((tx) =>
@@ -149,7 +151,7 @@ describe("order_amendments append helper", () => {
         kind: "order_cancelled",
         actorId: OPERATOR_A,
         reason: "customer left",
-        capturedByTillId: TILL_A1,
+        origin: deviceOrigin(deviceA1),
         capturedByNodeId: nodeA,
         eventAt: new Date("2026-08-06T10:05:00.900Z"),
         eventOffsetMinutes: 120,
@@ -171,10 +173,45 @@ describe("order_amendments append helper", () => {
     // is gone), which is what keeps the stored value, the hashed instant and the read-back identical.
     expect(rows[0]!.eventAt).toBe("2026-08-06T10:00:00.000Z");
     expect(rows[1]!.eventAt).toBe("2026-08-06T10:05:00.000Z");
+    expect(rows[0]).toMatchObject({ capturedBySource: "device", capturedByDeviceId: deviceA1 });
+  });
+
+  it("records a job's amendment with no device, and the chain verifies", async () => {
+    const order = await openOrder(nodeA);
+    await inTx((tx) =>
+      appendOrderAmendment(tx, { ...genesisA(order), origin: jobOrigin("dashboard") }),
+    );
+    const rows = await readAmendments(order);
+    expect(rows[0]).toMatchObject({ capturedBySource: "dashboard", capturedByDeviceId: null });
+    expect(verifyAmendmentChain(rows)).toEqual({ ok: true });
+  });
+
+  it("refuses a device source that names no device", async () => {
+    const order = await openOrder(nodeA);
+    const deviceless = { source: "device", deviceId: null } as unknown as Origin;
+    const error = await captureError(() =>
+      inTx((tx) => appendOrderAmendment(tx, { ...genesisA(order), origin: deviceless })),
+    );
+    expect(engineErrorMessage(error)).toBe(
+      "CHECK constraint failed: order_amendments_captured_by_source_device_ck",
+    );
+  });
+
+  it("refuses a capturing device that does not exist", async () => {
+    const order = await openOrder(nodeA);
+    const error = await captureError(() =>
+      inTx((tx) =>
+        appendOrderAmendment(tx, {
+          ...genesisA(order),
+          origin: deviceOrigin("dddddddd-0000-4000-8000-0000000000aa"),
+        }),
+      ),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
   it("is append-only: the trigger refuses an UPDATE and a DELETE", async () => {
-    const order = await openOrder(TILL_A1, nodeA);
+    const order = await openOrder(nodeA);
     await inTx((tx) => appendOrderAmendment(tx, genesisA(order)));
     const eU = await captureError(() =>
       suite.db
@@ -191,8 +228,8 @@ describe("order_amendments append helper", () => {
     expect(engineErrorMessage(eD)).toBe("order_amendments is append-only");
   });
 
-  it("the stored hash commits the reason, actor and capturing node — a tamper of any breaks verification", async () => {
-    const order = await openOrder(TILL_A1, nodeA);
+  it("the stored hash commits the reason, actor, capturing node and device — a tamper of any breaks verification", async () => {
+    const order = await openOrder(nodeA);
     await inTx((tx) => appendOrderAmendment(tx, genesisA(order)));
     await inTx((tx) =>
       appendOrderAmendment(tx, {
@@ -200,7 +237,7 @@ describe("order_amendments append helper", () => {
         kind: "order_cancelled",
         actorId: OPERATOR_A,
         reason: "customer left",
-        capturedByTillId: TILL_A1,
+        origin: deviceOrigin(deviceA1),
         capturedByNodeId: nodeA,
         eventAt: new Date("2026-08-06T10:05:00Z"),
         eventOffsetMinutes: 120,
@@ -229,13 +266,16 @@ describe("order_amendments append helper", () => {
       reason: "hash_mismatch",
       sequenceNo: 1,
     });
+    expect(verifyAmendmentChain([{ ...rows[0]!, capturedByDeviceId: deviceA2 }, rows[1]!])).toEqual(
+      { ok: false, reason: "hash_mismatch", sequenceNo: 1 },
+    );
   });
 
   it("serialises overlapping appends to one order into a gap-free, verifiable chain", async () => {
     // The subject: N callers append to ONE fresh order at once and all N commit with contiguous
     // positions 1..N and one unbroken hash chain. See this file's header for what arranges that.
     const WRITERS = 10;
-    const order = await openOrder(TILL_A1, nodeA);
+    const order = await openOrder(nodeA);
     // A distinct instant per writer, so a lost race would also show as a wrong hash, not only a
     // duplicate position.
     const results = await Promise.all(
@@ -246,7 +286,7 @@ describe("order_amendments append helper", () => {
             kind: i === 0 ? "order_placed" : "order_cancelled",
             actorId: OPERATOR_A,
             reason: i === 0 ? null : `amend ${String(i)}`,
-            capturedByTillId: TILL_A1,
+            origin: deviceOrigin(deviceA1),
             capturedByNodeId: nodeA,
             eventAt: new Date(Date.parse("2026-08-06T10:00:00Z") + i * 1000),
             eventOffsetMinutes: 120,

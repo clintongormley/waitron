@@ -8,7 +8,7 @@ import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import {
   BILL_PAYMENT_CHANGE_REFUSAL,
@@ -21,7 +21,7 @@ import { drawerOpens } from "./drawer-opens.js";
 import { workingOrders } from "./orders.js";
 import { sales, tenders } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 /**
  * What this file does NOT check: that the product's writers keep the bill invariant (design §4.4) —
@@ -29,14 +29,16 @@ import { locations, tenants, tills } from "./tenants.js";
  */
 
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL = "aaaaaaaa-1111-4000-8000-000000000001";
-const TILL_2 = "aaaaaaaa-1111-4000-8000-000000000002";
+/** An order opened from the dashboard at `LOCATION`, needing no device. */
+const DASHBOARD = { source: "dashboard", deviceId: null, locationId: LOCATION } as const;
 const PERSON = "cccccccc-0000-4000-8000-000000000001";
 const MANAGER = "cccccccc-0000-4000-8000-000000000002";
 const AT = "2026-09-27T12:00:00.000Z";
 const LATER = "2026-09-27T12:05:00.000Z";
 
 let nodeId = "";
+let deviceId = "";
+let device2 = "";
 let seriesId = "";
 let billId = "";
 let otherBillId = "";
@@ -61,11 +63,9 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await db.insert(tills).values([
-      { id: TILL, locationId: LOCATION, name: "Till" },
-      { id: TILL_2, locationId: LOCATION, name: "Till 2" },
-    ]);
     nodeId = await seedNode(db, brandLocationId(LOCATION));
+    ({ deviceId } = await seedDevice(db, { locationId: LOCATION }));
+    ({ deviceId: device2 } = await seedDevice(db, { locationId: LOCATION }));
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "FA", purpose: "standard" })
@@ -74,8 +74,8 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     const orders = await db
       .insert(workingOrders)
       .values([
-        { tillId: TILL, nodeId, orderNumber: 1, status: "open", openedAt: AT },
-        { tillId: TILL, nodeId, orderNumber: 2, status: "open", openedAt: AT },
+        { ...DASHBOARD, nodeId, orderNumber: 1, status: "open", openedAt: AT },
+        { ...DASHBOARD, nodeId, orderNumber: 2, status: "open", openedAt: AT },
       ])
       .returning({ id: workingOrders.id });
     billId = orders[0]!.id;
@@ -97,7 +97,8 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       tip: 0,
       state: "pending",
       requestedBy: PERSON,
-      tillId: TILL,
+      source: "device",
+      deviceId,
       ...overrides,
     };
   }
@@ -120,7 +121,8 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       reason: "wrong item",
       authorizedBy: MANAGER,
       requestedBy: PERSON,
-      tillId: TILL,
+      source: "device" as const,
+      deviceId,
       state: "pending" as const,
       ...overrides,
     };
@@ -170,7 +172,8 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       const [sale] = await tx
         .insert(sales)
         .values({
-          tillId: TILL,
+          source: "device",
+          deviceId,
           nodeId,
           seriesId,
           invoiceNumber,
@@ -210,7 +213,8 @@ describe("bill payments: the three tables, their checks and their triggers", () 
         tendered: null,
         state: "pending",
         requestedBy: PERSON,
-        tillId: TILL,
+        source: "device",
+        deviceId,
         receivedAt: null,
         failedAt: null,
       });
@@ -229,7 +233,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       await insertPayment({ submissionId: "same", workingOrderId: otherBillId });
     });
 
-    it("names an existing bill and an existing till", async () => {
+    it("names an existing bill and an existing device", async () => {
       const missing = "dddddddd-0000-4000-8000-0000000000ff";
       expect(
         isRefusal(
@@ -239,7 +243,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       ).toBe(true);
       expect(
         isRefusal(
-          await captureError(() => insertPayment({ tillId: missing })),
+          await captureError(() => insertPayment({ deviceId: missing })),
           FOREIGN_KEY_VIOLATION,
         ),
       ).toBe(true);
@@ -418,11 +422,12 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       ["the submission id", `submission_id = 'moved'`],
       ["the fingerprint", `fingerprint = 'other'`],
       ["who took it", `requested_by = '${MANAGER}'`],
-      ["the till", `till_id = '${TILL_2}'`],
+      ["the device", `device_id = '__DEVICE2__'`],
+      ["the source", `source = 'demo_seed', device_id = null`],
       ["when it was made", `created_at = '${LATER}'`],
     ])("refuses a change to %s, even alongside a legal transition", async (_name, set) => {
       const id = await insertPayment();
-      const statement = set.replace("__OTHER__", otherBillId);
+      const statement = set.replace("__OTHER__", otherBillId).replace("__DEVICE2__", device2);
       const error = await captureError(() =>
         updatePayment(id, `${statement}, state = 'received', received_at = '${AT}'`),
       );
@@ -597,7 +602,8 @@ describe("bill payments: the three tables, their checks and their triggers", () 
         reason: "wrong item",
         authorizedBy: MANAGER,
         requestedBy: PERSON,
-        tillId: TILL,
+        source: "device",
+        deviceId,
         state: "pending",
         sentAt: null,
         sendCount: 0,
@@ -832,7 +838,8 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       ["the applied amount", `applied_amount = 400`],
       ["the tip given back", `tip_amount = 1`],
       ["the payment", `bill_payment_id = '__OTHER__'`],
-      ["the till", `till_id = '${TILL_2}'`],
+      ["the device", `device_id = '__DEVICE2__'`],
+      ["the source", `source = 'demo_seed', device_id = null`],
       ["the submission id", `submission_id = 'moved'`],
       ["the fingerprint", `fingerprint = 'other'`],
       ["the reason", `reason = 'other'`],
@@ -843,7 +850,10 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       const id = await insertRefund(await receivedPayment());
       const other = await receivedPayment();
       const error = await captureError(() =>
-        updateRefund(id, `${set.replace("__OTHER__", other)}, sent_at = '${AT}', send_count = 1`),
+        updateRefund(
+          id,
+          `${set.replace("__OTHER__", other).replace("__DEVICE2__", device2)}, sent_at = '${AT}', send_count = 1`,
+        ),
       );
       expect(triggerRaised(error, BILL_REFUND_CHANGE_REFUSAL)).toBe(true);
       expect((await refundState(id)).sendCount).toBe(0);
@@ -882,14 +892,12 @@ describe("bill payments: the three tables, their checks and their triggers", () 
   describe("drawer_opens: a cash payment or refund before the invoice names its bill payment", () => {
     function open(values: Partial<typeof drawerOpens.$inferInsert>): Promise<unknown> {
       return inTx((tx) =>
-        tx
-          .insert(drawerOpens)
-          .values({ tillId: TILL, personId: PERSON, reason: "manual", ...values }),
+        tx.insert(drawerOpens).values({ deviceId, personId: PERSON, reason: "manual", ...values }),
       );
     }
 
     it.each(["bill_payment", "bill_refund"] as const)(
-      "accepts a %s open naming the till and the bill payment",
+      "accepts a %s open naming the device and the bill payment",
       async (reason) => {
         const billPaymentId = await receivedPayment({ method: "cash", tendered: 1000 });
         await open({ reason, billPaymentId });
@@ -899,8 +907,8 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     it.each([
       ["a bill payment open with no bill payment", { reason: "bill_payment" }],
       [
-        "a bill refund open with no till",
-        { reason: "bill_refund", tillId: null, withPayment: true },
+        "a bill refund open with no device",
+        { reason: "bill_refund", deviceId: null, withPayment: true },
       ],
       ["a cash sale open naming a bill payment", { reason: "cash_sale", withPayment: true }],
       ["a manual open naming a bill payment", { reason: "manual", withPayment: true }],
@@ -928,12 +936,12 @@ describe("bill payments: the three tables, their checks and their triggers", () 
     });
   });
 
-  describe("drawer_opens: a card slip names its till and exactly one of a sale or a bill payment", () => {
+  describe("drawer_opens: a card slip names its device and exactly one of a sale or a bill payment", () => {
     function open(values: Partial<typeof drawerOpens.$inferInsert>): Promise<unknown> {
       return inTx((tx) =>
         tx
           .insert(drawerOpens)
-          .values({ tillId: TILL, personId: PERSON, reason: "card_slip", ...values }),
+          .values({ deviceId, personId: PERSON, reason: "card_slip", ...values }),
       );
     }
 
@@ -945,11 +953,11 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       return sale!.id;
     }
 
-    it("accepts a card slip naming the till and a sale", async () => {
+    it("accepts a card slip naming the device and a sale", async () => {
       await open({ saleId: await aSale() });
     });
 
-    it("accepts a card slip naming the till and a bill payment", async () => {
+    it("accepts a card slip naming the device and a bill payment", async () => {
       await open({ billPaymentId: await receivedPayment() });
     });
 
@@ -965,9 +973,9 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       expect(checkFailed(error, "drawer_opens_target_ck")).toBe(true);
     });
 
-    it("refuses a card slip with no till", async () => {
+    it("refuses a card slip with no device", async () => {
       const saleId = await aSale();
-      const error = await captureError(() => open({ tillId: null, saleId }));
+      const error = await captureError(() => open({ deviceId: null, saleId }));
       expect(checkFailed(error, "drawer_opens_target_ck")).toBe(true);
     });
   });

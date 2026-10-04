@@ -203,7 +203,6 @@ describe("dashboard receipt reprint", () => {
     const device = await enrolDeviceForTest(venue.db, venue.cfg, {
       name: "No receipt",
       profileId: profile!.id,
-      registerId: venue.cfg.tillId,
     });
     const cookie = `${venue.staffDashboard}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
     expect(await post(cookie, billId, venue.printerId)).toMatchObject({
@@ -223,7 +222,6 @@ describe("dashboard receipt reprint", () => {
     const device = await enrolDeviceForTest(venue.db, venue.cfg, {
       name: "No copy",
       profileId: profile!.id,
-      registerId: venue.cfg.tillId,
     });
     const app = new Hono();
     mountOrdersApi(

@@ -171,6 +171,26 @@ describe("a receipt-language change while orders are open", () => {
     expect(await changeTo("gl-ES")).toEqual(refusedFor(2));
   });
 
+  it("does not count an open order holding a line at another location", async () => {
+    reset();
+    const elsewhere = randomUUID();
+    const orderId = randomUUID();
+    const stamp = new Date().toISOString();
+    venue.db.run(sql`insert into locations (id, name, invoice_locales, operation_description)
+                     values (${elsewhere}, ${`Elsewhere ${elsewhere}`}, '["en-GB"]', 'Other venue')`);
+    venue.db.run(sql`insert into working_orders (id, source, location_id, order_number, opened_at)
+                     values (${orderId}, 'dashboard', ${elsewhere}, 1, ${stamp})`);
+    venue.db.run(sql`insert into working_order_lines
+                       (id, working_order_id, line_no, name, descriptions, quantity, unit_price_gross,
+                        vat_class, line_total)
+                     values (${randomUUID()}, ${orderId}, 1, 'Item', '{"en-GB":"Item"}', 1000, 121,
+                             'general', 121)`);
+    expect(statusOf(orderId)).toBe("open");
+
+    expect(await changeTo("gl-ES")).toMatchObject({ status: 204 });
+    expect(language()).toEqual(["gl-ES"]);
+  });
+
   it("accepts the language already saved while an order is open, writing nothing new", async () => {
     reset();
     await seatedWith(venue, "Paella");

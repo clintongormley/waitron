@@ -1,8 +1,7 @@
 // Sales are seeded after the main transaction commits, because each sale opens its own transaction
 // and reads the committed products.
 
-import { eq } from "drizzle-orm";
-import { kitchenStations, stationPrinters, tills, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import {
@@ -21,11 +20,10 @@ import { seedOptionLists } from "./seed-option-lists.js";
 import { demoSeedEnvironment, seedSales } from "./seed-sales.js";
 import type { SeedSalesProduct } from "./seed-sales.js";
 import type { SeedLocale } from "./menu.js";
-import { DEMO_PRINTER_KEY } from "../../src/demo-printer.js";
+import { DEMO_PRINTER_KEY, routeToDemoPrinter } from "../../src/demo-printer.js";
 
 /** `seriesId` is the standard series, the first of `applyVenue`'s `seriesIds`. */
 export interface SeedDemoVenue {
-  tillId: string;
   nodeId: string;
   seriesId: string;
   locationId: string;
@@ -60,17 +58,7 @@ export async function seedDemoRestaurant(
         hasCashDrawer: true,
       },
     );
-    await tx
-      .update(tills)
-      .set({ receiptPrinterId: demoPrinter.id })
-      .where(eq(tills.locationId, locationId));
-    const stations = await tx
-      .select({ id: kitchenStations.id })
-      .from(kitchenStations)
-      .where(eq(kitchenStations.locationId, locationId));
-    for (const station of stations) {
-      await tx.insert(stationPrinters).values({ stationId: station.id, printerId: demoPrinter.id });
-    }
+    await routeToDemoPrinter(tx, locationId, demoPrinter.id);
     await seedOptionLists(tx, { productsByImage, locale });
     await seedFloor(tx, { locationId, locale, menuIds });
     await seedWatchers(tx, { locationId, locale, stationIds });
@@ -95,7 +83,6 @@ export async function seedDemoRestaurant(
 
   await seedSales(db, {
     venue: {
-      tillId: venue.tillId,
       nodeId: venue.nodeId,
       seriesId: venue.seriesId,
     },

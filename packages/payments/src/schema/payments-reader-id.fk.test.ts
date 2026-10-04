@@ -19,6 +19,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] })
 
 async function seedOrderWithReader(db: Database): Promise<{
   workingOrderId: string;
+  deviceId: string;
   readerId: string;
 }> {
   const seeded = await seedWorkingOrder(db, freshNif());
@@ -32,6 +33,7 @@ async function seedOrderWithReader(db: Database): Promise<{
     .returning({ id: cardReaders.id });
   return {
     workingOrderId: seeded.workingOrderId,
+    deviceId: seeded.deviceId,
     readerId: reader[0]!.id,
   };
 }
@@ -39,11 +41,13 @@ async function seedOrderWithReader(db: Database): Promise<{
 describe("payments.reader_id", () => {
   it("stores a payment's reader and round-trips it", async () => {
     const db = suite.db;
-    const { workingOrderId, readerId } = await seedOrderWithReader(db);
+    const { workingOrderId, deviceId, readerId } = await seedOrderWithReader(db);
 
     await withTransaction(db, async (tx) => {
       await tx.insert(payments).values({
         workingOrderId,
+        source: "device",
+        deviceId,
         readerId,
         provider: "sumup",
         paymentRef: "pay_1",
@@ -61,11 +65,13 @@ describe("payments.reader_id", () => {
 
   it("refuses a reader that does not exist", async () => {
     const db = suite.db;
-    const { workingOrderId } = await seedOrderWithReader(db);
+    const { workingOrderId, deviceId } = await seedOrderWithReader(db);
     const error = await captureError(() =>
       withTransaction(db, async (tx) => {
         await tx.insert(payments).values({
           workingOrderId,
+          source: "device",
+          deviceId,
           readerId: randomUUID(),
           provider: "sumup",
           paymentRef: "pay_missing_reader",

@@ -2,15 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  deviceProfiles,
-  devices,
-  locations,
-  nowIso,
-  tenants,
-  tills,
-  withTransaction,
-} from "@waitron/db";
+import { deviceProfiles, devices, locations, nowIso, tenants, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
@@ -21,7 +13,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import { mountPaymentsApi } from "./payments-api.js";
@@ -112,17 +103,12 @@ async function seedDevice(venue: Venue): Promise<string> {
     .insert(deviceProfiles)
     .values({ name: nextName("Perfil caja"), formFactor: "till" })
     .returning({ id: deviceProfiles.id });
-  const [till] = await suite.db
-    .insert(tills)
-    .values({ locationId: venue.locationId, name: nextName("Caja") })
-    .returning({ id: tills.id });
   const [dev] = await suite.db
     .insert(devices)
     .values({
       locationId: venue.locationId,
-      tillId: till!.id,
       deviceProfileId: profile!.id,
-      label: "Registro",
+      label: nextName("Registro"),
       tokenHash: "x",
     })
     .returning({ id: devices.id });
@@ -182,7 +168,6 @@ function saleDeps() {
 
 function cfgOf(venue: Venue): TillConfig {
   return {
-    tillId: brandTillId(randomUUID()),
     nodeId: brandNodeId(randomUUID()),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(venue.locationId),

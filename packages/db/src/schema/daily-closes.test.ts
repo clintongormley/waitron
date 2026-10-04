@@ -26,9 +26,9 @@ function snapshot(nodeVariance: string): DailyCloseSnapshot {
   return {
     close: { vat: { taxTotal: "12.35" }, cash: {}, counts: { sales: 3, corrections: 0, voids: 0 } },
     cashReconciliation: {
-      byTill: [
+      byDevice: [
         {
-          tillId: "dddddddd-0000-4000-8000-000000000001",
+          deviceId: "dddddddd-0000-4000-8000-000000000001",
           openingFloat: "50.00",
           payouts: "0.00",
           countedCash: "173.45",

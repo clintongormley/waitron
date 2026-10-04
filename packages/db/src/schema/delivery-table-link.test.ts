@@ -12,13 +12,12 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
 import { workingOrders } from "./orders.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 // The proof by deletion switches off EVERY foreign key at once, so it separates "a foreign key
 // refused this" from "a CHECK or a trigger did", not one foreign key from another;
 // `pragma foreign_key_list` is read alongside to pin WHICH key covers the column.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL_A = "aaaaaaaa-1111-4000-8000-000000000001";
 
 /** Runs `body` with every foreign key switched off, restoring enforcement afterwards. The pragma
  * has no effect inside a transaction, so this runs on the handle rather than through
@@ -54,7 +53,6 @@ describe("an order's delivery table", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await db.insert(tills).values({ id: TILL_A, locationId: LOCATION_A, name: "A1" });
     nodeA = await seedNode(db, brandLocationId(LOCATION_A));
   });
 
@@ -75,7 +73,14 @@ describe("an order's delivery table", () => {
     return inTx(async (tx) => {
       const [row] = await tx
         .insert(workingOrders)
-        .values({ tillId: TILL_A, nodeId: nodeA, orderNumber: orderSeq, status: "open" })
+        .values({
+          source: "dashboard",
+          deviceId: null,
+          locationId: LOCATION_A,
+          nodeId: nodeA,
+          orderNumber: orderSeq,
+          status: "open",
+        })
         .returning({ id: workingOrders.id });
       return row!.id;
     });

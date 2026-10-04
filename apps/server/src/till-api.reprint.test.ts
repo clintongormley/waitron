@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, locations, printJobs, tills, withTransaction } from "@waitron/db";
+import { deviceProfiles, locations, printJobs, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -15,7 +15,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger } from "./logger.js";
@@ -30,6 +29,7 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP shape of the reprint route: the `requireSession` guard, the `requireUuidId` screen, and
 // that `reprintOrderTickets` re-enqueues through the SAME outbox path the fire uses. The verb's logic
@@ -58,17 +58,13 @@ const suite = useVenueDb({
     const locationId = brandLocationId(loc!.id);
     // The default station serves an item with no matching exception or claim.
     stationId = await seedKitchenStation(db, { locationId });
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: loc!.id, name: "Caja 1" })
-      .returning({ id: tills.id });
     const nodeId = await seedNode(db, locationId);
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    cfg = makeCfg(till!.id, loc!.id, nodeId);
+    cfg = makeCfg(loc!.id, nodeId);
 
     // One sellable product with no claimed folder, routed to the default station.
     await withTransaction(db, async (tx) => {
@@ -87,9 +83,8 @@ const suite = useVenueDb({
   },
 });
 
-function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
+function makeCfg(locationId: string, nodeId: string): TillConfig {
   return {
-    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -139,9 +134,10 @@ function printCfg(): PrintConfig {
 }
 
 async function openSession(db: Database): Promise<string> {
+  const deviceId = await seedSessionDevice(db, cfg);
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
-      tillId: cfg.tillId,
+      deviceId,
       personId: ana.id,
       pin: "5555",
     });
@@ -151,8 +147,6 @@ async function openSession(db: Database): Promise<string> {
 
 let app: Hono;
 let cookie: string;
-// `POST /:id/place` resolves its `till_id` from the authenticated enrolled device, so `placeAndFire`
-// carries a `till`-device cookie.
 let tillDeviceCookie: string;
 
 /** Enrol a REAL `till` device and return its `waitron_device=…` cookie. */

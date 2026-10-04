@@ -45,16 +45,16 @@ function toEpochSeconds(when: Date | string): number {
  * A deterministic serialization: object keys sorted recursively, so the digest does not depend on
  * key order; array order preserved (the caller normalises the one array whose order is not
  * intrinsic, {@link canonicalSnapshot}). Money is `Decimal` strings, so no float representation
- * reaches the digest. The value must contain no `null` and no `undefined`: `null` reaches
- * `Object.keys`, which throws, and a key holding `undefined` is written here as the text
- * `undefined` while the `json` column the snapshot is stored in drops that key, so a hash
- * recomputed from the stored row would differ.
+ * reaches the digest. A `null`, such as a job source's `deviceId`, is written as `null`, which the
+ * `json` column keeps. The value must contain no `undefined`: a key holding it is written here as
+ * the text `undefined` while the `json` column drops that key, so a hash recomputed from the stored
+ * row would differ.
  */
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(stableStringify).join(",")}]`;
   }
-  if (typeof value === "object") {
+  if (typeof value === "object" && value !== null) {
     const obj = value as Record<string, unknown>;
     const keys = Object.keys(obj).sort();
     return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`;
@@ -63,19 +63,20 @@ function stableStringify(value: unknown): string {
 }
 
 /**
- * Normalises the snapshot so equal closes serialize identically. The reconciliation `byTill` array
- * is sorted by `tillId`, since its order is not intrinsic. The close's own arrays (`vat.byRate`,
- * `cash.byTill`) keep their order: `computeDailyClose` produces them deterministically.
+ * Normalises the snapshot so equal closes serialize identically. The reconciliation `byDevice`
+ * array is sorted by `deviceId`, since its order is not intrinsic. The close's own arrays
+ * (`vat.byRate`, `cash.byOrigin`) keep their order: `computeDailyClose` produces them
+ * deterministically.
  */
 function canonicalSnapshot(snapshot: DailyCloseSnapshot): unknown {
   // Code-unit compare, never `localeCompare`, which is locale-sensitive: the write and the
   // read-back must sort identically across environments.
-  const byTill = [...snapshot.cashReconciliation.byTill].sort(
-    (a, b) => Number(a.tillId > b.tillId) - Number(a.tillId < b.tillId),
+  const byDevice = [...snapshot.cashReconciliation.byDevice].sort(
+    (a, b) => Number(a.deviceId > b.deviceId) - Number(a.deviceId < b.deviceId),
   );
   return {
     close: snapshot.close,
-    cashReconciliation: { byTill, nodeVariance: snapshot.cashReconciliation.nodeVariance },
+    cashReconciliation: { byDevice, nodeVariance: snapshot.cashReconciliation.nodeVariance },
   };
 }
 

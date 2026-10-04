@@ -12,11 +12,10 @@ import { withTransaction } from "../tenancy.js";
 import { catalogues, products } from "./catalogue.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { workingOrderLines, workingOrders } from "./orders.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 import { ticketItems } from "./ticket-items.js";
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
 const AT = "2026-07-20T19:20:30+00:00";
 // The locale trigger checks description KEYS against the venue's invoice_locales (['es'] here).
 const DESCRIPTIONS_A = { es: "Café solo" };
@@ -42,7 +41,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
         operationDescription: "Hostelería",
       },
     ]);
-    await db.insert(tills).values([{ id: TILL_A1, locationId: LOCATION_A, name: "A1" }]);
     nodeA = await seedNode(db, brandLocationId(LOCATION_A));
     const [catA] = await db
       .insert(catalogues)
@@ -69,7 +67,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   // The Drizzle builder rather than raw SQL: `id` and `queued_at` are `$defaultFn` columns
   // applied CLIENT-side, so a raw insert is refused NOT NULL.
   async function seedOrderLine(
-    till: string,
     node: string,
     product: string,
   ): Promise<{ orderId: string; lineId: string }> {
@@ -77,7 +74,9 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     const [order] = await suite.db
       .insert(workingOrders)
       .values({
-        tillId: till,
+        source: "dashboard",
+        deviceId: null,
+        locationId: LOCATION_A,
         nodeId: node,
         orderNumber: orderNumberSeq,
         status: "open",
@@ -129,7 +128,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   }
 
   it("exposes every column through the Drizzle export across the queued → preparing → ready lifecycle", async () => {
-    const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
+    const { orderId, lineId } = await seedOrderLine(nodeA, productA);
     const id = await seedTicket(nodeA, orderId, lineId, stationA);
     await inTx((tx) =>
       tx
@@ -156,7 +155,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   });
 
   it("stamps away_at (the pass dispatch) and reads it back through the Drizzle export", async () => {
-    const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
+    const { orderId, lineId } = await seedOrderLine(nodeA, productA);
     const id = await seedTicket(nodeA, orderId, lineId, stationA);
     await inTx((tx) =>
       tx
@@ -169,7 +168,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   });
 
   it("defaults an item to not made here", async () => {
-    const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
+    const { orderId, lineId } = await seedOrderLine(nodeA, productA);
     const id = await seedTicket(nodeA, orderId, lineId, stationA);
     const [row] = await suite.db
       .select({ madeHere: ticketItems.madeHere })
@@ -192,7 +191,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       )
       .map((c) => ({ name: c.name, type: c.type, notnull: c.notnull }));
     expect(meta).toEqual([{ name: "note", type: "TEXT", notnull: 0 }]);
-    const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
+    const { orderId, lineId } = await seedOrderLine(nodeA, productA);
     const id = await seedTicket(nodeA, orderId, lineId, stationA);
     await inTx((tx) =>
       tx.update(ticketItems).set({ note: "sin sal" }).where(eq(ticketItems.id, id)),
@@ -211,9 +210,9 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       )
       .map((c) => ({ ...c }));
     expect(meta).toEqual([{ name: "quantity", type: "INTEGER", notnull: 0, dflt_value: null }]);
-    const unstated = await seedOrderLine(TILL_A1, nodeA, productA);
+    const unstated = await seedOrderLine(nodeA, productA);
     const unstatedId = await seedTicket(nodeA, unstated.orderId, unstated.lineId, stationA);
-    const stated = await seedOrderLine(TILL_A1, nodeA, productA);
+    const stated = await seedOrderLine(nodeA, productA);
     const [statedRow] = await inTx((tx) =>
       tx
         .insert(ticketItems)
@@ -240,7 +239,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
   });
 
   it("rejects a second ticket item for the same line (the per-line UNIQUE — the concurrent-fire guard)", async () => {
-    const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
+    const { orderId, lineId } = await seedOrderLine(nodeA, productA);
     await seedTicket(nodeA, orderId, lineId, stationA);
     const e = await captureError(() => seedTicket(nodeA, orderId, lineId, stationA));
     expect(isRefusal(e, UNIQUE_VIOLATION)).toBe(true);
@@ -248,7 +247,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
 
   it("cascades a ticket item away when its working_order_line is deleted (ON DELETE CASCADE)", async () => {
     // The parent order is open, so working_order_lines_require_open_parent permits the delete.
-    const { orderId, lineId } = await seedOrderLine(TILL_A1, nodeA, productA);
+    const { orderId, lineId } = await seedOrderLine(nodeA, productA);
     const id = await seedTicket(nodeA, orderId, lineId, stationA);
     expect(countTicket(id)).toBe(1);
     await suite.db.delete(workingOrderLines).where(eq(workingOrderLines.id, lineId));

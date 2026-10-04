@@ -526,6 +526,125 @@
       "when": 1791009698077,
       "tag": "0074_extra_price_quantity_freeze",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "6",
+      "when": 1791079247073,
+      "tag": "0075_profile_printer_lists",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "6",
+      "when": 1791079250759,
+      "tag": "0076_money_records_origin",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "6",
+      "when": 1791079280116,
+      "tag": "0077_incident_origin_add",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "6",
+      "when": 1791079285343,
+      "tag": "0078_incident_origin_drop_till",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "6",
+      "when": 1791079286076,
+      "tag": "0079_incident_origin_dedup",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "6",
+      "when": 1791079343018,
+      "tag": "0080_money_records_drop_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "6",
+      "when": 1791079343821,
+      "tag": "0081_money_records_lose_till",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "6",
+      "when": 1791079344551,
+      "tag": "0082_money_records_recreate_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "6",
+      "when": 1791079360724,
+      "tag": "0083_working_orders_drop_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "6",
+      "when": 1791079361546,
+      "tag": "0084_working_orders_add_origin",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "6",
+      "when": 1791079366074,
+      "tag": "0085_working_orders_drop_till",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "6",
+      "when": 1791079366800,
+      "tag": "0086_working_orders_recreate_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "6",
+      "when": 1791079388106,
+      "tag": "0087_history_origin_add",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "6",
+      "when": 1791079395074,
+      "tag": "0088_history_origin_drop_till",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "6",
+      "when": 1791079395804,
+      "tag": "0089_devices_drop_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "6",
+      "when": 1791079396593,
+      "tag": "0090_devices_lose_till",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "6",
+      "when": 1791079397324,
+      "tag": "0091_devices_recreate_triggers",
+      "breakpoints": true
     }
   ]
 }

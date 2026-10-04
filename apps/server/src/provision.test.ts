@@ -42,7 +42,6 @@ function venueRequest(taxId: string): VenueRequest {
       timeZone: "Europe/Madrid",
       dayCutover: "05:00",
     },
-    tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
     admin: {
@@ -103,7 +102,7 @@ function ownerDb(): Database {
 }
 
 describe("provisionVenue", () => {
-  it("stamps the environment and mints one venue with four ids and exactly one SIF + series set", async () => {
+  it("stamps the environment and mints one venue with three ids, exactly one SIF + series set, and no till", async () => {
     const db = ownerDb();
     expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 0, nodes: 0, registros: 0 });
 
@@ -112,7 +111,12 @@ describe("provisionVenue", () => {
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     );
 
-    for (const id of [result.locationId, result.tillId, result.nodeId, result.seriesIds[0]]) {
+    expect(result).not.toHaveProperty("tillId");
+    const devices = await db.execute<{ n: number }>(
+      sql`select cast(count(*) as int) as n from devices`,
+    );
+    expect(devices.rows[0]!.n).toBe(0);
+    for (const id of [result.locationId, result.nodeId, result.seriesIds[0]]) {
       expect(typeof id).toBe("string");
       expect((id as string).length).toBeGreaterThan(0);
     }
@@ -205,7 +209,7 @@ describe("provisionVenue", () => {
     expect(await fiscalCounts(db)).toEqual(afterFirst);
   });
 
-  it("recovers the exact committed venue after a process dies before file publication", async () => {
+  it("recovers the exact committed venue by location, node and series after a process dies before file publication", async () => {
     const db = ownerDb();
     const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
     const minted = await provisionVenue(
@@ -215,11 +219,11 @@ describe("provisionVenue", () => {
 
     const recovered = await recoverProvisionedVenue(db, request);
 
-    expect(recovered).toMatchObject({
+    expect(recovered).toEqual({
       locationId: minted.locationId,
-      tillId: minted.tillId,
       nodeId: minted.nodeId,
       seriesIds: minted.seriesIds,
+      seeded: [],
     });
     expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
   });

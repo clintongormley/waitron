@@ -34,13 +34,12 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { ExtraSelection } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { systemClock } from "./till-backend.js";
-import type { OrderFlow, TillConfig } from "./till-config.js";
+import type { OrderFlow } from "./till-config.js";
 import {
   collectOrder,
   payWorkingOrder,
@@ -64,6 +63,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // A line takes the VAT class the zone's published menu version froze, when its price locks, and
 // issuance files that stored class's rate on every path. Every product is published at `reduced`
@@ -125,7 +125,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -139,8 +138,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
-    tillId: brandTillId(venue.tillId),
+  const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -149,7 +147,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow,
-  };
+  });
   suite.db.run(sql`update locations set order_flow = ${orderFlow} where id = ${cfg.locationId}`);
 
   const products = await withTransaction(suite.db, async (tx) => {
@@ -310,6 +308,7 @@ function stubProvider(onCollect: () => Promise<void>): PaymentProvider {
       const settledAt = new Date();
       await withTransaction(suite.db, (tx) =>
         insertCapturedPayment(tx, {
+          origin: params.origin,
           workingOrderId: params.workingOrderId,
           provider: "stripe",
           paymentRef,
@@ -487,6 +486,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
         zoneId: v.counter.zoneId,
       });
       await insertCapturedPayment(tx, {
+        origin: v.cfg.origin,
         workingOrderId: id,
         provider: "stripe",
         paymentRef: `pi-${randomUUID()}`,
@@ -518,7 +518,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     const v = await setupVenue("invoice_first");
     const before = await park(v, one(v, v.products.cana));
     const after = await park(v, one(v, v.products.cana));
-    await placeOrder(deps(), v.cfg, before, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, before, OPERATOR);
     const placed = await filed(before);
     const storedAtPlacing = await stored(before);
     await setVat(v.products.cana, "general");
@@ -535,7 +535,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
     } finally {
       spy.restore();
     }
-    await placeOrder(deps(), v.cfg, after, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, after, OPERATOR);
 
     expect(placed).toMatchObject({ total: 250, vatBreakdown: CANA_AT_10 });
     expect(await filed(before)).toEqual(placed);
@@ -550,7 +550,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
   it("ticket-then-pay: an order placed at 10% and changed before collect files 10% at collect, and a replay rebuilds the same receipt", async () => {
     const v = await setupVenue("ticket_then_pay");
     const id = await park(v, one(v, v.products.cana));
-    await placeOrder(deps(), v.cfg, id, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, id, OPERATOR);
     await setVat(v.products.cana, "general");
 
     const ticket = await collectOrder(deps(), v.cfg, {
@@ -574,7 +574,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
   it("ticket-then-pay by card: a placed order collected on the reader after the change files 10%", async () => {
     const v = await setupVenue("ticket_then_pay");
     const id = await park(v, one(v, v.products.cana));
-    await placeOrder(deps(), v.cfg, id, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, id, OPERATOR);
     await setVat(v.products.cana, "general");
 
     const out = await payWorkingOrderIntegrated(

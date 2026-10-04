@@ -2433,6 +2433,23 @@ describe("TillApi", () => {
     });
   });
 
+  it("setDevicePrinters PUTs only the field given to /api/device/printers and returns the stored pair", async () => {
+    const stored = { receiptPrinterId: "P-off", paymentSlipPrinterId: "S1" };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(stored));
+
+    const r = await new TillApi("", fetchStub).setDevicePrinters({ paymentSlipPrinterId: "S1" });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/printers",
+      expect.objectContaining({
+        method: "PUT",
+        credentials: "include",
+        body: JSON.stringify({ paymentSlipPrinterId: "S1" }),
+      }),
+    );
+    expect(r).toEqual(stored);
+  });
+
   it("deviceAdvance POSTs { to } to the device ticket-item advance route (empty 204 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
 

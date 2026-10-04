@@ -10,11 +10,10 @@ import { resolveFiscalModules } from "./fiscal-modules.js";
 import "@waitron/fiscal"; // side-effect: registers fiscal.regime_not_implemented on ErrorParams
 import "./errors.js"; // side-effect: registers provisioning.invalid_locales on ErrorParams
 
-/** The four ids that name a mirror's venue for `trading.env` — the shape a mirror bundle
+/** The three ids that name a mirror's venue for `trading.env` — the shape a mirror bundle
  * designates. */
 export interface AdoptResult {
   locationId: string;
-  tillId: string;
   nodeId: string;
   seriesId: string;
 }
@@ -36,7 +35,6 @@ export interface VenueRequest {
     timeZone: string;
     dayCutover: string; // "HH:MM" or "HH:MM:SS"
   };
-  tillName: string;
   seriesCode: string;
   rectificativeSeriesCode: string;
   /** The initial admin. Both secrets arrive already hashed (`hashPin` / `hashPassword`), so no
@@ -92,7 +90,6 @@ export type VenueAction =
         inactivityTimeoutSeconds: number | null;
       }[];
     }
-  | { kind: "create-till"; name: string }
   | { kind: "create-node"; name: string; filingModule: string; taxModule: string }
   | { kind: "create-series"; code: string; purpose: "standard" | "rectificative" }
   /** Runs `modules[module].provisioning.seed` inside the venue transaction, after every core row.
@@ -182,7 +179,6 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
       timeZone: request.location.timeZone,
       dayCutover,
     },
-    { kind: "create-till", name: request.tillName },
     {
       kind: "create-node",
       name: request.location.name,
@@ -217,8 +213,6 @@ export function describeVenueAction(action: VenueAction): string {
       return `seed device profiles ${action.profiles.map((p) => p.name).join(", ")}`;
     case "create-location":
       return `create location ${action.name} in ${action.fiscalTerritory} (${action.invoiceLocales.join(", ")})`;
-    case "create-till":
-      return `create till ${action.name}`;
     case "create-node":
       return `create node ${action.name} filing=${action.filingModule} tax=${action.taxModule}`;
     case "create-series":

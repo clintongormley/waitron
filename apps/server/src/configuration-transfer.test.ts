@@ -51,6 +51,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { readProfilePrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { recordSale } from "@waitron/core";
@@ -66,7 +67,7 @@ import {
   saveAdjustmentSettings,
 } from "@waitron/adjustments";
 import { payments } from "@waitron/payments";
-import { decimal, nodeId, seriesId, tillId } from "@waitron/shared";
+import { decimal, nodeId, seriesId, deviceOrigin } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { systemClock } from "./till-backend.js";
@@ -77,6 +78,7 @@ import {
   importConfigurationTables,
   type ConfigurationBundle,
 } from "./configuration-transfer.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 
 // TWO databases: a transfer exports from a prepared venue's database and imports into a fresh
 // production database, and each holds one tenant. `suite` holds the source venue, `targetSuite` the
@@ -102,7 +104,6 @@ function venue(taxId: string): VenueRequest {
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
     },
-    tillName: "Till",
     seriesCode: "F",
     rectificativeSeriesCode: "R",
     admin: {
@@ -142,7 +143,6 @@ const bundle: ConfigurationBundle = {
       drawerOpenPolicy: "gated",
       catalogueId: null,
     },
-    tillName: "Till",
     seriesCode: "F",
     rectificativeSeriesCode: "R",
   },
@@ -181,6 +181,16 @@ describe("configuration transfer archive", () => {
         "a strong passphrase",
       ),
     ).toEqual(bundle);
+  });
+
+  it("accepts a bundle that still carries a tillName, as it checks only the venue fields it names", () => {
+    const older = { ...bundle, venue: { ...bundle.venue, tillName: "Till" } };
+    expect(
+      decodeConfigurationBundle(
+        encodeConfigurationBundle(older, "a strong passphrase"),
+        "a strong passphrase",
+      ).venue,
+    ).toMatchObject(bundle.venue);
   });
 
   it("rejects a short passphrase before creating an artifact", () => {
@@ -333,7 +343,9 @@ describe("configuration transfer database path", () => {
         values ('cash_only', 5000, ${policyStamp}, ${policyStamp})`);
       await tx.insert(workingOrders).values({
         id: "aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa",
-        tillId: source.tillId,
+        source: "dashboard",
+        deviceId: null,
+        locationId: source.locationId,
         nodeId: source.nodeId,
         orderNumber: 1,
         label: "Practice tab",
@@ -346,6 +358,7 @@ describe("configuration transfer database path", () => {
       await tx.insert(payments).values({
         id: "cccccccc-bbbb-bbbb-bbbb-cccccccccccc",
         workingOrderId: "aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa",
+        source: "demo_seed",
         nodeId: source.nodeId,
         provider: "simulated",
         paymentRef: "practice-payment",
@@ -381,7 +394,7 @@ describe("configuration transfer database path", () => {
         resolution: "203dpi",
       });
       await tx.insert(sales).values({
-        tillId: source.tillId,
+        source: "demo_seed",
         seriesId: source.seriesIds[0]!,
         nodeId: source.nodeId,
         invoiceNumber: 99,
@@ -408,6 +421,7 @@ describe("configuration transfer database path", () => {
       new Date("2026-09-09T00:00:00.000Z"),
       versions,
     );
+    expect(transferred.venue).not.toHaveProperty("tillName");
     for (const person of transferred.tables.persons ?? []) {
       expect(person).not.toHaveProperty("pin_hash");
       expect(person).not.toHaveProperty("password_hash");
@@ -530,12 +544,13 @@ describe("configuration transfer database path", () => {
     expect(printerSettings.rows).toEqual([{ paper_width: "58mm", resolution: "203dpi" }]);
 
     const fiscal = ALL_MODULES.find((module) => module.fiscal?.id === "verifactu")!.fiscal!;
+    const origin = deviceOrigin(await seedSessionDevice(targetSuite.db, target));
     await withTransaction(targetSuite.db, (tx) =>
       recordSale(
         tx,
         fiscal.makeBackend({ db: targetSuite.db, clock: systemClock(), environment: "production" }),
         {
-          tillId: tillId(target.tillId),
+          origin,
           nodeId: nodeId(target.nodeId),
           seriesId: seriesId(target.seriesIds[0]!),
           locale: "es-ES",
@@ -1208,6 +1223,69 @@ it("transfers a watcher with its station, zone, and printer in configuration exp
         .where(eq(printers.name, "Pass printer"))
     )[0]?.id,
   );
+});
+
+it("transfers a device profile's receipt and payment-slip printer lists, in order", async () => {
+  const source = await applyVenue(planVenue(venue("B13572471"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, async (tx) => {
+    const added = await tx
+      .insert(printers)
+      .values(
+        ["Bar printer", "Back printer", "Slip printer"].map((name, index) => ({
+          locationId: source.locationId,
+          name,
+          transport: "network_tcp" as const,
+          host: `10.0.1.${index + 1}`,
+        })),
+      )
+      .returning({ id: printers.id });
+    const [profile] = await tx
+      .insert(deviceProfiles)
+      .values({ name: "Counter till", formFactor: "tablet-landscape" })
+      .returning({ id: deviceProfiles.id });
+    await setProfilePrinterLists(tx, profile!.id, {
+      receiptPrinterIds: [added[1]!.id, added[0]!.id],
+      paymentSlipPrinterIds: [added[2]!.id],
+    });
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-04T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B97531867"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await withTransaction(targetSuite.db, async (tx) => {
+    const [profile] = await tx
+      .select({ id: deviceProfiles.id })
+      .from(deviceProfiles)
+      .where(eq(deviceProfiles.name, "Counter till"));
+    const names = new Map(
+      (await tx.select({ id: printers.id, name: printers.name }).from(printers)).map((row) => [
+        row.id,
+        row.name,
+      ]),
+    );
+    const lists = await readProfilePrinterLists(tx, profile!.id);
+    return {
+      receipt: lists.receiptPrinterIds.map((id) => names.get(id)),
+      paymentSlip: lists.paymentSlipPrinterIds.map((id) => names.get(id)),
+    };
+  });
+  expect(imported).toEqual({
+    receipt: ["Back printer", "Bar printer"],
+    paymentSlip: ["Slip printer"],
+  });
 });
 
 it("leaves a table's clearing state behind", async () => {

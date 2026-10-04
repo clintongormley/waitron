@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decimal, nodeId, saleId, seriesId, tillId } from "@waitron/shared";
+import { decimal, jobOrigin, nodeId, saleId, seriesId } from "@waitron/shared";
 import type { FiscalBackend, IntegrityReport, SaleForFiscalRecord } from "./backend.js";
 import { emptyDrainResult } from "./backend.js";
 import { FakeFiscalBackend } from "./testing/fake-backend.js";
@@ -30,7 +30,6 @@ describe("emptyDrainResult", () => {
   });
 });
 
-const TILL = tillId("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
 const NODE = nodeId("7ba7b810-9dad-11d1-80b4-00c04fd430c1");
 
 describe("FiscalBackend", () => {
@@ -54,7 +53,7 @@ describe("FiscalBackend", () => {
 
   it("accepts a sale whose monetary fields are exact decimals", () => {
     const sale: SaleForFiscalRecord = {
-      tillId: TILL,
+      origin: jobOrigin("readiness_test"),
       nodeId: NODE,
       saleId: saleId("11111111-2222-3333-4444-555555555555"),
       seriesId: seriesId("99999999-8888-7777-6666-555555555555"),

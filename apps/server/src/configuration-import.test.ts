@@ -51,7 +51,6 @@ const bundle: ConfigurationBundle = {
       drawerOpenPolicy: "gated",
       catalogueId: null,
     },
-    tillName: "Till",
     seriesCode: "F",
     rectificativeSeriesCode: "R",
   },

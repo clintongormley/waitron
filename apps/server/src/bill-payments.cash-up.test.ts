@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import { computeDailyClose, recordDailyClose } from "@waitron/reporting";
 import type { CashCountInput } from "@waitron/reporting";
-import { AppError, tillId as brandTillId } from "@waitron/shared";
+import { AppError, deviceId as brandDeviceId } from "@waitron/shared";
 import {
   paymentRows,
   provisionBillVenue,
@@ -19,7 +19,7 @@ import {
 import { systemClock } from "./till-backend.js";
 import "./errors.js";
 
-// Bill payments design §8 tests 24–27: the cash-up counts money on the day and till it moves,
+// Bill payments design §8 tests 24–27: the cash-up counts money on the day and device it moves,
 // driven through the till's routes on a clock set to each day. Each case uses days of its own, so a
 // day's cash-up is that case's alone.
 let venue: BillVenue;
@@ -116,18 +116,19 @@ async function refusedClose(businessDay: string, cashCounts: CashCountInput[]) {
   return error as AppError;
 }
 
-describe("the cash-up counts money on the day and till it moves (bill payments design §9a)", () => {
-  it("counts day 1's cash on its till, and day 2's card on its till, once each (test 24)", async () => {
-    const tillA = brandTillId(venue.deviceTillId);
-    const tillB = brandTillId(venue.device2TillId);
+describe("the cash-up counts money on the day and device it moves (bill payments design §9a)", () => {
+  it("counts day 1's cash on its device, and day 2's card on its device, once each (test 24)", async () => {
+    const deviceA = brandDeviceId(venue.deviceId);
+    const deviceB = brandDeviceId(venue.device2Id);
     const billId = await tabWith(venue, "Paella", "Chuletón", "Botella tinto", "Ensalada", "Tarta");
 
     expect((await cashContribution("2026-03-10", venue.cookie, billId, "50.00")).status).toBe(200);
     const day1 = await dailyClose("2026-03-10");
     expect(day1.cash).toEqual({
-      byTill: [
+      byOrigin: [
         {
-          tillId: tillA,
+          source: "device",
+          deviceId: deviceA,
           byMethod: [{ method: "cash", amount: "50.00", tip: "0.00" }],
           cashTakings: "50.00",
         },
@@ -141,21 +142,22 @@ describe("the cash-up counts money on the day and till it moves (bill payments d
     const last = await manualCard("2026-03-11", venue.cookie2, billId, "70.00");
     expect(last.status).toBe(200);
     expect(last.json.invoice).toMatchObject({ total: "120.00" });
-    // The invoice was filed at till B with a tender for each payment, so a cash-up that read them
-    // would count day 1's €50.00 again, on till B.
+    // The invoice was filed on device B with a tender for each payment, so a cash-up that read them
+    // would count day 1's €50.00 again, on device B.
     expect(
-      (await tendersOfBill(venue, billId)).map((t) => [t.method, t.saleTillId]).sort(),
+      (await tendersOfBill(venue, billId)).map((t) => [t.method, t.saleDeviceId]).sort(),
     ).toEqual([
-      ["card", tillB],
-      ["cash", tillB],
+      ["card", deviceB],
+      ["cash", deviceB],
     ]);
 
     expect((await dailyClose("2026-03-10")).cash).toEqual(day1.cash);
     const day2 = await dailyClose("2026-03-11");
     expect(day2.cash).toEqual({
-      byTill: [
+      byOrigin: [
         {
-          tillId: tillB,
+          source: "device",
+          deviceId: deviceB,
           byMethod: [{ method: "card", amount: "70.00", tip: "0.00" }],
           cashTakings: "0.00",
         },
@@ -167,19 +169,19 @@ describe("the cash-up counts money on the day and till it moves (bill payments d
 
     expect(await refusedClose("2026-03-10", [])).toMatchObject({
       code: "close.invalid_cash_input",
-      params: { tillId: tillA, reason: "uncounted_cash_till" },
+      params: { deviceId: deviceA, reason: "uncounted_cash_device" },
     });
     const frozen = await freeze("2026-03-10", [
-      { tillId: tillA, openingFloat: "100.00", payouts: "0.00", countedCash: "150.00" },
+      { deviceId: deviceA, openingFloat: "100.00", payouts: "0.00", countedCash: "150.00" },
     ]);
-    expect(frozen.snapshot.cashReconciliation.byTill).toMatchObject([
-      { tillId: tillA, cashTakings: "50.00", cashVariance: "0.00" },
+    expect(frozen.snapshot.cashReconciliation.byDevice).toMatchObject([
+      { deviceId: deviceA, cashTakings: "50.00", cashVariance: "0.00" },
     ]);
   });
 
-  it("subtracts a refund given on another day at another till, and forces that till's count (test 25)", async () => {
-    const tillA = brandTillId(venue.deviceTillId);
-    const tillB = brandTillId(venue.device2TillId);
+  it("subtracts a refund given on another day on another device, and forces that device's count (test 25)", async () => {
+    const deviceA = brandDeviceId(venue.deviceId);
+    const deviceB = brandDeviceId(venue.device2Id);
     const billId = await tabWith(venue, "Paella", "Chuletón", "Botella tinto", "Ensalada", "Tarta");
     const paymentId = paymentIdOf(
       await cashContribution("2026-03-12", venue.cookie, billId, "50.00"),
@@ -188,17 +190,19 @@ describe("the cash-up counts money on the day and till it moves (bill payments d
       200,
     );
 
-    expect((await dailyClose("2026-03-12")).cash.byTill).toEqual([
+    expect((await dailyClose("2026-03-12")).cash.byOrigin).toEqual([
       {
-        tillId: tillA,
+        source: "device",
+        deviceId: deviceA,
         byMethod: [{ method: "cash", amount: "50.00", tip: "0.00" }],
         cashTakings: "50.00",
       },
     ]);
     expect((await dailyClose("2026-03-13")).cash).toEqual({
-      byTill: [
+      byOrigin: [
         {
-          tillId: tillB,
+          source: "device",
+          deviceId: deviceB,
           byMethod: [{ method: "cash", amount: "-20.00", tip: "0.00" }],
           cashTakings: "-20.00",
         },
@@ -209,13 +213,13 @@ describe("the cash-up counts money on the day and till it moves (bill payments d
 
     expect(await refusedClose("2026-03-13", [])).toMatchObject({
       code: "close.invalid_cash_input",
-      params: { tillId: tillB, reason: "uncounted_cash_till" },
+      params: { deviceId: deviceB, reason: "uncounted_cash_device" },
     });
     const frozen = await freeze("2026-03-13", [
-      { tillId: tillB, openingFloat: "100.00", payouts: "0.00", countedCash: "80.00" },
+      { deviceId: deviceB, openingFloat: "100.00", payouts: "0.00", countedCash: "80.00" },
     ]);
-    expect(frozen.snapshot.cashReconciliation.byTill).toMatchObject([
-      { tillId: tillB, cashTakings: "-20.00", cashVariance: "0.00" },
+    expect(frozen.snapshot.cashReconciliation.byDevice).toMatchObject([
+      { deviceId: deviceB, cashTakings: "-20.00", cashVariance: "0.00" },
     ]);
   });
 
@@ -232,9 +236,10 @@ describe("the cash-up counts money on the day and till it moves (bill payments d
     expect(res.status).toBe(200);
 
     expect((await dailyClose("2026-03-14")).cash).toEqual({
-      byTill: [
+      byOrigin: [
         {
-          tillId: venue.deviceTillId,
+          source: "device",
+          deviceId: venue.deviceId,
           byMethod: [{ method: "cash", amount: "6.00", tip: "0.00" }],
           cashTakings: "6.00",
         },
@@ -244,38 +249,39 @@ describe("the cash-up counts money on the day and till it moves (bill payments d
     });
   });
 
-  it("forces a count for a till whose cash nets to zero, but not for a card-only till (test 27)", async () => {
+  it("forces a count for a device whose cash nets to zero, but not for a card-only device (test 27)", async () => {
     const billId = await tabWith(venue, "Paella", "Chuletón", "Botella tinto", "Ensalada", "Tarta");
     const paid = await cashContribution("2026-03-15", venue.cookieNoCard, billId, "50.00");
     const paymentId = paymentIdOf(paid);
     expect(
       (await cashRefund("2026-03-15", venue.cookieNoCard, billId, paymentId, "50.00")).status,
     ).toBe(200);
-    // The control: a card taken on another till the same day.
+    // The control: a card taken on another device the same day.
     expect((await manualCard("2026-03-15", venue.cookie2, billId, "30.00")).status).toBe(200);
-    const tillC = brandTillId(
-      (await paymentRows(venue, billId)).find((row) => row.id === paymentId)!.tillId,
+    const deviceC = brandDeviceId(
+      (await paymentRows(venue, billId)).find((row) => row.id === paymentId)!.deviceId!,
     );
 
     const day = await dailyClose("2026-03-15");
-    expect(day.cash.byTill.find((t) => t.tillId === tillC)).toEqual({
-      tillId: tillC,
+    expect(day.cash.byOrigin.find((t) => t.deviceId === deviceC)).toEqual({
+      source: "device",
+      deviceId: deviceC,
       byMethod: [{ method: "cash", amount: "0.00", tip: "0.00" }],
       cashTakings: "0.00",
     });
 
     expect(await refusedClose("2026-03-15", [])).toMatchObject({
       code: "close.invalid_cash_input",
-      params: { tillId: tillC, reason: "uncounted_cash_till" },
+      params: { deviceId: deviceC, reason: "uncounted_cash_device" },
     });
     const frozen = await freeze("2026-03-15", [
-      { tillId: tillC, openingFloat: "100.00", payouts: "0.00", countedCash: "100.00" },
+      { deviceId: deviceC, openingFloat: "100.00", payouts: "0.00", countedCash: "100.00" },
     ]);
-    expect(frozen.snapshot.cashReconciliation.byTill).toMatchObject([
-      { tillId: tillC, cashTakings: "0.00", cashVariance: "0.00" },
+    expect(frozen.snapshot.cashReconciliation.byDevice).toMatchObject([
+      { deviceId: deviceC, cashTakings: "0.00", cashVariance: "0.00" },
     ]);
-    expect(frozen.snapshot.close.cash.byTill.map((t) => t.tillId).sort()).toEqual(
-      [tillC, venue.device2TillId].sort(),
+    expect(frozen.snapshot.close.cash.byOrigin.map((t) => t.deviceId).sort()).toEqual(
+      [deviceC, brandDeviceId(venue.device2Id)].sort(),
     );
   });
 });

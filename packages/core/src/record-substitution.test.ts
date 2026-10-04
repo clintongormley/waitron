@@ -1,7 +1,13 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppError, saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import {
+  AppError,
+  saleId as brandSaleId,
+  seriesId as brandSeriesId,
+  deviceOrigin,
+  jobOrigin,
+} from "@waitron/shared";
+import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
@@ -27,7 +33,7 @@ import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
 import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
 
-let tillId: TillId;
+let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series — the F3 reuses it (owner decision)
 // A manager's session authorizes the one precondition void this suite performs.
@@ -41,13 +47,13 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
   const [person] = await suite.db
     .insert(persons)
     .values({ displayName: "P", pinHash: hashPin("1234"), role: "manager" })
     .returning({ id: persons.id });
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tillId, personId: person!.id, pin: "1234" }),
+    loginWithPin(tx, { deviceId, personId: person!.id, pin: "1234" }),
   );
   voidSessionId = session.id;
 });
@@ -80,7 +86,7 @@ const RECIPIENT = { taxId: "B12345674", legalName: "Acme Corp SL", countryCode: 
  * vacuous. */
 function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tillId,
+    origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
     locale: "es-ES",
@@ -122,7 +128,7 @@ function substitutionInput(
   overrides: Partial<RecordSubstitutionInput> = {},
 ): RecordSubstitutionInput {
   return {
-    tillId,
+    origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
     substitutedSaleIds,
@@ -189,6 +195,47 @@ async function countForSale(table: string, saleId: SaleId): Promise<number> {
   );
   return result.rows[0]!.n;
 }
+
+describe("recordSubstitution — the F3's origin", () => {
+  async function storedOrigin(id: SaleId) {
+    const result = await suite.db.execute<{ source: string; device_id: string | null }>(
+      sql`select source, device_id from sales where id = ${id}`,
+    );
+    return result.rows[0];
+  }
+
+  it("stores the device it was issued on", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: original } = await sellTicket(backend);
+    const { saleId } = await substitute(backend, [original], { origin: deviceOrigin(deviceId) });
+    expect(await storedOrigin(saleId)).toEqual({ source: "device", device_id: deviceId });
+  });
+
+  it("stores a demo seed F3 with no device", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: original } = await sellTicket(backend);
+    const { saleId } = await substitute(backend, [original], { origin: jobOrigin("demo_seed") });
+    expect(await storedOrigin(saleId)).toEqual({ source: "demo_seed", device_id: null });
+  });
+
+  it("hands the origin to the fiscal backend", async () => {
+    const fake = new FakeFiscalBackend(suite.db);
+    const { saleId: original } = await sellTicket(fake);
+    const seen: SaleForFiscalRecord[] = [];
+    const backend: FiscalBackend = Object.assign(Object.create(fake) as FakeFiscalBackend, {
+      recordSubstitution: (
+        tx: Transaction,
+        sale: SaleForFiscalRecord,
+        extra: Parameters<FiscalBackend["recordSubstitution"]>[2],
+      ) => {
+        seen.push(sale);
+        return fake.recordSubstitution(tx, sale, extra);
+      },
+    });
+    await substitute(backend, [original], { origin: jobOrigin("readiness_test") });
+    expect(seen.map((sale) => sale.origin)).toEqual([jobOrigin("readiness_test")]);
+  });
+});
 
 describe("recordSubstitution — the substituted tickets (input guards)", () => {
   it("rejects an empty substitutedSaleIds list (an F3 must name at least one ticket)", async () => {
@@ -527,7 +574,7 @@ describe("recordSubstitution — a mixed batch fails atomically", () => {
     const { saleId: recorded } = await sellTicket(backend); // number 1, has a fiscal record
     const unrecorded = await seedBareSale(
       suite.db,
-      { tillId, nodeId, seriesId },
+      { deviceId, nodeId, seriesId },
       { invoiceNumber: 99 }, // distinct number: avoids the series-unique collision with the ticket
     );
 
@@ -572,7 +619,7 @@ describe("recordSubstitution — no fiscal condition blocks an F3 (§5)", () => 
       confident: false,
       confidence: "degraded",
       anchorAgeSeconds: 999,
-      warning: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+      warning: new AppError("clock.degraded", { deviceId, anchorAgeSeconds: 999 }),
     }));
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: ticket } = await sellTicket(backend);

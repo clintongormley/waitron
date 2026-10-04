@@ -41,7 +41,8 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   thousandthsToDecimal,
-  tillId as brandTillId,
+  deviceOrigin,
+  jobOrigin,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -51,9 +52,10 @@ import { createTable } from "./tables.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig } from "./till-config.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
+import { revokedDeviceSessionCookie } from "./testing/session-device.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { cancelBody } from "./testing/cancel-line.js";
@@ -81,18 +83,22 @@ let backend: FiscalBackend;
 let clock: TrustedClock;
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: OriginConfig;
   offers: ZoneOffers;
   /** Product id by the staff name. */
   productIds: Map<string, string>;
   app: Hono;
   cookie: string;
-  /** The operator's session with no device. */
+  /** The till device `cookie` names, which its session is on. */
+  deviceId: string;
+  /** `cookie`'s session, with no device cookie beside it. */
   sessionCookie: string;
-  /** The operator's session on a handheld, which never opens a cash drawer. */
+  /** The operator's session on a handheld whose profile does not allow the drawer. */
   handheldCookie: string;
-  /** The till the enrolled device rings on. */
-  deviceTillId: string;
+  /** The handheld device `handheldCookie` names. */
+  handheldDeviceId: string;
+  /** The operator's session on a handheld whose profile does not take cash. */
+  noCashCookie: string;
   printerId: string;
   /** The session's operator, a member of staff, who does not hold `sale.refund`. */
   staffId: string;
@@ -164,7 +170,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -178,8 +183,8 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     ),
     { db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
-    tillId: brandTillId(provisioned.tillId),
+  const cfg: OriginConfig = {
+    origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(provisioned.nodeId),
     seriesId: brandSeriesId(provisioned.seriesIds[0]!),
     locationId: brandLocationId(provisioned.locationId),
@@ -217,12 +222,16 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       .values({
         name: "Counter till",
         formFactor: "till",
-        capabilities: ["integrated-card-payment", "open-cash-drawer"],
+        capabilities: ["integrated-card-payment", "open-cash-drawer", "take-cash"],
       })
       .returning({ id: deviceProfiles.id });
     const [handheldProfile] = await tx
       .insert(deviceProfiles)
-      .values({ name: "Handheld", formFactor: "phone-portrait" })
+      .values({ name: "Handheld", formFactor: "phone-portrait", capabilities: ["take-cash"] })
+      .returning({ id: deviceProfiles.id });
+    const [noCashProfile] = await tx
+      .insert(deviceProfiles)
+      .values({ name: "Handheld without cash", formFactor: "phone-portrait" })
       .returning({ id: deviceProfiles.id });
     const printer = await createPrinter(
       tx,
@@ -240,25 +249,32 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       personId: person!.id,
       profileId: profile!.id,
       handheldProfileId: handheldProfile!.id,
+      noCashProfileId: noCashProfile!.id,
       printerId: printer.id,
     };
   });
-  const session = await withTransaction(db, (tx) =>
-    loginWithPin(tx, { tillId: cfg.tillId, personId: seeded.personId, pin: "5555" }),
-  );
   const device = await enrolDeviceForTest(db, cfg, { name: "Barra", profileId: seeded.profileId });
-  const [deviceRow] = db.all<{ till_id: string }>(
-    sql`select till_id from devices where id = ${device.deviceId}`,
-  );
-  // On the till device's own till, which opens the drawer, so only the handheld rule keeps it shut.
+  const sessionOn = async (deviceId: string) =>
+    (
+      await withTransaction(db, (tx) =>
+        loginWithPin(tx, { deviceId, personId: seeded.personId, pin: "5555" }),
+      )
+    ).token;
+  const session = { token: await sessionOn(device.deviceId) };
+  // Its profile does not allow the drawer, though its receipt printer has one.
   const handheld = await enrolDeviceForTest(db, cfg, {
     name: "Terraza",
     profileId: seeded.handheldProfileId,
-    registerId: deviceRow!.till_id,
+  });
+  const noCash = await enrolDeviceForTest(db, cfg, {
+    name: "Patio",
+    profileId: seeded.noCashProfileId,
   });
   const [admin] = db.all<{ id: string }>(sql`select id from persons where role = 'admin'`);
-  // Every till, so the device's own till prints and opens its drawer whichever one it is.
-  db.run(sql`update tills set receipt_printer_id = ${seeded.printerId}`);
+  // Every device prints receipts and slips here; its profile decides whether it opens the drawer.
+  db.run(
+    sql`update devices set receipt_printer_id = ${seeded.printerId}, payment_slip_printer_id = ${seeded.printerId}`,
+  );
   const app = new Hono();
   mountTillApi(
     app,
@@ -280,8 +296,10 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     app,
     cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
     sessionCookie: `${SESSION_COOKIE}=${session.token}`,
-    handheldCookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`,
-    deviceTillId: deviceRow!.till_id,
+    deviceId: device.deviceId,
+    handheldCookie: `${SESSION_COOKIE}=${await sessionOn(handheld.deviceId)}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`,
+    handheldDeviceId: handheld.deviceId,
+    noCashCookie: `${SESSION_COOKIE}=${await sessionOn(noCash.deviceId)}; ${DEVICE_COOKIE}=${noCash.deviceId}.${noCash.token}`,
     printerId: seeded.printerId,
     staffId: seeded.personId,
     adminId: admin!.id,
@@ -620,11 +638,11 @@ describe("a contribution (design §8 test 2)", () => {
       tx.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, paymentId)),
     );
     expect(opens).toMatchObject([
-      { reason: "bill_payment", saleId: null, tillId: venue.deviceTillId },
+      { reason: "bill_payment", saleId: null, deviceId: venue.deviceId },
     ]);
   });
 
-  it("opens no drawer for cash taken on a handheld", async () => {
+  it("opens no drawer for cash taken on a handheld whose profile does not allow the drawer", async () => {
     const billId = await bill120();
 
     const paid = await request(
@@ -648,6 +666,65 @@ describe("a contribution (design §8 test 2)", () => {
       tx.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, paymentId)),
     );
     expect(opens).toEqual([]);
+  });
+
+  it("refuses cash from a device whose profile does not take cash, writing nothing", async () => {
+    const billId = await bill120();
+
+    const refused = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "10.00",
+        method: "cash",
+        tendered: "10.00",
+        applied: "10.00",
+        tip: "0.00",
+      },
+      venue.noCashCookie,
+    );
+
+    expect(refused).toMatchObject({ status: 403, json: { code: "device.cash_not_allowed" } });
+    expect(await paymentRows(billId)).toEqual([]);
+  });
+
+  it("takes the whole bill by card on a device that does not take cash, after refusing its cash part", async () => {
+    const billId = await tabWith("Pulpo");
+    const ask = { kind: "contribution", tip: "0.00" } as const;
+
+    const cashPart = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        ...ask,
+        submissionId: randomUUID(),
+        amount: "5.00",
+        method: "cash",
+        tendered: "5.00",
+        applied: "5.00",
+      },
+      venue.noCashCookie,
+    );
+    expect(cashPart).toMatchObject({ status: 403, json: { code: "device.cash_not_allowed" } });
+
+    const cardPart = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        ...ask,
+        submissionId: randomUUID(),
+        amount: "20.00",
+        method: "card",
+        entry: "manual",
+        applied: "20.00",
+      },
+      venue.noCashCookie,
+    );
+    expect(cardPart.status).toBe(200);
+    expect(await paymentRows(billId)).toHaveLength(1);
+    expect(await statusOf(billId)).toBe("settled");
   });
 
   it("records a hand-keyed card with its manual payment row, linked to the bill payment", async () => {
@@ -675,7 +752,7 @@ describe("a contribution (design §8 test 2)", () => {
       tx.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, paymentId)),
     );
     expect(opens).toMatchObject([
-      { reason: "card_slip", saleId: null, tillId: venue.deviceTillId, printerId: venue.printerId },
+      { reason: "card_slip", saleId: null, deviceId: venue.deviceId, printerId: venue.printerId },
     ]);
   });
 
@@ -1434,13 +1511,13 @@ describe("the invoice at full payment (design §8 test 8)", () => {
 });
 
 describe("a line write that leaves the bill exactly paid (design §7)", () => {
-  /** Issued in the write's own transaction, once, and filed on the till of the device that wrote. */
-  async function expectInvoicedOnDeviceTill(billId: string, totalCents: number): Promise<void> {
+  /** Issued in the write's own transaction, once, and filed under the device that wrote. */
+  async function expectInvoicedOnDevice(billId: string, totalCents: number): Promise<void> {
     expect(await statusOf(billId)).toBe("settled");
     expect(registroCount(billId)).toBe(1);
     const [sale] = await saleOf(billId);
     expect(sale!.total).toBe(totalCents);
-    expect(sale!.tillId).toBe(venue.deviceTillId);
+    expect(sale).toMatchObject({ source: "device", deviceId: venue.deviceId });
   }
 
   async function revisionOf(billId: string): Promise<number> {
@@ -1456,8 +1533,8 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     expect(raised.status).toBe(200);
   }
 
-  it("files on the device's own till, which is not the box's configured one", () => {
-    expect(venue.deviceTillId).not.toBe(venue.cfg.tillId);
+  it("files on the device that asked, which is not the server's configured origin", () => {
+    expect(venue.deviceId).not.toBe(venue.cfg.origin.deviceId);
   });
 
   it("issues the invoice when a void leaves the bill exactly paid", async () => {
@@ -1471,7 +1548,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     );
 
     expect(voided.status).toBe(200);
-    await expectInvoicedOnDeviceTill(billId, 2500);
+    await expectInvoicedOnDevice(billId, 2500);
   });
 
   it("issues the invoice when a split leaves the bill exactly paid", async () => {
@@ -1481,7 +1558,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     const split = await splitOff(billId, [{ lineNo: 2 }]);
 
     expect(split.status).toBe(200);
-    await expectInvoicedOnDeviceTill(billId, 2500);
+    await expectInvoicedOnDevice(billId, 2500);
   });
 
   it("issues the invoice when a line edit leaves the bill exactly paid", async () => {
@@ -1495,7 +1572,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     });
 
     expect(edited.status).toBe(200);
-    await expectInvoicedOnDeviceTill(billId, 2800);
+    await expectInvoicedOnDevice(billId, 2800);
   });
 
   it("issues the invoice when saving the whole order leaves the bill exactly paid", async () => {
@@ -1514,7 +1591,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     });
 
     expect(saved.status).toBe(200);
-    await expectInvoicedOnDeviceTill(billId, 2500);
+    await expectInvoicedOnDevice(billId, 2500);
   });
 
   it("refuses cutting part of a line when the rest would be less than the bill has received", async () => {
@@ -1536,7 +1613,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     expect(await lineTotals(billId)).toEqual(["35.00", "9.00"]);
   });
 
-  it("voids a line of a bill with no payments for a request with no device", async () => {
+  it("voids a line of a bill with no payments for a session sent with no device cookie", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
 
     const voided = await request(
@@ -1550,7 +1627,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     expect(await lineTotals(billId)).toEqual(["25.00"]);
   });
 
-  it("refuses a void that would issue the invoice for a request with no device, writing nothing", async () => {
+  it("refuses a void that would issue the invoice from a session whose device has been revoked, writing nothing", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
     expect((await contribute(billId, "25.00")).status).toBe(200);
 
@@ -1558,7 +1635,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
       "POST",
       `/api/working-orders/${billId}/adjustments`,
       await cancelBody(suite.db, billId, 2),
-      venue.sessionCookie,
+      await revokedDeviceSessionCookie(suite.db, venue.cfg, venue.staffId, "5555"),
     );
 
     expect(refused.status).toBe(401);
@@ -1700,7 +1777,8 @@ describe("retries and reused ids (plan D8, design §5.1)", () => {
         reason: "error",
         authorizedBy: randomUUID(),
         requestedBy: randomUUID(),
-        tillId: venue.deviceTillId,
+        source: "device",
+        deviceId: venue.deviceId,
         state: "completed",
         completedAt: new Date().toISOString(),
       }),
@@ -1744,6 +1822,7 @@ describe("the single-payment routes on a bill holding bill payments (design §7)
     const [paymentRow] = await paymentRows(billId);
     await inTx((tx) =>
       insertCapturedPayment(tx, {
+        origin: deviceOrigin(venue.deviceId),
         workingOrderId: billId,
         provider: "simulator",
         paymentRef: randomUUID(),
@@ -1859,13 +1938,44 @@ async function insertBillPayment(
         state: "received",
         receivedAt: new Date().toISOString(),
         requestedBy: venue.staffId,
-        tillId: venue.deviceTillId,
+        source: "device",
+        deviceId: venue.deviceId,
         ...row,
       })
       .returning({ id: billPayments.id }),
   );
   return inserted!.id;
 }
+
+describe("the device a bill payment and its refund name", () => {
+  it("records the payment under the device that took it, and the refund under the one that gave it back", async () => {
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+
+    const refunded = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        reason: "Cobrado de más",
+        override: { personId: venue.adminId, pin: "1234" },
+        appliedAmount: "20.00",
+        tipAmount: "0.00",
+      },
+      venue.handheldCookie,
+    );
+
+    expect(refunded.status).toBe(200);
+    expect(
+      suite.db.all(sql`select source, device_id from bill_payments where id = ${paymentId}`),
+    ).toEqual([{ source: "device", device_id: venue.deviceId }]);
+    expect(
+      suite.db.all(
+        sql`select source, device_id from bill_payment_refunds where bill_payment_id = ${paymentId}`,
+      ),
+    ).toEqual([{ source: "device", device_id: venue.handheldDeviceId }]);
+  });
+});
 
 describe("who can approve a refund (GET /api/refund-authorizers)", () => {
   async function addPerson(role: "staff" | "supervisor" | "manager", status = "active") {
@@ -1955,12 +2065,13 @@ describe("a cash refund before the invoice (design §6)", () => {
         state: "completed",
         requestedBy: venue.staffId,
         authorizedBy: venue.adminId,
-        tillId: venue.deviceTillId,
+        source: "device",
+        deviceId: venue.deviceId,
       },
     ]);
     expect(await refundDrawerOpens(paymentId)).toMatchObject([
       {
-        tillId: venue.deviceTillId,
+        deviceId: venue.deviceId,
         personId: venue.staffId,
         authorizedBy: venue.adminId,
         viaOverride: true,
@@ -1970,7 +2081,7 @@ describe("a cash refund before the invoice (design §6)", () => {
     expect(await saleOf(billId)).toEqual([]);
   });
 
-  it("gives cash back on a handheld at a till that opens the drawer without opening it", async () => {
+  it("gives cash back on a handheld whose profile does not allow the drawer without opening it", async () => {
     const billId = await bill120();
     const paymentId = paymentIdOf(await contribute(billId, "50.00"));
     const before = drawerJobCount();
@@ -1990,7 +2101,7 @@ describe("a cash refund before the invoice (design §6)", () => {
 
     expect(refunded.status).toBe(200);
     expect(await refundRows(paymentId)).toMatchObject([
-      { state: "completed", tillId: venue.deviceTillId },
+      { state: "completed", source: "device", deviceId: venue.handheldDeviceId },
     ]);
     expect(await refundDrawerOpens(paymentId)).toEqual([]);
     expect(drawerJobCount()).toBe(before);
@@ -2236,7 +2347,8 @@ describe("a cash refund before the invoice (design §6)", () => {
         appliedAmount: 1000,
         requestedBy: venue.staffId,
         authorizedBy: venue.adminId,
-        tillId: venue.deviceTillId,
+        source: "device",
+        deviceId: venue.deviceId,
       },
     ]);
     const [manual] = await inTx((tx) =>
@@ -2289,7 +2401,7 @@ describe("a cash refund before the invoice (design §6)", () => {
       }),
     );
     const adminSession = await inTx((tx) =>
-      loginWithPin(tx, { tillId: venue.cfg.tillId, personId: venue.adminId, pin: "1234" }),
+      loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),
     );
     const deviceCookie = venue.cookie
       .split("; ")
@@ -2535,10 +2647,10 @@ describe("the limit on wrong refund PINs", () => {
     return { clockAt, refundOn };
   }
 
-  /** The admin, who holds `sale.refund`, signed in on the staff session's till and device. */
+  /** The admin, who holds `sale.refund`, signed in on the staff session's device. */
   async function adminCookie(): Promise<string> {
     const adminSession = await inTx((tx) =>
-      loginWithPin(tx, { tillId: venue.cfg.tillId, personId: venue.adminId, pin: "1234" }),
+      loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),
     );
     const deviceCookie = venue.cookie
       .split("; ")
@@ -2813,7 +2925,8 @@ describe("the ticket after a refund", () => {
         reason: "error",
         authorizedBy: venue.adminId,
         requestedBy: venue.adminId,
-        tillId: venue.deviceTillId,
+        source: "device",
+        deviceId: venue.deviceId,
         state: "failed",
         failedAt: new Date().toISOString(),
       }),
@@ -2856,7 +2969,8 @@ describe("a payment no card provider stands behind", () => {
           state: "received",
           receivedAt: new Date().toISOString(),
           requestedBy: venue.staffId,
-          tillId: venue.deviceTillId,
+          source: "device",
+          deviceId: venue.deviceId,
         })
         .returning({ id: billPayments.id }),
     );
@@ -2973,7 +3087,7 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
         reason: "card_slip",
         billPaymentId: paymentId,
         saleId: null,
-        tillId: venue.deviceTillId,
+        deviceId: venue.deviceId,
         printerId: venue.printerId,
         personId: venue.staffId,
       },
@@ -2981,7 +3095,7 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
     expect(drawerJobCount() - before).toBe(1);
   });
 
-  it("opens no drawer for a hand-keyed card taken on a handheld", async () => {
+  it("opens no drawer for a hand-keyed card taken on a handheld whose profile does not allow the drawer", async () => {
     const billId = await bill120();
     const before = drawerJobCount();
 
@@ -3017,7 +3131,7 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
     const otherTill = await withTransaction(suite.db, async (tx) => {
       const [profile] = await tx
         .insert(deviceProfiles)
-        .values({ name: "Second till", formFactor: "till" })
+        .values({ name: "Second till", formFactor: "till", capabilities: ["open-cash-drawer"] })
         .returning({ id: deviceProfiles.id });
       const printer = await createPrinter(
         tx,
@@ -3035,9 +3149,13 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
       name: "Terraza till",
       profileId: otherTill.profileId,
     });
-    suite.db.run(sql`update tills set receipt_printer_id = ${otherTill.printerId}
-      where id = (select till_id from devices where id = ${device.deviceId})`);
-    const cookie = `${venue.sessionCookie}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+    suite.db.run(
+      sql`update devices set receipt_printer_id = ${otherTill.printerId} where id = ${device.deviceId}`,
+    );
+    const session = await inTx((tx) =>
+      loginWithPin(tx, { deviceId: device.deviceId, personId: venue.staffId, pin: "5555" }),
+    );
+    const cookie = `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
     const billId = await bill120();
     const before = drawerJobCount();
 
@@ -3054,12 +3172,17 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
   });
 });
 
-describe("a till switched off from opening the drawer it prints to", () => {
+describe("a till whose profile does not allow the drawer it prints to", () => {
+  const setTillCapabilities = (capabilities: string[]) =>
+    suite.db.run(
+      sql`update device_profiles set capabilities = ${JSON.stringify(capabilities)}
+        where id = (select device_profile_id from devices where id = ${venue.deviceId})`,
+    );
   beforeEach(() => {
-    suite.db.run(sql`update tills set opens_drawer = false where id = ${venue.deviceTillId}`);
+    setTillCapabilities(["integrated-card-payment", "take-cash"]);
   });
   afterEach(() => {
-    suite.db.run(sql`update tills set opens_drawer = true where id = ${venue.deviceTillId}`);
+    setTillCapabilities(["integrated-card-payment", "open-cash-drawer", "take-cash"]);
   });
 
   async function opensFor(paymentId: string) {
@@ -3153,10 +3276,10 @@ describe("a refund's supervisor PIN is checked before the write lock is taken", 
     };
   }
 
-  /** The admin, who holds `sale.refund`, signed in on the staff session's till and device. */
+  /** The admin, who holds `sale.refund`, signed in on the staff session's device. */
   async function adminCookie(): Promise<string> {
     const adminSession = await inTx((tx) =>
-      loginWithPin(tx, { tillId: venue.cfg.tillId, personId: venue.adminId, pin: "1234" }),
+      loginWithPin(tx, { deviceId: venue.deviceId, personId: venue.adminId, pin: "1234" }),
     );
     const deviceCookie = venue.cookie
       .split("; ")

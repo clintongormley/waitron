@@ -6,8 +6,9 @@ import {
   decimal,
   seriesId as brandSeriesId,
   nodeId as brandNodeId,
-  tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
+  jobOrigin,
 } from "@waitron/shared";
 import { openIncidents, recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
@@ -41,7 +42,7 @@ const steadyClock: TrustedClock = {
 
 function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
   return {
-    tillId: brandTillId(s.tillId),
+    origin: deviceOrigin(s.deviceId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
@@ -80,7 +81,7 @@ describe("on-device offline accept -> recordSale -> associate -> forward decline
       db: suite.db,
     });
     const paid = await provider.collect({
-      tillId: brandTillId(s.tillId),
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("10.00"),
       allowOffline: true,
@@ -112,7 +113,9 @@ describe("on-device offline accept -> recordSale -> associate -> forward decline
     );
     expect(sale.rows).toHaveLength(1); // NOT voided or removed
 
-    const incidents = await suite.db.transaction((tx) => openIncidents(tx, brandTillId(s.tillId)));
+    const incidents = await suite.db.transaction((tx) =>
+      openIncidents(tx, jobOrigin("payment_check")),
+    );
     expect(incidents).toHaveLength(1);
     expect(incidents[0].code).toBe("payment.offline_forward_declined");
     expect(incidents[0].saleId).toBe(saleId);

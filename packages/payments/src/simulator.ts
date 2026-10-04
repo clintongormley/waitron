@@ -63,6 +63,7 @@ export class SimulatorPaymentProvider implements PaymentProvider {
     const declined = params.simulationOutcome === "declined";
     const settledAt = declined ? null : new Date();
     const common = {
+      origin: params.origin,
       workingOrderId: params.workingOrderId,
       provider: this.provider,
       paymentRef,

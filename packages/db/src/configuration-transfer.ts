@@ -33,6 +33,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
       omit: ["poll_token_hash"],
       reconnect: true,
     },
+    { name: "device_profile_printers" },
     { name: "station_printers" },
     { name: "watcher_printers" },
     { name: "tenant_themes" },

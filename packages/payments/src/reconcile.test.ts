@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { AppError, decimal } from "@waitron/shared";
+import { AppError, decimal, deviceOrigin } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
@@ -17,6 +17,7 @@ import {
 import { FakeSettlementReport } from "./testing/fake-settlement-report.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
 import type { Seeded } from "../test/seed.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
@@ -68,6 +69,7 @@ function deps(report: FakeSettlementReport, reverse = recordingReverse().fn): Re
 async function capture(seeded: Seeded, paymentRef: string, externalRef: string, amount = "10.00") {
   await withTransaction(suite.db, (tx) =>
     insertCapturedPayment(tx, {
+      origin: deviceOrigin(seeded.deviceId),
       workingOrderId: seeded.workingOrderId,
       provider: PROVIDER,
       paymentRef,
@@ -84,6 +86,7 @@ async function capture(seeded: Seeded, paymentRef: string, externalRef: string, 
 async function forwardedOffline(seeded: Seeded, paymentRef: string, externalRef: string) {
   await withTransaction(suite.db, async (tx) => {
     await insertAcceptedOffline(tx, {
+      origin: deviceOrigin(seeded.deviceId),
       workingOrderId: seeded.workingOrderId,
       provider: PROVIDER,
       paymentRef,
@@ -95,27 +98,21 @@ async function forwardedOffline(seeded: Seeded, paymentRef: string, externalRef:
   });
 }
 
-/** Seeds a second till, node and open working order at the same location as `seeded`. */
+/** Seeds a second till device, node and open working order at the same location as `seeded`. */
 async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
-  const [till] = (
-    await suite.db.execute<{ location_id: string }>(
-      sql`select location_id from tills where id = ${seeded.tillId}`,
-    )
-  ).rows;
+  const { locationId } = seeded;
   // A raw insert runs no drizzle `$defaultFn`, so `id` and the timestamps are supplied by hand.
   const stamp = new Date().toISOString();
-  const till2 = await suite.db.execute<{ id: string }>(sql`
-    insert into tills (id, location_id, name, created_at)
-    values (${randomUUID()}, ${till.location_id}, 'Till 2', ${stamp}) returning id`);
-  const tillId = till2.rows[0].id;
   const node2 = await suite.db.execute<{ id: string }>(sql`
     insert into nodes (id, location_id, name, created_at)
-    values (${randomUUID()}, ${till.location_id}, 'Node 2', ${stamp}) returning id`);
+    values (${randomUUID()}, ${locationId}, 'Node 2', ${stamp}) returning id`);
+  const { deviceId } = await seedDevice(suite.db, { locationId });
   const wo2 = await suite.db.execute<{ id: string }>(sql`
-    insert into working_orders (id, till_id, order_number, opened_at)
-    values (${randomUUID()}, ${tillId}, 1, ${stamp}) returning id`);
+    insert into working_orders (id, source, device_id, location_id, order_number, opened_at)
+    values (${randomUUID()}, 'device', ${deviceId}, ${locationId}, 1, ${stamp}) returning id`);
   return {
-    tillId,
+    locationId,
+    deviceId,
     nodeId: node2.rows[0].id,
     workingOrderId: wo2.rows[0].id,
   };
@@ -161,7 +158,7 @@ describe("reconcilePayments", () => {
     expect(await openIncidentCodes()).toEqual([]);
   });
 
-  it("raises one aggregated unsettled incident covering every stale payment on the till", async () => {
+  it("raises one aggregated unsettled incident covering every stale payment", async () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await capture(seeded, "p2", "ext-2", "20.00");
@@ -186,25 +183,32 @@ describe("reconcilePayments", () => {
     ]);
   });
 
-  it("aggregates per (till, class), not per class alone — two tills stay two incidents", async () => {
-    // A single-till fixture cannot tell the `${tillId}|${klass}` grouping key from a bare `klass`.
+  it("raises its incident as the payment check, naming no device", async () => {
+    const seeded = await seedWorkingOrder(suite.db, freshNif());
+    await capture(seeded, "p1", "ext-1");
+    await reconcilePayments(deps(new FakeSettlementReport([])), PERIOD, NOW);
+    const { rows } = await suite.db.execute<{ source: string; device_id: string | null }>(
+      sql`select source, device_id from incidents where code = 'payment.reconcile_unsettled'`,
+    );
+    expect(rows).toEqual([{ source: "payment_check", device_id: null }]);
+  });
+
+  it("aggregates per class across devices — payments on two devices make one incident", async () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     const second = await seedSecondTill(seeded);
     await capture(seeded, "p1", "ext-1");
     await capture(second, "p2", "ext-2", "20.00");
     const result = await reconcilePayments(deps(new FakeSettlementReport([])), PERIOD, NOW);
     expect(result.unsettled).toHaveLength(2);
-    expect(result.incidentsRaised).toBe(2);
-    // Both type arguments: once one is written TypeScript stops inferring `R`, which would leave
-    // `till_id` off the row.
-    const { rows } = parseParams<{ count: number }, { till_id: string; params: string }>(
-      await suite.db.execute<{ till_id: string; params: string }>(
-        sql`select till_id, params from incidents where code = 'payment.reconcile_unsettled' order by till_id`,
+    expect(result.incidentsRaised).toBe(1);
+    const { rows } = parseParams<{ count: number; payments: { paymentRef: string }[] }>(
+      await suite.db.execute<{ params: string }>(
+        sql`select params from incidents where code = 'payment.reconcile_unsettled'`,
       ),
     );
-    expect(rows).toHaveLength(2);
-    expect(rows.map((r) => r.till_id).sort()).toEqual([seeded.tillId, second.tillId].sort());
-    expect(rows.every((r) => r.params.count === 1)).toBe(true);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].params.count).toBe(2);
+    expect(rows[0].params.payments.map((p) => p.paymentRef).sort()).toEqual(["p1", "p2"]);
   });
 
   it("does not re-count an incident a second sweep re-detects", async () => {
@@ -251,6 +255,7 @@ describe("reconcilePayments", () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await withTransaction(suite.db, (tx) =>
       insertInitiated(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: PROVIDER,
         paymentRef: "p-init",
@@ -309,6 +314,10 @@ describe("reconcilePayments", () => {
     expect(result.missingLocal).toHaveLength(1);
     expect(result.incidentsRaised).toBe(1);
     expect(await openIncidentCodes()).toEqual(["payment.reconcile_missing_local"]);
+    const origins = await suite.db.execute<{ source: string; device_id: string | null }>(
+      sql`select source, device_id from incidents`,
+    );
+    expect(origins.rows).toEqual([{ source: "payment_check", device_id: null }]);
     const { rows } = parseParams<{
       count: number;
       settlements: {
@@ -335,12 +344,38 @@ describe("reconcilePayments", () => {
     });
   });
 
+  it("raises an incident for a missingLocal whose hint names a working order that does not exist", async () => {
+    const result = await reconcilePayments(
+      deps(
+        new FakeSettlementReport([
+          settlement({
+            references: ["ext-ghost"],
+            hint: { workingOrderId: randomUUID(), paymentRef: "p-lost" },
+          }),
+        ]),
+      ),
+      PERIOD,
+      NOW,
+    );
+    expect(result.missingLocal).toHaveLength(1);
+    expect(result.incidentsRaised).toBe(1);
+    const { rows } = await suite.db.execute<{
+      code: string;
+      source: string;
+      device_id: string | null;
+    }>(sql`select code, source, device_id from incidents`);
+    expect(rows).toEqual([
+      { code: "payment.reconcile_missing_local", source: "payment_check", device_id: null },
+    ]);
+  });
+
   it("resolves each missingLocal candidate independently — one settlement's existing row must not clear another's", async () => {
     // The existence check is one batched query: a non-empty answer must not clear every candidate.
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     // ext-2's local row settled outside PERIOD; the existence check is unbounded by period.
     await withTransaction(suite.db, (tx) =>
       insertCapturedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: PROVIDER,
         paymentRef: "p-elsewhere",
@@ -638,7 +673,7 @@ describe("orphan remediation", () => {
     });
   });
 
-  it("aggregates two failed reversals on the same till into ONE incident, not two racing for one dedup slot", async () => {
+  it("aggregates two failed reversals into ONE incident, not two racing for one dedup slot", async () => {
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await capture(seeded, "p1", "ext-1");
     await capture(seeded, "p2", "ext-2", "20.00");
@@ -658,9 +693,9 @@ describe("orphan remediation", () => {
       NOW,
     );
     expect(result.remediated).toBe(0);
-    // Both orphans share a null sale_id and the same till: without aggregation, the second
-    // `payment.reconcile_remediation_failed` insert would collide on the open-incident dedup key
-    // (till, code, sale_id) and be silently dropped.
+    // Both orphans share a null sale_id and the payment check's source: without aggregation, the
+    // second `payment.reconcile_remediation_failed` insert would collide on the open-incident dedup
+    // key (source, device, code, sale_id) and be silently dropped.
     const { rows } = parseParams<{
       count: number;
       payments: { paymentRef: string; amount: string; reason: string }[];
@@ -701,7 +736,7 @@ describe("orphan remediation", () => {
       { paymentRef: "p1", reason: "payment.not_refundable" },
     ]);
 
-    // A new orphan on the same till while the first failure's incident is still open: its own
+    // A new orphan while the first failure's incident is still open: its own
     // incident is deduplicated away, so the result is the only record of it.
     await capture(seeded, "p2", "ext-2", "20.00");
     const second = await reconcilePayments(d, PERIOD, NOW);

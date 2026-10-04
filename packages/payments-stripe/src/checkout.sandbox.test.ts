@@ -2,7 +2,7 @@ import Stripe from "stripe";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
+import { decimal, workingOrderId as brandWorkingOrderId, deviceOrigin } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { PAYMENTS_MIGRATIONS, getPaymentByRef } from "@waitron/payments";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
@@ -32,6 +32,7 @@ d("Stripe test-mode sandbox: hosted Checkout Session", () => {
     const paymentRef = randomUUID();
 
     const res = await provider.initiate({
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       paymentRef,

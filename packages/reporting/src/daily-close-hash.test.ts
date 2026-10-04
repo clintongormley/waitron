@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { decimal, nodeId, tillId } from "@waitron/shared";
+import { decimal, deviceId, nodeId } from "@waitron/shared";
 import { computeCloseEntryHash, type CloseHashContent } from "./daily-close-hash.js";
-import type { DailyCloseSnapshot, TillReconciliation } from "./close-types.js";
+import type { DailyCloseSnapshot, DeviceReconciliation } from "./close-types.js";
 import type { DailyClose } from "./types.js";
 
 const NODE = nodeId("22222222-2222-4222-8222-222222222222");
-const TILL_A = tillId("33333333-3333-4333-8333-333333333333");
-const TILL_B = tillId("44444444-4444-4444-8444-444444444444");
+const DEVICE_A = deviceId("33333333-3333-4333-8333-333333333333");
+const DEVICE_B = deviceId("44444444-4444-4444-8444-444444444444");
 const CLOSED_BY = "55555555-5555-4555-8555-555555555555";
 
 /** A complete VAT-exact close over one day at one node — the `computeDailyClose` output shape. */
@@ -22,9 +22,10 @@ function dailyClose(): DailyClose {
       grossTotal: decimal("100.00"),
     },
     cash: {
-      byTill: [
+      byOrigin: [
         {
-          tillId: TILL_A,
+          source: "device",
+          deviceId: DEVICE_A,
           byMethod: [{ method: "cash", amount: decimal("100.00"), tip: decimal("0.00") }],
           cashTakings: decimal("100.00"),
         },
@@ -36,11 +37,11 @@ function dailyClose(): DailyClose {
   };
 }
 
-/** A two-till reconciliation block, till A first — the shape the caller sorts on `tillId`. */
-function reconciliation(): TillReconciliation[] {
+/** A two-device reconciliation block, device A first — the shape the caller sorts on `deviceId`. */
+function reconciliation(): DeviceReconciliation[] {
   return [
     {
-      tillId: TILL_A,
+      deviceId: DEVICE_A,
       openingFloat: decimal("50.00"),
       payouts: decimal("0.00"),
       countedCash: decimal("150.00"),
@@ -48,7 +49,7 @@ function reconciliation(): TillReconciliation[] {
       cashVariance: decimal("0.00"),
     },
     {
-      tillId: TILL_B,
+      deviceId: DEVICE_B,
       openingFloat: decimal("50.00"),
       payouts: decimal("10.00"),
       countedCash: decimal("40.00"),
@@ -61,7 +62,7 @@ function reconciliation(): TillReconciliation[] {
 function snapshot(over: Partial<DailyCloseSnapshot> = {}): DailyCloseSnapshot {
   return {
     close: dailyClose(),
-    cashReconciliation: { byTill: reconciliation(), nodeVariance: "0.00" },
+    cashReconciliation: { byDevice: reconciliation(), nodeVariance: "0.00" },
     ...over,
   };
 }
@@ -100,13 +101,13 @@ describe("computeCloseEntryHash", () => {
         // top-level keys reversed, and one nested object's keys reversed.
         cashReconciliation: {
           nodeVariance: "0.00",
-          byTill: reconciliation().map((t) => ({
+          byDevice: reconciliation().map((t) => ({
             cashVariance: t.cashVariance,
             cashTakings: t.cashTakings,
             countedCash: t.countedCash,
             payouts: t.payouts,
             openingFloat: t.openingFloat,
-            tillId: t.tillId,
+            deviceId: t.deviceId,
           })),
         },
         close: dailyClose(),
@@ -117,11 +118,11 @@ describe("computeCloseEntryHash", () => {
     );
   });
 
-  it("is independent of the byTill array order (sorted by tillId)", () => {
+  it("is independent of the byDevice array order (sorted by deviceId)", () => {
     const forward = content();
     const reversed = content({
       snapshot: snapshot({
-        cashReconciliation: { byTill: [...reconciliation()].reverse(), nodeVariance: "0.00" },
+        cashReconciliation: { byDevice: [...reconciliation()].reverse(), nodeVariance: "0.00" },
       }),
     });
     expect(computeCloseEntryHash(reversed, GENESIS_PREV)).toBe(
@@ -129,11 +130,11 @@ describe("computeCloseEntryHash", () => {
     );
   });
 
-  it("changes when a per-till cashVariance figure changes (tamper-evidence)", () => {
+  it("changes when a per-device cashVariance figure changes (tamper-evidence)", () => {
     const tampered = content({
       snapshot: snapshot({
         cashReconciliation: {
-          byTill: reconciliation().map((t, i) =>
+          byDevice: reconciliation().map((t, i) =>
             i === 0 ? { ...t, cashVariance: decimal("1.00") } : t,
           ),
           nodeVariance: "1.00",
@@ -141,6 +142,22 @@ describe("computeCloseEntryHash", () => {
       }),
     });
     expect(computeCloseEntryHash(tampered, GENESIS_PREV)).not.toBe(
+      computeCloseEntryHash(content(), GENESIS_PREV),
+    );
+  });
+
+  it("changes when only a reconciled device differs", () => {
+    const moved = content({
+      snapshot: snapshot({
+        cashReconciliation: {
+          byDevice: reconciliation().map((t, i) =>
+            i === 1 ? { ...t, deviceId: deviceId("66666666-6666-4666-8666-666666666666") } : t,
+          ),
+          nodeVariance: "0.00",
+        },
+      }),
+    });
+    expect(computeCloseEntryHash(moved, GENESIS_PREV)).not.toBe(
       computeCloseEntryHash(content(), GENESIS_PREV),
     );
   });

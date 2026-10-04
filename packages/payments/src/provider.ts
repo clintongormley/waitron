@@ -1,7 +1,7 @@
 // Side-effect only: registers this package's `payment.*` codes on the shared `ErrorParams`
 // registry and keeps ./errors.ts reachable from the public barrel (scripts/errors-reachable.test.ts).
 import "./errors.js";
-import type { Decimal, TillId, WorkingOrderId } from "@waitron/shared";
+import type { Decimal, DeviceOrigin, WorkingOrderId } from "@waitron/shared";
 
 /**
  * The lifecycle of one electronic tender, provider-neutral. `attempting` is written before an
@@ -31,7 +31,8 @@ export interface ProviderCapabilities {
 }
 
 export interface CollectParams {
-  tillId: TillId;
+  /** The device the payment is started on, written on the provider's `payments` row. */
+  origin: DeviceOrigin;
   workingOrderId: WorkingOrderId;
   /** Tax-inclusive. Split tender is several `collect` calls against one working order, each with
    * its own amount. */
@@ -275,6 +276,8 @@ export interface PaymentProvider {
  * anchor, so a retried initiate cannot double-insert.
  */
 export interface InitiateParams {
+  /** The device the payment is started on, written on the provider's `payments` row. */
+  origin: DeviceOrigin;
   workingOrderId: WorkingOrderId;
   amount: Decimal;
   paymentRef: string;

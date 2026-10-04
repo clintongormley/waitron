@@ -245,7 +245,7 @@ const till = {
   cardProvider: "none" as const,
   tipsEnabled: true,
   canvas,
-  capabilities: ["print-receipt"] as CapabilityFlag[],
+  capabilities: ["print-receipt", "take-cash"] as CapabilityFlag[],
   inactivityTimeoutSeconds: null as number | null,
   nodeId: "n1",
   servers: [],
@@ -636,6 +636,31 @@ describe("till-app: the three ways to pay part of a bill", () => {
       submissionId: expect.any(String),
     });
   });
+});
+
+describe("till-app: a device that does not take cash", () => {
+  it.each([
+    [["print-receipt"], ["card"]],
+    [
+      ["print-receipt", "take-cash"],
+      ["cash", "card"],
+    ],
+  ] as [CapabilityFlag[], string[]][])(
+    "with the capabilities %j, offers the bill payment dialog %j",
+    async (capabilities, methods) => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, capabilities }),
+      });
+      await openTable(el);
+      await openDialog(el, "contribution");
+
+      const offered = [
+        ...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="method"]'),
+      ].map((radio) => radio.value);
+      expect(offered).toEqual(methods);
+      expect(inDialog(el, ".cash-at-till") === null).toBe(methods.includes("cash"));
+    },
+  );
 });
 
 describe("till-app: a bill payment's refusals and retries", () => {

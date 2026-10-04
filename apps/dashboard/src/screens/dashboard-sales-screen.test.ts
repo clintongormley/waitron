@@ -22,9 +22,11 @@ const close: DailyCloseDto = {
     grossTotal: "176.00",
   },
   cash: {
-    byTill: [
+    byOrigin: [
       {
-        tillId: "till-1",
+        source: "device",
+        deviceId: "device-1",
+        deviceName: "Barra 1",
         byMethod: [
           { method: "cash", amount: "80.00", tip: "5.00" },
           { method: "card", amount: "96.00", tip: "3.00" },
@@ -230,15 +232,15 @@ describe("dashboard-sales-screen", () => {
     expect(api.getSalesPeriod).not.toHaveBeenCalled();
   });
 
-  it("renders the per-till tender table, VAT-by-rate table, counts and top sellers on a single day", async () => {
+  it("renders the per-device tender table, VAT-by-rate table, counts and top sellers on a single day", async () => {
     const api = stubApi();
     const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
     await flush(el);
     const root = el.shadowRoot!;
 
-    // Tender table: a per-till row per method, with the tender + tip totals.
+    // Tender table: a per-device row per method, with the tender + tip totals.
     expect(root.querySelector("[data-test=tender-table]")).not.toBeNull();
-    const cashRow = root.querySelector("[data-test=tender-row-till-1-cash]")!;
+    const cashRow = root.querySelector("[data-test=tender-row-device-1-cash]")!;
     expect(cashRow.textContent).toContain("80,00\u00a0€");
     expect(cashRow.textContent).toContain("5,00\u00a0€");
     expect(root.querySelector("[data-test=tender-total]")!.textContent).toContain("176,00\u00a0€");
@@ -294,8 +296,8 @@ describe("dashboard-sales-screen", () => {
       [...root.querySelectorAll(`${selector} th, ${selector} td`)].map((cell) =>
         cell.textContent!.trim(),
       );
-    expect(cells("[data-test=tender-row-till-1-cash]")).toEqual([
-      "till-1",
+    expect(cells("[data-test=tender-row-device-1-cash]")).toEqual([
+      "Barra 1",
       "cash",
       "€80.00",
       "€5.00",
@@ -314,6 +316,35 @@ describe("dashboard-sales-screen", () => {
       "3",
       "€7.50",
     ]);
+  });
+
+  it("heads each device's rows with its name, and a job's rows with the job's name", async () => {
+    setLocale("en-GB");
+    const api = stubApi({
+      getDailyClose: vi.fn().mockResolvedValue({
+        ...close,
+        cash: {
+          ...close.cash,
+          byOrigin: [
+            ...close.cash.byOrigin,
+            {
+              source: "demo_seed",
+              deviceId: null,
+              deviceName: null,
+              byMethod: [{ method: "cash", amount: "15.00", tip: "0.00" }],
+              cashTakings: "15.00",
+            },
+          ],
+        },
+      }),
+    });
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
+    await flush(el);
+    const headings = [
+      ...el.shadowRoot!.querySelectorAll("[data-test=tender-table] tbody th[scope=row]"),
+    ].map((cell) => cell.textContent!.trim());
+    expect(headings).toEqual(["Barra 1", "Barra 1", t("source.demo_seed")]);
+    expect(headings).not.toContain("device-1");
   });
 
   it("groups thousands in a period's English totals, and not in its Spanish ones", async () => {

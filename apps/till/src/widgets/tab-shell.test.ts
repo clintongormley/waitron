@@ -4,7 +4,7 @@ import type { TabDef } from "../layout.js";
 import { chooserFaces, cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./tab-shell.js";
 import type { TillTabShell } from "./tab-shell.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 
@@ -97,6 +97,17 @@ describe("till-tab-shell", () => {
     el.shadowRoot!.querySelector<HTMLElement>(".allergens")!.click();
     el.shadowRoot!.querySelector<HTMLElement>(".logout")!.click();
     expect(fired).toEqual(["show-expo", "show-schedule", "open-allergens", "logout"]);
+  });
+
+  it("offers Printers beside Allergens, emitting open-printers", async () => {
+    const { el } = await mountWidget<TillTabShell>("till-tab-shell", { tabs });
+    const printers = el.shadowRoot!.querySelector<HTMLElement>("wt-button.printers")!;
+    expect(printers.textContent).toContain(t("printers.open"));
+    expect(printers.nextElementSibling).toBe(el.shadowRoot!.querySelector("wt-button.allergens"));
+    let fired = 0;
+    el.addEventListener("open-printers", () => (fired += 1));
+    printers.click();
+    expect(fired).toBe(1);
   });
 
   it("shows the operator name in the header", async () => {
@@ -281,7 +292,7 @@ describe("till-tab-shell", () => {
             ".brand, .tab, wt-button, wt-language-chooser, .operator",
           ),
         ];
-        expect(controls.length).toBe(9 + shellTabs.length);
+        expect(controls.length).toBe(10 + shellTabs.length);
         const offScreen = controls
           .map((c) => ({ c: c.className || c.localName, r: c.getBoundingClientRect() }))
           .filter(({ r }) => r.left < 0 || r.right > 390)

@@ -32,9 +32,7 @@ describe("restoreFiscal", () => {
       nodeId: till.nodeId,
     };
     const sale = await seedSale(suite.db, till, 1);
-    await suite.db.transaction((tx) =>
-      appendToChain(tx, till.nodeId, altaFor(till.tillId, sale, 1, 1)),
-    );
+    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, sale, 1, 1)));
     const before = await withTransaction(suite.db, (tx) => currentSif(tx, till.nodeId));
 
     const outcome = await withTransaction(suite.db, (tx) => restoreFiscal(tx, node, NOW));

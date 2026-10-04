@@ -1,14 +1,13 @@
 /**
- * Device join-and-accept binding, plus direct cases over `resolveDeviceBinding` and
- * `requireDeviceBinding`.
+ * Device join-and-accept binding, plus direct cases over `resolveDeviceBinding`.
  *
  * What the join-and-accept cases pin is the binding rule: a kitchen screen has one station or
- * watcher, while a till or handheld binds a register.
+ * watcher, while a till or handheld binds neither.
  */
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, locations, tills, withTransaction } from "@waitron/db";
+import { deviceProfiles, locations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -16,13 +15,13 @@ import type { FormFactor } from "@waitron/layouts";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
-  tillId as brandTillId,
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
-import { requireDeviceBinding, resolveDeviceBinding } from "./device.js";
+import { insertDevice, resolveDeviceBinding } from "./device.js";
+import { acceptDeviceJoinRequest, createJoinRequest, readJoinStatus } from "./join-requests.js";
 import { createWatcher, removeWatcher } from "./watchers.js";
 import "./errors.js";
 
@@ -94,14 +93,12 @@ describe("watcher screen binding", () => {
   });
 });
 
-/** A fresh tenant + venue + one station + one seeded `tills` row ('Caja 1'). Every test calls it,
- * and `useVenueDb` empties the data tables between tests, so the device and till counts each case
- * reads are its own. */
+/** A fresh tenant + venue + one station. Every test calls it, and `useVenueDb` empties the data
+ * tables between tests, so the counts each case reads are its own. */
 async function setupVenue(): Promise<SeededVenue> {
   const admin = suite.db;
   await seedTenant(admin);
-  // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are
-  // `$defaultFn` generators raw SQL never reaches.
+  // Through the table definition: `locations.id` is a `$defaultFn` generator raw SQL never reaches.
   const [loc] = await admin
     .insert(locations)
     .values({
@@ -111,13 +108,8 @@ async function setupVenue(): Promise<SeededVenue> {
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
-  const [till] = await admin
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const nodeId = await seedNode(admin, brandLocationId(locationId));
   const cfg: TillConfig = {
-    tillId: brandTillId(till!.id),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -143,71 +135,95 @@ async function seedProfile(formFactor: FormFactor, name: string): Promise<string
   return row!.id;
 }
 
-async function tillCount(): Promise<number> {
-  const { rows } = await suite.db.execute<{ n: number }>(sql`select count(*) as n from tills `);
+/** Rows per table, so a case can say which tables an accept wrote to. */
+async function rowCounts(): Promise<Record<string, number>> {
+  const { rows: tables } = await suite.db.execute<{ name: string }>(sql`
+    select name from sqlite_master
+    where type = 'table' and name not like 'sqlite_%' and name not like '__drizzle%'`);
+  const counts: Record<string, number> = {};
+  for (const { name } of tables) {
+    const { rows } = await suite.db.execute<{ n: number }>(
+      sql`select count(*) as n from ${sql.identifier(name)}`,
+    );
+    counts[name] = rows[0]!.n;
+  }
+  return counts;
+}
+
+function changedCounts(
+  before: Record<string, number>,
+  after: Record<string, number>,
+): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(after)
+      .map(([name, n]) => [name, n - (before[name] ?? 0)] as const)
+      .filter(([, delta]) => delta !== 0),
+  );
+}
+
+async function activeNamed(locationId: string, label: string): Promise<number> {
+  const { rows } = await suite.db.execute<{ n: number }>(sql`
+    select count(*) as n from devices
+    where location_id = ${locationId} and label = ${label} and active = 1`);
   return rows[0]!.n;
 }
 
+function deviceValues(locationId: string, deviceProfileId: string, label: string) {
+  return { id: randomUUID(), locationId, deviceProfileId, label, tokenHash: "x", active: true };
+}
+
 /** The enrolled device's binding columns and label, read straight off the table rather than out of
- * the verb's return value: what is checked is that `acceptDeviceJoinRequest` (via
- * `resolveDeviceBinding`) STAMPED the station or register its branch resolved. */
+ * the verb's return value. */
 async function deviceRow(deviceId: string): Promise<{
   station_id: string | null;
-  till_id: string | null;
+  watcher_id: string | null;
   device_profile_id: string;
   label: string;
 }> {
   const { rows } = await suite.db.execute<{
     station_id: string | null;
-    till_id: string | null;
+    watcher_id: string | null;
     device_profile_id: string;
     label: string;
   }>(sql`
-    select station_id, till_id, device_profile_id, label from devices where id = ${deviceId}`);
+    select station_id, watcher_id, device_profile_id, label from devices where id = ${deviceId}`);
   return rows[0]!;
 }
 
 describe("device join-and-accept binds the device by its profile's form factor", () => {
-  it("a till profile auto-creates exactly ONE register named after the device and binds it (station NULL)", async () => {
-    // A `till_id` left NULL would also be refused by `device_binding_rule_insert`
-    // (`packages/db/drizzle/0001_behavioural_triggers.sql`, its non-kds arm); what these assertions
-    // add is WHICH register — the one this branch mints, named after the device.
+  it("accepting a till profile writes the device row and nothing else", async () => {
     const { cfg } = await setupVenue();
     const profileId = await seedProfile("till", "Perfil Caja");
-    const before = await tillCount();
+    const before = await rowCounts();
 
     const dev = await enrolDeviceForTest(suite.db, cfg, { name: "Caja Nueva", profileId });
 
-    expect(await tillCount()).toBe(before + 1);
-    const { rows: created } = await suite.db.execute<{ id: string }>(
-      sql`select id from tills where location_id = ${cfg.locationId} and name = 'Caja Nueva'`,
-    );
-    expect(created).toHaveLength(1);
-    const row = await deviceRow(dev.deviceId);
-    expect(row.till_id).toBe(created[0]!.id);
-    expect(row.station_id).toBeNull();
-    expect(row.device_profile_id).toBe(profileId);
-    expect(row.label).toBe("Caja Nueva");
+    expect(changedCounts(before, await rowCounts())).toEqual({ devices: 1 });
+    expect(await deviceRow(dev.deviceId)).toEqual({
+      station_id: null,
+      watcher_id: null,
+      device_profile_id: profileId,
+      label: "Caja Nueva",
+    });
   });
 
-  it("a handheld profile binds an EXISTING register named by registerId and creates no new till", async () => {
+  it("accepting a handheld needs no till and stores no binding beyond its profile", async () => {
     const { cfg } = await setupVenue();
     const profileId = await seedProfile("phone-portrait", "Perfil Móvil");
-    const before = await tillCount();
+    const before = await rowCounts();
 
-    const dev = await enrolDeviceForTest(suite.db, cfg, {
-      name: "Camarero 1",
-      profileId,
-      registerId: cfg.tillId,
+    const dev = await enrolDeviceForTest(suite.db, cfg, { name: "Camarero 1", profileId });
+
+    expect(changedCounts(before, await rowCounts())).toEqual({ devices: 1 });
+    expect(await deviceRow(dev.deviceId)).toEqual({
+      station_id: null,
+      watcher_id: null,
+      device_profile_id: profileId,
+      label: "Camarero 1",
     });
-    expect(await tillCount()).toBe(before); // no register minted
-
-    const row = await deviceRow(dev.deviceId);
-    expect(row.till_id).toBe(cfg.tillId);
-    expect(row.station_id).toBeNull();
   });
 
-  it("a kds profile binds the named station (till NULL)", async () => {
+  it("a kds profile binds the named station", async () => {
     const { cfg, stationId } = await setupVenue();
     const profileId = await seedProfile("kds", "Perfil KDS");
 
@@ -219,7 +235,7 @@ describe("device join-and-accept binds the device by its profile's form factor",
 
     const row = await deviceRow(dev.deviceId);
     expect(row.station_id).toBe(stationId);
-    expect(row.till_id).toBeNull();
+    expect(row.watcher_id).toBeNull();
   });
 
   it("a kds profile with NO station is device.station_required", async () => {
@@ -229,18 +245,34 @@ describe("device join-and-accept binds the device by its profile's form factor",
       enrolDeviceForTest(suite.db, cfg, { name: "Pantalla", profileId }),
     ).rejects.toMatchObject({ code: "device.station_required" });
   });
+});
 
-  it("a handheld profile with NO register is device.register_required", async () => {
+describe("device names among a location's active devices", () => {
+  it("refuses a second active device of the same name there as device.name_taken, and the request survives", async () => {
     const { cfg } = await setupVenue();
-    const profileId = await seedProfile("phone-portrait", "Perfil Móvil");
+    const profileId = await seedProfile("till", "Perfil Caja");
+    await enrolDeviceForTest(suite.db, cfg, { name: "Barra", profileId });
+    const made = await withTransaction(suite.db, (tx) =>
+      createJoinRequest(tx, cfg, { kind: "device", label: "Barra" }),
+    );
+
     await expect(
-      enrolDeviceForTest(suite.db, cfg, { name: "Camarero", profileId }),
-    ).rejects.toMatchObject({ code: "device.register_required" });
+      withTransaction(suite.db, (tx) =>
+        acceptDeviceJoinRequest(tx, cfg, made.joinId, {
+          choice: made.verificationNumber,
+          profileId,
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "device.name_taken" });
+
+    expect(await readJoinStatus(suite.db, cfg, made.joinId, made.token)).toBe("pending");
+    expect(await activeNamed(cfg.locationId, "Barra")).toBe(1);
   });
 
-  it("a handheld profile naming a register of another venue is device.binding_invalid (field tillId)", async () => {
-    // The register read is scoped by location, so a till at another location trips it.
+  it("accepts the same name at another location", async () => {
     const { cfg } = await setupVenue();
+    const profileId = await seedProfile("till", "Perfil Caja");
+    await enrolDeviceForTest(suite.db, cfg, { name: "Barra", profileId });
     const [other] = await suite.db
       .insert(locations)
       .values({
@@ -249,83 +281,96 @@ describe("device join-and-accept binds the device by its profile's form factor",
         operationDescription: "Venta en establecimiento",
       })
       .returning({ id: locations.id });
-    const [foreignTill] = await suite.db
-      .insert(tills)
-      .values({ locationId: other!.id, name: "Caja 1" })
-      .returning({ id: tills.id });
-    const profileId = await seedProfile("phone-portrait", "Perfil Móvil");
-    await expect(
-      enrolDeviceForTest(suite.db, cfg, {
-        name: "Camarero",
-        profileId,
-        registerId: foreignTill!.id,
-      }),
-    ).rejects.toMatchObject({ code: "device.binding_invalid", params: { field: "tillId" } });
+    const otherCfg: TillConfig = { ...cfg, locationId: brandLocationId(other!.id) };
+
+    await enrolDeviceForTest(suite.db, otherCfg, { name: "Barra", profileId });
+
+    expect(await activeNamed(cfg.locationId, "Barra")).toBe(1);
+    expect(await activeNamed(other!.id, "Barra")).toBe(1);
   });
 
-  it("a till profile whose name collides at the venue is device.register_name_taken", async () => {
-    // setupVenue already seeded a 'Caja 1' at cfg.locationId, so a till device named 'Caja 1'
-    // collides on `tills_tenant_location_name_key`.
+  it("accepts the name of a revoked device there", async () => {
     const { cfg } = await setupVenue();
     const profileId = await seedProfile("till", "Perfil Caja");
-    const before = await tillCount();
-    await expect(
-      enrolDeviceForTest(suite.db, cfg, { name: "Caja 1", profileId }),
-    ).rejects.toMatchObject({ code: "device.register_name_taken" });
-    expect(await tillCount()).toBe(before); // the colliding register did not land
+    const first = await enrolDeviceForTest(suite.db, cfg, { name: "Barra", profileId });
+    await suite.db.execute(sql`update devices set active = 0 where id = ${first.deviceId}`);
+
+    const second = await enrolDeviceForTest(suite.db, cfg, { name: "Barra", profileId });
+
+    expect(second.deviceId).not.toBe(first.deviceId);
+    expect(await activeNamed(cfg.locationId, "Barra")).toBe(1);
   });
 });
 
-describe("resolveDeviceBinding and requireDeviceBinding, called directly", () => {
+describe("resolveDeviceBinding and insertDevice, called directly", () => {
   it("refuses a profile id that names no profile as device_profile.not_found", async () => {
     const { cfg } = await setupVenue();
     await expect(
-      withTransaction(suite.db, (tx) =>
-        resolveDeviceBinding(tx, cfg, cfg.locationId, { profileId: randomUUID(), name: "Caja 9" }),
-      ),
+      withTransaction(suite.db, (tx) => resolveDeviceBinding(tx, cfg, { profileId: randomUUID() })),
     ).rejects.toMatchObject({ code: "device_profile.not_found" });
   });
 
-  it("rethrows a register insert that fails for a reason other than a duplicate name, untranslated", async () => {
-    const { cfg } = await setupVenue();
+  it("rethrows a device insert that fails for a reason other than a duplicate name, untranslated", async () => {
+    await setupVenue();
     const profileId = await seedProfile("till", "Perfil Caja");
-    // A location id no `locations` row carries, so the register insert breaks its foreign key.
+    // A location id no `locations` row carries, so the insert breaks its foreign key.
     const refusal = await withTransaction(suite.db, (tx) =>
-      resolveDeviceBinding(tx, cfg, randomUUID(), { profileId, name: "Caja 9" }),
+      insertDevice(tx, deviceValues(randomUUID(), profileId, "Caja 9")),
     ).then(
       () => undefined,
       (error: unknown) => error,
     );
     expect(refusal).toBeInstanceOf(Error);
-    expect(refusal).not.toHaveProperty("code", "device.register_name_taken");
+    expect(refusal).not.toHaveProperty("code", "device.name_taken");
     expect(String(refusal)).toMatch(/FOREIGN KEY constraint failed/);
   });
 
-  it("rethrows a duplicate on a unique index other than the venue's register name, untranslated", async () => {
+  it("rethrows a duplicate on a unique index other than the device name, untranslated", async () => {
     const { cfg } = await setupVenue();
     const profileId = await seedProfile("till", "Perfil Caja");
-    // setupVenue's 'Caja 1' already holds this location, so a one-register-per-location index makes
-    // a differently named register collide on a key that is not the name key.
-    await suite.db.execute(sql`create unique index tills_one_per_location on tills (location_id)`);
+    await enrolDeviceForTest(suite.db, cfg, { name: "Caja 1", profileId });
+    // One device per location makes a differently named device collide on a key that is not the
+    // name key.
+    await suite.db.execute(
+      sql`create unique index devices_one_per_location on devices (location_id)`,
+    );
     try {
       const refusal = await withTransaction(suite.db, (tx) =>
-        resolveDeviceBinding(tx, cfg, cfg.locationId, { profileId, name: "Caja 2" }),
+        insertDevice(tx, deviceValues(cfg.locationId, profileId, "Caja 2")),
       ).then(
         () => undefined,
         (error: unknown) => error,
       );
       expect(refusal).toBeInstanceOf(Error);
-      expect(refusal).not.toHaveProperty("code", "device.register_name_taken");
-      expect(String(refusal)).toMatch(/UNIQUE constraint failed: tills\.location_id/);
+      expect(refusal).not.toHaveProperty("code", "device.name_taken");
+      expect(String(refusal)).toMatch(/UNIQUE constraint failed: devices\.location_id/);
     } finally {
-      await suite.db.execute(sql`drop index tills_one_per_location`);
+      await suite.db.execute(sql`drop index devices_one_per_location`);
     }
   });
 
-  it("accepts clearing a receipt-printer binding without looking for a printer", async () => {
-    await setupVenue();
-    await expect(
-      withTransaction(suite.db, (tx) => requireDeviceBinding(tx, { receiptPrinterId: null })),
-    ).resolves.toBeUndefined();
+  it("rethrows a duplicate on a unique index that names no key, untranslated", async () => {
+    const { cfg } = await setupVenue();
+    const profileId = await seedProfile("till", "Perfil Caja");
+    await enrolDeviceForTest(suite.db, cfg, { name: "Caja 1", profileId });
+    // An index over an expression: its refusal names the index, not a table and columns.
+    await suite.db.execute(
+      sql`create unique index devices_one_per_location_expr on devices (lower(location_id))`,
+    );
+    try {
+      const refusal = await withTransaction(suite.db, (tx) =>
+        insertDevice(tx, deviceValues(cfg.locationId, profileId, "Caja 2")),
+      ).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(refusal).toBeInstanceOf(Error);
+      expect(refusal).not.toHaveProperty("code", "device.name_taken");
+      expect(String(refusal)).toMatch(
+        /UNIQUE constraint failed: index 'devices_one_per_location_expr'/,
+      );
+    } finally {
+      await suite.db.execute(sql`drop index devices_one_per_location_expr`);
+    }
   });
 });

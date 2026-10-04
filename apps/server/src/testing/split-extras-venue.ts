@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { locations, tills, workingOrderLines, withTransaction } from "@waitron/db";
+import { locations, workingOrderLines, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -17,9 +17,9 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
-import type { TillConfig } from "../till-config.js";
+import type { DeviceRequestConfig, OriginConfig, TillConfig } from "../till-config.js";
+import { deviceRequestCfg } from "./session-device.js";
 import { createStation } from "../kitchen.js";
 import { createPrinter } from "@waitron/printing";
 import { attachPrinterToStation } from "../station-printers.js";
@@ -39,7 +39,7 @@ export function useSplitExtrasDb(database: Database): void {
 }
 
 export interface Venue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   catalogueId: string;
 }
 
@@ -58,18 +58,13 @@ export async function setupVenue(): Promise<Venue> {
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const catalogueId = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
     await assignCatalogueToLocation(tx, locationId, cat.id);
     return cat.id;
   });
-  const cfg: TillConfig = {
-    tillId: brandTillId(till!.id),
+  const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -78,7 +73,7 @@ export async function setupVenue(): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  } satisfies TillConfig);
   return { cfg, catalogueId };
 }
 
@@ -236,7 +231,7 @@ export type ProductLine = {
  *  the active claim or default station each product would have taken. */
 export async function createOfferedOrder(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   id: string,
   lines: ProductLine[],
 ): ReturnType<typeof createOpenOrder> {
@@ -250,7 +245,7 @@ export async function createOfferedOrder(
  *  line, children included, to `fireLines`, so the parent-only filter under test is `fireLines`' own. */
 export async function fireNewOrder(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   lines: ProductLine[],
 ): Promise<string> {
   const id = randomUUID();

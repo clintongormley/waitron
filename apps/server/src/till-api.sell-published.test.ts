@@ -50,7 +50,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
@@ -155,7 +154,6 @@ async function setupLunch(): Promise<Lunch> {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -170,7 +168,6 @@ async function setupLunch(): Promise<Lunch> {
     { db: suite.db, modules: ALL_MODULES },
   );
   const cfg: TillConfig = {
-    tillId: brandTillId(venue.tillId),
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -264,14 +261,14 @@ async function setupLunch(): Promise<Lunch> {
   });
   const [profile] = await suite.db
     .insert(deviceProfiles)
-    .values({ name: `Till ${randomUUID()}`, formFactor: "till", capabilities: [] })
+    .values({ name: `Till ${randomUUID()}`, formFactor: "till", capabilities: ["take-cash"] })
     .returning({ id: deviceProfiles.id });
   const device = await enrolDeviceForTest(suite.db, cfg, {
     name: `Counter till ${randomUUID()}`,
     profileId: profile!.id,
   });
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tillId: cfg.tillId, personId: seeded.personId, pin: "5555" }),
+    loginWithPin(tx, { deviceId: device.deviceId, personId: seeded.personId, pin: "5555" }),
   );
   const app = new Hono();
   mountTillApi(
@@ -985,16 +982,32 @@ describe("the home layout each menu shows the device (D14)", () => {
     expect(await layoutsOf(v, "")).toEqual(expected);
   });
 
-  it("shows the default to a device whose profile chose nothing, and to a session with no device", async () => {
+  it("shows the default to a device whose profile chose nothing", async () => {
     const v = await setupLunch();
     await publish(v.menuId);
     const home = [{ menuId: v.menuId, homeLayoutId: await homeOf(v.menuId), layoutFallback: null }];
     expect(await layoutsOf(v)).toEqual(home);
+  });
+
+  it("shows the session's device's choice whatever device cookie the request carries", async () => {
+    const v = await setupLunch();
     const counter = (await app((tx) => createHomeLayout(tx, v.menuId, "Counter"))).id;
     await app((tx) => setDeviceHomeLayout(tx, v.profileId, v.menuId, counter));
     await publish(v.menuId);
-    expect(await layoutsOf(v, `?zoneId=${v.zoneId}`, v.sessionCookie)).toEqual(home);
-    expect(await layoutsOf(v, "", v.sessionCookie)).toEqual(home);
+    const [otherProfile] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: `Till ${randomUUID()}`, formFactor: "till", capabilities: [] })
+      .returning({ id: deviceProfiles.id });
+    const other = await enrolDeviceForTest(suite.db, v.cfg, {
+      name: `Other till ${randomUUID()}`,
+      profileId: otherProfile!.id,
+    });
+    const otherCookie = `${v.sessionCookie}; ${DEVICE_COOKIE}=${other.deviceId}.${other.token}`;
+    const chosen = [{ menuId: v.menuId, homeLayoutId: counter, layoutFallback: null }];
+    for (const cookie of [v.sessionCookie, otherCookie]) {
+      expect(await layoutsOf(v, `?zoneId=${v.zoneId}`, cookie)).toEqual(chosen);
+      expect(await layoutsOf(v, "", cookie)).toEqual(chosen);
+    }
   });
 
   it("serves each menu's structure, layouts and the device's layout on both offers routes", async () => {
@@ -1049,10 +1062,9 @@ describe("the home layout each menu shows the device (D14)", () => {
     };
     for (const path of [zonePath, "/api/default-service-zone/offers"])
       expect((await served(path)).menus).toEqual([lunch]);
-    // Without the device, the same menus show the default layout.
-    expect((await served(zonePath, v.sessionCookie)).menus).toEqual([
-      { ...lunch, homeLayoutId: home },
-    ]);
+    // The session names the device, so a request without the device cookie shows the same layout.
+    for (const path of [zonePath, "/api/default-service-zone/offers"])
+      expect((await served(path, v.sessionCookie)).menus).toEqual([lunch]);
   });
 });
 

@@ -8,6 +8,7 @@ import type {
   SistemaInformatico,
   TipoHuella,
 } from "@waitron/verifactu";
+import type { SaleOrigin } from "@waitron/shared";
 import { registrosFacturacion } from "./schema/registros.js";
 
 /** The insertable row shape, derived from the table's own schema rather than hand-duplicated. */
@@ -22,9 +23,10 @@ export type RegistroRowInsert = typeof registrosFacturacion.$inferInsert;
 export type Entorno = "production" | "preproduction";
 
 export interface RegistroRowContext {
-  /** The till the sale rang at — an informational SNAPSHOT column on the immutable record; `nodeId`
-   * below is the chain key. Travels on the `PendingRegistro`, NOT an `appendToChain` parameter. */
-  tillId: string;
+  /** Where the sale came from: an informational snapshot on the immutable record, never hashed;
+   * `nodeId` below is the chain key. Travels on the `PendingRegistro`, NOT an `appendToChain`
+   * parameter. */
+  origin: SaleOrigin;
   /** The node that owns this record's chain — the CHAIN KEY. This is the `appendToChain`
    * parameter, stamped onto `node_id`. */
   nodeId: string;
@@ -99,7 +101,8 @@ export function toRegistroRow(
 ): RegistroRowInsert {
   const anterior = record.Encadenamiento.RegistroAnterior;
   const common = {
-    tillId: ctx.tillId,
+    source: ctx.origin.source,
+    deviceId: ctx.origin.deviceId,
     nodeId: ctx.nodeId,
     sifId: ctx.sifId,
     saleId: ctx.saleId,
@@ -211,7 +214,9 @@ export function pointerTo(row: {
  */
 export type RegistroRow = {
   id: string;
-  till_id: string;
+  /** Unchecked text: read it through `readSaleOrigin` with `device_id`. */
+  source: string;
+  device_id: string | null;
   node_id: string;
   sif_id: string;
   sale_id: string;

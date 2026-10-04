@@ -3,8 +3,8 @@ import "./errors.js";
 import { sql } from "drizzle-orm";
 import { readTenant, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { AppError, decimal, sumDecimals } from "@waitron/shared";
-import type { NodeId, SaleId, TillId } from "@waitron/shared";
+import { AppError, decimal, readSaleOrigin, sumDecimals } from "@waitron/shared";
+import type { NodeId, SaleId } from "@waitron/shared";
 import type {
   Counterparty,
   FiscalBackend,
@@ -112,12 +112,17 @@ export interface VerifactuBackendOptions {
 /** The columns `recordVoid` reads off the alta it voids. */
 type OriginalAlta = Pick<
   RegistroRow,
-  "till_id" | "node_id" | "id_emisor_factura" | "num_serie_factura" | "fecha_expedicion_factura"
+  | "source"
+  | "device_id"
+  | "node_id"
+  | "id_emisor_factura"
+  | "num_serie_factura"
+  | "fecha_expedicion_factura"
 >;
 
 /**
  * The columns `recordCorrection` reads off the alta being corrected. Narrower than `OriginalAlta`
- * in one axis and wider in another: no `till_id` (the corrective's OWN `sale` carries it, unlike a
+ * in one axis and wider in another: no origin (the corrective's OWN `sale` carries it, unlike a
  * void which must recover it), but `tipo_factura` too — the R-type is derived
  * from it (F2 → R5), so it is read here rather than assumed. The three identity columns feed
  * `FacturasRectificadas` directly, the same shortcut `recordVoid` takes for the anulada identity.
@@ -237,7 +242,7 @@ export class VerifactuBackend implements FiscalBackend {
       {
         tipo: "alta",
         saleId: sale.saleId,
-        tillId: sale.tillId,
+        origin: sale.origin,
         entorno: this.deploymentEnvironment,
         input,
       },
@@ -320,7 +325,8 @@ export class VerifactuBackend implements FiscalBackend {
     void reason;
 
     const { rows } = await tx.execute<OriginalAlta>(sql`
-      select till_id, node_id, id_emisor_factura, num_serie_factura, fecha_expedicion_factura
+      select source, device_id, node_id, id_emisor_factura, num_serie_factura,
+        fecha_expedicion_factura
       from registros_facturacion
       where sale_id = ${saleId} and tipo_registro = 'alta'
       limit 1
@@ -330,8 +336,8 @@ export class VerifactuBackend implements FiscalBackend {
       throw new AppError("fiscal.sale_not_recorded", { saleId });
     }
 
-    // The anulación extends the ORIGINAL's chain, keyed by its node, and inherits its `till_id`.
-    const tillId = original.till_id as TillId;
+    // The anulación extends the ORIGINAL's chain, keyed by its node, and inherits its origin.
+    const origin = readSaleOrigin(original.source, original.device_id);
     const nodeId = original.node_id as NodeId;
     const sif = await currentSif(tx, nodeId);
     const tenant = await this.taxpayer(tx);
@@ -355,7 +361,7 @@ export class VerifactuBackend implements FiscalBackend {
     const appended = await appendToChain(
       tx,
       nodeId,
-      { tipo: "anulacion", saleId, tillId, entorno: this.deploymentEnvironment, input },
+      { tipo: "anulacion", saleId, origin, entorno: this.deploymentEnvironment, input },
       sif,
     );
 
@@ -448,7 +454,7 @@ export class VerifactuBackend implements FiscalBackend {
       {
         tipo: "alta",
         saleId: sale.saleId,
-        tillId: sale.tillId,
+        origin: sale.origin,
         entorno: this.deploymentEnvironment,
         input,
       },
@@ -568,7 +574,7 @@ export class VerifactuBackend implements FiscalBackend {
       {
         tipo: "alta",
         saleId: sale.saleId,
-        tillId: sale.tillId,
+        origin: sale.origin,
         entorno: this.deploymentEnvironment,
         input,
       },

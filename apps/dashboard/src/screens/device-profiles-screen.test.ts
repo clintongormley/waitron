@@ -4,7 +4,13 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
-import type { Canvas, DeviceMenuHomeLayouts, DeviceProfile, DashboardApi } from "../api/client.js";
+import type {
+  Canvas,
+  DeviceMenuHomeLayouts,
+  DeviceProfile,
+  DashboardApi,
+  Printer,
+} from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
@@ -23,6 +29,8 @@ const profiles: DeviceProfile[] = [
     capabilities: ["integrated-card-payment", "open-cash-drawer"],
     formFactor: "till",
     inactivityTimeoutSeconds: null,
+    receiptPrinterIds: [],
+    paymentSlipPrinterIds: [],
   },
   {
     id: "p2",
@@ -31,8 +39,12 @@ const profiles: DeviceProfile[] = [
     capabilities: [],
     formFactor: "kds",
     inactivityTimeoutSeconds: null,
+    receiptPrinterIds: [],
+    paymentSlipPrinterIds: [],
   },
 ];
+
+const NO_PRINTERS = { receiptPrinterIds: [], paymentSlipPrinterIds: [] };
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
@@ -42,6 +54,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     updateDeviceProfile: vi.fn().mockResolvedValue(profiles[0]),
     deleteDeviceProfile: vi.fn().mockResolvedValue(undefined),
     listCanvases: vi.fn().mockResolvedValue(canvases),
+    listPrinters: vi.fn().mockResolvedValue([]),
     getDeviceHomeLayouts: vi.fn().mockResolvedValue([]),
     setDeviceHomeLayout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -168,6 +181,7 @@ describe("device-profiles-screen list mode", () => {
       ["integrated-card-payment", "open-cash-drawer"],
       "till",
       null,
+      NO_PRINTERS,
     );
     expect(api.listDeviceProfiles).toHaveBeenCalledTimes(2);
   });
@@ -198,6 +212,7 @@ describe("device-profiles-screen editor form", () => {
       ["act-as-kds"],
       "tablet-landscape",
       null,
+      NO_PRINTERS,
     );
     // Back in list mode after a successful save.
     expect(el.shadowRoot!.querySelector("[data-test=editor-form]")).toBeNull();
@@ -221,6 +236,7 @@ describe("device-profiles-screen editor form", () => {
       ["print-receipt"],
       "phone-portrait",
       null,
+      NO_PRINTERS,
     );
   });
 
@@ -245,6 +261,32 @@ describe("device-profiles-screen editor form", () => {
       ["show-schedule"],
       "phone-portrait",
       null,
+      NO_PRINTERS,
+    );
+  });
+
+  it("draws a Takes cash switch whose save sends take-cash", async () => {
+    const api = stubApi();
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await el.updateComplete;
+    change(el, "profile-name", "Waiter");
+    selectFormFactor(el, "phone-portrait");
+    await el.updateComplete;
+    const cashSwitch = el.shadowRoot!.querySelector("[data-test=cap-take-cash]")!;
+    // Shipped locale is es-ES.
+    expect(cashSwitch.getAttribute("label")).toBe("Cobra en efectivo");
+    toggle(el, "cap-take-cash", true);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+    expect(api.createDeviceProfile).toHaveBeenCalledWith(
+      "Waiter",
+      null,
+      ["take-cash"],
+      "phone-portrait",
+      null,
+      NO_PRINTERS,
     );
   });
 
@@ -257,7 +299,14 @@ describe("device-profiles-screen editor form", () => {
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
     await flush(el);
-    expect(api.createDeviceProfile).toHaveBeenCalledWith("Counter", null, [], "till", null);
+    expect(api.createDeviceProfile).toHaveBeenCalledWith(
+      "Counter",
+      null,
+      [],
+      "till",
+      null,
+      NO_PRINTERS,
+    );
   });
 
   it("the form-factor picker offers the four form factors with their human labels", async () => {
@@ -342,6 +391,7 @@ describe("device-profiles-screen editor form", () => {
       ["integrated-card-payment", "open-cash-drawer"],
       "kds",
       null,
+      NO_PRINTERS,
     );
   });
 
@@ -361,6 +411,7 @@ describe("device-profiles-screen editor form", () => {
       ["open-cash-drawer"],
       "till",
       null,
+      NO_PRINTERS,
     );
   });
 
@@ -380,6 +431,7 @@ describe("device-profiles-screen editor form", () => {
       ["integrated-card-payment", "open-cash-drawer"],
       "till",
       null,
+      NO_PRINTERS,
     );
   });
 
@@ -403,6 +455,7 @@ describe("device-profiles-screen editor form", () => {
       ["integrated-card-payment", "open-cash-drawer"],
       "phone-portrait",
       300,
+      NO_PRINTERS,
     );
   });
 
@@ -423,6 +476,7 @@ describe("device-profiles-screen editor form", () => {
       ["integrated-card-payment", "open-cash-drawer"],
       "kds",
       null,
+      NO_PRINTERS,
     );
   });
 
@@ -581,6 +635,7 @@ describe("device-profiles-screen remaining edges", () => {
         ["integrated-card-payment", "open-cash-drawer"],
         "phone-portrait",
         null,
+        NO_PRINTERS,
       ),
     );
   });
@@ -615,6 +670,7 @@ describe("device-profiles-screen remaining edges", () => {
         ["integrated-card-payment", "open-cash-drawer"],
         "phone-portrait",
         120,
+        NO_PRINTERS,
       ),
     );
   });
@@ -693,6 +749,7 @@ describe("device-profiles-screen fields", () => {
       ["integrated-card-payment", "open-cash-drawer"],
       "tablet-landscape",
       null,
+      NO_PRINTERS,
     );
   });
 
@@ -1120,3 +1177,268 @@ it.each(["connection.failed", "server.internal"])(
     expect(alert()).toBe(codeMessage("connection.failed"));
   },
 );
+
+describe("device-profiles-screen printer lists", () => {
+  function printer(id: string, name: string, active = true): Printer {
+    return {
+      id,
+      name,
+      transport: "network_tcp",
+      host: "10.0.0.9",
+      port: 9100,
+      localKey: null,
+      pollId: null,
+      watcherId: null,
+      paperWidth: "80mm",
+      resolution: "180dpi",
+      hasCashDrawer: false,
+      pendingJobs: 0,
+      lastPrintAt: null,
+      lastPrintAgentId: null,
+      active,
+    };
+  }
+
+  const venuePrinters = [
+    printer("pr1", "Barra"),
+    printer("pr2", "Cocina"),
+    printer("pr3", "Terraza"),
+    printer("pr4", "Vieja", false),
+  ];
+
+  const listedProfile: DeviceProfile = {
+    ...profiles[0]!,
+    receiptPrinterIds: ["pr2", "pr1"],
+    paymentSlipPrinterIds: ["pr3"],
+  };
+
+  async function editListed(overrides: Partial<DashboardApi> = {}) {
+    const api = stubApi({
+      listDeviceProfiles: vi.fn().mockResolvedValue([listedProfile, profiles[1]]),
+      getDeviceProfile: vi.fn().mockResolvedValue(listedProfile),
+      listPrinters: vi.fn().mockResolvedValue(venuePrinters),
+      ...overrides,
+    });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await flush(el);
+    return { api, el };
+  }
+
+  type Switch = HTMLElement & { checked: boolean; label: string };
+
+  function switches(el: DeviceProfilesScreen, list: string): Switch[] {
+    return [
+      ...el.shadowRoot!.querySelectorAll<Switch>(`[data-test=${list}] wt-switch[data-printer-id]`),
+    ];
+  }
+
+  function switchedOn(el: DeviceProfilesScreen, list: string): string[] {
+    return switches(el, list)
+      .filter((s) => s.checked)
+      .map((s) => s.dataset.printerId!);
+  }
+
+  async function save(el: DeviceProfilesScreen) {
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-save]")!.click();
+    await flush(el);
+  }
+
+  function savedLists(api: DashboardApi) {
+    return vi.mocked(api.updateDeviceProfile).mock.calls[0]![6];
+  }
+
+  it("shows each list's printers switched on, in the profile's order", async () => {
+    const { el } = await editListed();
+    expect(switchedOn(el, "receipt-printers")).toEqual(["pr2", "pr1"]);
+    expect(switchedOn(el, "payment-slip-printers")).toEqual(["pr3"]);
+    // The printers a list does not hold are offered, switched off, after the ones it does.
+    expect(switches(el, "receipt-printers").map((s) => s.dataset.printerId)).toEqual([
+      "pr2",
+      "pr1",
+      "pr3",
+    ]);
+    expect(switches(el, "receipt-printers").map((s) => s.label)).toEqual([
+      "Cocina",
+      "Barra",
+      "Terraza",
+    ]);
+  });
+
+  it("adds a printer switched on to the end of its list, leaving the other list as it was", async () => {
+    const { api, el } = await editListed();
+    toggle(el, "receipt-printers-pr3", true);
+    await el.updateComplete;
+    expect(switchedOn(el, "receipt-printers")).toEqual(["pr2", "pr1", "pr3"]);
+    await save(el);
+    expect(savedLists(api)).toEqual({
+      receiptPrinterIds: ["pr2", "pr1", "pr3"],
+      paymentSlipPrinterIds: ["pr3"],
+    });
+  });
+
+  it("moves a printer up its list", async () => {
+    const { api, el } = await editListed();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=receipt-printers-up-pr1]")!.click();
+    await el.updateComplete;
+    expect(switchedOn(el, "receipt-printers")).toEqual(["pr1", "pr2"]);
+    await save(el);
+    expect(savedLists(api)).toEqual({
+      receiptPrinterIds: ["pr1", "pr2"],
+      paymentSlipPrinterIds: ["pr3"],
+    });
+  });
+
+  it("moves a printer down its list, and drops one switched off", async () => {
+    const { api, el } = await editListed();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=receipt-printers-down-pr2]")!.click();
+    await el.updateComplete;
+    toggle(el, "payment-slip-printers-pr3", false);
+    await el.updateComplete;
+    await save(el);
+    expect(savedLists(api)).toEqual({
+      receiptPrinterIds: ["pr1", "pr2"],
+      paymentSlipPrinterIds: [],
+    });
+  });
+
+  it("offers no move past either end, and none for a printer not on the list", async () => {
+    const { el } = await editListed();
+    const button = (test: string) =>
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test=${test}]`);
+    expect(button("receipt-printers-up-pr2")!.disabled).toBe(true);
+    expect(button("receipt-printers-down-pr2")!.disabled).toBe(false);
+    expect(button("receipt-printers-up-pr1")!.disabled).toBe(false);
+    expect(button("receipt-printers-down-pr1")!.disabled).toBe(true);
+    expect(button("receipt-printers-up-pr3")).toBeNull();
+    // Each button names the printer it moves.
+    expect(button("receipt-printers-up-pr1")!.getAttribute("aria-label")).toBe(
+      `${t("device_profiles.move_up")} Barra`,
+    );
+    expect(button("receipt-printers-down-pr2")!.getAttribute("aria-label")).toBe(
+      `${t("device_profiles.move_down")} Cocina`,
+    );
+  });
+
+  it("keeps a switched-off printer a list still holds, and offers none it does not", async () => {
+    const withOld: DeviceProfile = { ...listedProfile, paymentSlipPrinterIds: ["pr4", "pr3"] };
+    const { api, el } = await editListed({
+      getDeviceProfile: vi.fn().mockResolvedValue(withOld),
+    });
+    const slip = switches(el, "payment-slip-printers");
+    expect(slip.map((s) => s.dataset.printerId)).toEqual(["pr4", "pr3", "pr1", "pr2"]);
+    expect(slip[0]!.label).toBe(`Vieja (${t("printers.status_inactive")})`);
+    expect(switches(el, "receipt-printers").map((s) => s.dataset.printerId)).not.toContain("pr4");
+    await save(el);
+    expect(savedLists(api)).toEqual({
+      receiptPrinterIds: ["pr2", "pr1"],
+      paymentSlipPrinterIds: ["pr4", "pr3"],
+    });
+  });
+
+  it("keeps a listed printer the printer list has not delivered, without drawing it", async () => {
+    const withUnknown: DeviceProfile = { ...listedProfile, receiptPrinterIds: ["pr-new", "pr2"] };
+    const { api, el } = await editListed({
+      getDeviceProfile: vi.fn().mockResolvedValue(withUnknown),
+    });
+    expect(switches(el, "receipt-printers").map((s) => s.dataset.printerId)).toEqual([
+      "pr2",
+      "pr1",
+      "pr3",
+    ]);
+    await save(el);
+    expect(savedLists(api)).toEqual({
+      receiptPrinterIds: ["pr-new", "pr2"],
+      paymentSlipPrinterIds: ["pr3"],
+    });
+  });
+
+  it("ends the move buttons at the printers drawn, past an undelivered one", async () => {
+    const button = (el: DeviceProfilesScreen, test: string) =>
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test=${test}]`)!;
+    const trailing = await editListed({
+      getDeviceProfile: vi.fn().mockResolvedValue({
+        ...listedProfile,
+        receiptPrinterIds: ["pr2", "pr1", "pr-new"],
+      }),
+    });
+    expect(button(trailing.el, "receipt-printers-down-pr1").disabled).toBe(true);
+    cleanupWidgets();
+    const leading = await editListed({
+      getDeviceProfile: vi.fn().mockResolvedValue({
+        ...listedProfile,
+        receiptPrinterIds: ["pr-new", "pr2", "pr1"],
+      }),
+    });
+    expect(button(leading.el, "receipt-printers-up-pr2").disabled).toBe(true);
+  });
+
+  it("swaps a moved printer with the printer drawn next to it, past an undelivered one", async () => {
+    const { api, el } = await editListed({
+      getDeviceProfile: vi.fn().mockResolvedValue({
+        ...listedProfile,
+        receiptPrinterIds: ["pr2", "pr-new", "pr1"],
+      }),
+    });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=receipt-printers-up-pr1]")!.click();
+    await el.updateComplete;
+    expect(switchedOn(el, "receipt-printers")).toEqual(["pr1", "pr2"]);
+    await save(el);
+    expect(savedLists(api)).toEqual({
+      receiptPrinterIds: ["pr1", "pr-new", "pr2"],
+      paymentSlipPrinterIds: ["pr3"],
+    });
+  });
+
+  it("says to add a printer first when the venue has none", async () => {
+    const api = stubApi();
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p1]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=no-printers]")!.textContent!.trim()).toBe(
+      t("device_profiles.no_printers"),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=receipt-printers]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=payment-slip-printers]")).toBeNull();
+  });
+
+  it("creates a new profile with the lists chosen in its editor", async () => {
+    const api = stubApi({ listPrinters: vi.fn().mockResolvedValue(venuePrinters) });
+    const el = await mount(api);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await el.updateComplete;
+    change(el, "profile-name", "Caja");
+    toggle(el, "receipt-printers-pr2", true);
+    toggle(el, "payment-slip-printers-pr1", true);
+    await el.updateComplete;
+    await save(el);
+    expect(api.createDeviceProfile).toHaveBeenCalledWith("Caja", null, [], "till", null, {
+      receiptPrinterIds: ["pr2"],
+      paymentSlipPrinterIds: ["pr1"],
+    });
+  });
+
+  it("copies a profile's printer lists when it is duplicated", async () => {
+    const { api, el } = await editListed();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=duplicate-p1]")!.click();
+    await flush(el);
+    expect(vi.mocked(api.createDeviceProfile).mock.calls[0]![5]).toEqual({
+      receiptPrinterIds: ["pr2", "pr1"],
+      paymentSlipPrinterIds: ["pr3"],
+    });
+  });
+
+  it("starts the next profile opened from its own lists, not the last one's", async () => {
+    const { el } = await editListed();
+    toggle(el, "receipt-printers-pr3", true);
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=profile-cancel]")!.click();
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
+    await el.updateComplete;
+    expect(switchedOn(el, "receipt-printers")).toEqual([]);
+    expect(switchedOn(el, "payment-slip-printers")).toEqual([]);
+  });
+});

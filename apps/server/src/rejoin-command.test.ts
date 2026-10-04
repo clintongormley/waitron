@@ -22,7 +22,6 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 const STATE_DIR = mkdtempSync(join(tmpdir(), "rejoin-cmd-"));
 const VENUE_DIR = join(STATE_DIR, "venue");
 
-const TILL = "22222222-2222-4222-8222-222222222222";
 const NODE = "33333333-3333-4333-8333-333333333333";
 const SERIES = "44444444-4444-4444-8444-444444444444";
 const LOCATION = "55555555-5555-4555-8555-555555555555";
@@ -30,7 +29,6 @@ const LOCATION = "55555555-5555-4555-8555-555555555555";
 const base: Record<string, string | undefined> = {
   WAITRON_STATE_DIR: STATE_DIR,
   WAITRON_VENUE_DIR: VENUE_DIR,
-  WAITRON_TILL_TILL_ID: TILL,
   WAITRON_TILL_NODE_ID: NODE,
   WAITRON_TILL_SERIES_ID: SERIES,
   WAITRON_TILL_LOCATION_ID: LOCATION,
@@ -108,7 +106,6 @@ describe("waitron-rejoin rejoin", () => {
 
   it("refuses when the WAITRON_TILL_*_ID are absent (unprovisioned box)", async () => {
     const { code, out } = await run({
-      WAITRON_TILL_TILL_ID: undefined,
       WAITRON_TILL_NODE_ID: undefined,
       WAITRON_TILL_SERIES_ID: undefined,
       WAITRON_TILL_LOCATION_ID: undefined,

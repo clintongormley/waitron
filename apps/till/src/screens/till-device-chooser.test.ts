@@ -47,12 +47,11 @@ describe("till-device-chooser", () => {
   it("lists devices from getDevDevices, labelling each device's kind in human words", async () => {
     const list: DevDeviceList = {
       devices: [
-        { id: "d1", kind: "handheld", label: "Phone", tillId: "t1", stationId: null, active: true },
+        { id: "d1", kind: "handheld", label: "Phone", stationId: null, active: true },
         {
           id: "d2",
           kind: "kds_station",
           label: "Pass screen",
-          tillId: null,
           stationId: "s1",
           active: true,
         },
@@ -74,9 +73,7 @@ describe("till-device-chooser", () => {
   it("uses a pre-fetched `list` without re-reading getDevDevices", async () => {
     const getDevDevices = vi.fn();
     const list: DevDeviceList = {
-      devices: [
-        { id: "d1", kind: "till", label: "Front", tillId: "t1", stationId: null, active: true },
-      ],
+      devices: [{ id: "d1", kind: "till", label: "Front", stationId: null, active: true }],
     };
     const { el } = await mountWidget<TillDeviceChooser>("till-device-chooser", {
       api: stubApi({ getDevDevices }),
@@ -97,9 +94,7 @@ describe("till-device-chooser", () => {
   it("Use this device stores the id in this tab's sessionStorage and navigates to /", async () => {
     const navigate = vi.fn();
     const list: DevDeviceList = {
-      devices: [
-        { id: "d1", kind: "handheld", label: "Phone", tillId: null, stationId: null, active: true },
-      ],
+      devices: [{ id: "d1", kind: "handheld", label: "Phone", stationId: null, active: true }],
     };
     const { el } = await mountWidget<TillDeviceChooser>("till-device-chooser", {
       api: stubApi({ getDevDevices: vi.fn().mockResolvedValue(list) }),

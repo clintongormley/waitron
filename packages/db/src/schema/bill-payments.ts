@@ -14,8 +14,9 @@ import {
   table,
   tsString,
 } from "./columns.js";
+import { devices } from "./devices.js";
 import { workingOrders } from "./orders.js";
-import { tills } from "./tenants.js";
+import { originChecks, saleSourceColumn } from "./origin.js";
 
 export const billPaymentKind = enumType(["items", "contribution", "share"]);
 export const billPaymentMethod = enumType(["cash", "card"]);
@@ -49,7 +50,10 @@ export const billPayments = table(
     tendered: money("tendered"),
     state: billPaymentState("state").notNull(),
     requestedBy: id("requested_by").notNull(),
-    tillId: id("till_id").notNull(),
+    source: saleSourceColumn("source").notNull(),
+    /* v8 ignore start */
+    deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
+    /* v8 ignore stop */
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     receivedAt: tsString("received_at"),
     failedAt: tsString("failed_at"),
@@ -65,13 +69,9 @@ export const billPayments = table(
       foreignColumns: [workingOrders.id],
       name: "bill_payments_working_order_fk",
     }).onDelete("restrict"),
-    foreignKey({
-      columns: [t.tillId],
-      foreignColumns: [tills.id],
-      name: "bill_payments_till_fk",
-    }),
     unique("bill_payments_submission_key").on(t.workingOrderId, t.submissionId),
     check("bill_payments_kind_ck", enumCheck(t.kind)),
+    ...originChecks("bill_payments", t.source, t.deviceId),
     check("bill_payments_method_ck", enumCheck(t.method)),
     check("bill_payments_state_ck", enumCheck(t.state)),
     check(
@@ -152,7 +152,10 @@ export const billPaymentRefunds = table(
     reason: label("reason").notNull(),
     authorizedBy: id("authorized_by").notNull(),
     requestedBy: id("requested_by").notNull(),
-    tillId: id("till_id").notNull(),
+    source: saleSourceColumn("source").notNull(),
+    /* v8 ignore start */
+    deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
+    /* v8 ignore stop */
     state: billPaymentRefundState("state").notNull(),
     sentAt: tsString("sent_at"),
     sendCount: count("send_count").notNull().default(0),
@@ -172,13 +175,9 @@ export const billPaymentRefunds = table(
       foreignColumns: [billPayments.id],
       name: "bill_payment_refunds_payment_fk",
     }).onDelete("restrict"),
-    foreignKey({
-      columns: [t.tillId],
-      foreignColumns: [tills.id],
-      name: "bill_payment_refunds_till_fk",
-    }),
     unique("bill_payment_refunds_submission_key").on(t.billPaymentId, t.submissionId),
     check("bill_payment_refunds_state_ck", enumCheck(t.state)),
+    ...originChecks("bill_payment_refunds", t.source, t.deviceId),
     check(
       "bill_payment_refunds_amounts_ck",
       sql`${t.appliedAmount} >= 0 and ${t.tipAmount} >= 0 and ${t.appliedAmount} + ${t.tipAmount} > 0`,

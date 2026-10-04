@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "./errors.js";
 import type { LocationId, SaleId } from "./ids.js";
 import {
+  deviceId,
   fiscalRecordId,
   isUuid,
   locationId,
@@ -11,7 +12,6 @@ import {
   saleLineId,
   seriesId,
   tenderId,
-  tillId,
   workingOrderId,
   workingOrderLineId,
 } from "./ids.js";
@@ -21,7 +21,7 @@ const UUID_B = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
 
 const ALL_ID_CONSTRUCTORS: ReadonlyArray<[string, string, (value: string) => string]> = [
   ["locationId", "LocationId", locationId],
-  ["tillId", "TillId", tillId],
+  ["deviceId", "DeviceId", deviceId],
   ["nodeId", "NodeId", nodeId],
   ["seriesId", "SeriesId", seriesId],
   ["workingOrderId", "WorkingOrderId", workingOrderId],
@@ -38,7 +38,7 @@ describe("id constructors", () => {
   });
 
   it("accepts an upper-case uuid and folds it to lower case", () => {
-    expect(tillId(UUID_A.toUpperCase())).toBe(UUID_A);
+    expect(deviceId(UUID_A.toUpperCase())).toBe(UUID_A);
   });
 
   it("rejects a non-uuid string with shared.invalid_id", () => {
@@ -93,12 +93,12 @@ describe.each(ALL_ID_CONSTRUCTORS)("%s", (label, kind, construct) => {
 });
 
 describe("brand assignability", () => {
-  it("refuses a TillId where a SaleId is required", () => {
+  it("refuses a DeviceId where a SaleId is required", () => {
     // The @ts-expect-error directives below are the real assertions in this block: `tsc
     // --noEmit` fails with "Unused '@ts-expect-error' directive" if the brand ever stops
     // discriminating.
-    // @ts-expect-error a TillId is not a SaleId
-    const wrongKind: SaleId = tillId(UUID_A);
+    // @ts-expect-error a DeviceId is not a SaleId
+    const wrongKind: SaleId = deviceId(UUID_A);
     expect(typeof wrongKind).toBe("string");
   });
 

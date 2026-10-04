@@ -11,7 +11,6 @@ import {
   isRefusal,
   kitchenStations,
   locations,
-  tills,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@waitron/db";
@@ -443,18 +442,14 @@ describe("the service settings and kitchen notices tables refuse what their rule
       .insert(locations)
       .values({ name: "Venue", invoiceLocales: ["en"], operationDescription: "Hospitality" })
       .returning({ id: locations.id });
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: location!.id, name: "Bar" })
-      .returning({ id: tills.id });
     const [station] = await db
       .insert(kitchenStations)
       .values({ locationId: location!.id, name: "Grill" })
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
-      insert into working_orders (id, till_id, order_number, opened_at)
-      values (${orderId}, ${till!.id}, 1, ${new Date().toISOString()})`);
+      insert into working_orders (id, source, location_id, order_number, opened_at)
+      values (${orderId}, 'dashboard', ${location!.id}, 1, ${new Date().toISOString()})`);
     const notice = (kind: string, quantity: number, stationId: string) =>
       sql`insert into kitchen_notices
             (id, station_id, working_order_id, order_label, kind, line_name, quantity, created_at)
@@ -497,18 +492,14 @@ describe("the service settings and kitchen notices tables refuse what their rule
       .insert(locations)
       .values({ name: "Venue", invoiceLocales: ["en"], operationDescription: "Hospitality" })
       .returning({ id: locations.id });
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: location!.id, name: "Bar" })
-      .returning({ id: tills.id });
     const [station] = await db
       .insert(kitchenStations)
       .values({ locationId: location!.id, name: "Grill" })
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
-      insert into working_orders (id, till_id, order_number, opened_at)
-      values (${orderId}, ${till!.id}, 1, ${new Date().toISOString()})`);
+      insert into working_orders (id, source, location_id, order_number, opened_at)
+      values (${orderId}, 'dashboard', ${location!.id}, 1, ${new Date().toISOString()})`);
     const notice = (kind: string, direction: string | null) =>
       sql`insert into kitchen_notices
             (id, station_id, working_order_id, order_label, kind, line_name, quantity, direction,
@@ -547,18 +538,14 @@ describe("the service settings and kitchen notices tables refuse what their rule
       .insert(locations)
       .values({ name: "Venue", invoiceLocales: ["en"], operationDescription: "Hospitality" })
       .returning({ id: locations.id });
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: location!.id, name: "Bar" })
-      .returning({ id: tills.id });
     const [station] = await db
       .insert(kitchenStations)
       .values({ locationId: location!.id, name: "Grill" })
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
-      insert into working_orders (id, till_id, order_number, opened_at)
-      values (${orderId}, ${till!.id}, 1, ${new Date().toISOString()})`);
+      insert into working_orders (id, source, location_id, order_number, opened_at)
+      values (${orderId}, 'dashboard', ${location!.id}, 1, ${new Date().toISOString()})`);
     const notice = (kind: string, cancelledExtra: string | null) =>
       sql`insert into kitchen_notices
             (id, station_id, working_order_id, order_label, kind, line_name, quantity,

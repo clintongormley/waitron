@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
 import { check, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { id, json, label, newId, table, tsString } from "./columns.js";
+import { devices } from "./devices.js";
+import { originChecks, sourceColumn } from "./origin.js";
 import { sales } from "./sales.js";
-import { tills } from "./tenants.js";
 
 export type IncidentSeverity = "warning" | "error";
 
@@ -23,10 +24,9 @@ export const incidents = table(
   "incidents",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    tillId: id("till_id")
-      .notNull()
-      /* v8 ignore start */
-      .references(() => tills.id),
+    source: sourceColumn("source").notNull(),
+    /* v8 ignore start */
+    deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
     /* v8 ignore start */
     saleId: id("sale_id").references(() => sales.id),
@@ -41,28 +41,36 @@ export const incidents = table(
     acknowledgedBy: id("acknowledged_by"),
   },
   (t) => [
-    // `openIncidents` (packages/core): what is open on one till, newest first. Only tests call it;
-    // the till shows no incidents.
-    index("incidents_till_open_idx").on(t.tillId, t.detectedAt),
+    // `openIncidents` (packages/core): what is open for one source and device, newest first.
+    index("incidents_origin_open_idx").on(t.source, t.deviceId, t.detectedAt),
     // The dashboard's Handled tab: incidents handled since a date, most recent first.
     index("incidents_handled_idx").on(t.acknowledgedAt),
-    // At most one OPEN incident per (till, code, sale), so a repeat of the same problem collides
-    // rather than stacking a second alert on the dashboard. Partial on `acknowledged_at is null`,
-    // so handled rows accumulate freely.
+    // At most one OPEN incident per (source, device, code, sale), so a repeat of the same problem
+    // collides rather than stacking a second alert on the dashboard. Partial on
+    // `acknowledged_at is null`, so handled rows accumulate freely.
     //
-    // The third indexed value substitutes the empty string for a NULL `sale_id` rather than
-    // indexing `sale_id` itself. SQLite has no `NULLS NOT DISTINCT`, and in a SQLite unique index
-    // every NULL differs from every other NULL, so two open incidents carrying the same till and
-    // code and no sale would both be accepted. Mapping NULL onto the empty string makes those two
-    // collide instead. The stand-in is the empty string because `newId` — the `randomUUID()` that
-    // supplies `sales.id` — never returns it. Written as a CASE rather than
-    // `coalesce(sale_id, '')` because drizzle-kit splits an index expression on its commas and
-    // emits each piece as a quoted identifier: the `coalesce` form generated
-    // ``(`till_id`,`code`,`coalesce("sale_id"`,` '')`)``.
+    // A NULL `device_id` and a NULL `sale_id` are each indexed as the empty string. SQLite has no
+    // `NULLS NOT DISTINCT`, and in a SQLite unique index every NULL differs from every other NULL,
+    // so two open incidents from one job source with the same code and no sale would both be
+    // accepted. The empty string is a safe stand-in because `newId` — the `randomUUID()` behind
+    // `devices.id` and `sales.id` — never returns it. Written as a CASE rather than
+    // `coalesce(x, '')` because drizzle-kit splits an index expression on its commas and emits each
+    // piece as a quoted identifier.
+    //
+    // A drizzle-kit REBUILD of this table writes even the CASE form back as quoted column names,
+    // which SQLite refuses with `no such column` (drizzle-kit 0.31.11's recreate path ignores which
+    // index columns are expressions). A change that rebuilds `incidents` takes this index out of
+    // the schema first and adds it back in a generation of its own, as core 0077 to 0079 do.
     uniqueIndex("incidents_open_dedup")
-      .on(t.tillId, t.code, sql`case when ${t.saleId} is null then '' else ${t.saleId} end`)
+      .on(
+        t.source,
+        sql`case when ${t.deviceId} is null then '' else ${t.deviceId} end`,
+        t.code,
+        sql`case when ${t.saleId} is null then '' else ${t.saleId} end`,
+      )
       .where(sql`${t.acknowledgedAt} is null`),
     check("incidents_severity_ck", sql`${t.severity} in ('warning', 'error')`),
     check("incidents_code_ck", sql`${t.code} <> ''`),
+    ...originChecks("incidents", t.source, t.deviceId),
   ],
 );

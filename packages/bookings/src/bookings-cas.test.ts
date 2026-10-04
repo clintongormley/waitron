@@ -8,7 +8,7 @@
  */
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { diningTables, locations, tills, withTransaction } from "@waitron/db";
+import { diningTables, locations, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -32,7 +32,6 @@ async function setupVenue(db: Database): Promise<{ cfg: BookingConfig; createdBy
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
-  await db.insert(tills).values({ locationId, name: "Caja 1" });
   await seedNode(db, brandLocationId(locationId));
   return { cfg: { locationId: brandLocationId(locationId) }, createdBy: crypto.randomUUID() };
 }

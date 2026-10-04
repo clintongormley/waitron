@@ -116,7 +116,7 @@ refuses.
 ## Provisioning a venue
 
 `waitron-provision venue` creates the business rows a sellable venue needs — the taxpayer row, a
-location, a till, a node, and a standard plus a rectificative invoice series — and runs every enabled module's
+location, a node, and a standard plus a rectificative invoice series — and runs every enabled module's
 seed for that node, the fiscal one registering it as a Veri\*Factu SIF, in one transaction. It replaced the retired `apps/server/sql/bootstrap-tenant.sql` (see "What actually
 writes the stamp" above for why that file was removed).
 
@@ -147,7 +147,7 @@ WAITRON_ADMIN_PASSWORD='choose-a-strong-one' \
     --operation-description 'Venta en establecimiento' \
     --address-line1 'Calle Mayor 1' --postal-code 28001 --city Madrid --province Madrid \
     --time-zone Europe/Madrid --day-cutover 06:00 \
-    --till-name 'Caja 1' --series-code A --rectificative-code R \
+    --series-code A --rectificative-code R \
     --admin-name 'Owner' --admin-email 'owner@example.com' \
     --yes
 ```
@@ -199,7 +199,7 @@ waitron-rejoin rejoin [--accept-loss]
 
 It reads its own boot env — `WAITRON_STATE_DIR`, `WAITRON_VENUE_DIR` (both resolved exactly as
 `config.ts` resolves them, so an empty value takes the default rather than the working directory),
-`WAITRON_ENV`, and the four `WAITRON_TILL_*_ID`. Three ordered refusals come before the wipe:
+`WAITRON_ENV`, and the three `WAITRON_TILL_*_ID`. Three ordered refusals come before the wipe:
 
 - **`provisioning.database_in_use`** — another process, usually the running server, is using the venue
   folder. Refused before anything is read or wiped; stop the server first.
@@ -463,8 +463,7 @@ The ones worth grepping for:
   reset failed before any work was looked for, and the cause is the database, not the credential.
   There is at most one of these per pass: one database files for one taxpayer. This line is the
   ONLY place this fact exists outside `/health`'s `skipped` count — a skipped drain has no ledger
-  row (`drain` has no table of its own) and no incident (`incidents.till_id` is `NOT NULL`, and a
-  drain has no till). `errorCode` is typically `server.credential_unusable` (a `fiscal.aeat`
+  row (`drain` has no table of its own) and raises no incident. `errorCode` is typically `server.credential_unusable` (a `fiscal.aeat`
   credential exists but a declared field — most often `certKind`, absent from a row sealed before
   that field joined the purpose registry — is missing or unusable) or a credential-store code from
   `getCredential` (`credentials.missing` — no row for that purpose at all,

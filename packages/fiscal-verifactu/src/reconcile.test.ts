@@ -14,6 +14,7 @@ import { toAeatDate } from "./registro-row.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 // The drain fixtures stamp `fecha_expedicion_factura` = 2026-07-20, inside this one period.
 const SERVER_NOW = new Date("2026-07-21T00:00:00Z");
@@ -53,6 +54,16 @@ async function incidentsFor(): Promise<
   );
   // A raw read hands back a `json` column's stored text.
   return rows.map((row) => ({ ...row, params: JSON.parse(row.params) as Record<string, unknown> }));
+}
+
+/** Every incident's source and device: a checking pass names itself, never the record's device. */
+async function incidentOrigins(): Promise<{ source: string; device_id: string | null }[]> {
+  const { rows } = await withTransaction(suite.db, (tx) =>
+    tx.execute<{ source: string; device_id: string | null }>(
+      sql`select source, device_id from incidents`,
+    ),
+  );
+  return rows;
 }
 
 async function estadosFor(): Promise<Map<string, string>> {
@@ -110,7 +121,7 @@ async function altaIdentityFor(saleId: string): Promise<{ id: string; facturaKey
  */
 async function fileThenVoid(options: { submitAnulacion: boolean }) {
   const period = { year: "2026", month: "03" };
-  const { tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db);
+  const { locationId, nodeId, seriesId } = await seedTenantWithSif(suite.db);
   // recordVoid requires `sale.void`: a manager session authorizes it.
   const { rows: mgr } = await suite.db.execute<{ id: string }>(
     // `id` and `created_at` have no SQL DEFAULT (drizzle's `$defaultFn` runs only for a builder
@@ -118,8 +129,9 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
     sql`insert into persons (id, created_at, display_name, pin_hash, role)
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
   );
+  const deviceId = (await seedDevice(suite.db, { locationId })).deviceId;
   const voidSession = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tillId, personId: mgr[0]!.id, pin: "1234" }),
+    loginWithPin(tx, { deviceId, personId: mgr[0]!.id, pin: "1234" }),
   );
   const aeat = createFakeAeat({ serverNow: SERVER_NOW });
   const resolveClient = staticResolver(aeat.client());
@@ -131,7 +143,7 @@ async function fileThenVoid(options: { submitAnulacion: boolean }) {
   });
 
   const sale = await withTransaction(suite.db, async (tx) => {
-    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
+    return recordSale(tx, backend, saleInput({ nodeId, seriesId }));
   });
   // An envío takes `proximo_intento_en` from the wall clock; pin it so the drain is deterministic.
   const pinDue = () =>
@@ -381,6 +393,7 @@ describe("reconcile — the three audit cases", () => {
     expect(inc).toHaveLength(1);
     expect(inc[0]?.code).toBe("fiscal.reconcile_drift_errores");
     expect(inc[0]?.severity).toBe("warning");
+    expect(await incidentOrigins()).toEqual([{ source: "fiscal_filing", device_id: null }]);
 
     const estados = await estadosFor();
     expect(estados.get(seeded.registroIds[0]!)).toBe("aceptado_con_errores");
@@ -509,6 +522,7 @@ describe("reconcile — the three audit cases", () => {
     const incidents = await incidentsFor();
     expect(incidents).toHaveLength(1);
     expect(incidents[0]?.code).toBe("fiscal.reconcile_drift_anulada");
+    expect(await incidentOrigins()).toEqual([{ source: "fiscal_filing", device_id: null }]);
   });
 
   it("drift-AceptadoConErrores CONVERGES: a second sweep does not re-raise the incident", async () => {

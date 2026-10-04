@@ -3,7 +3,7 @@ import { AppError } from "@waitron/shared";
 import type { TrustedTimeAnchor } from "./clock.js";
 import { createTrustedClock } from "./clock.js";
 
-const TILL = "till-1";
+const DEVICE = "device-1";
 const TRUSTED = new Date("2027-03-14T10:00:00.000Z");
 const WALL_START = new Date("2027-03-14T09:59:58.000Z").getTime();
 
@@ -25,7 +25,7 @@ function makeSources(startWall = WALL_START) {
 function makeClock(overrides: Partial<Parameters<typeof createTrustedClock>[0]> = {}) {
   const sources = makeSources();
   const clock = createTrustedClock({
-    tillId: TILL,
+    deviceId: DEVICE,
     monotonic: sources.monotonic,
     wallClock: sources.wallClock,
     degradedAfterSeconds: 3_600,
@@ -157,7 +157,7 @@ describe("degraded confidence", () => {
     const reading = clock.now();
     expect(reading.warning).toBeInstanceOf(AppError);
     expect(reading.warning?.code).toBe("clock.degraded");
-    expect(reading.warning?.params).toEqual({ tillId: TILL, anchorAgeSeconds: 150 });
+    expect(reading.warning?.params).toEqual({ deviceId: DEVICE, anchorAgeSeconds: 150 });
   });
 
   it("restores confidence when re-anchored", () => {
@@ -231,7 +231,7 @@ describe("PWA reload — the monotonic reference resets", () => {
     const sources = makeSources(WALL_START + 30_000);
     sources.state.monotonic = 3;
     const clock = createTrustedClock({
-      tillId: TILL,
+      deviceId: DEVICE,
       monotonic: sources.monotonic,
       wallClock: sources.wallClock,
       degradedAfterSeconds: 3_600,
@@ -246,7 +246,7 @@ describe("PWA reload — the monotonic reference resets", () => {
     const sources = makeSources(WALL_START);
     sources.state.monotonic = 3;
     const clock = createTrustedClock({
-      tillId: TILL,
+      deviceId: DEVICE,
       monotonic: sources.monotonic,
       wallClock: sources.wallClock,
       degradedAfterSeconds: 3_600,
@@ -263,7 +263,7 @@ describe("PWA reload — the monotonic reference resets", () => {
     const sources = makeSources(WALL_START + 30_000);
     sources.state.monotonic = 3;
     const clock = createTrustedClock({
-      tillId: TILL,
+      deviceId: DEVICE,
       monotonic: sources.monotonic,
       wallClock: sources.wallClock,
       degradedAfterSeconds: 3_600,
@@ -277,7 +277,7 @@ describe("PWA reload — the monotonic reference resets", () => {
     const sources = makeSources(WALL_START - 3_600_000);
     sources.state.monotonic = 3;
     const clock = createTrustedClock({
-      tillId: TILL,
+      deviceId: DEVICE,
       monotonic: sources.monotonic,
       wallClock: sources.wallClock,
       degradedAfterSeconds: 3_600,
@@ -290,7 +290,7 @@ describe("PWA reload — the monotonic reference resets", () => {
     const sources = makeSources(WALL_START - 3_600_000);
     sources.state.monotonic = 3;
     const clock = createTrustedClock({
-      tillId: TILL,
+      deviceId: DEVICE,
       monotonic: sources.monotonic,
       wallClock: sources.wallClock,
       degradedAfterSeconds: 3_600,
@@ -309,7 +309,7 @@ describe("PWA reload — the monotonic reference resets", () => {
   it("still sells after a detected jump", () => {
     const sources = makeSources(WALL_START - 3_600_000);
     const clock = createTrustedClock({
-      tillId: TILL,
+      deviceId: DEVICE,
       monotonic: sources.monotonic,
       wallClock: sources.wallClock,
       degradedAfterSeconds: 3_600,
@@ -322,7 +322,7 @@ describe("PWA reload — the monotonic reference resets", () => {
   it("clears the jump once a trusted source is contacted again", () => {
     const sources = makeSources(WALL_START - 3_600_000);
     const clock = createTrustedClock({
-      tillId: TILL,
+      deviceId: DEVICE,
       monotonic: sources.monotonic,
       wallClock: sources.wallClock,
       degradedAfterSeconds: 3_600,

@@ -10,6 +10,8 @@ import {
   compareDecimal,
   decimal,
   deriveDisplayName,
+  deviceId,
+  deviceOrigin,
   draftLineMergeKey,
   firstCodeInCauseChain,
   divideDecimal,
@@ -18,11 +20,13 @@ import {
   grossOf,
   hasCode,
   isAppError,
+  isSaleOrigin,
   isSupportedLocale,
   isUuid,
   isValidGuestCount,
   isValidTelephone,
   isZeroDecimal,
+  jobOrigin,
   locationId,
   mapComments,
   MAX_GUEST_COUNT,
@@ -35,18 +39,21 @@ import {
   nodeId,
   normaliseDraftLines,
   normaliseUuid,
+  readOrigin,
+  readSaleOrigin,
   resolveActiveLocale,
   QUANTITY_SCALE,
   RATE_SCALE,
+  SALE_SOURCES,
   saleId,
   saleLineId,
   seriesId,
+  SOURCES,
   subtractDecimal,
   sumDecimals,
   SUPPORTED_LOCALE_CODES,
   SUPPORTED_LOCALES,
   tenderId,
-  tillId,
   toScale,
   workingOrderId,
   workingOrderLineId,
@@ -59,7 +66,7 @@ import {
 
 describe("package public surface (./index.js)", () => {
   it("re-exports AppError, isAppError and hasCode", () => {
-    const error = new AppError("shared.invalid_id", { kind: "TillId", value: "x" });
+    const error = new AppError("shared.invalid_id", { kind: "DeviceId", value: "x" });
     expect(isAppError(error)).toBe(true);
     expect(hasCode(error, "shared.invalid_id")).toBe(true);
   });
@@ -69,7 +76,7 @@ describe("package public surface (./index.js)", () => {
     expect(isUuid(uuid)).toBe(true);
     expect(normaliseUuid(uuid.toUpperCase(), "ProductId")).toBe(uuid);
     expect(locationId(uuid)).toBe(uuid);
-    expect(tillId(uuid)).toBe(uuid);
+    expect(deviceId(uuid)).toBe(uuid);
     expect(nodeId(uuid)).toBe(uuid);
     expect(seriesId(uuid)).toBe(uuid);
     expect(workingOrderId(uuid)).toBe(uuid);
@@ -78,6 +85,16 @@ describe("package public surface (./index.js)", () => {
     expect(saleLineId(uuid)).toBe(uuid);
     expect(tenderId(uuid)).toBe(uuid);
     expect(fiscalRecordId(uuid)).toBe(uuid);
+  });
+
+  it("re-exports the source vocabulary and its origin readers", () => {
+    const uuid = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
+    expect(SOURCES).toContain("dashboard");
+    expect(SALE_SOURCES).toContain("readiness_test");
+    expect(deviceOrigin(uuid)).toEqual({ source: "device", deviceId: uuid });
+    expect(readOrigin("kitchen_timer", null)).toEqual(jobOrigin("kitchen_timer"));
+    expect(isSaleOrigin(jobOrigin("demo_seed"))).toBe(true);
+    expect(readSaleOrigin("demo_seed", null)).toEqual(jobOrigin("demo_seed"));
   });
 
   it("re-exports every decimal function and constant", () => {

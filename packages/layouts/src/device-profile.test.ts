@@ -96,7 +96,7 @@ describe("DEFAULT_PROFILE_CAPABILITIES", () => {
       for (const c of caps) expect(CAPABILITY_FLAGS).toContain(c);
     }
   });
-  it("gives the till the reader + drawer + receipt + screen defaults and the kds act-as-kds", () => {
+  it("gives the till the reader + drawer + receipt + screen + cash defaults and the kds act-as-kds", () => {
     expect(DEFAULT_PROFILE_CAPABILITIES.till).toEqual([
       "integrated-card-payment",
       "open-cash-drawer",
@@ -104,9 +104,12 @@ describe("DEFAULT_PROFILE_CAPABILITIES", () => {
       "show-station",
       "show-expo",
       "show-schedule",
+      "take-cash",
     ]);
     expect(DEFAULT_PROFILE_CAPABILITIES.kds).toEqual(["act-as-kds"]);
     expect(DEFAULT_PROFILE_CAPABILITIES["phone-portrait"]).toEqual([]);
+    expect(DEFAULT_PROFILE_CAPABILITIES["tablet-landscape"]).toEqual([]);
+    expect(validateCapabilities(["take-cash"])).toEqual(["take-cash"]);
   });
 });
 

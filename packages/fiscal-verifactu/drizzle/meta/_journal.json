@@ -8,6 +8,20 @@
       "when": 1789995583309,
       "tag": "0000_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1791050479673,
+      "tag": "0001_registro_origin",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791061240146,
+      "tag": "0002_registro_lose_till",
+      "breakpoints": true
     }
   ]
 }

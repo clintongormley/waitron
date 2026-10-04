@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal } from "@waitron/shared";
+import { decimal, deviceOrigin } from "@waitron/shared";
 import { recordIncidentOnce } from "@waitron/core";
 import { workingOrders } from "@waitron/db";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
@@ -31,6 +31,7 @@ describe("concurrent reconcile sweeps", () => {
     const seeded = await seedWorkingOrder(suite.db, "B66666666");
     await withTransaction(suite.db, (tx) =>
       insertCapturedPayment(tx, {
+        origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
         provider: "fake",
         paymentRef: "race-1",

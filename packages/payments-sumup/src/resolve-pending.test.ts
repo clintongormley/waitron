@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { AppError, decimal } from "@waitron/shared";
+import { AppError, decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
 import {
   PAYMENTS_MIGRATIONS,
   getPaymentByRef,
@@ -41,6 +41,7 @@ async function setup(incidentRecorded = true) {
   ) => {
     await withTransaction(suite.db, (tx) =>
       insertAttempting(tx, {
+        origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
         provider: "sumup",
         paymentRef,
@@ -129,6 +130,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
     const { t, provider, state, raised } = await setup();
     await withTransaction(suite.db, (tx) =>
       insertAttempting(tx, {
+        origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
         provider: "sumup",
         paymentRef: "ghost",
@@ -148,7 +150,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
     expect(await provider.resolvePending(later)).toMatchObject({ declined: 1, incidentsRaised: 1 });
     expect((await state("ghost")).state).toBe("failed");
     expect(raised).toHaveLength(1);
-    expect(raised[0]).toMatchObject({ tillId: t.tillId, severity: "error" });
+    expect(raised[0]).toMatchObject({ origin: jobOrigin("payment_check"), severity: "error" });
     expect(raised[0]!.error.code).toBe("payment.pending_outcome_unactionable");
     expect(raised[0]!.error.params).toEqual({ paymentRef: "ghost", status: "not_found" });
   });
@@ -157,6 +159,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
     const { t, provider, state, raised } = await setup(false);
     await withTransaction(suite.db, (tx) =>
       insertAttempting(tx, {
+        origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
         provider: "sumup",
         paymentRef: "ghost-dup",
@@ -175,8 +178,8 @@ describe("SumUpCloudProvider.resolvePending", () => {
     expect(raised[0]!.error.params).toEqual({ paymentRef: "ghost-dup", status: "not_found" });
   });
 
-  it("REFUNDED resolves failed WITH a payment.pending_outcome_unactionable incident naming the till", async () => {
-    const { t, provider, attempting, state, raised } = await setup();
+  it("REFUNDED resolves failed WITH a payment.pending_outcome_unactionable incident naming the payment check", async () => {
+    const { provider, attempting, state, raised } = await setup();
     await attempting("r", { status: "REFUNDED" });
     expect(await provider.resolvePending(T0)).toMatchObject({ declined: 1, incidentsRaised: 1 });
     expect((await state("r")).state).toBe("failed");
@@ -184,13 +187,36 @@ describe("SumUpCloudProvider.resolvePending", () => {
     // toEqual (not toMatchObject) so the incident input's FULL key set is pinned — in particular that
     // no `saleId` is passed (an attempting row has no sale; §4: toMatchObject checks only listed keys).
     expect(raised[0]).toEqual({
-      tillId: t.tillId,
+      origin: jobOrigin("payment_check"),
       error: expect.any(AppError),
       severity: "error",
       detectedAt: T0,
     });
     expect(raised[0]!.error.code).toBe("payment.pending_outcome_unactionable");
     expect(raised[0]!.error.params).toEqual({ paymentRef: "r", status: "REFUNDED" });
+  });
+
+  it("hands the sink the unactionable incidents of two devices' orders under the payment check's origin", async () => {
+    const { provider, attempting, state, raised } = await setup();
+    await attempting("first", { status: "REFUNDED" });
+    // A second order on another till and device.
+    const other = await seedWorkingOrder(suite.db, freshNif());
+    await withTransaction(suite.db, (tx) =>
+      insertAttempting(tx, {
+        origin: deviceOrigin(other.deviceId),
+        workingOrderId: other.workingOrderId,
+        provider: "sumup",
+        paymentRef: "second",
+        amount: decimal("7.00"),
+      }),
+    );
+    await provider.resolvePending(new Date(Date.now() + NOT_FOUND_GRACE_MS + 1000));
+    expect((await state("second")).state).toBe("failed");
+    // Neither call names a device: both carry the payment check's origin, this code and no sale.
+    expect(raised.map((input) => [input.origin, input.error.code, input.saleId])).toEqual([
+      [jobOrigin("payment_check"), "payment.pending_outcome_unactionable", undefined],
+      [jobOrigin("payment_check"), "payment.pending_outcome_unactionable", undefined],
+    ]);
   });
 
   it("an unknown status resolves failed with an incident naming the value", async () => {

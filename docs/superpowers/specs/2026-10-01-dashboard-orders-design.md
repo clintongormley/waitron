@@ -144,7 +144,7 @@ None of the three opens the drawer: a drawer kick is a separate `drawer` job
 `outbox.ts:56-66`). #1011 (B29, landed 2026-10-02) changed none of these paths: it changed how the
 automatic drawer openings choose a printer (`drawerPrinter`, `receipt-print.ts:29-43`, which also
 needs the till's new "Opens the cash drawer" setting, `tills.opens_drawer`), and no reprint calls
-it.
+it. _2026-10-03: superseded by A238, `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`: the setting is gone, and a device's profile decides._
 
 ## 4. The proposal
 

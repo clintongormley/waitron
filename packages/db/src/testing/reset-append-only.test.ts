@@ -52,10 +52,10 @@ function seedSale(db: Database, id: string, invoiceNumber: number): void {
   db.run(sql.raw("pragma foreign_keys = off"));
   db.run(
     sql.raw(
-      `insert into "sales" (id, till_id, series_id, node_id, invoice_number, issued_at,
+      `insert into "sales" (id, source, series_id, node_id, invoice_number, issued_at,
         issued_offset_minutes, total, vat_breakdown, locale, invoice_locales, fiscal_backend,
         fiscal_state)
-       values ('${id}', 'till-1', 'series-1', 'node-1', ${String(invoiceNumber)},
+       values ('${id}', 'demo_seed', 'series-1', 'node-1', ${String(invoiceNumber)},
         '2026-09-22T00:00:00.000Z', 0, 0, '[]', 'es-ES', '["es-ES"]', 'none', 'recorded')`,
     ),
   );

@@ -44,7 +44,7 @@ function verify() {
 // value, so a string would be stored as a JSON string rather than a document.
 const SNAPSHOT = {
   close: {},
-  cashReconciliation: { byTill: [], nodeVariance: "0.00" },
+  cashReconciliation: { byDevice: [], nodeVariance: "0.00" },
 } as unknown as DailyCloseSnapshot;
 
 /** INSERT of one close row, through the table definition: `daily_closes.id` comes from a

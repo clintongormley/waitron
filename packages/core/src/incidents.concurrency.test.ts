@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
-import { AppError } from "@waitron/shared";
+import { AppError, deviceOrigin } from "@waitron/shared";
 import { seedTenant } from "../test/fixtures.js";
 import {
   findIncident,
@@ -26,9 +26,9 @@ describe("markIncidentHandled — two managers at once", () => {
     const seed = await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await recordIncident(tx, {
-        tillId: seed.tillId,
+        origin: deviceOrigin(seed.deviceId),
         error: new AppError("chain.verification_failed", {
-          tillId: seed.tillId,
+          deviceId: seed.deviceId,
           issues: [{ issueCode: "predecessor-hash-mismatch", recordId: null, issueParams: {} }],
         }),
         severity: "error",

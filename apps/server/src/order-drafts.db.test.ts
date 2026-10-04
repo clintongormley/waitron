@@ -10,7 +10,6 @@ import {
   orderGroups,
   serviceCommands,
   ticketItems,
-  tills,
   parties,
   withTransaction,
   workingOrderLines,
@@ -38,10 +37,10 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
 import type { OptionSelection } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig } from "./till-config.js";
 import { createCourse } from "./kitchen.js";
 import { createTable } from "./tables.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -83,7 +82,7 @@ const DISHES = {
 type Dish = keyof typeof DISHES;
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: OriginConfig;
   productId: Record<Dish, string>;
   courseId: string;
   sauceListId: string;
@@ -109,13 +108,9 @@ async function setupVenue(): Promise<Venue> {
     .returning({ id: locations.id });
   const locationId = location!.id;
   await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
-  const cfg: TillConfig = {
-    tillId: brandTillId(till!.id),
+  const cfg: OriginConfig = {
+    origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),

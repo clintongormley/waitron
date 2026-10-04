@@ -18,14 +18,11 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] })
 const BOGUS_NODE = "99999999-9999-4999-8999-999999999999";
 
 async function seedOrderWithNode(): Promise<{
-  seeded: { workingOrderId: string };
+  seeded: { workingOrderId: string; deviceId: string };
   node: string;
 }> {
   const seeded = await seedWorkingOrder(suite.db, freshNif());
-  const { rows } = await suite.db.execute<{ location_id: string }>(
-    sql`select location_id from tills where id = ${seeded.tillId}`,
-  );
-  const node = await seedNode(suite.db, brandLocationId(rows[0]!.location_id));
+  const node = await seedNode(suite.db, brandLocationId(seeded.locationId));
   return { seeded, node };
 }
 
@@ -34,14 +31,14 @@ async function seedOrderWithNode(): Promise<{
  * which is not a SQL DEFAULT, so a raw-SQL insert gets none of them.
  */
 async function insertPayment(
-  seeded: { workingOrderId: string },
+  seeded: { workingOrderId: string; deviceId: string },
   paymentRef: string,
   nodeId: string | null,
 ): Promise<{ node_id: string | null }[]> {
   const stamp = new Date().toISOString();
   const { rows } = await suite.db.execute<{ node_id: string | null }>(sql`
-    insert into payments (id, working_order_id, node_id, provider, payment_ref, amount, state, created_at, updated_at)
-    values (${randomUUID()}, ${seeded.workingOrderId}, ${nodeId}, 'fake', ${paymentRef}, 1000, 'captured', ${stamp}, ${stamp})
+    insert into payments (id, working_order_id, source, device_id, node_id, provider, payment_ref, amount, state, created_at, updated_at)
+    values (${randomUUID()}, ${seeded.workingOrderId}, 'device', ${seeded.deviceId}, ${nodeId}, 'fake', ${paymentRef}, 1000, 'captured', ${stamp}, ${stamp})
     returning node_id`);
   return rows;
 }

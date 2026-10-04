@@ -25,7 +25,7 @@ function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 /** A throttle whose every call is recorded, delegating to a real one on a fixed clock. */
-function spiedAttempts(slot = "override:till-1"): {
+function spiedAttempts(slot = "override:device-1"): {
   attempts: PinAttempts;
   throttle: { [K in keyof PinThrottle]: ReturnType<typeof vi.fn> };
 } {
@@ -51,8 +51,8 @@ describe("verifyThrottledCredential", () => {
     const cred = await run((tx) => verifyThrottledCredential(tx, personId, "1234", attempts));
 
     expect(cred).toEqual({ role: "supervisor", locale: null });
-    expect(throttle.check).toHaveBeenCalledWith("override:till-1", personId);
-    expect(throttle.clear).toHaveBeenCalledWith("override:till-1", personId);
+    expect(throttle.check).toHaveBeenCalledWith("override:device-1", personId);
+    expect(throttle.clear).toHaveBeenCalledWith("override:device-1", personId);
     expect(throttle.recordFailure).not.toHaveBeenCalled();
   });
 
@@ -65,7 +65,7 @@ describe("verifyThrottledCredential", () => {
     );
 
     expect(code).toBe("pin.invalid");
-    expect(throttle.recordFailure).toHaveBeenCalledWith("override:till-1", personId);
+    expect(throttle.recordFailure).toHaveBeenCalledWith("override:device-1", personId);
     expect(throttle.clear).not.toHaveBeenCalled();
   });
 

@@ -126,7 +126,7 @@ describe("till bill lookup", () => {
     );
     await inTx(venue, (tx) =>
       recordSubstitution(tx, venue.backend, {
-        tillId: venue.cfg.tillId,
+        origin: venue.cfg.origin,
         nodeId: venue.cfg.nodeId,
         seriesId: venue.cfg.seriesId,
         substitutedSaleIds: [brandSaleId(issued!.id)],

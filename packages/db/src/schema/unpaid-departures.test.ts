@@ -8,17 +8,18 @@ import { FOREIGN_KEY_VIOLATION, UNIQUE_VIOLATION } from "../sql-state.js";
 import { isRefusal } from "../unique-violation.js";
 import { withTransaction } from "../tenancy.js";
 import { captureError } from "../testing/errors.js";
-import { seedNode } from "../testing/seed.js";
+import { seedDevice, seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { workingOrders } from "./orders.js";
 import { parties } from "./parties.js";
 import { sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 import { unpaidDepartures } from "./unpaid-departures.js";
 
 const LOCATION = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL = "aaaaaaaa-1111-4000-8000-000000000001";
+/** An order opened from the dashboard at `LOCATION`, needing no device. */
+const DASHBOARD = { source: "dashboard", deviceId: null, locationId: LOCATION } as const;
 const STAFF = "cccccccc-0000-4000-8000-000000000001";
 const SUPERVISOR = "cccccccc-0000-4000-8000-000000000002";
 const MISSING = "cccccccc-3333-4000-8000-0000000000ff";
@@ -26,6 +27,7 @@ const AT = "2026-10-01T21:00:00.000Z";
 
 let nodeId = "";
 let seriesId = "";
+let deviceId = "";
 let nextOrder = 0;
 
 describe("unpaid_departures", () => {
@@ -46,13 +48,13 @@ describe("unpaid_departures", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await db.insert(tills).values({ id: TILL, locationId: LOCATION, name: "Till" });
     nodeId = await seedNode(db, brandLocationId(LOCATION));
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "FA", purpose: "standard" })
       .returning({ id: invoiceSeries.id });
     seriesId = series!.id;
+    ({ deviceId } = await seedDevice(db, { locationId: LOCATION }));
   });
 
   /** A party, one bill of it and that bill's unsettled invoice. */
@@ -67,7 +69,7 @@ describe("unpaid_departures", () => {
       const [bill] = await tx
         .insert(workingOrders)
         .values({
-          tillId: TILL,
+          ...DASHBOARD,
           nodeId,
           orderNumber,
           status: "placed",
@@ -78,7 +80,8 @@ describe("unpaid_departures", () => {
       const [sale] = await tx
         .insert(sales)
         .values({
-          tillId: TILL,
+          source: "device",
+          deviceId,
           nodeId,
           seriesId,
           invoiceNumber: orderNumber,
@@ -109,7 +112,8 @@ describe("unpaid_departures", () => {
       reason: "Se marcharon sin pagar",
       recordedBy: STAFF,
       authorizedBy: SUPERVISOR,
-      tillId: TILL,
+      source: "device",
+      deviceId,
       ...overrides,
     };
   }
@@ -136,7 +140,8 @@ describe("unpaid_departures", () => {
       reason: "Se marcharon sin pagar",
       recordedBy: STAFF,
       authorizedBy: SUPERVISOR,
-      tillId: TILL,
+      source: "device",
+      deviceId,
       recordedAt: expect.any(String),
     });
   });
@@ -159,7 +164,7 @@ describe("unpaid_departures", () => {
     ["party", { partyId: MISSING }],
     ["bill", { workingOrderId: MISSING }],
     ["sale", { saleId: MISSING }],
-    ["till", { tillId: MISSING }],
+    ["device", { deviceId: MISSING }],
   ] as const)("refuses a departure naming no %s", async (_, overrides) => {
     const bill = await invoicedBill();
     const error = await captureError(() =>

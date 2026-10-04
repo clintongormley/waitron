@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locations, tableServiceStatuses, tills, withTransaction } from "@waitron/db";
+import { locations, tableServiceStatuses, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -10,9 +10,9 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig, TillConfig } from "./till-config.js";
 import { createTable, setTableStatus } from "./tables.js";
 import { listTablesWithState } from "./working-order.js";
 import "./errors.js";
@@ -31,7 +31,7 @@ beforeAll(() => {
 });
 
 interface Seeded {
-  cfg: TillConfig;
+  cfg: OriginConfig;
   tableId: string;
   activeStatusId: string;
   inactiveStatusId: string;
@@ -39,8 +39,8 @@ interface Seeded {
 
 async function setupVenue(): Promise<Seeded> {
   await seedTenant(db);
-  // Through the table definitions: `locations.id`, `tills.id` and `tills.created_at` are NOT NULL
-  // `$defaultFn` generators a raw insert never reaches.
+  // Through the table definitions: `locations.id` is a NOT NULL `$defaultFn`
+  // generator a raw insert never reaches.
   const [location] = await db
     .insert(locations)
     .values({
@@ -50,13 +50,9 @@ async function setupVenue(): Promise<Seeded> {
     })
     .returning({ id: locations.id });
   const locationId = location!.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
-  const cfg: TillConfig = {
-    tillId: brandTillId(till!.id),
+  const cfg: OriginConfig = {
+    origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),

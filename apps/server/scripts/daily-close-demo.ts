@@ -11,7 +11,7 @@
 // So the printed close should read:
 //   vat.byRate      → 10%: base 50.00, tax 5.00 ; 21%: base 95.00, tax 19.95 (100 − 5, netted)
 //   vat.grossTotal  → 169.95  (= 121.00 + 55.00 − 6.05: sales totals net of the correction)
-//   cash.byTill[0]  → cashTakings 121.00 (only the cash tender), tenderTotal 176.00 (cash 121 + card 55)
+//   cash.byOrigin[0] → cashTakings 121.00 (only the cash tender), tenderTotal 176.00 (cash 121 + card 55)
 //   counts          → sales 2, corrections 1, voids 0
 // grossTotal (169.95) deliberately differs from tenderTotal (176.00): a correction lowers declared
 // VAT, but the cash was collected before it and a refund is a separate payments action, never a
@@ -30,18 +30,14 @@ import {
   nodes,
   openVenueDatabase,
   tenants,
-  tills,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
-import {
-  nodeId as brandNodeId,
-  seriesId as brandSeriesId,
-  tillId as brandTillId,
-} from "@waitron/shared";
-import type { NodeId, SeriesId, TillId } from "@waitron/shared";
+import { nodeId as brandNodeId, seriesId as brandSeriesId, jobOrigin } from "@waitron/shared";
+import type { NodeId, SeriesId } from "@waitron/shared";
+import { scriptSessionDevice } from "./script-device.js";
 
 /** identity holds the supervisor who authorises the rectificativa. */
 const SETS = ["core", "identity"];
@@ -72,7 +68,7 @@ function fixedClock(): TrustedClock {
 }
 
 interface Venue {
-  tillId: TillId;
+  locationId: string;
   nodeId: NodeId;
   seriesId: SeriesId;
   rectificativeSeriesId: SeriesId;
@@ -97,11 +93,6 @@ async function seedVenue(db: Database): Promise<Venue> {
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
-  const tillId = brandTillId(till!.id);
   const [node] = await db
     .insert(nodes)
     .values({ locationId, name: "Nodo 1" })
@@ -127,7 +118,7 @@ async function seedVenue(db: Database): Promise<Venue> {
     })
     .returning({ id: persons.id });
   const authorizerId = person!.id;
-  return { tillId, nodeId, seriesId, rectificativeSeriesId, authorizerId };
+  return { locationId, nodeId, seriesId, rectificativeSeriesId, authorizerId };
 }
 
 async function main(): Promise<void> {
@@ -149,7 +140,7 @@ async function main(): Promise<void> {
 
     // Sale A — immediate cash settlement, base 100.00 @ 21%.
     const saleAInput: RecordSaleInput = {
-      tillId: venue.tillId,
+      origin: jobOrigin("demo_seed"),
       nodeId: venue.nodeId,
       seriesId: venue.seriesId,
       locale: LOCALE,
@@ -178,7 +169,7 @@ async function main(): Promise<void> {
 
     // Sale B — deferred (invoice-first), base 50.00 @ 10%.
     const saleBInput: RecordSaleInput = {
-      tillId: venue.tillId,
+      origin: jobOrigin("demo_seed"),
       nodeId: venue.nodeId,
       seriesId: venue.seriesId,
       locale: LOCALE,
@@ -212,7 +203,7 @@ async function main(): Promise<void> {
 
     const authorizerSession = await withTransaction(db, async (tx) => {
       return loginWithPin(tx, {
-        tillId: venue.tillId,
+        deviceId: await scriptSessionDevice(tx, venue.locationId, "Daily close demo"),
         personId: venue.authorizerId,
         pin: "1234",
       });
@@ -220,7 +211,7 @@ async function main(): Promise<void> {
 
     // Corrects Sale A by −5.00 base @ 21% (total −6.05).
     const correctionInput: RecordCorrectionInput = {
-      tillId: venue.tillId,
+      origin: jobOrigin("demo_seed"),
       nodeId: venue.nodeId,
       seriesId: venue.rectificativeSeriesId,
       correctsSaleId: saleA.saleId,

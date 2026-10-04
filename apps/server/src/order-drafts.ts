@@ -23,7 +23,7 @@ import { invalid } from "./bill-allocation.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { placeGroups } from "./order-groups.js";
 import type { GroupLine, GroupRelease, SubmittedGroups, PartyCommandArgs } from "./order-groups.js";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig, TillConfig } from "./till-config.js";
 import { checkAndBumpParty, partyZone, requireOpenParty, runServiceCommand } from "./parties.js";
 import { screenNote } from "./working-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
@@ -295,7 +295,7 @@ export type SubmittedDraft = SubmittedGroups & { draft: Draft | null };
  */
 export async function submitDraft(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   partyId: string,
   draftId: string,
   input: SubmitDraftInput,

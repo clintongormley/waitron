@@ -7,13 +7,12 @@ import {
   engineErrorMessage,
   isRefusal,
   newId,
-  nowIso,
   refusalError,
   refusalOn,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { deviceOrigin, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -57,6 +56,7 @@ function inputAt(at: string): TimeEntryAppend {
     eventAt: at,
     eventOffsetMinutes: 0,
     recordedByPersonId: personId,
+    origin: jobOrigin("dashboard"),
   };
 }
 
@@ -64,13 +64,9 @@ function clockEvent(): TimeEntryAppend {
   return inputAt("2026-01-05T09:00:00Z");
 }
 
-async function seedTill(location: string): Promise<string> {
-  // `id` and `created_at` by hand: their `$defaultFn`s run for a builder insert, not for raw SQL.
-  const { rows } = await suite.db.execute<{ id: string }>(sql`
-    insert into tills (id, location_id, name, created_at)
-    values (${newId()}, ${location}, 'Till 1', ${nowIso()})
-    returning id`);
-  return rows[0]!.id;
+async function seedDeviceAt(location: string): Promise<string> {
+  const { deviceId } = await seedDevice(suite.db, { locationId: brandLocationId(location) });
+  return deviceId;
 }
 
 describe("appendToChain", () => {
@@ -186,10 +182,11 @@ describe("appendToChain", () => {
       suite.db.execute(sql`
         insert into time_entries (
           id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
-          recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
+          recorded_by_person_id, captured_by_source, recorded_at, entry_hash, sequence_no,
+          is_first_entry
         ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in',
           '2026-01-05T09:00:00.123Z', 0,
-          ${personId}, '2026-01-05T09:00:00.000Z', ${"0".repeat(64)}, 1, true)`),
+          ${personId}, 'dashboard', '2026-01-05T09:00:00.000Z', ${"0".repeat(64)}, 1, true)`),
     );
     // The class alone is also satisfied by the row's other checks, so the constraint name is asserted
     // too.
@@ -202,10 +199,11 @@ describe("appendToChain", () => {
       suite.db.execute(sql`
         insert into time_entries (
           id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
-          recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
+          recorded_by_person_id, captured_by_source, recorded_at, entry_hash, sequence_no,
+          is_first_entry
         ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in',
           '2026-01-05T09:00:00.000Z', 0,
-          ${personId}, '2026-01-05T09:00:00.123Z', ${"0".repeat(64)}, 1, true)`),
+          ${personId}, 'dashboard', '2026-01-05T09:00:00.123Z', ${"0".repeat(64)}, 1, true)`),
     );
     expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
     expect(engineErrorMessage(error)).toContain("time_entries_recorded_at_second_ck");
@@ -229,6 +227,7 @@ describe("appendToChain", () => {
       eventAt: "2026-01-05T18:00:00.000Z",
       eventOffsetMinutes: 0,
       recordedByPersonId: personId,
+      capturedBySource: "dashboard" as const,
       recordedAt: "2026-01-05T18:00:00.000Z",
       entryHash: "0".repeat(64),
       prevEntryHash: "1".repeat(64),
@@ -258,10 +257,11 @@ describe("appendToChain", () => {
     await suite.db.execute(sql`
       insert into time_entries (
         id, person_id, location_id, node_id, entry_kind, event_at, event_offset_minutes,
-        recorded_by_person_id, recorded_at, entry_hash, sequence_no, is_first_entry
+        recorded_by_person_id, captured_by_source, recorded_at, entry_hash, sequence_no,
+        is_first_entry
       ) values (${newId()}, ${personId}, ${locationId}, ${nodeId}, 'in',
         '2026-01-05T08:00:00.000Z', 0,
-        ${personId}, '2026-01-05T08:00:00.000Z', ${"1".repeat(64)}, 1, true)`);
+        ${personId}, 'dashboard', '2026-01-05T08:00:00.000Z', ${"1".repeat(64)}, 1, true)`);
 
     const error = await suite.db
       .transaction((tx) => appendToChain(tx, key(), inputAt("2026-01-05T09:00:00Z")))
@@ -324,6 +324,7 @@ describe("appendToChain", () => {
                 eventAt: "2026-01-05T08:00:00.000Z",
                 eventOffsetMinutes: 0,
                 recordedByPersonId: personId,
+                capturedBySource: "dashboard",
                 recordedAt: "2026-01-05T08:00:00.000Z",
                 entryHash: "1".repeat(64),
                 prevEntryHash: null,
@@ -383,7 +384,7 @@ describe("appendToChain commits the correction and capture content to the hash",
   // Each tamper edits the READ-BACK row and leaves its stored `entry_hash` untouched: what a direct
   // UPDATE that cannot recompute the chain would leave behind.
 
-  async function chainWithCorrection(tillId: string) {
+  async function chainWithCorrection(deviceId: string) {
     const base = await suite.db.transaction((tx) =>
       appendToChain(tx, key(), {
         personId,
@@ -391,7 +392,7 @@ describe("appendToChain commits the correction and capture content to the hash",
         eventAt: "2026-01-05T09:00:00Z",
         eventOffsetMinutes: 0,
         recordedByPersonId: personId,
-        capturedByTillId: tillId,
+        origin: deviceOrigin(deviceId),
       }),
     );
     await suite.db.transaction((tx) =>
@@ -401,6 +402,7 @@ describe("appendToChain commits the correction and capture content to the hash",
         eventAt: "2026-01-05T18:00:00Z",
         eventOffsetMinutes: 0,
         recordedByPersonId: personId,
+        origin: jobOrigin("dashboard"),
         correctsEntryId: base.id,
         correctionReason: "forgot to clock out",
         correctionStatus: "requested",
@@ -410,19 +412,24 @@ describe("appendToChain commits the correction and capture content to the hash",
     return readChain(suite.db, key());
   }
 
-  it("re-verifies a till + reason + actor round-trip untampered (the negative control)", async () => {
-    const tillId = await seedTill(locationId);
-    expect(verifyChain(await chainWithCorrection(tillId))).toEqual({ ok: true });
+  it("re-verifies a device + reason + actor round-trip untampered (the negative control)", async () => {
+    const deviceId = await seedDeviceAt(locationId);
+    const chain = await chainWithCorrection(deviceId);
+    expect(chain.map((e) => [e.capturedBySource, e.capturedByDeviceId])).toEqual([
+      ["device", deviceId],
+      ["dashboard", null],
+    ]);
+    expect(verifyChain(chain)).toEqual({ ok: true });
   });
 
   it("flags a correction whose stored reason was rewritten (teeth-test)", async () => {
-    const chain = await chainWithCorrection(await seedTill(locationId));
+    const chain = await chainWithCorrection(await seedDeviceAt(locationId));
     const tampered = [chain[0]!, { ...chain[1]!, correctionReason: "approved overtime" }];
     expect(verifyChain(tampered)).toEqual({ ok: false, reason: "hash_mismatch", sequenceNo: 2 });
   });
 
   it("flags a correction whose stored actor was swapped (teeth-test)", async () => {
-    const chain = await chainWithCorrection(await seedTill(locationId));
+    const chain = await chainWithCorrection(await seedDeviceAt(locationId));
     const tampered = [
       chain[0]!,
       { ...chain[1]!, correctionActorId: "99999999-9999-4999-8999-999999999999" },
@@ -430,10 +437,36 @@ describe("appendToChain commits the correction and capture content to the hash",
     expect(verifyChain(tampered)).toEqual({ ok: false, reason: "hash_mismatch", sequenceNo: 2 });
   });
 
-  it("flags a base event whose stored capturing till was swapped (teeth-test)", async () => {
-    const chain = await chainWithCorrection(await seedTill(locationId));
+  it("refuses a device source that names no device", async () => {
+    const error = await captureError(() =>
+      suite.db.transaction((tx) =>
+        appendToChain(tx, key(), {
+          ...clockEvent(),
+          origin: { source: "device", deviceId: null } as unknown as TimeEntryAppend["origin"],
+        }),
+      ),
+    );
+    expect(engineErrorMessage(error)).toBe(
+      "CHECK constraint failed: time_entries_captured_by_source_device_ck",
+    );
+  });
+
+  it("refuses a capturing device that does not exist", async () => {
+    const error = await captureError(() =>
+      suite.db.transaction((tx) =>
+        appendToChain(tx, key(), {
+          ...clockEvent(),
+          origin: deviceOrigin("dddddddd-0000-4000-8000-0000000000aa"),
+        }),
+      ),
+    );
+    expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it("flags a base event whose stored capturing device was swapped (teeth-test)", async () => {
+    const chain = await chainWithCorrection(await seedDeviceAt(locationId));
     const tampered = [
-      { ...chain[0]!, capturedByTillId: "99999999-9999-4999-8999-999999999999" },
+      { ...chain[0]!, capturedByDeviceId: await seedDeviceAt(locationId) },
       chain[1]!,
     ];
     expect(verifyChain(tampered)).toEqual({ ok: false, reason: "hash_mismatch", sequenceNo: 1 });

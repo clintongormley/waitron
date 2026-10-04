@@ -5,8 +5,8 @@ import {
   decimal,
   seriesId as brandSeriesId,
   nodeId as brandNodeId,
-  tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
 } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
@@ -51,7 +51,7 @@ function buildInput(
   tender: { amount: string; settledAt: Date | null },
 ): RecordSaleInput {
   return {
-    tillId: brandTillId(s.tillId),
+    origin: deviceOrigin(s.deviceId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
@@ -90,7 +90,7 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
     });
 
     const paid = await provider.collect({
-      tillId: brandTillId(s.tillId),
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       readerRef: "reader_1",
@@ -134,7 +134,7 @@ describe("stripe idempotency key is derived from the working order, decoupled fr
       poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
     });
     const args = {
-      tillId: brandTillId(s.tillId),
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       readerRef: "reader_1",

@@ -19,6 +19,7 @@ import {
   markAlertHandled,
   screenTargetOf,
   severityLabel,
+  sourceLabel,
 } from "../widgets/alert-format.js";
 
 const VIEWS = ["open", "handled"] as const;
@@ -142,10 +143,11 @@ export class AlertsScreen extends LitElement {
   }
 
   #alertCell(alert: AlertView): TemplateResult {
+    const from = sourceLabel(alert);
     return html`<span part="alert-message"
       >${alertMessage(alert.code, alert.params)}${
         hasAlertMessage(alert.code) ? nothing : html`<br />${alert.code}`
-      }<br />${severityLabel(alert.severity)}</span
+      }<br />${severityLabel(alert.severity)}${from === "" ? nothing : html` · ${from}`}</span
     >`;
   }
 

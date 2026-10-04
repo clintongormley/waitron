@@ -66,7 +66,6 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "FA",
         rectificativeSeriesCode: "RF",
         admin: {
@@ -82,7 +81,6 @@ async function setupVenue(): Promise<{ designated: AdoptResult; adminPersonId: s
   );
   const designated: AdoptResult = {
     locationId: venue.locationId,
-    tillId: venue.tillId,
     nodeId: venue.nodeId,
     seriesId: venue.seriesIds[0]!,
   };

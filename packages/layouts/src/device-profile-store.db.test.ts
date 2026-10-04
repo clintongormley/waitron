@@ -3,7 +3,7 @@ import {
   captureError,
   devices,
   locations,
-  tills,
+  printers,
   withTransaction,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -20,6 +20,7 @@ import {
   createDeviceProfile,
   deleteDeviceProfile,
   getDeviceProfile,
+  getDeviceProfileWithPrinters,
   listDeviceProfiles,
   updateDeviceProfile,
 } from "./device-profile-store.js";
@@ -76,22 +77,14 @@ async function seedCanvas(session: string, name: string): Promise<string> {
   return id;
 }
 
-/**
- * A `till` profile's device must bind a register (the binding-rule trigger), hence `tills`.
- * Through drizzle, for the `$defaultFn` reason `seedSession` states.
- */
+/** Through drizzle, for the `$defaultFn` reason `seedSession` states. */
 async function seedBoundDevice(profileId: string): Promise<void> {
   const [location] = await suite.db
     .insert(locations)
     .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
     .returning({ id: locations.id });
-  const [till] = await suite.db
-    .insert(tills)
-    .values({ locationId: location!.id, name: "Register 1" })
-    .returning({ id: tills.id });
   await suite.db.insert(devices).values({
     locationId: location!.id,
-    tillId: till!.id,
     label: "Bound device",
     tokenHash: "scrypt$00$00",
     deviceProfileId: profileId,
@@ -125,8 +118,10 @@ describe("device-profile store against a real migrated database", () => {
         canvasId: null,
         capabilities: ["open-cash-drawer", "integrated-card-payment"],
         inactivityTimeoutSeconds: null, // omitted on create ⇒ NULL (never)
+        receiptPrinterIds: [],
+        paymentSlipPrinterIds: [],
       });
-      const fetched = await inTx((tx) => getDeviceProfile(tx, created.id));
+      const fetched = await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id));
       expect(fetched).toEqual(created);
     } finally {
       await purgeProfiles();
@@ -152,8 +147,10 @@ describe("device-profile store against a real migrated database", () => {
       capabilities: ["act-as-kds"],
       formFactor: "kds",
       inactivityTimeoutSeconds: null,
+      receiptPrinterIds: [],
+      paymentSlipPrinterIds: [],
     });
-    expect(await inTx((tx) => getDeviceProfile(tx, created.id))).toEqual(created);
+    expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(created);
     const listed = await inTx((tx) => listDeviceProfiles(tx));
     expect(listed).toEqual([created]);
   });
@@ -172,7 +169,7 @@ describe("device-profile store against a real migrated database", () => {
       }),
     );
     expect(handheld.inactivityTimeoutSeconds).toBe(300);
-    expect(await inTx((tx) => getDeviceProfile(tx, handheld.id))).toEqual(handheld);
+    expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, handheld.id))).toEqual(handheld);
 
     const kds = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -207,6 +204,8 @@ describe("device-profile store against a real migrated database", () => {
       canvasId,
       capabilities: [],
       inactivityTimeoutSeconds: null,
+      receiptPrinterIds: [],
+      paymentSlipPrinterIds: [],
     });
   });
 
@@ -293,8 +292,10 @@ describe("device-profile store against a real migrated database", () => {
       canvasId,
       capabilities: ["integrated-card-payment"],
       inactivityTimeoutSeconds: null,
+      receiptPrinterIds: [],
+      paymentSlipPrinterIds: [],
     });
-    expect(await inTx((tx) => getDeviceProfile(tx, created.id))).toEqual(updated);
+    expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(updated);
     expect(await rowCount()).toBe(1); // update, never insert a duplicate
   });
 
@@ -401,6 +402,64 @@ describe("device-profile store against a real migrated database", () => {
     } finally {
       await suite.db.execute(sql`drop trigger device_profiles_test_guard`);
     }
+  });
+
+  it("stores a profile's printer lists on create, keeps them on an update that names none, and replaces them on one that does", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    const [location] = await suite.db
+      .insert(locations)
+      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
+      .returning({ id: locations.id });
+    const [p1, p2] = await suite.db
+      .insert(printers)
+      .values([
+        { locationId: location!.id, name: "Bar", transport: "network_tcp", host: "10.0.0.1" },
+        { locationId: location!.id, name: "Counter", transport: "network_tcp", host: "10.0.0.2" },
+      ])
+      .returning({ id: printers.id });
+    const base = {
+      managementSessionId: session,
+      name: "Listed",
+      formFactor: "till" as const,
+      canvasId: null,
+      capabilities: [],
+    };
+    const created = await inTx((tx) =>
+      createDeviceProfile(tx, {
+        ...base,
+        printerLists: { receiptPrinterIds: [p2!.id, p1!.id], paymentSlipPrinterIds: [p1!.id] },
+      }),
+    );
+    expect(created.receiptPrinterIds).toEqual([p2!.id, p1!.id]);
+    expect(created.paymentSlipPrinterIds).toEqual([p1!.id]);
+    expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(created);
+    expect(await inTx((tx) => listDeviceProfiles(tx))).toEqual([created]);
+    expect(await inTx((tx) => getDeviceProfile(tx, created.id))).toEqual({
+      id: created.id,
+      name: "Listed",
+      formFactor: "till",
+      canvasId: null,
+      capabilities: [],
+      inactivityTimeoutSeconds: null,
+    });
+
+    const renamed = await inTx((tx) =>
+      updateDeviceProfile(tx, { ...base, id: created.id, name: "Renamed" }),
+    );
+    expect(renamed.receiptPrinterIds).toEqual([p2!.id, p1!.id]);
+    expect(renamed.paymentSlipPrinterIds).toEqual([p1!.id]);
+
+    const emptied = await inTx((tx) =>
+      updateDeviceProfile(tx, {
+        ...base,
+        id: created.id,
+        printerLists: { receiptPrinterIds: [], paymentSlipPrinterIds: [p2!.id] },
+      }),
+    );
+    expect(emptied.receiptPrinterIds).toEqual([]);
+    expect(emptied.paymentSlipPrinterIds).toEqual([p2!.id]);
+    expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(emptied);
   });
 
   it("throws device_profile.not_found when updating an absent id", async () => {
@@ -541,7 +600,7 @@ describe("device-profile store against a real migrated database", () => {
 /** The schema half of what `translateWriteError`'s foreign-key branches rest on (see its doc). */
 describe("what can refuse a write to device_profiles", () => {
   // Migrates core and identity only: a key from another module's set is not seen.
-  it("has ONE key out of device_profiles and ONE key into it", async () => {
+  it("has ONE key out of device_profiles and ONE key into it that can refuse", async () => {
     const { rows } = await suite.db.execute<{
       child: string;
       column: string;
@@ -553,6 +612,12 @@ describe("what can refuse a write to device_profiles", () => {
       where m.type = 'table' and (f."table" = 'device_profiles' or m.name = 'device_profiles')
       order by child, column`);
     expect(rows).toEqual([
+      {
+        child: "device_profile_printers",
+        column: "device_profile_id",
+        parent: "device_profiles",
+        on_delete: "CASCADE",
+      },
       {
         child: "device_profiles",
         column: "canvas_id",

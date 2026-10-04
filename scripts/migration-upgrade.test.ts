@@ -284,6 +284,69 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "catalogue/0021_sections_owned_restore": {
     refused: ["NOT NULL constraint failed: section_members.id"],
   },
+  // Adds `sessions.device_id` as required with no default; a held row has no device to name.
+  "identity/0005_session_device_add": {
+    refused: ["ALTER TABLE `sessions` ADD `device_id`", "Cannot add a NOT NULL column"],
+  },
+  // Adds `incidents.source` as required with no default; a held row has no source to name.
+  "core/0077_incident_origin_add": {
+    refused: ["ALTER TABLE `incidents` ADD `source`", "Cannot add a NOT NULL column"],
+  },
+  // Rebuilds `incidents` with the source list's check; a carried row's source is not on the list.
+  "core/0078_incident_origin_drop_till": {
+    refused: ["CHECK constraint failed: incidents_source_ck"],
+  },
+  // Restores the open-alert index after the rebuild; the rows carried while it was absent collide.
+  "core/0079_incident_origin_dedup": {
+    refused: ["UNIQUE constraint failed: index 'incidents_open_dedup'"],
+  },
+  // Rebuilds the money records without `till_id`, with `source` required; a carried row has none.
+  "core/0081_money_records_lose_till": {
+    refused: ["NOT NULL constraint failed: __new_bill_payment_refunds.source"],
+  },
+  // Rebuilds `registros_facturacion` the same way.
+  "fiscal-verifactu/0002_registro_lose_till": {
+    refused: ["NOT NULL constraint failed: __new_registros_facturacion.source"],
+  },
+  // Rebuilds `payments` with `source` required; a carried row has none.
+  "payments/0004_payment_origin_required": {
+    refused: ["NOT NULL constraint failed: __new_payments.source"],
+  },
+  // Adds `working_orders.source` as required with no default; a held row has no source to name.
+  "core/0084_working_orders_add_origin": {
+    refused: ["ALTER TABLE `working_orders` ADD `source`", "Cannot add a NOT NULL column"],
+  },
+  // Rebuilds `working_orders` with the source list's check; a carried row's source is not on it.
+  "core/0085_working_orders_drop_till": {
+    refused: ["CHECK constraint failed: working_orders_source_ck"],
+  },
+  // Adds `order_amendments.captured_by_source` as required with no default; a held row has none.
+  "core/0087_history_origin_add": {
+    refused: [
+      "ALTER TABLE `order_amendments` ADD `captured_by_source`",
+      "Cannot add a NOT NULL column",
+    ],
+  },
+  // Adds `time_entries.captured_by_source` the same way.
+  "workforce/0001_time_entries_origin_add": {
+    refused: [
+      "ALTER TABLE `time_entries` ADD `captured_by_source`",
+      "Cannot add a NOT NULL column",
+    ],
+  },
+  // Rebuilds `order_amendments` and `drawer_opens` without the till; a carried amendment's source
+  // is not on the list.
+  "core/0088_history_origin_drop_till": {
+    refused: ["CHECK constraint failed: order_amendments_captured_by_source_ck"],
+  },
+  // Rebuilds `time_entries` the same way.
+  "workforce/0002_time_entries_origin_drop_till": {
+    refused: ["CHECK constraint failed: time_entries_captured_by_source_ck"],
+  },
+  // Drops `tills`, refused while a device names one, then rebuilds `devices` without `till_id`.
+  "core/0090_devices_lose_till": {
+    refused: ["DROP TABLE `tills`", "FOREIGN KEY constraint failed"],
+  },
 };
 
 /** What a step's failure lacks against its RESETS entry, or `undefined` when it matches. */

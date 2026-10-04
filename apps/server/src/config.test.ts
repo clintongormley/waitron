@@ -7,7 +7,6 @@ import { deploymentEnvironment, isDevMode, loadConfig, loadTunnelConfig } from "
 
 // Distinct per field so a mis-wired till mapping fails rather than passing by coincidence.
 const TILL_ENV = {
-  WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
@@ -20,7 +19,6 @@ const ROOT = "/opt/waitron/drizzle";
 const STATE_ROOT = "/opt/waitron/state";
 
 const EXPECTED_TILL = {
-  tillId: TILL_ENV.WAITRON_TILL_TILL_ID,
   nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
   seriesId: TILL_ENV.WAITRON_TILL_SERIES_ID,
   locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
@@ -105,13 +103,13 @@ describe("loadConfig", () => {
     expect(() => cfg({ ...MIN_ENV, WAITRON_HTTP_LANDING_PORT: "notaport" })).toThrow();
   });
 
-  it("populates config.till from the WAITRON_TILL_* environment (the till's fiscal identity)", () => {
+  it("populates config.till from the WAITRON_TILL_* environment (the venue's identity on this node)", () => {
     const config = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
     expect(config.till).toEqual(EXPECTED_TILL);
   });
 
   // Setup mode: an unprovisioned box has no till identity, and loading does not throw.
-  it("leaves config.till undefined when the four WAITRON_TILL_*_ID are absent, else populates it", () => {
+  it("leaves config.till undefined when the three WAITRON_TILL_*_ID are absent, else populates it", () => {
     const setup = loadConfig({}, ROOT, STATE_ROOT);
     expect(setup.till).toBeUndefined();
 

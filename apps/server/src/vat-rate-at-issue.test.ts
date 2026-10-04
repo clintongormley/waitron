@@ -21,19 +21,19 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { ExtraSelection } from "@waitron/shared";
 import { takeBillPayment, type BillPaymentRequest } from "./bill-payments.js";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { OrderFlow, TillConfig } from "./till-config.js";
+import type { OrderFlow } from "./till-config.js";
 import { collectOrder, payWorkingOrderIntegrated, recordTillSale } from "./till-sale.js";
 import { addTabRound, parkOrder, placeOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // A release that ships a reduced rate of 4% from 1 January 2027, the shipped table otherwise.
 vi.mock("@waitron/catalogue/src/vat-rates.js", async (importOriginal) => {
@@ -141,7 +141,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -155,8 +154,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
-    tillId: brandTillId(venue.tillId),
+  const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -165,7 +163,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow,
-  };
+  });
   suite.db.run(sql`update locations set order_flow = ${orderFlow} where id = ${cfg.locationId}`);
 
   const products = await withTransaction(suite.db, async (tx) => {
@@ -281,6 +279,7 @@ function stubProvider(onCollect: () => void): PaymentProvider {
       const settledAt = new Date();
       await withTransaction(suite.db, (tx) =>
         insertCapturedPayment(tx, {
+          origin: params.origin,
           workingOrderId: params.workingOrderId,
           provider: "stripe",
           paymentRef,
@@ -418,7 +417,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     at(EVE);
     const before = await park(v, one(v, v.products.cana));
     const after = await park(v, one(v, v.products.cana));
-    await placeOrder(deps(), v.cfg, before, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, before, OPERATOR);
 
     at(NEW_YEAR);
     await collectOrder(deps(), v.cfg, {
@@ -426,7 +425,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
       lines: [],
       tender: { method: "cash", amount: "2.50" },
     });
-    await placeOrder(deps(), v.cfg, after, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, after, OPERATOR);
 
     expect(await filed(before)).toMatchObject({ issuedAt: EVE, vatBreakdown: CANA_AT_10 });
     expect(await filed(after)).toMatchObject({ issuedAt: NEW_YEAR, vatBreakdown: CANA_AT_4 });
@@ -436,7 +435,7 @@ describe("a sale files the rate in force on the day its invoice is issued", () =
     const v = await setupVenue("ticket_then_pay");
     at(EVE);
     const id = await park(v, one(v, v.products.cana));
-    await placeOrder(deps(), v.cfg, id, OPERATOR, v.cfg.tillId);
+    await placeOrder(deps(), v.cfg, id, OPERATOR);
 
     at(NEW_YEAR);
     await collectOrder(deps(), v.cfg, {

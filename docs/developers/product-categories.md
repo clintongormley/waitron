@@ -211,14 +211,13 @@ import to the new menu and layout ids.
 
 A till reads the structure and the layouts from each menu's live version, not from the working
 state: both offers routes give each menu its `structure`, `homeLayouts` and `defaultHomeLayoutId`,
-and they and `GET /api/menu-state` give each menu the device's `homeLayoutId` and a `layoutFallback`
+and they and `GET /api/menu-state` give each menu the signed-in session's device's `homeLayoutId` and a `layoutFallback`
 (`resolveDeviceHomeLayouts`, `packages/catalogue/src/home-layouts.ts`). The profile's choice counts
 while the live version holds that layout, so a layout deleted or renamed since the last publish
 keeps showing, under its published name, until the menu is published again. Otherwise the till gets
 the live default, with `layoutFallback` `layout_unpublished` when the menu still has the chosen
-layout but has not published it, and `layout_removed` when it no longer has it; a request from no
-enrolled device, or from a device whose profile has no choice for that menu, gets the default and
-`null`. The till warns about `layout_removed` once for each removed layout of a menu while its page
+layout but has not published it, and `layout_removed` when it no longer has it; a device whose
+profile has no choice for that menu gets the default and `null`. The till warns about `layout_removed` once for each removed layout of a menu while its page
 stays loaded (a removal it cannot name, only if nothing has been said about that menu yet), and
 switches silently otherwise (`apps/till/src/till-app.ts`).
 

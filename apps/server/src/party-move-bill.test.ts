@@ -223,7 +223,7 @@ async function placedCounterOrder(...names: string[]): Promise<string> {
     lines: names.map((name) => ({ menuItemId: v.item(name), quantity: "1" })),
     operatorId: OPERATOR,
   });
-  await placeOrder(deps, v.cfg, id, OPERATOR, v.cfg.tillId);
+  await placeOrder(deps, v.cfg, id, OPERATOR);
   return id;
 }
 

@@ -3,8 +3,8 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import { isUniqueViolation, saleVoids, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
-import type { NodeId, SaleId, TillId } from "@waitron/shared";
+import { AppError, readOrigin } from "@waitron/shared";
+import type { NodeId, SaleId } from "@waitron/shared";
 import type { FiscalBackend, FiscalRecordRef } from "@waitron/fiscal";
 import { authorize, type AuthzInput } from "@waitron/identity";
 import { recordIncident } from "./incidents.js";
@@ -17,6 +17,8 @@ import { recordIncident } from "./incidents.js";
  * a supervisor `override`, and the authorizer is written to `sale_voids.voided_by` at insert, the
  * only moment it can be recorded. It runs after the sale lookup, so a missing sale is
  * `sale.not_found` rather than an authorization error, and before any fiscal work.
+ *
+ * A failed chain check's incident names the device the sale was rung on.
  */
 export async function recordVoid(
   tx: Transaction,
@@ -26,7 +28,7 @@ export async function recordVoid(
   authz: AuthzInput,
 ): Promise<{ fiscal: FiscalRecordRef }> {
   const [sale] = await tx
-    .select({ tillId: sales.tillId, nodeId: sales.nodeId })
+    .select({ nodeId: sales.nodeId, source: sales.source, deviceId: sales.deviceId })
     .from(sales)
     .where(eq(sales.id, saleId));
 
@@ -51,7 +53,7 @@ export async function recordVoid(
       ? [
           {
             error: new AppError("chain.verification_failed", {
-              tillId: sale.tillId,
+              deviceId: sale.deviceId,
               issues: verification.issues.map((issue) => ({
                 issueCode: issue.code,
                 recordId: issue.recordId ?? null,
@@ -71,7 +73,7 @@ export async function recordVoid(
 
   for (const incident of pending) {
     await recordIncident(tx, {
-      tillId: sale.tillId as TillId,
+      origin: readOrigin(sale.source, sale.deviceId),
       saleId,
       detectedAt: now,
       ...incident,

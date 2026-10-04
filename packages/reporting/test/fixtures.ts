@@ -5,14 +5,13 @@ import {
   locationId as brandLocationId,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   decimal,
   percentOf,
   stringToBasisPoints,
   stringToCents,
   stringToThousandths,
 } from "@waitron/shared";
-import type { NodeId, SaleId, SaleLineClassification, SeriesId, TillId } from "@waitron/shared";
+import type { DeviceId, NodeId, SaleId, SaleLineClassification, SeriesId } from "@waitron/shared";
 import {
   billPaymentRefunds,
   billPayments,
@@ -30,13 +29,12 @@ import {
   saleVoids,
   sales,
   tenders,
-  tills,
   ticketItems,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedTenant, seedDevice } from "@waitron/db/testing/seed.js";
 import type { TenderMethod } from "../src/types.js";
 
 /**
@@ -46,7 +44,8 @@ import type { TenderMethod } from "../src/types.js";
 
 export interface SeededVenue {
   locationId: string;
-  tillId: TillId;
+  /** A till device at that location: the origin of every money row the fixtures write. */
+  deviceId: DeviceId;
   nodeId: NodeId;
   seriesId: SeriesId;
 }
@@ -58,17 +57,13 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
     .values({ name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Test op" })
     .returning({ id: locations.id });
   const locationId = location!.id;
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Till 1" })
-    .returning({ id: tills.id });
-  const tillId = brandTillId(till!.id);
+  const { deviceId } = await seedDevice(db, { locationId });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId, code: "A" })
     .returning({ id: invoiceSeries.id });
-  return { locationId, tillId, nodeId, seriesId: brandSeriesId(series!.id) };
+  return { locationId, deviceId, nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
 /**
@@ -88,16 +83,9 @@ export async function seedNodeAndSeries(
   return { nodeId, seriesId: brandSeriesId(series!.id) };
 }
 
-// Till names are unique per location; seedVenue owns "Till 1".
-let tillSeq = 1;
-
-export async function seedTill(
-  db: Database,
-  locationId: string,
-  name = `Till ${++tillSeq}`,
-): Promise<TillId> {
-  const [till] = await db.insert(tills).values({ locationId, name }).returning({ id: tills.id });
-  return brandTillId(till!.id);
+/** Another device at `locationId`, for a test that needs money taken on two. */
+export async function seedVenueDevice(db: Database, locationId: string): Promise<DeviceId> {
+  return (await seedDevice(db, { locationId: brandLocationId(locationId) })).deviceId;
 }
 
 /**
@@ -125,9 +113,11 @@ function breakdownFromLines(
 
 export async function seedSale(
   db: Database,
-  seed: { tillId: TillId; nodeId: NodeId; seriesId: SeriesId },
+  seed: { deviceId: DeviceId; nodeId: NodeId; seriesId: SeriesId },
   opts: {
     invoiceNumber: number;
+    /** A sample sale the Demo seed recorded, with no device; otherwise `seed.deviceId` rang it. */
+    source?: "demo_seed";
     issuedAt: string;
     total: string;
     lines: Array<{
@@ -176,7 +166,8 @@ export async function seedSale(
   const [row] = await db
     .insert(sales)
     .values({
-      tillId: seed.tillId,
+      source: opts.source ?? "device",
+      deviceId: opts.source === undefined ? seed.deviceId : null,
       nodeId: seed.nodeId,
       seriesId: seed.seriesId,
       invoiceNumber: opts.invoiceNumber,
@@ -249,7 +240,7 @@ const PERSON = "dddddddd-0000-4000-8000-000000000001";
  */
 export async function seedBillPayment(
   db: Database,
-  ref: { workingOrderId: string; tillId: TillId },
+  ref: { workingOrderId: string; deviceId: DeviceId },
   opts: {
     method: "cash" | "card";
     applied: string;
@@ -276,7 +267,8 @@ export async function seedBillPayment(
       tendered: opts.method === "cash" ? stringToCents(opts.tendered ?? owed) : null,
       state: opts.state,
       requestedBy: PERSON,
-      tillId: ref.tillId,
+      source: "device",
+      deviceId: ref.deviceId,
       receivedAt: moved ? opts.at! : null,
       failedAt: opts.state === "failed" ? opts.at! : null,
     })
@@ -284,10 +276,10 @@ export async function seedBillPayment(
   return row!.id;
 }
 
-/** Money given back from one bill payment, on `tillId`. `at` is `completed_at` or `failed_at`. */
+/** Money given back from one bill payment, on `deviceId`. `at` is `completed_at` or `failed_at`. */
 export async function seedBillRefund(
   db: Database,
-  ref: { billPaymentId: string; tillId: TillId },
+  ref: { billPaymentId: string; deviceId: DeviceId },
   opts: {
     applied: string;
     tip?: string;
@@ -304,7 +296,8 @@ export async function seedBillRefund(
     reason: "fixture",
     authorizedBy: PERSON,
     requestedBy: PERSON,
-    tillId: ref.tillId,
+    source: "device",
+    deviceId: ref.deviceId,
     state: opts.state,
     completedAt: opts.state === "completed" ? opts.at! : null,
     failedAt: opts.state === "failed" ? opts.at! : null,
@@ -446,7 +439,7 @@ export async function seedFiredLine(
 
 /** What {@link seedFiredOrder} needs to seed one KITCHEN order with a single fired line. */
 export interface FiredOrderSeed {
-  tillId: TillId;
+  deviceId: DeviceId;
   nodeId: NodeId;
   locationId: string;
   stationId: string;
@@ -458,13 +451,15 @@ export interface FiredOrderSeed {
  */
 export async function seedOpenOrder(
   db: Database,
-  seed: { tillId: TillId; nodeId: NodeId },
+  seed: { deviceId: DeviceId; locationId: string; nodeId: NodeId },
   orderNumber: number,
 ): Promise<{ orderId: string }> {
   const [order] = await db
     .insert(workingOrders)
     .values({
-      tillId: seed.tillId,
+      source: "device",
+      deviceId: seed.deviceId,
+      locationId: seed.locationId,
       nodeId: seed.nodeId,
       orderNumber,
       status: "open",

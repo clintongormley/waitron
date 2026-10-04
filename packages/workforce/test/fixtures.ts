@@ -1,4 +1,5 @@
 import { locations } from "@waitron/db";
+import { jobOrigin } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { hashPin, persons } from "@waitron/identity";
 import { appendToChain } from "../src/chain.js";
@@ -256,6 +257,7 @@ export async function insertTimeEntry(
         eventAt: params.eventAt ?? "2026-01-05T09:00:00Z",
         eventOffsetMinutes: params.offsetMinutes ?? 0,
         recordedByPersonId: params.personId,
+        origin: jobOrigin("dashboard"),
       },
     ),
   );

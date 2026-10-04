@@ -1,7 +1,13 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppError, decimal, seriesId as brandSeriesId } from "@waitron/shared";
-import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import {
+  AppError,
+  decimal,
+  seriesId as brandSeriesId,
+  deviceOrigin,
+  jobOrigin,
+} from "@waitron/shared";
+import type { DeviceId, LocationId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import {
@@ -21,8 +27,10 @@ import { recordSale } from "./record-sale.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
 import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtures.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
-let tillId: TillId;
+let locationId: LocationId;
+let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId; // the ordinary (purpose='standard') series seedTenant creates
 let rectSeriesId: SeriesId; // a purpose='rectificative' series on the same node
@@ -44,7 +52,7 @@ const suite = useVenueDb({
 });
 
 beforeEach(async () => {
-  ({ tillId, nodeId, seriesId } = await seedTenant(suite.db));
+  ({ locationId, deviceId, nodeId, seriesId } = await seedTenant(suite.db));
   rectSeriesId = await seedRectificativeSeries(suite.db, nodeId);
   supervisorId = await seedPerson("supervisor");
   managerId = await seedPerson("manager");
@@ -65,8 +73,9 @@ async function seedPerson(role: "staff" | "supervisor" | "manager" | "admin"): P
 
 /** Opens a shift session for `personId` at this tenant's till and returns its id. */
 async function openSession(personId: string): Promise<string> {
+  const deviceId = (await seedDevice(suite.db, { locationId })).deviceId;
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tillId, personId, pin: "1234" }),
+    loginWithPin(tx, { deviceId, personId, pin: "1234" }),
   );
   return session.id;
 }
@@ -95,7 +104,7 @@ const steadyClock: TrustedClock = fixedClock(() => ({
 /** The ordinary sale, settled immediately, so "the corrective is unsettled" is not vacuous. */
 function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   return {
-    tillId,
+    origin: deviceOrigin(deviceId),
     nodeId,
     seriesId,
     locale: "es-ES",
@@ -137,7 +146,7 @@ function correctionInput(
   overrides: Partial<RecordCorrectionInput> = {},
 ): RecordCorrectionInput {
   return {
-    tillId,
+    origin: deviceOrigin(deviceId),
     nodeId,
     seriesId: rectSeriesId,
     correctsSaleId,
@@ -238,6 +247,47 @@ async function rectSeriesNext(): Promise<number | undefined> {
   return series?.n;
 }
 
+describe("recordCorrection — the corrective's origin", () => {
+  async function storedOrigin(id: SaleId) {
+    const result = await suite.db.execute<{ source: string; device_id: string | null }>(
+      sql`select source, device_id from sales where id = ${id}`,
+    );
+    return result.rows[0];
+  }
+
+  it("stores the device it was issued on", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: original } = await sell(backend);
+    const { saleId } = await correct(backend, original, { origin: deviceOrigin(deviceId) });
+    expect(await storedOrigin(saleId)).toEqual({ source: "device", device_id: deviceId });
+  });
+
+  it("stores a demo seed corrective with no device", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: original } = await sell(backend);
+    const { saleId } = await correct(backend, original, { origin: jobOrigin("demo_seed") });
+    expect(await storedOrigin(saleId)).toEqual({ source: "demo_seed", device_id: null });
+  });
+
+  it("hands the origin to the fiscal backend", async () => {
+    const fake = new FakeFiscalBackend(suite.db);
+    const { saleId: original } = await sell(fake);
+    const seen: SaleForFiscalRecord[] = [];
+    const backend: FiscalBackend = Object.assign(Object.create(fake) as FakeFiscalBackend, {
+      recordCorrection: (
+        tx: Transaction,
+        sale: SaleForFiscalRecord,
+        extra: Parameters<FiscalBackend["recordCorrection"]>[2],
+      ) => {
+        seen.push(sale);
+        return fake.recordCorrection(tx, sale, extra);
+      },
+    });
+    await correct(backend, original, { origin: jobOrigin("readiness_test") });
+    expect(seen.map((sale) => sale.origin)).toEqual([jobOrigin("readiness_test")]);
+  });
+});
+
 describe("recordCorrection — series purpose guard (§5)", () => {
   it("rejects an ordinary (standard) series: a correction must draw a corrective number", async () => {
     const backend = new FakeFiscalBackend(suite.db);
@@ -303,7 +353,7 @@ describe("recordCorrection — the sale being corrected", () => {
     // The original exists in `sales` but has no fiscal record, so the fake backend refuses with
     // `fiscal.sale_not_recorded`.
     const backend = new FakeFiscalBackend(suite.db);
-    const bareOriginal = await seedBareSale(suite.db, { tillId, nodeId, seriesId });
+    const bareOriginal = await seedBareSale(suite.db, { deviceId, nodeId, seriesId });
     await expect(correct(backend, bareOriginal)).rejects.toMatchObject({
       code: "fiscal.sale_not_recorded",
       params: { saleId: bareOriginal },
@@ -749,7 +799,7 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
     const backend = new FakeFiscalBackend(suite.db);
     const originalId = await seedBareSale(
       suite.db,
-      { tillId, nodeId, seriesId },
+      { deviceId, nodeId, seriesId },
       { total: "0.55", vatBreakdown: [{ rate: "21.00", base: "0.45", tax: "0.09" }] },
     );
 
@@ -1067,7 +1117,7 @@ describe("recordCorrection — no fiscal condition blocks a correction (§5)", (
       confident: false,
       confidence: "degraded",
       anchorAgeSeconds: 999,
-      warning: new AppError("clock.degraded", { tillId, anchorAgeSeconds: 999 }),
+      warning: new AppError("clock.degraded", { deviceId, anchorAgeSeconds: 999 }),
     }));
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);

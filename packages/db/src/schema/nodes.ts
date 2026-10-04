@@ -10,8 +10,8 @@ import { locations } from "./tenants.js";
  * on `node_roles` (`./node-roles.ts`), keyed by node id: a `local` table, because a node holding
  * another node's copy of the database must read its own role or none. Do not add a `role` column
  * here for the mirror/primary split — that concept already has its table. Deliberately
- * regime-neutral, like `tills`: the Veri*Factu SIF identity lives in the module-owned
- * `registro_sif` table, keyed by node.
+ * regime-neutral: the Veri*Factu SIF identity lives in the module-owned `registro_sif` table, keyed
+ * by node.
  *
  * `filing_module`/`tax_module` are stamped at provision time from the location's territory; the
  * authoritative per-sale value stays `sales.fiscal_backend` — these are the node's recorded

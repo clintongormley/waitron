@@ -11,21 +11,18 @@ import { useVenueDb } from "../testing/venue-db.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
 import { seedNode } from "../testing/seed.js";
 import { invoiceSeries } from "./series.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 afterEach(async () => {
   await suite.db.execute(sql`delete from invoice_series`);
   await suite.db.execute(sql`delete from nodes`);
-  await suite.db.execute(sql`delete from tills`);
   await suite.db.execute(sql`delete from locations`);
   await suite.db.execute(sql`delete from tenants`);
 });
 
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
-const TILL_A1 = "aaaaaaaa-1111-4000-8000-000000000001";
-const TILL_A2 = "aaaaaaaa-1111-4000-8000-000000000002";
 
 // seed() creates two nodes so the per-node uniqueness tests have a second node to collide
 // against.
@@ -49,10 +46,6 @@ async function seed(db: Database): Promise<void> {
       invoiceLocales: ["es", "ca"],
       operationDescription: "Hostelería",
     },
-  ]);
-  await db.insert(tills).values([
-    { id: TILL_A1, locationId: LOCATION_A, name: "A1" },
-    { id: TILL_A2, locationId: LOCATION_A, name: "A2" },
   ]);
   nodeA1 = await seedNode(db, brandLocationId(LOCATION_A));
   nodeA2 = await seedNode(db, brandLocationId(LOCATION_A));

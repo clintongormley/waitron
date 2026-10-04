@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AppError, compareDecimal, tillId as brandTillId } from "@waitron/shared";
+import { AppError, compareDecimal, jobOrigin } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -24,7 +24,6 @@ import {
   listAttempting,
   refundLookupOf,
   stampAttemptingRef,
-  tillsForWorkingOrders,
 } from "@waitron/payments";
 import type { SumUpClient, SumUpTransaction } from "./client.js";
 import { SUMUP_PROVIDER } from "./client.js";
@@ -174,6 +173,7 @@ export class SumUpCloudProvider implements PaymentProvider {
     // T1
     await this.inTransaction((tx) =>
       insertAttempting(tx, {
+        origin: params.origin,
         workingOrderId: params.workingOrderId,
         provider: SUMUP_PROVIDER,
         paymentRef,
@@ -299,42 +299,33 @@ export class SumUpCloudProvider implements PaymentProvider {
    * the outcome has stopped moving by the time the sweep sees it. The sweep MUST terminate every
    * row it can, or a deferred status would be swept forever.
    *
-   * The incident carries no `saleId` (an attempting row has none), so `recordIncidentOnce` (the sink
-   * boot wires) dedups per open `(till, code, sale_id=null)`: two unactionable rows on the SAME till
-   * in one sweep collapse to ONE incident and `incidentsRaised` undercounts. Accepted: one incident
-   * per till is enough to alert a human; the count is a log field, not a per-row guarantee.
+   * The incident names the payment check and carries no `saleId` (an attempting row has none), so
+   * `recordIncidentOnce` (the sink boot wires) keeps one open incident of this code: a second
+   * unactionable row, in this sweep or a later one while the first is open, raises nothing and
+   * `incidentsRaised` undercounts. Accepted: one open alert is enough to send a human to the
+   * payments screen; the count is a log field, not a per-row guarantee.
    */
   async resolvePending(now: Date): Promise<ForwardResult> {
     const rows = await this.inTransaction((tx) => listAttempting(tx, SUMUP_PROVIDER));
     if (rows.length === 0) {
       return { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
     }
-    const tills = await this.inTransaction((tx) =>
-      tillsForWorkingOrders(
-        tx,
-        rows.map((r) => r.workingOrderId),
-      ),
-    );
 
     let forwarded = 0;
     let declined = 0;
     let incidentsRaised = 0;
     let deferred = false;
-    /** `failAttempting` + (for an unactionable outcome) the incident, in ONE transaction. The till
-     * comes from the pre-fetched map; an absent till (order gone) means no incident but the row
-     * still fails. Returns whether an incident was raised. */
+    /** `failAttempting` + (for an unactionable outcome) the incident, in ONE transaction. Returns
+     * whether an incident was raised. */
     const failWith = (
       key: { provider: string; paymentRef: string },
-      workingOrderId: string,
       status: string | null,
     ): Promise<boolean> =>
       this.inTransaction(async (tx) => {
         await failAttempting(tx, key);
         if (status === null) return false;
-        const tillId = tills.get(workingOrderId);
-        if (tillId === undefined) return false;
         return this.opts.incidents(tx, {
-          tillId: brandTillId(tillId),
+          origin: jobOrigin("payment_check"),
           error: new AppError("payment.pending_outcome_unactionable", {
             paymentRef: key.paymentRef,
             status,
@@ -362,7 +353,7 @@ export class SumUpCloudProvider implements PaymentProvider {
           continue;
         }
         // A not-found we cannot correlate to a key SumUp recorded is an uncertain charge — surface it.
-        if (await failWith(key, row.workingOrderId, "not_found")) incidentsRaised++;
+        if (await failWith(key, "not_found")) incidentsRaised++;
         declined++;
         continue;
       }
@@ -385,7 +376,7 @@ export class SumUpCloudProvider implements PaymentProvider {
       }
       // failed → no incident; deferred (REFUNDED / unknown) → incident naming the status.
       const status = outcome.kind === "deferred" ? t.status : null;
-      if (await failWith(key, row.workingOrderId, status)) incidentsRaised++;
+      if (await failWith(key, status)) incidentsRaised++;
       declined++;
     }
     return {

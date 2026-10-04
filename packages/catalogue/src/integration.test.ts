@@ -18,6 +18,8 @@ import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { priceBasket } from "./pricing.js";
 import { customerPresentationText } from "./product-presentation.js";
 import { seedVenue } from "../test/fixtures.js";
+import { deviceOrigin } from "@waitron/shared";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 /**
  * The end-to-end proof of the catalogue slice's central seam: catalogue data alone → the sale's
@@ -75,7 +77,8 @@ const clock: TrustedClock = {
 
 describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
   it("rings a sale entirely from catalogue data", async () => {
-    const { locationId, tillId, nodeId, seriesId } = await seedVenue(suite.db);
+    const { locationId, nodeId, seriesId } = await seedVenue(suite.db);
+    const { deviceId } = await seedDevice(suite.db, { locationId });
     const backend = new CapturingFakeBackend(suite.db);
 
     let priced: ReturnType<typeof priceBasket>;
@@ -130,7 +133,7 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
       expect(priced.total).toBe("7.97");
 
       return recordSale(tx, backend, {
-        tillId,
+        origin: deviceOrigin(deviceId),
         nodeId,
         seriesId,
         locale: "en",

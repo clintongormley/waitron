@@ -7,7 +7,7 @@ import {
   loginWithPin,
   PIN_THROTTLE_FREE_ATTEMPTS,
 } from "@waitron/identity";
-import { seedPerson, seedTill } from "@waitron/identity/test/fixtures.js";
+import { seedPerson, seedSessionDevice } from "@waitron/identity/test/fixtures.js";
 import { describe, expect, it, vi } from "vitest";
 import { keysInTurn } from "./attempt-turns.js";
 import { overrideToCheck, withPinCheckAhead } from "./pin-check-ahead.js";
@@ -24,9 +24,9 @@ const suite = useVenueDb({
 
 /** A shift session for an operator of `role`. */
 async function sessionOf(role: "staff" | "supervisor"): Promise<{ id: string; token: string }> {
-  const tillId = await seedTill(suite.db);
+  const deviceId = await seedSessionDevice(suite.db);
   const personId = await seedPerson(suite.db, role);
-  return withTransaction(suite.db, (tx) => loginWithPin(tx, { tillId, personId, pin: "1234" }));
+  return withTransaction(suite.db, (tx) => loginWithPin(tx, { deviceId, personId, pin: "1234" }));
 }
 
 describe("overrideToCheck", () => {

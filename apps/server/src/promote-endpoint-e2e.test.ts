@@ -18,7 +18,6 @@ import {
   setDeploymentMode,
   stampDeployment,
   tenants,
-  tills,
   withTransaction,
   writeMirrorConfig,
   writeNodeMembership,
@@ -98,7 +97,6 @@ const RING = loadKeyRing({
 });
 
 const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const MIRROR_TILL_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const MIRROR_DESIGNATED_SERIES_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"; // the promote must replace it
 const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const MIRROR_NUMERO_INSTALACION = 7;
@@ -111,7 +109,7 @@ const ADMIN_PW = "correct-horse-battery-staple";
 const STAFF_ID = "88888888-8888-4888-8888-888888888888";
 const STAFF_PIN = "5555";
 
-// The sale resolves its `till_id` from this device.
+// The device the sale is made on.
 const DEVICE_ID = "77777777-7777-4777-8777-777777777777";
 const DEVICE_TOKEN = "promote-e2e-device-token";
 const DEVICE_PROFILE_ID = "66666666-6666-4666-8666-666666666666";
@@ -221,10 +219,6 @@ async function seedMirror(admin: Database): Promise<{ nodeId: string; standardSe
 async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
   await seedLegacySellingUnits(admin);
   await admin
-    .insert(tills)
-    .values({ id: MIRROR_TILL_ID, locationId: MIRROR_LOCATION_ID, name: "Barra" })
-    .onConflictDoNothing();
-  await admin
     .insert(persons)
     .values({
       id: STAFF_ID,
@@ -239,7 +233,7 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
       id: DEVICE_PROFILE_ID,
       name: "Counter",
       formFactor: "till",
-      capabilities: [],
+      capabilities: ["take-cash"],
     })
     .onConflictDoNothing();
   await admin
@@ -248,7 +242,6 @@ async function seedSaleVenue(admin: Database, nodeId: string): Promise<string> {
       id: DEVICE_ID,
       locationId: MIRROR_LOCATION_ID,
       deviceProfileId: DEVICE_PROFILE_ID,
-      tillId: MIRROR_TILL_ID,
       label: "Counter till",
       tokenHash: hashSecret(DEVICE_TOKEN),
     })
@@ -340,7 +333,6 @@ function mirrorEnv(
   return {
     ...KEY_ENV,
     ...TICK_ENV,
-    WAITRON_TILL_TILL_ID: MIRROR_TILL_ID,
     WAITRON_TILL_NODE_ID: nodeId,
     WAITRON_TILL_SERIES_ID: MIRROR_DESIGNATED_SERIES_ID,
     WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
@@ -435,7 +427,6 @@ describe("promote endpoint e2e — the whole arc over HTTP", () => {
       primary = await startServer({
         ...KEY_ENV,
         ...TICK_ENV,
-        WAITRON_TILL_TILL_ID: persisted.WAITRON_TILL_TILL_ID!,
         WAITRON_TILL_NODE_ID: persisted.WAITRON_TILL_NODE_ID!,
         WAITRON_TILL_SERIES_ID: persisted.WAITRON_TILL_SERIES_ID!,
         WAITRON_TILL_LOCATION_ID: persisted.WAITRON_TILL_LOCATION_ID!,

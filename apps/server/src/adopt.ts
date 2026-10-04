@@ -142,7 +142,6 @@ export async function adoptFromPrimary(
   });
   await deps.persistTrading({
     locationId: designated.locationId,
-    tillId: designated.tillId,
     // The mirror runs under its OWN id, not the primary's.
     nodeId: standby.nodeId,
     seriesId: designated.seriesId,

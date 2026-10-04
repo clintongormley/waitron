@@ -11,13 +11,13 @@ declare module "@waitron/shared" {
   interface ErrorParams {
     /** A tender still has `settledAt: null`, so `settleSale` settles nothing and the sale stays
      * retryable. `recordSale`'s immediate settlement runs the same `settleSale`. */
-    "sale.tender_unsettled": { tillId: string; saleId: string; unsettledCount: number };
+    "sale.tender_unsettled": { deviceId: string | null; saleId: string; unsettledCount: number };
     /** Every tender has settled, but `sum(amount) = total + sum(corrections) + sum(tip_amount)`
      * does not hold, where the corrections are the signed totals of this sale's corrective
      * invoices. Fires on overpayment as well as shortfall. The `sale_settlements_check_coverage`
      * trigger checks the same identity. */
     "sale.tender_shortfall": {
-      tillId: string;
+      deviceId: string | null;
       saleId: string;
       due: string;
       charged: string;
@@ -128,9 +128,9 @@ declare module "@waitron/shared" {
     /** Never thrown: the write paths build it from a failed `FiscalBackend.checkIntegrity` and
      * record it as an incident. One code whatever issues the regime reported. */
     "chain.verification_failed": {
-      tillId: string;
+      deviceId: string | null;
       /** Every issue from one check, in one incident: `incidents_open_dedup` allows one open
-       * incident per (till, code, sale), so one row per issue would keep only the first. */
+       * incident per (source, device, code, sale), so one row per issue would keep only the first. */
       issues: Array<{
         /** The module's own issue code — e.g. `predecessor-hash-mismatch` — never itself a
          * translation key: it is regime-specific and not registered on this shared surface. */

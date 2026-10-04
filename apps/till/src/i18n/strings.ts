@@ -32,6 +32,7 @@ export const en = {
   "action.authorize": "Authorize",
   // Tenders
   "tender.cash": "Cash",
+  "tender.cash_at_till": "This device does not take cash. Take cash at a till.",
   "tender.card": "Card",
   "tender.card_ref": "Operation number (optional)",
   "card.simulation_result": "Test payment result",
@@ -243,6 +244,12 @@ export const en = {
   "reader_picker.empty": "No active readers configured",
   "reader_picker.offline": "Offline",
   "card_reader.not_set_up": "This device is not set up to use the card reader",
+  "printers.open": "Printers",
+  "printers.title": "This device's printers",
+  "printers.receipt": "Receipt printer",
+  "printers.payment_slip": "Payment slip printer",
+  "printers.none": "No printer",
+  "printers.close": "Close",
   // Allergen screen chrome; the allergen names are in `allergen-names.ts`.
   "allergens.open": "Allergens",
   "allergens.title": "Allergens",
@@ -661,8 +668,6 @@ export const en = {
   "payment_slip.error": "Could not print the payment slip, try again",
   "drawer.error": "Could not open the cash drawer, try again",
   "drawer.not_attached": "No cash drawer is attached to this printer",
-  "drawer.till_switched_off":
-    "This till is not set to open the cash drawer — a manager can switch it on from the dashboard's Printing rules screen",
   "held.park_error": "Could not hold the order, try again",
   "held.product_gone": "A product is no longer available and was dropped from the order",
   "held.extra_not_offered":
@@ -999,6 +1004,7 @@ export const es: Record<StringKey, string> = {
   "action.hold": "Aparcar",
   "action.authorize": "Autorizar",
   "tender.cash": "Efectivo",
+  "tender.cash_at_till": "Este dispositivo no cobra en efectivo. Cobra en efectivo en una caja.",
   "tender.card": "Tarjeta",
   "tender.card_ref": "Número de operación (opcional)",
   "card.simulation_result": "Resultado del pago de prueba",
@@ -1185,6 +1191,12 @@ export const es: Record<StringKey, string> = {
   "reader_picker.empty": "No hay lectores activos configurados",
   "reader_picker.offline": "Sin conexión",
   "card_reader.not_set_up": "Este dispositivo no está configurado para usar el lector de tarjetas",
+  "printers.open": "Impresoras",
+  "printers.title": "Impresoras de este dispositivo",
+  "printers.receipt": "Impresora de tickets",
+  "printers.payment_slip": "Impresora de justificantes de pago",
+  "printers.none": "Sin impresora",
+  "printers.close": "Cerrar",
   "allergens.open": "Alérgenos",
   "allergens.title": "Alérgenos",
   "allergens.notice": "Hay información sobre alérgenos disponible — pregunta al personal.",
@@ -1582,8 +1594,6 @@ export const es: Record<StringKey, string> = {
   "payment_slip.error": "No se pudo imprimir el justificante de pago, inténtalo de nuevo",
   "drawer.error": "No se pudo abrir el cajón, inténtalo de nuevo",
   "drawer.not_attached": "Esta impresora no tiene un cajón conectado",
-  "drawer.till_switched_off":
-    "Esta caja no está configurada para abrir el cajón: un responsable puede activarlo en la pantalla Reglas de impresión del panel de gestión",
   "held.park_error": "No se pudo aparcar el pedido, inténtalo de nuevo",
   "held.product_gone": "Un producto ya no está disponible y se quitó del pedido",
   "held.extra_not_offered":

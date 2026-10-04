@@ -946,7 +946,6 @@ describe("sending split-off extras", () => {
         .insert(devices)
         .values({
           locationId: cfg.locationId,
-          tillId: cfg.tillId,
           deviceProfileId: profile!.id,
           label: "Bar till",
           tokenHash: "test",
@@ -994,7 +993,6 @@ describe("sending split-off extras", () => {
         .insert(devices)
         .values({
           locationId: venue.cfg.locationId,
-          tillId: venue.cfg.tillId,
           deviceProfileId: profile!.id,
           label: "Here",
           tokenHash: `here-${randomUUID()}`,
@@ -1004,7 +1002,6 @@ describe("sending split-off extras", () => {
         .insert(devices)
         .values({
           locationId: venue.cfg.locationId,
-          tillId: venue.cfg.tillId,
           deviceProfileId: profile!.id,
           label: "Elsewhere",
           tokenHash: `elsewhere-${randomUUID()}`,

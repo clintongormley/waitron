@@ -5,7 +5,7 @@ import type { Transaction } from "@waitron/db";
 import { thousandthsToDecimal } from "@waitron/shared";
 import { splitBill } from "../bill-actions.js";
 import { partyRevisionOfOrder, setMainBill } from "../parties.js";
-import type { TillConfig } from "../till-config.js";
+import type { OriginConfig, TillConfig } from "../till-config.js";
 import {
   fireLines,
   fireableLineColumns,
@@ -22,7 +22,7 @@ const OPERATOR = "cccccccc-0000-4000-8000-0000000000f1";
  */
 export async function openPartyTab(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   req: {
     tableId: string;
     lines?: { menuItemId: string; quantity: string }[];
@@ -46,7 +46,7 @@ export async function openPartyTab(
  */
 export async function splitPartyBill(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   billId: string,
   transfers: { lineNo: number; quantity?: string }[],
 ): Promise<{ billId: string }> {

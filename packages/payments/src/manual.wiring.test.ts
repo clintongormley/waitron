@@ -6,8 +6,8 @@ import {
   decimal,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
 } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
@@ -42,7 +42,7 @@ const steadyClock: TrustedClock = {
 
 function buildInput(s: SeededForSale, settledAt: Date): RecordSaleInput {
   return {
-    tillId: brandTillId(s.tillId),
+    origin: deviceOrigin(s.deviceId),
     nodeId: brandNodeId(s.nodeId),
     seriesId: brandSeriesId(s.seriesId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
@@ -77,6 +77,7 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
     const saleId = await suite.db.transaction(async (tx) => {
       const recorded = await recordSale(tx, backend, buildInput(s, BASE));
       const manual = await recordManualCardPayment(tx, {
+        origin: deviceOrigin(s.deviceId),
         workingOrderId: s.workingOrderId,
         amount: decimal("12.10"),
         settledAt: BASE,
@@ -117,6 +118,7 @@ describe("manual card tender -> recordSale -> associate (atomic, no provider)", 
       suite.db.transaction(async (tx) => {
         await recordSale(tx, backend, buildInput(s, BASE));
         await recordManualCardPayment(tx, {
+          origin: deviceOrigin(s.deviceId),
           workingOrderId: s.workingOrderId,
           amount: decimal("12.10"),
           settledAt: BASE,

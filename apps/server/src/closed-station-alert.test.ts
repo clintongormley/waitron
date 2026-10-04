@@ -49,7 +49,8 @@ it("records one release alert with staff names in line order until the open aler
   );
   expect(alerts).toHaveLength(1);
   expect(alerts[0]).toMatchObject({
-    tillId: venue.cfg.tillId,
+    source: "device",
+    deviceId: venue.cfg.origin.deviceId,
     saleId: null,
     severity: "error",
     detectedAt: at.toISOString(),

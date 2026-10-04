@@ -3,13 +3,12 @@ import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
-import { AppError, centsToDecimal, isAppError, tillId as brandTillId } from "@waitron/shared";
+import { AppError, centsToDecimal, isAppError } from "@waitron/shared";
 import {
   billPaymentRefunds,
   billPayments,
   devices,
   nowIso,
-  tills,
   withTransaction,
   workingOrders,
   type Database,
@@ -64,6 +63,7 @@ import {
   paymentAttemptIsLive,
   payWorkingOrderIntegrated,
 } from "./till-sale.js";
+import { storedDeviceOrigin } from "./request-config.js";
 
 /**
  * The routes never import a provider package. `fetch` is injected by tests; the live host omits it and the seats fall back to the global.
@@ -672,15 +672,17 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             workingOrderId: workingOrders.id,
             orderNumber: workingOrders.orderNumber,
             label: workingOrders.label,
-            tillId: workingOrders.tillId,
-            tillName: tills.name,
+            source: payments.source,
+            deviceId: payments.deviceId,
+            deviceName: devices.label,
             provider: payments.provider,
             amount: payments.amount,
             startedAt: payments.createdAt,
           })
           .from(payments)
           .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
-          .innerJoin(tills, eq(tills.id, workingOrders.tillId))
+          // No `active` filter: a device revoked since it started the payment is still named.
+          .leftJoin(devices, eq(devices.id, payments.deviceId))
           .where(
             and(
               eq(payments.state, "attempting"),
@@ -714,7 +716,8 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             workingOrderId: workingOrders.id,
             orderStatus: workingOrders.status,
             attemptAt: workingOrders.paymentAttemptAt,
-            tillId: workingOrders.tillId,
+            source: payments.source,
+            deviceId: payments.deviceId,
           })
           .from(payments)
           .innerJoin(workingOrders, eq(workingOrders.id, payments.workingOrderId))
@@ -727,8 +730,10 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         ) {
           throw new AppError("payment.not_stuck", { paymentId });
         }
+        // The sale is filed under the device that started the payment, never the dashboard.
+        const origin = storedDeviceOrigin(row);
         await requireConnected(tx, cardProviderById(deps.providers, row.provider));
-        return { ...row, attemptAt: row.attemptAt, personId };
+        return { ...row, attemptAt: row.attemptAt, personId, origin };
       });
 
       const { provider, resolved } = await resolveAtProvider(
@@ -765,7 +770,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           provider: withoutCollect(provider),
           log,
         },
-        { ...deps.cfg, tillId: brandTillId(stuck.tillId) },
+        { ...deps.cfg, origin: stuck.origin },
         { id: stuck.workingOrderId, lines: [] },
         stuck.personId,
       );
@@ -801,8 +806,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             workingOrderId: billPayments.workingOrderId,
             orderNumber: workingOrders.orderNumber,
             label: workingOrders.label,
-            tillId: billPayments.tillId,
-            tillName: tills.name,
+            source: billPayments.source,
+            deviceId: billPayments.deviceId,
+            deviceName: devices.label,
             method: billPayments.method,
             applied: billPayments.applied,
             tip: billPayments.tip,
@@ -812,7 +818,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           })
           .from(billPayments)
           .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
-          .innerJoin(tills, eq(tills.id, billPayments.tillId))
+          .leftJoin(devices, eq(devices.id, billPayments.deviceId))
           .leftJoin(payments, eq(payments.billPaymentId, billPayments.id))
           .where(eq(billPayments.state, "pending"))
           .orderBy(billPayments.createdAt, sql`${billPayments}.rowid`),
@@ -848,7 +854,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const fromRow = async () => {
         const settled = await gated(sessionId, async (tx) => {
           await requireStuckBillPayment(tx, id);
-          return settleFromProviderRow(tx, fiscal, id, deps.clock.now().instant);
+          return settleFromProviderRow(tx, fiscal, id, deps.clock.now().instant, "stored");
         });
         switch (settled.settled) {
           case "received":
@@ -960,8 +966,9 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             workingOrderId: billPayments.workingOrderId,
             orderNumber: workingOrders.orderNumber,
             label: workingOrders.label,
-            tillId: billPaymentRefunds.tillId,
-            tillName: tills.name,
+            source: billPaymentRefunds.source,
+            deviceId: billPaymentRefunds.deviceId,
+            deviceName: devices.label,
             appliedAmount: billPaymentRefunds.appliedAmount,
             tipAmount: billPaymentRefunds.tipAmount,
             reason: billPaymentRefunds.reason,
@@ -973,7 +980,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .from(billPaymentRefunds)
           .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
           .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
-          .innerJoin(tills, eq(tills.id, billPaymentRefunds.tillId))
+          .leftJoin(devices, eq(devices.id, billPaymentRefunds.deviceId))
           .leftJoin(payments, eq(payments.billPaymentId, billPayments.id))
           .where(eq(billPaymentRefunds.state, "pending"))
           .orderBy(billPaymentRefunds.createdAt, sql`${billPaymentRefunds}.rowid`),
@@ -998,7 +1005,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "BillRefundId");
       await gated(sessionId, () => Promise.resolve());
-      const resumed = await resumeCardRefund(refundDeps, id, "manager");
+      const resumed = await resumeCardRefund(refundDeps, id, "manager", "stored");
       if (!resumed.claimed) throw new AppError("bill.refund_not_stuck", { refundId: id });
       if (resumed.refund.state !== "pending") return c.json({ outcome: resumed.refund.state });
       const { lookup } = resumed;

@@ -34,12 +34,11 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { createTable } from "./tables.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./till-config.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
@@ -63,6 +62,7 @@ import "./errors.js";
 import { splitBill } from "./bill-actions.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 // What serving records, by quantity, on the lines of a party (spec §4, §12 item 5; plan D8, D18,
 // D19). Serving is an operational fact: it never touches a filed sale.
@@ -117,7 +117,7 @@ const DISHES = {
 type Dish = keyof typeof DISHES;
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   zoneId: string;
   offer(dish: Dish): string;
   /** The Steak's extras list, whose one pick is the sauce. */
@@ -146,7 +146,6 @@ async function setupVenue(): Promise<Venue> {
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -160,8 +159,7 @@ async function setupVenue(): Promise<Venue> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
-    tillId: brandTillId(venue.tillId),
+  const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -170,7 +168,7 @@ async function setupVenue(): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  });
   return inTx(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Carta" });
     const category = await createCategory(tx, { name: "Platos" });
@@ -1127,7 +1125,8 @@ describe("a card refund pending on a bill", () => {
         state: "received",
         receivedAt: new Date().toISOString(),
         requestedBy: ALEX,
-        tillId: v.cfg.tillId,
+        source: v.cfg.origin.source,
+        deviceId: v.cfg.origin.deviceId,
       })
       .returning({ id: billPayments.id });
     await suite.db.insert(billPaymentRefunds).values({
@@ -1138,7 +1137,8 @@ describe("a card refund pending on a bill", () => {
       reason: "r",
       authorizedBy: ALEX,
       requestedBy: ALEX,
-      tillId: v.cfg.tillId,
+      source: v.cfg.origin.source,
+      deviceId: v.cfg.origin.deviceId,
       state: "pending",
     });
   }

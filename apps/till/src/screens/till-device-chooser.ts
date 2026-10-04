@@ -9,16 +9,18 @@ import "./till-enrol-screen.js";
 import type { DevDeviceList, TillApi } from "../api/client.js";
 
 /**
- * The dev-only device front door, shown when the host runs in dev mode AND this tab has not yet adopted
- * a device. The adopted id lives in THIS TAB's `sessionStorage` ({@link setDevDeviceId}) and rides every
- * request as the `x-waitron-dev-device` header the server trusts in dev mode, so one browser can run a
- * different device in each tab.
+ * The dev-only device front door, shown when the host runs in dev mode AND this tab has not yet
+ * adopted a device. The adopted id lives in THIS TAB's `sessionStorage` ({@link setDevDeviceId}) and
+ * rides every request as the `x-waitron-dev-device` header the server trusts in dev mode, so each
+ * tab can adopt a different device. A sign-in is a cookie the whole browser shares, and a sale
+ * records the signed-in session's device, so two devices signed in at once need windows that share
+ * no cookies, such as a private window.
  *
- * "Set up a new device" embeds the {@link TillEnrolScreen}; in devMode the server auto-accepts that knock
- * with the venue's default `till` profile, so it can only mint a `till`, and a REPEATED name is refused
- * with `device.register_name_taken` because a till enrol creates a register named after the device.
- * Acceptable for a dev tool: `dev-setup` also seeds a phone-portrait handheld and a kitchen display, so
- * the chooser lists those without minting them.
+ * "Set up a new device" embeds the {@link TillEnrolScreen}; in devMode the server auto-accepts that
+ * knock with the venue's default `till` profile, so it can only mint a `till`, and the name of a
+ * device still active is refused with `device.name_taken`. Acceptable for a dev tool: `dev-setup`
+ * also seeds a phone-portrait handheld and a kitchen display, so the chooser lists those without
+ * minting them.
  *
  * Its own chrome is DELIBERATELY plain English literals, not `t()` keys: no venue ever sees this tool.
  */

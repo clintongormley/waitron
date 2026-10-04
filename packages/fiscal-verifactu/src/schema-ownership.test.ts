@@ -25,7 +25,7 @@ const CORE = [
   "sales",
   "tenants",
   "tenders",
-  "tills",
+  "devices",
   "working_order_lines",
   "working_orders",
 ];
@@ -72,6 +72,6 @@ describe("the fiscal schema entrypoint owns exactly its own tables", () => {
     // Catches a "fix" that deletes the core-table imports to silence the re-export test.
     const sqlText = generatedSql();
     expect(sqlText).toContain("references `sales`(`id`)");
-    expect(sqlText).toContain("references `tills`(`id`)");
+    expect(sqlText).toContain("references `devices`(`id`)");
   });
 });

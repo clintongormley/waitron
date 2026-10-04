@@ -13,10 +13,11 @@ import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
 import { workingOrders } from "./orders.js";
 import { parties, partyTables, serviceCommands } from "./parties.js";
-import { locations, tenants, tills } from "./tenants.js";
+import { locations, tenants } from "./tenants.js";
 
 const LOCATION = "bbbbbbbb-0000-4000-8000-000000000001";
-const TILL = "bbbbbbbb-1111-4000-8000-000000000001";
+/** An order opened from the dashboard at `LOCATION`, needing no device. */
+const DASHBOARD = { source: "dashboard", deviceId: null, locationId: LOCATION } as const;
 const OPERATOR = "bbbbbbbb-2222-4000-8000-000000000001";
 
 describe("parties, party_tables and service_commands", () => {
@@ -36,7 +37,6 @@ describe("parties, party_tables and service_commands", () => {
       invoiceLocales: ["es"],
       operationDescription: "Hostelería",
     });
-    await db.insert(tills).values({ id: TILL, locationId: LOCATION, name: "Till" });
     nodeId = await seedNode(db, brandLocationId(LOCATION));
   });
 
@@ -189,7 +189,7 @@ describe("parties, party_tables and service_commands", () => {
     const [order] = await inTx((tx) =>
       tx
         .insert(workingOrders)
-        .values({ tillId: TILL, nodeId, orderNumber: orderSeq, partyId: id })
+        .values({ ...DASHBOARD, nodeId, orderNumber: orderSeq, partyId: id })
         .returning({ partyId: workingOrders.partyId }),
     );
     expect(order!.partyId).toBe(id);

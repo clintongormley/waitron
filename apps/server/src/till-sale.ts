@@ -68,8 +68,9 @@ import { readIssuedSales } from "./sale-due.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
 import { readVenueReceiptLanguageRules } from "./venue-locale.js";
+import { storedDeviceOrigin } from "./request-config.js";
 import {
   enqueueSaleDrawer,
   enqueueOriginalReceipt,
@@ -464,7 +465,7 @@ export type IntegratedPayDeps = TillSaleDeps & {
  */
 export async function payWorkingOrder(
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   req: PayWorkingOrderRequest,
   operatorId?: string,
 ): Promise<TillSaleResult> {
@@ -557,7 +558,7 @@ export async function payWorkingOrder(
 async function fireAndFileSale(
   tx: Transaction,
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   workingOrderId: string,
   tender: TillTender | null,
   order: GrossOrder,
@@ -652,7 +653,7 @@ export async function readSettledTicket(
 /** The action determines original versus duplicate; both only enqueue paper for an existing sale. */
 export async function printSaleReceipt(
   deps: { db: Database; backend: FiscalBackend },
-  cfg: TillConfig,
+  cfg: OriginConfig,
   workingOrderId: string,
   duplicate: boolean,
   language?: string,
@@ -703,7 +704,7 @@ function settlementFor(tender: TillTender, total: string): { settledAmount: stri
 async function fileImmediateSale(
   tx: Transaction,
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   workingOrderId: string,
   tender: TillTender | null,
   order: GrossOrder,
@@ -722,7 +723,7 @@ async function fileImmediateSale(
 
   const language = await readReceiptLanguage(tx, cfg.locationId);
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-    tillId: cfg.tillId,
+    origin: cfg.origin,
     nodeId: cfg.nodeId,
     seriesId: cfg.seriesId,
     // The sale-idempotency key (`sales_working_order_id_key`).
@@ -754,6 +755,7 @@ async function fileImmediateSale(
   // `recordManualCardPayment` makes no network call, so it commits inline with the sale.
   if (taken?.method === "card") {
     const { provider, paymentRef } = await recordManualCardPayment(tx, {
+      origin: cfg.origin,
       workingOrderId,
       amount: decimal(priced.total),
       settledAt,
@@ -838,7 +840,7 @@ async function readOutstandingSaleForOrder(
  */
 export async function payWorkingOrderIntegrated(
   deps: IntegratedPayDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   req: IntegratedPayRequest,
   operatorId?: string,
 ): Promise<IntegratedPayOutcome> {
@@ -870,7 +872,7 @@ export async function payWorkingOrderIntegrated(
 
 async function payIntegrated(
   deps: IntegratedPayDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   req: IntegratedPayRequest,
   operatorId: string | undefined,
   live: ReadonlyMap<string, string>,
@@ -1029,7 +1031,7 @@ async function payIntegrated(
   let result: PaymentResult;
   try {
     result = await deps.provider.collect({
-      tillId: cfg.tillId,
+      origin: cfg.origin,
       workingOrderId: brandWorkingOrderId(req.id),
       amount: addDecimal(baseAmount, tip),
       ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
@@ -1217,7 +1219,7 @@ export async function releaseStalePaymentAttempts(db: Database): Promise<number>
  */
 async function finalizeCapture(
   deps: IntegratedPayDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   req: IntegratedPayRequest,
   grossInP1: GrossLines,
   identities: readonly OrderLineIdentity[],
@@ -1240,7 +1242,7 @@ async function finalizeCapture(
       const { priced, clock } = issueMoment(deps.clock, grossInP1);
       const language = await readReceiptLanguage(tx, cfg.locationId);
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-        tillId: cfg.tillId,
+        origin: cfg.origin,
         nodeId: cfg.nodeId,
         seriesId: cfg.seriesId,
         // The sale-idempotency key (`sales_working_order_id_key`) the backstop below relies on.
@@ -1336,7 +1338,7 @@ async function finalizeCapture(
  */
 async function finalizeRecovery(
   deps: IntegratedPayDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   req: IntegratedPayRequest,
   captured: CapturedPaymentForOrder,
   operatorId?: string,
@@ -1379,9 +1381,15 @@ async function finalizeRecovery(
     /* v8 ignore stop */
     const settledAt = new Date(captured.settledAt);
 
+    // Filed under the device that took the card, as the stuck resolve and a bill payment are.
+    const [startedOn] = await tx
+      .select({ source: payments.source, deviceId: payments.deviceId })
+      .from(payments)
+      .where(eq(payments.id, captured.id));
+    const origin = storedDeviceOrigin(startedOn!);
     const language = await readReceiptLanguage(tx, cfg.locationId);
     const { saleId, fiscal } = await recordSale(tx, deps.backend, {
-      tillId: cfg.tillId,
+      origin,
       nodeId: cfg.nodeId,
       seriesId: cfg.seriesId,
       workingOrderId: brandWorkingOrderId(req.id),
@@ -1508,7 +1516,7 @@ export async function fireDishesAtPayment(
  */
 async function finalizeSettle(
   deps: IntegratedPayDeps,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   req: IntegratedPayRequest,
   outstanding: { saleId: SaleId; amountDue: Decimal },
   tip: Decimal,
@@ -1575,7 +1583,7 @@ async function finalizeSettle(
  */
 async function finalizeSettleRecovery(
   deps: IntegratedPayDeps,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   req: IntegratedPayRequest,
   captured: CapturedPaymentForOrder,
   outstanding: { saleId: SaleId; amountDue: Decimal },
@@ -1679,7 +1687,7 @@ export function toPayOutcome(
  */
 export async function collectOrder(
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   req: PayWorkingOrderRequest,
   operatorId?: string,
 ): Promise<TillSaleResult> {
@@ -1727,6 +1735,7 @@ export async function collectOrder(
 
       if (req.tender.method === "card") {
         const { provider, paymentRef } = await recordManualCardPayment(tx, {
+          origin: cfg.origin,
           workingOrderId: req.id,
           amount: outstanding.amountDue,
           settledAt,
@@ -1764,7 +1773,7 @@ export async function collectOrder(
 async function settleOwingNothing(
   tx: Transaction,
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: OriginConfig,
   workingOrderId: string,
   saleId: SaleId,
 ): Promise<TillSaleResult> {
@@ -1795,7 +1804,7 @@ export async function settleIssuedOwingNothing(
  */
 export async function recordTillSale(
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: DeviceRequestConfig,
   req: TillSaleRequest,
   operatorId?: string,
 ): Promise<TillSaleResult> {
@@ -1821,7 +1830,7 @@ export async function recordTillSale(
 
 export async function reprintSale(
   deps: { db: Database; backend: FiscalBackend },
-  cfg: TillConfig,
+  cfg: OriginConfig,
   workingOrderId: string,
   language?: string,
 ): Promise<void> {

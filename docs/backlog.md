@@ -3012,7 +3012,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   not `wt-data-table`, so `pinned` does not reach them; `member-list-editor.ts` and
   `product-editor.ts` also contain both a `<table>` and a row menu (found by grep, not read). None
   has a phone-width case and none was measured.
-- Read-back gaps: the per-till printer picker is not location-filtered; the print-mode and
+- Read-back gaps: the print-mode and
   `drawer_open_policy` toggles are set-only (the latter gates cash access); the Impresoras editor
   leaves agent and transport re-binding read-only though the API accepts it.
 
@@ -3300,7 +3300,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       route each still repeat the steps `verifyThrottledCredential`
       (`packages/identity/src/credential.ts`) packages. The tests do not check that a refund's
       wrong PINs share the drawer's and adjustments' count, that the sign-in and override counts
-      are separate, or that the count is per till. **Next action:** the owner decides whether to
+      are separate, or that the count is per device. **Next action:** the owner decides whether to
       add the countdown and make the limit required.
     - **A reason's percentage limit can be exceeded** by combining a bill discount with a line
       discount, or two bill discounts under one reason, because a bill discount counts as 0% on
@@ -3406,7 +3406,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       reader" (`card_reader.not_set_up`). At login each counter list shows its own failure with a
       retry notice, so one list that fails no longer stops the others loading (they are still read
       one after another, so a read that hangs still delays the rest); this changed for tills too.
-      Left as it was: a handheld never opens the drawer. (Its Station, Pass and Schedule buttons
+      Left as it was: a handheld never opens the drawer (2026-10-04: changed by A238 — a device
+      whose profile allows the drawer opens it, handhelds included). (Its Station, Pass and Schedule buttons
       now follow its profile — C130 below.)
     - **Done (C128, #1031) — who may take a payment.** Every till or handheld payment route now also needs
       `sale.take_payment`, which every role holds; detail in `docs/developers/conventions-ui.md`.
@@ -3499,21 +3500,18 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       edge, 1349 px wide in English and 1378 px in Spanish. Lane C's W27 takes this cost rather than
       adding a breakpoint: the wrap is sized by the controls, as the data table's toolbar is
       (`docs/developers/design-system.md`).
-    - The Devices screen's per-device "Receipt printer" is read by nothing that prints.
     - The dashboard's "Test open drawer" calibration
       (`POST /management-api/printers/:id/test-drawer`) opens any active printer's drawer for a
       manager holding both `printer.manage` and `cash.drawer`, with no per-till check — left as it
       is (owner, 2026-10-02).
     - **For the owner:** a card taken on a connected machine that also prints a paper merchant
       slip opens no drawer; B30 covers only the machine Waitron does not talk to.
-    - From B29's review, not fixed there: a cash sale with automatic receipts reads the till's
+    - From B29's review, not fixed there: a cash sale with automatic receipts reads the device's
       receipt printer twice in one transaction (`enqueueSaleReceipt` and `enqueueSaleDrawer` each
       call `resolveReceiptPrinter`) — resolve it once; every change on the dashboard's Printing
       rules screen reloads all its data through `#mutate` → `#load()`
       (`apps/dashboard/src/screens/printing-rules-screen.ts`), even `#setPrintMode` and
-      `#setDrawerPolicy`, which update their own state in place; and a test title in
-      `apps/server/src/made-here.routes.test.ts` still names `deviceSaleCfgOf`, a helper #1011
-      removed — rename it.
+      `#setDrawerPolicy`, which update their own state in place.
   - **Task 17 (#991, a table that leaves without paying).** Asesor Q28 was decided by the owner
     without the asesor (2026-10-01): the full simplified invoice is issued when the table leaves.
     Open:
@@ -3611,7 +3609,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       someone holding `sale.rectify` (a supervisor, manager or admin) lets someone without it cancel and
       credit an invoiced order.** The cancel's
       body may carry `override: { personId, pin }`, checked as an unpaid departure, a bill refund
-      and opening the drawer check theirs: a wrong PIN is `pin.invalid` and is counted, per till
+      and opening the drawer check theirs: a wrong PIN is `pin.invalid` and is counted, per device
       and per person, in the count those routes share (`overridePinAttempts`,
       `apps/server/src/till-api.ts`), so wrong tries on any of them add up to one lock-out (the
       case shows four wrong tries on the cancel locking out the drawer too); the PIN of someone
@@ -3984,23 +3982,20 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   probe with 404, which the box's `mountSpa` does; and no test covers the HTTPS default, because a
   browser test page cannot be served over HTTPS. **Next action:** during the on-device trust rows
   above, click past the certificate warning on one device and confirm the page appears.
-- **Location-consistency guard** — nothing enforces that a sale-capable device's register lives in
-  the box's configured location, so a mis-provisioned device could stamp a fiscal record with a
-  different site. Guard at enrol or first sale.
+- **Location-consistency guard** — nothing enforces that a sale-capable device's own location
+  (`devices.location_id`) is the box's configured location. Guard at enrol or first sale.
 - **Refuse a request from a device that is not enrolled** (owner design of 2026-08-30, deferred
   until after the demo: [design](superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md)).
   Tills enrol, selling needs an enrolled device, and a device profile's capabilities gate some
-  actions (`assertDeviceCapability`). But a request that carries NO device still passes both
-  `assertDeviceCapability` and `assertNotHandheld` (`apps/server/src/device-session.ts`), and the
-  handheld block is still a blocklist. Left: refuse a request with no device, one table of which
+  actions (`assertDeviceCapability`). But a request that carries NO device still passes
+  `assertDeviceCapability` (`apps/server/src/device-session.ts`). Left: refuse a request with no device, one table of which
   device kinds may do what with a guard that walks the routes, and printer identity (the design's
   sub-project C). It sits on the sale and cash path, so it takes the full review. Since B29 (#1011)
-  a handheld places, collects and cancels like a till; of the refusals for being a handheld, only
-  the Open drawer button's remains, and integrated card payment and printing still need the device
+  a handheld places, collects and cancels like a till, and since A238 no refusal is for being a
+  handheld: taking cash, the drawer, integrated card payment and printing each follow the device
   profile's capability. The design's table is out of date on those rows.
-- Register/device follow-ups: `WAITRON_TILL_TILL_ID` still seeds a "Caja 1" register while a till
-  enrol auto-creates its own; the device-management routes build their `devices ⨝ device_profiles`
-  read inline where a `listDevices` store verb belongs.
+- The device-management routes build their `devices ⨝ device_profiles` read inline
+  (`apps/server/src/device-api.ts`) where a `listDevices` store verb belongs.
 - **Screen faults seen during menus Task 9's look on 2026-09-27.** Seen on the dev stack while
   checking the till's home page, not investigated, and not checked against `main`, so any of them
   may predate that branch:
@@ -4209,19 +4204,24 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **A till is a device (A238) — DESIGNED, spec approved (owner, 2026-10-03).** The `tills`
-  table goes; every record names its source (usually the device; otherwise the dashboard or a named
-  background job); a device's profile decides whether it takes cash and opens the drawer, and lists the receipt and payment slip printers its devices may switch between mid-service; setup creates no
-  till; the receipt, payment-slip and reprint routes print on the device's current printers. Ships with a
-  venue reset. Spec: `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`. Next: a plan,
-  reviewed against the spec, then it is queued for a campaign lane. Pieces 2 and 3 follow
-  it (A239, A240).
+- **A till is a device (A238) — BUILT on branch `a238-till-is-a-device`, its pull request
+  awaiting the owner's review and a venue reset (2026-10-04).** The `tills` table is gone; every
+  record names its source (usually the device; otherwise the dashboard or a named background job)
+  and, for a device, the device; a device's profile decides whether it takes cash (`take-cash`) and
+  opens the drawer (`open-cash-drawer`), and lists the receipt and payment slip printers its devices
+  may switch between mid-service; setup creates no till, and the server reads no
+  `WAITRON_TILL_TILL_ID`; the receipt, payment-slip, reprint and drawer routes use the requesting
+  device's current printers. Ships with a venue reset: every venue, the owner's box included, is
+  wiped and set up again. Spec: `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`;
+  plan: `docs/superpowers/plans/2026-10-03-till-is-a-device.md`. Pieces 2 and 3 follow it (A239,
+  A240).
 
 - **Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner,
   2026-10-03).** Piece 2 of A238. Each top-up or removal of cash from a till device's drawer is a
   recorded entry: who, how much, why, when (topping up change, paying a supplier, a waiter handing
   in float cash). The entries replace the two typed totals the daily close takes today (opening float
-  and payouts, `packages/reporting/src/record-daily-close.ts`). Needs A238. No screen collects cash
+  and payouts, `packages/reporting/src/record-daily-close.ts`). Needs A238 (built, not yet landed).
+  No screen collects cash
   counts yet; this is where one belongs.
 
 - **Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03).** Piece 3 of
@@ -4231,7 +4231,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   cash goes into that till's drawer as an A239 entry; the daily close lists any float still open.
   Cash taken on a handheld whose profile allows cash, with no float, is counted against the
   handheld until then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs
-  A238 and A239.
+  A238 (built, not yet landed) and A239.
 
 - **A pretend printer in Demo mode (A241) — DONE in W37.** Demo and Preparation provide a printer
   for receipts, kitchen tickets and separate drawer openings. A manager can open its page from the
@@ -4691,7 +4691,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     receipt text changes or a width is chosen: a printer or till changed elsewhere does not update
     it while the page is open (probed 2026-10-01 with a temporary browser test: invalidating
     `printers` and `tills` sent no new preview and no new read, while invalidating
-    `tenant_receipts`, the control, sent one).
+    `tenant_receipts`, the control, sent one; 2026-10-04: `tills` is gone, A238).
 - **«QR tributario:» above the QR (C115, owner 2026-09-30) — done (2026-10-01, #999).** Both the
   printed receipt (`apps/server/src/receipt-ticket.ts`) and the till's on-screen ticket
   (`apps/till/src/screens/till-ticket-view.ts`) print the caption, in Spanish whatever the receipt
@@ -5597,8 +5597,7 @@ characters. Left open:
     `execute` has scheduled the restart, the lock is now released while that restart is pending.
     Stale wording outside f2: "a device with no profile" in `apps/server/src/till-api.test.ts` (near
     lines 1377–1395) and `apps/till/src/till-app.test.ts` (near line 5765), though a device's
-    profile column is NOT NULL; the "four ids" test title in `apps/server/src/provision.test.ts`,
-    which asserts five; `config.ts`'s "minted once and reused" for the box certificate, which a
+    profile column is NOT NULL; `config.ts`'s "minted once and reused" for the box certificate, which a
     restore re-issues; and `errors.ts` describing `setup.already_provisioning` as a persistent-lease
     refusal, when it mostly comes from the in-memory lock. Test titles carrying history, left
     because titles are code: "(SP-A.2 §16, device-profile §5)" in `device-session.test.ts`, and
@@ -5736,7 +5735,6 @@ characters. Left open:
     lines 128–133) may treat a lock written by a different store as a previous boot's, so a live
     process's lock could be taken over (a belief, not verified). `node-entry.test.ts` fixtures are
     still PostgreSQL-shaped (a `Failed query` wrapper, code `42703`).
-    `packages/db/drizzle/0000_baseline.sql` still names an index `tills_tenant_location_name_key`.
     Test titles #617 could not touch: "(SP-A.2 §16, device-profile §5)" in `device-session.test.ts`;
     "since Task 7" and "this tenant's devices" in `device-api.test.ts`; "(R1 behaviour preserved)"
     in `membership-mint.test.ts`.
@@ -6953,7 +6951,7 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   login is really the same state as an inactive product — then change the English and Spanish
   strings together and record the rule in `docs/developers/design-system.md`. String keys are not
   renamed on the way (only their text).
-- The dev `?dev` chooser shows `label · kind` rather than `name · profile · register`; the Spanish
+- The dev `?dev` chooser shows `label · kind` rather than `name · profile`; the Spanish
   form-factor label differs between two pickers ("TPV" vs "Caja registradora") — an owner copy call.
 - An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional
   `create/updateDeviceProfile` verbs; a shared `SeedDeviceProfileInput`; a `BRAND_PRIMARY_HEX`
@@ -7135,8 +7133,9 @@ torn by a concurrent promotion, credential sealing, and scheduler takeover.
 **Task 1b** (#554, session cookies stored only as hashes). Nothing fails when the UUID shape
 screens in `requireSession` and the till logout route are deleted — a non-UUID value hashes to no
 row, so the screens now only save a lookup. Also open: now that both ends are `state`, the
-keys #426 dropped could be declared again — `sessions` to `persons` and `tills`, and
-`management_sessions`, `totp_enrollments` and `google_oidc_states` to `persons`. Doing so would
+keys #426 dropped could be declared again — `sessions` to `persons`, and
+`management_sessions`, `totp_enrollments` and `google_oidc_states` to `persons` (`sessions`' key to
+`tills` went with that table in A238, and `sessions.device_id` holds one to `devices`). Doing so would
 change what deleting a person does.
 
 **Task 2a** (#557, a recovery key that does not need an archive destination). Open:
@@ -7526,7 +7525,9 @@ conflict.
   by jurisdiction (Veri\*Factu / TicketBAI / none). New domains land as modules, and no new core table
   without a stated reason (CLAUDE.md §3).
 - **Register and device are both kept.** A register (`tills`; UI "register"/"caja") is the drawer
-  counted at close; a device is the screen. Several devices ring into one register.
+  counted at close; a device is the screen. Several devices ring into one register. _2026-10-03:
+  superseded by A238 — a till is a device and the `tills` table goes,
+  `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`._
 - **Rerouting lives in the till web app** for every device kind; the device credential stays an
   httpOnly cookie. A native agent is built for hardware only, printing first.
 - **No relay.** Remote access is the cloud instance forwarding the box's name down the box↔instance
@@ -7560,7 +7561,7 @@ partial scope; the detail for a live thread is in its track.
 | 2 | Sales spine | Immutable hash-chained sales, per-node series, catalogue, the one-taxpayer model | — |
 | 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations; AEAT certificate install and renewal after setup (A9); cert distribution to a promoted node; a foreign business customer's identifier type (A1a) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329) | webhook `recordSale` hand-off; reconcile remediation UI; the handheld NFC/QR link (A6) |
-| 5 | Identity | persons/sessions, PIN (+ wrong-PIN back-off: per device at sign-in, per till for override PINs), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce |
+| 5 | Identity | persons/sessions, PIN (+ wrong-PIN back-off: per device at sign-in and for override PINs), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297) | multiple locations, edit/deactivate; then location-scope the by-id verb family |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, canvas/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
 | 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file and its download route and its dashboard screen, purchase-invoice UI; dashboard sales screen (with a category sales report, at time of sale or current, printable) + business-overview home | fiscal filing remainder parked (*Detail → Reporting*) |
@@ -7618,9 +7619,6 @@ Live A2 work is under *A2* in Track A. What constrains the next change to the wi
   lifted out with the rest behind one closed disclosure.
 - **The demo tax ID is generated and must never reach Prepare or Live.** It is a company checksum shape
   (`packages/country-es/src/spain.ts`), safe only because a demo box files nothing.
-- **"Till name" is the till row, not the filing identity.** The node/SIF is created and named after the
-  location automatically; a `till`-form device always creates its own register (`createRegister`,
-  `apps/server/src/device.ts`), so the wizard's register is left over unless a handheld claims it.
 - **Default both series codes to values that survive a cold restore.** A cold restore appends
   `-<installation number>` and `stripOwnSuffixes` would then re-number a trailing `-<digits>`, so
   default to **FS** (factura simplificada — every till sale is `TipoFactura` F2) and **FR**

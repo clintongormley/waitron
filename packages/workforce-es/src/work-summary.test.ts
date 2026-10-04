@@ -3,7 +3,7 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WorkforceBackend, WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { resolveWorkTimeRuleset } from "./convenio.js";
@@ -39,6 +39,7 @@ async function clockDay(
       locationId,
       at: `${date}T${from}:00Z`,
       offsetMinutes: 0,
+      origin: jobOrigin("dashboard"),
     }),
   );
   await run((tx) =>
@@ -48,6 +49,7 @@ async function clockDay(
       locationId,
       at: `${date}T${to}:00Z`,
       offsetMinutes: 0,
+      origin: jobOrigin("dashboard"),
     }),
   );
 }

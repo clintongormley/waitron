@@ -15,7 +15,6 @@ import {
   products,
   serviceCommands,
   ticketItems,
-  tills,
   parties,
   withTransaction,
   workingOrderLines,
@@ -41,9 +40,9 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createWatcher, setPrinterWatcher } from "./watchers.js";
@@ -135,7 +134,7 @@ const COURSE_OF: Record<Dish, keyof typeof COURSES> = {
 };
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
   productId: Record<Dish, string>;
   printerId: string;
   /** The one kitchen station every routed dish goes to. */
@@ -155,13 +154,8 @@ async function setupVenue(): Promise<Venue> {
     .returning({ id: locations.id });
   const locationId = location!.id;
   const stationId = await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: "Caja 1" })
-    .returning({ id: tills.id });
   const nodeId = await seedNode(db, brandLocationId(locationId));
-  const cfg: TillConfig = {
-    tillId: brandTillId(till!.id),
+  const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -170,7 +164,7 @@ async function setupVenue(): Promise<Venue> {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  } satisfies TillConfig);
   return inTx(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Carta" });
     const category = await createCategory(tx, { name: "Platos" });
@@ -2924,7 +2918,7 @@ describe("credit (D5)", () => {
   // save that may issue the bill's invoice types without naming who saves. Vitest does not typecheck.
   it("will not type a save that may issue the invoice without naming who saves", () => {
     const cfg = {} as TillConfig;
-    const issue = { fiscal: {} as TillSaleDeps, saleCfg: null };
+    const issue = { fiscal: {} as TillSaleDeps, saleCfg: {} as DeviceRequestConfig };
     const unnamed = { lines: [], revision: 0 };
     expectTypeOf(updateHeldOrder).toBeCallableWith({ db }, cfg, "order", unnamed);
     expectTypeOf(updateHeldOrder).toBeCallableWith(

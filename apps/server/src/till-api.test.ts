@@ -12,7 +12,6 @@ import {
   printJobs,
   stationPrinters,
   tenantReceipts,
-  tills,
   withTransaction,
   writeNodeMembership,
 } from "@waitron/db";
@@ -31,7 +30,7 @@ import {
   permissionsForRole,
   persons,
 } from "@waitron/identity";
-import { DEFAULT_CANVASES, DEFAULT_RECEIPT } from "@waitron/layouts";
+import { CAPABILITY_FLAGS, DEFAULT_CANVASES, DEFAULT_RECEIPT } from "@waitron/layouts";
 import type { ReceiptConfig } from "@waitron/layouts";
 import {
   addCatalogueToLocation,
@@ -54,7 +53,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
@@ -63,6 +61,7 @@ import { createTable } from "./tables.js";
 import { mountTillApi, run } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { revokedDeviceSessionCookie, seedSessionDevice } from "./testing/session-device.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
@@ -118,9 +117,11 @@ let cervezaProduct: { id: string; catalogueId: string };
 let counterZoneId: string;
 let aguaOfferId: string;
 let hiddenAguaOfferId: string;
-// An enrolled `till` device's cookie: the sale routes resolve `till_id` from the device, so a
-// happy-path place/sale call carries it to reach the route body.
+// An enrolled `till` device's cookie, which a happy-path place/sale call carries to reach the
+// route body.
 let tillDeviceCookie: string;
+// The device `openSession` opens Ana's shift on: at `cfg`'s location, allowed every capability.
+let sessionDeviceId: string;
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -135,10 +136,9 @@ const suite = useVenueDb({
       sql`select tax_id from tenants where id = 1`,
     );
     venueTaxId = tenant.rows[0]!.tax_id;
-    // A location → till the session cookie references: `loginWithPin` inserts a `sessions` row with
-    // a FK to `tills`, so the till `cfg.tillId` names must exist. The products are authored under the
-    // BARE `es` key; `priceOrderLines` re-keys their descriptions to the location's `es-ES` before
-    // the working-order-line insert fires `check_locales`, which demands the keys match EXACTLY.
+    // The products are authored under the BARE `es` key; `priceOrderLines` re-keys their
+    // descriptions to the location's `es-ES` before the working-order-line insert fires
+    // `check_locales`, which demands the keys match EXACTLY.
     const [loc] = await db
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
@@ -147,10 +147,6 @@ const suite = useVenueDb({
     const defaultStationId = await seedKitchenStation(db, {
       locationId: brandLocationId(loc!.id),
     });
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: loc!.id, name: "Till 1" })
-      .returning({ id: tills.id });
     // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
     // (its FK `(node_id) → nodes(id)` requires a real row), and
     // `listHeldOrders` filters by it. `cfg.nodeId` names THIS row so every parked order is on-node.
@@ -263,14 +259,23 @@ const suite = useVenueDb({
     counterZoneId = zoneId;
     aguaOfferId = offerId;
     hiddenAguaOfferId = hiddenOfferId;
-    cfg = makeCfg(till!.id, loc!.id, nodeId);
+    cfg = makeCfg(loc!.id, nodeId);
+    sessionDeviceId = await seedSessionDevice(db, cfg);
   },
 });
 
 // Enrolled fresh in each `beforeEach` that needs it, because the `GET /api/till` canvas tests
 // `delete from devices`, so a once-only device would not survive to a later describe.
+let saleTillProfiles = 0;
 async function enrolSaleTillDevice(): Promise<void> {
-  tillDeviceCookie = await enrolTillDeviceCookie(suite.db);
+  saleTillProfiles += 1;
+  const profileId = await seedDeviceProfile(
+    suite.db,
+    `Sale till profile ${saleTillProfiles}`,
+    ["take-cash"],
+    null,
+  );
+  tillDeviceCookie = await enrolTillDeviceCookie(suite.db, profileId);
 }
 
 /** A collecting logger for asserting the structured lines the routes emit. */
@@ -282,9 +287,8 @@ function collect(
 
 /** The till's config for the seeded tenant. `seriesId` is unused by these routes, so it carries a
  * fresh uuid. */
-function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
+function makeCfg(locationId: string, nodeId: string): TillConfig {
   return {
-    tillId: brandTillId(tillId),
     nodeId: brandNodeId(nodeId),
     seriesId: brandSeriesId(randomUUID()),
     locationId: brandLocationId(locationId),
@@ -336,10 +340,10 @@ function deps(db: Database): TillApiDeps {
 /** Opens a real shift session for Ana — the same `withTransaction` + `loginWithPin` path the login
  * route runs — and returns its cookie token, so a test can hand `requireSession` or the logout
  * route a cookie that names a genuine row. */
-async function openSession(db: Database): Promise<string> {
+async function openSession(db: Database, deviceId: string = sessionDeviceId): Promise<string> {
   const session = await withTransaction(db, async (tx) => {
     return loginWithPin(tx, {
-      tillId: cfg.tillId,
+      deviceId,
       personId: ana.id,
       pin: "5555",
     });
@@ -362,16 +366,21 @@ async function enrolTillDeviceCookie(
   db: Database,
   deviceProfileId: string | null = null,
 ): Promise<string> {
+  return (await enrolTillDevice(db, deviceProfileId)).cookie;
+}
+
+async function enrolTillDevice(
+  db: Database,
+  deviceProfileId: string | null = null,
+): Promise<{ deviceId: string; cookie: string }> {
   tillDeviceCounter += 1;
-  // `resolveDeviceBinding` creates a register for a `till` device at accept, named after the device,
-  // so each call names the device uniquely.
   const profileId =
     deviceProfileId ?? (await seedDeviceProfile(db, `Till profile ${tillDeviceCounter}`, [], null));
   const dev = await enrolDeviceForTest(db, cfg, {
     name: `Counter till ${tillDeviceCounter}`,
     profileId,
   });
-  return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
+  return { deviceId: dev.deviceId, cookie: `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}` };
 }
 
 /** Seed a `device_profiles` row — the bundle a device resolves its canvas + capabilities through. */
@@ -600,19 +609,11 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     return /waitron_device=([^.]+)\./.exec(cookie)![1]!;
   }
 
-  it("stamps the DEVICE's own register on the session, not deps.cfg.tillId (§6)", async () => {
+  it("records the signing-in device on the session", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
-    // The till device auto-creates its OWN register at enrol (register B), distinct from the box's env
-    // register A (`cfg.tillId`). The shift must name B.
     const deviceCookie = await enrolTillDeviceCookie(suite.db);
-    const deviceRow = await suite.db.execute<{ till_id: string }>(
-      sql`select till_id from devices where id = ${deviceIdOf(deviceCookie)}`,
-    );
-    const deviceTillId = deviceRow.rows[0]!.till_id;
-    expect(deviceTillId).not.toBe(cfg.tillId); // B ≠ A — a real divergence to detect
-
     const res = await app.request("/api/session", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: deviceCookie },
@@ -620,12 +621,10 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     });
     expect(res.status).toBe(200);
     const token = /waitron_till_session=([^;]+)/.exec(res.headers.get("set-cookie")!)![1]!;
-    const sess = await suite.db.execute<{ till_id: string }>(
-      sql`select till_id from sessions where token_hash = ${hashSessionToken(token)}`,
+    const sess = await suite.db.execute<{ device_id: string }>(
+      sql`select device_id from sessions where token_hash = ${hashSessionToken(token)}`,
     );
-    // The session records the DEVICE's register (B), never the env `cfg.tillId` (A).
-    expect(sess.rows[0]!.till_id).toBe(deviceTillId);
-    expect(sess.rows[0]!.till_id).not.toBe(cfg.tillId);
+    expect(sess.rows).toEqual([{ device_id: deviceIdOf(deviceCookie) }]);
 
     await suite.db.execute(sql`delete from sessions where token_hash = ${hashSessionToken(token)}`);
   });
@@ -887,20 +886,87 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     return app;
   }
 
-  it("ACCEPTS an open session and returns the operator's personId, sessionId and the session's till", async () => {
+  /** What `requireSession` answers for a session on {@link sessionDeviceId}. */
+  async function sessionOnSeededDevice(sessionId: string) {
+    const { rows } = await suite.db.execute<{
+      device_profile_id: string;
+      label: string;
+    }>(sql`select device_profile_id, label from devices where id = ${sessionDeviceId}`);
+    return {
+      personId: ana.id,
+      sessionId,
+      deviceId: sessionDeviceId,
+      device: {
+        deviceId: sessionDeviceId,
+        formFactor: "till",
+        label: rows[0]!.label,
+        locationId: cfg.locationId,
+        stationId: null,
+        watcherId: null,
+        deviceProfileId: rows[0]!.device_profile_id,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+        capabilities: [...CAPABILITY_FLAGS],
+      },
+    };
+  }
+
+  it("ACCEPTS an open session and returns the operator's personId, sessionId and the session's device", async () => {
     const token = await openSession(suite.db);
-    const { rows } = await suite.db.execute<{ id: string; till_id: string }>(
-      sql`select id, till_id from sessions where token_hash = ${hashSessionToken(token)}`,
+    const { rows } = await suite.db.execute<{ id: string }>(
+      sql`select id from sessions where token_hash = ${hashSessionToken(token)}`,
     );
     const res = await guardApp(suite.db).request("/whoami", {
       headers: { cookie: `${SESSION_COOKIE}=${token}` },
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      personId: ana.id,
-      sessionId: rows[0]!.id,
-      tillId: rows[0]!.till_id,
-    });
+    expect(await res.json()).toEqual(await sessionOnSeededDevice(rows[0]!.id));
+  });
+
+  it("records a sighting of the session's device when one is due, at most once a minute", async () => {
+    const deviceId = await seedSessionDevice(suite.db, cfg);
+    const token = await openSession(suite.db, deviceId);
+    const request = () =>
+      guardApp(suite.db).request("/whoami", { headers: { cookie: `${SESSION_COOKIE}=${token}` } });
+    const lastSeen = async () =>
+      (
+        await suite.db.execute<{ last_seen_at: string | null }>(
+          sql`select last_seen_at from devices where id = ${deviceId}`,
+        )
+      ).rows[0]!.last_seen_at;
+    const setLastSeen = (msAgo: number) => {
+      const seenAt = new Date(Date.now() - msAgo).toISOString();
+      return suite.db.execute(
+        sql`update devices set last_seen_at = ${seenAt} where id = ${deviceId}`,
+      );
+    };
+
+    expect(await lastSeen()).toBeNull();
+    expect((await request()).status).toBe(200);
+    expect(await lastSeen()).not.toBeNull();
+
+    await setLastSeen(30_000);
+    const recent = await lastSeen();
+    expect((await request()).status).toBe(200);
+    expect(await lastSeen()).toBe(recent);
+
+    await setLastSeen(120_000);
+    const stale = await lastSeen();
+    expect((await request()).status).toBe(200);
+    expect(Date.parse((await lastSeen())!)).toBeGreaterThan(Date.parse(stale!));
+  });
+
+  it("REJECTS (401 device.unauthorized) an open session whose device has since been revoked", async () => {
+    const deviceId = await seedSessionDevice(suite.db, cfg);
+    const token = await openSession(suite.db, deviceId);
+    const request = () =>
+      guardApp(suite.db).request("/whoami", { headers: { cookie: `${SESSION_COOKIE}=${token}` } });
+    expect((await request()).status).toBe(200);
+
+    await suite.db.execute(sql`update devices set active = 0 where id = ${deviceId}`);
+    const res = await request();
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
   });
 
   // Only the row id is presented here. The stored hash is 64 hex characters, which the guard's
@@ -908,8 +974,8 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   // lookup did, and it is left out.
   it("REJECTS (401 session.required) the row's own id — what a copy of the database holds", async () => {
     const token = await openSession(suite.db);
-    const { rows } = await suite.db.execute<{ id: string; till_id: string }>(
-      sql`select id, till_id from sessions where token_hash = ${hashSessionToken(token)}`,
+    const { rows } = await suite.db.execute<{ id: string }>(
+      sql`select id from sessions where token_hash = ${hashSessionToken(token)}`,
     );
     const res = await guardApp(suite.db).request("/whoami", {
       headers: { cookie: `${SESSION_COOKIE}=${rows[0]!.id}` },
@@ -921,11 +987,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
       headers: { cookie: `${SESSION_COOKIE}=${token}` },
     });
     expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({
-      personId: ana.id,
-      sessionId: rows[0]!.id,
-      tillId: rows[0]!.till_id,
-    });
+    expect(await ok.json()).toEqual(await sessionOnSeededDevice(rows[0]!.id));
   });
 
   it("REJECTS (401 session.required) when no cookie is present", async () => {
@@ -979,7 +1041,7 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
       .returning({ id: persons.id });
     const personId = row!.id;
     const session = await withTransaction(suite.db, async (tx) => {
-      return loginWithPin(tx, { tillId: cfg.tillId, personId, pin });
+      return loginWithPin(tx, { deviceId: sessionDeviceId, personId, pin });
     });
     return { personId, token: session.token };
   }
@@ -1445,8 +1507,12 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(body.receipt).toEqual(DEFAULT_RECEIPT);
       expect(body).not.toHaveProperty("layout");
     } finally {
-      await suite.db.execute(sql`delete from devices `);
-      await suite.db.execute(sql`delete from device_profiles `);
+      await suite.db.execute(
+        sql`delete from devices where id not in (select device_id from sessions)`,
+      );
+      await suite.db.execute(
+        sql`delete from device_profiles where id not in (select device_profile_id from devices)`,
+      );
       await suite.db.execute(sql`delete from canvases `);
     }
   });
@@ -1477,8 +1543,12 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // This profile was seeded with no timeout, so the boot payload carries null (the app default).
       expect(body.inactivityTimeoutSeconds).toBeNull();
     } finally {
-      await suite.db.execute(sql`delete from devices `);
-      await suite.db.execute(sql`delete from device_profiles `);
+      await suite.db.execute(
+        sql`delete from devices where id not in (select device_id from sessions)`,
+      );
+      await suite.db.execute(
+        sql`delete from device_profiles where id not in (select device_profile_id from devices)`,
+      );
     }
   });
 
@@ -1505,7 +1575,9 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(body.receipt).toEqual(DEFAULT_RECEIPT);
       expect(body).not.toHaveProperty("layout");
     } finally {
-      await suite.db.execute(sql`delete from devices `);
+      await suite.db.execute(
+        sql`delete from devices where id not in (select device_id from sessions)`,
+      );
     }
   });
 
@@ -1543,12 +1615,12 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     });
   });
 
-  it("prefers the enrolled device's default service zone", async () => {
+  it("prefers the session's device's default service zone, whatever device cookie the request carries", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const token = await openSession(suite.db);
-    const deviceCookie = await enrolTillDeviceCookie(suite.db);
-    const deviceId = deviceCookie.slice(`${DEVICE_COOKIE}=`.length).split(".")[0]!;
+    const { deviceId } = await enrolTillDevice(suite.db);
+    const token = await openSession(suite.db, deviceId);
+    const otherCookie = await enrolTillDeviceCookie(suite.db);
     const [second] = await suite.db
       .insert(floorZones)
       .values({ locationId: cfg.locationId, name: `Device zone ${deviceId}` })
@@ -1566,11 +1638,14 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       insert into device_zone_defaults (device_id, zone_id)
       values (${deviceId}, ${second!.id})`);
 
-    const res = await app.request("/api/default-service-zone/offers", {
-      headers: { cookie: `${SESSION_COOKIE}=${token}; ${deviceCookie}` },
-    });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ context: { zoneId: second!.id } });
+    for (const cookie of [
+      `${SESSION_COOKIE}=${token}`,
+      `${SESSION_COOKIE}=${token}; ${otherCookie}`,
+    ]) {
+      const res = await app.request("/api/default-service-zone/offers", { headers: { cookie } });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ context: { zoneId: second!.id } });
+    }
   });
 
   it("returns the offers allowed in an explicit service zone", async () => {
@@ -1750,6 +1825,89 @@ describe("POST /api/sales (session-guarded sale)", () => {
   });
 });
 
+describe("the device checks read the session's device, not the device cookie", () => {
+  /** A shift on a fresh till device whose profile allows only `capabilities`. */
+  async function sessionOnDeviceWith(capabilities: string[]): Promise<string> {
+    const profileId = await seedDeviceProfile(
+      suite.db,
+      `Session profile ${randomUUID()}`,
+      capabilities,
+      null,
+    );
+    const { deviceId } = await enrolTillDevice(suite.db, profileId);
+    return `${SESSION_COOKIE}=${await openSession(suite.db, deviceId)}`;
+  }
+
+  it("refuses a cash sale sent with no device cookie from a session on a device that does not take cash", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: await sessionOnDeviceWith(["open-cash-drawer"]),
+      },
+      body: JSON.stringify({
+        lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
+        tender: { method: "cash", amount: "10.00" },
+      }),
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: { code: "device.cash_not_allowed" } });
+  });
+
+  /** The cookie of a fresh till device whose profile allows `capabilities`. */
+  async function deviceCookieWith(capabilities: string[]): Promise<string> {
+    const profileId = await seedDeviceProfile(
+      suite.db,
+      `Cookie profile ${randomUUID()}`,
+      capabilities,
+      null,
+    );
+    return (await enrolTillDevice(suite.db, profileId)).cookie;
+  }
+
+  it("refuses a cash sale from a session on a device that does not take cash, though the cookie names one that does", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${await sessionOnDeviceWith(["open-cash-drawer"])}; ${await deviceCookieWith(["take-cash"])}`;
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        lines: [{ menuItemId: aguaOfferId, quantity: "1" }],
+        tender: { method: "cash", amount: "10.00" },
+      }),
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: { code: "device.cash_not_allowed" } });
+  });
+
+  it("refuses a drawer open from a session on a device that may not open it, though the cookie names one that may", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const cookie = `${await sessionOnDeviceWith(["take-cash"])}; ${await deviceCookieWith(["open-cash-drawer"])}`;
+    const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({
+      error: { code: "device.forbidden_action", params: { action: "drawer_open" } },
+    });
+  });
+
+  it("refuses a drawer open sent with no device cookie from a session on a device that may not open it", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const res = await app.request("/api/drawer/open", {
+      method: "POST",
+      headers: { cookie: await sessionOnDeviceWith(["take-cash"]) },
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({
+      error: { code: "device.forbidden_action", params: { action: "drawer_open" } },
+    });
+  });
+});
+
 describe("POST /api/pay (session-guarded integrated card pay)", () => {
   it("REJECTS (401 session.required) when no cookie is present — a pay never runs unauthenticated", async () => {
     const app = new Hono();
@@ -1766,16 +1924,14 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
 
-  it("401s device.unauthorized on /api/pay from a cookieless caller (an env-only till is not a sellable box)", async () => {
-    // The reader is resolved from the paying DEVICE, so a cookieless caller is refused
-    // `device.unauthorized` at `requireSaleTillId`, before any reader read.
-    const token = await openSession(suite.db);
+  it("401s device.unauthorized on /api/pay from a session whose device has been revoked", async () => {
+    const cookie = await revokedDeviceSessionCookie(suite.db, cfg, ana.id, "5555");
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
 
     const res = await app.request("/api/pay", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+      headers: { "content-type": "application/json", cookie },
       body: JSON.stringify({ id: randomUUID(), lines: [] }),
     });
     expect(res.status).toBe(401);
@@ -2028,7 +2184,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     }
   });
 
-  it("POST parks an order attributed to the session's till and returns { id, orderNumber }", async () => {
+  it("POST parks an order as the session's device and returns { id, orderNumber }", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
@@ -2046,11 +2202,19 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     expect(Number.isInteger(body.orderNumber)).toBe(true);
     expect(body.orderNumber).toBeGreaterThanOrEqual(1);
 
-    // The order really persisted OPEN on the seeded till.
-    const rows = await suite.db.execute<{ status: string; till_id: string }>(
-      sql`select status, till_id from working_orders where id = ${id}`,
-    );
-    expect(rows.rows[0]).toMatchObject({ status: "open", till_id: cfg.tillId });
+    // The order really persisted OPEN, opened by the session's device at the venue's location.
+    const rows = await suite.db.execute<{
+      status: string;
+      source: string;
+      device_id: string;
+      location_id: string;
+    }>(sql`select status, source, device_id, location_id from working_orders where id = ${id}`);
+    expect(rows.rows[0]).toEqual({
+      status: "open",
+      source: "device",
+      device_id: sessionDeviceId,
+      location_id: cfg.locationId,
+    });
   });
 
   it("POST prices an allowed menu offer and rejects an offer outside the selected zone", async () => {
@@ -3196,7 +3360,7 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
     managerPersonId = managerRow!.id;
     const managerSession = await withTransaction(suite.db, async (tx) => {
       return loginWithPin(tx, {
-        tillId: cfg.tillId,
+        deviceId: sessionDeviceId,
         personId: managerPersonId,
         pin: "9999",
       });

@@ -9,7 +9,7 @@ export declare const idBrand: unique symbol;
 export type Branded<T, B extends string> = T & { readonly [idBrand]: B };
 
 export type LocationId = Branded<string, "LocationId">;
-export type TillId = Branded<string, "TillId">;
+export type DeviceId = Branded<string, "DeviceId">;
 export type NodeId = Branded<string, "NodeId">;
 export type SeriesId = Branded<string, "SeriesId">;
 export type WorkingOrderId = Branded<string, "WorkingOrderId">;
@@ -50,7 +50,7 @@ function brandId<B extends string>(value: string, kind: B): Branded<string, B> {
 }
 
 export const locationId = (value: string): LocationId => brandId(value, "LocationId");
-export const tillId = (value: string): TillId => brandId(value, "TillId");
+export const deviceId = (value: string): DeviceId => brandId(value, "DeviceId");
 export const nodeId = (value: string): NodeId => brandId(value, "NodeId");
 export const seriesId = (value: string): SeriesId => brandId(value, "SeriesId");
 export const workingOrderId = (value: string): WorkingOrderId => brandId(value, "WorkingOrderId");

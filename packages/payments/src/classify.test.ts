@@ -23,7 +23,6 @@ function row(over: Partial<ReconcilableRow> = {}): ReconcilableRow {
     auditedAt: OLD,
     workingOrderId: "wo-1",
     workingOrderStatus: "settled",
-    tillId: "till-1",
     reconcileRemediatedAt: null,
     ...over,
   };

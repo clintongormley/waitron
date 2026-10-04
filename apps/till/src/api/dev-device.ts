@@ -1,6 +1,7 @@
 /**
- * Dev-only per-tab device identity: `sessionStorage` is per tab, so one browser can run several
- * devices side by side. The server honours the header only in devMode.
+ * Dev-only per-tab device identity: `sessionStorage` is per tab, so each tab can adopt a different
+ * device (the sign-in cookie is still shared; see `till-device-chooser.ts`). The server honours the
+ * header only in devMode.
  */
 export const DEV_DEVICE_STORAGE_KEY = "waitron.devDeviceId";
 export const DEV_DEVICE_HEADER = "x-waitron-dev-device";

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   billPayments,
+  devices,
   enumCheck,
   enumType,
   id,
@@ -10,6 +11,8 @@ import {
   newId,
   nodes,
   nowIso,
+  originChecks,
+  saleSourceColumn,
   sales,
   table,
   tsString,
@@ -44,6 +47,11 @@ export const payments = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     workingOrderId: id("working_order_id").notNull(),
+    // The device that started the payment; a stuck payment's sale is filed under it.
+    source: saleSourceColumn("source").notNull(),
+    /* v8 ignore start */
+    deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
+    /* v8 ignore stop */
     // Null until the sale is written: the money moves first (`associatePaymentWithSale`).
     saleId: id("sale_id"),
     // Nullable: no writer sets it yet (design §5).
@@ -105,8 +113,6 @@ export const payments = table(
       foreignColumns: [cardReaders.id],
       name: "payments_reader_fk",
     }).onDelete("restrict"),
-    // No delete rule: drizzle adds this column with a plain `ALTER TABLE ADD`, which writes none
-    // (`drizzle/0002_bill_payment_link.sql`), and a declared `restrict` would not match the table.
     foreignKey({
       columns: [t.billPaymentId],
       foreignColumns: [billPayments.id],
@@ -126,5 +132,6 @@ export const payments = table(
       sql`${t.cardEntryMode} is null or ${t.cardEntryMode} in ('contactless','chip','swipe','unknown')`,
     ),
     check("payments_state_ck", enumCheck(t.state)),
+    ...originChecks("payments", t.source, t.deviceId),
   ],
 );

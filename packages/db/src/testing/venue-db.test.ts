@@ -248,9 +248,9 @@ describe("a migrated set's append-only tables", () => {
   // The control, in the other direction: a table nobody declared append-only takes both statements
   // under the same two pragmas. Without it, a seeding failure would look like a refusal.
   it("leaves a table nobody declared append-only writable", () => {
-    seedOneRow(suite.db, "tills");
-    suite.db.run(sql.raw("update tills set name = 'renamed'"));
-    suite.db.run(sql.raw("delete from tills"));
-    expect(count(suite.db, "tills")).toBe(0);
+    seedOneRow(suite.db, "kitchen_stations");
+    suite.db.run(sql.raw("update kitchen_stations set name = 'renamed'"));
+    suite.db.run(sql.raw("delete from kitchen_stations"));
+    expect(count(suite.db, "kitchen_stations")).toBe(0);
   });
 });

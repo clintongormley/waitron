@@ -20,7 +20,7 @@ const OWNED = [
 ];
 
 /** Core tables: none may appear in this package's generated SQL. */
-const CORE = ["tenants", "locations", "tills", "nodes"];
+const CORE = ["tenants", "locations", "devices", "nodes"];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
 

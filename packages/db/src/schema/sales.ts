@@ -17,10 +17,11 @@ import {
   tsString,
 } from "./columns.js";
 import { billPayments } from "./bill-payments.js";
+import { devices } from "./devices.js";
 import { nodes } from "./nodes.js";
+import { originChecks, saleSourceColumn } from "./origin.js";
 import { workingOrders } from "./orders.js";
 import { invoiceSeries } from "./series.js";
-import { tills } from "./tenants.js";
 
 /**
  * The classification of a sale AT ISSUANCE, written once and never updated.
@@ -65,17 +66,16 @@ export const sales = table(
   "sales",
   {
     id: id("id").primaryKey().$defaultFn(newId),
-    tillId: id("till_id")
-      .notNull()
-      /* v8 ignore start */
-      .references(() => tills.id, { onDelete: "restrict" }),
+    source: saleSourceColumn("source").notNull(),
+    /* v8 ignore start */
+    deviceId: id("device_id").references(() => devices.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
     seriesId: id("series_id")
       .notNull()
       /* v8 ignore start */
       .references(() => invoiceSeries.id, { onDelete: "restrict" }),
     /* v8 ignore stop */
-    // Which node processed and chained this sale; `till_id` is where it rang.
+    // Which node processed and chained this sale.
     nodeId: id("node_id").notNull(),
     invoiceNumber: count("invoice_number").notNull(),
     // tsString rather than ts — a JS Date takes on the host timezone as soon as
@@ -145,6 +145,7 @@ export const sales = table(
     check("sales_locale_member_ck", sql`instr(${t.invoiceLocales}, '"' || ${t.locale} || '"') > 0`),
     check("sales_issued_offset_ck", sql`${t.issuedOffsetMinutes} between -840 and 840`),
     check("sales_fiscal_state_ck", enumCheck(t.fiscalState)),
+    ...originChecks("sales", t.source, t.deviceId),
   ],
 );
 
@@ -263,8 +264,9 @@ export const tenders = table(
       foreignColumns: [sales.id],
       name: "tenders_sale_fk",
     }).onDelete("restrict"),
-    // No delete rule: drizzle adds this column with a plain `ALTER TABLE ADD`, which writes none
-    // (`drizzle/0022_bill_payments.sql`), and a declared `restrict` would not match the table built.
+    // No delete rule: the `ALTER TABLE ADD` drizzle generated for this column
+    // (`drizzle/0022_bill_payments.sql`) names none, so the table holds `no action`, and a declared
+    // `restrict` would not match it.
     foreignKey({
       columns: [t.billPaymentId],
       foreignColumns: [billPayments.id],

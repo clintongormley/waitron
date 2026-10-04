@@ -83,7 +83,6 @@ const RING = loadKeyRing({
 });
 
 const TILL_ENV = {
-  WAITRON_TILL_TILL_ID: "22222222-2222-4222-8222-222222222222",
   WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
   WAITRON_TILL_SERIES_ID: "44444444-4444-4444-8444-444444444444",
   WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
@@ -94,7 +93,6 @@ const ADMIN_ID = "99999999-9999-4999-8999-999999999999";
 const ADMIN_PW = "correct-horse-battery-staple";
 
 const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const MIRROR_TILL_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const MIRROR_DESIGNATED_SERIES_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const MIRROR_NUMERO_INSTALACION = 7;
@@ -297,7 +295,6 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
     const server = await startServer({
       ...KEY_ENV,
       ...TICK_ENV,
-      WAITRON_TILL_TILL_ID: MIRROR_TILL_ID,
       WAITRON_TILL_NODE_ID: seed.nodeId,
       WAITRON_TILL_SERIES_ID: MIRROR_DESIGNATED_SERIES_ID,
       WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,

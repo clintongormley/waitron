@@ -6,7 +6,7 @@ import { computeHuella } from "@waitron/verifactu";
 import { newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
-import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import type { NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { VerifactuBackend } from "./backend.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
@@ -15,9 +15,10 @@ import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 
 let backend: VerifactuBackend;
-let tillId: TillId;
+let locationId: string;
 let nodeId: NodeId;
 let seriesId: SeriesId;
 // recordVoid requires `sale.void`; this is a manager shift session that authorizes every void
@@ -40,7 +41,7 @@ let voidSessionId: string;
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 beforeEach(async () => {
-  ({ tillId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
+  ({ locationId, nodeId, seriesId } = await seedTenantWithSif(suite.db));
   // Seed a manager (holds `sale.void`) and open its session.
   const { rows } = await suite.db.execute<{ id: string }>(
     // `id` and `created_at` are supplied here: both come from a `$defaultFn` generator, which
@@ -48,8 +49,9 @@ beforeEach(async () => {
     sql`insert into persons (id, created_at, display_name, pin_hash, role)
         values (${newId()}, ${nowIso()}, 'P', ${hashPin("1234")}, 'manager') returning id`,
   );
+  const deviceId = (await seedDevice(suite.db, { locationId })).deviceId;
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tillId, personId: rows[0]!.id, pin: "1234" }),
+    loginWithPin(tx, { deviceId, personId: rows[0]!.id, pin: "1234" }),
   );
   voidSessionId = session.id;
   backend = new VerifactuBackend({
@@ -62,7 +64,7 @@ beforeEach(async () => {
 
 async function sell() {
   return withTransaction(suite.db, async (tx) => {
-    return recordSale(tx, backend, saleInput({ tillId, nodeId, seriesId }));
+    return recordSale(tx, backend, saleInput({ nodeId, seriesId }));
   });
 }
 

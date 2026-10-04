@@ -10,14 +10,7 @@
 import { randomUUID } from "node:crypto";
 import { count as countRows, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  locations,
-  printJobs,
-  printers,
-  tills,
-  withTransaction,
-  workingOrderLines,
-} from "@waitron/db";
+import { locations, printJobs, printers, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -29,9 +22,9 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
+  jobOrigin,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { OriginConfig, TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { createOpenOrder } from "./working-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -105,13 +98,9 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
       })
       .returning({ id: locations.id });
     const locationId = loc!.id;
-    const [till] = await suite.db
-      .insert(tills)
-      .values({ locationId, name: "Caja 1" })
-      .returning({ id: tills.id });
     const nodeId = await seedNode(suite.db, brandLocationId(locationId));
-    const cfg: TillConfig = {
-      tillId: brandTillId(till!.id),
+    const cfg: OriginConfig = {
+      origin: jobOrigin("dashboard"),
       nodeId: brandNodeId(nodeId),
       seriesId: brandSeriesId(randomUUID()),
       locationId: brandLocationId(locationId),

@@ -149,7 +149,7 @@ import {
 } from "./configuration-transfer.js";
 import { createFiscalReadinessStore } from "./fiscal-readiness.js";
 import { fiscalReadinessInput, submitFiscalReadiness } from "./fiscal-readiness-runner.js";
-import { seatTable } from "./parties.js";
+import { moduleCoreServices } from "./parties.js";
 import { mountCatalogueApi } from "./catalogue-api.js";
 import { mountUnitsApi } from "./units-api.js";
 import { mountPurchasingApi } from "./purchasing-api.js";
@@ -1510,7 +1510,6 @@ async function bootServer(
         db,
         cfg: {
           locationId: till.locationId,
-          tillId: till.tillId,
           nodeId: till.nodeId,
         },
         modules: setsToMigrate,
@@ -1550,7 +1549,7 @@ async function bootServer(
   mountUnitsApi(app, { db, venueLocale }, log);
   mountPurchasingApi(app, { db }, log);
   // Every ENABLED module's routes, so a module toggled off mounts nothing. `core.seatTable` closes
-  // over the full `till` here, so `nodeId`/`tillId` never enter a module's cfg.
+  // over the full `till` here, so `nodeId` never enters a module's cfg.
   const routeCtx: ModuleRouteContext = {
     db,
     cfg: {
@@ -1558,7 +1557,7 @@ async function bootServer(
       contentDefaultLanguage: venueLocale,
     },
     maxUploadBytes: MAX_UPLOAD_BYTES,
-    core: { seatTable: (tx, req) => seatTable(tx, till, req) },
+    core: moduleCoreServices(till),
   };
   for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
   // `dataNodeId`, not this node's own id: see its declaration above.
@@ -1877,7 +1876,6 @@ async function bootServer(
         // `MirrorPromoteDeps.persistTradingEnv`).
         persistTradingEnv: async (seriesId) => {
           const next: TradingConfig = {
-            tillId: till.tillId,
             nodeId: till.nodeId,
             seriesId,
             locationId: till.locationId,

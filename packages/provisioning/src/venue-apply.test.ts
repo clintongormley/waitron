@@ -30,7 +30,6 @@ function request(taxId = "B12345678"): VenueRequest {
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
     },
-    tillName: "Caja 1",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
     admin: {
@@ -80,7 +79,6 @@ describe("applyVenue: the one taxpayer row", () => {
 
     await expect(retry).resolves.toMatchObject({
       locationId: first.locationId,
-      tillId: first.tillId,
       nodeId: first.nodeId,
       seriesIds: first.seriesIds,
     });
@@ -126,7 +124,7 @@ describe("applyVenue: the one taxpayer row", () => {
 });
 
 describe("applyVenue", () => {
-  it("provisions a sellable venue: tenant, location, till, node, live SIF, two series", async () => {
+  it("provisions a sellable venue: tenant, location, node, live SIF, two series, and no till", async () => {
     const result = await applyVenue(planVenue(request(), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -140,8 +138,10 @@ describe("applyVenue", () => {
       default_stations: number;
       default_departments: number;
       counter_zones: number;
+      devices: number;
     }>(sql`
       select
+        (select count(*) from devices) as devices,
         (select count(*) from tenants where id = 1) as tenants,
         (select count(*) from nodes where id = ${result.nodeId}) as nodes,
         (select count(*) from invoice_series where node_id = ${result.nodeId}) as series,
@@ -160,7 +160,9 @@ describe("applyVenue", () => {
       default_stations: 1,
       default_departments: 1,
       counter_zones: 1,
+      devices: 0,
     });
+    expect(result).not.toHaveProperty("tillId");
 
     const series = await suite.db.execute<{ purpose: string }>(sql`
       select purpose from invoice_series where node_id = ${result.nodeId} order by purpose`);
@@ -294,6 +296,7 @@ describe("applyVenue", () => {
           "show-station",
           "show-expo",
           "show-schedule",
+          "take-cash",
         ],
         inactivity_timeout_seconds: 300,
       },
@@ -347,18 +350,17 @@ describe("applyVenue", () => {
       select count(*) as n from tenants where country = 'ES' and tax_id = 'B99999999'`);
     expect(tenants.rows[0]?.n).toBe(1);
     expect(second.locationId).toBe(first.locationId);
-    expect(second.tillId).toBe(first.tillId);
     expect(second.nodeId).toBe(first.nodeId);
     const venueRows = await suite.db.execute<{
       locations: number;
-      tills: number;
+      devices: number;
       nodes: number;
     }>(sql`
       select
         (select count(*) from locations ) as locations,
-        (select count(*) from tills ) as tills,
+        (select count(*) from devices ) as devices,
         (select count(*) from nodes ) as nodes`);
-    expect(venueRows.rows[0]).toEqual({ locations: 1, tills: 1, nodes: 1 });
+    expect(venueRows.rows[0]).toEqual({ locations: 1, devices: 0, nodes: 1 });
   });
 
   it("refuses a different operational venue for the same tenant", async () => {
@@ -415,14 +417,6 @@ describe("applyVenue", () => {
           modules: ALL_MODULES,
         }),
       ).rejects.toMatchObject({ code: "provisioning.second_venue" });
-    });
-
-    it("when the till is named differently, and adds no till", async () => {
-      const renamedTill = { ...request("B13131313"), tillName: "Caja 2" };
-      await provisionThenReapply(planVenue(renamedTill, ALL_MODULES));
-
-      const tills = await suite.db.execute<{ name: string }>(sql`select name from tills`);
-      expect(tills.rows).toEqual([{ name: "Caja 1" }]);
     });
 
     it.each([
@@ -535,7 +529,6 @@ describe("applyVenue", () => {
         timeZone: "Europe/Madrid",
         dayCutover: "06:00:00",
       },
-      { kind: "create-till", name: "Caja 1" },
       { kind: "create-node", name: "Mostrador", filingModule: "verifactu", taxModule: "vat" },
       { kind: "seed-module", module: "fiscal-verifactu", summary: "s" },
       { kind: "create-series", code: "A", purpose: "standard" },
@@ -548,35 +541,6 @@ describe("applyVenue", () => {
     const series = await suite.db.execute<{ n: number }>(sql`
       select count(*) as n from invoice_series where node_id = ${result.nodeId}`);
     expect(series.rows[0]?.n).toBe(1);
-  });
-
-  it("refuses a plan that omits create-till rather than returning an empty till id", async () => {
-    // No later action depends on `tillId`, so an omitted create-till slips past every ordering guard.
-    const taxId = "B44444444";
-    const planWithoutTill: VenueAction[] = [
-      { kind: "ensure-tenant", country: "ES", taxId, legalName: "Deli SL" },
-      {
-        kind: "create-location",
-        name: "Mostrador",
-        fiscalTerritory: "ES-common",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "venta en establecimiento",
-        addressLine1: "Calle Mayor 1",
-        addressLine2: null,
-        postalCode: "28013",
-        city: "Madrid",
-        province: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "06:00:00",
-      },
-      { kind: "create-node", name: "Mostrador", filingModule: "verifactu", taxModule: "vat" },
-      { kind: "seed-module", module: "fiscal-verifactu", summary: "s" },
-      { kind: "create-series", code: "A", purpose: "standard" },
-    ];
-
-    await expect(
-      applyVenue(planWithoutTill, { db: suite.db, modules: ALL_MODULES }),
-    ).rejects.toThrow("applyVenue: plan is missing create-till");
   });
 
   describe("guards a malformed plan whose actions arrive out of order", () => {
@@ -621,11 +585,6 @@ describe("applyVenue", () => {
           } as VenueAction,
         ],
         message: "applyVenue: seed-device-profiles before seed-admin",
-      },
-      {
-        name: "create-till before create-location",
-        plan: [ensure, { kind: "create-till", name: "Caja 1" } as VenueAction],
-        message: "applyVenue: create-till before create-location",
       },
       {
         name: "create-node before create-location",

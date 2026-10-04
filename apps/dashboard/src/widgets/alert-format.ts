@@ -33,6 +33,16 @@ export async function markAlertHandled(
   if (stillCurrent()) api.liveData.invalidate([{ type: "incidents" }]);
 }
 
+/** Where an event came from: its device's name, or its job source's name. Empty for an ongoing
+ * alert, which names neither. */
+export function sourceLabel(alert: Pick<AlertView, "source" | "deviceId" | "deviceName">): string {
+  if (alert.source === undefined) return "";
+  if (alert.source === "device") return alert.deviceName ?? alert.deviceId ?? "";
+  const key = `source.${alert.source}`;
+  const label = tKit(key);
+  return label === key ? alert.source : label;
+}
+
 export function areaLabel(area: string): string {
   const key = `alerts.area.${area}`;
   const label = tKit(key);

@@ -72,7 +72,6 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
 
 function venueFor(v: VenueResult): SeedSalesVenue {
   return {
-    tillId: v.tillId,
     nodeId: v.nodeId,
     // planVenue emits the standard series first, then the rectificative one.
     seriesId: v.seriesIds[0]!,
@@ -154,8 +153,37 @@ describe("seedSales", () => {
 
     expect(read.close.vat.byRate.length).toBeGreaterThan(0);
     expect(compareDecimal(read.close.vat.taxTotal, decimal("0.00"))).toBeGreaterThan(0);
-    expect(read.close.cash.byTill.length).toBeGreaterThan(0);
+    expect(read.close.cash.byOrigin.length).toBeGreaterThan(0);
     expect(compareDecimal(read.close.cash.tenderTotal, decimal("0.00"))).toBeGreaterThan(0);
+  });
+
+  it("records every demo sale and its fiscal record as the demo seed's, with no device", async () => {
+    // Its own provisioner: the shared one's fixed `K` letter is a valid NIF for its first venue only.
+    const venue = await createDemoVenueProvisioner(() => suite.db, {
+      nifBase: 81_000_000,
+      nifFormat: "calculated",
+      invoiceLocale: SEED_INVOICE_LOCALE[LOCALE],
+    })();
+    // Two days, not one: before the day's first service slot every one of today's sales would be in
+    // the future, so only yesterday guarantees any.
+    const { count } = await seedSales(suite.db, {
+      venue: venueFor(venue),
+      locale: LOCALE,
+      days: 2,
+      products: PRODUCTS,
+    });
+    expect(count).toBeGreaterThan(0);
+
+    const pairs = (table: string) =>
+      suite.db.all<{ source: string | null; device_id: string | null }>(
+        sql`select source, device_id from ${sql.raw(table)}`,
+      );
+    const expected = Array.from({ length: count }, () => ({
+      source: "demo_seed",
+      device_id: null,
+    }));
+    expect(pairs("sales")).toEqual(expected);
+    expect(pairs("registros_facturacion")).toEqual(expected);
   });
 
   it("refuses to file demo sales into a production environment, and writes nothing", async () => {

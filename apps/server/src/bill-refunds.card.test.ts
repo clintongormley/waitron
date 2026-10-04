@@ -16,7 +16,7 @@ import { loadKeyRing } from "@waitron/credentials";
 import type { PaymentProvider, RefundAnswer, RefundLookup } from "@waitron/payments";
 import { SumUpCloudProvider } from "@waitron/payments-sumup";
 import type { SumUpClient, SumUpTransaction } from "@waitron/payments-sumup";
-import { AppError, decimal } from "@waitron/shared";
+import { AppError, decimal, jobOrigin } from "@waitron/shared";
 import type { RefundScript } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
@@ -425,7 +425,12 @@ describe("a card refund, sent once (design §6b R1–R3)", () => {
       idempotencyKey: `bpr_${row.id}`,
       refundId: row.id,
     });
-    expect(row).toMatchObject({ state: "completed", sendCount: 1, tillId: venue.deviceTillId });
+    expect(row).toMatchObject({
+      state: "completed",
+      sendCount: 1,
+      source: "device",
+      deviceId: venue.deviceId,
+    });
     expect(row.sentAt).not.toBeNull();
     expect(row.providerRefundRef).toMatch(/^fake-re-/);
     expect(await providerRefundsOf(card.id)).toEqual([
@@ -804,6 +809,7 @@ describe("the provider refunds another refund of the payment already accounts fo
         },
         second!.id,
         "loop",
+        jobOrigin("payment_check"),
       );
 
       expect(
@@ -849,6 +855,7 @@ describe("the provider refunds another refund of the payment already accounts fo
         },
         pending!.id,
         "loop",
+        jobOrigin("payment_check"),
       ),
     );
 
@@ -918,6 +925,7 @@ describe("the provider's refunds read before the first send", () => {
         },
         row!.id,
         "loop",
+        jobOrigin("payment_check"),
       );
       // SumUp stamps the refund our send made 30 s before our own clock's `sent_at`.
       events.push(refunded("ours", Date.now() - Date.parse(row!.sentAt!) + 30_000));
@@ -929,6 +937,7 @@ describe("the provider's refunds read before the first send", () => {
         },
         row!.id,
         "loop",
+        jobOrigin("payment_check"),
       );
 
       expect(row).toMatchObject({ state: "pending", refsBeforeSend: ["made-a-minute-before"] });
@@ -997,7 +1006,8 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
           reason: "stranded",
           authorizedBy: venue.adminId,
           requestedBy: venue.operatorId,
-          tillId: venue.deviceTillId,
+          source: "device",
+          deviceId: venue.deviceId,
           state: "pending",
         })
         .returning(),
@@ -1031,7 +1041,8 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
           reason: "stranded",
           authorizedBy: venue.adminId,
           requestedBy: venue.operatorId,
-          tillId: venue.deviceTillId,
+          source: "device",
+          deviceId: venue.deviceId,
           state: "pending",
         })
         .returning(),
@@ -1139,7 +1150,8 @@ describe("design §8 test 21: never sent, sent but not found, and the key window
           reason: REASON,
           authorizedBy: venue.adminId,
           requestedBy: venue.operatorId,
-          tillId: venue.deviceTillId,
+          source: "device",
+          deviceId: venue.deviceId,
           state: "pending",
         })
         .returning(),
@@ -1217,7 +1229,12 @@ describe("one resolver at a time", () => {
     expect(await providerRefundsOf(card.id)).toEqual([]);
     const raised = await inTx(venue, (tx) =>
       tx
-        .select({ code: incidents.code, params: incidents.params })
+        .select({
+          code: incidents.code,
+          params: incidents.params,
+          source: incidents.source,
+          deviceId: incidents.deviceId,
+        })
         .from(incidents)
         .where(eq(incidents.code, "payment.refund_outcome_conflict")),
     );
@@ -1228,6 +1245,9 @@ describe("one resolver at a time", () => {
         workingOrderId: billId,
       }),
     );
+    // Raised inside the till's own refund request: the alert names the device that asked.
+    const mine = raised.find((r) => (r.params as { refundId?: string }).refundId === row!.id);
+    expect(mine).toMatchObject({ source: "device", deviceId: venue.deviceId });
   });
 });
 
@@ -1241,6 +1261,34 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
       `/management-api/payments/bill-refunds/${refundId}/attest`,
       body,
     );
+
+  it("keeps the device a refund was asked on through the manager's resolve and attestation", async () => {
+    const resolvedRefund = await pendingRefund();
+    const attestedRefund = await pendingRefund();
+
+    const resolved = await send(
+      managerApp(clockPlus(HOUR)),
+      managerCookie,
+      "POST",
+      `/management-api/payments/bill-refunds/${resolvedRefund.refundId}/resolve`,
+    );
+    const attested = await attest(attestedRefund.refundId, {
+      outcome: "completed",
+      note: NOTE,
+      pin: "1234",
+    });
+
+    expect(resolved.json).toEqual({ outcome: "completed" });
+    expect(attested.json).toEqual({ outcome: "completed" });
+    const stored = venue.db.all(
+      sql`select source, device_id from bill_payment_refunds
+          where id in (${resolvedRefund.refundId}, ${attestedRefund.refundId})`,
+    );
+    expect(stored).toEqual([
+      { source: "device", device_id: venue.deviceId },
+      { source: "device", device_id: venue.deviceId },
+    ]);
+  });
 
   it("refuses to record failed from an empty lookup, and records a confirmed failure with the note and PIN", async () => {
     const { billId, paymentId, refundId } = await pendingRefund();
@@ -1379,7 +1427,8 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
           reason: "stranded",
           authorizedBy: venue.adminId,
           requestedBy: venue.operatorId,
-          tillId: venue.deviceTillId,
+          source: "device",
+          deviceId: venue.deviceId,
           state: "pending",
         })
         .returning(),
@@ -1411,13 +1460,18 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
   });
 
   it("raises the alert for a refund pending over an hour, and not for one under it", async () => {
-    // On the second till, which no other case here refunds on: an open alert is raised once per
-    // till, so another case's pending refund would otherwise hold the till's one alert.
     const billId = await bill("Pulpo", "Croquetas");
     const card = await pay(billId, "card", "20.00", venue.cookie2);
     venue.card.scriptNextRefund({ made: false, answer: LOST });
     await refund(billId, card.id, { applied: "5.00", cookie: venue.cookie2 });
     const refundId = (await onlyRefundOf(card.id)).id;
+    // The payment check's open alert of this code stands for every pending refund, so an earlier
+    // case's alert, or its still-pending refund, would absorb this one's.
+    venue.db.run(sql`delete from incidents where code = 'payment.refund_unresolved'`);
+    venue.db.run(
+      sql`update bill_payment_refunds set state = 'failed', failed_at = ${new Date().toISOString()}
+          where state = 'pending' and id <> ${refundId}`,
+    );
     const alerts = () =>
       inTx(venue, (tx) =>
         tx
@@ -1426,7 +1480,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
           .where(
             and(
               eq(incidents.code, "payment.refund_unresolved"),
-              eq(incidents.tillId, venue.device2TillId),
+              eq(incidents.source, "payment_check"),
             ),
           ),
       );
@@ -1611,6 +1665,7 @@ describe("a refund the provider here cannot answer for", () => {
       },
       refundId,
       "manager",
+      "stored",
     );
 
   /** The test provider with only the parts named, so a missing method is missing. */
@@ -1704,7 +1759,8 @@ describe("a refund the provider here cannot answer for", () => {
           reason: "stranded",
           authorizedBy: venue.adminId,
           requestedBy: venue.operatorId,
-          tillId: venue.deviceTillId,
+          source: "device",
+          deviceId: venue.deviceId,
           state: "pending",
         })
         .returning(),
@@ -1714,6 +1770,7 @@ describe("a refund the provider here cannot answer for", () => {
       { db: venue.db, clock: systemClock(), refundProviderFor: partial({}) },
       stranded!.id,
       "retry",
+      venue.cfg.origin,
     );
 
     expect(resumed).toMatchObject({

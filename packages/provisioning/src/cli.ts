@@ -69,7 +69,7 @@ const USAGE = [
   "           [--location-name <name>] [--territory <t>] [--locale <l>]...",
   "           [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]",
   "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
-  "           [--day-cutover <HH:MM>] [--till-name <name>] [--series-code <code>]",
+  "           [--day-cutover <HH:MM>] [--series-code <code>]",
   "           [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]",
   "           [--admin-first-names <names>] [--admin-last-names <names>] [--yes]",
   "",
@@ -149,7 +149,6 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       province: { type: "string" },
       "time-zone": { type: "string" },
       "day-cutover": { type: "string" },
-      "till-name": { type: "string" },
       "series-code": { type: "string" },
       "rectificative-code": { type: "string" },
       "admin-name": { type: "string" },
@@ -198,7 +197,6 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       deps,
     );
     const dayCutover = await resolveOption(values["day-cutover"], "day cutover (HH:MM): ", deps);
-    const tillName = await resolveOption(values["till-name"], "till name: ", deps);
     const seriesCode = await resolveOption(values["series-code"], "series code: ", deps);
     const rectificativeSeriesCode = await resolveOption(
       values["rectificative-code"],
@@ -235,7 +233,6 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         timeZone,
         dayCutover,
       },
-      tillName,
       seriesCode,
       rectificativeSeriesCode,
       admin: {

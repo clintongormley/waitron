@@ -46,6 +46,17 @@ describe.each(["light", "dark"] as const)("till-tender-pay a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations in the idle Pay view on a device that does not take cash", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "2");
+    const { host } = await mountWidget<TillTenderPay>(
+      "till-tender-pay",
+      { store, takesCash: false },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations on the weigh screen", async () => {
     const store = new WorkingOrderStore();
     const { el, host } = await mountWidget<TillTenderPay>("till-tender-pay", { store }, theme);

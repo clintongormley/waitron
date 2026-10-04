@@ -1,4 +1,4 @@
-import type { Context, Hono } from "hono";
+import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
 import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
@@ -7,15 +7,13 @@ import { invalid } from "./bill-allocation.js";
 import {
   getBillBalance,
   previewBillPayment,
-  SaleTillRequired,
   takeBillPayment,
   takeReaderBillPayment,
 } from "./bill-payments.js";
 import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
 import { refundBillPayment, refundProvidersOf } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
-import { assertDeviceCapability, deviceTillCfg, tryReadDevice } from "./device-session.js";
-import type { DeviceBinding } from "./device-session.js";
+import { assertDeviceCapability, assertTakesCash } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import {
   overridePinAttempts,
@@ -24,8 +22,8 @@ import {
   resolveCardCollector,
 } from "./till-api.js";
 import type { Run, TillApiDeps } from "./till-api.js";
-import type { TillConfig } from "./till-config.js";
-import { madeHereSinkFor } from "./made-here.js";
+import { sendingCfg } from "./made-here.js";
+import { requestCfg } from "./request-config.js";
 import { isUuid, requireSession } from "./till-session.js";
 import "./errors.js";
 
@@ -178,46 +176,9 @@ function requireBillParam(id: string): string {
   return id;
 }
 
-/** A sale made during a device's request files on that device's own till ({@link deviceTillCfg}). */
-async function deviceSaleCfg(
-  deps: TillApiDeps,
-  c: Context,
-  device?: DeviceBinding | null,
-): Promise<TillConfig> {
-  const resolved = device === undefined ? await tryReadDevice(deps, c) : device;
-  return {
-    ...(await deviceTillCfg(deps, c, resolved)),
-    sendingDeviceId: resolved?.deviceId,
-    madeHereSink: madeHereSinkFor(c),
-  };
-}
-
-/**
- * Runs a line write that can leave a bill exactly paid, so that the invoice it issues is filed on
- * the requesting device's till. `write` runs first with no till, and again with the device's only
- * when an invoice is due: reading the device may run a scrypt verification, and opens a transaction
- * of its own whenever a sighting looks due, which the write queue refuses inside another
- * (`packages/store/src/write-queue.ts`).
- */
-export async function withSaleTillWhenIssuing<T>(
-  deps: TillApiDeps,
-  c: Context,
-  write: (saleCfg: TillConfig | null) => Promise<T>,
-): Promise<T> {
-  const sink = madeHereSinkFor(c);
-  const before = new Set(sink);
-  try {
-    return await write(null);
-  } catch (error) {
-    if (!(error instanceof SaleTillRequired)) throw error;
-    for (const id of sink) if (!before.has(id)) sink.delete(id);
-  }
-  return write(await deviceSaleCfg(deps, c));
-}
-
 /**
  * The bill payment routes (bill payments design §3.6, §5.1, §6, §7), behind the till session. A
- * payment is taken on the device's own till, which is the till its cash drawer and its invoice use.
+ * payment, and the invoice it completes, names the requesting device.
  */
 export function mountBillPaymentsApi(
   app: Hono,
@@ -238,33 +199,37 @@ export function mountBillPaymentsApi(
 
   app.post("/api/working-orders/:id/payments/preview", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const session = await requireSession(deps, c);
+      const cfg = requestCfg(deps.cfg, session);
       const id = requireBillParam(c.req.param("id"));
       const ask = parseAsk(asObject(await readRawJsonBody<unknown>(c)));
-      return c.json(await previewBillPayment(fiscal, deps.cfg, id, ask));
+      return c.json(await previewBillPayment(fiscal, cfg, id, ask));
     }),
   );
 
   app.post("/api/working-orders/:id/payments", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c, { permission: "sale.take_payment" });
+      const session = await requireSession(deps, c, { permission: "sale.take_payment" });
+      const { personId } = session;
+      const cfg = requestCfg(deps.cfg, session);
       const id = requireBillParam(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const request = parseRequest(body);
       if (request.entry !== "reader") {
-        const saleCfg = await deviceSaleCfg(deps, c);
+        const saleCfg = sendingCfg(cfg, c, session.device);
+        if (request.method === "cash") assertTakesCash(session.device);
         return c.json(await takeBillPayment(fiscal, saleCfg, id, request, personId));
       }
       // The guards `/api/pay` runs before a reader is asked, in its order. A card outcome is data,
       // answered 200 even for a decline.
-      const device = await tryReadDevice(deps, c);
+      const device = session.device;
       await assertDeviceCapability(deps, c, "integrated-card-payment", "pay", device);
       const readerId = parseReaderId(body);
       if (request.simulationOutcome !== undefined && deps.cardProvider?.provider !== "simulator") {
         throw invalid("simulationOutcome");
       }
-      const saleCfg = await deviceSaleCfg(deps, c, device);
-      const { provider, reader } = await resolveCardCollector(deps, device?.deviceId, readerId);
+      const saleCfg = sendingCfg(cfg, c, device);
+      const { provider, reader } = await resolveCardCollector(deps, device.deviceId, readerId);
       return c.json(
         await takeReaderBillPayment(
           {
@@ -291,16 +256,18 @@ export function mountBillPaymentsApi(
     }),
   );
 
-  // The refund is recorded on the device's own till. Cash opens a drawer only where
-  // `enqueueBillRefundDrawer` finds one this till may open; a connected card goes through its
+  // The refund names the requesting device. Cash opens a drawer only where
+  // `enqueueBillRefundDrawer` finds one this device may open; a connected card goes through its
   // provider, while a separately charged card needs staff confirmation and a manager PIN.
   app.post("/api/working-orders/:id/payments/:paymentId/refunds", (c) =>
     run(c, log, async () => {
-      const { personId, sessionId, tillId } = await requireSession(deps, c);
+      const session = await requireSession(deps, c);
+      const { personId, sessionId } = session;
+      const cfg = requestCfg(deps.cfg, session);
       const id = requireBillParam(c.req.param("id"));
       const paymentId = c.req.param("paymentId");
       const refund = parseRefund(asObject(await readRawJsonBody<unknown>(c)));
-      const saleCfg = await deviceSaleCfg(deps, c);
+      const saleCfg = sendingCfg(cfg, c, session.device);
       return c.json(
         await refundBillPayment(
           {
@@ -314,7 +281,7 @@ export function mountBillPaymentsApi(
           id,
           paymentId,
           refund,
-          { personId, sessionId, attempts: overridePinAttempts(pinThrottle, tillId) },
+          { personId, sessionId, attempts: overridePinAttempts(pinThrottle, session.deviceId) },
         ),
       );
     }),

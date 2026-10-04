@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
+import { decimal, workingOrderId as brandWorkingOrderId, deviceOrigin } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS, getPaymentByRef } from "@waitron/payments";
 import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import type { Seeded } from "@waitron/payments/test/seed.js";
@@ -29,6 +29,7 @@ describe("StripeHostedProvider.initiate", () => {
     const paymentRef = randomUUID();
 
     const res = await provider.initiate({
+      origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
       amount: decimal("12.10"),
       paymentRef,
@@ -54,6 +55,7 @@ describe("StripeHostedProvider.initiate", () => {
     const provider = new StripeHostedProvider({ client, db: suite.db });
     const seeded = await seedWorkingOrder(suite.db, freshNif());
     await provider.initiate({
+      origin: deviceOrigin(seeded.deviceId),
       workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
       amount: decimal("12.50"),
       paymentRef: "ref-meta",

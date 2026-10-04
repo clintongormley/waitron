@@ -701,6 +701,19 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `product_categories` on a scratch venue without the media triggers, and its `menu_items` rebuild
   emptied three menu tables while reporting success or, once the venue had sold from a menu, refused
   to run. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
+- **A drizzle-kit 0.31.10–0.31.11 generation that rebuilds a table must not also add a column to
+  it.** The rebuild's `INSERT … SELECT` names every column of the NEW schema, so it reads the added
+  one from the old table, and this engine refuses that even on an empty table (`no such column`). A
+  new CHECK, a
+  changed nullability or a changed foreign key forces a rebuild, so add the column in one
+  generation and its CHECK in the next. Cost: paid three times — #721, #750 and A238's `incidents`
+  migration (2026-10-03). Receipt: [conventions-data.md](docs/developers/conventions-data.md).
+- **A drizzle-kit 0.31.11 table rebuild writes an expression index back as quoted column names,
+  which this engine refuses** (`no such column: case when …`). Take the index out of the schema for
+  every generation that rebuilds its table and add it back in a generation of its own, with a note
+  at the index (core `0077` to `0079`; `packages/db/src/schema/incidents.ts`). Cost: A238's
+  `incidents` migration failed until the index moved (2026-10-03). Receipt:
+  [conventions-data.md](docs/developers/conventions-data.md).
 - **A foreign key whose target has no unique index is refused at the first WRITE, not at migrate
   time.** This engine creates a table naming a parent that does not exist yet, and a whole migration
   set applies clean; the first insert then fails `foreign key mismatch - "child" referencing
@@ -932,24 +945,30 @@ browser test** — most of these rules exist because a test passed while proving
 
 ## 5. Fiscal invariants — the unrecoverable ones
 
-- **Printing never opens the cash drawer, and a till opens it only while it is set to.** A cash
-  payment, or a card hand-keyed on a machine Waitron does not talk to (its slip is kept in the
+- **Printing never opens the cash drawer, and a device opens it only when its profile allows it.** A
+  cash payment, or a card hand-keyed on a machine Waitron does not talk to (its slip is kept in the
   drawer, owner 2026-10-01), enqueues a separate audited `drawer` job; receipt jobs are `document`
-  jobs and contain no drawer command. A card on a connected machine opens nothing. A till opens its
-  receipt printer's drawer only while its "Opens the cash drawer" setting (`tills.opens_drawer`, on
-  by default, on the Printing rules screen) is on, and several tills sharing one printer may all
-  have it on (owner 2026-10-02). A handheld never opens it, even with `cash.drawer` and a profile
-  capability: the automatic openings read `allowCashDrawer` through `drawerPrinter`
-  (`apps/server/src/receipt-print.ts`), which `deviceTillCfg` (`apps/server/src/device-session.ts`)
-  sets only for a till, and the manual open refuses a handheld through `assertNotHandheld`. A
-  configuration leaving `allowCashDrawer` unset allows a drawer, and nothing guards a new route that
-  builds it another way. The manual open needs an
-  enrolled device. The one exception is the dashboard's "Test open drawer" calibration
-  (`POST /management-api/printers/:id/test-drawer`), which opens any active printer's drawer for a
-  manager holding `printer.manage` and `cash.drawer`. Drawer jobs cannot be manually resent. The
-  receipt review reproduced a resent cash receipt opening the drawer without a new audit row.
-  Pointer: #324; the card slip, B30; the per-till setting, B29;
-  [conventions-ui.md](docs/developers/conventions-ui.md#a-till-opens-its-drawer-only-while-it-is-set-to-a-handheld-does-what-a-till-does).
+  jobs and contain no drawer command. A card on a connected machine opens nothing. A device opens
+  its current receipt printer's drawer only when its profile has `open-cash-drawer` and that
+  printer has a drawer, handhelds included (`drawerPrinter`, `apps/server/src/receipt-print.ts`);
+  nothing per till decides it, and a till that must not open a drawer it shares gets a profile of
+  its own (approved by the owner 2026-10-03, A238). `take-cash` decides whether a device takes cash
+  at all: a cash sale, collection or bill payment from a profile without it is refused
+  `device.cash_not_allowed` (`assertTakesCash`, `apps/server/src/device-session.ts`). The manual open needs a session on an
+  active device, the profile's `open-cash-drawer`, and under the `gated` drawer policy `cash.drawer`
+  or the PIN of someone holding it. The one exception is the dashboard's "Test open drawer"
+  calibration (`POST /management-api/printers/:id/test-drawer`), which opens any active printer's
+  drawer for a manager holding `printer.manage` and `cash.drawer`. Drawer jobs cannot be manually
+  resent. The receipt review reproduced a resent cash receipt opening the drawer without a new
+  audit row. Guards, weaker than the rule: the drawer cases in
+  `apps/server/src/receipt-print.test.ts`, `apps/server/src/till-api.receipt.test.ts` and
+  `apps/server/src/bill-payments-api.test.ts`, the `device.cash_not_allowed` cases in
+  `apps/server/src/till-api.fiscal-sale-paths.test.ts` and `bill-payments-api.test.ts`, the
+  calibration case in `apps/server/src/print-api.test.ts` and the drawer resend refusal in
+  `packages/printing/src/outbox.test.ts` — each holds only the routes or functions it names, and
+  nothing stops a new route queuing a `drawer` job without `drawerPrinter`
+  or taking cash without `assertTakesCash`. Pointer: #324; the card slip, B30; A238;
+  [conventions-ui.md](docs/developers/conventions-ui.md#a-device-opens-the-drawer-when-its-profile-allows-it-a-handheld-does-what-a-till-does).
 
 - **One database per environment.** A pre-production database is never promoted:
   `invoice_series.next_number` carries across and pre-production sales would leave a permanent hole

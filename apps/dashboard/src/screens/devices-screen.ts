@@ -13,6 +13,7 @@ import { registerCatalogue, type CardProviderPanel, t as tRaw } from "@waitron/d
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
+import { printerLabel } from "../i18n/domain.js";
 import type {
   DashboardApi,
   DeviceProfile,
@@ -23,34 +24,16 @@ import type {
   Printer,
   ReaderRow,
   Station,
-  Till,
   Watcher,
 } from "../api/client.js";
 
 /**
- * A dashboard-local mirror of `kindOfFormFactor` (`@waitron/layouts`, whose barrel would pull
- * `@waitron/db` into the browser bundle). A `till` binds neither picker: the server creates the
- * register it rings against. The server re-derives this, so it only decides which picker to show.
+ * Whether a joining device of this form factor binds a station or watcher: only a `kds` screen does.
+ * The server re-derives this, so it only decides whether to show the picker.
  */
-function bindingOf(formFactor: FormFactor): "station" | "register" | "none" {
-  switch (formFactor) {
-    case "kds":
-      return "station";
-    case "till":
-      return "none";
-    case "phone-portrait":
-    case "tablet-landscape":
-      return "register";
-  }
+function bindsStation(formFactor: FormFactor): boolean {
+  return formFactor === "kds";
 }
-
-interface HardwareEdit {
-  receiptPrinterId: string;
-}
-
-const DEFAULT_HARDWARE: HardwareEdit = {
-  receiptPrinterId: "",
-};
 
 @customElement("dashboard-devices-screen")
 export class DevicesScreen extends LitElement {
@@ -116,6 +99,20 @@ export class DevicesScreen extends LitElement {
       .hardware wt-combobox {
         flex: 0 1 calc(var(--wt-space-6) * 7);
         min-width: 0;
+      }
+      .printers {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-3);
+        margin: 0;
+      }
+      .printers dt {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .printers dd {
+        margin: 0;
+        color: var(--wt-color-text);
       }
       .pickers wt-combobox {
         flex: 1 1 calc(var(--wt-space-6) * 6);
@@ -185,18 +182,14 @@ export class DevicesScreen extends LitElement {
   @state() private watchers: Watcher[] = [];
   @state() private deviceProfiles: DeviceProfile[] = [];
   @state() private printers: Printer[] = [];
-  // A row with no entry opens at DEFAULT_HARDWARE: the device list carries no hardware.
-  @state() private hardwareEdits: Record<string, HardwareEdit> = {};
   @state() private readers: ReaderRow[] = [];
   @state() private deviceReaders: Record<string, string | null> = {};
-  @state() private tills: Till[] = [];
   @state() private pairing: PairingModeState | undefined;
   @state() private pendingJoins: JoinRequestRow[] = [];
   @state() private openRequestId: string | null = null;
   @state() private challenges: Record<string, string[]> = {};
   @state() private chosenProfileId = "";
   @state() private chosenBinding = "";
-  @state() private chosenRegisterId = "";
   // Separate from `armedRevokeId`, so arming a Deny does not disarm a Revoke in the list below it.
   @state() private armedDenyId: string | null = null;
   @state() private armedRevokeId: string | null = null;
@@ -245,9 +238,6 @@ export class DevicesScreen extends LitElement {
         }),
         this.#queries.watch("listReaders", [], (value) => {
           this.readers = value;
-        }),
-        this.#queries.watch("listTills", [], (value) => {
-          this.tills = value;
         }),
         this.#queries.watch("pairingMode", [], (value) => {
           this.pairing = value;
@@ -314,7 +304,6 @@ export class DevicesScreen extends LitElement {
     this.openRequestId = id;
     this.chosenProfileId = "";
     this.chosenBinding = "";
-    this.chosenRegisterId = "";
     if (this.challenges[id] !== undefined) return;
     try {
       const { choices } = await this.api.joinChallenge(id);
@@ -357,10 +346,7 @@ export class DevicesScreen extends LitElement {
   #bindingReady(): boolean {
     const profile = this.#chosenProfile();
     if (profile === undefined) return false;
-    const binding = bindingOf(profile.formFactor);
-    if (binding === "station") return this.chosenBinding !== "";
-    if (binding === "register") return this.chosenRegisterId !== "";
-    return true;
+    return !bindsStation(profile.formFactor) || this.chosenBinding !== "";
   }
 
   /**
@@ -371,7 +357,7 @@ export class DevicesScreen extends LitElement {
   async #accept(request: JoinRequestRow, choice: string): Promise<void> {
     const profile = this.#chosenProfile();
     if (this.submitting || profile === undefined || !this.#bindingReady()) return;
-    const binding = bindingOf(profile.formFactor);
+    const binding = bindsStation(profile.formFactor);
     this.#showError(null);
     this.submitting = true;
     let written = false;
@@ -379,13 +365,12 @@ export class DevicesScreen extends LitElement {
       await this.api.acceptDeviceJoinRequest(request.id, {
         choice,
         profileId: profile.id,
-        ...(binding === "station" && this.chosenBinding.startsWith("station:")
+        ...(binding && this.chosenBinding.startsWith("station:")
           ? { stationId: this.chosenBinding.slice("station:".length) }
           : {}),
-        ...(binding === "station" && this.chosenBinding.startsWith("watcher:")
+        ...(binding && this.chosenBinding.startsWith("watcher:")
           ? { watcherId: this.chosenBinding.slice("watcher:".length) }
           : {}),
-        ...(binding === "register" ? { registerId: this.chosenRegisterId } : {}),
       });
       written = true;
       this.openRequestId = null;
@@ -445,35 +430,6 @@ export class DevicesScreen extends LitElement {
     } catch (error) {
       if (written) this.#showReadError(error);
       else this.#showError(codeOf(error));
-    }
-  }
-
-  #hardwareFor(id: string): HardwareEdit {
-    return this.hardwareEdits[id] ?? DEFAULT_HARDWARE;
-  }
-
-  #setHardware(id: string, patch: Partial<HardwareEdit>): void {
-    this.hardwareEdits = {
-      ...this.hardwareEdits,
-      [id]: { ...this.#hardwareFor(id), ...patch },
-    };
-  }
-
-  async #saveHardware(id: string): Promise<void> {
-    this.#showError(null);
-    const hw = this.#hardwareFor(id);
-    try {
-      const updated = await this.api.patchDeviceHardware(id, {
-        receiptPrinterId: hw.receiptPrinterId === "" ? null : hw.receiptPrinterId,
-      });
-      this.hardwareEdits = {
-        ...this.hardwareEdits,
-        [id]: {
-          receiptPrinterId: updated.receiptPrinterId ?? "",
-        },
-      };
-    } catch (error) {
-      this.#showError(codeOf(error));
     }
   }
 
@@ -576,28 +532,31 @@ export class DevicesScreen extends LitElement {
     return formatIsoMinute(iso);
   }
 
-  /** The printer list is deliberately not filtered to a location; the server's binding check is the
-   * authority. */
+  /** A device may stay on a printer switched off since it chose it, so that one is shown too. */
+  #printerName(printerId: string | null): string {
+    const printer = this.printers.find((p) => p.id === printerId);
+    if (printer === undefined) return t("devices.no_printer");
+    return printerLabel(printer);
+  }
+
+  /** Read-only: a device picks its own printers from its profile's lists. */
   #renderHardware(device: DeviceRow): TemplateResult {
-    const activePrinters = this.printers.filter((p) => p.active);
     const activeReaders = this.readers.filter((r) => r.active);
     return html`<div class="hardware" data-test="hardware-${device.id}">
-      <wt-combobox
-        data-test="hw-printer-${device.id}"
-        name="receiptPrinterId"
-        label=${t("devices.receipt_printer")}
-        search="auto"
-        placeholder=${t("devices.receipt_printer_none")}
-        searchPlaceholder=${t("categories.combobox_search")}
-        noResultsLabel=${t("categories.combobox_no_results")}
-        .options=${[
-          { value: "", label: t("devices.receipt_printer_none") },
-          ...activePrinters.map((p) => ({ value: p.id, label: p.name })),
-        ]}
-        .value=${this.#hardwareFor(device.id).receiptPrinterId}
-        @wt-change=${(e: CustomEvent<{ value: string }>) =>
-          this.#setHardware(device.id, { receiptPrinterId: e.detail.value })}
-      ></wt-combobox>
+      <dl class="printers">
+        <div>
+          <dt>${t("devices.receipt_printer_now")}</dt>
+          <dd data-test="device-receipt-printer-${device.id}">
+            ${this.#printerName(device.receiptPrinterId)}
+          </dd>
+        </div>
+        <div>
+          <dt>${t("devices.slip_printer_now")}</dt>
+          <dd data-test="device-slip-printer-${device.id}">
+            ${this.#printerName(device.paymentSlipPrinterId)}
+          </dd>
+        </div>
+      </dl>
       <wt-combobox
         data-test="hw-reader-${device.id}"
         name="defaultReaderId"
@@ -614,13 +573,6 @@ export class DevicesScreen extends LitElement {
         @wt-change=${(e: CustomEvent<{ value: string }>) =>
           void this.#onReaderChange(device.id, e.detail.value)}
       ></wt-combobox>
-      <wt-button
-        variant="secondary"
-        size="sm"
-        data-test="hw-save-${device.id}"
-        @click=${() => void this.#saveHardware(device.id)}
-        >${t("devices.save_hardware")}</wt-button
-      >
     </div>`;
   }
 
@@ -799,52 +751,34 @@ export class DevicesScreen extends LitElement {
   }
 
   #renderBindingPicker(profile: DeviceProfile): TemplateResult | typeof nothing {
-    const binding = bindingOf(profile.formFactor);
-    if (binding === "none") return nothing;
-    if (binding === "station") {
-      return html`<wt-combobox
-        data-test="join-binding"
-        name="binding"
-        label=${t("devices.shows")}
-        search="auto"
-        placeholder=${t("devices.join_pick_binding")}
-        searchPlaceholder=${t("categories.combobox_search")}
-        noResultsLabel=${t("categories.combobox_no_results")}
-        .options=${[
-          { value: "", label: t("devices.join_pick_binding") },
-          ...this.stations
-            .filter((station) => station.active)
-            .map((station) => ({
-              value: `station:${station.id}`,
-              label: station.name,
-              group: t("devices.stations_group"),
-            })),
-          ...this.watchers
-            .filter((watcher) => watcher.active)
-            .map((watcher) => ({
-              value: `watcher:${watcher.id}`,
-              label: watcher.name,
-              group: t("devices.watchers_group"),
-            })),
-        ]}
-        .value=${this.chosenBinding}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => (this.chosenBinding = e.detail.value)}
-      ></wt-combobox>`;
-    }
+    if (!bindsStation(profile.formFactor)) return nothing;
     return html`<wt-combobox
-      data-test="join-register"
-      name="registerId"
-      label=${t("devices.till")}
+      data-test="join-binding"
+      name="binding"
+      label=${t("devices.shows")}
       search="auto"
-      placeholder=${t("devices.join_pick_register")}
+      placeholder=${t("devices.join_pick_binding")}
       searchPlaceholder=${t("categories.combobox_search")}
       noResultsLabel=${t("categories.combobox_no_results")}
       .options=${[
-        { value: "", label: t("devices.join_pick_register") },
-        ...this.tills.map((till) => ({ value: till.id, label: till.label })),
+        { value: "", label: t("devices.join_pick_binding") },
+        ...this.stations
+          .filter((station) => station.active)
+          .map((station) => ({
+            value: `station:${station.id}`,
+            label: station.name,
+            group: t("devices.stations_group"),
+          })),
+        ...this.watchers
+          .filter((watcher) => watcher.active)
+          .map((watcher) => ({
+            value: `watcher:${watcher.id}`,
+            label: watcher.name,
+            group: t("devices.watchers_group"),
+          })),
       ]}
-      .value=${this.chosenRegisterId}
-      @wt-change=${(e: CustomEvent<{ value: string }>) => (this.chosenRegisterId = e.detail.value)}
+      .value=${this.chosenBinding}
+      @wt-change=${(e: CustomEvent<{ value: string }>) => (this.chosenBinding = e.detail.value)}
     ></wt-combobox>`;
   }
 
@@ -880,7 +814,6 @@ export class DevicesScreen extends LitElement {
           @wt-change=${(e: CustomEvent<{ value: string }>) => {
             this.chosenProfileId = e.detail.value;
             this.chosenBinding = "";
-            this.chosenRegisterId = "";
           }}
         ></wt-combobox>
         ${profile === undefined ? nothing : this.#renderBindingPicker(profile)}

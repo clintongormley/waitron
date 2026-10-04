@@ -711,7 +711,7 @@ request.submissionId, "line.move_station", { orderId, lineIds: [...new Set(reque
 1. One clock reading, `const at = new Date()`, as the FIRST statement of `moveDishesToStation`,
    before `runServiceCommand` and any other `await` (3b plan:973-977 says why: a timer that runs in
    such a gap shifts the reading). `run` uses that `at`.
-2. The order, joined to `tills` on `cfg.locationId` as `recordKitchenNotices` does
+2. (_2026-10-03: superseded by A238, `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`: `tills` is gone._) The order, joined to `tills` on `cfg.locationId` as `recordKitchenNotices` does
    (`packages/venue-service/src/kitchen-notices.ts:89-96`): absent → `working_order.not_found`;
    `abandoned` → `working_order.not_open`; `collected_at` set → `working_order.already_collected`
    (P2).

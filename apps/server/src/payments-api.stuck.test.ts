@@ -4,7 +4,14 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPaymentRefunds, billPayments, withTransaction, workingOrders } from "@waitron/db";
+import {
+  billPaymentRefunds,
+  billPayments,
+  devices,
+  withTransaction,
+  workingOrders,
+} from "@waitron/db";
+import { createPrinter } from "@waitron/printing";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -28,8 +35,8 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
   workingOrderId as brandWorkingOrderId,
+  deviceOrigin,
 } from "@waitron/shared";
 import {
   failAttempting,
@@ -56,7 +63,7 @@ import type { CardProviderPool } from "./card-provider-pool.js";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./till-config.js";
 import { systemClock } from "./till-backend.js";
 import { createOpenOrder } from "./working-order.js";
 import { payWorkingOrderIntegrated } from "./till-sale.js";
@@ -69,6 +76,8 @@ import {
   watchedOrder,
   watchedDerivationCount,
 } from "./testing/watched-scrypt.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
+import { deviceRequestCfg, orderDeviceOrigin } from "./testing/session-device.js";
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -117,7 +126,10 @@ const stripeSeat: CardProviderContribution = createStripeCardProvider((() => {
 }) as unknown as MakeStripe);
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: DeviceRequestConfig;
+  /** Two devices at the venue: payments start on `deviceId` unless a case says otherwise. */
+  deviceId: string;
+  otherDeviceId: string;
   menuItemId: string;
   zoneId: string;
   managerId: string;
@@ -156,7 +168,6 @@ async function setup(
           timeZone: "Europe/Madrid",
           dayCutover: "05:00",
         },
-        tillName: "Caja 1",
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
@@ -170,8 +181,7 @@ async function setup(
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
-    tillId: brandTillId(venue.tillId),
+  const cfg = await deviceRequestCfg(suite.db, {
     nodeId: brandNodeId(venue.nodeId),
     seriesId: brandSeriesId(venue.seriesIds[0]!),
     locationId: brandLocationId(venue.locationId),
@@ -180,7 +190,7 @@ async function setup(
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
     orderFlow: "prepay",
-  };
+  });
   const seeded = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
@@ -255,8 +265,14 @@ async function setup(
     },
     noopLog,
   );
+  const devices = [
+    await seedDevice(suite.db, { locationId: brandLocationId(venue.locationId), label: "Barra 1" }),
+    await seedDevice(suite.db, { locationId: brandLocationId(venue.locationId), label: "Barra 2" }),
+  ];
   return {
     cfg,
+    deviceId: devices[0]!.deviceId,
+    otherDeviceId: devices[1]!.deviceId,
     menuItemId: seeded.menuItemId,
     zoneId: seeded.zoneId,
     managerId: seeded.managerId,
@@ -287,7 +303,7 @@ async function strandPayment(
   v: Venue,
   orderId: string,
   intent: { status: string; amountReceived?: number },
-  opts: { amount?: string; mark?: string | null } = {},
+  opts: { amount?: string; mark?: string | null; deviceId?: string } = {},
 ): Promise<{ paymentId: string; piId: string }> {
   const paymentRef = randomUUID();
   const piId = `pi_stuck_${randomUUID()}`;
@@ -299,6 +315,7 @@ async function strandPayment(
   });
   await withTransaction(suite.db, async (tx) => {
     await insertAttempting(tx, {
+      origin: deviceOrigin(opts.deviceId ?? v.deviceId),
       workingOrderId: brandWorkingOrderId(orderId),
       provider: "stripe",
       paymentRef,
@@ -321,8 +338,10 @@ async function strandPayment(
 /** An `attempting` payment of `provider` on a marked order, with no PaymentIntent. */
 async function strandBarePayment(orderId: string, provider: string): Promise<string> {
   const paymentRef = randomUUID();
+  const origin = await orderDeviceOrigin(suite.db, orderId);
   await withTransaction(suite.db, (tx) =>
     insertAttempting(tx, {
+      origin,
       workingOrderId: brandWorkingOrderId(orderId),
       provider,
       paymentRef,
@@ -414,14 +433,34 @@ describe("GET /management-api/payments/stuck", () => {
     expect(body[0]).toMatchObject({
       paymentId,
       workingOrderId: stuckOrder,
-      tillId: v.cfg.tillId,
-      tillName: "Caja 1",
+      source: "device",
+      deviceId: v.deviceId,
+      deviceName: "Barra 1",
       provider: "stripe",
       amount: "1.50",
       label: null,
     });
     expect(typeof body[0]!.orderNumber).toBe("number");
     expect(typeof body[0]!.startedAt).toBe("string");
+  });
+
+  it("names the device that started the payment, even after it was revoked", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    await strandPayment(
+      v,
+      orderId,
+      { status: "requires_payment_method" },
+      { deviceId: v.otherDeviceId },
+    );
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, v.otherDeviceId));
+
+    const res = await send(v, "GET", "/management-api/payments/stuck");
+
+    const body = (await res.json()) as Record<string, unknown>[];
+    expect(body.map((row) => [row.deviceId, row.deviceName])).toEqual([
+      [v.otherDeviceId, "Barra 2"],
+    ]);
   });
 
   it("is refused to a staff session and to no session", async () => {
@@ -438,6 +477,52 @@ describe("GET /management-api/payments/stuck", () => {
 // --- resolving ------------------------------------------------------------------------------
 
 describe("POST /management-api/payments/stuck/:id/resolve", () => {
+  it("files the sale under the device that started the payment, not the dashboard", async () => {
+    // The payment was started on the venue's second device; nothing else names that device.
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const { paymentId } = await strandPayment(
+      v,
+      orderId,
+      { status: "succeeded", amountReceived: 150 },
+      { deviceId: v.otherDeviceId },
+    );
+
+    const res = await send(v, "POST", resolvePath(paymentId));
+
+    expect(res.status).toBe(200);
+    const expected = [{ source: "device", device_id: v.otherDeviceId }];
+    expect(
+      suite.db.all(sql`select source, device_id from sales where working_order_id = ${orderId}`),
+    ).toEqual(expected);
+    expect(
+      suite.db.all(sql`
+        select r.source, r.device_id from registros_facturacion r
+        join sales s on s.id = r.sale_id where s.working_order_id = ${orderId}`),
+    ).toEqual(expected);
+  });
+
+  it("refuses a stuck payment that names no device, asking nobody and filing nothing", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const { paymentId } = await strandPayment(v, orderId, {
+      status: "succeeded",
+      amountReceived: 150,
+    });
+    // A source with no device: the sale tables accept it, but only a device starts a payment.
+    await suite.db.execute(
+      sql`update payments set source = 'demo_seed', device_id = null where id = ${paymentId}`,
+    );
+    const retrieve = vi.spyOn(v.client, "retrievePaymentIntent");
+
+    const res = await send(v, "POST", resolvePath(paymentId));
+
+    expect(res.status).toBe(400);
+    expect(await errorOf(res)).toMatchObject({ code: "origin.invalid" });
+    expect(retrieve).not.toHaveBeenCalled();
+    expect(saleIdsFor(orderId)).toEqual([]);
+  });
+
   it("(a) files ONE sale for a payment Stripe captured, settles the order, and refuses a second resolve", async () => {
     const v = await setup();
     const orderId = await openOrder(v);
@@ -928,6 +1013,7 @@ async function strandBillPayment(
   orderId: string,
   provided: Provided,
   amount = "1.50",
+  startedOn: string = v.cfg.origin.deviceId,
 ): Promise<string> {
   const [bill] = await suite.db
     .insert(billPayments)
@@ -940,13 +1026,15 @@ async function strandBillPayment(
       applied: Math.round(Number(amount) * 100),
       state: "pending",
       requestedBy: v.managerId,
-      tillId: v.cfg.tillId,
+      source: "device",
+      deviceId: startedOn,
     })
     .returning({ id: billPayments.id });
   const billPaymentId = bill!.id;
   const key = { provider: "stripe", paymentRef: randomUUID() };
   const common = {
     ...key,
+    origin: deviceOrigin(v.deviceId),
     workingOrderId: brandWorkingOrderId(orderId),
     amount: decimal(amount),
     billPaymentId,
@@ -1035,8 +1123,9 @@ describe("GET /management-api/payments/bill-payments", () => {
       expect.objectContaining({
         billPaymentId: pending,
         workingOrderId: orderId,
-        tillId: v.cfg.tillId,
-        tillName: "Caja 1",
+        source: "device",
+        deviceId: v.cfg.origin.deviceId,
+        deviceName: expect.any(String),
         method: "card",
         applied: "1.50",
         tip: "0.00",
@@ -1166,6 +1255,20 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     });
     expect((await billPaymentOf(id)).state).toBe("pending");
     expect(saleIdsFor(orderId)).toEqual([]);
+    // A manager acting from the dashboard: the alert names the device that started the payment.
+    const { rows } = await suite.db.execute<{
+      source: string;
+      device_id: string | null;
+      started_on: string | null;
+    }>(sql`
+      select i.source, i.device_id, p.device_id as started_on
+      from incidents i join bill_payments p on p.id = ${id}
+      where i.code = 'payment.bill_capture_mismatch'
+        and json_extract(i.params, '$.billPaymentId') = ${id}
+    `);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.started_on).not.toBeNull();
+    expect(rows[0]).toMatchObject({ source: "device", device_id: rows[0]!.started_on });
   });
 
   it("refuses outcome_unconfirmed, naming Stripe's status, when Stripe captured another amount", async () => {
@@ -1247,6 +1350,23 @@ describe("POST /management-api/payments/bill-payments/:id/resolve", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ outcome: "received" });
     expect((await billPaymentOf(id)).state).toBe("received");
+  });
+
+  it("keeps the payment's device, and files the invoice it completes under that device", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "captured" }, "1.50", v.otherDeviceId);
+
+    const res = await send(v, "POST", billResolvePath(id));
+
+    expect(res.status).toBe(200);
+    const expected = [{ source: "device", device_id: v.otherDeviceId }];
+    expect(suite.db.all(sql`select source, device_id from bill_payments where id = ${id}`)).toEqual(
+      expected,
+    );
+    expect(
+      suite.db.all(sql`select source, device_id from sales where working_order_id = ${orderId}`),
+    ).toEqual(expected);
   });
 
   it("completes a payment that leaves the bill owing, answering no invoice", async () => {
@@ -1364,6 +1484,50 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
       sql`select t.bill_payment_id, t.method from tenders t join sales s on s.id = t.sale_id where s.working_order_id = ${orderId}`,
     );
     expect(tender).toEqual({ bill_payment_id: id, method: "card" });
+  });
+
+  it("prints the invoice's receipt on the receipt printer of the device that started the payment", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "failed" });
+    const printerId = await withTransaction(suite.db, async (tx) => {
+      const printer = await createPrinter(
+        tx,
+        { locationId: v.cfg.locationId },
+        { name: "Recibos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+      );
+      await tx
+        .update(devices)
+        .set({ receiptPrinterId: printer.id })
+        .where(eq(devices.id, v.cfg.origin.deviceId));
+      return printer.id;
+    });
+
+    const res = await post(v, attestPath(id), { outcome: "received", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(200);
+    expect(
+      suite.db.all<{ printer_id: string; kind: string }>(
+        sql`select printer_id, kind from print_jobs`,
+      ),
+    ).toEqual([{ printer_id: printerId, kind: "document" }]);
+  });
+
+  it("keeps the payment's device, and files the invoice it completes under that device", async () => {
+    const v = await setup();
+    const orderId = await openOrder(v);
+    const id = await strandBillPayment(v, orderId, { kind: "failed" }, "1.50", v.otherDeviceId);
+
+    const res = await post(v, attestPath(id), { outcome: "received", note: NOTE, pin: "1234" });
+
+    expect(res.status).toBe(200);
+    const expected = [{ source: "device", device_id: v.otherDeviceId }];
+    expect(suite.db.all(sql`select source, device_id from bill_payments where id = ${id}`)).toEqual(
+      expected,
+    );
+    expect(
+      suite.db.all(sql`select source, device_id from sales where working_order_id = ${orderId}`),
+    ).toEqual(expected);
   });
 
   it("records a confirmed receipt that leaves the bill owing, answering no invoice", async () => {
@@ -1733,7 +1897,8 @@ describe("the manager's lists, of rows written within one millisecond", () => {
           applied: 150,
           state: "pending",
           requestedBy: v.managerId,
-          tillId: v.cfg.tillId,
+          source: v.cfg.origin.source,
+          deviceId: v.cfg.origin.deviceId,
           createdAt: AT,
         })
         .returning({ id: billPayments.id });
@@ -1753,6 +1918,8 @@ describe("the manager's lists, of rows written within one millisecond", () => {
         .values({
           id: id(),
           workingOrderId,
+          source: v.cfg.origin.source,
+          deviceId: v.cfg.origin.deviceId,
           provider: "stripe",
           paymentRef: randomUUID(),
           amount: 150,
@@ -1788,6 +1955,8 @@ describe("the manager's lists, of rows written within one millisecond", () => {
       await suite.db.insert(payments).values({
         id: id(),
         workingOrderId: bill!.workingOrderId,
+        source: v.cfg.origin.source,
+        deviceId: v.cfg.origin.deviceId,
         provider: "stripe",
         paymentRef: randomUUID(),
         amount: 150,
@@ -1824,7 +1993,8 @@ describe("the manager's lists, of rows written within one millisecond", () => {
           reason: "error",
           authorizedBy: v.managerId,
           requestedBy: v.managerId,
-          tillId: v.cfg.tillId,
+          source: v.cfg.origin.source,
+          deviceId: v.cfg.origin.deviceId,
           state: "pending",
           createdAt: AT,
         })

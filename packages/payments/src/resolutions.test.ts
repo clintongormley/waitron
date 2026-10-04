@@ -13,7 +13,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { AppError, decimal } from "@waitron/shared";
+import { AppError, decimal, deviceOrigin } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import {
   countProviderCancelledResolutions,
@@ -30,22 +30,23 @@ const RESOLVED_AT = new Date("2026-09-26T12:00:00Z");
 
 let refCounter = 0;
 
-/** An `attempting` payment on a fresh working order, as a crash would leave it. */
+/** An `attempting` payment on a fresh working order, or on `on`'s, as a crash would leave it. */
 async function stuckPayment(
   provider = "stripe",
-  workingOrderId?: string,
-): Promise<{ paymentId: string; workingOrderId: string; paymentRef: string }> {
-  const woId = workingOrderId ?? (await seedWorkingOrder(suite.db, freshNif())).workingOrderId;
+  on?: { workingOrderId: string; deviceId: string },
+): Promise<{ paymentId: string; workingOrderId: string; deviceId: string; paymentRef: string }> {
+  const { workingOrderId, deviceId } = on ?? (await seedWorkingOrder(suite.db, freshNif()));
   const paymentRef = `stuck-${++refCounter}`;
   return withTransaction(suite.db, async (tx) => {
     await insertAttempting(tx, {
-      workingOrderId: woId,
+      origin: deviceOrigin(deviceId),
+      workingOrderId,
       provider,
       paymentRef,
       amount: decimal("12.10"),
     });
     const row = await getPaymentByRef(tx, { provider, paymentRef });
-    return { paymentId: row!.id, workingOrderId: woId, paymentRef };
+    return { paymentId: row!.id, workingOrderId, deviceId, paymentRef };
   });
 }
 
@@ -216,11 +217,11 @@ describe("countProviderCancelledResolutions", () => {
   it("counts only this order's resolutions that left the payment cancelled at the provider", async () => {
     const p = await stuckPayment();
     await record(p, { cancelledAtProvider: true });
-    const second = await stuckPayment("stripe", p.workingOrderId);
+    const second = await stuckPayment("stripe", p);
     await record(second, { cancelledAtProvider: true });
-    const third = await stuckPayment("stripe", p.workingOrderId);
+    const third = await stuckPayment("stripe", p);
     await record(third, { cancelledAtProvider: false, providerStatus: null });
-    const captured = await stuckPayment("stripe", p.workingOrderId);
+    const captured = await stuckPayment("stripe", p);
     await record(captured, { outcome: "captured", cancelledAtProvider: false });
     const otherOrder = await stuckPayment();
     await record(otherOrder, { cancelledAtProvider: true });
@@ -231,7 +232,7 @@ describe("countProviderCancelledResolutions", () => {
   it("counts only the named provider's payments when a provider is given", async () => {
     const p = await stuckPayment("stripe");
     await record(p, { cancelledAtProvider: true });
-    const other = await stuckPayment("fake", p.workingOrderId);
+    const other = await stuckPayment("fake", p);
     await record(other, { cancelledAtProvider: true });
 
     expect(await countFor(p.workingOrderId, "stripe")).toBe(1);

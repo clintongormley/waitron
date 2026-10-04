@@ -12,6 +12,7 @@ import {
   type RegistroRow,
 } from "./registro-row.js";
 import { seedSale, seedTill, TEST_NIF, TEST_SISTEMA, type SeededTill } from "./testing/seed.js";
+import { deviceOrigin } from "@waitron/shared";
 
 // Record flattening, storage, rehydration and XML assembly, without concurrency: one writer
 // against one venue database is all these cases need.
@@ -37,7 +38,7 @@ async function storeAndReadBack(record: RegistroAlta): Promise<RegistroRow> {
   invoiceSequence += 1;
   const saleId = await seedSale(suite.db, till, invoiceSequence);
   const row = toRegistroRow(record, {
-    tillId: till.tillId,
+    origin: deviceOrigin(till.deviceId),
     nodeId: till.nodeId,
     sifId: till.sifId,
     saleId,

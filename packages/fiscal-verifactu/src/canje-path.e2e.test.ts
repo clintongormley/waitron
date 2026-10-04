@@ -9,6 +9,7 @@ import { registrosFacturacion } from "./schema/registros.js";
 import { seedSale, seedTill, TEST_NIF, TEST_SISTEMA, type SeededTill } from "./testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { deviceOrigin } from "@waitron/shared";
 
 /**
  * Store an F3 record and serialize its stored columns through the drainer path. Both
@@ -65,7 +66,7 @@ function f3CanjeRecord(): RegistroAlta {
 async function storeF3(record: RegistroAlta): Promise<string> {
   const saleId = await seedSale(suite.db, till, 1);
   const row = toRegistroRow(record, {
-    tillId: till.tillId,
+    origin: deviceOrigin(till.deviceId),
     nodeId: till.nodeId,
     sifId: till.sifId,
     saleId,

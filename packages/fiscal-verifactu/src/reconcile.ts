@@ -3,8 +3,8 @@ import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { recordIncident, recordIncidentOnce } from "@waitron/core";
 import type { IncidentSeverity } from "@waitron/core";
-import { AppError } from "@waitron/shared";
-import type { SaleId, TillId } from "@waitron/shared";
+import { AppError, jobOrigin } from "@waitron/shared";
+import type { SaleId } from "@waitron/shared";
 import type { ReconcileMismatch, ReconcileResult, TrustedClock } from "@waitron/fiscal";
 import type {
   Cabecera,
@@ -36,7 +36,6 @@ export interface ReconcileDeps {
  */
 type PeriodRow = {
   id: string;
-  till_id: string;
   sale_id: string;
   /** For an alta, the id of its sale's anulación, if one exists; otherwise null. */
   anulacion_id: string | null;
@@ -224,7 +223,7 @@ async function rowsForPeriod(
 ): Promise<PeriodRow[]> {
   const { rows } = await tx.execute<PeriodRow>(sql`
     select
-      r.id, r.till_id, r.sale_id,
+      r.id, r.sale_id,
       case when r.tipo_registro = 'alta' then (
         select a.id from registros_facturacion a
         where a.sale_id = r.sale_id and a.tipo_registro = 'anulacion'
@@ -363,7 +362,7 @@ async function raise(
   detectedAt: Date,
 ): Promise<void> {
   await recordIncident(tx, {
-    tillId: row.till_id as TillId,
+    origin: jobOrigin("fiscal_filing"),
     saleId: row.sale_id as SaleId,
     error: new AppError(code, {
       registroId: row.id,
@@ -386,7 +385,7 @@ async function hasSiblingAnulacion(tx: Transaction, row: PeriodRow): Promise<boo
   return rows.length > 0;
 }
 
-/** `raise`, but idempotent per open `(till, code, sale)`, for the incidents a sweep re-detects while
+/** `raise`, but idempotent per open `(code, sale)`, for the incidents a sweep re-detects while
  * still open. Returns whether a new incident was inserted. */
 async function raiseOnce(
   tx: Transaction,
@@ -396,7 +395,7 @@ async function raiseOnce(
   detectedAt: Date,
 ): Promise<boolean> {
   return recordIncidentOnce(tx, {
-    tillId: row.till_id as TillId,
+    origin: jobOrigin("fiscal_filing"),
     saleId: row.sale_id as SaleId,
     error: new AppError(code, {
       registroId: row.id,

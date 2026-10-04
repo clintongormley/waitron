@@ -17,6 +17,7 @@ import {
   compareDecimal,
   decimal,
   rawCentsToDecimal,
+  readOrigin,
   stringToCents,
   sumDecimals,
 } from "@waitron/shared";
@@ -43,7 +44,9 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   // `rawCentsToDecimal` (see its doc comment); `sales.total` is a typed column and needs no cast.
   const [sale] = await tx
     .select({
-      tillId: sales.tillId,
+      // A refusal names the device the sale was rung on, not the one settling it.
+      source: sales.source,
+      deviceId: sales.deviceId,
       total: sales.total,
       corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0) as text)`,
     })
@@ -76,7 +79,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   const unsettled = input.tenders.filter((t) => t.settledAt === null);
   if (unsettled.length > 0) {
     throw new AppError("sale.tender_unsettled", {
-      tillId: sale.tillId,
+      deviceId: readOrigin(sale.source, sale.deviceId).deviceId,
       saleId: input.saleId,
       unsettledCount: unsettled.length,
     });
@@ -91,7 +94,7 @@ export async function settleSale(tx: Transaction, input: SettleSaleInput): Promi
   const charged = sumDecimals(input.tenders.map((t) => decimal(t.amount)));
   if (compareDecimal(charged, due) !== 0) {
     throw new AppError("sale.tender_shortfall", {
-      tillId: sale.tillId,
+      deviceId: readOrigin(sale.source, sale.deviceId).deviceId,
       saleId: input.saleId,
       due,
       charged,

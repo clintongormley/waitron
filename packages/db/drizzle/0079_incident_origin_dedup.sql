@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `incidents_open_dedup` ON `incidents` (`source`,case when "device_id" is null then '' else "device_id" end,`code`,case when "sale_id" is null then '' else "sale_id" end) WHERE "incidents"."acknowledged_at" is null;

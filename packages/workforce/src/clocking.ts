@@ -1,6 +1,7 @@
 import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { isUniqueViolation, newId, nowIso, type Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, jobOrigin } from "@waitron/shared";
+import type { Origin } from "@waitron/shared";
 import { appendToChain } from "./chain.js";
 import { timeEntries } from "./schema/time-entries.js";
 import {
@@ -34,7 +35,8 @@ export interface ClockEventInput {
   locationId: string;
   at: string;
   offsetMinutes: number;
-  tillId?: string | null;
+  /** The device it was captured on, or the job that recorded it (`dashboard` for a manual entry). */
+  origin: Origin;
   /** Who recorded it; defaults to the subject (self-service clock-in). */
   recordedByPersonId?: string;
 }
@@ -68,7 +70,7 @@ export interface CorrectionRequestInput {
   offsetMinutes: number;
   reason: string;
   actorPersonId: string;
-  tillId?: string | null;
+  origin: Origin;
 }
 
 /** A supervisor's approval of a requested correction — the second append that gives it effect. */
@@ -320,7 +322,7 @@ export class WorkforceBackend {
       reason: input.reason,
       actorPersonId: input.actorPersonId,
       status: "requested",
-      tillId: input.tillId ?? null,
+      origin: input.origin,
     });
   }
 
@@ -359,7 +361,7 @@ export class WorkforceBackend {
       reason: request.reason,
       actorPersonId: input.approverPersonId,
       status: "approved",
-      tillId: null,
+      origin: jobOrigin("dashboard"),
     });
   }
 
@@ -632,7 +634,7 @@ export class WorkforceBackend {
         eventAt: input.at,
         eventOffsetMinutes: input.offsetMinutes,
         recordedByPersonId: input.recordedByPersonId ?? input.personId,
-        capturedByTillId: input.tillId ?? null,
+        origin: input.origin,
       },
     );
   }
@@ -721,7 +723,7 @@ export class WorkforceBackend {
       reason: string;
       actorPersonId: string;
       status: "requested" | "approved";
-      tillId: string | null;
+      origin: Origin;
     },
   ): Promise<string> {
     const { id } = await appendToChain(
@@ -733,7 +735,7 @@ export class WorkforceBackend {
         eventAt: params.at,
         eventOffsetMinutes: params.offsetMinutes,
         recordedByPersonId: params.actorPersonId,
-        capturedByTillId: params.tillId,
+        origin: params.origin,
         correctsEntryId: params.correctsEntryId,
         correctionReason: params.reason,
         correctionStatus: params.status,

@@ -15,7 +15,6 @@ import {
   CORE_MIGRATIONS,
   kitchenStations,
   locations,
-  tills,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -99,13 +98,9 @@ async function seedOrder(
   orderNumber: number,
   label: string | null,
 ): Promise<{ orderId: string; burgerLineId: string; lemonadeLineId: string; pizzaLineId: string }> {
-  const [till] = await db
-    .insert(tills)
-    .values({ locationId, name: `Till ${orderNumber}` })
-    .returning({ id: tills.id });
   const [order] = await db
     .insert(workingOrders)
-    .values({ tillId: till!.id, orderNumber, label })
+    .values({ source: "dashboard", deviceId: null, locationId, orderNumber, label })
     .returning({ id: workingOrders.id });
   const line = {
     workingOrderId: order!.id,

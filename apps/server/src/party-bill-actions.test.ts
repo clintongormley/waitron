@@ -44,6 +44,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { joinTables } from "./table-actions.js";
 import { overridePinAttempts } from "./till-api.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 import { VENUE_SERVICE } from "./modules.js";
 
 // Split, merge and transfer between a party's bills (table actions plan, Task 5; spec §7, §9, §15).
@@ -173,8 +174,9 @@ async function contribute(billId: string, amount: string): Promise<string> {
 
 /** Gives the whole of a 5.00 cash contribution back, under the admin's PIN. */
 async function refundInFull(billId: string, paymentId: string): Promise<void> {
+  const deviceId = await seedSessionDevice(v.db, v.cfg);
   const session = await inTx(v, (tx) =>
-    loginWithPin(tx, { tillId: v.cfg.tillId, personId: adminId, pin: "1234" }),
+    loginWithPin(tx, { deviceId, personId: adminId, pin: "1234" }),
   );
   await refundBillPayment(
     { db: v.db, clock: v.clock },
@@ -185,7 +187,7 @@ async function refundInFull(billId: string, paymentId: string): Promise<void> {
     {
       personId: adminId,
       sessionId: session.id,
-      attempts: overridePinAttempts(createPinThrottle(), v.cfg.tillId),
+      attempts: overridePinAttempts(createPinThrottle(), deviceId),
     },
   );
 }

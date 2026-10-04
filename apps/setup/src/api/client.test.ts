@@ -51,7 +51,6 @@ const provisionBody: ProvisionBody = {
       timeZone: "Europe/Madrid",
       dayCutover: "05:00",
     },
-    tillName: "Barra",
     seriesCode: "A",
     rectificativeSeriesCode: "RA",
     admin: {

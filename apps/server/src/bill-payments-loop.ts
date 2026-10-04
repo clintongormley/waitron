@@ -4,18 +4,13 @@ import type { Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
 import { codeOf } from "@waitron/server-kit";
 import { findPaymentByBillPayment } from "@waitron/payments";
-import {
-  AppError,
-  centsToDecimal,
-  compareDecimal,
-  decimal,
-  tillId as brandTillId,
-} from "@waitron/shared";
+import { AppError, centsToDecimal, compareDecimal, decimal, jobOrigin } from "@waitron/shared";
 import { raiseRefundUnresolved } from "./bill-refund-alerts.js";
 import { billPaymentIsLive, completeBillPayment, failBillPayment } from "./bill-payments.js";
 import { resumeCardRefund } from "./bill-refunds.js";
 import type { RefundProviderFor } from "./bill-refunds.js";
 import { perDatabase } from "./live-in-process.js";
+import { alertOrigin, type AlertOrigin } from "./request-config.js";
 import type { TillConfig } from "./till-config.js";
 import type { TillSaleResult } from "./till-sale.js";
 import type { TillSaleDeps } from "./working-order.js";
@@ -72,6 +67,8 @@ export interface BillPaymentsPass {
 
 type RefundRow = typeof billPaymentRefunds.$inferSelect;
 
+const PAYMENT_CHECK = jobOrigin("payment_check");
+
 /** The provider row's states that mean the card was charged. */
 export const CHARGED = new Set(["captured", "accepted_offline", "settled"]);
 
@@ -85,13 +82,15 @@ export type SettledFromRow =
 
 /**
  * Settle one pending card bill payment nothing in this process drives, from its provider's row
- * alone (design §5.4), in the caller's transaction. Shared by the loop and the manager's resolve.
+ * alone (design §5.4), in the caller's transaction. Shared by the loop and the manager's resolve;
+ * `raisedBy` is who a mismatch alert names.
  */
 export async function settleFromProviderRow(
   tx: Transaction,
   deps: BillPaymentsLoopDeps,
   billPaymentId: string,
   now: Date,
+  raisedBy: AlertOrigin,
 ): Promise<SettledFromRow> {
   const [payment] = await tx.select().from(billPayments).where(eq(billPayments.id, billPaymentId));
   // Read in the transaction: a P1 registers its payment as live in its own, which this one excludes.
@@ -114,7 +113,7 @@ export async function settleFromProviderRow(
   const expected = centsToDecimal(payment.applied + payment.tip);
   if (compareDecimal(decimal(provided.amount), expected) !== 0) {
     await recordIncidentOnce(tx, {
-      tillId: brandTillId(payment.tillId),
+      origin: alertOrigin(raisedBy, payment),
       error: new AppError("payment.bill_capture_mismatch", {
         billPaymentId,
         workingOrderId: payment.workingOrderId,
@@ -166,7 +165,7 @@ export async function settlePendingBillPayments(
     const now = deps.clock.now().instant;
     try {
       const { settled } = await withTransaction(deps.db, (tx) =>
-        settleFromProviderRow(tx, deps, id, now),
+        settleFromProviderRow(tx, deps, id, now, PAYMENT_CHECK),
       );
       if (settled !== "left") pass[settled] += 1;
       if (settled === "received" || settled === "failed") pass.pending -= 1;
@@ -202,7 +201,7 @@ async function raiseSettleFailed(
       return;
     }
     await recordIncidentOnce(tx, {
-      tillId: brandTillId(payment.tillId),
+      origin: PAYMENT_CHECK,
       error: new AppError("payment.bill_settle_failed", {
         billPaymentId,
         workingOrderId: payment.workingOrderId,
@@ -219,8 +218,8 @@ async function raiseSettleFailed(
  * The refund half of a pass (design §6b): each pending card refund nothing in this process drives
  * is failed when it never reached its provider, else looked up, at most as often as
  * {@link refundLookupGapMs} allows, and settled by the evidence table, never sent again. One still
- * pending an hour after it was asked for raises `payment.refund_unresolved` on the till that gave
- * it, whether or not this pass looked it up.
+ * pending an hour after it was asked for raises `payment.refund_unresolved`, whether or not this
+ * pass looked it up; while that alert is open, a second pending refund adds none.
  */
 async function settlePendingBillRefunds(
   deps: BillPaymentsLoopDeps,
@@ -246,7 +245,7 @@ async function settlePendingBillRefunds(
       let refund = found;
       const now = deps.clock.now().instant;
       if (lookupDue(found, lastLookups.get(id), now.getTime())) {
-        const resumed = await resumeCardRefund(deps, id, "loop");
+        const resumed = await resumeCardRefund(deps, id, "loop", PAYMENT_CHECK);
         if (!resumed.claimed) continue;
         lastLookups.set(id, now.getTime());
         refund = resumed.refund;

@@ -7,7 +7,6 @@ import {
   invoiceSeries,
   locations,
   sales,
-  tills,
   parties,
   serviceCommands,
   withTransaction,
@@ -30,7 +29,6 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
-  tillId as brandTillId,
 } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { mountTillApi } from "./till-api.js";
@@ -41,6 +39,7 @@ import { createTable } from "./tables.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP surface of seating and finishing a table: the session guard, the body and id screens and
 // the status each refusal answers. The verbs themselves are pinned in `parties.test.ts`.
@@ -59,10 +58,6 @@ const suite = useVenueDb({
       .insert(locations)
       .values({ name: "Sala", invoiceLocales: ["es-ES"], operationDescription: "Restaurante" })
       .returning({ id: locations.id });
-    const [till] = await db
-      .insert(tills)
-      .values({ locationId: loc!.id, name: "Caja 1" })
-      .returning({ id: tills.id });
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
     const [person] = await db
       .insert(persons)
@@ -70,7 +65,6 @@ const suite = useVenueDb({
       .returning({ id: persons.id });
     ana = { id: person!.id };
     cfg = {
-      tillId: brandTillId(till!.id),
       nodeId: brandNodeId(nodeId),
       seriesId: brandSeriesId(randomUUID()),
       locationId: brandLocationId(loc!.id),
@@ -116,8 +110,9 @@ function app(db: Database): Hono {
 }
 
 async function cookie(): Promise<string> {
+  const deviceId = await seedSessionDevice(suite.db, cfg);
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { tillId: cfg.tillId, personId: ana.id, pin: "5555" }),
+    loginWithPin(tx, { deviceId, personId: ana.id, pin: "5555" }),
   );
   return `${SESSION_COOKIE}=${session.token}`;
 }
@@ -180,6 +175,34 @@ describe("POST /api/tables/:id/seat", () => {
       tx.select().from(workingOrders).where(eq(workingOrders.id, seated.tabId)),
     );
     expect(tab!.partyId).toBe(seated.partyId);
+  });
+
+  it("opens the tab as the device that seated it, at the venue's location", async () => {
+    const deviceId = await seedSessionDevice(suite.db, cfg);
+    const session = await withTransaction(suite.db, (tx) =>
+      loginWithPin(tx, { deviceId, personId: ana.id, pin: "5555" }),
+    );
+    const res = await app(suite.db).request(`/api/tables/${await table()}/seat`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `${SESSION_COOKIE}=${session.token}`,
+      },
+      body: JSON.stringify({ guestCount: 2 }),
+    });
+    expect(res.status).toBe(200);
+    const { tabId } = (await res.json()) as { tabId: string };
+    const [tab] = await withTransaction(suite.db, (tx) =>
+      tx
+        .select({
+          source: workingOrders.source,
+          deviceId: workingOrders.deviceId,
+          locationId: workingOrders.locationId,
+        })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, tabId)),
+    );
+    expect(tab).toEqual({ source: "device", deviceId, locationId: cfg.locationId });
   });
 
   it("seats without a guest count, absent or null", async () => {
@@ -677,8 +700,10 @@ describe("GET /api/parties/:id/bills", () => {
       .insert(invoiceSeries)
       .values({ nodeId: cfg.nodeId, code: `R${randomUUID()}` })
       .returning({ id: invoiceSeries.id });
+    const deviceId = await seedSessionDevice(suite.db, cfg);
     await suite.db.insert(sales).values({
-      tillId: cfg.tillId,
+      source: "device",
+      deviceId,
       nodeId: cfg.nodeId,
       seriesId: series!.id,
       invoiceNumber: 1,

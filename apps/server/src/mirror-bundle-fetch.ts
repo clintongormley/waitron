@@ -29,7 +29,7 @@ function isMirrorBundle(value: unknown): value is MirrorBundle {
     (value.environment !== "production" && value.environment !== "preproduction") ||
     (wireguardPublicKey !== undefined && typeof wireguardPublicKey !== "string") ||
     !isRecord(designated) ||
-    !hasStrings(designated, ["locationId", "tillId", "nodeId", "seriesId"]) ||
+    !hasStrings(designated, ["locationId", "nodeId", "seriesId"]) ||
     !isRecord(tenant) ||
     !hasStrings(tenant, ["country", "taxId"]) ||
     !isRecord(primaryNode) ||

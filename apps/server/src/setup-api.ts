@@ -407,7 +407,6 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
       timeZone: area?.timeZone ?? country.defaultTimeZone,
       dayCutover: asString(loc.dayCutover, "location.dayCutover"),
     },
-    tillName: asString(v.tillName, "tillName"),
     seriesCode: asString(v.seriesCode, "seriesCode"),
     rectificativeSeriesCode: asString(v.rectificativeSeriesCode, "rectificativeSeriesCode"),
     admin: {
@@ -702,7 +701,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
 
       if (!setupPhaseReached(operation, "publishing")) {
         await persistTrading({
-          tillId: result.tillId,
           nodeId: result.nodeId,
           seriesId: result.seriesIds[0],
           locationId: result.locationId,

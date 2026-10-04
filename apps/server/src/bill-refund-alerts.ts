@@ -1,12 +1,11 @@
 import type { billPaymentRefunds } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
-import { AppError, centsToDecimal, tillId as brandTillId } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
+import { AppError, centsToDecimal, jobOrigin } from "@waitron/shared";
+import type { Decimal, Origin } from "@waitron/shared";
 import "./errors.js";
 
-/** The incidents a card refund of a bill raises (bill payments design §6b), on the till that gave
- * the money back. */
+/** The incidents a card refund of a bill raises (bill payments design §6b). */
 
 type RefundRow = typeof billPaymentRefunds.$inferSelect;
 
@@ -20,9 +19,10 @@ export function raiseRefundOutcomeConflict(
   workingOrderId: string,
   providerRefundRef: string | null,
   now: Date,
+  origin: Origin,
 ): Promise<boolean> {
   return recordIncidentOnce(tx, {
-    tillId: brandTillId(refund.tillId),
+    origin,
     error: new AppError("payment.refund_outcome_conflict", {
       refundId: refund.id,
       billPaymentId: refund.billPaymentId,
@@ -35,6 +35,7 @@ export function raiseRefundOutcomeConflict(
   });
 }
 
+/** Raised by the payment check alone, which finds a refund still pending after an hour. */
 export function raiseRefundUnresolved(
   tx: Transaction,
   refund: RefundRow,
@@ -42,7 +43,7 @@ export function raiseRefundUnresolved(
   now: Date,
 ): Promise<boolean> {
   return recordIncidentOnce(tx, {
-    tillId: brandTillId(refund.tillId),
+    origin: jobOrigin("payment_check"),
     error: new AppError("payment.refund_unresolved", {
       refundId: refund.id,
       billPaymentId: refund.billPaymentId,

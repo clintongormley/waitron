@@ -1,16 +1,9 @@
 import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
+import { operationDescriptionFor } from "./sale-location.js";
 import { eq, sql } from "drizzle-orm";
-import {
-  allocateInvoiceNumber,
-  invoiceSeries,
-  locations,
-  saleLines,
-  saleVoids,
-  sales,
-  tills,
-} from "@waitron/db";
+import { allocateInvoiceNumber, invoiceSeries, saleLines, saleVoids, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   AppError,
@@ -22,7 +15,7 @@ import {
   stringToCents,
   sumDecimals,
 } from "@waitron/shared";
-import type { Decimal, NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
+import type { Decimal, NodeId, SaleId, SaleOrigin, SeriesId } from "@waitron/shared";
 import type {
   FiscalBackend,
   FiscalRecordRef,
@@ -38,8 +31,8 @@ import type { RecordSaleLine } from "./record-sale.js";
 const ZERO = decimal("0");
 
 export interface RecordCorrectionInput {
-  /** Where the corrective invoice rings; not checked against the series (`nodeId` is). */
-  tillId: TillId;
+  /** Where the sale came from, written to `sales.source` and `sales.device_id`. */
+  origin: SaleOrigin;
   /**
    * The node that issues this corrective invoice and whose chain it extends. Checked against the
    * corrective series (`sale.series_wrong_node`) but deliberately NOT against the original sale's
@@ -241,7 +234,7 @@ export async function recordCorrection(
   if (verification.issues.length > 0) {
     pending.push({
       error: new AppError("chain.verification_failed", {
-        tillId: input.tillId,
+        deviceId: input.origin.deviceId,
         issues: verification.issues.map((issue) => ({
           issueCode: issue.code,
           recordId: issue.recordId ?? null,
@@ -265,7 +258,8 @@ export async function recordCorrection(
   const [inserted] = await tx
     .insert(sales)
     .values({
-      tillId: input.tillId,
+      source: input.origin.source,
+      deviceId: input.origin.deviceId,
       nodeId: input.nodeId,
       seriesId: input.seriesId,
       vatBreakdown,
@@ -295,7 +289,7 @@ export async function recordCorrection(
   // On this same transaction, attached to the corrective sale.
   for (const incident of pending) {
     await recordIncident(tx, {
-      tillId: input.tillId,
+      origin: input.origin,
       saleId,
       detectedAt: now.instant,
       ...incident,
@@ -309,23 +303,12 @@ export async function recordCorrection(
         saleLineRows(saleId, input.lines, { corrective: true }),
     );
 
-  const [location] = await tx
-    .select({ operationDescription: locations.operationDescription })
-    .from(tills)
-    .innerJoin(locations, eq(locations.id, tills.locationId))
-    .where(eq(tills.id, input.tillId));
-
-  /* v8 ignore start */
-  if (location === undefined) {
-    // `tills.location_id` is a not-null foreign key, so this means the till does not exist.
-    throw new Error(`recordCorrection: no location found for till ${input.tillId}`);
-  }
-  /* v8 ignore stop */
+  const descriptionOfOperation = await operationDescriptionFor(tx, input.origin, input.nodeId);
 
   const fiscal = await backend.recordCorrection(
     tx,
     {
-      tillId: input.tillId,
+      origin: input.origin,
       nodeId: input.nodeId,
       saleId,
       seriesId: input.seriesId,
@@ -333,7 +316,7 @@ export async function recordCorrection(
       invoiceNumber,
       issuedAt: now.instant,
       offsetMinutes: now.offsetMinutes,
-      descriptionOfOperation: location.operationDescription,
+      descriptionOfOperation,
       total: correction,
       vatBreakdown,
       counterparty: null,
