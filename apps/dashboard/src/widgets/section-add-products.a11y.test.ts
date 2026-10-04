@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { SectionAddProducts } from "./section-add-products.js";
@@ -32,6 +32,8 @@ const states = [
   "busy",
   "invalid",
   "all-in-section",
+  "mixed",
+  "all-listed",
 ] as const;
 
 describe.each(["light", "dark"] as const)("section add products (%s)", (theme) => {
@@ -62,6 +64,18 @@ describe.each(["light", "dark"] as const)("section add products (%s)", (theme) =
       root.querySelector<HTMLInputElement>('input[value="p-lager"]')!.click();
       await el.updateComplete;
     }
+    const header = root.querySelector<HTMLInputElement>('[data-test="select-listed"]');
+    if (state === "mixed") {
+      root.querySelector<HTMLInputElement>('input[value="p-lager"]')!.click();
+      await el.updateComplete;
+      expect(header!.indeterminate).toBe(true);
+    }
+    if (state === "all-listed") {
+      header!.click();
+      await el.updateComplete;
+      expect(header!.checked).toBe(true);
+    }
+    if (state === "no-matches" || state === "busy") expect(header!.disabled).toBe(true);
     if (state === "invalid") {
       root.querySelector<HTMLElement>('[data-test="add"]')!.click();
       await el.updateComplete;
