@@ -1,4 +1,4 @@
-import { LitElement, html, nothing } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { commands } from "vitest/browser";
@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { cleanup, mount as mountHtml } from "./test-helpers.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
 import { reorder } from "./reorder.js";
+import { baseStyles } from "./base-styles.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
@@ -917,3 +918,84 @@ it("locates rows from viewport pointer coordinates when the table is offset down
   expect(order(el)).toEqual(["b", "c", "a"]);
   pointer(document, "pointerup", 1);
 });
+
+/** A host laid out by the shared table styles, as the dashboard's reorderable tables are: a text
+ * cell that can wrap, beside a cell holding a tap-target-tall control. */
+@customElement("test-reorder-table-host")
+class TableReorderHost extends LitElement {
+  static override styles = [
+    baseStyles,
+    ReorderController.styles,
+    ReorderController.tableStyles,
+    css`
+      .table-wrap {
+        width: 300px;
+      }
+      .control {
+        min-height: var(--wt-tap-min);
+      }
+    `,
+  ];
+  @property({ attribute: false }) items: { id: string; name: string }[] = [];
+  readonly #reorder = new ReorderController(
+    this,
+    {
+      order: () => this.items.map((item) => item.id),
+      move: () => {},
+      label: (id) => id,
+      busy: () => false,
+      reorderLabel: "Reorder",
+    } satisfies ReorderModel,
+    { announce: announcement },
+  );
+  override render() {
+    return html`<div class="table-wrap">
+      <table>
+        <tbody>
+          ${this.items.map(
+            (item) =>
+              html`<tr data-choice=${item.id}>
+                <td class="handle-cell">${this.#reorder.handle(item.id)}</td>
+                <td><span class="name">${item.name}</span></td>
+                <td><button type="button" class="control">Edit</button></td>
+              </tr>`,
+          )}
+        </tbody>
+      </table>
+    </div>`;
+  }
+}
+declare global {
+  interface HTMLElementTagNameMap {
+    "test-reorder-table-host": TableReorderHost;
+  }
+}
+
+it.each([
+  ["a name that wraps", "A long product name that wraps over several lines in this narrow table"],
+  ["a one-line name", "Short"],
+])(
+  "draws the handle's icon within the first line of the row's text, beside %s",
+  async (_, name) => {
+    const { el } = await mountWidget<TableReorderHost>("test-reorder-table-host", {
+      items: [{ id: "a", name }],
+    });
+    const row = el.shadowRoot!.querySelector("tr")!;
+    const icon = row.querySelector("wt-icon")!.getBoundingClientRect();
+    const range = document.createRange();
+    range.selectNodeContents(row.querySelector(".name")!);
+    const lines = range.getClientRects();
+    const line = lines[0]!;
+    const iconMiddle = (icon.top + icon.bottom) / 2;
+    if (name.length > 10) {
+      expect(lines.length, "the name wraps").toBeGreaterThan(1);
+      expect(row.getBoundingClientRect().height).toBeGreaterThan(
+        row.querySelector(".handle")!.getBoundingClientRect().height * 1.5,
+      );
+    }
+    expect(
+      iconMiddle >= line.top && iconMiddle <= line.bottom,
+      JSON.stringify({ iconMiddle, line }),
+    ).toBe(true);
+  },
+);

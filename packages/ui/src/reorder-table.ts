@@ -170,9 +170,10 @@ export class ReorderController implements ReactiveController {
       vertical-align: top;
       border-bottom: 1px solid var(--wt-color-border);
     }
-    /* The handle is a square button, so it centres rather than sitting at the top of a tall row. */
-    td.handle-cell {
-      vertical-align: middle;
+    /* A text line is shorter than the handle, so only baseline alignment puts the handle, and every
+       control, on the first line of a tall row's text. */
+    tbody td {
+      vertical-align: baseline;
     }
   `;
 
