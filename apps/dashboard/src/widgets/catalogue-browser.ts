@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, iconButtonStyles, registerIcons, trackIconTooltip } from "@waitron/ui";
+import { baseStyles, iconButtonStyles, trackIconTooltip } from "@waitron/ui";
 import { chooseMaker, type RoutingModel } from "@waitron/venue-service/routing";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -25,11 +25,6 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import { acceptsCatalogueDrop, type CategoryNameDraft, type ProductList } from "./product-list.js";
-
-registerIcons({
-  "select-rows":
-    "M1 1h6v6H1Z M2 2v4h4V2Z M2.8 4.2l.7-.7.9.9 1.6-1.6.7.7-2.3 2.3Z M9 3h6v2H9Z M1 9h6v6H1Z M2 10v4h4v-4Z M9 11h6v2H9Z",
-});
 
 @customElement("dashboard-catalogue-browser")
 export class CatalogueBrowser extends LitElement {
@@ -593,6 +588,7 @@ export class CatalogueBrowser extends LitElement {
           this.nameError = "";
         }}
       >
+        <!-- A native button: wt-button does not pass aria-pressed to its inner button. -->
         <button
           type="button"
           slot="toolbar-start"

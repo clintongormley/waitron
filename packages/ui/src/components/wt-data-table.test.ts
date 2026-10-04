@@ -1714,6 +1714,24 @@ async function tableS(props: Partial<WtDataTable<RowS>> = {}): Promise<WtDataTab
   return el;
 }
 
+test.each([[false], [true]])(
+  "with leadingFilters %s, typing a search that matches nothing, and then one that matches, keeps focus in the search box",
+  async (leadingFilters) => {
+    const el = await tableS({ searchable: true, columns: withStatus, leadingFilters });
+    const root = el.shadowRoot!;
+    const input = root.querySelector<HTMLInputElement>(".table-search")!;
+    input.focus();
+    await userEvent.keyboard("zzz");
+    await el.updateComplete;
+    expect(root.querySelector(".empty")).not.toBeNull();
+    expect(root.activeElement).toBe(input);
+    await userEvent.keyboard("{Backspace}{Backspace}{Backspace}ada");
+    await el.updateComplete;
+    expect(rowKeysS(el)).toEqual(["1"]);
+    expect(root.activeElement).toBe(input);
+  },
+);
+
 test("an empty source table shows only its empty state, even with an initial filter", async () => {
   const status = withStatus[1]!;
   const el = await tableS({
@@ -6225,10 +6243,7 @@ test("the leading Filters button's tooltip shows on hover and on keyboard focus,
     expect(tip.height).toBeLessThan(button.height);
     const heading = root.querySelector("thead th")!.getBoundingClientRect();
     expect(tip.bottom).toBeGreaterThan(heading.top);
-    // Hit testing skips a tooltip that takes no pointer events, so this probe lets it take them.
-    tooltip.style.pointerEvents = "auto";
     const hit = root.elementFromPoint(tip.left + 4, tip.bottom - 2);
-    tooltip.style.pointerEvents = "";
     expect(hit !== null && tooltip.contains(hit)).toBe(true);
     await userEvent.keyboard("{Shift}");
     expect(shown()).toBe(true);
@@ -6249,6 +6264,25 @@ test("the leading Filters button's tooltip shows on hover and on keyboard focus,
     await userEvent.tab({ shift: true });
     expect(root.activeElement).toBe(trigger);
     expect(shown()).toBe(true);
+  });
+});
+
+test("a click on the leading Filters button's tooltip, where it lies over the headings, leaves Filters closed; a click on its icon opens it", async () => {
+  await inWindow(1280, 900, async () => {
+    const { el, root, trigger } = await leadingTable<StickyRow>(900, leadingSticky);
+    el.style.height = "560px";
+    await settle();
+    const tooltip = trigger.querySelector<HTMLElement>(".icon-tooltip")!;
+    await userEvent.hover(trigger);
+    expect(root.querySelector("thead th")!.getBoundingClientRect().top).toBeLessThan(
+      tooltip.getBoundingClientRect().bottom,
+    );
+    await userEvent.click(tooltip);
+    await el.updateComplete;
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    await userEvent.click(trigger.querySelector("wt-icon")!);
+    await el.updateComplete;
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
   });
 });
 
@@ -6494,5 +6528,121 @@ test("from 768 px a leading tree opens Filters beside rows that keep their wide 
     await userEvent.click(narrow.trigger);
     await narrow.el.updateComplete;
     expect(narrow.panel.matches(":popover-open")).toBe(true);
+  });
+});
+
+test("Escape with focus outside a full-screen leading Filters panel closes it and reports it closed, and Filters opens it again", async () => {
+  await inWindow(1280, 900, async () => {
+    const { el, root, trigger, panel } = await leadingTable<RowS>(500, {
+      rows: rowsS,
+      rowKey: (r: RowS) => r.id,
+      columns: withStatus,
+    });
+    await userEvent.click(trigger);
+    await el.updateComplete;
+    expect(panel.matches(":popover-open")).toBe(true);
+    (root.activeElement as HTMLElement).blur();
+    await userEvent.keyboard("{Escape}");
+    await el.updateComplete;
+    expect(panel.matches(":popover-open")).toBe(false);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    await userEvent.click(trigger);
+    await el.updateComplete;
+    expect(panel.matches(":popover-open")).toBe(true);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  });
+});
+
+/** Chooses `steps` rows down (or up, when negative) from the chosen one in a filter that has
+ * focus, with the keys alone. */
+async function chooseByKeys(steps: number): Promise<void> {
+  const key = steps < 0 ? "{ArrowUp}" : "{ArrowDown}";
+  await userEvent.keyboard(`{Enter}${key.repeat(Math.abs(steps))}{Enter}`);
+}
+
+test.each([[900], [500]])(
+  "in a %i px leading table, a keyboard choice that empties the rows and one that brings them back leave focus on the filter, and Escape still closes",
+  async (width) => {
+    await inWindow(1280, 900, async () => {
+      const { el, root, trigger, panel } = await leadingTable<RowS>(width, {
+        rows: [rowsS[0]!],
+        rowKey: (r: RowS) => r.id,
+        columns: withStatus,
+        noMatchesMessage: "No matching users",
+      });
+      trigger.focus();
+      await userEvent.keyboard("{Enter}");
+      const filter = firstChoice(panel);
+      const filterTrigger = filter.shadowRoot!.querySelector(".trigger");
+      await vi.waitFor(() => expect(filter.shadowRoot!.activeElement).toBe(filterTrigger));
+      await chooseByKeys(2);
+      await el.updateComplete;
+      expect(root.querySelector(".empty")!.textContent).toContain("No matching users");
+      expect(root.querySelector(".filters-panel")).toBe(panel);
+      expect(root.activeElement).toBe(filter);
+      expect(filter.shadowRoot!.activeElement).toBe(filterTrigger);
+      await chooseByKeys(-1);
+      await el.updateComplete;
+      expect(rowKeysS(el)).toEqual(["1"]);
+      expect(root.activeElement).toBe(filter);
+      expect(filter.shadowRoot!.activeElement).toBe(filterTrigger);
+      await chooseByKeys(1);
+      await el.updateComplete;
+      expect(root.querySelector(".empty")).not.toBeNull();
+      if (width < 768) {
+        await userEvent.keyboard("{Tab}");
+        expect(root.activeElement).toBe(panel.querySelector(".filters-clear-all"));
+      }
+      await userEvent.keyboard("{Escape}");
+      await el.updateComplete;
+      expect(getComputedStyle(panel).display).toBe("none");
+      expect(trigger.getAttribute("aria-expanded")).toBe("false");
+      expect(root.activeElement).toBe(trigger);
+    });
+  },
+);
+
+test("without leadingFilters, a keyboard choice that empties the rows and one that brings them back leave focus on the filter", async () => {
+  const el = await tableS({ rows: [rowsS[0]!], columns: withStatus });
+  const root = el.shadowRoot!;
+  root.querySelector<HTMLButtonElement>(".filters-trigger")!.focus();
+  await userEvent.keyboard("{Enter}");
+  const filter = root.querySelector<WtCombobox>(".filter-section .table-filter")!;
+  const filterTrigger = filter.shadowRoot!.querySelector(".trigger");
+  await vi.waitFor(() => expect(filter.shadowRoot!.activeElement).toBe(filterTrigger));
+  await chooseByKeys(2);
+  await el.updateComplete;
+  expect(root.querySelector(".empty")).not.toBeNull();
+  expect(root.activeElement).toBe(filter);
+  await chooseByKeys(-1);
+  await el.updateComplete;
+  expect(rowKeysS(el)).toEqual(["1"]);
+  expect(root.activeElement).toBe(filter);
+  expect(filter.shadowRoot!.activeElement).toBe(filterTrigger);
+});
+
+test("the leading Filters button's tooltip stays shown while the pointer moves from the button across the gap onto it, and once hidden it takes no pointer", async () => {
+  await inWindow(1280, 900, async () => {
+    const { root, trigger } = await leadingTable<RowS>(900, {
+      rows: rowsS,
+      rowKey: (r: RowS) => r.id,
+      columns: withStatus,
+    });
+    const tooltip = trigger.querySelector<HTMLElement>(".icon-tooltip")!;
+    const shown = () => getComputedStyle(tooltip).display !== "none";
+    await userEvent.hover(trigger);
+    expect(shown()).toBe(true);
+    const tip = tooltip.getBoundingClientRect();
+    const gap = tip.top - trigger.getBoundingClientRect().bottom;
+    expect(gap).toBeGreaterThan(0);
+    await userEvent.hover(tooltip, { position: { x: 4, y: -gap / 2 }, timeout: 2000 });
+    expect(shown()).toBe(true);
+    await userEvent.hover(tooltip, { timeout: 2000 });
+    expect(shown()).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    expect(shown()).toBe(false);
+    await commands.parkPointer();
+    const hit = root.elementFromPoint(tip.left + tip.width / 2, tip.top + tip.height / 2);
+    expect(hit === null || !trigger.contains(hit)).toBe(true);
   });
 });

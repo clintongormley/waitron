@@ -780,21 +780,30 @@ export class WtDataTable<Row = unknown> extends LitElement {
     for (const { contentRect } of entries)
       this.toggleAttribute("narrow", contentRect.width <= NARROW_TREE_WIDTH);
   });
-  readonly #hostResizeObserver = new ResizeObserver(([entry]) => {
+  /** Watched while column widths are held or `leadingFilters` is set. Its effects wait a frame:
+   * run inside the callback, they make Chromium report "ResizeObserver loop completed with
+   * undelivered notifications". */
+  readonly #hostObserver = new ResizeObserver(([entry]) => {
+    this.#hostWidth = entry!.borderBoxSize[0]!.inlineSize;
     if (
       this.filterColumnWidths &&
       this.filterHostWidth !== null &&
-      entry &&
-      Math.abs(entry.contentRect.width - this.filterHostWidth) > 0.5
+      Math.abs(entry!.contentRect.width - this.filterHostWidth) > 0.5
     ) {
       this.#releaseColumnWidths();
-      if (this.#resizeFrame !== null) return;
-      this.#resizeFrame = requestAnimationFrame(() => {
-        this.#resizeFrame = null;
-        if (this.isConnected) this.requestUpdate();
-      });
+      this.#widthsReleased = true;
     }
+    if (this.#resizeFrame !== null) return;
+    this.#resizeFrame = requestAnimationFrame(() => {
+      this.#resizeFrame = null;
+      if (!this.isConnected) return;
+      if (this.leadingFilters) this.sideFilters = this.#hostWidth >= SIDE_FILTERS_WIDTH;
+      if (this.#widthsReleased) this.requestUpdate();
+      this.#widthsReleased = false;
+    });
   });
+  #hostWidth = 0;
+  #widthsReleased = false;
   #observedScroll: Element | null = null;
   /** Keeps a revealed or focused row clear of the headings held over the top of the box. */
   readonly #headObserver = new ResizeObserver(() => this.#padScroll());
@@ -804,16 +813,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (!this.leadingFilters && this.filtersPanel?.matches(":popover-open"))
       this.#positionFilters();
   };
-  #sideFrame: number | null = null;
-  /** Deferred a frame: moving the panel resizes the rows' box, which other observers watch, and a
-   * change inside this callback would leave theirs undelivered. */
-  readonly #sideObserver = new ResizeObserver(() => {
-    if (this.#sideFrame !== null) return;
-    this.#sideFrame = requestAnimationFrame(() => {
-      this.#sideFrame = null;
-      this.sideFilters = this.#fitsSideFilters();
-    });
-  });
 
   #rememberedOpen(): Set<string> {
     if (this.#remembered) return this.#remembered;
@@ -857,13 +856,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#padScroll();
   }
 
-  #fitsSideFilters(): boolean {
-    return this.getBoundingClientRect().width >= SIDE_FILTERS_WIDTH;
-  }
-
-  #observeSide(): void {
-    if (this.leadingFilters) this.#sideObserver.observe(this);
-    else this.#sideObserver.disconnect();
+  #observeHost(): void {
+    if (this.leadingFilters || this.filterColumnWidths) this.#hostObserver.observe(this);
+    else this.#hostObserver.disconnect();
   }
 
   /** Below the side width the panel is a full-screen popover, shown once it is rendered as one. */
@@ -878,11 +873,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     window.addEventListener("resize", this.#resizeFilters);
-    if (this.filterColumnWidths) this.#hostResizeObserver.observe(this);
+    this.#observeHost();
     if (this.hasUpdated) {
       this.#observeScroll();
       this.#observeHead();
-      this.#observeSide();
     }
   }
 
@@ -890,24 +884,22 @@ export class WtDataTable<Row = unknown> extends LitElement {
     super.disconnectedCallback();
     this.#endColumnDrag();
     window.removeEventListener("resize", this.#resizeFilters);
-    this.#hostResizeObserver.disconnect();
+    this.#hostObserver.disconnect();
     if (this.#resizeFrame !== null) cancelAnimationFrame(this.#resizeFrame);
     this.#resizeFrame = null;
     this.#scrollObserver.disconnect();
     this.#observedScroll = null;
     this.#headObserver.disconnect();
     this.#observedHead = null;
-    this.#sideObserver.disconnect();
-    if (this.#sideFrame !== null) cancelAnimationFrame(this.#sideFrame);
-    this.#sideFrame = null;
   }
 
-  protected override updated(changed: PropertyValues<this>): void {
+  protected override updated(changed: PropertyValues): void {
     super.updated(changed);
     this.#observeScroll();
     this.#observeHead();
-    if (changed.has("leadingFilters")) this.#observeSide();
-    this.#placeLeadingFilters();
+    if (changed.has("leadingFilters")) this.#observeHost();
+    if (changed.has("filtersOpen") || changed.has("sideFilters") || changed.has("leadingFilters"))
+      this.#placeLeadingFilters();
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
@@ -1279,7 +1271,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     else next[column.key] = value;
     this.filterSelections = next;
     this.filterColumnWidths = widths;
-    if (widths) this.#hostResizeObserver.observe(this);
+    if (widths) this.#hostObserver.observe(this);
     this.#persistView();
     this.dispatchEvent(
       new CustomEvent("wt-filter-change", {
@@ -1304,7 +1296,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       return;
     this.filterSelections = next;
     this.filterColumnWidths = widths;
-    if (widths) this.#hostResizeObserver.observe(this);
+    if (widths) this.#hostObserver.observe(this);
     this.#persistView();
     this.dispatchEvent(
       new CustomEvent("wt-filter-change", {
@@ -1326,7 +1318,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   #releaseColumnWidths(): void {
     this.filterColumnWidths = null;
     this.filterHostWidth = null;
-    this.#hostResizeObserver.disconnect();
+    if (!this.leadingFilters) this.#hostObserver.disconnect();
   }
 
   #positionFilters(): void {
@@ -1343,8 +1335,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   #toggleFilters(event?: MouseEvent): void {
     event?.preventDefault();
     if (this.filtersPanel.matches(":popover-open")) {
-      this.filtersPanel.hidePopover();
-      this.filtersOpen = false;
+      this.#hideFilters();
       return;
     }
     this.filtersPanel.showPopover();
@@ -1356,19 +1347,19 @@ export class WtDataTable<Row = unknown> extends LitElement {
   async #toggleLeadingFilters(event: MouseEvent): Promise<void> {
     event.preventDefault();
     if (this.filtersOpen) {
-      this.#closeLeadingFilters();
+      this.#hideFilters();
       return;
     }
-    this.sideFilters = this.#fitsSideFilters();
+    this.sideFilters = this.getBoundingClientRect().width >= SIDE_FILTERS_WIDTH;
     this.filtersOpen = true;
     await this.updateComplete;
     this.#focusFirstFilter();
   }
 
   /** Widths held for a choice made beside the rows would keep them at that narrower width. */
-  #closeLeadingFilters(): void {
+  #hideFilters(): void {
     if (this.filtersPanel.matches(":popover-open")) this.filtersPanel.hidePopover();
-    if (this.sideFilters) this.#releaseColumnWidths();
+    if (this.leadingFilters && this.sideFilters) this.#releaseColumnWidths();
     this.filtersOpen = false;
   }
 
@@ -1962,18 +1953,14 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #closeFilters(): void {
-    if (this.leadingFilters) this.#closeLeadingFilters();
-    else {
-      this.filtersPanel.hidePopover();
-      this.filtersOpen = false;
-    }
+    this.#hideFilters();
     this.filtersTrigger.focus();
   }
 
   /** With `leadingFilters` one panel serves both widths: in the flow beside the rows, or a
-   * full-screen popover. `beforetoggle` reports a light dismiss before a render could show the
-   * popover again; the close it reports when the panel stops being a popover is ignored, because
-   * the panel stays open beside the rows. */
+   * full-screen popover. Any close of the popover closes the filters; the close reported
+   * when the panel stops being a popover is ignored, because the panel stays open beside the
+   * rows. */
   #renderFiltersPanel() {
     const side = this.leadingFilters && this.sideFilters;
     const opened = (event: ToggleEvent) => {
@@ -2040,10 +2027,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
     </div>`;
   }
 
-  /** With `leadingFilters`, the rows (or the no-matches message) share a row with the panel. */
-  #withSideFilters(content: unknown) {
-    if (!this.leadingFilters || !this.columns.some((column) => column.filter)) return content;
-    return html`<div class="table-body">${this.#renderFiltersPanel()}${content}</div>`;
+  /** Every branch with rows to filter draws this one template, so a choice that empties the rows
+   * or brings them back keeps the toolbar and the filters panel, and the focus inside them. */
+  #withToolbar(content: unknown) {
+    const side = this.leadingFilters && this.columns.some((column) => column.filter);
+    return html`${this.#renderToolbar()}${
+      side ? html`<div class="table-body">${this.#renderFiltersPanel()}${content}</div>` : content
+    }`;
   }
 
   /** Whether the chooser could change anything: a table opts in with a `choosable` column, and
@@ -2194,12 +2184,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const treeVisible = isTree ? this.#treeVisible(visible) : undefined;
     const renderedCount = isTree ? treeVisible!.rows.length : visible.length;
     if (renderedCount === 0)
-      return html`${this.#renderToolbar()}
-      ${this.#withSideFilters(
+      return this.#withToolbar(
         html`<div class="empty">
           <p class="message" role="status">${this.noMatchesMessage}</p>
         </div>`,
-      )}`;
+      );
 
     const shown = this.#shownColumns();
     const widths =
@@ -2214,78 +2203,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
       const visibleKeys = sorted.flatMap((row, index) =>
         this.rowSelectable(row) ? [this.rowKey(row, index)] : [],
       );
-      return html`
-        ${this.#renderToolbar()}
-        ${this.#withSideFilters(
-          html`<div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
-            <table
-              data-locked-columns=${widths ? "" : nothing}
-              style=${lockedWidth === undefined ? nothing : `width: ${lockedWidth}px`}
-            >
-              ${
-                widths
-                  ? html`<colgroup>
-                      ${widths.map((width) => html`<col style=${`width: ${width}px`} />`)}
-                    </colgroup>`
-                  : nothing
-              }
-              ${this.#renderHead(visibleKeys, shown)}
-              <tbody>
-                ${repeat(sorted, repeatKeys(rowKeys), (row, index) => {
-                  const key = rowKeys[index]!;
-                  return html`
-                    <tr
-                      data-row-key=${key}
-                      class=${classMap({ clickable: this.rowClick !== undefined })}
-                    >
-                      ${this.#renderSelectCell(key, row, false)}
-                      ${shown.map(
-                        (column, ci) => html`
-                          <td
-                            data-align=${column.align ?? "start"}
-                            data-pinned=${column.pinned ?? nothing}
-                            data-actions=${column.key === "actions" ? "" : nothing}
-                            data-row-activate=${column.activatesRow === false ? "false" : nothing}
-                            @click=${
-                              column.pinned &&
-                              column.activatesRow !== false &&
-                              this.rowClick !== undefined
-                                ? (event: Event) => this.#openFromPinnedCell(event, row)
-                                : nothing
-                            }
-                          >
-                            ${
-                              ci === 0 && this.rowClick !== undefined
-                                ? html`<button
-                                      class="row-activate"
-                                      aria-label=${this.rowClickLabel(row)}
-                                      @click=${() => this.rowClick!(row)}
-                                    ></button
-                                    >${column.cell(row, { ancestorOnly: false })}`
-                                : column.cell(row, { ancestorOnly: false })
-                            }
-                          </td>
-                        `,
-                      )}
-                    </tr>
-                  `;
-                })}
-              </tbody>
-            </table>
-          </div>`,
-        )}
-      `;
-    }
-
-    const { rows: treeRows, ancestorOnly, heldOpen } = treeVisible!;
-    const entries = this.#treeRows(treeRows, heldOpen, sortColumn);
-    const visibleKeys = entries.filter(({ row }) => this.rowSelectable(row)).map(({ key }) => key);
-    return html`
-      ${this.#renderToolbar()}
-      ${this.#withSideFilters(
+      return this.#withToolbar(
         html`<div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
           <table
-            role="treegrid"
             data-locked-columns=${widths ? "" : nothing}
             style=${lockedWidth === undefined ? nothing : `width: ${lockedWidth}px`}
           >
@@ -2297,111 +2217,174 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 : nothing
             }
             ${this.#renderHead(visibleKeys, shown)}
-            <tbody role="rowgroup">
-              ${repeat(
-                entries,
-                repeatKeys(entries.map(({ key }) => key)),
-                ({ row, key, depth, hasChildren }) => {
-                  const collapsible = this.rowCollapsible(row);
-                  const held = heldOpen.has(key);
-                  const expanded = !collapsible || !this.collapsed.has(key) || held;
-                  const cellContext = { ancestorOnly: ancestorOnly.has(key) };
-                  const branch = hasChildren && collapsible && !held;
-                  const mode = this.rowActivation?.(row) ?? "click";
-                  const toggles = mode === "toggle" && branch;
-                  const clicks = mode === "click" && this.rowClick !== undefined;
-                  const toggleLabel = this.rowToggleLabel
-                    ? this.rowToggleLabel(row, expanded)
-                    : expanded
-                      ? this.collapseLabel
-                      : this.expandLabel;
-                  const joined = depth > 0 && this.rowJoinsParent(row);
-                  const activate = toggles
-                    ? () => this.#toggle(key)
-                    : clicks
-                      ? () => this.rowClick!(row)
-                      : undefined;
-                  return html`<tr
+            <tbody>
+              ${repeat(sorted, repeatKeys(rowKeys), (row, index) => {
+                const key = rowKeys[index]!;
+                return html`
+                  <tr
                     data-row-key=${key}
-                    role="row"
-                    class=${classMap({ clickable: activate !== undefined, joined })}
-                    aria-level=${depth + 1}
-                    aria-expanded=${hasChildren ? String(expanded) : nothing}
+                    class=${classMap({ clickable: this.rowClick !== undefined })}
                   >
-                    ${this.#renderSelectCell(key, row, true)}
+                    ${this.#renderSelectCell(key, row, false)}
                     ${shown.map(
-                      (column, ci) =>
-                        html`<td
-                          role="gridcell"
+                      (column, ci) => html`
+                        <td
                           data-align=${column.align ?? "start"}
                           data-pinned=${column.pinned ?? nothing}
                           data-actions=${column.key === "actions" ? "" : nothing}
                           data-row-activate=${column.activatesRow === false ? "false" : nothing}
                           @click=${
-                            column.pinned && column.activatesRow !== false && activate !== undefined
-                              ? (event: Event) => {
-                                  if (event.target === event.currentTarget) activate();
-                                }
+                            column.pinned &&
+                            column.activatesRow !== false &&
+                            this.rowClick !== undefined
+                              ? (event: Event) => this.#openFromPinnedCell(event, row)
                               : nothing
                           }
                         >
                           ${
-                            ci === 0
-                              ? html`${
-                                    toggles
-                                      ? html`<button
-                                          class="row-activate"
-                                          aria-label=${toggleLabel}
-                                          aria-expanded=${String(expanded)}
-                                          @click=${(event: Event) => {
-                                            event.stopPropagation();
-                                            this.#toggle(key);
-                                          }}
-                                        ></button>`
-                                      : clicks
-                                        ? html`<button
-                                            class="row-activate"
-                                            aria-label=${this.rowClickLabel(row)}
-                                            @click=${() => this.rowClick!(row)}
-                                          ></button>`
-                                        : nothing
-                                  }<span
-                                    class="tree-cell"
-                                    style=${`--tree-depth: ${joined ? depth - 1 : depth}`}
-                                  >
-                                    ${
-                                      !branch
-                                        ? html`<span class="tree-spacer"></span>`
-                                        : toggles
-                                          ? html`<span class="tree-arrow" aria-hidden="true"
-                                              >${expanded ? "▾" : "▸"}</span
-                                            >`
-                                          : html`<button
-                                              class="tree-toggle"
-                                              part="tree-toggle"
-                                              aria-label=${toggleLabel}
-                                              @click=${(event: Event) => {
-                                                event.stopPropagation();
-                                                this.#toggle(key);
-                                              }}
-                                            >
-                                              ${expanded ? "▾" : "▸"}
-                                            </button>`
-                                    }
-                                    ${column.cell(row, cellContext)}
-                                  </span>`
-                              : column.cell(row, cellContext)
+                            ci === 0 && this.rowClick !== undefined
+                              ? html`<button
+                                    class="row-activate"
+                                    aria-label=${this.rowClickLabel(row)}
+                                    @click=${() => this.rowClick!(row)}
+                                  ></button
+                                  >${column.cell(row, { ancestorOnly: false })}`
+                              : column.cell(row, { ancestorOnly: false })
                           }
-                        </td>`,
+                        </td>
+                      `,
                     )}
-                  </tr>`;
-                },
-              )}
+                  </tr>
+                `;
+              })}
             </tbody>
           </table>
         </div>`,
-      )}
-    `;
+      );
+    }
+
+    const { rows: treeRows, ancestorOnly, heldOpen } = treeVisible!;
+    const entries = this.#treeRows(treeRows, heldOpen, sortColumn);
+    const visibleKeys = entries.filter(({ row }) => this.rowSelectable(row)).map(({ key }) => key);
+    return this.#withToolbar(
+      html`<div class="scroll" tabindex="0" role="region" aria-label=${label ?? nothing}>
+        <table
+          role="treegrid"
+          data-locked-columns=${widths ? "" : nothing}
+          style=${lockedWidth === undefined ? nothing : `width: ${lockedWidth}px`}
+        >
+          ${
+            widths
+              ? html`<colgroup>
+                  ${widths.map((width) => html`<col style=${`width: ${width}px`} />`)}
+                </colgroup>`
+              : nothing
+          }
+          ${this.#renderHead(visibleKeys, shown)}
+          <tbody role="rowgroup">
+            ${repeat(
+              entries,
+              repeatKeys(entries.map(({ key }) => key)),
+              ({ row, key, depth, hasChildren }) => {
+                const collapsible = this.rowCollapsible(row);
+                const held = heldOpen.has(key);
+                const expanded = !collapsible || !this.collapsed.has(key) || held;
+                const cellContext = { ancestorOnly: ancestorOnly.has(key) };
+                const branch = hasChildren && collapsible && !held;
+                const mode = this.rowActivation?.(row) ?? "click";
+                const toggles = mode === "toggle" && branch;
+                const clicks = mode === "click" && this.rowClick !== undefined;
+                const toggleLabel = this.rowToggleLabel
+                  ? this.rowToggleLabel(row, expanded)
+                  : expanded
+                    ? this.collapseLabel
+                    : this.expandLabel;
+                const joined = depth > 0 && this.rowJoinsParent(row);
+                const activate = toggles
+                  ? () => this.#toggle(key)
+                  : clicks
+                    ? () => this.rowClick!(row)
+                    : undefined;
+                return html`<tr
+                  data-row-key=${key}
+                  role="row"
+                  class=${classMap({ clickable: activate !== undefined, joined })}
+                  aria-level=${depth + 1}
+                  aria-expanded=${hasChildren ? String(expanded) : nothing}
+                >
+                  ${this.#renderSelectCell(key, row, true)}
+                  ${shown.map(
+                    (column, ci) =>
+                      html`<td
+                        role="gridcell"
+                        data-align=${column.align ?? "start"}
+                        data-pinned=${column.pinned ?? nothing}
+                        data-actions=${column.key === "actions" ? "" : nothing}
+                        data-row-activate=${column.activatesRow === false ? "false" : nothing}
+                        @click=${
+                          column.pinned && column.activatesRow !== false && activate !== undefined
+                            ? (event: Event) => {
+                                if (event.target === event.currentTarget) activate();
+                              }
+                            : nothing
+                        }
+                      >
+                        ${
+                          ci === 0
+                            ? html`${
+                                  toggles
+                                    ? html`<button
+                                        class="row-activate"
+                                        aria-label=${toggleLabel}
+                                        aria-expanded=${String(expanded)}
+                                        @click=${(event: Event) => {
+                                          event.stopPropagation();
+                                          this.#toggle(key);
+                                        }}
+                                      ></button>`
+                                    : clicks
+                                      ? html`<button
+                                          class="row-activate"
+                                          aria-label=${this.rowClickLabel(row)}
+                                          @click=${() => this.rowClick!(row)}
+                                        ></button>`
+                                      : nothing
+                                }<span
+                                  class="tree-cell"
+                                  style=${`--tree-depth: ${joined ? depth - 1 : depth}`}
+                                >
+                                  ${
+                                    !branch
+                                      ? html`<span class="tree-spacer"></span>`
+                                      : toggles
+                                        ? html`<span class="tree-arrow" aria-hidden="true"
+                                            >${expanded ? "▾" : "▸"}</span
+                                          >`
+                                        : html`<button
+                                            class="tree-toggle"
+                                            part="tree-toggle"
+                                            aria-label=${toggleLabel}
+                                            @click=${(event: Event) => {
+                                              event.stopPropagation();
+                                              this.#toggle(key);
+                                            }}
+                                          >
+                                            ${expanded ? "▾" : "▸"}
+                                          </button>`
+                                  }
+                                  ${column.cell(row, cellContext)}
+                                </span>`
+                            : column.cell(row, cellContext)
+                        }
+                      </td>`,
+                  )}
+                </tr>`;
+              },
+            )}
+          </tbody>
+        </table>
+      </div>`,
+    );
   }
 }
 

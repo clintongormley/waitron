@@ -2127,11 +2127,38 @@ it("draws the Select tooltip over the sticky headings", async () => {
     const tip = tooltip.getBoundingClientRect();
     const heading = table.shadowRoot!.querySelector("thead th")!.getBoundingClientRect();
     expect(tip.bottom).toBeGreaterThan(heading.top);
-    // Hit testing skips a tooltip that takes no pointer events, so this probe lets it take them.
-    tooltip.style.pointerEvents = "auto";
     const hit = el.shadowRoot!.elementFromPoint(tip.left + 4, tip.bottom - 2);
-    tooltip.style.pointerEvents = "";
     expect(hit !== null && tooltip.contains(hit)).toBe(true);
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
+it("a click on the Select tooltip, where it lies over the sticky headings, leaves Select mode off; a click on its icon turns it on", async () => {
+  const { page } = await import("vitest/browser");
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 720);
+  try {
+    const el = await mountBrowser({ stickyHeader: true });
+    const host = el.parentElement!;
+    host.style.display = "flex";
+    host.style.flexDirection = "column";
+    host.style.height = "600px";
+    const table = await tableOf(el);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const select = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="select"]')!;
+    const tooltip = select.querySelector<HTMLElement>(".icon-tooltip")!;
+    await userEvent.hover(select);
+    expect(table.shadowRoot!.querySelector("thead th")!.getBoundingClientRect().top).toBeLessThan(
+      tooltip.getBoundingClientRect().bottom,
+    );
+    await userEvent.click(tooltip);
+    await el.updateComplete;
+    expect(select.getAttribute("aria-pressed")).toBe("false");
+    await userEvent.click(select.querySelector("wt-icon")!);
+    await el.updateComplete;
+    expect(select.getAttribute("aria-pressed")).toBe("true");
   } finally {
     await page.viewport(width, height);
   }

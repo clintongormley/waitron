@@ -2,9 +2,10 @@ import { css } from "lit";
 
 /**
  * An icon-only `.icon-button`, pressed (`aria-pressed`) or open (`aria-expanded`), and the
- * `.icon-tooltip` inside it that shows its name on hover and on keyboard focus. The tooltip is
- * `aria-hidden`: the button's `aria-label` is its name. Bind `trackIconTooltip` to the button so
- * Escape can hide the tooltip.
+ * `.icon-tooltip` inside it that shows its name on keyboard focus, and on hover where the primary
+ * pointer can hover. The tooltip is `aria-hidden`: the button's `aria-label` is its name. Bind
+ * `trackIconTooltip` to the button so Escape can hide the tooltip and a click on the tooltip does
+ * not press the button.
  */
 export const iconButtonStyles = css`
   .icon-button {
@@ -50,13 +51,39 @@ export const iconButtonStyles = css`
     font-size: var(--wt-font-size-sm);
     font-weight: var(--wt-font-weight-normal);
     text-wrap: nowrap;
-    pointer-events: none;
   }
 
-  .icon-button:is(:hover, :focus-visible):not([data-tooltip-hidden]) > .icon-tooltip {
+  /* The tooltip is inside its button, so the pointer on it keeps the button hovered; this bridges
+     the gap between them, so moving onto the tooltip never hides it (WCAG 1.4.13). */
+  .icon-tooltip::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: 100%;
+    block-size: var(--wt-space-1);
+  }
+
+  .icon-button:focus-visible:not([data-tooltip-hidden]) > .icon-tooltip {
     display: block;
   }
+
+  /* A touch screen leaves a tapped button in :hover, which would leave its tooltip over whatever
+     lies beneath it. */
+  @media (hover: hover) {
+    .icon-button:hover:not([data-tooltip-hidden]) > .icon-tooltip {
+      display: block;
+    }
+  }
 `;
+
+/** The tooltip is inside its button but can lie over other controls, so a click on it presses
+ * nothing. */
+function ignoreTooltipClick(event: Event): void {
+  const button = event.currentTarget as HTMLElement;
+  if (!button.querySelector(".icon-tooltip")?.contains(event.target as Node)) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
 
 const watched = new WeakMap<
   HTMLElement,
@@ -70,10 +97,14 @@ const watched = new WeakMap<
  */
 export function trackIconTooltip(event: Event): void {
   const button = event.currentTarget as HTMLElement;
+  button.addEventListener("click", ignoreTooltipClick, true);
   let state = watched.get(button);
   if (!state) {
+    // A button removed while hovered gets no pointerleave, so the listener lets itself go at the
+    // next keydown after its button leaves the page.
     const escape = (key: KeyboardEvent) => {
-      if (key.key === "Escape") button.setAttribute("data-tooltip-hidden", "");
+      if (!button.isConnected) forget(button);
+      else if (key.key === "Escape") button.setAttribute("data-tooltip-hidden", "");
     };
     state = { hovered: false, focused: false, escape };
     watched.set(button, state);
@@ -83,7 +114,11 @@ export function trackIconTooltip(event: Event): void {
     state.hovered = event.type === "pointerenter";
   else state.focused = event.type === "focus";
   if (state.hovered || state.focused) return;
-  document.removeEventListener("keydown", state.escape, true);
-  watched.delete(button);
+  forget(button);
   button.removeAttribute("data-tooltip-hidden");
+}
+
+function forget(button: HTMLElement): void {
+  document.removeEventListener("keydown", watched.get(button)!.escape, true);
+  watched.delete(button);
 }
