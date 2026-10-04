@@ -205,6 +205,11 @@ export class WtPriceInput extends LitElement {
     );
   }
 
+  /** A host `.focus()` lands on the amount, so a chooser the unit button opened returns focus here. */
+  focusUnit(): void {
+    this.renderRoot.querySelector<HTMLButtonElement>("button.unit")?.focus();
+  }
+
   private renderUnit() {
     if (!this.fixedUnit)
       return html`<button

@@ -10,6 +10,7 @@ import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { VAT_CLASSES, localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
 import { PRODUCT_ORDERINGS } from "@waitron/catalogue/src/product-ordering.js";
 import "@waitron/ui/src/components/wt-modal.js";
+import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-icon.js";
@@ -265,6 +266,12 @@ export class ProductEditor extends LitElement {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
       }
+      /* A wt-dialog is as wide as its content, so the chooser takes the standard form width and
+         gives it up on a screen narrower than that. */
+      .unit-chooser {
+        inline-size: var(--wt-form-max-width);
+        max-inline-size: 100%;
+      }
       .notice {
         margin: 0;
         color: var(--wt-color-text-muted);
@@ -342,6 +349,8 @@ export class ProductEditor extends LitElement {
   @state() private dismissed: ReadonlySet<string> = new Set();
   @state() private imageOpen = false;
   @state() private unitPickerOpen = false;
+  /** Which button opened the unit chooser, where focus goes back once it shuts. */
+  #unitOpener: "price" | "heading" = "price";
   @state() private unitUsage: ExtraOfferUsage[] = [];
   @state() private unitUsageUnavailable = false;
   #unitUsageGeneration = 0;
@@ -413,6 +422,11 @@ export class ProductEditor extends LitElement {
     // and focus goes to it, so a rejected save never hides its reason behind a folded header.
     if (changed.has("fieldErrors")) {
       this.dismissed = new Set();
+      // A refused unit opens the chooser once, so its message is on screen beside the dropdown.
+      if (this.inherited === null && this.fieldErrors.unit) {
+        this.#unitOpener = "price";
+        this.unitPickerOpen = true;
+      }
       this.recordVariantProblems();
       const shown = this.shownFields();
       this.#focusField =
@@ -601,13 +615,35 @@ export class ProductEditor extends LitElement {
     if (!unit) return t("editor.missing_choice");
     return this.text(unit.abbreviation) || this.text(unit.name);
   }
-  /** The unit dropdown is a chooser behind the price field's button, on a product's own page only.
-   * There it also has to be on screen whenever the server
-   * has rejected the unit — a field carrying an error cannot hide behind a button that gives no
-   * sign anything is wrong. Having no unit is NOT such a case: it means Each,
-   * which the button names like any other unit. */
-  private get unitOpen(): boolean {
-    return this.inherited === null && (this.unitPickerOpen || this.error("unit") !== "");
+  /** Only while the editor itself is open, and on a product's own page: a variant's unit is its
+   * product's. */
+  private get unitsShown(): boolean {
+    return this.open && this.inherited === null && this.unitPickerOpen;
+  }
+  private openUnits(opener: "price" | "heading"): void {
+    if (this.suspended) return;
+    this.#unitOpener = opener;
+    this.unitPickerOpen = true;
+  }
+  private closeUnits(): void {
+    this.unitPickerOpen = false;
+    void this.returnUnitFocus();
+  }
+  /** The dialog's own return goes to whatever had focus when it opened, which need not be the
+   * opener: a refused unit opens it with no button pressed. */
+  private async returnUnitFocus(): Promise<void> {
+    await this.updateComplete;
+    await this.shadowRoot!.querySelector<LitElement>("wt-dialog[data-test=unit-chooser]")
+      ?.updateComplete;
+    if (this.#unitOpener === "heading") {
+      await this.shadowRoot!.querySelector("dashboard-variant-table")?.focusUnit();
+      return;
+    }
+    const price = this.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-price-input"]>(
+      "wt-price-input[name=unit-price]",
+    );
+    await price?.updateComplete;
+    price?.focusUnit();
   }
   private fields(): FieldContext {
     return { busy: this.busy, locales: this.locales, error: (key) => this.error(key) };
@@ -657,7 +693,10 @@ export class ProductEditor extends LitElement {
   }
   /** A nested create returns through the composing screen, without reseeding the product. */
   selectRelated(kind: ProductChildKind, id: string): void {
-    if (kind === "unit") this.change("unitId", id);
+    if (kind === "unit") {
+      this.change("unitId", id);
+      this.unitPickerOpen = false;
+    }
     if (kind === "courses") this.change("courseId", id);
     if (kind === "extras" || kind === "options") {
       if (this.draft.modifiers.some((ref) => ref.kind === kind && ref.id === id)) return;
@@ -667,8 +706,14 @@ export class ProductEditor extends LitElement {
   clearCourse(): void {
     this.change("courseId", null);
   }
-  /** Both kinds of modifier list are added from the ONE combobox, so both return focus there. */
+  /** Both kinds of modifier list are added from the ONE combobox, so both return focus there. A
+   * unit goes back to Add unit while the chooser is still open, and to the chooser's opener once a
+   * new unit has been chosen and the chooser shut. */
   returnRelatedFocus(kind: ProductChildKind): void {
+    if (kind === "unit" && !this.unitPickerOpen) {
+      void this.returnUnitFocus();
+      return;
+    }
     if (kind === "courses") {
       this.shadowRoot!.querySelector<HTMLElement>("[name=product-course]")?.focus();
       return;
@@ -1142,7 +1187,7 @@ export class ProductEditor extends LitElement {
     ></wt-combobox>`;
   }
 
-  /** The unit dropdown behind the price field's button, on a product's own page only. */
+  /** The unit dropdown and Add unit, drawn only while the chooser is open. */
   private renderUnit() {
     const each = t("editor.unit_each");
     return html`<wt-combobox
@@ -1156,13 +1201,15 @@ export class ProductEditor extends LitElement {
           { value: EACH_CHOICE, label: each },
           ...this.units.map((unit) => ({ value: unit.id, label: this.unitLabel(unit) })),
         ]}
+        ?disabled=${this.suspended}
         .value=${this.draft.unitId ?? EACH_CHOICE}
         error=${this.error("unit")}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
+          if (this.suspended) return;
           const value = event.detail.value;
           this.change("unitId", value === EACH_CHOICE ? null : value);
-          this.unitPickerOpen = false;
+          this.closeUnits();
         }}
       ></wt-combobox>
       <div class="row">
@@ -1174,6 +1221,33 @@ export class ProductEditor extends LitElement {
           >${t("editor.add_unit")}</wt-button
         >
       </div>`;
+  }
+
+  /** Beside the editor's window rather than in the Pricing section, which may be folded shut. */
+  private renderUnitChooser() {
+    return html`<wt-dialog
+      data-test="unit-chooser"
+      heading=${t("editor.pricing_unit")}
+      .open=${this.unitsShown}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (event.target === event.currentTarget && this.unitsShown) this.closeUnits();
+      }}
+    >
+      ${this.unitsShown ? html`<div class="group unit-chooser">${this.renderUnit()}</div>` : nothing}
+      <wt-form-actions slot="footer"
+        ><wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="close-unit-chooser"
+          @click=${(event: Event) => {
+            event.stopPropagation();
+            this.closeUnits();
+          }}
+          >${t("action.close")}</wt-button
+        ></wt-form-actions
+      >
+    </wt-dialog>`;
   }
 
   private get hasActiveVariant(): boolean {
@@ -1219,17 +1293,18 @@ export class ProductEditor extends LitElement {
         ?required=${parent === null}
         ?disabled=${this.suspended}
         .value=${amount}
-        .error=${this.error("unit-price")}
+        .error=${[this.error("unit-price"), parent === null ? this.error("unit") : ""]
+          .filter((message) => message !== "")
+          .join(" ")}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
           this.change("unitPrice", event.detail.value);
         }}
         @wt-unit-click=${(event: Event) => {
           event.stopPropagation();
-          this.unitPickerOpen = true;
+          this.openUnits("price");
         }}
       ></wt-price-input>
-      ${this.unitOpen ? this.renderUnit() : nothing}
       ${
         this.unitUsage.length
           ? html`<p data-test="unit-usage-warning">
@@ -1285,15 +1360,7 @@ export class ProductEditor extends LitElement {
               <dashboard-variant-table
                 .variants=${this.draft.variants}
                 basePrice=${this.draft.unitPrice ?? ""}
-                .unitId=${this.draft.unitId}
-                .unitOptions=${[
-                  { value: null, label: t("editor.unit_each") },
-                  ...this.units.map((unit) => ({
-                    value: unit.id,
-                    label: this.text(unit.abbreviation) || this.text(unit.name),
-                  })),
-                ]}
-                addUnitLabel=${t("editor.add_unit")}
+                unitLabel=${this.unitShortLabel || t("editor.unit_each")}
                 .busy=${this.suspended}
                 .openBlocked=${unsaved}
                 .errors=${this.#rowsNow}
@@ -1302,11 +1369,10 @@ export class ProductEditor extends LitElement {
                   event.stopPropagation();
                   this.showInactive = true;
                 }}
-                @wt-unit-change=${(event: CustomEvent<{ unitId: string | null }>) => {
+                @wt-unit-click=${(event: Event) => {
                   event.stopPropagation();
-                  this.change("unitId", event.detail.unitId);
+                  this.openUnits("heading");
                 }}
-                @wt-add-unit=${(event: Event) => this.related(event, "unit")}
                 @wt-reorder=${(event: CustomEvent<{ from: number; to: number }>) => {
                   event.stopPropagation();
                   // The table has ALREADY moved the row on screen, so a host that does not apply the
@@ -1622,6 +1688,7 @@ export class ProductEditor extends LitElement {
           ></wt-form-actions
         >
       </wt-modal>
+      ${this.inherited === null ? this.renderUnitChooser() : nothing}
       <dashboard-variant-form
         .open=${this.variantOpen}
         .locales=${this.locales}

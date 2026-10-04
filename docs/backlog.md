@@ -1953,12 +1953,12 @@ primary blue. A group whose lists are all attached, or that has none, still show
 its make-new choice. The blue comes from a new opt-in on `wt-combobox` options, `primary`, which
 paints the row in a new token, `--wt-color-primary-text`: the primary colour itself was too faint
 on a hovered row in the light theme for axe (4.32:1). **Open:** each list still reads "Extra bread
-· Extras", and under its heading the " · Extras" is now said twice; and the price heading's "Add
-unit…" row could take the same blue; with three lists the dropdown already scrolls, so "+ New
-options list…" sits at or just below its bottom edge when it opens; and `--wt-color-primary-text`
-has fixed light and dark values that do not follow `--wt-color-primary`, and a tenant theme
-cannot set it (`THEMEABLE_TOKENS`, `packages/layouts/src/theme.ts`) — no screen applies a stored
-tenant theme yet.
+· Extras", and under its heading the " · Extras" is now said twice; with three lists the dropdown
+already scrolls, so "+ New options list…" sits at or just below its bottom edge when it opens; and
+`--wt-color-primary-text` has fixed light and dark values that do not follow `--wt-color-primary`,
+and a tenant theme cannot set it (`THEMEABLE_TOKENS`, `packages/layouts/src/theme.ts`) — no screen applies a stored
+tenant theme yet. _2026-10-04 (W66): the price heading now holds a button that opens the Pricing
+unit dialog, where Add unit is a button._
 
 **With variants, Pricing folds and Variants becomes its own section (A219) — DONE (#1065).**
 The owner: _"when we have variants the vat and base price and status filter are overwhelming.
@@ -2000,6 +2000,15 @@ their spacing.
 **Disclosure opening and closing motion (W68) — DONE.** Shared disclosure sections move their body
 and following content over about a second. Reduced-motion preferences and validation errors reveal
 fields immediately; repeated clicks reverse the motion from its current height.
+
+**The pricing unit is chosen in a dialog (W66, owner 2026-10-04) — DONE.** The owner, on Product
+editor screenshots: _"the unit selector should open in a modal, it's not obvious that the field gets
+added after clicking the 'per g' button, also there is no way to dismiss it like you would have in a
+modal"_. The price field's unit button, and on a product with variants the unit button in the
+variants table's Price heading, open one Pricing unit dialog holding the unit dropdown and Add unit.
+Close and Escape shut it without changing the unit, choosing a unit shuts it, and focus goes back to
+the button that opened it. A refused unit opens it once, and the refusal stays on the price field
+once it is shut. Detail: design-system.md, the `wt-price-input` note under the product editor.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).** The owner: _"the Kitchen name, and
