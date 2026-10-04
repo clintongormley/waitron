@@ -307,14 +307,19 @@ export class ProductEditor extends LitElement {
       th {
         font-weight: var(--wt-font-weight-bold);
       }
-      /* Every cell of the attached-lists table holds one line of text or one tap-target-tall
-         control, so the shared block's top alignment — which suits the two modifier-list
-         forms, whose cells stack labelled inputs — leaves the name and the type reading above their
-         own grip and row menu. Centre them instead; the handle's own override then changes nothing
-         here. Guard: the one-line row test in product-editor.test.ts. */
-      th,
-      td {
+      /* The grip and the row menu are a tap target tall and the name and type are text, so the cells
+         start at their top and each text cell is padded by half the difference: a one-line row
+         reads as one line, and a wrapping name keeps the grip, type and menu on its first line.
+         The --wt-space-2 term repeats the cell padding of ReorderController.tableStyles and must
+         change with it. Guard: the one-line and wrapping-name row tests in product-editor.test.ts. */
+      th {
         vertical-align: middle;
+      }
+      tbody td {
+        vertical-align: top;
+      }
+      tbody td:is(:nth-child(2), :nth-child(3)) {
+        padding-block-start: calc(var(--wt-space-2) + (var(--wt-tap-min) - 1lh) / 2);
       }
       /* The name column is the one that grows; capping it keeps the actions on screen at phone
          width. The token is used in three different directions across the dashboard, which

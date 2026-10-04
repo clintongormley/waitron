@@ -1,6 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 import type { WtInput, WtRowActions } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -972,4 +973,95 @@ describe("reordering", () => {
     expect(rowIds(el)).toEqual(["c1", "c2", "c3"]);
     expect(alertLine(el)!.textContent!.trim()).toBe(codeMessage("course.not_found"));
   });
+});
+
+describe("layout", () => {
+  it.each([
+    [1280, "light"],
+    [1280, "dark"],
+    [390, "light"],
+    [390, "dark"],
+  ] as const)(
+    "puts a course's grip and row menu on the first line of a wrapping name at %ipx (%s)",
+    async (frame, theme) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      await page.viewport(frame, 844);
+      try {
+        // Long enough to wrap even across a desktop-wide table.
+        const long = "Small plates to share while the table decides, ".repeat(12).trim();
+        const api = stubApi({}, [{ ...COURSES[0]!, name: long }, ...COURSES.slice(1)]);
+        const { el } = await mountWidget<CourseList>("dashboard-course-list", { api }, theme);
+        await vi.waitFor(() => expect(rowIds(el).length).toBeGreaterThan(0));
+        expect(el.parentElement!.getAttribute("data-theme")).toBe(theme);
+        const row = q(el, 'tr[data-course="c1"]')!;
+        const name = nameButton(el, "c1")!;
+        const handle = q(el, '[data-test="drag-c1"]')!;
+
+        expect(window.innerWidth).toBe(frame);
+        expect(row.getBoundingClientRect().height).toBeGreaterThan(
+          handle.getBoundingClientRect().height * 1.5,
+        );
+        expect(textLines(name).length, "the name wraps").toBeGreaterThan(1);
+        const line = textLines(name)[0]!;
+        const within = middleWithin(line);
+        const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
+        const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();
+        expect(
+          { icon: within(icon), menu: within(menu) },
+          JSON.stringify({ line, icon, menu }),
+        ).toEqual({ icon: true, menu: true });
+      } finally {
+        await page.viewport(width, height);
+      }
+    },
+  );
+
+  it.each([
+    [1280, "light"],
+    [1280, "dark"],
+    [390, "light"],
+    [390, "dark"],
+  ] as const)(
+    "lines a renamed course's grip and row menu up with its field, a refusal under it, at %ipx (%s)",
+    async (frame, theme) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      await page.viewport(frame, 844);
+      try {
+        const { el } = await mountWidget<CourseList>(
+          "dashboard-course-list",
+          { api: stubApi() },
+          theme,
+        );
+        await vi.waitFor(() => expect(rowIds(el).length).toBeGreaterThan(0));
+        expect(el.parentElement!.getAttribute("data-theme")).toBe(theme);
+        await openRename(el, "c1");
+        await typeName(el, "   ");
+        await press(el, "Enter");
+        await settle(el);
+        expect(field(el)!.error).toBe(t("kitchen.course_name_required"));
+        const row = q(el, 'tr[data-course="c1"]')!;
+        const handle = q(el, '[data-test="drag-c1"]')!;
+        const middle = (box: DOMRect) => (box.top + box.bottom) / 2;
+        const fieldBox = field(el)!.shadowRoot!.querySelector(".field")!.getBoundingClientRect();
+        const refusal = field(el)!.shadowRoot!.querySelector("[data-error]")!;
+        const box = middle(fieldBox);
+        const icon = middle((handle.querySelector("wt-icon") ?? handle).getBoundingClientRect());
+        const menu = middle(row.querySelector("wt-row-actions")!.getBoundingClientRect());
+
+        expect(window.innerWidth).toBe(frame);
+        expect(refusal.textContent).toBe(t("kitchen.course_name_required"));
+        expect(refusal.getBoundingClientRect().top).toBeGreaterThanOrEqual(fieldBox.bottom);
+        expect(row.getBoundingClientRect().height).toBeGreaterThan(
+          handle.getBoundingClientRect().height * 1.5,
+        );
+        const report = JSON.stringify({ box, icon, menu });
+        expect(Math.abs(icon - box), report).toBeLessThanOrEqual(1.5);
+        expect(Math.abs(menu - box), report).toBeLessThanOrEqual(1.5);
+      } finally {
+        await page.viewport(width, height);
+      }
+    },
+  );
 });

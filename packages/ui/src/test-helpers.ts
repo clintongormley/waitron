@@ -93,3 +93,27 @@ export async function chooseOption(el: Element, value: string): Promise<void> {
   );
   await box.updateComplete;
 }
+
+/**
+ * The line boxes of the first non-blank text node inside `element`. A Range over the element's whole
+ * contents would also return the boxes of the elements inside it.
+ */
+export function textLines(element: Element): DOMRectList {
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node && !node.textContent!.trim()) node = walker.nextNode();
+  const range = document.createRange();
+  range.selectNodeContents(node!);
+  return range.getClientRects();
+}
+
+/**
+ * Whether a box's vertical middle falls within `line`. Middles, not whole boxes: line boxes differ by
+ * a pixel between machines' fonts.
+ */
+export function middleWithin(line: DOMRect): (box: DOMRect) => boolean {
+  return (box) => {
+    const at = (box.top + box.bottom) / 2;
+    return at >= line.top && at <= line.bottom;
+  };
+}

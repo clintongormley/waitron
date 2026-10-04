@@ -48,7 +48,12 @@ export class CourseList extends LitElement {
         padding: 0;
         border: 0;
       }
-      tbody td,
+      /* Not the shared baseline, which lines the grip and row menu up with the name button's LAST
+         line once the name wraps. The name pads its first line to the centre of a tap target
+         instead, where the top-aligned grip and menu have theirs. */
+      tbody td {
+        vertical-align: top;
+      }
       tfoot td {
         vertical-align: middle;
       }
@@ -64,7 +69,7 @@ export class CourseList extends LitElement {
       .open-name {
         width: 100%;
         min-height: var(--wt-tap-min);
-        padding: 0;
+        padding: calc((var(--wt-tap-min) - 1lh) / 2) 0;
         border: 0;
         background: transparent;
         color: inherit;

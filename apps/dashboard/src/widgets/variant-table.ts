@@ -60,6 +60,18 @@ export class VariantTable extends LitElement {
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
       }
+      /* The grip, the switch and the row menu are a tap target tall and the name and price are
+         text, so the cells start at their top and each text cell is padded by half the difference:
+         a one-line row reads as one line, and a wrapping name keeps the rest on its first line.
+         The --wt-space-2 term repeats the cell padding of the th, td rule above and must change
+         with it. Guard, weaker than its name: the wrapping-name case in variant-table.test.ts
+         holds the first line only; nothing holds a one-line row or the --wt-space-2 term. */
+      tbody td {
+        vertical-align: top;
+      }
+      tbody td:is(:nth-child(2), :nth-child(3)) {
+        padding-block-start: calc(var(--wt-space-2) + (var(--wt-tap-min) - 1lh) / 2);
+      }
       /* The grip and the row menu are each a tap-target-wide button that already centres its icon,
          so their cells need no inline padding. */
       th:first-child,

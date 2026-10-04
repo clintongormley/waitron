@@ -1225,9 +1225,23 @@ a tall row. Open: the Price heading reads "Price per portion" also over a row so
 Left OPEN from its review, for the owner to decide: (1) the Products list decides "Each" by whether
 the product's unit is in the venue's saved unit list, the Extras editor by the unit's id, so the two
 can disagree (for example before the unit list has loaded) — aligning them changes the Products
-screen; (2) the handle-on-the-first-line alignment applies to the Extras list only, while the other
-reorderable tables still centre their handles; (3) the editor refuses a blank Portion for every unit
+screen; (2) the handle-on-the-first-line alignment applied to the Extras list only — DONE by W75b, below; (3) the editor refuses a blank Portion for every unit
 but Each while the server accepts none for a whole unit with no scale link (ml) and stores 1.
+
+**Every reorderable table puts its drag handle on the first line of a tall row (W75b, owner
+2026-10-04) — DONE.** The shared reorder table styles (`packages/ui/src/reorder-table.ts`) now line
+body cells up by the baseline, so the handle sits on the first line of the plain text beside it,
+such as a long, wrapping name, instead of the row's middle; the Extras editor's own rule for this went. The
+Product editor's Modifiers table, the variant table, the Courses list and the option list form start
+their cells at the top and push the text down to the middle of a tap-target-tall first line, so on a
+one-line row the text and the controls still share one centre line (tested for the Product editor
+and the option list form only). The option list form moved off the baseline because its existing
+one-line test failed on CI's Linux Chromium, measuring the radio 1.5 px from the name where the test
+allows 1 px. The Product editor, variant table, Courses list, option list form, section member list,
+Extras editor and Prep stations screen each have a test with a wrapping name. The option list form
+and the section member list had their own centring rules: the section member list's is removed, and
+the option list form's is replaced by the top alignment. See `docs/developers/design-system.md`,
+tables.
 
 **A folded Customer-facing names section shows every language's name, inherited ones in italic
 (W77, owner 2026-10-04) — DONE (#1197).** The owner, on an Extras list: _"missing the summary of the values

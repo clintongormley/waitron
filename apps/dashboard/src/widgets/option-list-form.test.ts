@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { formMessageOf, middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 // Value import (not `import type`): pulls the module in for its `@customElement` side effect, so
 // `mountWidget` can create `dashboard-option-list-form`.
 import { OptionListForm } from "./option-list-form.js";
@@ -1611,3 +1611,60 @@ it("starts again when reopened: no messages and Save working", async () => {
   expect(await bottomOf(el)).toBe("");
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
+
+it.each([
+  [1280, "light"],
+  [1280, "dark"],
+  [390, "light"],
+  [390, "dark"],
+] as const)(
+  "puts an option's grip, default and row menu on the first line of a wrapping name at %ipx (%s)",
+  async (frame, theme) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(frame, 844);
+    try {
+      const { el } = await mountWidget<OptionListForm>(
+        "dashboard-option-list-form",
+        {
+          open: true,
+          languages,
+          value: {
+            ...cooked,
+            labels: [
+              {
+                ...cooked.labels[0]!,
+                name: "Rare, seared hard on the outside and left cool and red in the middle, ".repeat(
+                  6,
+                ),
+              },
+              cooked.labels[1]!,
+            ],
+          },
+        },
+        theme,
+      );
+      expect(el.parentElement!.getAttribute("data-theme")).toBe(theme);
+      const row = el.shadowRoot!.querySelector<HTMLElement>(`tr[data-label="${RARE}"]`)!;
+      const name = row.querySelector('[data-test="label-0-name"]')!;
+      const handle = row.querySelector<HTMLElement>(".handle")!;
+
+      expect(window.innerWidth).toBe(frame);
+      expect(row.getBoundingClientRect().height).toBeGreaterThan(
+        handle.getBoundingClientRect().height * 1.5,
+      );
+      expect(textLines(name).length, "the name wraps").toBeGreaterThan(1);
+      const line = textLines(name)[0]!;
+      const within = middleWithin(line);
+      const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
+      const radio = row.querySelector('[data-test="label-0-default"]')!.getBoundingClientRect();
+      const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();
+      expect(
+        { icon: within(icon), radio: within(radio), menu: within(menu) },
+        JSON.stringify({ line, icon, radio, menu }),
+      ).toEqual({ icon: true, radio: true, menu: true });
+    } finally {
+      await page.viewport(width, height);
+    }
+  },
+);

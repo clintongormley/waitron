@@ -1,4 +1,6 @@
+import { page } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
+import { middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
 import type { PrepStationsApi, PrepStationsView } from "./routing-client.js";
@@ -250,9 +252,10 @@ it("names no watcher for a routed dish and says nothing for no preparation", asy
   expect(q(el, '[data-test="test-answer"]')?.textContent).not.toContain("watcher follows");
   window.history.replaceState(null, "", "/manage?dashboard=prep-stations");
 });
-async function mount(a: PrepStationsApi): Promise<PrepStationsScreen> {
+async function mount(a: PrepStationsApi, theme?: "light" | "dark"): Promise<PrepStationsScreen> {
   const host = document.createElement("div");
   applyTokens(host);
+  if (theme) host.setAttribute("data-theme", theme);
   document.body.append(host);
   hosts.push(host);
   const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
@@ -1205,6 +1208,53 @@ it("lists exceptions by position as sentences and identifies both warnings", asy
   expect(rows[1]!.textContent).toContain("Never used: an exception above always catches it first");
   expect(rows[1]!.textContent).toContain("Its station is switched off");
 });
+it.each([
+  [1280, "light"],
+  [1280, "dark"],
+  [390, "light"],
+  [390, "dark"],
+] as const)(
+  "puts an exception's grip and row menu on the first line of a wrapping rule at %ipx (%s)",
+  async (frame, theme) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(frame, 844);
+    try {
+      // Long enough to wrap even across a desktop-wide table.
+      const long = "Bread baked in the wood oven every morning and sliced at the pass, ".repeat(6);
+      const el = await mount(
+        api({
+          load: vi.fn().mockResolvedValue({
+            ...exceptionView,
+            products: [{ id: "bread", name: long }],
+          }),
+        }),
+        theme,
+      );
+      expect(el.parentElement!.getAttribute("data-theme")).toBe(theme);
+      const row = q(el, '[data-test="exceptions"] tr[data-id="a"]')!;
+      const rule = row.children[1]!;
+      const handle = q(el, '[data-test="drag-a"]')!;
+
+      expect(window.innerWidth).toBe(frame);
+      expect(rule.textContent).toContain(long.trim());
+      expect(row.getBoundingClientRect().height).toBeGreaterThan(
+        handle.getBoundingClientRect().height * 1.5,
+      );
+      expect(textLines(rule).length, "the rule wraps").toBeGreaterThan(1);
+      const line = textLines(rule)[0]!;
+      const within = middleWithin(line);
+      const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
+      const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();
+      expect(
+        { icon: within(icon), menu: within(menu) },
+        JSON.stringify({ line, icon, menu }),
+      ).toEqual({ icon: true, menu: true });
+    } finally {
+      await page.viewport(width, height);
+    }
+  },
+);
 it("sorts equal-position exceptions by id and restores that order after cancellation", async () => {
   const tied = {
     ...exceptionView,

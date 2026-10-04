@@ -170,9 +170,12 @@ export class ReorderController implements ReactiveController {
       vertical-align: top;
       border-bottom: 1px solid var(--wt-color-border);
     }
-    /* The handle is a square button, so it centres rather than sitting at the top of a tall row. */
-    td.handle-cell {
-      vertical-align: middle;
+    /* A text line is shorter than the handle, so neither top nor middle alignment puts the handle
+       on it; baseline alignment does, beside plain text. The Courses list's name button lined the
+       grip up with the button's last line under this rule, so that host top-aligns and pads
+       (course-list.ts). */
+    tbody td {
+      vertical-align: baseline;
     }
   `;
 

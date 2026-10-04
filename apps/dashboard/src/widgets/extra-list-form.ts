@@ -185,11 +185,6 @@ export class ExtraListForm extends LitElement {
         inset-block-start: var(--wt-space-2);
         white-space: nowrap;
       }
-      /* The handle cell is named so this outranks the shared reorder style's centring. */
-      tbody td,
-      tbody td.handle-cell {
-        vertical-align: baseline;
-      }
     `,
   ];
 

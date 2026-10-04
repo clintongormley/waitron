@@ -1,5 +1,6 @@
 import { reorder } from "@waitron/ui";
 import { afterEach, expect, it, vi } from "vitest";
+import { middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { VariantTable } from "./variant-table.js";
@@ -836,6 +837,72 @@ it.each(["light", "dark"] as const)(
       document.dispatchEvent(
         new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientY: y }),
       );
+    }
+  },
+);
+
+it.each([
+  [1280, "light"],
+  [1280, "dark"],
+  [390, "light"],
+  [390, "dark"],
+] as const)(
+  "puts a row's grip, price, Available switch and row menu on the first line of a wrapping name at %ipx (%s)",
+  async (frame, theme) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(frame, 844);
+    try {
+      const [first, ...rest] = threeVariants();
+      const { el } = await mountWidget<VariantTable>(
+        "dashboard-variant-table",
+        {
+          variants: [
+            {
+              ...first!,
+              name: "Half a portion for sharing between two at the bar, served on the small board with bread and a little olive oil from the village, cut thin at the counter while you wait and finished with salt flakes and a twist of black pepper",
+            },
+            ...rest,
+          ],
+        },
+        theme,
+      );
+      expect(el.parentElement!.getAttribute("data-theme")).toBe(theme);
+      const row = rows(el)[0]!;
+      const name = row.children[1]!;
+      const handle = handles(el)[0]!;
+
+      expect(window.innerWidth).toBe(frame);
+      expect(row.getBoundingClientRect().height).toBeGreaterThan(
+        handle.getBoundingClientRect().height * 1.5,
+      );
+      expect(textLines(name).length, "the name wraps").toBeGreaterThan(1);
+      const line = textLines(name)[0]!;
+      const within = middleWithin(line);
+      const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
+      const toggle = row
+        .querySelector('[data-test="available-0"]')!
+        .shadowRoot!.querySelector(".track")!
+        .getBoundingClientRect();
+      const menu = row.querySelector('[data-test="actions-0"]')!.getBoundingClientRect();
+      // A narrow table moves the price under the name and hides its column.
+      const price = textLines(row.children[2]!)[0];
+      expect(
+        {
+          icon: within(icon),
+          toggle: within(toggle),
+          menu: within(menu),
+          price: price ? within(price) : "hidden",
+        },
+        JSON.stringify({ line, icon, toggle, menu, price }),
+      ).toEqual({
+        icon: true,
+        toggle: true,
+        menu: true,
+        price: frame === 1280 ? true : "hidden",
+      });
+    } finally {
+      await page.viewport(width, height);
     }
   },
 );

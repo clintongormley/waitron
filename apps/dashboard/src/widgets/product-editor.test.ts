@@ -3,7 +3,12 @@ import { page, userEvent } from "vitest/browser";
 import { registerIcons, type ComboboxOption } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
-import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import {
+  chooseOption,
+  formMessageOf,
+  middleWithin,
+  textLines,
+} from "@waitron/ui/src/test-helpers.js";
 import {
   ProductEditor,
   productEditorField,
@@ -2986,10 +2991,8 @@ it("shows each class's rate in force today, and a fractional rate supplied by a 
   expect(options()[0]!.label).toBe("Fixture rate (2.5%)");
 });
 
-// Every cell in this table holds ONE line of text or one 44px-tall control, so a row only reads as a
-// row when all four sit on the same line. The shared table block top-aligns cells and re-centres the
-// handle alone, which is right for the two modifier-list FORMS — their cells stack labelled inputs —
-// and wrong here. Geometry is the only thing that can catch it; every attribute assertion passes either way.
+// A one-line row only reads as a row when its text and its 44px controls share one middle. Geometry
+// is the only thing that can catch it; every attribute assertion passes either way.
 it("keeps an attached row's name, type, grip and row menu on one line", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -3018,6 +3021,61 @@ it("keeps an attached row's name, type, grip and row menu on one line", async ()
   expect(textMiddle("[data-test=modifier-name]")).toBeCloseTo(grip, 0);
   expect(textMiddle("[data-test=modifier-kind]")).toBeCloseTo(grip, 0);
 });
+
+it.each([
+  [1280, "light"],
+  [1280, "dark"],
+  [390, "light"],
+  [390, "dark"],
+] as const)(
+  "puts an attached row's grip, type and row menu on the first line of a wrapping list name at %ipx (%s)",
+  async (frame, theme) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(frame, 844);
+    try {
+      const { el } = await mountWidget<ProductEditor>(
+        "dashboard-product-editor",
+        {
+          open: true,
+          value: { ...product, modifiers: [{ kind: "extras", id: "sauces" }] },
+          locales: ["en"],
+          units: [unit],
+          taxChoices: reduced,
+          extraLists: [
+            {
+              ...extraLists[0]!,
+              name: "Sauces, dips and dressings made in the kitchen every morning from whatever the market had, served cold in small pots beside the plate, with more on request at no charge to the table",
+            },
+          ],
+          optionLists,
+        },
+        theme,
+      );
+      expect(el.parentElement!.getAttribute("data-theme")).toBe(theme);
+      const row = attachedRows(el)[0]!;
+      const name = row.querySelector("[data-test=modifier-name]")!;
+      const handle = row.querySelector<HTMLElement>(".handle")!;
+
+      expect(window.innerWidth).toBe(frame);
+      expect(row.getBoundingClientRect().height).toBeGreaterThan(
+        handle.getBoundingClientRect().height * 1.5,
+      );
+      expect(textLines(name).length, "the name wraps").toBeGreaterThan(1);
+      const line = textLines(name)[0]!;
+      const within = middleWithin(line);
+      const icon = (handle.querySelector("wt-icon") ?? handle).getBoundingClientRect();
+      const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();
+      const kind = textLines(row.querySelector("[data-test=modifier-kind]")!)[0]!;
+      expect(
+        { icon: within(icon), menu: within(menu), kind: within(kind) },
+        JSON.stringify({ line, icon, menu, kind }),
+      ).toEqual({ icon: true, menu: true, kind: true });
+    } finally {
+      await page.viewport(width, height);
+    }
+  },
+);
 
 // --- The parent's variants section ---
 

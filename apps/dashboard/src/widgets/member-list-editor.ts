@@ -91,9 +91,6 @@ export class MemberListEditor extends LitElement {
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
       }
-      td {
-        vertical-align: middle;
-      }
       td.name {
         overflow-wrap: anywhere;
       }
