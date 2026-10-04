@@ -1616,6 +1616,24 @@ describe("order service context", () => {
     });
   });
 
+  it("uses the destination zone's effective quick-sale payment timing when moving an order", async () => {
+    const venue = await seedSellingVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      const orderId = await openOrder(tx, venue, 1);
+      await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
+      await setZoneSalePolicyOverride(tx, cfg, venue.barZone, "paidWhen", "ticket_then_pay");
+
+      await retargetOrderServiceContext(tx, cfg, orderId, venue.barZone);
+
+      await expect(getOrderServiceContext(tx, cfg, orderId)).resolves.toEqual({
+        zoneId: venue.barZone,
+        departmentId: venue.barId,
+        serviceMode: "ticket_then_pay",
+      });
+    });
+  });
+
   it("records nothing for an empty round, even on an order that has no service context", async () => {
     const venue = await seedSellingVenue();
     const { cfg } = venue;

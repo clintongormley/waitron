@@ -952,12 +952,16 @@ export async function retargetOrderServiceContext(
   zoneId: string,
 ): Promise<void> {
   const context = await resolveZoneContext(tx, cfg, zoneId);
+  const serviceMode =
+    context.serviceMode === "table_tab" || context.serviceMode === "invoice_first"
+      ? context.serviceMode
+      : (await resolveSalePolicy(tx, cfg, zoneId)).paidWhen;
   const updated = await tx
     .update(orderServiceContexts)
     .set({
       zoneId: context.zoneId,
       departmentId: context.departmentId,
-      serviceMode: context.serviceMode,
+      serviceMode,
     })
     .where(
       and(
