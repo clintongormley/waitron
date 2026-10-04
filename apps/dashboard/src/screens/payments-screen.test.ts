@@ -104,6 +104,13 @@ async function flush(el: PaymentsScreen): Promise<void> {
   await el.updateComplete;
 }
 
+async function waitForReaderStatusCalls(
+  readerStatus: DashboardApi["readerStatus"],
+  count: number,
+): Promise<void> {
+  await vi.waitFor(() => expect(readerStatus).toHaveBeenCalledTimes(count));
+}
+
 async function mount(
   api: DashboardApi = stubApi(),
   props: Partial<PaymentsScreen> = {},
@@ -1611,6 +1618,7 @@ describe("the providers and readers once the server answers again", () => {
   it("does not ask the readers for their status again when the list refreshes in the background", async () => {
     const api = liveApi();
     const { el } = await mount(api);
+    await waitForReaderStatusCalls(api.readerStatus, 1);
     expect(api.readerStatus).toHaveBeenCalledTimes(1);
 
     api.liveData.refresh();
@@ -1712,6 +1720,7 @@ describe("the providers and readers once the server answers again", () => {
     });
     const api = liveApi({ background } as Partial<DashboardApi>);
     const { el } = await mount(api);
+    await waitForReaderStatusCalls(api.readerStatus, 1);
     expect(api.readerStatus).toHaveBeenCalledTimes(1);
 
     api.liveData.refresh();
@@ -1746,6 +1755,7 @@ describe("the providers and readers once the server answers again", () => {
         .mockResolvedValue([second, ...READERS]),
     });
     const { el } = await mount(api);
+    await waitForReaderStatusCalls(api.readerStatus, 2);
     expect(api.readerStatus).toHaveBeenCalledTimes(2);
 
     api.liveData.refresh();
@@ -1970,6 +1980,7 @@ describe("the readers' status reads", () => {
         readerStatus: held.readerStatus,
       }),
     );
+    await waitForReaderStatusCalls(held.readerStatus, 2);
     await flush(el);
     expect(held.readerStatus.mock.calls.map(([id]) => id)).toEqual(["r-1", "r-2"]);
 
@@ -2005,6 +2016,7 @@ describe("the readers' status reads", () => {
       readerStatus: held.readerStatus,
     });
     const { el } = await mount(api);
+    await waitForReaderStatusCalls(held.readerStatus, 2);
     expect(held.readerStatus).toHaveBeenCalledTimes(2);
 
     api.liveData.refresh();
@@ -2054,6 +2066,7 @@ describe("the readers' status reads", () => {
         disableReader: vi.fn().mockReturnValueOnce(pending),
       }),
     );
+    await waitForReaderStatusCalls(held.readerStatus, 1);
     expect(held.readerStatus).toHaveBeenCalledTimes(1);
     qCell(el, "[data-test=disable-r-1]")!.click();
 

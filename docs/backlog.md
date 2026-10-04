@@ -1318,6 +1318,17 @@ serves HTTPS through `node:https` (`apps/server/src/tls.ts`), which is HTTP/1.1,
 dashboard's live connection (an EventSource) already holds one connection. Raised in W18c's pull
 request (`fix/slow-read-limit`).
 
+**Payments reader-status tests counted calls before the Web Lock grant (W59, 2026-10-04) — DONE.**
+The dashboard shard failed twice with one call where a test expected two: PR #1165 CI
+`37186851640` at `payments-screen.test.ts:2008`, then main CI `37188446283` attempt 1 at
+the reordered-readers case. `takeStatusSlot` awaits `navigator.locks.request` before calling
+`readerStatus` (`apps/dashboard/src/screens/payments-screen.ts`), while the test's `mount` helper
+waits a fixed 10 ms. The tests now wait for the expected call count before checking that later
+refreshes add no calls; the exact count and call-order assertions remain. The failure did not
+recur locally: on this machine the parent of #1166 and main each passed 12 focused Chromium runs,
+and main passed eight full Payments-file runs before W59; the changed file passed one full run and
+12 focused runs. Those passes do not measure the CI race's frequency.
+
 **Empty-state text shows beside a failed read on Payments and Cloud services (A252, seen 2026-10-03
 while checking lane A's W18) — OPEN.** While its read is failing, Payments still says "No card
 readers yet." under an empty table, and Cloud services says "Checking Cloud connection…" under the
