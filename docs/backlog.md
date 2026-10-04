@@ -1226,7 +1226,8 @@ Left OPEN from its review, for the owner to decide: (1) the Products list decide
 the product's unit is in the venue's saved unit list, the Extras editor by the unit's id, so the two
 can disagree (for example before the unit list has loaded) — aligning them changes the Products
 screen; (2) the handle-on-the-first-line alignment applied to the Extras list only — DONE by W75b, below; (3) the editor refuses a blank Portion for every unit
-but Each while the server accepts none for a whole unit with no scale link (ml) and stores 1.
+but Each while the server accepts none for a whole unit with no scale link (ml) and stores 1 — DONE
+by W75c, below.
 
 **Every reorderable table puts its drag handle on the first line of a tall row (W75b, owner
 2026-10-04) — DONE (#1201).** The shared reorder table styles (`packages/ui/src/reorder-table.ts`) now line
@@ -1242,6 +1243,16 @@ Extras editor and Prep stations screen each have a test with a wrapping name. Th
 and the section member list had their own centring rules: the section member list's is removed, and
 the option list form's is replaced by the top alignment. See `docs/developers/design-system.md`,
 tables.
+
+**The server refuses an Extras item with no Portion for every unit but Each (W75c, owner
+2026-10-04) — DONE.** `assertPortionPrecision` (`packages/catalogue/src/extras.ts`) used to refuse a
+new item with no portion only when its unit had decimals or a scale link, so a new item for ml or a
+venue's own whole unit was saved with no portion and stored as 1. It now refuses a new item with no
+portion as `extras.invalid` naming `items.<n>.portion` unless the product is Each — it has no stored
+unit, or its stored unit was seeded as `each` — and an Each item still takes none and stores 1.
+Tests in `packages/catalogue/src/extras.test.ts` cover the seeded ml unit, a venue's own whole unit,
+and both kinds of Each. An item already on the list is checked as before. Two catalogue test files
+whose lists offered products on a venue's own whole unit now send a portion of 1.
 
 **A folded Customer-facing names section shows every language's name, inherited ones in italic
 (W77, owner 2026-10-04) — DONE (#1197).** The owner, on an Extras list: _"missing the summary of the values
@@ -1771,7 +1782,7 @@ W53 changes the filed display surfaces.
   product's portion is one and the form asks for none; _2026-10-04 (W75): the list editor now asks
   for a portion for EVERY unit but Each, so whole grams, millilitres and a venue's own units too;
   the server still accepts a new item of a whole unit with no hardware link (ml, say) without one,
-  and stores 1._
+  and stores 1._ _2026-10-05 (W75c): the server now refuses that too, as the editor does._
 - each pick adds one portion: three picks of 50 g are 150 g, and a dish × 2 doubles that, as the
   count does today;
 - the item's **Price is per portion**: blank, it is the portion × the product's unit price (50 g ×
