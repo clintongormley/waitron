@@ -30,6 +30,7 @@ import {
   type DashboardRequest,
   type DashboardScreenHandle,
   type DashboardScreenPlacement,
+  type DashboardSettingsPanel,
   type NavGroupId,
 } from "@waitron/dashboard-kit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
@@ -54,6 +55,8 @@ import "./screens/content-languages-screen.js";
 import "./screens/service-status-screen.js";
 import "./screens/floor-screen.js";
 import "./screens/kitchen-screen.js";
+import { VENUE_SETTINGS_TABS } from "./screens/venue-settings-screen.js";
+import type { VenueSettingsPanel, VenueSettingsTab } from "./screens/venue-settings-screen.js";
 import "./screens/roster-screen.js";
 import "./screens/approvals-screen.js";
 import "./screens/planned-actual-screen.js";
@@ -100,11 +103,9 @@ const CORE_SCREENS = [
   "modifiers",
   "menus",
   "units",
-  "receipts",
   "content-languages",
-  "statuses",
+  "venue-settings",
   "floor",
-  "kitchen",
   "roster",
   "approvals",
   "planned-actual",
@@ -139,22 +140,25 @@ const WAITRON_LOGO_DARK_URL = new URL(
   import.meta.url,
 ).href;
 
-type ScreenRule = {
-  screen: ScreenId;
+type AccessRule = {
   requiresManager?: boolean;
   requiresPermission?: string;
 };
+type ScreenRule = AccessRule & { screen: ScreenId };
 type NavItem = ScreenRule & { labelKey: StringKey };
 type NavGroup = {
   id: NavGroupId;
   headerKey?: StringKey;
   icon?: string;
   items: NavItem[];
+  /** Sorted with the group's module pages; a tie keeps the core item first. */
+  itemsAmongModules?: (NavItem & { order: number })[];
   itemsAfterModules?: NavItem[];
 };
 
 const coreItems = (group: NavGroup): NavItem[] => [
   ...group.items,
+  ...(group.itemsAmongModules ?? []),
   ...(group.itemsAfterModules ?? []),
 ];
 /** A nav row as shown: a core item or a module's screen, labelled in the current language. */
@@ -177,6 +181,11 @@ const NAV_GROUPS: NavGroup[] = [
     itemsAfterModules: [{ screen: "orders", labelKey: "nav.orders" }],
   },
   {
+    id: "service",
+    headerKey: "nav.group.service",
+    items: [],
+  },
+  {
     id: "menu",
     headerKey: "nav.group.menu",
     items: [
@@ -187,13 +196,11 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    id: "service",
-    headerKey: "nav.group.service",
-    items: [
-      { screen: "floor", labelKey: "nav.floor" },
-      { screen: "statuses", labelKey: "nav.statuses" },
-      { screen: "kitchen", labelKey: "nav.kitchen" },
-    ],
+    id: "operations",
+    headerKey: "nav.group.operations",
+    items: [],
+    itemsAmongModules: [{ screen: "floor", labelKey: "nav.floor", order: 20 }],
+    itemsAfterModules: [{ screen: "venue-settings", labelKey: "nav.venue_settings" }],
   },
   {
     id: "team",
@@ -215,7 +222,6 @@ const NAV_GROUPS: NavGroup[] = [
     headerKey: "nav.group.configuration",
     icon: "gear",
     items: [
-      { screen: "receipts", labelKey: "nav.receipts", requiresManager: true },
       {
         screen: "content-languages",
         labelKey: "nav.content_languages",
@@ -239,6 +245,39 @@ const NAV_GROUPS: NavGroup[] = [
 const UNLISTED_SCREENS: ScreenRule[] = [
   { screen: "email", requiresManager: true },
   { screen: "demo-printer", requiresManager: true },
+];
+
+type CoreSettingsPanel = AccessRule & {
+  key: string;
+  tab: VenueSettingsTab;
+  render(api: DashboardApi, canConfigure: boolean): TemplateResult;
+};
+
+const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
+  {
+    key: "receipts",
+    tab: "receipts",
+    requiresManager: true,
+    render: (api) => html`<dashboard-receipts-screen .api=${api}></dashboard-receipts-screen>`,
+  },
+  {
+    key: "statuses",
+    tab: "tables",
+    render: (api, canConfigure) =>
+      html`<dashboard-service-status-screen
+        .api=${api}
+        .readOnly=${!canConfigure}
+      ></dashboard-service-status-screen>`,
+  },
+  {
+    key: "kitchen",
+    tab: "kitchen",
+    render: (api, canConfigure) =>
+      html`<dashboard-kitchen-screen
+        .api=${api}
+        .readOnly=${!canConfigure}
+      ></dashboard-kitchen-screen>`,
+  },
 ];
 
 /**
@@ -618,6 +657,10 @@ export class DashboardApp extends LitElement {
     { screen: DashboardScreenPlacement; handle: DashboardScreenHandle }
   >();
   #navGroups = new Map<NavGroupId, DashboardScreenPlacement[]>();
+  #activePanels: {
+    panel: DashboardSettingsPanel;
+    handle: ReturnType<DashboardSettingsPanel["create"]>;
+  }[] = [];
 
   #sessionPermissions: string[] = [];
 
@@ -1061,6 +1104,7 @@ export class DashboardApp extends LitElement {
     this.#sessionPermissions = [];
     this.#activeScreens.clear();
     this.#navGroups.clear();
+    this.#activePanels = [];
     this.drawerOpen = false;
     this.navSearch = "";
     this.#broadcastSessionDeadline(0);
@@ -1076,15 +1120,17 @@ export class DashboardApp extends LitElement {
 
   /**
    * Runs on every probe/login and rebuilds the maps from scratch, so a module disabled server-side
-   * since the last session stops showing. A screen naming an unknown nav group id, or repeating
-   * another screen's id or a built-in screen's, THROWS rather than silently dropping or replacing a
-   * screen.
+   * since the last session stops showing. Unknown nav groups or settings tabs, and repeated screen
+   * or panel ids, throw rather than silently dropping or replacing a contribution.
    */
   #activate(enabled: readonly string[]): void {
     const knownGroups = new Set<NavGroupId>(NAV_GROUPS.map((g) => g.id));
+    const knownTabs = new Set<string>(VENUE_SETTINGS_TABS);
     const ids = new Set<string>(CORE_SCREENS);
+    const panelIds = new Set<string>(CORE_SETTINGS_PANELS.map((panel) => panel.key));
     this.#activeScreens.clear();
     this.#navGroups.clear();
+    this.#activePanels = [];
     for (const c of DASHBOARD_MODULES) {
       if (!enabled.includes(c.module)) continue;
       const screens: readonly DashboardFurtherScreen[] = [c, ...(c.moreScreens ?? [])];
@@ -1097,12 +1143,22 @@ export class DashboardApp extends LitElement {
           throw new Error(`dashboard module "${c.module}" repeats screen id "${screen.id}"`);
         ids.add(screen.id);
       }
+      for (const panel of c.settingsPanels ?? []) {
+        if (!knownTabs.has(panel.tab))
+          throw new Error(
+            `dashboard module "${c.module}" names unknown settings tab "${panel.tab}"`,
+          );
+        if (panelIds.has(panel.id))
+          throw new Error(`dashboard module "${c.module}" repeats settings panel id "${panel.id}"`);
+        panelIds.add(panel.id);
+      }
       registerCatalogue(c.strings);
+      const ctx = { request: this.request, liveData: this.api.liveData };
       for (const contributed of screens) {
         const { screen } = contributed;
         this.#activeScreens.set(screen.id, {
           screen,
-          handle: contributed.create({ request: this.request, liveData: this.api.liveData }),
+          handle: contributed.create(ctx),
         });
         if (this.#sessionPermissions.includes(screen.requiresPermission)) {
           const group = this.#navGroups.get(screen.group) ?? [];
@@ -1110,6 +1166,8 @@ export class DashboardApp extends LitElement {
           this.#navGroups.set(screen.group, group);
         }
       }
+      for (const panel of c.settingsPanels ?? [])
+        this.#activePanels.push({ panel, handle: panel.create(ctx) });
     }
     for (const list of this.#navGroups.values())
       list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -1408,13 +1466,36 @@ export class DashboardApp extends LitElement {
     this.#url.write({ product: event.detail.productId }, true);
   }
 
-  #mayOpen(item: ScreenRule): boolean {
+  #mayOpen(item: AccessRule): boolean {
     if (item.requiresManager && this.sessionRole !== "manager" && this.sessionRole !== "admin")
       return false;
     return (
       item.requiresPermission === undefined ||
       this.#sessionPermissions.includes(item.requiresPermission)
     );
+  }
+
+  #settingsPanels(): (VenueSettingsPanel & { order: number })[] {
+    const core = CORE_SETTINGS_PANELS.filter((panel) => this.#mayOpen(panel)).map((panel) => ({
+      key: panel.key,
+      tab: panel.tab,
+      order: 0,
+      render: () => panel.render(this.api, this.#sessionPermissions.includes("venue.configure")),
+    }));
+    const modules = this.#activePanels
+      .filter(
+        ({ panel }) =>
+          this.#sessionPermissions.includes(panel.requiresPermission) ||
+          (panel.readPermission !== undefined &&
+            this.#sessionPermissions.includes(panel.readPermission)),
+      )
+      .map(({ panel, handle }) => ({
+        key: panel.id,
+        tab: panel.tab as VenueSettingsTab,
+        order: panel.order ?? 0,
+        render: () => handle.render(!this.#sessionPermissions.includes(panel.requiresPermission)),
+      }));
+    return [...core, ...modules].sort((a, b) => a.order - b.order);
   }
 
   /** The module permission check here matches the one `#activate` applies to the nav. */
@@ -1491,7 +1572,7 @@ export class DashboardApp extends LitElement {
   }
 
   /** The pages this person may open, group by group in nav order, each labelled in the current
-   * language; `pages` is undefined for a group the search hides whole. */
+   * language; `pages` is undefined when no page is permitted or no page matches the search. */
   #shownNav(): { group: NavGroup; pages?: NavPage[] }[] {
     if (this.sessionRole === "staff")
       return [
@@ -1509,15 +1590,26 @@ export class DashboardApp extends LitElement {
         .filter((item) => this.#mayOpen(item))
         .map((item) => ({ screen: item.screen, label: t(item.labelKey) }));
     return NAV_GROUPS.map((group) => {
+      const among = [
+        ...(group.itemsAmongModules ?? [])
+          .filter((item) => this.#mayOpen(item))
+          .map((item) => ({
+            order: item.order,
+            page: { screen: item.screen, label: t(item.labelKey) },
+          })),
+        ...(this.#navGroups.get(group.id) ?? []).map((screen) => ({
+          order: screen.order ?? 0,
+          page: { screen: screen.id, label: tKit(screen.navLabelKey) },
+        })),
+      ]
+        .sort((a, b) => a.order - b.order)
+        .map(({ page }) => page);
       const permitted: NavPage[] = [
         ...shown(group.items),
-        ...(this.#navGroups.get(group.id) ?? []).map((screen) => ({
-          screen: screen.id,
-          label: tKit(screen.navLabelKey),
-        })),
+        ...among,
         ...shown(group.itemsAfterModules),
       ];
-      if (term === "") return { group, pages: permitted };
+      if (term === "") return { group, pages: permitted.length > 0 ? permitted : undefined };
       const headerMatches =
         group.headerKey !== undefined && foldForSearch(t(group.headerKey)).includes(term);
       const pages = headerMatches
@@ -1714,16 +1806,12 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-content-languages-screen
           .api=${this.api}
         ></dashboard-content-languages-screen>`;
-      case "receipts":
-        return html`<dashboard-receipts-screen .api=${this.api}></dashboard-receipts-screen>`;
-      case "statuses":
-        return html`<dashboard-service-status-screen
-          .api=${this.api}
-        ></dashboard-service-status-screen>`;
+      case "venue-settings":
+        return html`<dashboard-venue-settings-screen
+          .panels=${this.#settingsPanels()}
+        ></dashboard-venue-settings-screen>`;
       case "floor":
         return html`<dashboard-floor-screen .api=${this.api}></dashboard-floor-screen>`;
-      case "kitchen":
-        return html`<dashboard-kitchen-screen .api=${this.api}></dashboard-kitchen-screen>`;
       case "roster":
         return html`<dashboard-roster-screen .api=${this.api}></dashboard-roster-screen>`;
       case "approvals":

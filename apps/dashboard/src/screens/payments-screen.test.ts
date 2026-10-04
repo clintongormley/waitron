@@ -2026,6 +2026,7 @@ describe("the readers' status reads", () => {
       readerStatus: held.readerStatus,
     });
     const first = await mount(api);
+    await vi.waitFor(() => expect(held.readerStatus).toHaveBeenCalledTimes(2));
     expect(held.readerStatus).toHaveBeenCalledTimes(2);
 
     first.host.remove();

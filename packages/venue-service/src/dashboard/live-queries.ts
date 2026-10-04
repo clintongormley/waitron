@@ -1,4 +1,5 @@
 export const QUERY_DEPENDENCIES = {
+  settings: ["service_settings"],
   routing: [
     "station_claims",
     "route_exceptions",

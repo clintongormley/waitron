@@ -42,6 +42,7 @@ function stubApi(
     deactivateStation: vi.fn().mockResolvedValue(undefined),
     setDefaultStation: vi.fn().mockResolvedValue(undefined),
     setBumpMode: vi.fn().mockResolvedValue(undefined),
+    getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
     listCourses: vi.fn().mockResolvedValue(courses.map((c) => ({ ...c }))),
     createCourse: vi.fn().mockResolvedValue({ id: "c9" }),
     updateCourse: vi.fn().mockResolvedValue(undefined),
@@ -60,14 +61,34 @@ async function flush(el: KitchenScreen): Promise<void> {
 const q = (el: KitchenScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
 describe("kitchen-screen", () => {
-  it("links to Prep stations without the former stations panel", async () => {
+  it("seeds the bump-mode toggle from the stored setting", async () => {
+    const api = stubApi({ getBumpMode: vi.fn().mockResolvedValue({ mode: "ticket" }) });
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+    expect(q(el, "[data-test=bump-ticket]")!.getAttribute("variant")).toBe("primary");
+    expect(q(el, "[data-test=bump-line]")!.getAttribute("variant")).toBe("secondary");
+  });
+
+  it("still reads fire control when the bump mode cannot be read, and says the read failed", async () => {
+    const api = stubApi(
+      { getBumpMode: vi.fn().mockRejectedValue({ code: "server.internal" }) },
+      STATIONS,
+      COURSES,
+      "expo",
+    );
+    const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
+    await flush(el);
+    expect(q(el, "[data-test=fire-expo]")!.getAttribute("variant")).toBe("primary");
+    expect(q(el, "[role=alert]")!.textContent).toContain(codeMessage("server.internal"));
+  });
+
+  it("draws no h1, no stations panel and no link to Prep stations", async () => {
     const api = stubApi();
     const { el } = await mountWidget<KitchenScreen>("dashboard-kitchen-screen", { api });
     await flush(el);
+    expect(el.shadowRoot!.querySelectorAll("h1")).toHaveLength(0);
     expect(q(el, "[data-test=stations-panel]")).toBeNull();
-    expect(q(el, 'a[href="/manage/prep-stations"]')?.textContent).toContain(
-      t("kitchen.prep_stations_link"),
-    );
+    expect(q(el, 'a[href="/manage/prep-stations"]')).toBeNull();
     expect(api.listStations).not.toHaveBeenCalled();
   });
 

@@ -378,7 +378,10 @@ export async function listStatuses(
   tx: Transaction,
   input: { managementSessionId: string },
 ): Promise<ServiceStatus[]> {
-  await requireConfigure(tx, input.managementSessionId);
+  await authorizeManager(tx, {
+    managementSessionId: input.managementSessionId,
+    permission: "venue.view",
+  });
   return tx
     .select({
       id: tableServiceStatuses.id,

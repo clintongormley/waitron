@@ -194,7 +194,7 @@ leave it as it is (2026-10-02, B29).
 ## A successful write followed by a failed refresh is a load failure, not a failed save
 
 Close the editor after the write succeeds, then refresh the list separately; retaining a create form
-with a save error invites a duplicate submission. The Venue operations regression resolves creation,
+with a save error invites a duplicate submission. The Departments and zones screen's regression resolves creation,
 rejects the following load and checks the closed modal plus load error
 (`packages/venue-service/src/dashboard/venue-operations-screen.test.ts`, “refreshing the list
 fails”).

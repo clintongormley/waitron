@@ -36,6 +36,13 @@ describe("DashboardApi routes", () => {
     expect(methods.filter((name) => /tills/i.test(name))).toEqual([]);
   });
 
+  it("reads the bump mode from its own route", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ mode: "ticket" }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getBumpMode()).toEqual({ mode: "ticket" });
+    expect(callsOf(fetchImpl)).toEqual([["/management-api/bump-mode", "GET", undefined]]);
+  });
+
   it("passes Orders filters and the chosen printer to the management routes", async () => {
     const page = { rows: [], next: null, from: null, to: null };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(page));

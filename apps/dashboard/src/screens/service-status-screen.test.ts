@@ -74,7 +74,7 @@ describe("service-status-screen", () => {
     await flush(el);
     expect(api.listStatuses).toHaveBeenCalledTimes(1);
     expect(q(el, "[data-test=row-s1]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelectorAll("h1").length).toBe(1);
+    expect(el.shadowRoot!.querySelectorAll("h1").length).toBe(0);
   });
 
   it("creates a status from the new-status form, then reloads", async () => {

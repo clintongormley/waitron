@@ -319,19 +319,27 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
-  it("the receipt screen renders accessibly with a single, well-ordered heading", async () => {
-    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
+  it("the Venue settings page renders accessibly with a single, well-ordered heading", async () => {
+    const api = stubApi({
+      listStaff: vi.fn().mockResolvedValue(people),
+      getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
+      getFireControl: vi.fn().mockResolvedValue({ mode: "waiter" }),
+      listCourses: vi.fn().mockResolvedValue([]),
+      listStatuses: vi.fn().mockResolvedValue([]),
+    });
     const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
     await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-receipts]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-venue-settings]")!.click();
     await flush(el);
-    const receipt = el.shadowRoot!.querySelector("dashboard-receipts-screen");
-    expect(receipt).toBeTruthy();
-    const h1s = [
-      ...el.shadowRoot!.querySelectorAll("h1"),
-      ...(receipt!.shadowRoot?.querySelectorAll("h1") ?? []),
+    const page = el.shadowRoot!.querySelector("dashboard-venue-settings-screen");
+    expect(page).toBeTruthy();
+    const deep = (root: ParentNode): Element[] => [
+      ...root.querySelectorAll("h1"),
+      ...[...root.querySelectorAll("*")].flatMap((child) =>
+        child.shadowRoot ? deep(child.shadowRoot) : [],
+      ),
     ];
-    expect(h1s).toHaveLength(1);
+    expect(deep(el.shadowRoot!)).toHaveLength(1);
     await expectNoA11yViolations(host);
   });
 

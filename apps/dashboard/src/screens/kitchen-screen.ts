@@ -16,11 +16,6 @@ export class KitchenScreen extends LitElement {
       :host {
         display: block;
       }
-      .title {
-        margin: 0 0 var(--wt-space-4);
-        font-size: var(--wt-font-size-lg);
-        color: var(--wt-color-text);
-      }
       .panel-title {
         margin: 0 0 var(--wt-space-3);
         font-size: var(--wt-font-size-md);
@@ -45,6 +40,7 @@ export class KitchenScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) readOnly = false;
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -54,7 +50,6 @@ export class KitchenScreen extends LitElement {
     },
   );
 
-  // There is no route to read the bump mode back, so the control starts on the column default.
   @state() private bumpMode: BumpMode = "line";
   @state() private fireControl: FireControl = "waiter";
   @state() private errorKey: string | null = null;
@@ -78,13 +73,18 @@ export class KitchenScreen extends LitElement {
 
   async #load(): Promise<void> {
     this.#showError(null);
-    try {
-      await this.#queries.watch("getFireControl", [], (fire) => {
-        this.fireControl = fire.mode;
-      });
-    } catch (error) {
-      this.#showReadError(error);
-    }
+    await Promise.all([
+      this.#queries
+        .watch("getBumpMode", [], (bump) => {
+          this.bumpMode = bump.mode;
+        })
+        .catch((error: unknown) => this.#showReadError(error)),
+      this.#queries
+        .watch("getFireControl", [], (fire) => {
+          this.fireControl = fire.mode;
+        })
+        .catch((error: unknown) => this.#showReadError(error)),
+    ]);
   }
 
   async #setBump(mode: BumpMode): Promise<void> {
@@ -129,28 +129,22 @@ export class KitchenScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <h1 class="title">${t("kitchen.title")}</h1>
-      <p><a href="/manage/prep-stations">${t("kitchen.prep_stations_link")}</a></p>
-
       <section data-test="courses-panel">
         <h2 class="panel-title">${t("kitchen.courses_title")}</h2>
-        <dashboard-course-list .api=${this.api}></dashboard-course-list>
+        <dashboard-course-list .api=${this.api} .readOnly=${this.readOnly}></dashboard-course-list>
       </section>
 
       <section class="bump" role="group" aria-label=${t("kitchen.bump_mode")}>
         <span class="panel-title">${t("kitchen.bump_mode")}</span>
         <div class="bump-options">
-          ${this.#bumpOption("line", t("kitchen.bump_line"))}
-          ${this.#bumpOption("ticket", t("kitchen.bump_ticket"))}
+          ${this.readOnly ? (this.bumpMode === "line" ? t("kitchen.bump_line") : t("kitchen.bump_ticket")) : html`${this.#bumpOption("line", t("kitchen.bump_line"))}${this.#bumpOption("ticket", t("kitchen.bump_ticket"))}`}
         </div>
       </section>
 
       <section class="bump" role="group" aria-label=${t("kitchen.fire_mode")}>
         <span class="panel-title">${t("kitchen.fire_mode")}</span>
         <div class="bump-options">
-          ${this.#fireOption("waiter", t("kitchen.fire_waiter"))}
-          ${this.#fireOption("kitchen", t("kitchen.fire_kitchen"))}
-          ${this.#fireOption("expo", t("kitchen.fire_expo"))}
+          ${this.readOnly ? t(this.fireControl === "waiter" ? "kitchen.fire_waiter" : this.fireControl === "kitchen" ? "kitchen.fire_kitchen" : "kitchen.fire_expo") : html`${this.#fireOption("waiter", t("kitchen.fire_waiter"))}${this.#fireOption("kitchen", t("kitchen.fire_kitchen"))}${this.#fireOption("expo", t("kitchen.fire_expo"))}`}
         </div>
       </section>
 

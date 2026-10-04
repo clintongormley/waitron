@@ -84,14 +84,13 @@ describe("receipts page: the receipt header and footer", () => {
     expect(footer.value).toBe("Gracias por su visita");
   });
 
-  it("renders exactly one h1, the page title", async () => {
+  it("renders no h1: the Venue settings page owns the page heading", async () => {
     const api = stubApi();
     const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
     await flush(el);
 
-    const h1s = qa(el, "h1");
-    expect(h1s).toHaveLength(1);
-    expect(h1s[0]!.textContent).toBe("Recibos");
+    expect(qa(el, "h1")).toHaveLength(0);
+    expect(qa(el, "h2").length).toBeGreaterThan(0);
   });
 
   it("leaves both fields empty when the receipt config is empty", async () => {

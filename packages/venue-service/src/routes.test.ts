@@ -58,6 +58,7 @@ interface Fixture {
   locationId: LocationId;
   managerCookie: string;
   staffCookie: string;
+  supervisorCookie: string;
   zoneId: string;
   stationId: string;
   menuId: string;
@@ -80,8 +81,8 @@ async function fixture(): Promise<Fixture> {
     .values({ locationId: scopedLocationId, name: "Terrace bar", isDefault: true })
     .returning({ id: kitchenStations.id });
 
-  const { menuId, categoryId, managerSessionId, staffSessionId } = await db.transaction(
-    async (tx) => {
+  const { menuId, categoryId, managerSessionId, staffSessionId, supervisorSessionId } =
+    await db.transaction(async (tx) => {
       const menu = await createCatalogue(tx, { name: "Drinks" });
       const category = await createCategory(tx, { name: "Cocktails" });
       const [manager] = await tx
@@ -100,20 +101,31 @@ async function fixture(): Promise<Fixture> {
           role: "staff",
         })
         .returning({ id: persons.id });
+      const [supervisor] = await tx
+        .insert(persons)
+        .values({
+          displayName: `Supervisor ${scopedLocationId}`,
+          pinHash: hashPin("1234"),
+          role: "supervisor",
+        })
+        .returning({ id: persons.id });
       const managerSession = await startManagementSession(tx, {
         personId: manager!.id,
       });
       const staffSession = await startManagementSession(tx, {
         personId: staff!.id,
       });
+      const supervisorSession = await startManagementSession(tx, {
+        personId: supervisor!.id,
+      });
       return {
         menuId: menu.id,
         categoryId: category.id,
         managerSessionId: managerSession.token,
         staffSessionId: staffSession.token,
+        supervisorSessionId: supervisorSession.token,
       };
-    },
-  );
+    });
 
   const app = new Hono();
   VENUE_SERVICE_ROUTES.mount(
@@ -130,6 +142,7 @@ async function fixture(): Promise<Fixture> {
     locationId: scopedLocationId,
     managerCookie: `${MANAGEMENT_COOKIE}=${managerSessionId}`,
     staffCookie: `${MANAGEMENT_COOKIE}=${staffSessionId}`,
+    supervisorCookie: `${MANAGEMENT_COOKIE}=${supervisorSessionId}`,
     zoneId: zone!.id,
     stationId: station!.id,
     menuId,
@@ -994,6 +1007,26 @@ describe("venue service management routes", () => {
 
 describe("the venue's service settings", () => {
   const SETTINGS = "/management-api/venue-service/settings";
+  it("lets a supervisor read the settings without editing them or reading the wider operations model", async () => {
+    const fx = await fixture();
+    const read = await send(fx.app, "GET", SETTINGS, fx.supervisorCookie);
+    expect(read.status).toBe(200);
+    expect(await read.json()).toMatchObject({
+      settings: { editSentLines: true },
+      kitchenTicketGrouping: "combined",
+      clearingWorkflow: false,
+    });
+    expect(
+      (await send(fx.app, "GET", "/management-api/venue-service", fx.supervisorCookie)).status,
+    ).toBe(403);
+    const write = await send(fx.app, "PUT", SETTINGS, fx.supervisorCookie, {
+      editSentLines: false,
+    });
+    expect(write.status).toBe(403);
+    expect(await write.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect((await send(fx.app, "GET", SETTINGS, fx.staffCookie)).status).toBe(403);
+    expect((await send(fx.app, "GET", SETTINGS, fx.managerCookie)).status).toBe(200);
+  });
   async function stored(fx: Fixture): Promise<unknown> {
     return (
       (await (
@@ -1184,6 +1217,80 @@ describe("the print-held-work setting", () => {
     ).json()) as { settings: unknown; kitchenTicketGrouping: unknown };
     expect(body.settings).toEqual({ editSentLines: true });
     expect(body.kitchenTicketGrouping).toBe("combined");
+  });
+});
+
+describe("the clearing setting", () => {
+  const CLEARING = "/management-api/venue-service/settings/clearing-workflow";
+  async function stored(fx: Fixture): Promise<unknown> {
+    return (
+      (await (
+        await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+      ).json()) as { clearingWorkflow: unknown }
+    ).clearingWorkflow;
+  }
+
+  it("reads off until a manager turns it on, and back", async () => {
+    const fx = await fixture();
+    expect(await stored(fx)).toBe(false);
+    expect(
+      (await send(fx.app, "PUT", CLEARING, fx.managerCookie, { clearingWorkflow: true })).status,
+    ).toBe(204);
+    expect(await stored(fx)).toBe(true);
+    expect(
+      (await send(fx.app, "PUT", CLEARING, fx.managerCookie, { clearingWorkflow: false })).status,
+    ).toBe(204);
+    expect(await stored(fx)).toBe(false);
+  });
+
+  it("refuses anything but true or false, naming the field, and keeps the stored value", async () => {
+    const fx = await fixture();
+    expect(
+      (await send(fx.app, "PUT", CLEARING, fx.managerCookie, { clearingWorkflow: true })).status,
+    ).toBe(204);
+    for (const body of [
+      {},
+      { clearingWorkflow: "false" },
+      { clearingWorkflow: 0 },
+      { clearingWorkflow: null },
+      { clearingWorkflow: [false] },
+    ]) {
+      const rejected = await send(fx.app, "PUT", CLEARING, fx.managerCookie, body);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "clearingWorkflow" } },
+      });
+    }
+    expect(await stored(fx)).toBe(true);
+  });
+
+  it("lets only a signed-in manager change it", async () => {
+    const fx = await fixture();
+    const body = { clearingWorkflow: true };
+    expect((await send(fx.app, "PUT", CLEARING, undefined, body)).status).toBe(401);
+    const refused = await send(fx.app, "PUT", CLEARING, fx.staffCookie, body);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await stored(fx)).toBe(false);
+  });
+
+  it("leaves the other settings as they were", async () => {
+    const fx = await fixture();
+    expect(
+      (await send(fx.app, "PUT", CLEARING, fx.managerCookie, { clearingWorkflow: true })).status,
+    ).toBe(204);
+    const body = (await (
+      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+    ).json()) as {
+      settings: unknown;
+      kitchenTicketGrouping: unknown;
+      printHeldWork: unknown;
+      releaseReminderMinutes: unknown;
+    };
+    expect(body.settings).toEqual({ editSentLines: true });
+    expect(body.kitchenTicketGrouping).toBe("combined");
+    expect(body.printHeldWork).toBe(false);
+    expect(body.releaseReminderMinutes).toBe(10);
   });
 });
 

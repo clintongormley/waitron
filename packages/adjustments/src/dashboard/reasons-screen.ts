@@ -130,9 +130,6 @@ export class AdjustmentReasonsScreen extends LitElement {
         display: block;
         min-width: 0;
       }
-      h1 {
-        margin-top: 0;
-      }
       .intro {
         margin-top: 0;
         color: var(--wt-color-text-muted);
@@ -943,8 +940,7 @@ export class AdjustmentReasonsScreen extends LitElement {
 
   override render() {
     const alert = this.loadError ?? this.orderError;
-    return html`<h1>${t("adjustments.title")}</h1>
-      <p class="intro">${t("adjustments.intro")}</p>
+    return html`<p class="intro">${t("adjustments.intro")}</p>
       ${alert ? html`<p class="alert" role="alert" data-test="page-alert">${alert}</p>` : nothing}
       <div class="toolbar">${this.#renderAdd()}</div>
       ${

@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles } from "../base-styles.js";
@@ -115,6 +115,21 @@ export class WtTabs extends LitElement {
     const button = this.renderRoot.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]!;
     button.focus();
     button.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }
+
+  override updated(changed: PropertyValues<this>): void {
+    if (!changed.has("items") && !changed.has("value")) return;
+    const bar = this.renderRoot.querySelector<HTMLElement>('[role="tablist"]');
+    const selected = [...this.renderRoot.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+      (button) => button.dataset.key === this.#selected,
+    );
+    if (!bar || !selected) return;
+
+    // Move only the tab strip; scrolling the selected button into view can move the whole page.
+    const barBounds = bar.getBoundingClientRect();
+    const tabBounds = selected.getBoundingClientRect();
+    if (tabBounds.right > barBounds.right) bar.scrollLeft += tabBounds.right - barBounds.right;
+    else if (tabBounds.left < barBounds.left) bar.scrollLeft += tabBounds.left - barBounds.left;
   }
 
   override render() {

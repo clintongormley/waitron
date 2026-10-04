@@ -17,7 +17,6 @@ import type {
   Department,
   FloorZone,
   HoursInterval,
-  KitchenTicketGrouping,
   ServiceMode,
   VenueReadinessIssue,
   VenueServiceApi,
@@ -26,10 +25,8 @@ import type {
 import { t } from "./strings.js";
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "invoice_first", "ticket_then_pay"];
-const GROUPINGS: KitchenTicketGrouping[] = ["combined", "separate"];
-const REMINDER_MINUTES = [5, 10, 15, 20, 30];
 const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
-const VIEWS = ["status", "departments", "zones", "kitchen"] as const;
+const VIEWS = ["status", "departments", "zones"] as const;
 type View = (typeof VIEWS)[number];
 type Editor =
   | { kind: "department"; row?: Department }
@@ -99,14 +96,6 @@ export class VenueOperationsScreen extends LitElement {
       wt-form-actions {
         width: 100%;
       }
-      .setting {
-        margin-top: var(--wt-space-4);
-      }
-      .hint {
-        margin: var(--wt-space-1) 0 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
     `,
   ];
   @property({ attribute: false }) api!: VenueServiceApi;
@@ -122,7 +111,7 @@ export class VenueOperationsScreen extends LitElement {
   @state() private loadError?: string;
   /** A refusal of a list action that saved at once, with no editor open. */
   @state() private actionError?: string;
-  /** The open editor's check results, or with none open, the instant settings' refusals. */
+  /** The open editor's check results. */
   @state() private fieldErrors: Record<string, string> = {};
   /** The server's refusal of an editor field, until the operator changes that field or saves again. */
   @state() private refusedFields: Record<string, string> = {};
@@ -273,78 +262,12 @@ export class VenueOperationsScreen extends LitElement {
   #errors(): Record<string, string> {
     return { ...this.refusedFields, ...this.fieldErrors };
   }
-  async #saveEditSentLines(editSentLines: boolean): Promise<void> {
-    if (this.busy) return;
-    this.busy = true;
-    this.actionError = undefined;
-    this.fieldErrors = {};
-    try {
-      await this.api.saveSettings({ editSentLines });
-      this.model = { ...this.model!, settings: { editSentLines } };
-      await this.#load();
-    } catch {
-      this.fieldErrors = { editSentLines: t("venue.save_error") };
-    } finally {
-      this.busy = false;
-    }
-  }
-  async #saveKitchenTicketGrouping(kitchenTicketGrouping: KitchenTicketGrouping): Promise<void> {
-    if (this.busy) return;
-    this.busy = true;
-    this.actionError = undefined;
-    this.fieldErrors = {};
-    try {
-      await this.api.saveKitchenTicketGrouping(kitchenTicketGrouping);
-      this.model = { ...this.model!, kitchenTicketGrouping };
-      await this.#load();
-    } catch {
-      this.fieldErrors = { kitchenTicketGrouping: t("venue.save_error") };
-    } finally {
-      this.busy = false;
-    }
-  }
-  async #saveReleaseReminderMinutes(releaseReminderMinutes: number | null): Promise<void> {
-    if (this.busy) return;
-    this.busy = true;
-    this.actionError = undefined;
-    this.fieldErrors = {};
-    try {
-      await this.api.saveReleaseReminderMinutes(releaseReminderMinutes);
-      this.model = { ...this.model!, releaseReminderMinutes };
-      await this.#load();
-    } catch {
-      this.fieldErrors = { releaseReminderMinutes: t("venue.save_error") };
-    } finally {
-      this.busy = false;
-    }
-  }
-  async #savePrintHeldWork(printHeldWork: boolean): Promise<void> {
-    if (this.busy) return;
-    this.busy = true;
-    this.actionError = undefined;
-    this.fieldErrors = {};
-    try {
-      await this.api.savePrintHeldWork(printHeldWork);
-      this.model = { ...this.model!, printHeldWork };
-      await this.#load();
-    } catch {
-      this.fieldErrors = { printHeldWork: t("venue.save_error") };
-    } finally {
-      this.busy = false;
-    }
-  }
   #required(names: readonly string[]): Record<string, string> {
     return Object.fromEntries(
       names
         .filter((name) => this.#value(name).trim() === "")
         .map((name) => [name, t("venue.field_required")]),
     );
-  }
-  #fieldError(name: string) {
-    const message = this.#errors()[name];
-    return message
-      ? html`<p id=${`error-${name}`} class="field-error" data-field-error=${name}>${message}</p>`
-      : nothing;
   }
   #input(name: string, label: string, value = "", type = "text") {
     return html`<wt-input
@@ -848,96 +771,6 @@ export class VenueOperationsScreen extends LitElement {
       }
     </section>`;
   }
-  #kitchenChanges() {
-    return html`<section data-test="kitchen-changes">
-      <h2>${t("venue.kitchen_changes")}</h2>
-      <wt-switch
-        name="editSentLines"
-        label=${t("venue.edit_sent_lines")}
-        .checked=${live(this.model!.settings.editSentLines)}
-        .disabled=${this.busy}
-        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-          event.stopPropagation();
-          void this.#saveEditSentLines(event.detail.checked);
-        }}
-      ></wt-switch>
-      <p class="hint" data-test="edit-sent-lines-hint">${t("venue.edit_sent_lines_hint")}</p>
-      ${this.#fieldError("editSentLines")} ${this.#kitchenTicketGrouping()}
-      <wt-switch
-        class="setting"
-        name="printHeldWork"
-        label=${t("venue.print_held_work")}
-        .checked=${live(this.model!.printHeldWork)}
-        .disabled=${this.busy}
-        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-          event.stopPropagation();
-          void this.#savePrintHeldWork(event.detail.checked);
-        }}
-      ></wt-switch>
-      <p class="hint" data-test="print-held-work-hint">${t("venue.print_held_work_hint")}</p>
-      ${this.#fieldError("printHeldWork")} ${this.#releaseReminder()}
-    </section>`;
-  }
-  /** Blank is off. A stored value the list does not offer, which setup can bring in, is offered too
-   * so the dropdown never shows another. */
-  #releaseReminder() {
-    const stored = this.model!.releaseReminderMinutes;
-    const choices =
-      stored === null || REMINDER_MINUTES.includes(stored)
-        ? REMINDER_MINUTES
-        : [...REMINDER_MINUTES, stored].sort((a, b) => a - b);
-    const shown = stored === null ? "" : String(stored);
-    return html`<wt-combobox
-      class="setting"
-      name="releaseReminderMinutes"
-      label=${t("venue.release_reminder")}
-      hint=${t("venue.release_reminder_hint")}
-      search="auto"
-      placeholder=${t("venue.release_reminder.off")}
-      searchPlaceholder=${t("venue.combobox_search")}
-      noResultsLabel=${t("venue.combobox_no_results")}
-      .options=${[
-        { value: "", label: t("venue.release_reminder.off") },
-        ...choices.map((minutes) => ({
-          value: String(minutes),
-          label: t("venue.release_reminder.minutes").replace("{n}", String(minutes)),
-        })),
-      ]}
-      .value=${live(shown)}
-      ?disabled=${this.busy}
-      error=${this.fieldErrors.releaseReminderMinutes ?? ""}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        const value = event.detail.value;
-        if (value === shown) return;
-        void this.#saveReleaseReminderMinutes(value === "" ? null : Number(value));
-      }}
-    ></wt-combobox>`;
-  }
-  #kitchenTicketGrouping() {
-    const stored = this.model!.kitchenTicketGrouping;
-    return html`<wt-combobox
-      class="setting"
-      name="kitchenTicketGrouping"
-      label=${t("venue.kitchen_ticket_grouping")}
-      hint=${t("venue.kitchen_ticket_grouping_hint")}
-      search="auto"
-      searchPlaceholder=${t("venue.combobox_search")}
-      noResultsLabel=${t("venue.combobox_no_results")}
-      .options=${GROUPINGS.map((choice) => ({
-        value: choice,
-        label: t(`venue.kitchen_ticket_grouping.${choice}`),
-      }))}
-      .value=${live(stored)}
-      ?disabled=${this.busy}
-      error=${this.fieldErrors.kitchenTicketGrouping ?? ""}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => {
-        event.stopPropagation();
-        if (event.detail.value === stored) return;
-        void this.#saveKitchenTicketGrouping(event.detail.value as KitchenTicketGrouping);
-      }}
-    ></wt-combobox>`;
-  }
   #hours(departmentId: string, omit?: number) {
     return this.model!.hours.filter(
       (row, index) => row.departmentId === departmentId && index !== omit,
@@ -1098,9 +931,7 @@ export class VenueOperationsScreen extends LitElement {
   #pageAlert() {
     const messages = [
       ...(this.loadError ? [this.loadError] : []),
-      ...(this.editor
-        ? []
-        : [...Object.values(this.fieldErrors), ...(this.actionError ? [this.actionError] : [])]),
+      ...(this.editor ? [] : this.actionError ? [this.actionError] : []),
     ];
     return html`<div role="alert" data-test="page-alert">
       ${messages.map((message) => html`<p>${message}</p>`)}
@@ -1182,7 +1013,6 @@ export class VenueOperationsScreen extends LitElement {
                   { key: "status", label: t("venue.status") },
                   { key: "departments", label: t("venue.departments") },
                   { key: "zones", label: t("venue.zones") },
-                  { key: "kitchen", label: t("venue.kitchen_changes") },
                 ]}
                 @wt-tab-change=${this.#selectView}
               >
@@ -1190,8 +1020,8 @@ export class VenueOperationsScreen extends LitElement {
                 <div slot="status">${this.#readiness()}</div>
                 <div slot="departments">${this.#departments()}</div>
                 <div slot="zones">${this.#zones()}</div>
-                <div slot="kitchen">${this.#kitchenChanges()}</div> </wt-tabs
-              >${this.#modal()}`
+              </wt-tabs>
+              ${this.#modal()}`
           : nothing
       }`;
   }

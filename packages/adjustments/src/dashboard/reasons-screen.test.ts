@@ -361,7 +361,8 @@ describe("the reasons list", () => {
   it("speaks Spanish when the dashboard does", async () => {
     setLocale("es");
     const el = await mount(fakeApi());
-    expect(el.shadowRoot!.querySelector("h1")!.textContent).toContain("Motivos de ajuste");
+    expect(el.shadowRoot!.querySelector("h1")).toBeNull();
+    expect(table(el).getAttribute("aria-label")).toBe("Motivos de ajuste");
     const text = rowText(el, "c");
     expect(text).toContain("Invitación");
     expect(text).toContain("Hasta un 50% de un artículo");

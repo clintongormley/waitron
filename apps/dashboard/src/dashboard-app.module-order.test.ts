@@ -1,6 +1,7 @@
 import { html } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
 import type { DashboardContribution } from "@waitron/dashboard-kit";
+import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
 import type { DashboardApi } from "./api/client.js";
@@ -38,7 +39,7 @@ afterEach(() => {
   setLocale("es-ES");
 });
 
-function stubApi(): DashboardApi {
+function stubApi(modules: string[] = ["second", "unordered", "first"]): DashboardApi {
   const pending = () => vi.fn(() => new Promise(() => undefined));
   return {
     getMe: vi.fn().mockResolvedValue({
@@ -50,12 +51,16 @@ function stubApi(): DashboardApi {
       sessionDefault: "es-ES",
       venueName: "Deli Test SL",
       permissions: ["test.use"],
-      modules: ["second", "unordered", "first"],
+      modules,
     }),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     getSalesOverview: pending(),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
+    getFireControl: vi.fn().mockResolvedValue({ enabled: false }),
+    getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
+    listCourses: vi.fn().mockResolvedValue([]),
+    listStatuses: vi.fn().mockResolvedValue([]),
   } as unknown as DashboardApi;
 }
 
@@ -70,12 +75,40 @@ it("orders a group's module items by their stated order, an unstated order count
   const service = [
     ...el.shadowRoot!.querySelectorAll<HTMLElement>("#nav-group-panel-service [data-test]"),
   ].map((item) => item.dataset.test);
-  expect(service).toEqual([
-    "nav-floor",
-    "nav-statuses",
-    "nav-kitchen",
-    "nav-unordered",
-    "nav-first",
-    "nav-second",
-  ]);
+  expect(service).toEqual(["nav-unordered", "nav-first", "nav-second"]);
+});
+
+it("sorts a group's core items among its module items by their order", async () => {
+  const list = DASHBOARD_MODULES as unknown as DashboardContribution[];
+  const original = [...list];
+  list.length = 0;
+  list.push(
+    {
+      ...contribution("before", 19),
+      screen: { ...contribution("before", 19).screen, group: "operations" },
+    },
+    {
+      ...contribution("after", 21),
+      screen: { ...contribution("after", 21).screen, group: "operations" },
+    },
+  );
+  try {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi(["before", "after"]),
+      request: async () => [] as never,
+    });
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector("#nav-group-panel-operations [data-test=nav-after]"),
+      ).not.toBeNull(),
+    );
+    expect(
+      [
+        ...el.shadowRoot!.querySelectorAll<HTMLElement>("#nav-group-panel-operations [data-test]"),
+      ].map((item) => item.dataset.test),
+    ).toEqual(["nav-before", "nav-floor", "nav-after", "nav-venue-settings"]);
+  } finally {
+    list.length = 0;
+    list.push(...original);
+  }
 });

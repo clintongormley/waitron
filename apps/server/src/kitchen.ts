@@ -219,6 +219,13 @@ export async function setBumpMode(tx: Transaction, cfg: TillConfig, mode: BumpMo
   await tx.execute(sql`update locations set bump_mode = ${mode} where id = ${cfg.locationId}`);
 }
 
+export async function getBumpMode(tx: Transaction, cfg: TillConfig): Promise<BumpMode> {
+  const { rows } = await tx.execute<{ bump_mode: BumpMode }>(
+    sql`select bump_mode from locations where id = ${cfg.locationId}`,
+  );
+  return rows[0]!.bump_mode;
+}
+
 /** Which surface shows the per-course fire action. It governs only the UI. The dashboard and till keep hand-written copies of this union, because the
  *  browser bundle cannot import `@waitron/db` — add a mode to each by hand. */
 export type FireControl = (typeof fireControlMode.enumValues)[number];

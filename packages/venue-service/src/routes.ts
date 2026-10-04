@@ -29,10 +29,12 @@ import {
   updateDepartment,
 } from "./operations.js";
 import {
+  readClearingWorkflow,
   readEditSentLines,
   readKitchenTicketGrouping,
   readPrintHeldWork,
   readReleaseReminderMinutes,
+  writeClearingWorkflow,
   writeEditSentLines,
   writeKitchenTicketGrouping,
   writePrintHeldWork,
@@ -412,8 +414,26 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
           printHeldWork: await readPrintHeldWork(tx),
           releaseReminderMinutes: await readReleaseReminderMinutes(tx),
+          clearingWorkflow: await readClearingWorkflow(tx),
         }));
         return c.json(result);
+      }),
+    );
+
+    app.get("/management-api/venue-service/settings", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const settings = await withTransaction(ctx.db, async (tx) => {
+          await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.view" });
+          return {
+            settings: { editSentLines: await readEditSentLines(tx) },
+            kitchenTicketGrouping: await readKitchenTicketGrouping(tx),
+            printHeldWork: await readPrintHeldWork(tx),
+            releaseReminderMinutes: await readReleaseReminderMinutes(tx),
+            clearingWorkflow: await readClearingWorkflow(tx),
+          };
+        });
+        return c.json(settings);
       }),
     );
 
@@ -454,6 +474,19 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           throw new AppError("management.request_invalid", { field: "printHeldWork" });
         }
         await gated(sessionId, (tx) => writePrintHeldWork(tx, printHeldWork));
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/settings/clearing-workflow", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const clearingWorkflow = body.clearingWorkflow;
+        if (typeof clearingWorkflow !== "boolean") {
+          throw new AppError("management.request_invalid", { field: "clearingWorkflow" });
+        }
+        await gated(sessionId, (tx) => writeClearingWorkflow(tx, clearingWorkflow));
         return c.body(null, 204);
       }),
     );

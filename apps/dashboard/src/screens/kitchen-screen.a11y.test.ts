@@ -42,6 +42,7 @@ function stubApi(stations: Station[], courses: Course[] = COURSES): DashboardApi
     deactivateStation: vi.fn().mockResolvedValue(undefined),
     setDefaultStation: vi.fn().mockResolvedValue(undefined),
     setBumpMode: vi.fn().mockResolvedValue(undefined),
+    getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
     listCourses: vi.fn().mockResolvedValue(courses.map((c) => ({ ...c }))),
     createCourse: vi.fn().mockResolvedValue({ id: "c9" }),
     updateCourse: vi.fn().mockResolvedValue(undefined),
