@@ -36,6 +36,13 @@
       "when": 1791061241029,
       "tag": "0004_payment_origin_required",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791110927950,
+      "tag": "0005_operator_script_source",
+      "breakpoints": true
     }
   ]
 }

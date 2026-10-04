@@ -290,6 +290,21 @@ describe("recordIncident — origin", () => {
     expect(rows).toEqual([{ source: "fiscal_filing", deviceId: null }]);
   });
 
+  it("keeps an operator script warning attributed to that script", async () => {
+    await withTransaction(suite.db, (tx) =>
+      recordIncident(tx, {
+        origin: jobOrigin("operator_script"),
+        error: new AppError("clock.degraded", { deviceId, anchorAgeSeconds: 999 }),
+        severity: "warning",
+        detectedAt: BASE,
+      }),
+    );
+    const rows = await suite.db
+      .select({ source: incidents.source, deviceId: incidents.deviceId })
+      .from(incidents);
+    expect(rows).toEqual([{ source: "operator_script", deviceId: null }]);
+  });
+
   it("refuses a job source that names a device", async () => {
     await expect(insertRaw("dashboard", deviceId)).rejects.toThrow(/incidents_source_device_ck/);
   });

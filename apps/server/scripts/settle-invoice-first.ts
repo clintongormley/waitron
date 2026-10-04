@@ -114,7 +114,7 @@ export async function settleInvoiceFirst(
     });
 
     const saleInput: RecordSaleInput = {
-      origin: jobOrigin("demo_seed"),
+      origin: jobOrigin("operator_script"),
       nodeId: node,
       seriesId: stdSeries,
       locale: LOCALE,
@@ -165,7 +165,7 @@ export async function settleInvoiceFirst(
     });
 
     const corrInput: RecordCorrectionInput = {
-      origin: jobOrigin("demo_seed"),
+      origin: jobOrigin("operator_script"),
       nodeId: node,
       seriesId: rectSeries,
       correctsSaleId: sale.saleId,

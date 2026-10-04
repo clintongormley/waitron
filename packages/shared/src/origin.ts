@@ -14,14 +14,16 @@ export const SOURCES = [
   "kitchen_timer",
   "demo_seed",
   "readiness_test",
+  "operator_script",
 ] as const;
 export type Source = (typeof SOURCES)[number];
 
-/** The sources a sale table accepts: a device, or the demo seed or readiness test without one. */
+/** The sources a sale table accepts. A job source carries no device. */
 export const SALE_SOURCES = [
   "device",
   "demo_seed",
   "readiness_test",
+  "operator_script",
 ] as const satisfies readonly Source[];
 export type SaleSource = (typeof SALE_SOURCES)[number];
 
@@ -30,7 +32,7 @@ export type DeviceOrigin = { readonly source: "device"; readonly deviceId: Devic
 export type JobOrigin = { readonly source: JobSource; readonly deviceId: null };
 export type Origin = DeviceOrigin | JobOrigin;
 export type SaleOrigin =
-  DeviceOrigin | { readonly source: "demo_seed" | "readiness_test"; readonly deviceId: null };
+  DeviceOrigin | { readonly source: Exclude<SaleSource, "device">; readonly deviceId: null };
 
 export const deviceOrigin = (id: string): DeviceOrigin => ({
   source: "device",
@@ -56,7 +58,7 @@ export function isSaleOrigin(origin: Origin): origin is SaleOrigin {
   return (SALE_SOURCES as readonly string[]).includes(origin.source);
 }
 
-/** A sale table's stored pair: a device, the Demo seed or the readiness test. */
+/** A sale table's stored source and optional device. */
 export function readSaleOrigin(source: string, deviceId: string | null): SaleOrigin {
   const origin = readOrigin(source, deviceId);
   if (isSaleOrigin(origin)) return origin;

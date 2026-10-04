@@ -22,11 +22,12 @@ describe("the source vocabulary", () => {
       "kitchen_timer",
       "demo_seed",
       "readiness_test",
+      "operator_script",
     ]);
   });
 
-  it("allows a sale only from a device, the demo seed or the readiness test", () => {
-    expect(SALE_SOURCES).toEqual(["device", "demo_seed", "readiness_test"]);
+  it("allows only named sale sources", () => {
+    expect(SALE_SOURCES).toEqual(["device", "demo_seed", "readiness_test", "operator_script"]);
   });
 });
 
@@ -81,6 +82,10 @@ describe("origins", () => {
   it("reads a stored sale pair back", () => {
     expect(readSaleOrigin("device", DEVICE)).toEqual({ source: "device", deviceId: DEVICE });
     expect(readSaleOrigin("readiness_test", null)).toEqual(jobOrigin("readiness_test"));
+    expect(readSaleOrigin("operator_script", null)).toEqual({
+      source: "operator_script",
+      deviceId: null,
+    });
   });
 
   it.each([

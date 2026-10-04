@@ -28,9 +28,15 @@ it("names a device alert by its device and a job alert by its source, in the cho
   expect(sourceLabel({ source: "payment_check", deviceId: null, deviceName: null })).toBe(
     "Payment check",
   );
+  expect(sourceLabel({ source: "operator_script", deviceId: null, deviceName: null })).toBe(
+    "Operator script",
+  );
   setLocale("es-ES");
   expect(sourceLabel({ source: "payment_check", deviceId: null, deviceName: null })).toBe(
     "Comprobación de pagos",
+  );
+  expect(sourceLabel({ source: "operator_script", deviceId: null, deviceName: null })).toBe(
+    "Script del operador",
   );
   // A source this dashboard has no name for is shown as stored, rather than as a missing key.
   expect(sourceLabel({ source: "new_job", deviceId: null, deviceName: null })).toBe("new_job");

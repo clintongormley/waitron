@@ -114,7 +114,7 @@ export async function recordOneSale(
     });
 
     const input: RecordSaleInput = {
-      origin: jobOrigin("demo_seed"),
+      origin: jobOrigin("operator_script"),
       nodeId: node,
       seriesId: series,
       locale: LOCALE,
