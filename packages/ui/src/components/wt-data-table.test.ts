@@ -1032,6 +1032,7 @@ test("a toggling branch opens and closes from its row, says which it will do, an
   expect(el.shadowRoot!.querySelector('tr[data-row-key="break"] button.tree-toggle')).toBeNull();
   expect(arrow().getAttribute("aria-hidden")).toBe("true");
   expect(arrow().textContent!.trim()).toBe("▾");
+  expect(parseFloat(getComputedStyle(arrow()).fontSize)).toBeGreaterThanOrEqual(22);
   activator().click();
   await el.updateComplete;
   expect(treeKeys(el)).toEqual(["food", "break", "drinks"]);
