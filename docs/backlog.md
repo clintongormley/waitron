@@ -2959,7 +2959,7 @@ In Select mode at 375×667 the content column overflows: by 129px before W83 and
 same temporary test; no kept test covers Select mode there. Whether
 that is enough rows is the owner's call.
 
-**Products: Filters and Select at the start of the table's toolbar — DONE (W83, owner
+**Products: Filters and Select at the start of the table's toolbar — DONE (W83, #1193, owner
 2026-10-04).** On Products, Filters (a funnel with its count) and Select (a checklist mark) are icon
 buttons at the toolbar's leading edge, before the search. Each is named for screen readers, shows
 its name in a tooltip that Escape hides, on keyboard focus and, where the pointer can hover, on
