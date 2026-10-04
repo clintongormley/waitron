@@ -1229,7 +1229,7 @@ screen; (2) the handle-on-the-first-line alignment applied to the Extras list on
 but Each while the server accepts none for a whole unit with no scale link (ml) and stores 1.
 
 **Every reorderable table puts its drag handle on the first line of a tall row (W75b, owner
-2026-10-04) — DONE.** The shared reorder table styles (`packages/ui/src/reorder-table.ts`) now line
+2026-10-04) — DONE (#1201).** The shared reorder table styles (`packages/ui/src/reorder-table.ts`) now line
 body cells up by the baseline, so the handle sits on the first line of the plain text beside it,
 such as a long, wrapping name, instead of the row's middle; the Extras editor's own rule for this went. The
 Product editor's Modifiers table, the variant table, the Courses list and the option list form start
