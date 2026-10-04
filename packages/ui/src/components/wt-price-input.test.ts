@@ -2,6 +2,7 @@ import { expect, test, afterEach } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import { applyTokens } from "../tokens/index.js";
 import "./wt-price-input.js";
+import type { WtPriceInput } from "./wt-price-input.js";
 
 afterEach(cleanup);
 
@@ -80,6 +81,25 @@ test("clicking the unit button emits exactly one wt-unit-click and no leaked nat
   expect(unitClicks).toBe(1);
   // stopPropagation on the native click keeps the consumer from observing the change twice.
   expect(nativeClicks).toBe(0);
+});
+
+test("focusUnit puts focus on the unit button, where a host focus would land on the amount", async () => {
+  const el = (await mount(
+    '<wt-price-input label="Price" unit="kg"></wt-price-input>',
+  )) as WtPriceInput;
+  el.focusUnit();
+  expect(document.activeElement).toBe(el);
+  expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("button.unit"));
+});
+
+test("focusUnit leaves focus where it was on a field with a fixed unit, which has no button", async () => {
+  const el = (await mount(
+    '<wt-price-input label="Price" unit="kg" fixed-unit></wt-price-input>',
+  )) as WtPriceInput;
+  const before = document.activeElement;
+  el.focusUnit();
+  expect(document.activeElement).toBe(before);
+  expect(el.shadowRoot!.activeElement).toBeNull();
 });
 
 test("wt-unit-click bubbles and crosses shadow boundaries, so an ancestor outside a wrapping shadow root receives it", async () => {
