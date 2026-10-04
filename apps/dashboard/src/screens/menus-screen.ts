@@ -382,9 +382,10 @@ export class MenusScreen extends LitElement {
       wt-data-table.narrow::part(stacked) {
         max-width: calc(100cqi - 3 * var(--wt-tap-min));
       }
-      /* Set by the probes' widths rather than by the layout they choose, so they already hold in
-         the frame before the probes are read. Between the narrow and the wide layouts, the name
-         leaves room for the row menu and for the changes link at the start of Status. */
+      /* The middle and wide name widths are set by container queries on the list's width, like
+         the probes', rather than by the layout the probes choose, so they already apply in the
+         frame before the probes are read. Between the narrow and the wide layouts, the name leaves
+         room for the row menu and for the changes link under the state in Status. */
       @container (30rem < width < 50rem) {
         wt-data-table::part(name) {
           max-width: calc(100cqi - 3 * var(--wt-tap-min) - 8.5rem);
@@ -1540,7 +1541,7 @@ export class MenusScreen extends LitElement {
       return html`<span part="status muted" data-test=${test}
         >${t(menu.status === "loading" ? "menus.status_loading" : "menus.status_error")}</span
       >`;
-    // The list's Status says what is live; a changed menu's drafts have the Changes column.
+    // The list's Status says what is live; a changed menu's drafts have the changes link.
     const { label, live } = statusWords(
       menu.status.state === "changed" ? { ...menu.status, state: "current" } : menu.status,
     );

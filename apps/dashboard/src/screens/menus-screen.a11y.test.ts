@@ -366,6 +366,20 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
+  it("accessible menus list with Lunch's changes link under its state in Status, 700px wide", async () => {
+    const frame = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(700, 900);
+    onTestFinished(() => page.viewport(frame.width, frame.height));
+    const { el, host } = await mount("populated", theme, "/manage/menus");
+    const table = q(el, '[data-test="menus"]');
+    await vi.waitFor(() => {
+      expect(table.shadowRoot!.querySelectorAll("thead th")).toHaveLength(3);
+      const link = table.shadowRoot!.querySelector('[data-test="changes-menu-lunch"]');
+      expect(link?.closest("td")?.cellIndex).toBe(1);
+    });
+    await expectNoA11yViolations(host);
+  });
+
   async function mountHome(width: number) {
     const frame = { width: window.innerWidth, height: window.innerHeight };
     await page.viewport(width, 900);
