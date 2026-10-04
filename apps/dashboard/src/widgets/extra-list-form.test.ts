@@ -2216,7 +2216,7 @@ it("refuses to save a list holding a product with an Active variant, and saves o
 // Portion, in a column of its own beside Price
 
 /** The id a product read reports for a product sold by the unit (`EACH_UNIT_ID`,
- * packages/catalogue/src/units.ts). */
+ * packages/catalogue/src/unit-validation.ts). */
 const EACH_ID = "00000000-0000-0000-0000-000000000001";
 const EACH = {
   id: EACH_ID,
@@ -2395,7 +2395,7 @@ it("switches a row between an editable portion and a fixed 1 when its product's 
   expect("portion" in submitted[0]!.items[0]!).toBe(false);
 });
 
-it("shows the same Portion cells before a save and after the list is reopened with what the server returns", async () => {
+it("shows the same Portion cells before a save and after the list is reopened with what the server returns, and saves them again", async () => {
   const { el, host } = await mount({
     products: [product({ unitId: MILLILITRE.id, unit: MILLILITRE }), eachEgg],
   });
@@ -2432,6 +2432,13 @@ it("shows the same Portion cells before a save and after the list is reopened wi
   expect(portionCell(el, 0).textContent!.trim()).toBe("1");
   expect(field(el, "item-0-portion")).toBeNull();
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-portion").value).toBe("250.000");
+
+  await click(el, "save");
+  expect(submitted).toHaveLength(2);
+  const resent = submitted[1]!.items;
+  expect(resent.map((item) => item.productId)).toEqual([EGG, BACON]);
+  expect("portion" in resent[0]!, "the Each row sends no portion").toBe(false);
+  expect(resent[1]!.portion).toBe("250.000");
 });
 
 /** A text's FIRST line box, however many lines it wraps to. */
@@ -2441,24 +2448,39 @@ function firstLine(node: Element): DOMRect {
   return range.getClientRects()[0]!;
 }
 
-it.each([1280, 390])(
-  "draws the drag handle's icon within the first line of a tall row's product name at %ipx",
-  async (frame) => {
+it.each([
+  [1280, "light"],
+  [1280, "dark"],
+  [390, "light"],
+  [390, "dark"],
+] as const)(
+  "draws the drag handle's icon within the first line of a tall row's product name at %ipx (%s)",
+  async (frame, theme) => {
     const width = window.innerWidth,
       height = window.innerHeight;
     await page.viewport(frame, 844);
     try {
-      const { el } = await mount({
-        value: { ...addons, items: [{ ...addons.items[0]!, portion: "0.055" }, addons.items[1]!] },
-        products: [
-          product({
-            name: "Smoked streaky bacon from the farm down the road, cut thick and fried until it is crisp at the edges",
-            unitId: KG.id,
-            unit: { ...KG, precision: 2 },
-          }),
-          products[1]!,
-        ],
-      });
+      const { el } = await mountWidget<ExtraListForm>(
+        "dashboard-extra-list-form",
+        {
+          open: true,
+          languages,
+          value: {
+            ...addons,
+            items: [{ ...addons.items[0]!, portion: "0.055" }, addons.items[1]!],
+          },
+          products: [
+            product({
+              name: "Smoked streaky bacon from the farm down the road, cut thick and fried until it is crisp at the edges",
+              unitId: KG.id,
+              unit: { ...KG, precision: 2 },
+            }),
+            products[1]!,
+          ],
+        },
+        theme,
+      );
+      expect(el.parentElement!.getAttribute("data-theme")).toBe(theme);
       const row = el.shadowRoot!.querySelector<HTMLElement>(`tr[data-item="${BACON_ITEM}"]`)!;
       const name = row.querySelector('[data-test="item-0-product"]')!;
       const handle = row.querySelector<HTMLElement>(`[data-test="drag-${BACON_ITEM}"]`)!;
@@ -2472,7 +2494,7 @@ it.each([1280, 390])(
       })();
 
       expect(window.innerWidth).toBe(frame);
-      // A row taller than its handle is what the centring got wrong.
+      // Only a row taller than its handle can tell the first line from the row's middle.
       expect(row.getBoundingClientRect().height).toBeGreaterThan(handleBox.height * 1.5);
       expect(nameLines, "the name wraps").toBeGreaterThan(1);
       const line = firstLine(name);
