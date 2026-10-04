@@ -293,6 +293,28 @@ describe("venue operations screen", () => {
     await vi.waitFor(() => expect(updateZone).toHaveBeenCalledWith("z1", { name: "Garden room" }));
   });
 
+  it("keeps a zone rename open and reports a rejected save", async () => {
+    setLocale("es");
+    const updateZone = vi.fn().mockRejectedValue({ code: "zone.not_found" });
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      updateZone,
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    tree.querySelector<HTMLButtonElement>('[data-test="edit-zone-name"]')!.click();
+    await settle(el);
+    const input = tree
+      .querySelector('wt-input[name="zoneName"]')!
+      .shadowRoot!.querySelector("input")!;
+    input.value = "Garden room";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    tree.querySelector<HTMLButtonElement>('[data-test="save-zone-name"]')!.click();
+    await vi.waitFor(() => expect(updateZone).toHaveBeenCalledWith("z1", { name: "Garden room" }));
+    await settle(el);
+    expect(tree.querySelector('wt-input[name="zoneName"]')).not.toBeNull();
+    expect(pageAlert(el)).toBe("No se pudo guardar el cambio.");
+  });
+
   it("shows a zone's readiness problem beneath that zone in the policy table", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({
@@ -516,6 +538,29 @@ describe("venue operations screen", () => {
     expect(deactivateZone).not.toHaveBeenCalled();
     await action(el, "save-editor");
     expect(deactivateZone).toHaveBeenCalledWith("z1");
+  });
+
+  it("keeps zone removal available after a rejected request", async () => {
+    const deactivateZone = vi.fn().mockRejectedValue({ code: "zone.not_found" });
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      deactivateZone,
+      departmentRemovalImpact: vi.fn().mockResolvedValue({
+        zones: [{ id: "z1", name: "Dining room", activeTableCount: 0 }],
+      }),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const remove = tree.querySelector<HTMLElement>('[data-test="remove-tree-zone-z1"]')!;
+    remove
+      .closest("wt-row-actions")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    remove.click();
+    await settle(el);
+    await action(el, "save-editor");
+    await vi.waitFor(() => expect(deactivateZone).toHaveBeenCalledWith("z1"));
+    expect(modal(el)).not.toBeNull();
+    expect(await bottom(el)).toBe("The change could not be saved.");
   });
 
   it("names the zone and its active tables before removal", async () => {
