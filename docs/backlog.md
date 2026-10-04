@@ -1247,13 +1247,17 @@ tables.
 **The server refuses a new Extras item with no Portion for every unit but Each (W75c, owner
 2026-10-04) — DONE.** `assertPortionPrecision` (`packages/catalogue/src/extras.ts`) used to refuse a
 new item with no portion only when its unit had decimals or a scale link, so a new item for ml or a
-venue's own whole unit was saved with no portion and stored as 1. It now refuses a new item with no
-portion as `extras.invalid` naming `items.<n>.portion` unless the product is Each — it has no stored
-unit, or its stored unit was seeded as `each` — and an Each item still takes none and stores 1.
-Tests in `packages/catalogue/src/extras.test.ts` cover the seeded ml unit, a venue's own whole unit,
-and both kinds of Each. An item already on the list is checked as before. Two catalogue test files
-whose lists offered products on a venue's own whole unit now send a portion of 1.
-Left OPEN, found while building it and not in its scope: an item already on a list that is sent
+venue's own whole unit was saved with no portion and stored as 1. It now refuses an item with no
+portion that the list does not already hold — sent with no id, or with an id the list does not hold
+(the dashboard's Extras editor gives every row it adds an id of its own) — as `extras.invalid`
+naming `items.<n>.portion`, unless the product is Each: it has no stored unit, or its stored unit
+was seeded as `each`. An Each item still takes none and stores 1. An id that belongs to another list
+is refused on `items.<n>.id` before the portion check runs, so it keeps that refusal. Tests in
+`packages/catalogue/src/extras.test.ts` cover the seeded ml unit, a venue's own whole unit, both
+kinds of Each, and items sent with an id the list does not hold, on create and on update. An item
+the list already holds is checked as before. Two catalogue test files whose lists offered products
+on a venue's own whole unit now send a portion of 1.
+Left OPEN, found while building it and not in its scope: an item the list already holds that is sent
 again WITHOUT a portion loses its saved one. Tried with a throwaway test: a kg item saved at
 `0.050`, then `updateExtraList` with `{ id, productId }` and no portion, read back `1.000`, because
 `assertPortionPrecision` skips a kept item with no portion and `writeItems` re-inserts every item
