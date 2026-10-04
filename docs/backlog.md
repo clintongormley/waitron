@@ -2772,6 +2772,22 @@ heading row's trailing edge; the doc only names the exceptions, and whether the 
 is the owner's call. And the row-highlight tests focus only the row's own button, so nothing tests
 that a row highlights while another control in it, such as its Actions menu, has focus.
 
+**Menus list Changes column and top-aligned rows — DONE (W87, owner 2026-10-04).** The Menus
+list has a Changes column. A menu with changes since its live version keeps "Published", the live
+version and its time in Status, and shows an "Unpublished changes" link under Changes, named for
+its menu, that opens the menu's Preview tab straight away without opening the row; a click with a
+modifier key is left to the browser. A menu never published, one with no changes, and every menu
+while the states are read or after their read fails show nothing there. Clashes stay in Status and
+the status sort is unchanged. The list's cells now start at their top (a new `topAligned` option
+on `wt-data-table`, set by this list alone) with the name, state, link and row menu on one line.
+At phone width the state and then the link stack under the name. With a second movable column the
+desktop list now offers Customise columns, which W79 had left off; the list keeps its column
+choices under a new key, so a choice saved while Status was its only movable column is not read.
+Left open by W87: at widths between the phone layout and a wide desktop (about 700 px with a long
+menu name, seen in a screenshot) the four columns no longer fit and the list scrolls sideways under
+its pinned Actions column; the editor heading still reads "Unpublished changes · Live: version
+<n>", which W88 redesigns.
+
 **Add products picker selects all listed — DONE (W81, owner 2026-10-04).** The Structure tab's
 "Add several products" button now reads "Add products" ("Añadir productos"). The picker's list has
 a header row whose checkbox lines up with the products' own, labelled "Select all listed" and named
