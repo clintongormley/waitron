@@ -1181,7 +1181,7 @@ while the drag handle, the Default radio and the row menu keep doing their own t
 list form (`extra-list-form.ts`) draws the same kind of table, but its rows have no editor.
 
 **Clicking an Extras or Options list's row opens its editor, in the product editor and on the
-Modifiers page (W71, owner 2026-10-04) — DONE (#1192; W71f).** In the product editor's Modifiers table
+Modifiers page (W71, owner 2026-10-04) — DONE (#1192; W71f #1198).** In the product editor's Modifiers table
 (`apps/dashboard/src/widgets/product-editor.ts`) a click on a list's name or the empty part of its
 row, or Enter or Space on it, does what Edit in the row's menu does (`wt-edit-related`), through a
 row-sized button named "Edit: <list> · <kind>", built as the variants table's is; the drag handle,
@@ -1200,7 +1200,15 @@ The unit form's Cancel and Escape cases failed — Add unit was still drawn disa
 hand-back ran, and after Escape focus was lost even when Add unit was opened with a real click — so
 `#returnChildFocus` now waits for the unit form as it does for the list forms. The Courses window
 passed unchanged; with its hand-back removed only the new cases failed, as opening it from the
-course box puts focus on the box first.
+course box puts focus on the box first. Left OPEN from W71f's review, not acted on: (1)
+`docs/developers/design-system.md` (the `wt-modal` paragraph) says the native dialog "returns focus
+to its trigger on close", while the W71f test comments and `product-editor.ts` rely on it going back
+to whatever had focus when the dialog opened; the line dates from #319 (2026-09-11, `git blame`) and
+neither reading has been tested — next step: a browser case that opens a dialog with focus away from
+its trigger and records where focus lands, then correct the sentence to what it shows. (2) The unit
+form's wait in `#returnChildFocus` works because the product editor finishes redrawing Add unit as
+enabled in the meantime (seen in Codex's timing log); the code does not wait for the editor itself,
+and nobody has tested whether that order is guaranteed.
 
 **The Extras editor shows Portion beside Price, and a fixed 1 for a product sold by the unit
 (W75, owner 2026-10-04) — DONE (#1194).** In `apps/dashboard/src/widgets/extra-list-form.ts` Portion is a
