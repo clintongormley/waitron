@@ -41,10 +41,6 @@ interface DraftItem {
 }
 
 /**
- * A blank Portion is refused here for every unit but Each, though the server refuses a missing
- * portion only on a new entry whose unit has decimals or a scale link, and stores 1 otherwise
- * (`assertPortionPrecision` and `writeItems`, packages/catalogue/src/extras.ts).
- *
  * A blank price is emitted as `null`, which is what keeps "inherits" and "set to the same number"
  * different rows.
  */

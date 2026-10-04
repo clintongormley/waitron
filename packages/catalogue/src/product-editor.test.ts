@@ -406,7 +406,7 @@ it("round-trips real category, extras and options associations in the order they
       category: await createCategory(tx, { name: "Drinks" }),
       sauces: await createExtraList(
         tx,
-        { name: "Sauces", items: [{ productId: topping.id }] },
+        { name: "Sauces", items: [{ productId: topping.id, portion: "1" }] },
         "en",
       ),
       doneness: await createOptionList(tx, { name: "Doneness", labels: [{ name: "Rare" }] }, "en"),
@@ -866,13 +866,23 @@ describe("a product an extras list offers", () => {
     offering = await withTransaction(fx.db, async (tx) => {
       const toppings = await createExtraList(
         tx,
-        { name: "Toppings", items: [{ productId: tea.id }, { productId: coffee.id }] },
+        {
+          name: "Toppings",
+          items: [
+            { productId: tea.id, portion: "1" },
+            { productId: coffee.id, portion: "1" },
+          ],
+        },
         "en",
       );
-      await createExtraList(tx, { name: "Sides", items: [{ productId: tea.id }] }, "en");
+      await createExtraList(
+        tx,
+        { name: "Sides", items: [{ productId: tea.id, portion: "1" }] },
+        "en",
+      );
       const addOns = await createExtraList(
         tx,
-        { name: "Add-ons", items: [{ productId: coffee.id }] },
+        { name: "Add-ons", items: [{ productId: coffee.id, portion: "1" }] },
         "en",
       );
       return [

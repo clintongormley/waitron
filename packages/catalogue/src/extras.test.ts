@@ -182,6 +182,76 @@ describe("extra list CRUD", () => {
     });
   });
 
+  it.each([
+    ["the seeded ml unit", "ml"],
+    ["a venue's own whole unit", null],
+  ])("requires an explicit portion for %s, which has no scale link", async (_label, seedKey) => {
+    const productId = await run(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "millilitre" }, precision: 0, abbreviation: { en: "ml" } },
+        "en",
+      );
+      await tx.execute(sql`update units set seed_key = ${seedKey} where id = ${unit.id}`);
+      const catalogue = await createCatalogue(tx, { name: "Poured extras" });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: "Olive oil",
+        unitId: unit.id,
+        unitPrice: "0.02",
+        vatClass: "reduced",
+      });
+      return product.id;
+    });
+
+    const error = await refusal((tx) =>
+      createExtraList(
+        tx,
+        { name: "Oils", items: [{ productId: breads.rye }, { productId }] },
+        "en",
+      ),
+    );
+    expect(error).toMatchObject({
+      code: "extras.invalid",
+      params: { field: "items.1.portion" },
+    });
+  });
+
+  it("takes no portion for an Each extra, stored or not, and stores one", async () => {
+    const eachProductId = await run(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "each" }, precision: 0, abbreviation: { en: "u" } },
+        "en",
+      );
+      await tx.execute(sql`update units set seed_key = 'each' where id = ${unit.id}`);
+      const catalogue = await createCatalogue(tx, { name: "Counted extras" });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: "Olive",
+        unitId: unit.id,
+        unitPrice: "0.30",
+        vatClass: "reduced",
+      });
+      return product.id;
+    });
+
+    const created = await run((tx) =>
+      createExtraList(
+        tx,
+        { name: "Sides", items: [{ productId: breads.rye }, { productId: eachProductId }] },
+        "en",
+      ),
+    );
+    const read = await run((tx) => getExtraList(tx, created.id));
+    expect(read.items.map((item) => [item.productId, item.portion])).toEqual([
+      [breads.rye, "1.000"],
+      [eachProductId, "1.000"],
+    ]);
+  });
+
   it("refuses a non-one portion for an Each extra", async () => {
     const error = await refusal((tx) =>
       createExtraList(

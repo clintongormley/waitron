@@ -211,7 +211,6 @@ async function assertPortionPrecision(
       id: products.id,
       unitId: units.id,
       precision: units.precision,
-      hardwareUnit: units.hardwareUnit,
       seedKey: units.seedKey,
     })
     .from(products)
@@ -240,9 +239,10 @@ async function assertPortionPrecision(
   for (const [index, item] of input.items.entries()) {
     const unit = unitByProduct.get(item.productId);
     const precision = unit?.precision ?? 0;
+    const each = unit?.unitId === null || unit?.seedKey === "each";
     const saved = item.id === undefined ? undefined : savedById.get(item.id);
     if (item.portion === undefined) {
-      if (item.id === undefined && (precision > 0 || Boolean(unit?.hardwareUnit)))
+      if (item.id === undefined && !each)
         throw new AppError("extras.invalid", { field: `items.${index}.portion` });
       continue;
     }
@@ -252,8 +252,7 @@ async function assertPortionPrecision(
     )
       continue;
     try {
-      if ((unit?.unitId === null || unit?.seedKey === "each") && item.portion !== "1.000")
-        throw new Error("Each portion must be one");
+      if (each && item.portion !== "1.000") throw new Error("Each portion must be one");
       assertQuantityPrecision(item.portion, precision, {
         positive: true,
       });
