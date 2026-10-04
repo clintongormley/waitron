@@ -2246,3 +2246,43 @@ it("reads and writes the opened category in the address", async () => {
   await el.updateComplete;
   expect(location.pathname).toBe("/manage/catalogue");
 });
+
+describe("catalogue-screen sticky headings", () => {
+  async function mountBounded(props: Partial<CatalogueScreen>, api = stubApi()) {
+    const { el, host } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+      api,
+      ...props,
+    });
+    host.style.display = "flex";
+    host.style.flexDirection = "column";
+    host.style.height = "600px";
+    await flush(el);
+    return { el, host };
+  }
+
+  it.each([false, true])(
+    "hands stickyHeader (%s) down to the Products table, which fills the screen only when it is set",
+    async (sticky) => {
+      const { el, host } = await mountBounded({ stickyHeader: sticky });
+      expect(el.hasAttribute("sticky-header")).toBe(sticky);
+      expect(list(el).stickyHeader).toBe(sticky);
+      const table = await productTable(el);
+      expect(table.stickyHeader).toBe(sticky);
+      const scroll = table.shadowRoot!.querySelector(".scroll")!.getBoundingClientRect();
+      const bottom = host.getBoundingClientRect().bottom;
+      if (sticky) expect(scroll.bottom).toBeCloseTo(bottom, 0);
+      else expect(scroll.bottom).toBeLessThan(bottom - 100);
+      const heading = el.shadowRoot!.querySelector("h1")!.getBoundingClientRect();
+      expect(heading.top).toBeCloseTo(host.getBoundingClientRect().top, 0);
+    },
+  );
+
+  it("keeps the no-catalogue prompt its own height", async () => {
+    const { el } = await mountBounded(
+      { stickyHeader: true },
+      stubApi({ listCatalogues: vi.fn().mockResolvedValue([]) }),
+    );
+    const prompt = el.shadowRoot!.querySelector<HTMLElement>("[data-test=no-catalogue]")!;
+    expect(prompt.getBoundingClientRect().height).toBeLessThan(100);
+  });
+});

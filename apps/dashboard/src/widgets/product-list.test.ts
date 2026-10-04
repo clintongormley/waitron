@@ -2174,3 +2174,75 @@ describe("a product's variants in the list", () => {
     expect(cellUnder(root, "cecina", t("product.made_at")).textContent!.trim()).not.toBe("");
   });
 });
+
+describe("the product list with sticky headings", () => {
+  const longList = () => [
+    ...Array.from({ length: 12 }, (_, index) =>
+      product({ id: `d-${index}`, name: `Drink ${index}`, primaryCategoryId: "d" }),
+    ),
+    ...Array.from({ length: 12 }, (_, index) =>
+      product({ id: `f-${index}`, name: `Food ${index}`, primaryCategoryId: "f" }),
+    ),
+  ];
+  const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+
+  /** Mounts the list as the only thing in a 600 px column, the way the Products screen bounds it. */
+  async function mountBounded(props: Partial<ProductList> = {}) {
+    const { el, host } = await mountWidget<ProductList>("dashboard-product-list", {
+      categories: [drinks, food],
+      products: longList(),
+      ...props,
+    });
+    host.style.display = "flex";
+    host.style.flexDirection = "column";
+    host.style.height = "600px";
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    await el.revealProduct("f-11");
+    await el.revealProduct("d-11");
+    await frame();
+    return { el, host, table, root, scroll: root.querySelector<HTMLElement>(".scroll")! };
+  }
+
+  it("is off unless the screen asks for it", async () => {
+    const { el, table, scroll } = await mountBounded();
+    expect(el.stickyHeader).toBe(false);
+    expect(table.stickyHeader).toBe(false);
+    expect(scroll.scrollHeight).toBe(scroll.clientHeight);
+  });
+
+  it("fills its column and keeps the table's toolbar and headings in place while the rows scroll", async () => {
+    const { el, host, table, root, scroll } = await mountBounded({ stickyHeader: true });
+    expect(el.hasAttribute("sticky-header")).toBe(true);
+    expect(table.stickyHeader).toBe(true);
+    expect(el.getBoundingClientRect().bottom).toBeCloseTo(host.getBoundingClientRect().bottom, 0);
+    expect(scroll.getBoundingClientRect().bottom).toBeCloseTo(
+      host.getBoundingClientRect().bottom,
+      0,
+    );
+    expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
+    const toolbar = root.querySelector(".table-toolbar")!;
+    const name = root.querySelector<HTMLElement>("thead th")!;
+    const before = [toolbar, name].map((item) => item.getBoundingClientRect().toJSON());
+    scroll.scrollTop = scroll.scrollHeight;
+    await frame();
+    expect(scroll.scrollTop).toBeGreaterThan(0);
+    expect([toolbar, name].map((item) => item.getBoundingClientRect().toJSON())).toEqual(before);
+    const box = name.getBoundingClientRect();
+    const hit = root.elementFromPoint(box.x + 8, box.y + box.height / 2);
+    expect(hit !== null && name.contains(hit)).toBe(true);
+  });
+
+  it("reveals a product below the headings, not under them", async () => {
+    const { el, root, scroll } = await mountBounded({ stickyHeader: true });
+    scroll.scrollTop = scroll.scrollHeight;
+    await frame();
+    await el.revealProduct("d-0");
+    await frame();
+    const row = root.querySelector('tr[data-row-key="d-0"]')!.getBoundingClientRect();
+    expect(row.top).toBeGreaterThanOrEqual(
+      root.querySelector("thead th")!.getBoundingClientRect().bottom - 0.5,
+    );
+    expect(row.bottom).toBeLessThanOrEqual(scroll.getBoundingClientRect().bottom);
+  });
+});

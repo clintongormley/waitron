@@ -5701,3 +5701,144 @@ describe("telling the password manager which passkeys are accepted after a sign-
     expect(signalDetails).not.toHaveBeenCalled();
   });
 });
+
+describe("the Products screen in the shell", () => {
+  const listed = Array.from({ length: 40 }, (_, index) => ({
+    id: `p${index}`,
+    name: `Product ${index}`,
+    primaryCategoryId: null,
+    categoryId: null,
+    active: true,
+    catalogueId: "cat-a",
+    modifiers: [],
+    customerName: null,
+    unitId: "u",
+    unit: { id: "u", name: { es: "Unidad" }, abbreviation: { es: "ud" }, precision: 0 },
+    description: null,
+    kitchenName: null,
+    dietaryDeclarations: [],
+    pricingUnit: "each",
+    unitPrice: "2.00",
+    vatClass: "reduced",
+    available: true,
+    ordering: "public",
+    allergens: null,
+    dietOverride: null,
+    manualAllergens: null,
+    image: null,
+    variants: [],
+  }));
+  const productsApi = () => {
+    const api = stubApi({
+      listCatalogues: vi
+        .fn()
+        .mockResolvedValue([{ id: "cat-a", name: "Comida", active: true, version: 1 }]),
+      listProducts: vi.fn().mockResolvedValue(listed),
+      listUnits: vi.fn().mockResolvedValue([]),
+      listExtraLists: vi.fn().mockResolvedValue([]),
+      listOptionLists: vi.fn().mockResolvedValue([]),
+      listMadeAt: vi.fn().mockResolvedValue({}),
+      getFolderRouting: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    Object.defineProperty(api, "background", { get: () => api });
+    return api;
+  };
+  const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+
+  async function openProducts(width: number, height: number) {
+    await page.viewport(width, height);
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api: productsApi() });
+    // The page gives the app the viewport's height, as index.html does.
+    host.style.height = `${height}px`;
+    await flush(el);
+    navCatalogue(el)!.click();
+    await flush(el);
+    const screen = catalogue(el)!;
+    const browser = screen.shadowRoot!.querySelector("dashboard-catalogue-browser")!;
+    await vi.waitFor(() =>
+      expect(browser.shadowRoot!.querySelector("dashboard-product-list")).not.toBeNull(),
+    );
+    const list = browser.shadowRoot!.querySelector("dashboard-product-list")!;
+    const table = list.shadowRoot!.querySelector("wt-data-table")!;
+    await vi.waitFor(() =>
+      expect(table.shadowRoot!.querySelectorAll("tbody tr").length).toBeGreaterThan(40),
+    );
+    await frame();
+    const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
+    const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+    return { el, screen, table, main, scroll };
+  }
+
+  it("fills the main column at desktop size, keeping its title, the table's toolbar and its headings in view while the rows scroll", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      const { screen, table, main, scroll } = await openProducts(1280, 800);
+      expect(screen.stickyHeader).toBe(true);
+      expect(screen.hasAttribute("sticky-header")).toBe(true);
+      expect(main.scrollHeight).toBe(main.clientHeight);
+      expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
+      const fixed = [
+        screen.shadowRoot!.querySelector("h1")!,
+        table.shadowRoot!.querySelector(".table-toolbar")!,
+        table.shadowRoot!.querySelector("thead th")!,
+      ];
+      const before = fixed.map((item) => item.getBoundingClientRect().toJSON());
+      scroll.scrollTop = scroll.scrollHeight;
+      await frame();
+      expect(scroll.scrollTop).toBeGreaterThan(0);
+      expect(fixed.map((item) => item.getBoundingClientRect().toJSON())).toEqual(before);
+      const port = main.getBoundingClientRect();
+      for (const item of fixed) {
+        expect(item.getBoundingClientRect().top).toBeGreaterThanOrEqual(port.top);
+        expect(item.getBoundingClientRect().bottom).toBeLessThanOrEqual(port.bottom);
+      }
+      // The box reaches down to the body's padding: the rows use the whole column.
+      const body = main.querySelector<HTMLElement>(".body")!;
+      expect(scroll.getBoundingClientRect().bottom).toBeCloseTo(
+        port.bottom - parseFloat(getComputedStyle(body).paddingBottom),
+        0,
+      );
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  it.each([
+    [390, 844],
+    [375, 667],
+  ])(
+    "at %i×%i the content column does not overflow, the table's box does, and the toolbar and headings stay inside the column with the rows scrolled to the end",
+    async (w, h) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      try {
+        const { table, main, scroll } = await openProducts(w, h);
+        expect(main.scrollHeight).toBeLessThanOrEqual(main.clientHeight);
+        expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
+        scroll.scrollTop = scroll.scrollHeight;
+        await frame();
+        expect(scroll.scrollTop).toBeGreaterThan(0);
+        const port = main.getBoundingClientRect();
+        for (const item of [
+          table.shadowRoot!.querySelector(".table-toolbar")!,
+          table.shadowRoot!.querySelector("thead th")!,
+        ]) {
+          expect(item.getBoundingClientRect().top).toBeGreaterThanOrEqual(port.top);
+          expect(item.getBoundingClientRect().bottom).toBeLessThanOrEqual(port.bottom);
+        }
+      } finally {
+        await page.viewport(width, height);
+      }
+    },
+  );
+
+  it("leaves another screen's body a plain block", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: productsApi() });
+    await flush(el);
+    navStaff(el)!.click();
+    await flush(el);
+    expect(staff(el)).not.toBeNull();
+    expect(getComputedStyle(el.shadowRoot!.querySelector(".body")!).display).toBe("block");
+  });
+});
