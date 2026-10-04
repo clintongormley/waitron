@@ -6497,9 +6497,8 @@ describe("till-app", () => {
 
     it("cancels the pretend reader on the server and does not show its late decline", async () => {
       let settlePay: (outcome: PayOutcome) => void = () => undefined;
-      const pay = vi.fn(
-        (_request: { demoAttemptId?: string }) =>
-          new Promise<PayOutcome>((resolve) => (settlePay = resolve)),
+      const pay = vi.fn<(request: { demoAttemptId?: string }) => Promise<PayOutcome>>(
+        () => new Promise<PayOutcome>((resolve) => (settlePay = resolve)),
       );
       const cancelDemoReaderPayment = vi.fn(async () => {
         settlePay({ outcome: "declined" });
