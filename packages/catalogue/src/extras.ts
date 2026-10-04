@@ -199,27 +199,20 @@ async function assertProductsExist(tx: Transaction, input: ExtraListInput): Prom
   if (at !== -1) throw new AppError("extras.invalid", { field: `items.${at}.productId` });
 }
 
+type SavedItem = { productId: string; portion: number };
+
+/** `savedById` holds this list's saved rows for the ids the body sends. */
 async function assertPortionPrecision(
   tx: Transaction,
-  extraListId: string,
+  savedById: ReadonlyMap<string, SavedItem>,
   input: ExtraListInput,
 ): Promise<void> {
-  const retainedIds = input.items.flatMap((item) => (item.id === undefined ? [] : [item.id]));
-  const retained = retainedIds.length
-    ? await tx
-        .select({
-          id: extraListItems.id,
-          productId: extraListItems.productId,
-          portion: extraListItems.portion,
-        })
-        .from(extraListItems)
-        .where(eq(extraListItems.listId, extraListId))
-    : [];
-  const savedById = new Map(retained.map((row) => [row.id, row]));
-  // New means the list does not hold the id, not that no id was sent: the dashboard's editor sends
-  // one for every row it adds.
+  const savedFor = (item: ExtraListInput["items"][number]) =>
+    item.id === undefined ? undefined : savedById.get(item.id);
+  // New means the list holds no row for the item's product under its id, not that no id was sent:
+  // the dashboard's editor sends one for every row it adds.
   const isNew = (item: ExtraListInput["items"][number]) =>
-    item.id === undefined || !savedById.has(item.id);
+    savedFor(item)?.productId !== item.productId;
   const named = input.items.filter((item) => item.portion !== undefined || isNew(item));
   if (named.length === 0) return;
   const rows = await tx
@@ -244,7 +237,7 @@ async function assertPortionPrecision(
     const unit = unitByProduct.get(item.productId);
     const precision = unit?.precision ?? 0;
     const each = unit?.unitId === null || unit?.seedKey === "each";
-    const saved = item.id === undefined ? undefined : savedById.get(item.id);
+    const saved = savedFor(item);
     if (item.portion === undefined) {
       if (isNew(item) && !each)
         throw new AppError("extras.invalid", { field: `items.${index}.portion` });
@@ -300,7 +293,12 @@ async function writeItems(
   const bodyIds = input.items.flatMap((item) => (item.id === undefined ? [] : [item.id]));
   const existing = bodyIds.length
     ? await tx
-        .select({ id: extraListItems.id, listId: extraListItems.listId })
+        .select({
+          id: extraListItems.id,
+          listId: extraListItems.listId,
+          productId: extraListItems.productId,
+          portion: extraListItems.portion,
+        })
         .from(extraListItems)
         .where(inArray(extraListItems.id, bodyIds))
     : [];
@@ -311,9 +309,8 @@ async function writeItems(
     const at = input.items.findIndex((item) => item.id !== undefined && foreign.has(item.id));
     throw new AppError("extras.invalid", { field: `items.${at}.id` });
   }
-  // After the foreign-id refusal: this list does not hold another list's id, so the portion check
-  // would read that item as new and could refuse its portion rather than its id.
-  await assertPortionPrecision(tx, extraListId, input);
+  // After the foreign-id refusal, so every row handed to the portion check is this list's.
+  await assertPortionPrecision(tx, new Map(existing.map((row) => [row.id, row])), input);
   // The list now starts from nothing, so no row the body keeps can collide with a row it replaces.
   await tx.delete(extraListItems).where(eq(extraListItems.listId, extraListId));
   for (const [sort, item] of input.items.entries()) {

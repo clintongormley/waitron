@@ -322,6 +322,47 @@ describe("extra list CRUD", () => {
     });
   });
 
+  it("requires a portion for a held id sent with a different product", async () => {
+    const productId = await mlProduct();
+    const list = await run((tx) =>
+      createExtraList(tx, { name: "Oils", items: [{ productId: breads.rye }] }, "en"),
+    );
+
+    const error = await refusal((tx) =>
+      updateExtraList(
+        tx,
+        list.id,
+        { name: "Oils", items: [{ id: list.items[0]!.id, productId }] },
+        "en",
+      ),
+    );
+    expect(error).toMatchObject({
+      code: "extras.invalid",
+      params: { field: "items.0.portion" },
+    });
+  });
+
+  // What the kept item's portion becomes is the open point in W75c's backlog entry.
+  it("takes no portion for a held id sent with the same product", async () => {
+    const productId = await mlProduct();
+    const list = await run((tx) =>
+      createExtraList(tx, { name: "Oils", items: [{ productId, portion: "30" }] }, "en"),
+    );
+
+    await run((tx) =>
+      updateExtraList(
+        tx,
+        list.id,
+        { name: "Oils", items: [{ id: list.items[0]!.id, productId }] },
+        "en",
+      ),
+    );
+    const read = await run((tx) => getExtraList(tx, list.id));
+    expect(read.items.map((item) => [item.id, item.productId])).toEqual([
+      [list.items[0]!.id, productId],
+    ]);
+  });
+
   // The item sent with no id keeps the check from returning before it reads any unit, so the
   // id-carrying items' units must be read too.
   it("takes no portion for an Each extra sent with an id the list does not hold, and stores one", async () => {
