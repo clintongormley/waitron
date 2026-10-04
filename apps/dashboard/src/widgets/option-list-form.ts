@@ -77,8 +77,13 @@ export class OptionListForm extends LitElement {
         white-space: nowrap;
       }
       th:nth-child(3) {
-        white-space: normal;
-        overflow-wrap: anywhere;
+        position: relative;
+      }
+      .default-heading {
+        position: absolute;
+        inset-inline-end: var(--wt-space-1);
+        inset-block-start: var(--wt-space-2);
+        white-space: nowrap;
       }
       td:last-child {
         text-align: end;
@@ -583,7 +588,7 @@ export class OptionListForm extends LitElement {
             <tr>
               <th scope="col"><span class="visually-hidden">${t("options.reorder")}</span></th>
               <th scope="col">${t("options.name")}</th>
-              <th scope="col">${t("options.default")}</th>
+              <th scope="col"><span class="default-heading">${t("options.default")}</span></th>
               <th scope="col">
                 <span class="visually-hidden">${t("options.option_actions")}</span>
               </th>

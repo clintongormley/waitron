@@ -1354,19 +1354,12 @@ keeps its grip, Preselected and remove columns at their content widths. Chromium
 languages at phone and desktop widths. A195 asked the same of `wt-data-table`'s Actions column; it is
 done too (above).
 
-**An extras list with no products shows its Preselected heading one letter per line (A262, owner
-2026-10-03) — OPEN, queued in lane D as part of W49, after A203 lands.** Lane D wrote its own
-entry for the same bug on `feat/fixed-extra-portions` ("W49"); W49's PR merges the two into this one. The owner's screenshot of the extras list editor with an empty items
-table: "Preselected" runs down the page a letter at a time, making the empty table several times its
-normal height. A198's rules (#1066) set that heading to `width: 1%` with
-`overflow-wrap: anywhere` (`th:nth-child(4)`, `apps/dashboard/src/widgets/extra-list-form.ts`), so
-when there is no row whose switch holds the column open, the browser narrows it to one character and
-breaks the word wherever it can. **Wanted:** the heading readable with no rows, at phone and desktop
-width, in English and Spanish ("Preseleccionado"), without undoing A198's narrow column once rows
-exist. The options list editor gives its Default heading the same two rules
-(`th:nth-child(3)`, `apps/dashboard/src/widgets/option-list-form.ts`), so an options list with no
-options probably shows the same fault; that has not been opened to check. A198's Chromium checks did
-not cover an empty table; the fix adds that case for both editors.
+**Empty extras and options tables keep their Preselected and Default headings readable (A262, owner
+2026-10-03) — DONE (W49).** The headings stay on one line with no rows in English and Spanish.
+The extras heading extends into the preceding column's spare space while its switch column stays
+narrow; the options heading does the same with Name while the Default radio column stays narrow.
+Chromium cases cover empty tables
+at 1280px and 390px in both languages.
 
 **The number field with − and + is still too wide (A263, owner 2026-10-03) — DONE (#1151). (The owner chose
 option C: 24px plain − and + either side of a centred number, and clearable Minimum and Maximum
@@ -1433,28 +1426,16 @@ token-painting tests, changed with it.
   the owner approved. OPEN, unqueued.
 - At 390px the extras table's Price column runs past its scroll area's right edge until scrolled;
   #1151's review measured it on main before the change (452px against a 373px area) and smaller
-  after it (388px). OPEN, unqueued; A264 (lane D's W49) changes the same table's columns.
+  after it (388px). OPEN, unqueued; W49 changed the table's column sizing, but horizontal scrolling
+  remains for the Price column at phone width.
 
-**The extras list editor's columns move as products are added (A264, owner 2026-10-03) — OPEN,
-queued in lane D as part of W49.** The owner, on two screenshots of the editor before and after adding a second product:
-_"the layout jumps as you add different extras options"_. Adding "Croquetas" beside "Bravas" moved
-the Maximum quantity, Preselected and Price columns right by about 19 CSS pixels (measured from
-the screenshots), because the table sizes its Product column to its longest name
-(`apps/dashboard/src/widgets/extra-list-form.ts`; only the grip, Preselected and remove columns
-have widths, from A198). **Wanted:** columns that stay put as rows are added, removed or renamed,
-with a long product name wrapping or cut rather than pushing the others along, at phone and
-desktop width. The options list editor (`option-list-form.ts`) gives its Name column the spare
-width (A198), so whether its columns move too has not been checked. Do it with A262, which changes
-the same column rules.
+**The extras list editor's columns stay in place as products are added (A264, owner 2026-10-03)
+— DONE (W49).** Fixed table sizing leaves spare width with Product, and long names wrap inside it.
+Chromium cases add a longer product at 1280px and 390px in English and Spanish and check each
+following column's position.
 
 **Each extras row's Preselected switch repeats its column heading beside it (A265, owner
-2026-10-03) — OPEN, queued in lane D as part of W49.** In the owner's A264 screenshots every row's switch is followed by the
-word "Preselected", directly under the column's own "Preselected" heading, widening the column for
-nothing. The row's `wt-switch` (`apps/dashboard/src/widgets/extra-list-form.ts`) sets `label` with
-no `hide-label`; the price input in the same row already sets `hide-label`, and so does the switch
-in `apps/dashboard/src/widgets/variant-table.ts`. **Wanted:** the switch drawn without its text,
-still named for screen readers. Do it with A262 and A264: dropping the text changes how wide the
-Preselected column needs to be.
+2026-10-03) — DONE (W49).** The row switch hides the repeated text and keeps its accessible name.
 
 **An extra's maximum quantity can be left blank for no limit (A266, owner 2026-10-03) — OPEN,
 queued in lane D as W54 (A263 landed as #1151).** While designing A263 the owner asked for the extras
@@ -1656,15 +1637,6 @@ The [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md) an
 pre-publish changes list (W51) — DONE.** The two new core `price_quantity` columns still have no
 positive-value CHECK (`packages/db/src/schema/orders.ts`, `sales.ts`); a zero would be a divisor in
 the pricing and report paths. Test the refusal and add a constraint in a separate migration (W52).
-
-**The extras editor's “Preselected” heading stacks one letter per line on a desktop (W49) — OPEN,
-queued after A203 (owner, 2026-10-03).** In the Add extras list dialog at
-1280 px, the table gives the heading a switch-width column and lets its text break anywhere, so
-you read it vertically while the rest of the headings stay on one or two lines. The rule is also
-on `origin/main` (`apps/dashboard/src/widgets/extra-list-form.ts:120-130`); the browser test at
-`apps/dashboard/src/widgets/extra-list-form.test.ts:1093-1095` holds the narrow column. Give the
-heading a readable layout on desktop and phone without squeezing the product or price fields, and
-update that layout assertion as authorised for W49. A203 does not change this column.
 
 **A menu's hours per location, and a publish date for a new version (A204, owner 2026-10-02) —
 OPEN, not designed.** The owner: _"we should be able to specify what times of of which days each

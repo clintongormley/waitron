@@ -86,14 +86,9 @@ export class ExtraListForm extends LitElement {
         gap: var(--wt-space-3);
         align-items: start;
       }
-      /* The same narrow case, and the same width, as the variants table's (design-system.md): a
-         container query cannot read a token. There the column heading alone names the switches. */
       @container (max-width: 30rem) {
         .picks-row {
           grid-template-columns: minmax(0, 1fr);
-        }
-        td wt-switch::part(label) {
-          display: none;
         }
         /* The unit moves under the amount as text, breaking inside a word where it must. */
         td wt-price-input::part(unit) {
@@ -127,6 +122,36 @@ export class ExtraListForm extends LitElement {
       .picker {
         flex: 1 1 var(--wt-cell-name-max-width);
       }
+      table {
+        table-layout: fixed;
+        min-width: calc(
+          var(--wt-cell-name-max-width) + var(--wt-stepper-field-width) +
+            var(--wt-price-field-width) + var(--wt-tap-min) * 5 + var(--wt-space-5) +
+            var(--wt-space-4)
+        );
+      }
+      col:first-child,
+      col:last-child {
+        width: var(--wt-tap-min);
+      }
+      col:nth-child(3) {
+        width: calc(var(--wt-stepper-field-width) + var(--wt-tap-min) + var(--wt-space-4));
+      }
+      col:nth-child(4) {
+        width: var(--wt-tap-min);
+      }
+      col:nth-child(5) {
+        width: calc(var(--wt-price-field-width) + var(--wt-tap-min) + var(--wt-space-5));
+      }
+      td:nth-child(2) {
+        overflow-wrap: anywhere;
+      }
+      .quantity-heading {
+        display: inline-block;
+        max-width: var(--wt-stepper-field-width);
+        position: relative;
+        inset-inline-end: var(--wt-space-6);
+      }
       /* The grip and the bin are each a tap-target-wide button that already centres its icon. */
       th:first-child,
       td:first-child,
@@ -149,8 +174,13 @@ export class ExtraListForm extends LitElement {
         margin-bottom: var(--wt-space-2);
       }
       th:nth-child(4) {
-        white-space: normal;
-        overflow-wrap: anywhere;
+        position: relative;
+      }
+      .preselected-heading {
+        position: absolute;
+        inset-inline-end: var(--wt-space-1);
+        inset-block-start: var(--wt-space-2);
+        white-space: nowrap;
       }
       /* A row lines up its text, not its boxes (spec D6); the handle cell keeps its centring. */
       tbody td:not(.handle-cell) {
@@ -664,6 +694,7 @@ export class ExtraListForm extends LitElement {
           name=${`item-${index}-preselected`}
           data-test=${`item-${index}-preselected`}
           label=${t("extras.preselected")}
+          hide-label
           .checked=${item.preselected}
           .disabled=${this.busy}
           @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
@@ -741,16 +772,31 @@ export class ExtraListForm extends LitElement {
       </div>
       <div class="table-wrap" tabindex="0" role="region" aria-label=${t("extras.items")}>
         <table>
+          <colgroup>
+            <col />
+            <col />
+            <col />
+            <col />
+            <col />
+            <col />
+          </colgroup>
           <thead>
             <tr>
               <th scope="col"><span class="visually-hidden">${t("extras.reorder")}</span></th>
               <th scope="col">${t("extras.product")}</th>
               <th scope="col">
-                ${t("extras.max_quantity")}<span class="required" data-required aria-hidden="true"
-                  >*</span
+                <span class="quantity-heading"
+                  >${t("extras.max_quantity")}<span
+                    class="required"
+                    data-required
+                    aria-hidden="true"
+                    >*</span
+                  ></span
                 >
               </th>
-              <th scope="col">${t("extras.preselected")}</th>
+              <th scope="col">
+                <span class="preselected-heading">${t("extras.preselected")}</span>
+              </th>
               <th scope="col" colspan="2">${t("extras.price")}</th>
             </tr>
           </thead>
