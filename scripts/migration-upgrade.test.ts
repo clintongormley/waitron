@@ -275,6 +275,10 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "core/0060_drop_routing_station_columns": {
     refused: ["DROP TABLE `products`", "FOREIGN KEY constraint failed"],
   },
+  // A line's self-reference refuses this first rebuild; sale_lines can refuse at its later rebuild.
+  "core/0092_positive_price_quantity": {
+    refused: ["DROP TABLE `working_order_lines`", "FOREIGN KEY constraint failed"],
+  },
   "catalogue/0018_sections_owned_prepare": {
     refused: ["DELETE FROM sections WHERE role = 'library'", "FOREIGN KEY constraint failed"],
   },

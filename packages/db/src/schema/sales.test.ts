@@ -1,5 +1,5 @@
 import { locationId as brandLocationId } from "@waitron/shared";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -149,6 +149,51 @@ describe("sales — the commercial record", () => {
     const [tender] = await suite.db.select().from(tenders).where(eq(tenders.saleId, id));
     expect(tender!.amount).toBe(150);
     expect(tender!.tipAmount).toBe(50);
+  });
+
+  it("stores a positive sale price quantity and refuses zero or negative ones", async () => {
+    const saleId = await recordCompleteSale(suite.db);
+    for (const [lineNo, priceQuantity] of [
+      [2, 0],
+      [3, -1],
+    ] as const) {
+      const error = await captureError(() =>
+        suite.db.insert(saleLines).values({
+          saleId,
+          lineNo,
+          name: "Café solo",
+          descriptions: { es: "Café solo", ca: "Cafè sol" },
+          quantity: 1000,
+          priceQuantity,
+          unitPrice: 100,
+          vatRate: 1000,
+          lineTotal: 100,
+        }),
+      );
+      expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+      expect(engineErrorMessage(error)).toMatch(/sale_lines_price_quantity_ck/);
+    }
+    await suite.db.insert(saleLines).values({
+      saleId,
+      lineNo: 2,
+      name: "Café solo",
+      descriptions: { es: "Café solo", ca: "Cafè sol" },
+      quantity: 1000,
+      priceQuantity: 1,
+      unitPrice: 100,
+      vatRate: 1000,
+      lineTotal: 100,
+    });
+    const [stored] = await suite.db
+      .select({ priceQuantity: saleLines.priceQuantity })
+      .from(saleLines)
+      .where(and(eq(saleLines.saleId, saleId), eq(saleLines.lineNo, 1)));
+    expect(stored.priceQuantity).toBe(1000);
+    const [positive] = await suite.db
+      .select({ priceQuantity: saleLines.priceQuantity })
+      .from(saleLines)
+      .where(and(eq(saleLines.saleId, saleId), eq(saleLines.lineNo, 2)));
+    expect(positive.priceQuantity).toBe(1);
   });
 
   it("rejects a duplicate invoice number within a series", async () => {

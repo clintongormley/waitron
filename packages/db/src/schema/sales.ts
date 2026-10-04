@@ -227,6 +227,7 @@ export const saleLines = table(
     ),
     index("sale_lines_sale_idx").on(t.saleId),
     check("sale_lines_quantity_ck", sql`${t.quantity} <> 0`),
+    check("sale_lines_price_quantity_ck", sql`${t.priceQuantity} > 0`),
     // 10000 basis points is 100%.
     check("sale_lines_vat_rate_ck", sql`${t.vatRate} >= 0 and ${t.vatRate} <= 10000`),
     check("sale_lines_line_no_ck", sql`${t.lineNo} >= 1`),
