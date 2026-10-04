@@ -192,6 +192,10 @@ export class VenueServiceApi {
     return this.request(`/management-api/venue-service/zones/${zoneId}`, "PUT", input);
   }
 
+  updateZone(zoneId: string, patch: { name: string }): Promise<void> {
+    return this.request(`/management-api/zones/${zoneId}`, "PATCH", patch);
+  }
+
   setDepartmentSalePolicyField<K extends keyof Omit<DepartmentSalePolicy, "departmentId">>(
     departmentId: string,
     field: K,

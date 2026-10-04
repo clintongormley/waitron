@@ -196,6 +196,24 @@ async function changesHeardOutside(act: () => Promise<void>): Promise<number> {
 }
 
 describe("venue operations screen", () => {
+  it("renames a zone from its policy-tree cell", async () => {
+    const updateZone = vi.fn().mockResolvedValue(undefined);
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      updateZone,
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    tree.querySelector<HTMLButtonElement>('[data-test="edit-zone-name"]')!.click();
+    await settle(el);
+    const input = tree
+      .querySelector('wt-input[name="zoneName"]')!
+      .shadowRoot!.querySelector("input")!;
+    input.value = "Garden room";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    tree.querySelector<HTMLButtonElement>('[data-test="save-zone-name"]')!.click();
+    await vi.waitFor(() => expect(updateZone).toHaveBeenCalledWith("z1", { name: "Garden room" }));
+  });
+
   it("shows a zone's readiness problem beneath that zone in the policy table", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({

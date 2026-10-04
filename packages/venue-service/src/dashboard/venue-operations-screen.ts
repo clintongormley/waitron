@@ -85,6 +85,7 @@ export class VenueOperationsScreen extends LitElement {
       wt-data-table::part(edit-collection),
       wt-data-table::part(edit-receipt),
       wt-data-table::part(edit-department-name),
+      wt-data-table::part(edit-zone-name),
       wt-data-table::part(edit-trading-name) {
         border: 0;
         background: transparent;
@@ -157,6 +158,9 @@ export class VenueOperationsScreen extends LitElement {
   @state() private departmentNameEditor?: string;
   @state() private departmentNameDraft = "";
   @state() private departmentNameError = "";
+  @state() private zoneNameEditor?: string;
+  @state() private zoneNameDraft = "";
+  @state() private zoneNameError = "";
   @state() private tradingNameEditor?: string;
   @state() private tradingNameDraft = "";
   @state() private tradingNameError = "";
@@ -558,7 +562,60 @@ export class VenueOperationsScreen extends LitElement {
         label: t("venue.name"),
         cell: (row) => {
           if (row.kind !== "department")
-            return html`${row.zone.name}${model.readiness
+            return html`${
+              this.zoneNameEditor === row.zone.id
+                ? html`<wt-input
+                      name="zoneName"
+                      label=${t("venue.name")}
+                      hide-label
+                      required
+                      .value=${live(this.zoneNameDraft)}
+                      error=${this.zoneNameError}
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                        event.stopPropagation();
+                        this.zoneNameDraft = event.detail.value;
+                        this.zoneNameError = "";
+                      }}
+                    ></wt-input>
+                    <button
+                      type="button"
+                      data-test="save-zone-name"
+                      ?disabled=${this.busy}
+                      @click=${() => {
+                        const name = this.zoneNameDraft.trim();
+                        if (!name) {
+                          this.zoneNameError = t("venue.field_required");
+                          return;
+                        }
+                        void this.#save(async () => {
+                          await this.api.updateZone(row.zone.id, { name });
+                          if (this.zoneNameEditor === row.zone.id) this.zoneNameEditor = undefined;
+                        });
+                      }}
+                    >
+                      ${t("venue.save")}
+                    </button>
+                    <button
+                      type="button"
+                      data-test="cancel-zone-name"
+                      @click=${() => (this.zoneNameEditor = undefined)}
+                    >
+                      ${t("venue.cancel")}
+                    </button>`
+                : html`<button
+                    type="button"
+                    part="edit-zone-name"
+                    data-test="edit-zone-name"
+                    aria-label=${`${row.zone.name}: ${t("venue.name")}`}
+                    @click=${() => {
+                      this.zoneNameDraft = row.zone.name;
+                      this.zoneNameError = "";
+                      this.zoneNameEditor = row.zone.id;
+                    }}
+                  >
+                    ${row.zone.name}
+                  </button>`
+            }${model.readiness
               .filter((issue) => "zoneId" in issue && issue.zoneId === row.zone.id)
               .map(
                 (issue) =>
