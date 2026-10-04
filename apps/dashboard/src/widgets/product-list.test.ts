@@ -2697,7 +2697,7 @@ it("falls back as product rows do when a station's or a category's name is not k
   });
   const root = await tableRoot(el);
   expect(cellUnder(root, "folder:d", "Made at").textContent!.replace(/\s+/g, " ").trim()).toBe(
-    "No replacement (Nowhere is switched off)from Unavailable selection",
+    "No replacement (Nowhere is switched off) from Unavailable selection",
   );
   expect(cellUnder(root, "folder:f", "Made at").querySelector("a")!.textContent!.trim()).toBe(
     "Nowhere",

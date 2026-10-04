@@ -9,6 +9,7 @@ import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
 import type { CategorySummary, DashboardApi, Product } from "../api/client.js";
+import type { RoutingModel } from "@waitron/venue-service/routing";
 import type { CatalogueBrowser } from "./catalogue-browser.js";
 import "./catalogue-browser.js";
 import { HOVER_OPEN_MS, ROOT_KEY } from "./product-list.js";
@@ -209,6 +210,79 @@ it("does not mark a folder covered by a global folder exception", async () => {
     root.querySelector('tr[data-row-key="folder:d"] [data-test="unrouted-folder"]'),
   ).not.toBeNull();
 });
+/** The Made at cell of a row, found by its column heading. */
+async function madeAtText(el: CatalogueBrowser, key: string) {
+  const root = (await tableOf(el)).shadowRoot!;
+  const index = [...root.querySelectorAll("thead th")].findIndex((cell) =>
+    cell.textContent!.trim().startsWith("Made at"),
+  );
+  expect(index).toBeGreaterThanOrEqual(0);
+  const row = root.querySelector(`tr[data-row-key="${key}"]`)!;
+  return [...row.querySelectorAll("td")][index]!.textContent!.replace(/\s+/g, " ").trim();
+}
+const routingWith = (overrides: Partial<RoutingModel> = {}): RoutingModel => ({
+  stationTimes: [],
+  todayEnds: null,
+  clockReadable: true,
+  claims: [{ categoryId: "d", target: { kind: "station", stationId: "bar" }, stationOff: false }],
+  exceptions: [],
+  unassigned: { folders: [], products: [] },
+  defaultStationId: "kitchen",
+  stations: [
+    { id: "bar", name: "Bar", active: true },
+    { id: "kitchen", name: "Kitchen", active: true },
+  ],
+  ...overrides,
+});
+
+it("shows each category's route from the routing it holds, and redraws it when routing changes", async () => {
+  const el = await mountBrowser({ routing: routingWith() });
+  expect(await madeAtText(el, "folder:d")).toBe("Bar set on this category");
+  expect(await madeAtText(el, "folder:f")).toBe("Kitchen default station");
+  await toggleCategory(el, "d");
+  expect(await madeAtText(el, "folder:b")).toBe("Bar from Drinks");
+  el.routing = routingWith({
+    claims: [{ categoryId: "d", target: { kind: "no_preparation" }, stationOff: false }],
+  });
+  expect(await madeAtText(el, "folder:d")).toBe("No preparation set on this category");
+  expect(await madeAtText(el, "folder:b")).toBe("No preparation from Drinks");
+});
+
+it("works the route out again when the products or the categories change", async () => {
+  const exceptions = [
+    {
+      id: "e1",
+      position: 0,
+      zoneId: null,
+      categoryId: null,
+      productId: "juice",
+      target: { kind: "station" as const, stationId: "kitchen" },
+      neverMatches: false,
+      stationOff: false,
+    },
+  ];
+  const el = await mountBrowser({ routing: routingWith({ exceptions }) });
+  expect(await madeAtText(el, "folder:d")).toBe("Bar set on this category");
+  el.products = [
+    ...PRODUCTS,
+    { ...PRODUCTS[0]!, id: "juice", name: "Juice", primaryCategoryId: "d", categoryId: "d" },
+  ];
+  expect(await madeAtText(el, "folder:d")).toBe(
+    "Bar set on this category · some items made elsewhere",
+  );
+  el.categories = [...CATEGORIES, folder("w", "Wine", "d")];
+  await toggleCategory(el, "d");
+  expect(await madeAtText(el, "folder:w")).toBe("Bar from Drinks");
+});
+
+it("leaves categories blank while routing loads, and says so when its read failed", async () => {
+  const el = await mountBrowser();
+  expect(await madeAtText(el, "folder:d")).toBe("");
+  el.routingFailed = true;
+  expect(await madeAtText(el, "folder:d")).toBe("Routing unavailable");
+  expect(await madeAtText(el, ROOT_KEY)).toBe("");
+});
+
 async function nameCell(el: CatalogueBrowser, key: string) {
   return (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(
     `tr[data-row-key="${key}"] [part~="${key.startsWith("folder:") ? "folder-cell" : "product-cell"}"]`,

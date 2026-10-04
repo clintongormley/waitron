@@ -841,7 +841,7 @@ export class ProductList extends LitElement {
       .filter((part) => part !== "")
       .join(" · ");
     return html`<a part="maker-link" href="/manage/prep-stations">${value}</a>${
-        detail === "" ? nothing : html`<span part="maker-detail">${detail}</span>`
+        detail === "" ? nothing : html` <span part="maker-detail">${detail}</span>`
       }`;
   }
 
