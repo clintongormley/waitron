@@ -1507,9 +1507,11 @@ export class TillApp extends LitElement {
   };
   @state() private printersOpen = false;
   @state() private printersError: { code: string; field?: string } | null = null;
-  /** Numbers printer switches, so an answer older than the one already shown is dropped. */
+  /** Numbers printer switches. The newest success applied decides the printer shown; the newest
+   * answer applied, success or refusal, decides whether a refusal is shown. */
   #printersSwitch = 0;
-  #printersShown = 0;
+  #printersStored = 0;
+  #printersAnswered = 0;
   /** `GET /api/device/me` as last read, which the printers dialog falls back to. */
   #heldIdentity?: DeviceIdentity;
   /** The open cancel, give-away or discount dialog, with what the server last answered it. */
@@ -3529,24 +3531,27 @@ export class TillApp extends LitElement {
     this.printersOpen = true;
   }
 
-  /** A refusal stays shown until the next answer: clearing it first re-renders the list, dropping
-   * the retried pick while the request is in flight. */
+  /** A refusal stays shown until a newer switch answers: clearing it before the request re-renders
+   * the list, dropping the retried pick while the request is in flight. */
   async #onPrintersChange(event: CustomEvent<PrintersChangeDetail>): Promise<void> {
     const attempt = ++this.#printersSwitch;
     try {
       const stored = await this.api.setDevicePrinters(event.detail);
-      if (attempt <= this.#printersShown) return;
-      this.#printersShown = attempt;
+      if (attempt > this.#printersAnswered) {
+        this.#printersAnswered = attempt;
+        this.printersError = null;
+      }
+      if (attempt <= this.#printersStored) return;
+      this.#printersStored = attempt;
       if (this.#heldIdentity !== undefined)
         this.#heldIdentity = { ...this.#heldIdentity, ...stored };
-      this.printersError = null;
       this.devicePrinters = {
         receipt: { ...this.devicePrinters.receipt, current: stored.receiptPrinterId },
         paymentSlip: { ...this.devicePrinters.paymentSlip, current: stored.paymentSlipPrinterId },
       };
     } catch (error) {
-      if (attempt <= this.#printersShown) return;
-      this.#printersShown = attempt;
+      if (attempt <= this.#printersAnswered) return;
+      this.#printersAnswered = attempt;
       const { code, field } = error as { code?: unknown; field?: unknown };
       this.printersError = {
         code: typeof code === "string" ? code : "server.internal",

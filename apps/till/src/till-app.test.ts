@@ -12454,6 +12454,28 @@ describe("the device's printers, switched from the header", () => {
     });
   });
 
+  it("shows an earlier switch's success that answers after a later switch's refusal, keeping the refusal", async () => {
+    const answers: { resolve: (value: unknown) => void; reject: (error: unknown) => void }[] = [];
+    const setDevicePrinters = vi.fn(
+      () => new Promise((resolve, reject) => answers.push({ resolve, reject })),
+    );
+    const el = await openPrinters({ setDevicePrinters });
+
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P1" });
+    emit(printersDialog(el)!, "printers-change", { receiptPrinterId: "P2" });
+    await flush(el);
+    answers[1]!.reject({ field: "receiptPrinterId", code: "device.binding_invalid", status: 400 });
+    await flush(el);
+    answers[0]!.resolve({ receiptPrinterId: "P1", paymentSlipPrinterId: "S1" });
+    await flush(el);
+
+    expect(printersDialog(el)!.receipt).toEqual({ current: "P1", choices: [P1, P2] });
+    expect(printersDialog(el)!.error).toEqual({
+      code: "device.binding_invalid",
+      field: "receiptPrinterId",
+    });
+  });
+
   it("keeps a retried pick shown, with the refusal, until the retry answers", async () => {
     let answer!: (value: unknown) => void;
     const refusal = { field: "receiptPrinterId", code: "device.binding_invalid", status: 400 };
