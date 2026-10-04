@@ -1,10 +1,10 @@
 import { AppError, deviceOrigin, readOrigin } from "@waitron/shared";
-import type { DeviceId, DeviceOrigin, Origin } from "@waitron/shared";
+import type { DeviceOrigin, Origin } from "@waitron/shared";
 import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
 
-/** The configuration a till-app request runs under: the venue's, as its session's device. */
-export function requestCfg(cfg: TillConfig, session: { deviceId: DeviceId }): DeviceRequestConfig {
-  return { ...cfg, origin: deviceOrigin(session.deviceId) };
+/** The venue's configuration, recording as the given device. */
+export function requestCfg(cfg: TillConfig, device: { deviceId: string }): DeviceRequestConfig {
+  return { ...cfg, origin: deviceOrigin(device.deviceId) };
 }
 
 /**

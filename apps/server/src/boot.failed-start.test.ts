@@ -110,7 +110,7 @@ async function tempDir(prefix: string): Promise<string> {
   return dir;
 }
 
-/** Migrates `directory` and writes the till's identity, leaving no handle open on it. */
+/** Migrates `directory` and writes the venue's identity on this node, leaving no handle open on it. */
 async function seedVenue(directory: string): Promise<void> {
   await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
   const store = await openVenueDatabase(directory);

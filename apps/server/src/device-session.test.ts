@@ -614,8 +614,7 @@ async function enrolDevDevices(): Promise<{
   deviceBId: string;
 }> {
   const { cfg, stationId } = await setupStation();
-  // Device A — a `till` device (its profile auto-creates a register), whose cookie stands in for the
-  // current identity.
+  // Device A — a `till` device, whose cookie stands in for the current identity.
   const tillProfileId = await seedDeviceProfile("Till A profile", "till", []);
   const devA = await enrolDeviceForTest(suite.db, cfg, {
     name: "Till A",

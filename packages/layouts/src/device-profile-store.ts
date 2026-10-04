@@ -25,7 +25,7 @@ import {
 } from "./device-printers.js";
 
 /** `canvasId` is `null` when the profile falls back to its form factor's canvas. */
-export type DeviceProfileRow = {
+export type DeviceProfileSettings = {
   id: string;
   name: string;
   formFactor: FormFactor;
@@ -33,7 +33,9 @@ export type DeviceProfileRow = {
   capabilities: CapabilityFlag[];
   /** The auto-logout idle timeout in seconds; `null` means never. */
   inactivityTimeoutSeconds: number | null;
-} & ProfilePrinterLists;
+};
+
+export type DeviceProfileRow = DeviceProfileSettings & ProfilePrinterLists;
 
 const PROFILE_COLUMNS = {
   id: deviceProfiles.id,
@@ -44,21 +46,20 @@ const PROFILE_COLUMNS = {
   inactivityTimeoutSeconds: deviceProfiles.inactivityTimeoutSeconds,
 } as const;
 
+type StoredProfile = {
+  id: string;
+  name: string;
+  formFactor: FormFactor;
+  canvasId: string | null;
+  capabilities: unknown;
+  inactivityTimeoutSeconds: number | null;
+};
+
 /**
  * The `as` cast restores a type the JSON column does not carry: this package depends on
  * `@waitron/db`, so the column cannot name one of its types without a dependency cycle.
  */
-function toRow(
-  row: {
-    id: string;
-    name: string;
-    formFactor: FormFactor;
-    canvasId: string | null;
-    capabilities: unknown;
-    inactivityTimeoutSeconds: number | null;
-  },
-  lists: ProfilePrinterLists,
-): DeviceProfileRow {
+function toSettings(row: StoredProfile): DeviceProfileSettings {
   return {
     id: row.id,
     name: row.name,
@@ -66,6 +67,12 @@ function toRow(
     canvasId: row.canvasId,
     capabilities: row.capabilities as CapabilityFlag[],
     inactivityTimeoutSeconds: row.inactivityTimeoutSeconds,
+  };
+}
+
+function toRow(row: StoredProfile, lists: ProfilePrinterLists): DeviceProfileRow {
+  return {
+    ...toSettings(row),
     receiptPrinterIds: lists.receiptPrinterIds,
     paymentSlipPrinterIds: lists.paymentSlipPrinterIds,
   };
@@ -137,16 +144,25 @@ export async function listDeviceProfiles(tx: Transaction): Promise<DeviceProfile
   );
 }
 
+/** The profile without its printer lists; {@link getDeviceProfileWithPrinters} reads those too. */
 export async function getDeviceProfile(
   tx: Transaction,
   id: string,
-): Promise<DeviceProfileRow | undefined> {
+): Promise<DeviceProfileSettings | undefined> {
   const [row] = await tx
     .select(PROFILE_COLUMNS)
     .from(deviceProfiles)
     .where(eq(deviceProfiles.id, id));
-  if (row === undefined) return undefined;
-  return toRow(row, await readProfilePrinterLists(tx, id));
+  return row === undefined ? undefined : toSettings(row);
+}
+
+export async function getDeviceProfileWithPrinters(
+  tx: Transaction,
+  id: string,
+): Promise<DeviceProfileRow | undefined> {
+  const settings = await getDeviceProfile(tx, id);
+  if (settings === undefined) return undefined;
+  return { ...settings, ...(await readProfilePrinterLists(tx, id)) };
 }
 
 export async function createDeviceProfile(
@@ -171,7 +187,7 @@ export async function createDeviceProfile(
     input.inactivityTimeoutSeconds ?? null,
     input.formFactor,
   );
-  let created: Parameters<typeof toRow>[0];
+  let created: StoredProfile;
   try {
     const [row] = await tx
       .insert(deviceProfiles)
@@ -215,7 +231,7 @@ export async function updateDeviceProfile(
     input.inactivityTimeoutSeconds ?? null,
     input.formFactor,
   );
-  let updated: Parameters<typeof toRow>[0][];
+  let updated: StoredProfile[];
   try {
     const rows = await tx
       .update(deviceProfiles)

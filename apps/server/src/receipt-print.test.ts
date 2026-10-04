@@ -1054,7 +1054,7 @@ describe("every device whose profile allows the drawer opens its receipt printer
     }));
   }
 
-  /** Two tills at one location, both printing their receipts on one drawer printer; the other's
+  /** Two till devices at one location, both printing their receipts on one drawer printer; the other's
    *  device has `otherCapabilities`. */
   async function sharedDrawer(
     orderFlow: OrderFlow = "prepay",

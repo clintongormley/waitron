@@ -80,6 +80,8 @@ export async function insertPendingAlta(
   params: {
     locationId: string;
     nodeId: string;
+    /** The device the sale is recorded from; absent seeds one at `locationId`. */
+    deviceId?: string;
     sifId: string;
     nif: string;
     secuencia: number;
@@ -92,7 +94,8 @@ export async function insertPendingAlta(
   },
 ): Promise<{ registroId: string; numSerieFactura: string }> {
   const numSerieFactura = `S${String(params.secuencia)}/1`;
-  const { deviceId } = await seedDevice(db, { locationId: params.locationId });
+  const deviceId =
+    params.deviceId ?? (await seedDevice(db, { locationId: params.locationId })).deviceId;
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId: params.nodeId, code: `S${String(params.secuencia)}` })
@@ -231,6 +234,7 @@ export async function seedPendingEnvios(
   const entorno = opts.entorno === undefined ? DEFAULT_ENTORNO : opts.entorno;
   const registroIds: string[] = [];
   const facturaKeys: string[] = [];
+  const { deviceId } = await seedDevice(db, { locationId });
 
   for (let offset = 0; offset < opts.count; offset += 1) {
     const sequence = firstSequence + offset;
@@ -239,6 +243,7 @@ export async function seedPendingEnvios(
     const { registroId, numSerieFactura } = await insertPendingAlta(db, {
       locationId,
       nodeId,
+      deviceId,
       sifId: sif.id,
       nif: sif.nif,
       secuencia: sequence,

@@ -1,16 +1,6 @@
 import { eq } from "drizzle-orm";
-import { deviceProfiles, devices, nodes } from "@waitron/db";
+import { deviceProfiles, devices } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-
-/** The location `nodeId` sells at. */
-export async function nodeLocation(tx: Transaction, nodeId: string): Promise<string> {
-  const [node] = await tx
-    .select({ locationId: nodes.locationId })
-    .from(nodes)
-    .where(eq(nodes.id, nodeId));
-  if (node === undefined) throw new Error(`no node ${nodeId}`);
-  return node.locationId;
-}
 
 /**
  * A device for a script's shift session to name, at `locationId`, under a till profile named `label`

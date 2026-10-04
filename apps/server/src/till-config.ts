@@ -61,13 +61,13 @@ export interface OriginConfig extends TillConfig {
   origin: Origin;
 }
 
-/** A till-app request's configuration: its records come from the session's device. */
+/** A till-app request's configuration: its records come from the request's device. */
 export interface DeviceRequestConfig extends TillConfig {
   origin: DeviceOrigin;
 }
 
-/** What the environment alone says about the till: boot adds the rest from the database and the
- * fiscal backend. */
+/** What the environment alone says about the venue's identity on this node: boot adds the rest
+ * from the database and the fiscal backend. */
 export type TillIdentityConfig = Omit<TillConfig, "orderFlow" | "simplifiedInvoiceLimit">;
 
 /** Only the variable NAME travels in the error, never the value. */

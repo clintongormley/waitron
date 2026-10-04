@@ -57,11 +57,7 @@ export async function orderDeviceOrigin(
     .select({ locationId: workingOrders.locationId })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
-  const { deviceId } = await seedDevice(db, {
-    locationId: brandLocationId(order!.locationId),
-    capabilities: [...CAPABILITY_FLAGS],
-  });
-  return deviceOrigin(deviceId);
+  return deviceOrigin(await seedSessionDevice(db, order!));
 }
 
 /** The origin and place of an order a fixture writes straight to the table: the dashboard, at `locationId`. */

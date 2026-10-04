@@ -387,7 +387,7 @@ async function enrolTillCookie(
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
 }
 
-/** A till device that may open a drawer, bound to the venue's till. */
+/** A till device that may open a drawer. */
 async function enrolConfiguredTillCookie(cfg: TillConfig): Promise<string> {
   tillDeviceCounter += 1;
   const n = tillDeviceCounter;

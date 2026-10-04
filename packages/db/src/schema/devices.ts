@@ -55,8 +55,8 @@ export const devices = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    // A sale names its device by label, so two ACTIVE devices at a location never share one; a
-    // revoked device's name is free again.
+    // A record stores `device_id` and screens show its device by label, so two ACTIVE devices at a
+    // location never share one; a revoked device's name is free again.
     uniqueIndex("devices_location_label_active_key")
       .on(t.locationId, t.label)
       .where(sql`${t.active} = 1`),

@@ -113,7 +113,8 @@ describe("dashboard-alerts-screen", () => {
     await flush(el);
     const [deviceRow, jobRow] = rows(el, "open-alerts-table");
     expect(deviceRow!.textContent).toContain("Caja 1");
-    expect(jobRow!.textContent).toContain("Veri*Factu filing");
+    // The area column also reads "Tax filing", so only the alert cell shows the source.
+    expect(jobRow!.querySelector('[part="alert-message"]')!.textContent).toContain("· Tax filing");
     expect(jobRow!.textContent).not.toContain("fiscal_filing");
   });
 

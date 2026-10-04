@@ -63,6 +63,7 @@ import {
   getReceipt,
   getCanvas,
   getDeviceProfile,
+  getDeviceProfileWithPrinters,
   getTenantTheme,
   listCanvases,
   listDeviceProfiles,
@@ -1279,7 +1280,7 @@ export function mountManagementApi(
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return getDeviceProfile(tx, id);
+        return getDeviceProfileWithPrinters(tx, id);
       });
       if (profile === undefined) throw new AppError("device_profile.not_found", {});
       return c.json(profile);

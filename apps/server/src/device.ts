@@ -28,9 +28,9 @@ export type { DeviceKind };
  */
 export async function requireDeviceBinding(
   tx: Transaction,
-  binding: { deviceProfileId: string },
+  deviceProfileId: string,
 ): Promise<void> {
-  const profile = await getDeviceProfile(tx, binding.deviceProfileId);
+  const profile = await getDeviceProfile(tx, deviceProfileId);
   if (profile === undefined) {
     throw new AppError("device.binding_invalid", { field: "deviceProfileId" });
   }

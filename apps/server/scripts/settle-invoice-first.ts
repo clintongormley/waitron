@@ -33,7 +33,8 @@ import {
   jobOrigin,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
-import { nodeLocation, scriptSessionDevice } from "./script-device.js";
+import { nodeLocation } from "../src/provision-till.js";
+import { scriptSessionDevice } from "./script-device.js";
 
 const LOCALE = "es-ES";
 

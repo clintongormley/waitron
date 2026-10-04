@@ -1002,11 +1002,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         let capabilities: CapabilityFlag[] = [];
         let inactivityTimeoutSeconds: number | null = null;
         if (device != null) {
-          const profile =
-            device.deviceProfileId != null
-              ? await getDeviceProfile(tx, device.deviceProfileId)
-              : undefined;
-          capabilities = profile?.capabilities ?? [];
+          const profile = await getDeviceProfile(tx, device.deviceProfileId);
+          capabilities = device.capabilities;
           inactivityTimeoutSeconds = profile?.inactivityTimeoutSeconds ?? null;
           let assigned: CanvasDef | undefined;
           if (profile?.canvasId != null) {
@@ -1136,11 +1133,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.get("/api/default-service-zone/offers", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
-      const device = await tryReadDevice(deps, c);
+      const { device } = await requireSession(deps, c);
       const result = await withTransaction(deps.db, async (tx) => {
         const context = await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
-          deviceId: device?.deviceId,
+          deviceId: device.deviceId,
         });
         return {
           context,
@@ -1148,7 +1144,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             (zone) => zone.serviceMode !== "table_tab",
           ),
           ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, context.zoneId, {
-            deviceProfileId: device?.deviceProfileId,
+            deviceProfileId: device.deviceProfileId,
           })),
         };
       });
@@ -1161,15 +1157,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // product differently from another zone's menu.
   app.get("/api/service-zones/:zoneId/offers", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { device } = await requireSession(deps, c);
       const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
-      const device = await tryReadDevice(deps, c);
       const result = await withTransaction(deps.db, async (tx) => {
         const context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
         return {
           context,
           ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, zoneId, {
-            deviceProfileId: device?.deviceProfileId,
+            deviceProfileId: device.deviceProfileId,
           })),
         };
       });
@@ -1179,20 +1174,19 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
 
   app.get("/api/menu-state", (c) =>
     run(c, log, async () => {
-      await requireSession(deps, c);
+      const { device } = await requireSession(deps, c);
       const named = c.req.query("zoneId");
       const zoneId = named === undefined ? undefined : requireUuidParam(named, "ServiceZoneId");
-      const device = await tryReadDevice(deps, c);
       const state = await withTransaction(deps.db, async (tx) => {
         const zone =
           zoneId === undefined
             ? (
                 await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
-                  deviceId: device?.deviceId,
+                  deviceId: device.deviceId,
                 })
               ).zoneId
             : (await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId)).zoneId;
-        return VENUE_SERVICE.menuState(tx, zone, { deviceProfileId: device?.deviceProfileId });
+        return VENUE_SERVICE.menuState(tx, zone, { deviceProfileId: device.deviceProfileId });
       });
       return c.json(state);
     }),
@@ -1311,7 +1305,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c, { permission: "sale.take_payment" });
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
-      // Not fenced against a handheld: a sale files under the submitting node's SIF, not the till,
+      // Not fenced against a handheld: a sale files under the submitting node's SIF,
       // and a manual card is charged on a terminal the POS never talks to. Cash is fenced by the
       // `take-cash` capability, the integrated reader (`POST /api/pay`) by its own.
       const body = await readJsonBody<TillSaleRequest>(c);

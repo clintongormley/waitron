@@ -127,7 +127,7 @@ const stripeSeat: CardProviderContribution = createStripeCardProvider((() => {
 
 interface Venue {
   cfg: DeviceRequestConfig;
-  /** Two devices on the venue's till: payments start on `deviceId` unless a case says otherwise. */
+  /** Two devices at the venue: payments start on `deviceId` unless a case says otherwise. */
   deviceId: string;
   otherDeviceId: string;
   menuItemId: string;

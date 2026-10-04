@@ -76,7 +76,7 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Pr
     order by m.source, m.device_id, m.method
   `);
 
-  const origins = new Map<string, OriginCashUp>();
+  const origins = new Map<string, Omit<OriginCashUp, "cashTakings">>();
   let tenderTotal = decimal("0.00");
   let tipTotal = decimal("0.00");
   for (const r of rows) {
@@ -88,19 +88,13 @@ export async function computeCashUp(tx: Transaction, input: DailyCloseInput): Pr
     const key = JSON.stringify([r.source, r.device_id]);
     const existing = origins.get(key);
     if (existing === undefined) {
-      const origin = readOrigin(r.source, r.device_id);
-      origins.set(key, {
-        source: origin.source,
-        deviceId: origin.deviceId,
-        byMethod: [line],
-        cashTakings: decimal("0.00"),
-      });
+      origins.set(key, { ...readOrigin(r.source, r.device_id), byMethod: [line] });
     } else existing.byMethod.push(line);
     tenderTotal = addDecimal(tenderTotal, line.amount);
     tipTotal = addDecimal(tipTotal, line.tip);
   }
 
-  const byOrigin = [...origins.values()].map((row) => ({
+  const byOrigin: OriginCashUp[] = [...origins.values()].map((row) => ({
     ...row,
     // The query groups by (origin, method), so an origin has at most one cash line.
     cashTakings: row.byMethod.find((m) => m.method === "cash")?.amount ?? decimal("0.00"),

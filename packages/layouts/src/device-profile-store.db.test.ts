@@ -20,6 +20,7 @@ import {
   createDeviceProfile,
   deleteDeviceProfile,
   getDeviceProfile,
+  getDeviceProfileWithPrinters,
   listDeviceProfiles,
   updateDeviceProfile,
 } from "./device-profile-store.js";
@@ -120,7 +121,7 @@ describe("device-profile store against a real migrated database", () => {
         receiptPrinterIds: [],
         paymentSlipPrinterIds: [],
       });
-      const fetched = await inTx((tx) => getDeviceProfile(tx, created.id));
+      const fetched = await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id));
       expect(fetched).toEqual(created);
     } finally {
       await purgeProfiles();
@@ -149,7 +150,7 @@ describe("device-profile store against a real migrated database", () => {
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
     });
-    expect(await inTx((tx) => getDeviceProfile(tx, created.id))).toEqual(created);
+    expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(created);
     const listed = await inTx((tx) => listDeviceProfiles(tx));
     expect(listed).toEqual([created]);
   });
@@ -168,7 +169,7 @@ describe("device-profile store against a real migrated database", () => {
       }),
     );
     expect(handheld.inactivityTimeoutSeconds).toBe(300);
-    expect(await inTx((tx) => getDeviceProfile(tx, handheld.id))).toEqual(handheld);
+    expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, handheld.id))).toEqual(handheld);
 
     const kds = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -294,7 +295,7 @@ describe("device-profile store against a real migrated database", () => {
       receiptPrinterIds: [],
       paymentSlipPrinterIds: [],
     });
-    expect(await inTx((tx) => getDeviceProfile(tx, created.id))).toEqual(updated);
+    expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(updated);
     expect(await rowCount()).toBe(1); // update, never insert a duplicate
   });
 
@@ -432,8 +433,16 @@ describe("device-profile store against a real migrated database", () => {
     );
     expect(created.receiptPrinterIds).toEqual([p2!.id, p1!.id]);
     expect(created.paymentSlipPrinterIds).toEqual([p1!.id]);
-    expect(await inTx((tx) => getDeviceProfile(tx, created.id))).toEqual(created);
+    expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(created);
     expect(await inTx((tx) => listDeviceProfiles(tx))).toEqual([created]);
+    expect(await inTx((tx) => getDeviceProfile(tx, created.id))).toEqual({
+      id: created.id,
+      name: "Listed",
+      formFactor: "till",
+      canvasId: null,
+      capabilities: [],
+      inactivityTimeoutSeconds: null,
+    });
 
     const renamed = await inTx((tx) =>
       updateDeviceProfile(tx, { ...base, id: created.id, name: "Renamed" }),
@@ -450,7 +459,7 @@ describe("device-profile store against a real migrated database", () => {
     );
     expect(emptied.receiptPrinterIds).toEqual([]);
     expect(emptied.paymentSlipPrinterIds).toEqual([p2!.id]);
-    expect(await inTx((tx) => getDeviceProfile(tx, created.id))).toEqual(emptied);
+    expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toEqual(emptied);
   });
 
   it("throws device_profile.not_found when updating an absent id", async () => {

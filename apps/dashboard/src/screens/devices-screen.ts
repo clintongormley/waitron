@@ -13,6 +13,7 @@ import { registerCatalogue, type CardProviderPanel, t as tRaw } from "@waitron/d
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
+import { printerLabel } from "../i18n/domain.js";
 import type {
   DashboardApi,
   DeviceProfile,
@@ -535,7 +536,7 @@ export class DevicesScreen extends LitElement {
   #printerName(printerId: string | null): string {
     const printer = this.printers.find((p) => p.id === printerId);
     if (printer === undefined) return t("devices.no_printer");
-    return printer.active ? printer.name : `${printer.name} (${t("printers.status_inactive")})`;
+    return printerLabel(printer);
   }
 
   /** Read-only: a device picks its own printers from its profile's lists. */

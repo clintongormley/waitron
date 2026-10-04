@@ -38,11 +38,12 @@ export {
 export {
   listDeviceProfiles,
   getDeviceProfile,
+  getDeviceProfileWithPrinters,
   createDeviceProfile,
   updateDeviceProfile,
   deleteDeviceProfile,
 } from "./device-profile-store.js";
-export type { DeviceProfileRow } from "./device-profile-store.js";
+export type { DeviceProfileRow, DeviceProfileSettings } from "./device-profile-store.js";
 export {
   readProfilePrinterLists,
   setProfilePrinterLists,

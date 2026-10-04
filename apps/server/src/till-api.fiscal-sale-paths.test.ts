@@ -704,7 +704,7 @@ describe("sale-time device from the authenticated session (SP-A.2 cutover)", () 
       stationId: station.id,
     });
     const deviceCookie = `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
-    // Opened directly: the sign-in route refuses a till-less device itself.
+    // Opened directly: the sign-in route refuses a `kds_station` device itself.
     const session = await withTransaction(suite.db, (tx) =>
       loginWithPin(tx, { deviceId: dev.deviceId, personId: operatorId, pin: "5555" }),
     );

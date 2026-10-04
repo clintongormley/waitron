@@ -199,7 +199,7 @@ waitron-rejoin rejoin [--accept-loss]
 
 It reads its own boot env — `WAITRON_STATE_DIR`, `WAITRON_VENUE_DIR` (both resolved exactly as
 `config.ts` resolves them, so an empty value takes the default rather than the working directory),
-`WAITRON_ENV`, and the four `WAITRON_TILL_*_ID`. Three ordered refusals come before the wipe:
+`WAITRON_ENV`, and the three `WAITRON_TILL_*_ID`. Three ordered refusals come before the wipe:
 
 - **`provisioning.database_in_use`** — another process, usually the running server, is using the venue
   folder. Refused before anything is read or wiped; stop the server first.

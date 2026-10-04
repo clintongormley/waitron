@@ -1615,12 +1615,12 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     });
   });
 
-  it("prefers the enrolled device's default service zone", async () => {
+  it("prefers the session's device's default service zone, whatever device cookie the request carries", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
-    const token = await openSession(suite.db);
-    const deviceCookie = await enrolTillDeviceCookie(suite.db);
-    const deviceId = deviceCookie.slice(`${DEVICE_COOKIE}=`.length).split(".")[0]!;
+    const { deviceId } = await enrolTillDevice(suite.db);
+    const token = await openSession(suite.db, deviceId);
+    const otherCookie = await enrolTillDeviceCookie(suite.db);
     const [second] = await suite.db
       .insert(floorZones)
       .values({ locationId: cfg.locationId, name: `Device zone ${deviceId}` })
@@ -1638,11 +1638,14 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       insert into device_zone_defaults (device_id, zone_id)
       values (${deviceId}, ${second!.id})`);
 
-    const res = await app.request("/api/default-service-zone/offers", {
-      headers: { cookie: `${SESSION_COOKIE}=${token}; ${deviceCookie}` },
-    });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ context: { zoneId: second!.id } });
+    for (const cookie of [
+      `${SESSION_COOKIE}=${token}`,
+      `${SESSION_COOKIE}=${token}; ${otherCookie}`,
+    ]) {
+      const res = await app.request("/api/default-service-zone/offers", { headers: { cookie } });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ context: { zoneId: second!.id } });
+    }
   });
 
   it("returns the offers allowed in an explicit service zone", async () => {

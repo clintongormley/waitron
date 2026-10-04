@@ -11,6 +11,7 @@ import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { printerLabel } from "../i18n/domain.js";
 import type { StringKey } from "../i18n/strings.js";
 // Reuses the canvas editor's dashboard-local mirror: `@waitron/layouts`' barrel would pull
 // `@waitron/db` into the browser bundle. A profile's `capabilities` is an opaque `string[]` on the
@@ -742,9 +743,7 @@ export class DeviceProfilesScreen extends LitElement {
       <div class="toggles">
         ${choices.map(({ printer, listed }) => {
           const position = drawn.indexOf(printer.id);
-          const name = printer.active
-            ? printer.name
-            : `${printer.name} (${t("printers.status_inactive")})`;
+          const name = printerLabel(printer);
           return html`<div class="printer-choice">
             <wt-switch
               data-test="${list.test}-${printer.id}"

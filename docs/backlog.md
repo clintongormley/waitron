@@ -3300,7 +3300,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       route each still repeat the steps `verifyThrottledCredential`
       (`packages/identity/src/credential.ts`) packages. The tests do not check that a refund's
       wrong PINs share the drawer's and adjustments' count, that the sign-in and override counts
-      are separate, or that the count is per till. **Next action:** the owner decides whether to
+      are separate, or that the count is per device. **Next action:** the owner decides whether to
       add the countdown and make the limit required.
     - **A reason's percentage limit can be exceeded** by combining a bill discount with a line
       discount, or two bill discounts under one reason, because a bill discount counts as 0% on
@@ -3609,7 +3609,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       someone holding `sale.rectify` (a supervisor, manager or admin) lets someone without it cancel and
       credit an invoiced order.** The cancel's
       body may carry `override: { personId, pin }`, checked as an unpaid departure, a bill refund
-      and opening the drawer check theirs: a wrong PIN is `pin.invalid` and is counted, per till
+      and opening the drawer check theirs: a wrong PIN is `pin.invalid` and is counted, per device
       and per person, in the count those routes share (`overridePinAttempts`,
       `apps/server/src/till-api.ts`), so wrong tries on any of them add up to one lock-out (the
       case shows four wrong tries on the cancel locking out the drawer too); the PIN of someone
@@ -5597,8 +5597,7 @@ characters. Left open:
     `execute` has scheduled the restart, the lock is now released while that restart is pending.
     Stale wording outside f2: "a device with no profile" in `apps/server/src/till-api.test.ts` (near
     lines 1377–1395) and `apps/till/src/till-app.test.ts` (near line 5765), though a device's
-    profile column is NOT NULL; the "four ids" test title in `apps/server/src/provision.test.ts`,
-    which asserts five; `config.ts`'s "minted once and reused" for the box certificate, which a
+    profile column is NOT NULL; `config.ts`'s "minted once and reused" for the box certificate, which a
     restore re-issues; and `errors.ts` describing `setup.already_provisioning` as a persistent-lease
     refusal, when it mostly comes from the in-memory lock. Test titles carrying history, left
     because titles are code: "(SP-A.2 §16, device-profile §5)" in `device-session.test.ts`, and

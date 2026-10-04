@@ -1194,7 +1194,7 @@ export const es: Record<StringKey, string> = {
   "printers.open": "Impresoras",
   "printers.title": "Impresoras de este dispositivo",
   "printers.receipt": "Impresora de tickets",
-  "printers.payment_slip": "Impresora de comprobantes de pago",
+  "printers.payment_slip": "Impresora de justificantes de pago",
   "printers.none": "Sin impresora",
   "printers.close": "Cerrar",
   "allergens.open": "Alérgenos",

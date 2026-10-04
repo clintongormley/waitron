@@ -18,8 +18,8 @@ const SIGHTING_INTERVAL_MS = 60_000;
 
 /**
  * DEV-ONLY: in `devMode`, a request carrying this header is authenticated AS the named device
- * WITHOUT a token, so one browser can run several device identities in separate tabs. NEVER read
- * unless `deps.devMode` is true.
+ * WITHOUT a token, so each tab of one browser can adopt a different device; a sign-in still belongs
+ * to the whole browser. NEVER read unless `deps.devMode` is true.
  */
 export const DEV_DEVICE_HEADER = "x-waitron-dev-device";
 
