@@ -258,6 +258,25 @@ describe("venue operations screen", () => {
     ).toBe(true);
   });
 
+  it("opens the zone's menu assignment from its missing-menu warning", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        readiness: [{ code: "zone.menu_missing", zoneId: "z1", zoneName: "Dining room" }],
+      }),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const zone = [...tree.querySelectorAll('tbody [role="row"]')].find((row) =>
+      row.textContent?.includes("Dining room"),
+    )!;
+    const action = zone.querySelector<HTMLButtonElement>('[data-test="zone-readiness-action"]');
+    expect(action).not.toBeNull();
+    expect(action!.textContent).toContain("Make available");
+    action!.click();
+    await settle(el);
+    expect(modal(el)?.getAttribute("heading")).toBe("Make available");
+  });
+
   it("renames a department from its table cell", async () => {
     const updateDepartment = vi.fn().mockResolvedValue(undefined);
     const el = await mount({

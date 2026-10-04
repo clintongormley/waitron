@@ -86,7 +86,8 @@ export class VenueOperationsScreen extends LitElement {
       wt-data-table::part(edit-receipt),
       wt-data-table::part(edit-department-name),
       wt-data-table::part(edit-zone-name),
-      wt-data-table::part(edit-trading-name) {
+      wt-data-table::part(edit-trading-name),
+      wt-data-table::part(zone-readiness-action) {
         border: 0;
         background: transparent;
         color: var(--wt-color-primary-text);
@@ -637,6 +638,21 @@ export class VenueOperationsScreen extends LitElement {
                 (issue) =>
                   html`<div part="zone-readiness" data-test="zone-readiness">
                     ${this.#readinessMessage(issue)}
+                    ${
+                      issue.code === "zone.menu_missing"
+                        ? html`<button
+                            type="button"
+                            part="zone-readiness-action"
+                            data-test="zone-readiness-action"
+                            @click=${(event: Event) => {
+                              this.#opener = event.currentTarget as HTMLElement;
+                              this.#open({ kind: "assignment", zoneId: row.zone.id });
+                            }}
+                          >
+                            ${t("venue.make_available")}
+                          </button>`
+                        : nothing
+                    }
                   </div>`,
               )}`;
           const displayName =
