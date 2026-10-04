@@ -7,6 +7,8 @@ import { allergenStateName, vatClassName } from "../i18n/domain.js";
 import type { Product, Unit } from "../api/client.js";
 import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
 import { ProductList, ROOT_KEY } from "./product-list.js";
+import { registerIcons } from "@waitron/ui";
+import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
@@ -1814,6 +1816,36 @@ describe("the product list as a tree", () => {
         .getBoundingClientRect().left;
     expect(iconLeft("draft:new")).toBe(iconLeft("folder:d"));
     expect(iconLeft("draft:new")).toBe(iconLeft("folder:f"));
+  });
+
+  it("draws large folder icons on root, nested and new category rows and on a category drag", async () => {
+    registerIcons(DASHBOARD_ICONS);
+    const { el, root } = await mountTree();
+    await openRow(el, "folder:d");
+    el.nameDraft = { kind: "create", parentId: "d" };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    for (const key of [ROOT_KEY, "folder:d", "folder:b", "draft:new"]) {
+      const icon = root.querySelector<HTMLElement>(
+        `tr[data-row-key="${key}"] wt-icon[name="folder"]`,
+      )!;
+      expect(icon.shadowRoot!.querySelector("svg")).not.toBeNull();
+      expect(icon.getBoundingClientRect().width).toBe(18);
+      expect(icon.getBoundingClientRect().height).toBe(18);
+    }
+
+    const grip = root.querySelector<HTMLElement>('tr[data-row-key="folder:d"] .drag-grip')!;
+    grip.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, composed: true, pointerId: 7 }),
+    );
+    document.dispatchEvent(new PointerEvent("pointermove", { pointerId: 7, clientY: 20 }));
+    await el.updateComplete;
+    const preview = el.shadowRoot!.querySelector<HTMLElement>(
+      '.drag-ghost wt-icon[name="folder"]',
+    )!;
+    expect(preview.getBoundingClientRect().width).toBe(18);
+    expect(preview.getBoundingClientRect().height).toBe(18);
+    document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: 7 }));
   });
 
   it("sends the typed name, trimmed, on Enter or on leaving the box, and a cancel on Esc or on leaving it blank", async () => {

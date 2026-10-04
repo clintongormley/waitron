@@ -1369,6 +1369,7 @@ there is no copy to keep in step.
 **The Products screen as a category tree (A208) — DONE.** Spec
 [2026-10-02-products-category-tree-design.md](superpowers/specs/2026-10-02-products-category-tree-design.md);
 plan [2026-10-02-products-category-tree.md](superpowers/plans/2026-10-02-products-category-tree.md).
+The tree's folder icons use the larger shared icon size on the root, category, new-category and drag-preview rows (W61).
 
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE.** The
 owner, on two screenshots of the same three options, the Name column starting far to the right
