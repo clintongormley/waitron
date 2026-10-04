@@ -961,7 +961,6 @@ export class AdjustmentReasonsScreen extends LitElement {
               columnPositionLabel=${t("adjustments.column_position")}
               filtersLabel=${t("adjustments.filters")}
               filteredColumnLabel=${t("adjustments.filtered_column")}
-              filterClearLabel=${t("adjustments.filter_clear")}
               filtersClearAllLabel=${t("adjustments.filters_clear_all")}
               filtersCloseLabel=${t("adjustments.filters_close")}
               .rows=${this.reasons}

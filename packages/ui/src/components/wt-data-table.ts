@@ -290,7 +290,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
       .filters-trigger,
       .filters-clear-all,
-      .filter-clear,
       .filters-close {
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-3);
@@ -304,7 +303,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
       .filters-trigger:focus-visible,
       .filters-clear-all:focus-visible,
-      .filter-clear:focus-visible,
       .filters-close:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
@@ -351,8 +349,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
         padding-block: var(--wt-space-2);
       }
 
-      .filter-section summary {
-        cursor: pointer;
+      .filter-section h3 {
+        margin: 0 0 var(--wt-space-2);
+        font-size: var(--wt-font-size-md);
       }
 
       .filters-panel-header {
@@ -580,7 +579,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
   @property() filterNoResultsLabel = "No results";
   @property() filtersLabel = "Filters";
   @property() filteredColumnLabel = "Filtered";
-  @property() filterClearLabel = "Clear";
   @property() filtersClearAllLabel = "Clear all";
   @property() filtersCloseLabel = "Close filters";
   @property() customiseColumnsLabel = "Customise columns";
@@ -1079,7 +1077,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
     }
     this.filtersPanel.showPopover();
     this.filtersOpen = true;
-    this.filtersPanel.querySelector<HTMLElement>(".filter-section summary")?.focus();
+    this.filtersPanel
+      .querySelector<HTMLElement>(".filter-section .table-filter")
+      ?.shadowRoot?.querySelector<HTMLElement>(".trigger")
+      ?.focus();
     this.#positionFilters();
   }
 
@@ -1504,14 +1505,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
                         @click=${() => {
                           if (!this.filtersPanel.matches(":popover-open")) this.#toggleFilters();
                           this.filtersPanel
-                            .querySelector<HTMLDetailsElement>(
-                              `[data-section="${CSS.escape(column.key)}"]`,
-                            )
-                            ?.setAttribute("open", "");
-                          this.filtersPanel
                             .querySelector<HTMLElement>(
-                              `[data-section="${CSS.escape(column.key)}"] summary`,
+                              `[data-section="${CSS.escape(column.key)}"] .table-filter`,
                             )
+                            ?.shadowRoot?.querySelector<HTMLElement>(".trigger")
                             ?.focus();
                         }}
                       >
@@ -1636,14 +1633,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   if (event.key === "Tab" && this.filtersPanel.hasAttribute("data-fullscreen")) {
                     const first =
                       this.filtersPanel.querySelector<HTMLButtonElement>(".filters-clear-all");
-                    const finalSection = [
-                      ...this.filtersPanel.querySelectorAll<HTMLDetailsElement>(".filter-section"),
-                    ].at(-1);
-                    const last = finalSection?.open
-                      ? finalSection
-                          .querySelector<HTMLElement>(".table-filter")
-                          ?.shadowRoot?.querySelector<HTMLButtonElement>(".trigger")
-                      : finalSection?.querySelector<HTMLElement>("summary");
+                    const last = [
+                      ...this.filtersPanel.querySelectorAll<HTMLElement>(
+                        ".filter-section .table-filter",
+                      ),
+                    ]
+                      .at(-1)
+                      ?.shadowRoot?.querySelector<HTMLButtonElement>(".trigger");
                     const origin = event.composedPath()[0];
                     if (event.shiftKey && origin === first && last) {
                       event.preventDefault();
@@ -1687,18 +1683,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   ${this.columns.map((column) => {
                     const active = this.#activeFilter(column);
                     return column.filter
-                      ? html`<details class="filter-section" data-section=${column.key} open>
-                          <summary>
-                            ${column.filter.label} (${column.filter.options.length})
-                          </summary>
-                          <button
-                            type="button"
-                            class="filter-clear"
-                            data-clear-filter=${column.key}
-                            @click=${() => this.#chooseFilter(column, "")}
-                          >
-                            ${this.filterClearLabel}
-                          </button>
+                      ? html`<div
+                          class="filter-section"
+                          data-section=${column.key}
+                          role="group"
+                          aria-label=${column.filter.label}
+                        >
+                          <h3>${column.filter.label}</h3>
                           <wt-combobox
                             class="table-filter"
                             name=${`${column.key}-filter`}
@@ -1721,7 +1712,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                               this.#chooseFilter(column, event.detail.value);
                             }}
                           ></wt-combobox>
-                        </details>`
+                        </div>`
                       : nothing;
                   })}
                 </div>

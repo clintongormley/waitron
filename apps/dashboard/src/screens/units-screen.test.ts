@@ -305,13 +305,17 @@ describe("units-screen", () => {
     expect(listedKeys(el)).toEqual(["u2"]);
   });
 
-  it("names the Filters panel and its clear controls in Spanish", async () => {
+  it("names the Filters panel and its always visible precision choice in Spanish", async () => {
     setLocale("es-ES");
     const el = await mount();
     const root = el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
     expect(root.querySelector(".filters-trigger")!.textContent).toContain("Filtros");
     expect(root.querySelector(".filters-clear-all")!.textContent).toContain("Borrar todo");
-    expect(root.querySelector(".filter-clear")!.textContent).toContain("Borrar");
+    expect(root.querySelector(".filter-section h3")!.textContent).toBe("Precisión");
+    expect(root.querySelector("wt-combobox.table-filter")!.getAttribute("placeholder")).toBe(
+      "Todas las precisiones",
+    );
+    expect(root.querySelector(".filter-clear")).toBeNull();
   });
 
   it("sorts by name ascending on first visit", async () => {

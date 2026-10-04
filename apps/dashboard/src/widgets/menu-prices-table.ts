@@ -1050,7 +1050,6 @@ export class MenuPricesTable extends LitElement {
         columnPositionLabel=${t("table.column_position")}
         filtersLabel=${t("table.filters")}
         filteredColumnLabel=${t("table.filtered_column")}
-        filterClearLabel=${t("table.filter_clear")}
         filtersClearAllLabel=${t("table.filters_clear_all")}
         filtersCloseLabel=${t("table.filters_close")}
         .rows=${this.#lines}

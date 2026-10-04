@@ -2668,6 +2668,11 @@ has.
 **Filters panel initial focus — DONE (W39f, owner 2026-10-03).** Opening the panel focuses its first
 filter section, so a second Enter collapses that section without clearing the filters.
 
+**Filters panel sections — DONE (W62, owner 2026-10-04).** Each filter now has a plain heading and
+an always available choice control. The section no longer collapses or shows a value count or its
+own Clear button. Choose "Any …" for one filter, or Clear all for every filter. Opening the panel
+focuses the first choice control. This supersedes W39's section layout and W39f's focus behavior.
+
 **The table's Columns button becomes a Customise dialog (A249, owner 2026-10-03) — DONE.**
 `wt-data-table` has an icon button opening a dialog that lists every column with a show/hide eye.
 The fixed first and pinned end columns are listed but cannot move or hide. Drag and keyboard controls
