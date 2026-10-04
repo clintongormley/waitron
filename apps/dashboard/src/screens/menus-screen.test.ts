@@ -1429,6 +1429,182 @@ describe("the menus list's Changes column", () => {
       });
     });
   });
+
+  const HYPHENATED = "Menú-del-mediodía-de-lunes-a-viernes-con-postre";
+  const SPACED = "Menú del mediodía de lunes a viernes, con postre y bebida incluidos";
+  const UNBROKEN = "Menúdelmediodíadelunesaviernesconpostreybebidaincluidos";
+
+  /** The mixed list, with Lunch, the menu that has changes, under a long name. */
+  function named(name: string): Api {
+    return mixed({
+      listCatalogues: vi.fn().mockResolvedValue([{ ...menus[0]!, name }, menus[1]!, BRUNCH]),
+    });
+  }
+
+  function scrollBox(el: MenusScreen): HTMLElement {
+    return table(el).shadowRoot.querySelector<HTMLElement>(".scroll")!;
+  }
+
+  /** The link lies in the table's box, left of the pinned row menu, on the screen, and nothing
+   * covers it, with the table scrolled to its start. */
+  function expectLinkOnScreen(el: MenusScreen, id: string): void {
+    const anchor = link(el, id)!;
+    const scroll = scrollBox(el);
+    expect(scroll.scrollLeft).toBe(0);
+    const box = scroll.getBoundingClientRect();
+    const at = anchor.getBoundingClientRect();
+    const menu = row(el, id).querySelector("td[data-pinned]")!.getBoundingClientRect();
+    expect(at.left, "against the box").toBeGreaterThanOrEqual(box.left);
+    expect(at.right, "against the row menu").toBeLessThanOrEqual(menu.left);
+    expect(at.right, "against the screen").toBeLessThanOrEqual(window.innerWidth);
+    for (const x of [at.left + 2, at.left + at.width / 2, at.right - 2]) {
+      const hit = table(el).shadowRoot.elementFromPoint(x, at.top + at.height / 2);
+      expect(hit !== null && anchor.contains(hit), `covered at ${x}`).toBe(true);
+    }
+  }
+
+  async function threeColumns(el: MenusScreen): Promise<void> {
+    await vi.waitFor(async () => {
+      await table(el).updateComplete;
+      expect(heads(el)).toHaveLength(3);
+    });
+    expect(heads(el)[1]).toBe(t("menus.status"));
+  }
+
+  describe.each([
+    [600, "en-GB"],
+    [600, "es-ES"],
+    [700, "en-GB"],
+    [700, "es-ES"],
+    [790, "en-GB"],
+    [790, "es-ES"],
+  ] as const)("between the phone layout and a wide list (%i px, %s)", (width, locale) => {
+    it.each([HYPHENATED, SPACED, UNBROKEN])(
+      "puts the link under the state in Status, on screen without scrolling, beside %s",
+      async (name) => {
+        await at([width, 900], locale, async () => {
+          const el = await listed(named(name));
+          await threeColumns(el);
+          expect(table(el).shadowRoot.querySelector(".columns-trigger")).toBeNull();
+          const cell = row(el, "menu-lunch").querySelectorAll("td")[1]!;
+          const anchor = link(el, "menu-lunch")!;
+          expect(anchor.closest("td")).toBe(cell);
+          expect(text(anchor)).toBe(t("menus.changes_link"));
+          const state = cell.querySelector('[data-test="status-menu-lunch"]')!;
+          expect(state.contains(anchor)).toBe(false);
+          const under = state.getBoundingClientRect();
+          const at = anchor.getBoundingClientRect();
+          expect(at.top, "under the state").toBeGreaterThanOrEqual(under.bottom - 1);
+          expect(Math.abs(at.left - under.left), "lined up with the state").toBeLessThanOrEqual(1);
+          expectLinkOnScreen(el, "menu-lunch");
+          for (const id of ["menu-dinner", "menu-brunch"]) expect(link(el, id), id).toBeNull();
+        });
+      },
+    );
+  });
+
+  describe.each([
+    [816, "en-GB"],
+    [816, "es-ES"],
+    [1280, "en-GB"],
+    [1280, "es-ES"],
+  ] as const)("on a wide list (%i px, %s)", (width, locale) => {
+    it.each([HYPHENATED, SPACED, UNBROKEN])(
+      "fits all four columns in the box beside %s, the link under Changes",
+      async (name) => {
+        await at([width, 900], locale, async () => {
+          const el = await listed(named(name));
+          await vi.waitFor(async () => {
+            await table(el).updateComplete;
+            expect(heads(el)).toHaveLength(4);
+          });
+          expect(heads(el).slice(1, 3)).toEqual([t("menus.status"), t("menus.changes")]);
+          const scroll = scrollBox(el);
+          expect(scroll.scrollWidth, "no sideways scrolling").toBeLessThanOrEqual(
+            scroll.clientWidth,
+          );
+          expect(link(el, "menu-lunch")!.closest("td")).toBe(changesCell(el, "menu-lunch"));
+          expectLinkOnScreen(el, "menu-lunch");
+        });
+      },
+    );
+  });
+
+  it("opens the Preview tab, and not the row, from the link in the Status cell", async () => {
+    await at([700, 900], "en-GB", async () => {
+      const opens = opened();
+      const el = await listed(mixed());
+      await threeColumns(el);
+      await userEvent.click(link(el, "menu-lunch")!);
+      await vi.waitFor(() => expect(location.pathname).toBe(PREVIEW("menu-lunch")));
+      expect(opens()).toEqual([PREVIEW("menu-lunch")]);
+    });
+  });
+
+  it.each(["corner", "beside the link"] as const)(
+    "opens the menu once from a click on the Status cell's blank space (%s)",
+    async (where) => {
+      await at([700, 900], "en-GB", async () => {
+        const opens = opened();
+        const el = await listed(mixed());
+        await threeColumns(el);
+        const cell = row(el, "menu-lunch").querySelectorAll("td")[1]!;
+        const box = cell.getBoundingClientRect();
+        const anchor = link(el, "menu-lunch")!;
+        const at = anchor.getBoundingClientRect();
+        expect(at.right).toBeLessThan(box.right - 4);
+        const position =
+          where === "corner"
+            ? { x: 2, y: 2 }
+            : { x: (at.right + box.right) / 2 - box.x, y: at.top + at.height / 2 - box.y };
+        const hit = table(el).shadowRoot.elementFromPoint(box.x + position.x, box.y + position.y);
+        expect(anchor.contains(hit)).toBe(false);
+        // Forced, because the blank space lies under the row's stretched button, which takes it.
+        await userEvent.click(cell, { position, force: true });
+        const structure = "/manage/menus/menu/menu-lunch/view/structure";
+        await vi.waitFor(() => expect(location.pathname).toBe(structure));
+        expect(opens()).toEqual([structure]);
+      });
+    },
+  );
+
+  it.each([
+    ["Status hidden", { columns: { status: false } }],
+    ["Changes hidden", { columns: { changes: false } }],
+    ["Changes moved before Status", { "column-order": ["changes", "status"] }],
+  ] as const)(
+    "keeps the link under the state between the layouts, and the wide choice after, with %s",
+    async (_, saved) => {
+      for (const [suffix, value] of Object.entries(saved))
+        localStorage.setItem(`${LIST_KEY}:${suffix}`, JSON.stringify(value));
+      const stored = () => [
+        localStorage.getItem(`${LIST_KEY}:columns`),
+        localStorage.getItem(`${LIST_KEY}:column-order`),
+      ];
+      const before = stored();
+      await at([1280, 900], "en-GB", async () => {
+        const el = await mount(mixed());
+        await vi.waitFor(async () => {
+          await table(el).updateComplete;
+          expect(text(row(el, "menu-lunch"))).toMatch(/Version 2|Unpublished changes/);
+        });
+        const wide = heads(el);
+        expect(wide).toHaveLength("columns" in saved ? 3 : 4);
+        await at([700, 900], "en-GB", async () => {
+          await threeColumns(el);
+          expect(link(el, "menu-lunch")!.closest("td")).toBe(
+            row(el, "menu-lunch").querySelectorAll("td")[1],
+          );
+          expectLinkOnScreen(el, "menu-lunch");
+        });
+        await vi.waitFor(async () => {
+          await table(el).updateComplete;
+          expect(heads(el)).toEqual(wide);
+        });
+      });
+      expect(stored()).toEqual(before);
+    },
+  );
 });
 
 it("creating a menu needs a name: an empty one is explained beside the field and above Save", async () => {
