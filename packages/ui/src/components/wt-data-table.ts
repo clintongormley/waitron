@@ -106,7 +106,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       }
 
       th[data-filtered] {
-        box-shadow: inset 0 -2px 0 var(--wt-color-primary);
+        box-shadow: inset 0 calc(-1 * var(--wt-field-line-width-active)) 0 var(--wt-color-primary);
       }
 
       th[data-align="end"],
