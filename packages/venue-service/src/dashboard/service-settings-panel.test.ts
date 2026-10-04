@@ -62,6 +62,34 @@ it("shows both settings panels to a read-only viewer with every control disabled
   expect(api.saveClearingWorkflow).not.toHaveBeenCalled();
 });
 
+it("refuses synthetic changes from a read-only viewer even when a control emits them", async () => {
+  const api = {
+    loadSettingsReadOnly: vi.fn().mockResolvedValue(model),
+    saveSettings: vi.fn(),
+    saveClearingWorkflow: vi.fn(),
+    saveReleaseReminderMinutes: vi.fn(),
+    saveKitchenTicketGrouping: vi.fn(),
+  } as unknown as VenueServiceApi;
+  const kitchen = await mount(api, "kitchen", true);
+  const tables = await mount(api, "tables", true);
+  const change = (root: ShadowRoot, selector: string, detail: object) => {
+    const control = root.querySelector(selector)!;
+    control.dispatchEvent(new CustomEvent("wt-change", { detail, bubbles: true, composed: true }));
+  };
+  change(kitchen.shadowRoot!, 'wt-switch[name="editSentLines"]', { checked: false });
+  change(kitchen.shadowRoot!, 'wt-combobox[name="releaseReminderMinutes"]', { value: "15" });
+  change(kitchen.shadowRoot!, 'wt-combobox[name="kitchenTicketGrouping"]', {
+    value: "separate",
+  });
+  change(tables.shadowRoot!, 'wt-switch[name="clearingWorkflow"]', { checked: true });
+  await settle(kitchen);
+  await settle(tables);
+  expect(api.saveSettings).not.toHaveBeenCalled();
+  expect(api.saveReleaseReminderMinutes).not.toHaveBeenCalled();
+  expect(api.saveKitchenTicketGrouping).not.toHaveBeenCalled();
+  expect(api.saveClearingWorkflow).not.toHaveBeenCalled();
+});
+
 async function settle(el: ServiceSettingsPanel) {
   await el.updateComplete;
   await new Promise((resolve) => setTimeout(resolve, 0));
