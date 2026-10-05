@@ -3712,7 +3712,7 @@ as two identical entries, in the tree and in a search. The path separator W82a's
 about is settled (owner 2026-10-05: every Products-screen path uses " › "; built in W82b, #1232): the
 Delete dialog's list of categories (`#namedPaths`, `apps/dashboard/src/widgets/catalogue-browser.ts`)
 joins a path with " › ", as the Move dialog does. The Products table shows no path since W84 (#1199)
-removed its Main category column. Settled by the owner 2026-10-05 and built in W82c: the Menus
+removed its Main category column. Settled by the owner 2026-10-05 and built in W82c (#1262): the Menus
 screen joins a path with " › " too — the menu prices table's Main category column and its filter
 list (`menu-prices-table.ts`) and the add-products dialog's category picker
 (`section-add-products.ts`) — because " › " (`PATH_SEPARATOR`) is now `categoryPath`'s default
