@@ -7148,6 +7148,9 @@ describe("colour swatches on the Structure tab", () => {
     );
     live.invalidate([{ type: "products" }]);
     await vi.waitFor(() => expect(colorForm(el).open).toBe(false));
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menus.product_gone").replace("{name}", "Lemonade"),
+    );
 
     client.listLibraryProducts.mockResolvedValue(products);
     live.invalidate([{ type: "products" }]);
@@ -7157,6 +7160,47 @@ describe("colour swatches on the Structure tab", () => {
     await el.updateComplete;
     expect(colorForm(el).open).toBe(false);
     expect(writeCalls(client)).toEqual([]);
+  });
+
+  it("keeps the dialog open while its save is out and its product leaves the library, shows a refusal there, and closes with the reason when saved again", async () => {
+    const live = new LiveData();
+    const saving = deferred<void>();
+    const client = api({ liveData: live, setProductColor: vi.fn(() => saving.promise) });
+    const el = await openLemonade(client);
+    const form = colorForm(el);
+    inColorForm(el, '[data-color="#b12525"]').click();
+    await form.updateComplete;
+    inColorForm(el, '[data-test="save"]').click();
+    await vi.waitFor(() => expect(client.setProductColor).toHaveBeenCalledOnce());
+
+    client.listLibraryProducts.mockResolvedValue(
+      products.filter((each) => each.id !== "p-lemonade"),
+    );
+    live.invalidate([{ type: "products" }]);
+    await vi.waitFor(() =>
+      expect(structure(el).products.some((each) => each.id === "p-lemonade")).toBe(false),
+    );
+    await el.updateComplete;
+    expect(form.open).toBe(true);
+    expect(form.name).toBe("Lemonade");
+
+    saving.reject({ code: "product.not_found" });
+    await vi.waitFor(() =>
+      expect(form.errors).toEqual({ _form: codeMessage("product.not_found") }),
+    );
+    await el.updateComplete;
+    expect(form.open).toBe(true);
+    expect(form.busy).toBe(false);
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+
+    // Saved again, with its product gone, it closes and sends nothing.
+    inColorForm(el, '[data-test="save"]').click();
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(client.setProductColor).toHaveBeenCalledOnce();
+    expect(form.open).toBe(false);
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menus.product_gone").replace("{name}", "Lemonade"),
+    );
   });
 
   it("closes the dialog on Cancel, writing nothing", async () => {

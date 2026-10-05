@@ -608,6 +608,10 @@ export class MenusScreen extends LitElement {
   /** The products the add-products window's own list already holds, which it does not offer. */
   #pickerHeld: string[] = [];
   #addable: Product[] = [];
+  #categoryById = new Map<string, CategorySummary>();
+  /** The coloured product as last read, so the colour dialog still names it while its save is out
+   * after the product has left the library. */
+  #colouredSeen: Product | null = null;
   /** The tree row whose ⋮ gets focus back once its window has closed and nothing is out. */
   #focusReturn: { menuId: string; key: string } | null = null;
   #windowShut = false;
@@ -673,7 +677,10 @@ export class MenusScreen extends LitElement {
       );
     }
     if (changed.has("products")) this.#addable = this.products.filter((product) => product.active);
-    if (changed.has("products") && this.#colouredProduct() === null) this.colouring = null;
+    if (changed.has("categories"))
+      this.#categoryById = new Map(this.categories.map((each) => [each.id, each]));
+    if (changed.has("colouring") || (changed.has("products") && this.colouring !== null))
+      this.#closeLostProduct();
     if (changed.has("structure") || changed.has("products")) {
       const products = new Map(
         this.products.filter((product) => product.active).map(({ id, name }) => [id, name]),
@@ -728,6 +735,25 @@ export class MenusScreen extends LitElement {
     this.includingMenu = null;
     if (target.menuId === this.menuId)
       this.memberError = t("menus.list_gone").replace("{name}", target.name);
+    return true;
+  }
+
+  /** Closes the colour dialog when its product has left the library, saying why, except while its
+   * save is out, so a refusal is shown in the dialog that names the product. Says whether it
+   * closed it. */
+  #closeLostProduct(): boolean {
+    if (this.#colouredSeen?.id !== this.colouring) this.#colouredSeen = null;
+    if (this.colouring === null) return false;
+    const product = this.products.find((each) => each.id === this.colouring);
+    if (product) {
+      this.#colouredSeen = product;
+      return false;
+    }
+    if (this.colorBusy) return false;
+    const lost = this.#colouredSeen;
+    this.colouring = null;
+    this.#colouredSeen = null;
+    if (lost) this.memberError = t("menus.product_gone").replace("{name}", lost.name);
     return true;
   }
 
@@ -2263,8 +2289,9 @@ export class MenusScreen extends LitElement {
   }
 
   async #saveProductColor(color: string | null): Promise<void> {
+    if (this.colorBusy || this.#closeLostProduct()) return;
     const product = this.#colouredProduct();
-    if (!product || this.colorBusy) return;
+    if (!product) return;
     this.colorBusy = true;
     try {
       await this.api.setProductColor(product.id, color);
@@ -2280,18 +2307,14 @@ export class MenusScreen extends LitElement {
   }
 
   #colouredProduct(): Product | null {
-    return this.products.find((each) => each.id === this.colouring) ?? null;
+    if (this.colouring === null) return null;
+    return this.products.find((each) => each.id === this.colouring) ?? this.#colouredSeen;
   }
 
   #renderProductColor() {
     const product = this.#colouredProduct();
     const inherited =
-      product === null
-        ? null
-        : categoryColor(
-            product.categoryId,
-            new Map(this.categories.map((each) => [each.id, each])),
-          );
+      product === null ? null : categoryColor(product.categoryId, this.#categoryById);
     return html`<dashboard-product-color-form
       .open=${product !== null}
       .busy=${this.colorBusy}
