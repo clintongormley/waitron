@@ -301,6 +301,7 @@ export class AddToMenus extends LitElement {
     const choosing = this.menus !== null && this.loadError === null;
     const failed = this.failures.length > 0 || this.loadError !== null;
     return html`<wt-modal
+      size="standard"
       .open=${this.open}
       heading=${t("add_to_menus.heading").replace("{name}", this.productName)}
       @keydown=${(event: KeyboardEvent) => {

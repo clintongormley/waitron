@@ -947,6 +947,7 @@ export class MenuPricesTable extends LitElement {
       ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : []),
     ].join(" ");
     return html`<wt-modal
+      size="standard"
       .open=${form !== null}
       heading=${
         form

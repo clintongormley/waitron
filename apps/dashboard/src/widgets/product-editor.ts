@@ -269,8 +269,11 @@ export class ProductEditor extends LitElement {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
       }
-      /* A wt-dialog is as wide as its content, so the chooser takes the standard form width and
-         gives it up on a screen narrower than that. */
+      wt-dialog[data-test="unit-chooser"] {
+        --wt-dialog-max-width: min(90vw, var(--wt-modal-compact-width));
+      }
+      /* A wt-dialog is as wide as its content: asking for the form width grows the dialog to its
+         compact cap, and the chooser then fills the dialog's body. */
       .unit-chooser {
         inline-size: var(--wt-form-max-width);
         max-inline-size: 100%;
@@ -1715,6 +1718,7 @@ export class ProductEditor extends LitElement {
     this.#rowsNow = rows;
     const fields = this.fields();
     return html`<wt-modal
+        size="standard"
         .open=${this.open}
         heading=${t(
           this.inherited ? "editor.edit_variant" : this.value?.id ? "product.edit" : "product.new",

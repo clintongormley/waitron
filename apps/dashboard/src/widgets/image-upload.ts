@@ -185,6 +185,7 @@ export class ImageUpload extends LitElement {
 
   #renderPicker() {
     return html`<wt-modal
+      size="wide"
       open
       heading=${t("image.choose")}
       @wt-close=${(event: Event) => {

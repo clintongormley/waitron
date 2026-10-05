@@ -877,6 +877,7 @@ export class ExtraListForm extends LitElement {
     ].join(" ");
     const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
     return html`<wt-modal
+      size="wide"
       .open=${this.open}
       heading=${t(this.value ? "extras.edit" : "extras.create")}
       @keydown=${(event: KeyboardEvent) => {

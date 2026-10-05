@@ -968,6 +968,7 @@ export class VenueOperationsScreen extends LitElement {
     return keyed(
       editor,
       html`<wt-modal
+        size=${editor.kind === "delete" ? "compact" : "standard"}
         open
         heading=${content.heading}
         @wt-close=${() => {

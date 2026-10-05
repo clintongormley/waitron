@@ -977,6 +977,7 @@ export class ProfileScreen extends LitElement {
     this.#fieldErrors = form.fields;
     return html`
       <wt-modal
+        size=${this.mode === "details" || this.mode === "totp" ? "standard" : "compact"}
         heading=${this.#modalHeading()}
         .open=${this.mode !== "view"}
         @wt-close=${(e: Event) => {

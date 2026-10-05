@@ -1810,6 +1810,7 @@ export class PrintersScreen extends LitElement {
   #renderAgentModal(): TemplateResult | typeof nothing {
     if (!this.addingAgent) return nothing;
     return html`<wt-modal
+      size="standard"
       data-test="new-agent-modal"
       heading=${t("printers.add_agent")}
       .open=${true}
@@ -1861,6 +1862,7 @@ export class PrintersScreen extends LitElement {
     if (!agent) return nothing;
     const nameError = this.formAttempted && !agent.name.trim() ? t("form.name_required") : "";
     return html`<wt-modal
+      size="compact"
       heading=${t("printers.edit_agent")}
       data-test="edit-agent-modal"
       .open=${true}
@@ -2505,6 +2507,7 @@ export class PrintersScreen extends LitElement {
         @wt-change=${this.#editHandler(p.id, key)}
       ></wt-input>`;
     return html`<wt-modal
+      size="standard"
       data-test="edit-printer-modal"
       heading=${this.calibrationStep ? `${t("printers.calibrate")}: ${p.name}` : t("printers.edit_printer")}
       .open=${true}
@@ -2767,6 +2770,7 @@ export class PrintersScreen extends LitElement {
       this.discoveredNames[key] ?? this.#disabledPrinter(d)?.name ?? this.#discoveredLabel(d);
     const nameError = this.formAttempted && !name.trim() ? t("form.name_required") : "";
     return html`<wt-modal
+      size="compact"
       data-test="name-printer-modal"
       heading=${t("printers.add_printer")}
       .open=${true}
@@ -2824,6 +2828,7 @@ export class PrintersScreen extends LitElement {
     const pinInvalid = this.pairAttempted && !BLUETOOTH_PIN.test(this.pairPin);
     const pinError = pinInvalid || this.pairRefused ? t("printers.bluetooth_pin_invalid") : "";
     return html`<wt-modal
+      size="compact"
       data-test="pair-printer-modal"
       heading=${t("printers.bluetooth_pair_title")}
       .open=${true}
@@ -3000,6 +3005,7 @@ export class PrintersScreen extends LitElement {
       Object.keys(probeErrors).length > 0 ? t("form.fix_fields") : null,
     );
     return html`<wt-modal
+      size="wide"
       data-test="new-printer-modal"
       heading=${t("printers.add_printer")}
       .open=${true}

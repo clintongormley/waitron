@@ -443,6 +443,7 @@ export class CatalogueBrowser extends LitElement {
       count,
     );
     return html`<wt-modal
+      size=${this.operation === "move" ? "compact" : "standard"}
       .open=${true}
       .heading=${heading}
       .dismissible=${!this.operationBusy && !this.summaryLoading}

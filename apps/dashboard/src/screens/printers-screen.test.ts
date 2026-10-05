@@ -3778,20 +3778,21 @@ it("reports a failed pairing close after dismissing the modal", async () => {
   expect(text(el, "[role=alert]")).toContain(codeMessage("server.internal"));
 });
 
-it.each(["agent", "printer"])(
-  "sizes the Add %s modal to the full dialog width on desktop",
-  async (kind) => {
-    await page.viewport(1280, 900);
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
-      api: stubApi(),
-    });
-    await flush(el);
-    q(el, `[data-test=open-add-${kind}]`)!.click();
-    await flush(el);
-    const dialog = q(el, `[data-test=new-${kind}-modal]`)!.shadowRoot!.querySelector("dialog")!;
-    expect(dialog.getBoundingClientRect().width).toBeCloseTo(1024, 0);
-  },
-);
+// At 1280px wide no size is capped by the window: standard is 42rem (672px), wide 64rem (1024px).
+it.each([
+  ["agent", 672],
+  ["printer", 1024],
+])("sizes the Add %s modal to its size's full width on desktop", async (kind, width) => {
+  await page.viewport(1280, 900);
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  q(el, `[data-test=open-add-${kind}]`)!.click();
+  await flush(el);
+  const dialog = q(el, `[data-test=new-${kind}-modal]`)!.shadowRoot!.querySelector("dialog")!;
+  expect(dialog.getBoundingClientRect().width).toBeCloseTo(width, 0);
+});
 
 it("distinguishes job statuses with coloured dots while preserving the status text", async () => {
   const allJobs = (["queued", "printing", "done", "failed"] as const).map((status) => ({

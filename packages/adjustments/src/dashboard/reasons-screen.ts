@@ -881,6 +881,7 @@ export class AdjustmentReasonsScreen extends LitElement {
     return keyed(
       editor,
       html`<wt-modal
+        size=${deactivating ? "compact" : "standard"}
         open
         heading=${heading}
         @wt-close=${() => {

@@ -772,6 +772,7 @@ export class CatalogueScreen extends LitElement {
         }}
       ></dashboard-add-to-menus>
       <wt-modal
+        size="compact"
         data-test="delete-dialog"
         .open=${this.deletingProduct !== null}
         heading=${t(
@@ -808,6 +809,7 @@ export class CatalogueScreen extends LitElement {
         >
       </wt-modal>
       <wt-modal
+        size="standard"
         data-test="courses-dialog"
         .open=${this.#child.kind === "courses"}
         heading=${t("kitchen.courses_title")}

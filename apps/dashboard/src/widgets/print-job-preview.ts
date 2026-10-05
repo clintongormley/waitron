@@ -45,7 +45,12 @@ export class PrintJobPreviewDialog extends LitElement {
   override render() {
     const preview = this.preview;
     return html`
-      <wt-modal .open=${this.open} heading=${t("printers.preview_title")} @wt-close=${this.#close}>
+      <wt-modal
+        size="standard"
+        .open=${this.open}
+        heading=${t("printers.preview_title")}
+        @wt-close=${this.#close}
+      >
         <p>${t("printers.preview_notice")}</p>
         ${
           preview

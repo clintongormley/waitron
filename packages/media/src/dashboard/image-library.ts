@@ -486,6 +486,7 @@ export class ImageLibrary extends LitElement {
     if (viewing === null) return nothing;
     const name = this.#text(viewing.image.names);
     return html`<wt-modal
+      size="wide"
       open
       data-test="image-preview"
       heading=${name}
@@ -577,6 +578,7 @@ export class ImageLibrary extends LitElement {
           ? `/media/${encodeURIComponent(editor.image.filename)}`
           : null;
     return html`<wt-modal
+      size="standard"
       open
       heading=${t(editor.image ? "image.edit" : "image.upload")}
       @wt-close=${(event: Event) => {
@@ -801,6 +803,7 @@ export class ImageLibrary extends LitElement {
       ${
         this.deletion
           ? html`<wt-modal
+              size="compact"
               open
               heading=${t("image.confirm")}
               @wt-close=${(event: Event) => {
