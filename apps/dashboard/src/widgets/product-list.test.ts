@@ -1011,6 +1011,7 @@ describe("product-list", () => {
       expect(label("delete-bun")).toBe(words.disable);
       expect(label("delete-small")).toBe(words.disable);
       expect(label("restore-large")).toBe(words.enable);
+      expect(label("restore-off")).toBe(words.enable);
       const badge = (key: string) =>
         root
           .querySelector<HTMLElement>(`tr[data-row-key="${key}"] [data-test=active-badge]`)!
@@ -1061,6 +1062,32 @@ describe("product-list", () => {
       ["delete-product", "small"],
       ["restore-product", "large"],
     ]);
+  });
+
+  it("under a disabled product, each variant offers what its own status calls for", async () => {
+    const removed = { ...bunVariant, id: "large", name: "Large", active: false };
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [
+        product({ id: "off", name: "Anchoas", active: false, variants: [bunVariant, removed] }),
+      ],
+    });
+    await choose(el, "active", "");
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    root.querySelector<HTMLElement>('tr[data-row-key="off"] .tree-toggle')!.click();
+    await table.updateComplete;
+    for (const id of ["off", "large"]) {
+      const actions = root.querySelector<HTMLElement>(`[data-test="actions-${id}"]`)!;
+      expect(actions.querySelector(`[data-test="delete-${id}"]`)).toBeNull();
+      expect(actions.querySelector(`[data-test="restore-${id}"]`)!.textContent).toContain(
+        t("product.enable"),
+      );
+    }
+    const small = root.querySelector<HTMLElement>('[data-test="actions-small"]')!;
+    expect(small.querySelector('[data-test="restore-small"]')).toBeNull();
+    expect(small.querySelector('[data-test="delete-small"]')!.textContent).toContain(
+      t("product.disable"),
+    );
   });
 
   it("offers Enable and not Disable on a disabled product's own row, and Disable on an active one", async () => {
@@ -3011,25 +3038,32 @@ describe("the product list as a tree", () => {
   );
 
   it.each([
-    ["Edit", "edit-bread", "edit-product"],
-    ["Disable", "delete-bread", "delete-product"],
+    ["Edit", "edit-bread", "edit-product", "bread"],
+    ["Disable", "delete-bread", "delete-product", "bread"],
+    ["Enable", "restore-stale", "restore-product", "stale"],
   ])(
     "closes a top-level product's menu when %s is chosen from it, and sends only that request",
-    async (_label, button, request) => {
-      const { el, root } = await mountTree();
+    async (_label, button, request, productId) => {
+      const { el, root } = await mountTree({
+        products: [
+          ...treeProducts(),
+          product({ id: "stale", name: "Stale", primaryCategoryId: null, active: false }),
+        ],
+      });
+      await choose(el, "active", "");
       const seen: [string, string][] = [];
       for (const name of ["edit-product", "delete-product", "restore-product"])
         el.addEventListener(name, (event) =>
           seen.push([name, (event as CustomEvent<{ productId: string }>).detail.productId]),
         );
       const menu = root.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-        '[data-test="actions-bread"]',
+        `[data-test="actions-${productId}"]`,
       )!;
       menu.show();
       const popup = menu.shadowRoot!.querySelector("[popover]")!;
       expect(popup.matches(":popover-open")).toBe(true);
       await userEvent.click(root.querySelector<HTMLElement>(`[data-test="${button}"]`)!);
-      expect(seen).toEqual([[request, "bread"]]);
+      expect(seen).toEqual([[request, productId]]);
       expect(popup.matches(":popover-open")).toBe(false);
     },
   );
