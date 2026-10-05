@@ -3487,7 +3487,7 @@ and `setup_port`, and the Printers screen links an agent's host cell to its `set
 (`apps/dashboard/src/screens/printers-screen.ts`), so an imported agent that had reported one, which
 arrives inactive and is shown once the status filter includes revoked agents, would link to the
 exporting machine's setup page (read, not run).
-Fixed in W72e (2026-10-05): at 390 px the Products tree's category name box used to cut its
+Fixed in W72e (#1241, 2026-10-05): at 390 px the Products tree's category name box used to cut its
 duplicate-name refusal, and `category.invalid`'s, off against the pinned Actions column. The table
 is as wide as its widest row, and the refusal's one long line widened the Name column past the
 screen. The box now takes only the room before the pinned column, measured when it opens and again
@@ -3496,7 +3496,10 @@ past is scrolled back to its start (`#fitNameBox`,
 `apps/dashboard/src/widgets/product-list.ts`). The new box for a category being added is the same
 box. Pinned by the 390 px cases in `apps/dashboard/src/widgets/product-list.test.ts`. The fix
 changes only the name box, so the long product names in the phone-width entry above are not
-affected (W85b).
+affected (W85b). Still open, for the owner: in the demo venue at 390 px the tree's leading slots
+leave the box about 55 px, so the refusal wraps about one word a line (local screenshots in
+`~/waitron-campaign/w72e-shots/`); whether to give it more room, for example by narrowing those
+slots at phone width alongside W85b, is asked in the campaign's questions file.
 
 **Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
 owner 2026-10-04; since 2026-10-05 a tree, W82a, see the last paragraph).** The bulk Move
