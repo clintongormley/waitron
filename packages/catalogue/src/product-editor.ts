@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { catalogues, now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { setMainReportingCategory } from "./categories.js";
+import { readCategory } from "./categories.js";
 import { assertContentTranslations, readContentLanguages } from "./content-languages.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import {
@@ -10,7 +10,6 @@ import {
   updateProductSkippingNameCheck,
 } from "./operations.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
-import { setProductColor } from "./product-colors.js";
 import { productUnits } from "./schema/units.js";
 import { priceOrNull } from "./offer-price.js";
 import { productWithId } from "./variant-fallback.js";
@@ -213,8 +212,11 @@ export async function saveProductEditor(
       .set({ categoryId: null, color: null, updatedAt: now() })
       .where(eq(products.id, productId));
   } else {
-    await setMainReportingCategory(tx, productId, value.primaryCategoryId);
-    await setProductColor(tx, productId, value.color);
+    if (value.primaryCategoryId !== null) await readCategory(tx, value.primaryCategoryId);
+    await tx
+      .update(products)
+      .set({ categoryId: value.primaryCategoryId, color: value.color, updatedAt: now() })
+      .where(eq(products.id, productId));
     await writeProductVariantsSkippingNameCheck(tx, productId, value.variants, config);
     await writeProductModifiers(tx, productId, value.modifiers);
   }

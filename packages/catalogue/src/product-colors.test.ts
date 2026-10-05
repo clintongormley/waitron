@@ -72,6 +72,15 @@ it("answers a variant's id as an id that names no product, and leaves both rows"
   expect(await storedColor(productId)).toBe("#256bb1");
 });
 
+it("refuses a variant's id with null too, leaving a colour it holds", async () => {
+  await fx.db.update(products).set({ color: "#b12525" }).where(eq(products.id, variantId));
+  await expect(app((tx) => setProductColor(tx, variantId, null))).rejects.toMatchObject({
+    code: "product.not_found",
+    params: { productId: variantId },
+  });
+  expect(await storedColor(variantId)).toBe("#b12525");
+});
+
 it.each(["#B12525", "", "red"])(
   "refuses the colour %j as product.invalid on color, before looking for the product",
   async (color) => {
