@@ -2400,7 +2400,8 @@ estación, mesa or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a 
 words.
 
 Where a screen has both, the action follows what the code does: the products list's bulk action
-reads Disable while only products are selected and Delete once a category is in the selection,
+reads Disable while only products are selected (and is not offered when every selected product is
+disabled already) and Delete once a category is in the selection,
 because the category itself is deleted. Products selected directly are disabled; the products
 inside the category, its subcategories included, are disabled only with **Delete it too**, and with
 **Move it up to the parent category** they stay active.
