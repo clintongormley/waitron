@@ -492,6 +492,19 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That request is no longer waiting",
     es: "Esa solicitud ya no está esperando",
   },
+  "device.pairing_hold_lapsed": {
+    en: "Devices can no longer ask to join from this dialog, and any that were waiting may have to ask again. Start again to keep accepting them",
+    es: "Este diálogo ya no acepta dispositivos, y los que esperaban pueden tener que solicitarlo de nuevo. Vuelve a empezar para seguir aceptándolos",
+  },
+  "join_request.claimed": {
+    en: "Another manager is pairing this device",
+    es: "Otro responsable está emparejando este dispositivo",
+  },
+  // Also the answer for an id that is gone or already approved, such as a repeated submit after success.
+  "join_request.unclaimed": {
+    en: "This request is no longer waiting for your approval. If the device is not in the list, ask it to try again",
+    es: "Esta solicitud ya no espera tu aprobación. Si el dispositivo no está en la lista, pídele que lo vuelva a intentar",
+  },
   "device.station_required": {
     en: "This profile needs a station — choose one",
     es: "Este perfil necesita una estación. Elige una",

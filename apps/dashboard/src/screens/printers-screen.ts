@@ -32,6 +32,8 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { DashboardQueries } from "../api/query-controller.js";
+import { PairingHold, type PairingHoldStatus } from "../api/pairing-hold.js";
+import { bottomMessage, refusal } from "../i18n/form-message.js";
 import { SETTING_WIDTHS, textGrid } from "@waitron/printing/src/layout.js";
 import type {
   BluetoothCommandStatus,
@@ -59,12 +61,6 @@ interface PrinterDraft {
   localKey?: string;
   pollId?: string;
 }
-
-/** A form's one message about a failed submission: each non-empty part, in order. */
-const bottomMessage = (...parts: (string | null)[]): string =>
-  parts.filter((part): part is string => part !== null && part !== "").join(" ");
-
-const refusal = (code: string | null): string | null => (code === null ? null : codeMessage(code));
 
 /** The `last_error` codes of a job the server ended itself, setting its attempts to the cap
  * (`BLUETOOTH_PRINTING_UNAVAILABLE` and `PRINTER_UNPAIRED`, packages/printing/src/runtime.ts). */
@@ -170,6 +166,14 @@ export class PrintersScreen extends LitElement {
       wt-data-table::part(printer-meta) {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+      .hold-lapsed {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin: var(--wt-space-2) 0;
+        color: var(--wt-color-danger);
       }
       wt-data-table::part(printer-name) {
         text-align: start;
@@ -580,8 +584,17 @@ export class PrintersScreen extends LitElement {
   #agentScanUntil = 0;
   #agentReadInFlight = false;
   #agentEpoch = 0;
-  #pairingOperations: Promise<void> = Promise.resolve();
-  #renewPairingAt = 0;
+  @state() private holdStatus: PairingHoldStatus = "idle";
+  readonly #hold = new PairingHold(
+    () => this.api,
+    (status, code, openUntil) => {
+      this.holdStatus = status;
+      if (code !== null && status === "failed") this.errorKey = code;
+      // Shown at once, before the live read of the window next answers.
+      if (openUntil !== null)
+        this.pairing = { deviceAddress: "", ...this.pairing, open: true, openUntil };
+    },
+  );
   // `#scanUntil` is wall-clock because a throttled background tab stretches the ticks;
   // `#scanInFlight` stops the next tick overlapping a slow read whose older reply could overwrite
   // `discovered`.
@@ -737,39 +750,12 @@ export class PrintersScreen extends LitElement {
     this.agents = await this.api.listAgents();
   }
 
-  // Serialize opens and closes so a late open cannot leave pairing enabled after closing the modal.
-  #setPairing(open: boolean, passive = false): Promise<void> {
-    const epoch = this.#agentEpoch;
-    this.#pairingOperations = this.#pairingOperations.then(async () => {
-      try {
-        if (open) {
-          if (epoch !== this.#agentEpoch || !this.addingAgent || !this.isConnected) return;
-          this.#renewPairingAt = Date.now() + 60_000;
-          const api = passive ? (this.api.background ?? this.api) : this.api;
-          const result = await (passive ? api.renewPairingMode() : api.openPairingMode());
-          if (epoch !== this.#agentEpoch) return;
-          this.pairing = {
-            open: true,
-            openUntil: result.openUntil,
-            refusedRecently: this.pairing?.refusedRecently ?? 0,
-          };
-        } else {
-          await this.api.closePairingMode();
-        }
-      } catch (error) {
-        if (epoch !== this.#agentEpoch) return;
-        this.errorKey = codeOf(error);
-        this.scanningAgents = false;
-      }
-    });
-    return this.#pairingOperations;
-  }
-
   #openAgentModal(): void {
     if (this.addingAgent) return;
     this.#agentEpoch++;
     this.errorKey = null;
     this.addingAgent = true;
+    void this.#hold.start();
     void this.#scanAgents();
     this.#agentTimer = setInterval(() => void this.#agentTick(), SCAN_POLL_MS);
   }
@@ -779,16 +765,12 @@ export class PrintersScreen extends LitElement {
     this.addingAgent = false;
     this.#agentEpoch++;
     this.#agentReadInFlight = false;
-    this.pairing = {
-      open: false,
-      openUntil: null,
-      refusedRecently: this.pairing?.refusedRecently ?? 0,
-    };
+    this.pairing = { deviceAddress: "", ...this.pairing, open: false, openUntil: null };
     this.openRequestId = null;
     clearInterval(this.#agentTimer);
     this.#agentTimer = undefined;
     this.scanningAgents = false;
-    void this.#setPairing(false);
+    this.#hold.stop();
   }
 
   async #scanAgents(): Promise<void> {
@@ -796,9 +778,7 @@ export class PrintersScreen extends LitElement {
     this.errorKey = null;
     this.scanningAgents = true;
     this.#agentScanUntil = Date.now() + AGENT_SCAN_LISTEN_MS;
-    const epoch = this.#agentEpoch;
-    await this.#setPairing(true);
-    if (epoch === this.#agentEpoch) await this.#agentTick();
+    await this.#agentTick();
   }
 
   async #agentTick(): Promise<void> {
@@ -806,7 +786,6 @@ export class PrintersScreen extends LitElement {
     this.#agentReadInFlight = true;
     const epoch = this.#agentEpoch;
     try {
-      if (Date.now() >= this.#renewPairingAt) await this.#setPairing(true, true);
       const api = this.api.background ?? this.api;
       const pending = await api.joinRequests("print_agent");
       if (epoch === this.#agentEpoch && this.addingAgent && this.isConnected)
@@ -1629,8 +1608,17 @@ export class PrintersScreen extends LitElement {
 
   #renderPairing(): TemplateResult {
     return html`<p class="hint" data-test="pairing-panel">${t("printers.pairing_hint")}</p>
-      ${(this.pairing?.refusedRecently ?? 0) > 0 ? html`<p class="hint" data-test="pairing-refused">${t("printers.pairing_refused").replace("{count}", String(this.pairing!.refusedRecently))}</p>` : nothing}
-      ${this.pairing?.open ? html`<p data-test="pairing-until">${t("printers.pairing_open_until").replace("{time}", this.#timestamp(this.pairing.openUntil))}</p>` : nothing}`;
+      ${this.pairing?.open && this.holdStatus !== "lapsed" && this.holdStatus !== "failed" ? html`<p data-test="pairing-until">${t("printers.pairing_open_until").replace("{time}", this.#timestamp(this.pairing.openUntil))}</p>` : nothing}
+      ${
+        this.holdStatus === "lapsed"
+          ? html`<p role="status" class="hold-lapsed" data-test="hold-lapsed">
+              ${t("pairing.hold_lapsed")}
+              <wt-button size="sm" data-test="hold-restart" @click=${() => void this.#hold.start()}
+                >${t("pairing.hold_restart")}</wt-button
+              >
+            </p>`
+          : nothing
+      }`;
   }
 
   /** No join number is shown or fetched for the row (design §1.2 rule 1). */
