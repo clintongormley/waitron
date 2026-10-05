@@ -71,7 +71,10 @@ it("join approval binds a kitchen screen to its watcher and rejects a second tar
       headers: { cookie: venue.managerCookie, "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-  expect((await send("check", { choice: made.verificationNumber, holdId })).status).toBe(204);
+  expect(
+    (await send("check", { choice: made.verificationNumber, holdId, createdAt: made.createdAt }))
+      .status,
+  ).toBe(204);
   const both = await send("accept", {
     name: "Pass screen",
     profileId: profile!.id,

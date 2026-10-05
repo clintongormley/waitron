@@ -148,6 +148,9 @@ it.each([
     ["sales", "sale_lines", "sale_voids", "sale_substitutions", "locations"],
   ],
   ["getReportPrinters", [], ["printers"]],
+  // A device's ask also carries a returning device's own row (`returningDevicesOf`,
+  // apps/server/src/join-requests.ts).
+  ["joinRequests", ["device"], ["join_requests", "devices"]],
   // The server works the rules out once at boot, so no table change moves them.
   ["getContentLanguageRules", [], []],
   // `listTranslationGapReport` (packages/catalogue/src/content-translation-report.ts): the setting,

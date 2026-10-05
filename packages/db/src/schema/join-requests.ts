@@ -64,6 +64,9 @@ export const joinRequests = table(
     // management session could derive the answer and never risk a mismatch, which is the check the
     // whole design rests on (design §1.2 rule 2).
     decoyNumbers: labelList("decoy_numbers").notNull(),
+    // With `id`, names one ask: a returning device's next ask takes the same id, and is written a
+    // later time than the ask it replaces (`createJoinRequest`), so a manager's deny or number check
+    // that names an ask since replaced touches nothing.
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [check("join_requests_kind_ck", enumCheck(t.kind))],

@@ -573,11 +573,11 @@ export interface JoinRequestRow {
   /** Device rows only: set when the knock came from a disabled device's browser, which proved it is
    * that device. The request's `id` is then the device's own id, and accepting it enables that
    * device again rather than adding one. */
-  returning?: ReturningDevice | null;
+  returning?: ReturningDetails | null;
 }
 
 /** What a returning device's disabled row holds, for the Pair step to start from. */
-export interface ReturningDevice {
+export interface ReturningDetails {
   name: string;
   profileId: string;
   stationId: string | null;
@@ -2463,14 +2463,21 @@ export class DashboardApi {
     );
   }
 
-  denyJoinRequest(id: string): Promise<void> {
-    return this.#request<void>(`/management-api/join-requests/${id}/deny`, "POST");
+  /** A device's ask is named by `createdAt` too, because a returning device's next ask replaces it
+   * under the same id; an ask already replaced is answered `join_request.not_found`, as one already
+   * gone is. A print agent's ask needs no `createdAt`. */
+  denyJoinRequest(id: string, ask?: { createdAt: string }): Promise<void> {
+    return this.#request<void>(`/management-api/join-requests/${id}/deny`, "POST", ask);
   }
 
   /** A wrong `choice` is terminal: the server deletes the request before answering
    * `device.join_mismatch`, so the caller refreshes rather than offering a second attempt. A match
-   * claims the request for this login and hold. */
-  checkDeviceJoinNumber(id: string, input: { choice: string; holdId: string }): Promise<void> {
+   * claims the request for this login and hold. `createdAt` names the ask, as on
+   * {@link denyJoinRequest}. */
+  checkDeviceJoinNumber(
+    id: string,
+    input: { choice: string; holdId: string; createdAt: string },
+  ): Promise<void> {
     return this.#request<void>(`/management-api/device-join-requests/${id}/check`, "POST", input);
   }
 

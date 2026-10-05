@@ -140,6 +140,13 @@ function pairAction(request: JoinRequestRow): string {
   return request.returning ? t("devices.enable") : t("devices.pair");
 }
 
+function pairTitle(request: JoinRequestRow): string {
+  return (request.returning ? t("devices.enable_title") : t("devices.pair_title")).replace(
+    "{name}",
+    waitingName(request),
+  );
+}
+
 /** A battery report older than this is greyed and says when it was taken (spec §6). */
 const BATTERY_STALE_MS = 10 * 60_000;
 
@@ -482,17 +489,20 @@ export class DevicesScreen extends LitElement {
     this.submitting = false;
     if (this.#pairSettled) return;
     const addEpoch = this.#addEpoch;
-    void this.api.denyJoinRequest(request.id).catch((error: unknown) => {
-      const code = codeOf(error);
-      if (code !== "join_request.not_found" && this.addingDevice && addEpoch === this.#addEpoch)
-        this.addError = code;
-    });
+    void this.api
+      .denyJoinRequest(request.id, { createdAt: request.createdAt })
+      .catch((error: unknown) => {
+        const code = codeOf(error);
+        if (code !== "join_request.not_found" && this.addingDevice && addEpoch === this.#addEpoch)
+          this.addError = code;
+      });
   }
 
   /**
    * A returning device's new ask keeps its id and replaces the request the open dialog was made for,
-   * numbers and claim included, so the dialog closes without the discard that would delete the new
-   * ask. A request that only left the list keeps the dialog open: its next step is refused.
+   * numbers and claim included, so the dialog closes and sends no discard: the server would answer
+   * one naming the replaced ask as already gone. A request that only left the list keeps the dialog
+   * open: its next step is refused.
    */
   #closeReplacedPair(rows: readonly JoinRequestRow[]): void {
     const open = this.pairRequest;
@@ -537,7 +547,7 @@ export class DevicesScreen extends LitElement {
         ? back.profileId
         : "";
     this.pairStep = "settings";
-    this.pairName = back?.name ?? request.label;
+    this.pairName = waitingName(request);
     this.chosenProfileId = profileId;
     this.chosenBinding = back === null ? "" : this.#activeBinding(back);
     this.formAttempted = false;
@@ -558,7 +568,11 @@ export class DevicesScreen extends LitElement {
     this.checking = true;
     this.pairError = null;
     try {
-      await this.api.checkDeviceJoinNumber(request.id, { choice, holdId });
+      await this.api.checkDeviceJoinNumber(request.id, {
+        choice,
+        holdId,
+        createdAt: request.createdAt,
+      });
       if (epoch !== this.#pairEpoch) return;
       this.checking = false;
       this.#toSettings(request);
@@ -1334,10 +1348,7 @@ export class DevicesScreen extends LitElement {
     return html`<wt-modal
       size="standard"
       data-test="pair-modal"
-      heading=${(request.returning ? t("devices.enable_title") : t("devices.pair_title")).replace(
-        "{name}",
-        waitingName(request),
-      )}
+      heading=${pairTitle(request)}
       .open=${true}
       .dismissible=${!this.submitting}
       @wt-close=${() => this.#closePair()}

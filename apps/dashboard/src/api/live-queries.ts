@@ -59,7 +59,7 @@ export const QUERY_DEPENDENCIES = {
     "devices",
   ],
   pairingMode: ["pairing"],
-  joinRequests: ["join_requests"],
+  joinRequests: ["join_requests", "devices"],
   listDiscoveredPrinters: ["printer_discovery", "printers", "print_agents"],
   getSalesOverview: [
     "sales",

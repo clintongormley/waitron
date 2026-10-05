@@ -13,7 +13,7 @@ import {
   checkDeviceJoinNumber,
   createJoinRequest,
   denyJoinRequest,
-  joinRequestKind,
+  findJoinRequest,
   listPendingJoinRequests,
   provenDisabledDevice,
   readAgentJoinStatus,
@@ -22,6 +22,7 @@ import {
   selfEnrolNodeAgent,
 } from "./join-requests.js";
 import { createPairingMode, type PairingMode } from "./pairing-mode.js";
+import { parseDeviceCookie } from "./device-session.js";
 import {
   deviceProfiles,
   devices,
@@ -143,8 +144,11 @@ describe("pending joins belong to the node that received them", () => {
     expect(await readAgentJoinStatus(suite.db, otherNode, agent.joinId, agent.token)).toBe(
       "not_approved",
     );
-    expect(await asApp((tx) => joinRequestKind(tx, venue.cfg, device.joinId))).toBe("device");
-    expect(await asApp((tx) => joinRequestKind(tx, otherNode, device.joinId))).toBeUndefined();
+    expect(await asApp((tx) => findJoinRequest(tx, venue.cfg, device.joinId))).toEqual({
+      kind: "device",
+      createdAt: device.createdAt,
+    });
+    expect(await asApp((tx) => findJoinRequest(tx, otherNode, device.joinId))).toBeUndefined();
   });
 
   it("does not let another node accept a pending request, of either kind", async () => {
@@ -792,6 +796,10 @@ describe("a returning disabled device", () => {
     return rows[0]!.n;
   }
 
+  /** As the knock route calls it: on the cookie as parsed. */
+  const proven = (cookie: string | null) =>
+    provenDisabledDevice(suite.db, parseDeviceCookie(cookie));
+
   async function storedHash(deviceId: string): Promise<string> {
     const [row] = await suite.db
       .select({ tokenHash: devices.tokenHash })
@@ -1017,7 +1025,7 @@ describe("a returning disabled device", () => {
       return made;
     });
     expect(await verifySecretAsync(made.token, await storedHash(deviceId))).toBe(true);
-    expect(await provenDisabledDevice(suite.db, `${deviceId}.${made.token}`)).toEqual({
+    expect(await proven(`${deviceId}.${made.token}`)).toEqual({
       deviceId,
       tokenHash: await storedHash(deviceId),
     });
@@ -1052,17 +1060,17 @@ describe("a returning disabled device", () => {
       return made;
     });
     const cookie = `${made.joinId}.${made.token}`;
-    expect(await provenDisabledDevice(suite.db, cookie)).toBeNull();
+    expect(await proven(cookie)).toBeNull();
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, made.joinId));
-    expect(await provenDisabledDevice(suite.db, cookie)).toEqual({
+    expect(await proven(cookie)).toEqual({
       deviceId: made.joinId,
       tokenHash: await storedHash(made.joinId),
     });
-    expect(await provenDisabledDevice(suite.db, `${made.joinId}.wrong`)).toBeNull();
-    expect(await provenDisabledDevice(suite.db, `${randomUUID()}.${made.token}`)).toBeNull();
-    expect(await provenDisabledDevice(suite.db, null)).toBeNull();
-    expect(await provenDisabledDevice(suite.db, "no-dot")).toBeNull();
-    expect(await provenDisabledDevice(suite.db, `not-a-uuid.${made.token}`)).toBeNull();
+    expect(await proven(`${made.joinId}.wrong`)).toBeNull();
+    expect(await proven(`${randomUUID()}.${made.token}`)).toBeNull();
+    expect(await proven(null)).toBeNull();
+    expect(await proven("no-dot")).toBeNull();
+    expect(await proven(`not-a-uuid.${made.token}`)).toBeNull();
   });
 });
 
@@ -1079,13 +1087,23 @@ describe("checkDeviceJoinNumber", () => {
     });
     const wrong = made.verificationNumber === "00" ? "01" : "00";
     const refused = await withTransaction(suite.db, async (tx) => {
-      return checkDeviceJoinNumber(tx, venue.cfg, made.joinId, wrong);
+      return checkDeviceJoinNumber(
+        tx,
+        venue.cfg,
+        { id: made.joinId, createdAt: made.createdAt },
+        wrong,
+      );
     });
     expect(refused).toEqual({ ok: false });
     // Gone AFTER the transaction committed — this is what makes one-in-three an acceptable guess rate.
     await withTransaction(suite.db, async (tx) => {
       await expect(
-        checkDeviceJoinNumber(tx, venue.cfg, made.joinId, made.verificationNumber),
+        checkDeviceJoinNumber(
+          tx,
+          venue.cfg,
+          { id: made.joinId, createdAt: made.createdAt },
+          made.verificationNumber,
+        ),
       ).rejects.toMatchObject({ code: "join_request.not_found" });
       await expect(
         acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { label: "d", profileId }),
@@ -1104,7 +1122,12 @@ describe("checkDeviceJoinNumber", () => {
     );
     expect(
       await asApp((tx) =>
-        checkDeviceJoinNumber(tx, venue.cfg, made.joinId, made.verificationNumber),
+        checkDeviceJoinNumber(
+          tx,
+          venue.cfg,
+          { id: made.joinId, createdAt: made.createdAt },
+          made.verificationNumber,
+        ),
       ),
     ).toEqual({ ok: true });
     expect(await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token, window)).toBe(
@@ -1119,7 +1142,16 @@ describe("checkDeviceJoinNumber", () => {
     );
     const wrong = made.verificationNumber === "00" ? "01" : "00";
     expect(
-      await codeOf(() => asApp((tx) => checkDeviceJoinNumber(tx, venue.cfg, made.joinId, wrong))),
+      await codeOf(() =>
+        asApp((tx) =>
+          checkDeviceJoinNumber(
+            tx,
+            venue.cfg,
+            { id: made.joinId, createdAt: made.createdAt },
+            wrong,
+          ),
+        ),
+      ),
     ).toBe("join_request.not_found");
     expect(await readAgentJoinStatus(suite.db, venue.cfg, made.joinId, made.token)).toBe("pending");
   });

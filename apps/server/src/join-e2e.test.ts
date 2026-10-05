@@ -6,7 +6,13 @@
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { deviceMadeHereStations, deviceProfiles, devices, withTransaction } from "@waitron/db";
+import {
+  deviceMadeHereStations,
+  deviceProfiles,
+  devices,
+  joinRequests,
+  withTransaction,
+} from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { cardReaders, deviceCardReaders } from "@waitron/payments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -106,6 +112,17 @@ async function knock(
   };
 }
 
+/** The ask the dashboard is showing under `id`, named as its actions name it: the createdAt the
+ *  pending list gives it. */
+async function shownAsk(app: Hono, venue: Venue, id: string): Promise<string> {
+  const res = await send(app, "GET", "/management-api/join-requests?kind=device", {
+    cookie: venue.managerCookie,
+  });
+  expect(res.status).toBe(200);
+  const rows = (await res.json()) as { id: string; createdAt: string }[];
+  return rows.find((row) => row.id === id)!.createdAt;
+}
+
 let profileCounter = 0;
 async function seedProfile(formFactor: "till" | "kds" | "phone-portrait"): Promise<string> {
   profileCounter += 1;
@@ -176,7 +193,10 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
       app,
       "POST",
       `/management-api/device-join-requests/${joinId}/check`,
-      { cookie: venue.managerCookie, body: { choice: verificationNumber, holdId } },
+      {
+        cookie: venue.managerCookie,
+        body: { choice: verificationNumber, holdId, createdAt: await shownAsk(app, venue, joinId) },
+      },
     );
     expect(checkRes.status).toBe(204);
     const acceptRes = await send(
@@ -224,7 +244,10 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
       app,
       "POST",
       `/management-api/device-join-requests/${joinId}/check`,
-      { cookie: venue.managerCookie, body: { choice: wrong, holdId } },
+      {
+        cookie: venue.managerCookie,
+        body: { choice: wrong, holdId, createdAt: await shownAsk(app, venue, joinId) },
+      },
     );
     expect(checkRes.status).toBe(400);
     expect((await errorOf(checkRes)).code).toBe("device.join_mismatch");
@@ -242,7 +265,14 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
       app,
       "POST",
       `/management-api/device-join-requests/${again.joinId}/check`,
-      { cookie: venue.managerCookie, body: { choice: again.verificationNumber, holdId } },
+      {
+        cookie: venue.managerCookie,
+        body: {
+          choice: again.verificationNumber,
+          holdId,
+          createdAt: await shownAsk(app, venue, again.joinId),
+        },
+      },
     );
     expect(checkAgain.status).toBe(204);
     const acceptAgain = await send(
@@ -300,7 +330,14 @@ describe("a claim whose hold lapsed is forgotten only once its request's deletio
       app,
       "POST",
       `/management-api/device-join-requests/${device.joinId}/check`,
-      { cookie: venue.managerCookie, body: { choice: device.verificationNumber, holdId: holdA } },
+      {
+        cookie: venue.managerCookie,
+        body: {
+          choice: device.verificationNumber,
+          holdId: holdA,
+          createdAt: await shownAsk(app, venue, device.joinId),
+        },
+      },
     );
     expect(checked.status).toBe(204);
     offset += 2 * 60_000;
@@ -362,7 +399,14 @@ describe("a disabled device comes back as the same device", () => {
       app,
       "POST",
       `/management-api/device-join-requests/${joined.joinId}/check`,
-      { cookie: venue.managerCookie, body: { choice: joined.verificationNumber, holdId } },
+      {
+        cookie: venue.managerCookie,
+        body: {
+          choice: joined.verificationNumber,
+          holdId,
+          createdAt: await shownAsk(app, venue, joined.joinId),
+        },
+      },
     );
     expect(checked.status).toBe(204);
     return send(app, "POST", `/management-api/device-join-requests/${joined.joinId}/accept`, {
@@ -401,7 +445,7 @@ describe("a disabled device comes back as the same device", () => {
     return rows[0]!.n;
   }
 
-  async function listDevices(app: Hono, venue: Venue): Promise<unknown[]> {
+  async function listJoinRequests(app: Hono, venue: Venue): Promise<unknown[]> {
     const res = await send(app, "GET", "/management-api/join-requests?kind=device", {
       cookie: venue.managerCookie,
     });
@@ -418,12 +462,13 @@ describe("a disabled device comes back as the same device", () => {
   /** A till added and then disabled through the real routes, with the window left open. */
   async function disabledTill() {
     const venue = await setupVenue(suite.db);
-    const app = mountBoth(venue.cfg);
+    const mode = createPairingMode();
+    const app = mountBoth(venue.cfg, mode);
     const profileId = await seedProfile("till");
     const holdId = await openWindow(app, venue);
     const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
     await disable(app, venue, deviceId);
-    return { venue, app, profileId, holdId, deviceId, jar };
+    return { venue, mode, app, profileId, holdId, deviceId, jar };
   }
 
   it("knocks as itself, is listed as returning, and Pair enables the same row with its settings", async () => {
@@ -449,7 +494,7 @@ describe("a disabled device comes back as the same device", () => {
     expect(back.joinId).toBe(deviceId);
     expect(back.jar).toMatch(new RegExp(`^waitron_device=${deviceId}\\.`));
     expect(back.jar).not.toBe(oldJar);
-    expect(await listDevices(app, venue)).toEqual([
+    expect(await listJoinRequests(app, venue)).toEqual([
       {
         id: deviceId,
         kind: "device",
@@ -529,7 +574,9 @@ describe("a disabled device comes back as the same device", () => {
     const { venue, app, deviceId } = await disabledTill();
     const fresh = await joined(await knockWith(app, "Tablet"));
     expect(fresh.joinId).not.toBe(deviceId);
-    expect(await listDevices(app, venue)).toMatchObject([{ id: fresh.joinId, returning: null }]);
+    expect(await listJoinRequests(app, venue)).toMatchObject([
+      { id: fresh.joinId, returning: null },
+    ]);
   });
 
   it("a cookie naming a disabled device with the wrong token joins as a new device", async () => {
@@ -539,7 +586,9 @@ describe("a disabled device comes back as the same device", () => {
       await knockWith(app, "Tablet", `waitron_device=${deviceId}.not-the-token`),
     );
     expect(forged.joinId).not.toBe(deviceId);
-    expect(await listDevices(app, venue)).toMatchObject([{ id: forged.joinId, returning: null }]);
+    expect(await listJoinRequests(app, venue)).toMatchObject([
+      { id: forged.joinId, returning: null },
+    ]);
     expect(await deviceRow(deviceId)).toEqual(stored);
   });
 
@@ -553,7 +602,9 @@ describe("a disabled device comes back as the same device", () => {
 
     const other = await joined(await knockWith(app, "Tablet", jar));
     expect(other.joinId).not.toBe(deviceId);
-    expect(await listDevices(app, venue)).toMatchObject([{ id: other.joinId, returning: null }]);
+    expect(await listJoinRequests(app, venue)).toMatchObject([
+      { id: other.joinId, returning: null },
+    ]);
     expect(await deviceRow(deviceId)).toEqual(stored);
     expect((await send(app, "GET", "/api/device/me", { cookie: jar })).status).toBe(200);
   });
@@ -580,6 +631,7 @@ describe("a disabled device comes back as the same device", () => {
     const back = await joined(await knockWith(app, "Bar till", jar));
     const denied = await send(app, "POST", `/management-api/join-requests/${deviceId}/deny`, {
       cookie: venue.managerCookie,
+      body: { createdAt: await shownAsk(app, venue, deviceId) },
     });
     expect(denied.status).toBe(204);
 
@@ -606,7 +658,14 @@ describe("a disabled device comes back as the same device", () => {
       app,
       "POST",
       `/management-api/device-join-requests/${deviceId}/check`,
-      { cookie: venue.managerCookie, body: { choice: first.verificationNumber, holdId } },
+      {
+        cookie: venue.managerCookie,
+        body: {
+          choice: first.verificationNumber,
+          holdId,
+          createdAt: await shownAsk(app, venue, deviceId),
+        },
+      },
     );
     expect(checked.status).toBe(204);
 
@@ -630,6 +689,108 @@ describe("a disabled device comes back as the same device", () => {
     expect((await send(app, "GET", "/api/device/me", { cookie: second.jar })).status).toBe(200);
   });
 
+  describe("a dialog still showing the ask a second knock replaced", () => {
+    /** The device knocks, the dashboard lists that ask, and the device knocks again before the
+     *  dashboard hears of it. */
+    async function replacedAsk() {
+      const till = await disabledTill();
+      const first = await joined(await knockWith(till.app, "Bar till", till.jar));
+      const shown = await shownAsk(till.app, till.venue, till.deviceId);
+      const second = await joined(await knockWith(till.app, "Bar till", first.jar));
+      expect(second.joinId).toBe(till.deviceId);
+      return { ...till, first, second, shown };
+    }
+
+    async function statusOf(app: Hono, jar: string) {
+      return (await send(app, "GET", "/api/device/join/status", { cookie: jar })).json();
+    }
+
+    it("Cancel is answered as for a request already gone, and the new ask stays pending", async () => {
+      const { venue, app, deviceId, second, shown } = await replacedAsk();
+      expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
+
+      const denied = await send(app, "POST", `/management-api/join-requests/${deviceId}/deny`, {
+        cookie: venue.managerCookie,
+        body: { createdAt: shown },
+      });
+      expect(denied.status).toBe(404);
+      expect((await errorOf(denied)).code).toBe("join_request.not_found");
+      expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
+      expect(await pendingCount()).toBe(1);
+    });
+
+    it("a number check with a number other than the new ask's is refused, and deletes and claims nothing", async () => {
+      const { venue, mode, app, holdId, deviceId, first, second, shown } = await replacedAsk();
+      const other = first.verificationNumber === "00" ? "01" : "00";
+      await suite.db
+        .update(joinRequests)
+        .set({ verificationNumber: other })
+        .where(eq(joinRequests.id, deviceId));
+
+      const checked = await send(
+        app,
+        "POST",
+        `/management-api/device-join-requests/${deviceId}/check`,
+        {
+          cookie: venue.managerCookie,
+          body: { choice: first.verificationNumber, holdId, createdAt: shown },
+        },
+      );
+      expect(checked.status).toBe(404);
+      expect((await errorOf(checked)).code).toBe("join_request.not_found");
+      expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
+      expect(mode.claimOf(deviceId)).toBeUndefined();
+    });
+
+    it("a number check with the same number as the new ask's is refused, so Pair cannot approve the new ask", async () => {
+      const { venue, mode, app, profileId, holdId, deviceId, first, second, shown } =
+        await replacedAsk();
+      await suite.db
+        .update(joinRequests)
+        .set({ verificationNumber: first.verificationNumber })
+        .where(eq(joinRequests.id, deviceId));
+
+      const checked = await send(
+        app,
+        "POST",
+        `/management-api/device-join-requests/${deviceId}/check`,
+        {
+          cookie: venue.managerCookie,
+          body: { choice: first.verificationNumber, holdId, createdAt: shown },
+        },
+      );
+      expect(checked.status).toBe(404);
+      expect((await errorOf(checked)).code).toBe("join_request.not_found");
+      expect(mode.claimOf(deviceId)).toBeUndefined();
+      const accepted = await send(
+        app,
+        "POST",
+        `/management-api/device-join-requests/${deviceId}/accept`,
+        { cookie: venue.managerCookie, body: { name: "Bar till", profileId } },
+      );
+      expect(accepted.status).toBe(409);
+      expect((await errorOf(accepted)).code).toBe("join_request.unclaimed");
+      expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
+      expect((await send(app, "GET", "/api/device/me", { cookie: second.jar })).status).toBe(401);
+    });
+
+    it("the new ask is listed under a createdAt after the replaced one's, even in the same millisecond", async () => {
+      const { venue, app, deviceId, jar } = await disabledTill();
+      // Frozen at the present, so the window the case opened is still open.
+      const frozen = Date.now();
+      vi.useFakeTimers({ toFake: ["Date"], now: frozen });
+      try {
+        const first = await joined(await knockWith(app, "Bar till", jar));
+        const shown = await shownAsk(app, venue, deviceId);
+        await joined(await knockWith(app, "Bar till", first.jar));
+        expect(shown).toBe(new Date(frozen).toISOString());
+        expect(await shownAsk(app, venue, deviceId)).toBe(new Date(frozen + 1).toISOString());
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   it("an ask whose proof another ask overtook is refused with no cookie, and the browser keeps the winner's", async () => {
     const { venue, app, deviceId, jar } = await disabledTill();
     let winner: Awaited<ReturnType<typeof joined>> | undefined;
@@ -644,7 +805,7 @@ describe("a disabled device comes back as the same device", () => {
     expect(overtaken.headers.get("set-cookie")).toBeNull();
     expect(winner!.joinId).toBe(deviceId);
     expect(await pendingCount()).toBe(1);
-    expect(await listDevices(app, venue)).toMatchObject([{ id: deviceId, returning: {} }]);
+    expect(await listJoinRequests(app, venue)).toMatchObject([{ id: deviceId, returning: {} }]);
 
     const again = await joined(await knockWith(app, "Bar till", winner!.jar));
     expect(again.joinId).toBe(deviceId);

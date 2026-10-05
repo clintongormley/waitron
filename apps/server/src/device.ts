@@ -1,9 +1,10 @@
 // Side-effect only: keeps the `device.*` codes (errors.ts) reachable from the file that throws them.
 import "./errors.js";
 import { AppError } from "@waitron/shared";
+import { eq } from "drizzle-orm";
 import { constraintTarget, devices, isUniqueViolation, sameTarget } from "@waitron/db";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
-import { getDeviceProfile, kindOfFormFactor } from "@waitron/layouts";
+import { firstUsablePrinters, getDeviceProfile, kindOfFormFactor } from "@waitron/layouts";
 import type { DeviceKind, FormFactor } from "@waitron/layouts";
 import { requireLiveStation } from "./kitchen.js";
 import { readWatcher } from "./watchers.js";
@@ -46,6 +47,53 @@ export async function insertDevice(
   } catch (error) {
     throw mapDeviceNameTaken(error);
   }
+}
+
+/** The printers a device row holds. */
+interface DevicePrinters {
+  receiptPrinterId: string | null;
+  paymentSlipPrinterId: string | null;
+}
+
+/**
+ * Write a device's name, profile and binding, plus any `also` columns, refusals mapped by
+ * {@link mapDeviceNameTaken}. The printers it holds stay while the profile does; a new profile takes
+ * its first usable printers at the device's own location. Returns the printers the row now holds.
+ */
+export async function updateDeviceSettings(
+  tx: Transaction,
+  device: DevicePrinters & { id: string; locationId: string; deviceProfileId: string | null },
+  settings: {
+    label: string;
+    profileId: string;
+    stationId: string | null;
+    watcherId: string | null;
+  },
+  also: Partial<typeof devices.$inferInsert> = {},
+): Promise<DevicePrinters> {
+  const printers =
+    settings.profileId === device.deviceProfileId
+      ? {
+          receiptPrinterId: device.receiptPrinterId,
+          paymentSlipPrinterId: device.paymentSlipPrinterId,
+        }
+      : await firstUsablePrinters(tx, settings.profileId, device.locationId);
+  try {
+    await tx
+      .update(devices)
+      .set({
+        ...also,
+        label: settings.label,
+        deviceProfileId: settings.profileId,
+        stationId: settings.stationId,
+        watcherId: settings.watcherId,
+        ...printers,
+      })
+      .where(eq(devices.id, device.id));
+  } catch (error) {
+    throw mapDeviceNameTaken(error);
+  }
+  return printers;
 }
 
 /**

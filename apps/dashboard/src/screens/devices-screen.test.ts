@@ -1957,6 +1957,7 @@ describe("add a device", () => {
     expect(api.checkDeviceJoinNumber).toHaveBeenCalledExactlyOnceWith("r1", {
       choice: REAL_NUMBER,
       holdId: "h1",
+      createdAt: "2026-09-08T10:02:00.000Z",
     });
     expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Barra 1");
     expect(q(el, "[data-choice]")).toBeNull();
@@ -2391,6 +2392,24 @@ describe("add a device", () => {
     expect(pairFieldsDisabled(el)).toEqual(enabled);
   });
 
+  it("the number check and Cancel name the ask the dialog was opened on, by its createdAt", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+    await toSettings(el);
+
+    q(el, "[data-test=pair-cancel]")!.click();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    expect(api.checkDeviceJoinNumber).toHaveBeenCalledExactlyOnceWith("r1", {
+      choice: REAL_NUMBER,
+      holdId: "h1",
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
+  });
+
   it("Cancel discards the request at the number step", async () => {
     const api = stubApi();
     const el = await openAdd(api);
@@ -2399,7 +2418,9 @@ describe("add a device", () => {
     q(el, "[data-test=pair-cancel]")!.click();
 
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
-    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
     expect(q(el, "[data-test=add-device-modal]")).not.toBeNull();
     expect(api.releasePairingHold).not.toHaveBeenCalled();
   });
@@ -2414,7 +2435,9 @@ describe("add a device", () => {
     q(el, "[data-test=pair-cancel]")!.click();
 
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
-    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
     await flush(el);
     expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
   });
@@ -2456,7 +2479,9 @@ describe("add a device", () => {
     q(el, "[data-test=pair-cancel]")!.click();
 
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
-    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
     await flush(el);
     expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
   });
@@ -2475,7 +2500,9 @@ describe("add a device", () => {
 
     q(el, "[data-test=add-device-close]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).toBeNull());
-    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
     q(el, "[data-test=open-add-device]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).not.toBeNull());
     rejectDeny({ code: "connection.failed" });
@@ -2528,7 +2555,9 @@ describe("add a device", () => {
     q(el, "[data-test=pair-modal]")!.shadowRoot!.querySelector("dialog")!.close();
 
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
-    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
     expect(q(el, "[data-test=add-device-modal]")).not.toBeNull();
   });
 
@@ -2539,7 +2568,9 @@ describe("add a device", () => {
 
     el.remove();
 
-    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
     expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1");
   });
 
@@ -2725,6 +2756,7 @@ describe("add a device", () => {
       expect(api.checkDeviceJoinNumber).toHaveBeenCalledExactlyOnceWith("d2", {
         choice: REAL_NUMBER,
         holdId: "h1",
+        createdAt: "2026-09-08T10:04:00.000Z",
       });
       expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Pase revocado");
       expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
@@ -2863,7 +2895,11 @@ describe("add a device", () => {
         expect(q(el, "[data-test=asked-again]")).toBeNull();
 
         q(el, "[data-test=pair-cancel]")!.click();
-        await vi.waitFor(() => expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("d2"));
+        await vi.waitFor(() =>
+          expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("d2", {
+            createdAt: "2026-09-08T10:04:00.000Z",
+          }),
+        );
       });
 
       it("an ask that left the list keeps the dialog open, and Cancel says nothing", async () => {
@@ -2879,7 +2915,11 @@ describe("add a device", () => {
         expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
 
         q(el, "[data-test=pair-cancel]")!.click();
-        await vi.waitFor(() => expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("d2"));
+        await vi.waitFor(() =>
+          expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("d2", {
+            createdAt: "2026-09-08T10:04:00.000Z",
+          }),
+        );
         await flush(el);
         expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
         expect(q(el, "[data-test=asked-again]")).toBeNull();

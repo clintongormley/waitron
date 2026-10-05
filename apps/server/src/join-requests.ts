@@ -1,6 +1,6 @@
 import "./errors.js";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import {
   type Database,
   type Transaction,
@@ -10,11 +10,10 @@ import {
   printAgents,
   withTransaction,
 } from "@waitron/db";
-import { hashSecret, sessions, verifySecretAsync } from "@waitron/identity";
+import { endDeviceSessions, hashSecret, verifySecretAsync } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { firstUsablePrinters, type FormFactor } from "@waitron/layouts";
-import { insertDevice, mapDeviceNameTaken, resolveDeviceBinding } from "./device.js";
-import { parseDeviceCookie } from "./device-session.js";
+import { insertDevice, resolveDeviceBinding, updateDeviceSettings } from "./device.js";
 import type { PairingMode } from "./pairing-mode.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -118,8 +117,9 @@ export async function createJoinRequest(
     /** A disabled device the knocking browser proved it is ({@link provenDisabledDevice}). */
     returning?: ReturningDevice | null;
   },
-): Promise<{ joinId: string; verificationNumber: string; token: string }> {
+): Promise<{ joinId: string; verificationNumber: string; token: string; createdAt: string }> {
   await sweepLapsed(tx, cfg);
+  let createdAt = nowIso();
 
   // The proof was checked before this transaction. A row changed since means another knock or Pair
   // got there first; a new-id request would take the browser's cookie and strand the device.
@@ -132,9 +132,14 @@ export async function createJoinRequest(
     if (row?.tokenHash !== input.returning.tokenHash) throw new AppError("device.join_stale", {});
     returningId = input.returning.deviceId;
     // The device's id is the request's primary key, so a second knock replaces the first.
-    await tx
+    const [replaced] = await tx
       .delete(joinRequests)
-      .where(and(ownedBy(cfg), eq(joinRequests.id, returningId), eq(joinRequests.kind, "device")));
+      .where(and(ownedBy(cfg), eq(joinRequests.id, returningId), eq(joinRequests.kind, "device")))
+      .returning({ createdAt: joinRequests.createdAt });
+    // The manager's actions name an ask by its id and createdAt, so the ask replacing another under
+    // the same id must not share its createdAt, even within one millisecond.
+    if (replaced !== undefined && createdAt <= replaced.createdAt)
+      createdAt = new Date(Date.parse(replaced.createdAt) + 1).toISOString();
   }
 
   const [{ count }] = await tx
@@ -189,6 +194,7 @@ export async function createJoinRequest(
       tokenHash,
       verificationNumber,
       decoyNumbers,
+      createdAt,
     })
     .returning({ id: joinRequests.id });
   // The browser's cookie is replaced by one carrying this token, so the disabled row takes its hash:
@@ -196,7 +202,7 @@ export async function createJoinRequest(
   // denied or lapses.
   if (returningId !== undefined)
     await tx.update(devices).set({ tokenHash }).where(eq(devices.id, returningId));
-  return { joinId: row!.id, verificationNumber, token };
+  return { joinId: row!.id, verificationNumber, token, createdAt };
 }
 
 /** A disabled device a knocking browser has proved it is: the row's id and the hash its token
@@ -207,18 +213,18 @@ export interface ReturningDevice {
 }
 
 /**
- * The disabled device a knock's device cookie proves, or `null` — for no cookie, a malformed one, an
- * id that names no device or an active one, or a token that does not verify. Every `null` makes the
- * knock an ordinary new request, answered as one from a browser with no cookie.
+ * The disabled device a knock's parsed device cookie proves, or `null` — for no cookie (or a
+ * malformed one, which parses to `null`), an id that names no device or an active one, or a token
+ * that does not verify. Every `null` makes the knock an ordinary new request, answered as one from a
+ * browser with no cookie.
  *
  * Called with no transaction open, so scrypt never holds the write lock; {@link createJoinRequest}
  * re-reads the row before relying on the result.
  */
 export async function provenDisabledDevice(
   db: Database,
-  cookie: string | null,
+  parsed: { id: string; token: string } | null,
 ): Promise<ReturningDevice | null> {
-  const parsed = parseDeviceCookie(cookie);
   if (parsed === null) return null;
   const [row] = await db
     .select({ tokenHash: devices.tokenHash })
@@ -312,24 +318,26 @@ async function requirePending(
 }
 
 /**
- * The KIND of one of this node's pending requests, or `undefined` when this node holds no such row.
+ * The kind and createdAt of one of this node's pending requests, or `undefined` when this node holds
+ * no such row. A device request's id and createdAt together name one ask: a returning device's next
+ * ask replaces it under the same id with a later createdAt ({@link createJoinRequest}).
  *
  * Deliberately not {@link requirePending}'s throw: the by-id routes (`join-api.ts`) read the kind
  * BEFORE they authorize, and must refuse a caller holding neither permission whether or not the id
  * is live, or the status code enumerates pending requests. So the miss is a VALUE held until after
  * the gate.
  */
-export async function joinRequestKind(
+export async function findJoinRequest(
   tx: Transaction,
   cfg: TillConfig,
   id: string,
-): Promise<JoinRequestKind | undefined> {
+): Promise<{ kind: JoinRequestKind; createdAt: string } | undefined> {
   await sweepLapsed(tx, cfg);
   const [row] = await tx
-    .select({ kind: joinRequests.kind })
+    .select({ kind: joinRequests.kind, createdAt: joinRequests.createdAt })
     .from(joinRequests)
     .where(and(ownedBy(cfg), eq(joinRequests.id, id)));
-  return row?.kind;
+  return row;
 }
 
 /**
@@ -414,15 +422,23 @@ export async function readJoinStatus(
 /**
  * Compare the tapped number with a device request's own. A mismatch DELETES the request and is
  * returned, not thrown, so the deletion commits and a wrong tap cannot be retried.
+ *
+ * `ask` names the ask the manager was shown ({@link findJoinRequest}); one another ask has replaced
+ * is `join_request.not_found`, and the request now under its id is neither deleted nor matched.
  */
 export async function checkDeviceJoinNumber(
   tx: Transaction,
   cfg: TillConfig,
-  id: string,
+  ask: { id: string; createdAt: string },
   choice: string,
 ): Promise<{ ok: boolean }> {
   await sweepLapsed(tx, cfg);
-  const where = and(ownedBy(cfg), eq(joinRequests.id, id), eq(joinRequests.kind, "device"));
+  const where = and(
+    ownedBy(cfg),
+    eq(joinRequests.id, ask.id),
+    eq(joinRequests.createdAt, ask.createdAt),
+    eq(joinRequests.kind, "device"),
+  );
   const [row] = await tx
     .select({ n: joinRequests.verificationNumber })
     .from(joinRequests)
@@ -493,37 +509,19 @@ export async function acceptDeviceJoinRequest(
     .from(devices)
     .where(and(eq(devices.id, row.id), eq(devices.active, false)));
   if (disabled !== undefined) {
-    // A disabled device coming back keeps its row and everything hung on it; an ACTIVE row with
-    // this id is left to the insert below, which refuses it.
-    // The row keeps its own location, not the request's, so its printers are chosen there.
-    const printers =
-      input.profileId === disabled.deviceProfileId
-        ? {
-            receiptPrinterId: disabled.receiptPrinterId,
-            paymentSlipPrinterId: disabled.paymentSlipPrinterId,
-          }
-        : await firstUsablePrinters(tx, input.profileId, disabled.locationId);
-    try {
-      await tx
-        .update(devices)
-        .set({
-          active: true,
-          tokenHash: row.tokenHash,
-          label: input.label,
-          deviceProfileId: input.profileId,
-          stationId: binding.stationId,
-          watcherId: binding.watcherId,
-          ...printers,
-        })
-        .where(eq(devices.id, row.id));
-    } catch (error) {
-      throw mapDeviceNameTaken(error);
-    }
-    // A shift session left open when the device was disabled would otherwise work again.
-    await tx
-      .update(sessions)
-      .set({ endedAt: nowIso() })
-      .where(and(eq(sessions.deviceId, row.id), isNull(sessions.endedAt)));
+    // An ACTIVE row with this id is left to the insert below, which refuses it.
+    await updateDeviceSettings(
+      tx,
+      { id: row.id, ...disabled },
+      {
+        label: input.label,
+        profileId: input.profileId,
+        stationId: binding.stationId,
+        watcherId: binding.watcherId,
+      },
+      { active: true, tokenHash: row.tokenHash },
+    );
+    await endDeviceSessions(tx, row.id);
     return { deviceId: row.id, name: input.label, formFactor: binding.formFactor };
   }
 

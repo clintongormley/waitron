@@ -9,7 +9,6 @@ import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import {
   chooseDevicePrinter,
-  firstUsablePrinters,
   kindOfFormFactor,
   listDeviceProfiles,
   printerChoices,
@@ -25,7 +24,7 @@ import {
   setDeviceCookie,
   sightingDue,
 } from "./device-session.js";
-import { mapDeviceNameTaken, requireDeviceName, resolveDeviceBinding } from "./device.js";
+import { requireDeviceName, resolveDeviceBinding, updateDeviceSettings } from "./device.js";
 import { requestCfg } from "./request-config.js";
 import {
   acceptDeviceJoinRequest,
@@ -90,7 +89,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.unauthorized": 401,
   "session.required": 401,
   "device.forbidden_station": 403,
-  // The knock's own three refusals. `pairing_closed` is a 403 rather than a 401: the door is shut, not
+  // The knock's own refusals. `pairing_closed` is a 403 rather than a 401: the door is shut, not
   // the caller unknown, and the device's next step is a person, not a credential.
   "device.pairing_closed": 403,
   "device.join_full": 429,
@@ -157,7 +156,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       const name = requireString(body.name, "name");
       // A disabled device's browser still holds its cookie; proven, the knock comes back as that
       // device. Checked before the transaction, so scrypt does not hold the write lock.
-      const returning = await provenDisabledDevice(deps.db, readDeviceCookie(c));
+      const returning = await provenDisabledDevice(deps.db, parseDeviceCookie(readDeviceCookie(c)));
       let dropped: string[] = [];
       const made = await withTransaction(deps.db, async (tx) => {
         // The window can shut, and open again, while the body arrives; a knock admitted in an
@@ -176,7 +175,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         // A number check on the request this one replaced must not approve this one. Dropped inside
         // the transaction: a rollback brings that request back unclaimed, which only asks for the
         // check again.
-        if (request.joinId === returning?.deviceId) deps.pairingMode.dropClaim(request.joinId);
+        if (returning !== null) deps.pairingMode.dropClaim(request.joinId);
         if (auto) {
           // Accept in the SAME transaction, so a later throw (no till profile, or a taken device
           // name) rolls the just-minted request back rather than leaving a pending row nobody can
@@ -530,27 +529,16 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           stationId,
           watcherId,
         });
-        const held =
-          profileId === device.deviceProfileId
-            ? {
-                receiptPrinterId: device.receiptPrinterId,
-                paymentSlipPrinterId: device.paymentSlipPrinterId,
-              }
-            : await firstUsablePrinters(tx, profileId, device.locationId);
-        try {
-          await tx
-            .update(devices)
-            .set({
-              label,
-              deviceProfileId: profileId,
-              stationId: binding.stationId,
-              watcherId: binding.watcherId,
-              ...held,
-            })
-            .where(ownDeviceById(id));
-        } catch (error) {
-          throw mapDeviceNameTaken(error);
-        }
+        const held = await updateDeviceSettings(
+          tx,
+          { id, ...device },
+          {
+            label,
+            profileId,
+            stationId: binding.stationId,
+            watcherId: binding.watcherId,
+          },
+        );
         // Only a printer that differs from the one held is checked: `chooseDevicePrinter` takes
         // switched-on printers only, and a device may still hold a listed one since switched off.
         const current: Record<PrinterRole, string | null> = {
