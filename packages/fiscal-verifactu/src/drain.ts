@@ -44,6 +44,7 @@ export const RECUPERACION_ENVIANDO_MS = 5 * 60_000;
  * `@waitron/scheduler`'s `DEFAULTS.skipRetryMs`, so editing this constant changes nothing deployed.
  */
 export const DEFAULT_SKIP_RETRY_MS = 5 * 60 * 1000;
+const MAX_CONSULTA_PAGES = 10;
 
 /** The first retry's wait, and the per-attempt doubling unit `backoffMs` scales from. */
 export const BACKOFF_BASE_MS = 60_000;
@@ -89,8 +90,8 @@ type DueRow = RegistroRow & { intentos: number };
  * Is there anything to send, read before the drain opens its own transaction? Lone stale claims
  * count, so `drainDue` can recover them even with no pending row.
  *
- * - `proximo_intento_en <= now` is INCLUSIVE, the same comparison `countDue` and `claimBatch`
- *   make, so this gate never opens on a row neither of them would claim.
+ * - `proximo_intento_en <= now` is INCLUSIVE. A due successor can still wait for an earlier
+ *   record's retry or in-flight answer.
  * - `enviado_en < now - RECUPERACION_ENVIANDO_MS` is STRICT, the same cutoff `recoverStaleClaims`
  *   computes, so a row this reports stale is a row that pass will recover.
  *
@@ -128,7 +129,7 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
     result.tenantsWithWork += 1;
     try {
       const client = await deps.resolveClient();
-      await drainDue(deps.db, client, deps.environment, now, result, maxPorEnvio);
+      await drainDue(deps.db, client, deps.environment, now, result, maxPorEnvio, deps.skipRetryMs);
     } catch (error) {
       // Contained: reported in `skipped` rather than thrown, so the host still schedules a retry.
       result.skipped.push({ errorCode: codeOf(error) });
@@ -167,6 +168,7 @@ async function drainDue(
   now: Date,
   result: DrainResult,
   maxPorEnvio: number,
+  skipRetryMs: number,
 ): Promise<void> {
   // Commits before anything else in this pass reads `envios`, so a recovered row is an ordinary
   // `pendiente` row to the later transactions.
@@ -205,8 +207,13 @@ async function drainDue(
       if (claimed.sendable.length > 0 || claimed.rawCount === 0) break;
     }
     const batch = claimed.sendable;
-    // Only when the claim found nothing at all: the work `countDue` saw is gone by claim time.
-    if (batch.length === 0) break;
+    // Due work can wait for an earlier retry or an unresolved original invoice.
+    if (batch.length === 0) {
+      const next = await withTransaction(db, (tx) => nextClaimOpportunity(tx, now));
+      bumpNextDue(result, next ?? new Date(now.getTime() + skipRetryMs));
+      if (result.batchesSent === 0) return;
+      break;
+    }
 
     const cabecera = cabeceraFor(batch[0]!);
     const registros: EnvioRegistro[] = batch.map(toEnvioRegistro);
@@ -251,13 +258,29 @@ async function readFlujo(
     : { proximoEnvioEn: null, tiempoEsperaSeg: 0 };
 }
 
-/** How many rows are due right now — the same predicate `claimBatch` runs. */
+/** How many rows are due now, including successors held behind an earlier retry. */
 async function countDue(tx: Transaction, now: Date): Promise<number> {
   const rows = await tx.execute<{ count: number }>(sql`
     select count(*) as count from envios
     where estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()}
   `);
   return rows.rows[0]!.count;
+}
+
+async function nextClaimOpportunity(tx: Transaction, now: Date): Promise<Date | null> {
+  const rows = await tx.execute<{ next_retry: string | null; oldest_claim: string | null }>(sql`
+    select
+      min(case when estado = 'pendiente' and proximo_intento_en > ${now.toISOString()}
+        then proximo_intento_en end) as next_retry,
+      min(case when estado = 'enviando' then enviado_en end) as oldest_claim
+    from envios
+  `);
+  const row = rows.rows[0];
+  const candidates = [
+    row?.next_retry ? new Date(row.next_retry).getTime() : null,
+    row?.oldest_claim ? new Date(row.oldest_claim).getTime() + RECUPERACION_ENVIANDO_MS + 1 : null,
+  ].filter((value): value is number => value !== null);
+  return candidates.length > 0 ? new Date(Math.min(...candidates)) : null;
 }
 
 /** Upserts the one flow-control row: when the next envío may go, and the `t` that produced that
@@ -293,11 +316,8 @@ async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
  * no staleness gate, raising `incidencia` as `recoverStaleClaims` does. Sound only before this
  * process's first drain pass and while no other process files from this database, so the host
  * calls it before that pass, and again only if that attempt failed. A resend of a record the
- * previous run had filed meets AEAT's duplicate check (error 3000): when AEAT reports its stored
- * copy `Correcta` or `AceptadaConErrores`, `resolveEstadoEfectivo` reads that as an accept and
- * `applyOutcome` marks the row `aceptado`, or `aceptado_con_errores` with a warning
- * `fiscal.aceptado_con_errores` incident, without comparing fingerprints; only an annulled or
- * unstated copy reaches `handleDuplicate`.
+ * previous run had filed meets AEAT's duplicate check (error 3000); the drainer checks the stored
+ * fingerprint before treating that reply as confirmation of our record.
  */
 export async function resetInFlightClaims(db: Database, now: Date): Promise<void> {
   await withTransaction(db, (tx) => requeueClaims(tx, now, null));
@@ -366,6 +386,36 @@ async function claimBatch(
     join registros_facturacion r on r.id = e.registro_id
     where e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
       ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
+      -- A cancellation can alter the authority's row under this invoice key before our original's
+      -- duplicate reply reveals that the row belongs to someone else.
+      and (r.tipo_registro != 'anulacion' or exists (
+        select 1 from registros_facturacion original
+        join envios original_envio on original_envio.registro_id = original.id
+        where original.tipo_registro = 'alta'
+          and original.sif_id = r.sif_id
+          and original.id_emisor_factura = r.id_emisor_factura
+          and original.num_serie_factura = r.num_serie_factura
+          and original.fecha_expedicion_factura = r.fecha_expedicion_factura
+          and original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')
+      ))
+      and not exists (
+        select 1 from envios earlier
+        join registros_facturacion prior on prior.id = earlier.registro_id
+        where prior.sif_id = r.sif_id and prior.secuencia < r.secuencia
+          and (earlier.estado = 'enviando'
+            or (earlier.estado = 'pendiente' and (
+              earlier.proximo_intento_en > ${now.toISOString()}
+              or (prior.tipo_registro = 'anulacion' and not exists (
+                select 1 from registros_facturacion prior_original
+                join envios prior_original_envio on prior_original_envio.registro_id = prior_original.id
+                where prior_original.tipo_registro = 'alta'
+                  and prior_original.sif_id = prior.sif_id
+                  and prior_original.id_emisor_factura = prior.id_emisor_factura
+                  and prior_original.num_serie_factura = prior.num_serie_factura
+                  and prior_original.fecha_expedicion_factura = prior.fecha_expedicion_factura
+                  and prior_original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')
+              )))))
+      )
     order by r.sif_id, r.secuencia
     limit ${maxPorEnvio}`)
   ).rows;
@@ -500,15 +550,16 @@ function cabeceraFor(row: RegistroRow): Cabecera {
   return { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } };
 }
 
-/** Route B's answer for one line: whether AEAT holds our huella, or the lookup's failure. */
-type Lookup = { matched: boolean } | { failed: unknown };
+/** A missing fingerprint or invoice leaves the duplicate unresolved. */
+type Lookup = { matched: boolean | null } | { failed: unknown };
 
-/** A reply line matched to its claimed row. `lookup` is set exactly on the lines Route B covers. */
+/** A reply line matched to its claimed row. */
 interface ResolvedLine {
   row: DueRow;
   linea: RespuestaLinea;
   efectivo: EstadoEfectivo;
   lookup: Lookup | null;
+  duplicateAcceptedWithErrors: boolean;
 }
 
 /**
@@ -529,11 +580,23 @@ async function resolveLines(
     // `recoverStaleClaims` or a restart requeues it.
     const row = linea.RefExterna !== undefined ? byId.get(linea.RefExterna) : undefined;
     if (row === undefined) continue;
-    const efectivo = resolveEstadoEfectivo(linea);
+    const resolved = resolveEstadoEfectivo(linea);
+    const efectivo =
+      linea.CodigoErrorRegistro === 3000 &&
+      (resolved === "accepted" || resolved === "accepted_with_errors")
+        ? "duplicate_unknown"
+        : resolved;
     const routeBCovers =
       efectivo === "duplicate_unknown" ||
       (efectivo === "duplicate_annulled" && row.tipo_registro === "anulacion");
-    lines.push({ row, linea, efectivo, lookup: routeBCovers ? await lookUp(client, row) : null });
+    lines.push({
+      row,
+      linea,
+      efectivo,
+      lookup: routeBCovers ? await lookUp(client, row) : null,
+      duplicateAcceptedWithErrors:
+        linea.CodigoErrorRegistro === 3000 && resolved === "accepted_with_errors",
+    });
   }
   return lines;
 }
@@ -574,7 +637,7 @@ async function persistResponse(
  * successor ids this call halts. */
 async function applyOutcome(
   tx: Transaction,
-  { row, linea, efectivo, lookup }: ResolvedLine,
+  { row, linea, efectivo, lookup, duplicateAcceptedWithErrors }: ResolvedLine,
   csv: string | null,
   now: Date,
   result: DrainResult,
@@ -630,16 +693,24 @@ async function applyOutcome(
       return;
     // duplicate_annulled / duplicate_unknown — error 3000; see `handleDuplicate`.
     default:
-      await handleDuplicate(tx, row, efectivo, lookup, csv, now, result, halted);
+      await handleDuplicate(
+        tx,
+        row,
+        linea,
+        efectivo,
+        lookup,
+        duplicateAcceptedWithErrors,
+        csv,
+        now,
+        result,
+        halted,
+      );
   }
 }
 
 /**
- * A line whose own status `@waitron/verifactu` could not read: the reply does not say whether AEAT
- * stored the record, so it is neither accepted nor rejected here, and never looked up as a
- * duplicate, whose fingerprint comparison could halt a healthy chain. The row goes back to
- * `pendiente` on `backoffBatch`'s schedule; a resend AEAT already holds comes back as error 3000
- * with its stored state. The incident keeps the envío's CSV, which AEAT never returns again.
+ * An unreadable reply or a duplicate lookup with missing evidence stays pending for a later send.
+ * The incident keeps the envío's CSV, which AEAT never returns again.
  */
 async function awaitReadableAnswer(
   tx: Transaction,
@@ -753,28 +824,60 @@ async function raiseIncident(
 }
 
 /**
- * Route B (error 3000; `handleDuplicate` says which cases): a targeted consulta for this one record
- * resolves it. Only the `Huella` is compared:
- * it already summarises every hashed field.
+ * A targeted consulta compares the stored fingerprint and installation identity before a duplicate
+ * can confirm our record. An absent record or fingerprint leaves the answer unresolved; when the
+ * fingerprint matches, missing installation identity also leaves it unresolved.
  *
  * `Ejercicio`/`Periodo` come from `fecha_expedicion_factura`: our records never carry a separate
  * `FechaOperacion`, so the operation month is the expedition month.
  */
-async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean> {
+async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | null> {
   const [ejercicio, periodo] = row.fecha_expedicion_factura.split("-");
-  const respuesta: RespuestaConsulta = await client.consultar(
-    { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } },
-    {
-      Ejercicio: ejercicio,
-      Periodo: periodo,
-      NumSerieFactura: row.num_serie_factura,
-      FechaExpedicionFactura: toAeatDate(row.fecha_expedicion_factura),
-    },
-  );
-  const stored = respuesta.registros.find(
-    (r) => r.IDFactura.NumSerieFactura === row.num_serie_factura,
-  );
-  return stored?.DatosRegistroFacturacion.Huella === row.huella;
+  const fecha = toAeatDate(row.fecha_expedicion_factura);
+  let page: RespuestaConsulta["ClavePaginacion"];
+  const seenPages = new Set<string>();
+  // Rotating page keys must not keep a claimed record inside one network pass forever.
+  for (let pagesRead = 0; pagesRead < MAX_CONSULTA_PAGES; pagesRead += 1) {
+    const respuesta: RespuestaConsulta = await client.consultar(
+      { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } },
+      {
+        Ejercicio: ejercicio,
+        Periodo: periodo,
+        NumSerieFactura: row.num_serie_factura,
+        FechaExpedicionFactura: fecha,
+        DatosAdicionalesRespuesta: { MostrarSistemaInformatico: "S" },
+        ...(page === undefined ? {} : { ClavePaginacion: page }),
+      },
+    );
+    const stored = respuesta.registros.find(
+      (r) =>
+        r.IDFactura.IDEmisorFactura === row.id_emisor_factura &&
+        r.IDFactura.NumSerieFactura === row.num_serie_factura &&
+        r.IDFactura.FechaExpedicionFactura === fecha,
+    );
+    const huella = stored?.DatosRegistroFacturacion.Huella;
+    if (huella !== undefined) {
+      if (huella !== row.huella) return false;
+      const sistema = stored?.DatosRegistroFacturacion.SistemaInformatico;
+      if (typeof sistema !== "object" || sistema === null) return null;
+      const original = fromRegistroRow(row).SistemaInformatico;
+      return (
+        "NIF" in sistema &&
+        sistema.NIF === original.NIF &&
+        "IdSistemaInformatico" in sistema &&
+        sistema.IdSistemaInformatico === original.IdSistemaInformatico &&
+        "NumeroInstalacion" in sistema &&
+        sistema.NumeroInstalacion === original.NumeroInstalacion
+      );
+    }
+    const next = respuesta.ClavePaginacion;
+    if (respuesta.IndicadorPaginacion !== "S" || next === undefined) return null;
+    const key = JSON.stringify(next);
+    if (seenPages.has(key)) return null;
+    seenPages.add(key);
+    page = next;
+  }
+  return null;
 }
 
 /**
@@ -783,11 +886,9 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean> {
  *   - Route A (`duplicate_annulled` on an alta): AEAT's own copy of this identity is `Anulada`. This
  *     record can never become a confirmed accept under this identity, so it halts with
  *     `fiscal.duplicado_anulado` rather than retrying forever.
- *   - Route B (`duplicate_unknown`, or `duplicate_annulled` on an anulación): a consulta reads the
- *     record AEAT holds under this identity. A huella equal to the row's own means AEAT already
- *     holds OUR record, so it resolves to `aceptado`. A differing huella, or AEAT returning no record
- *     for it, halts: on an anulación with `fiscal.duplicado_anulado`, otherwise with
- *     `fiscal.huella_divergente`. An anulación belongs here because `Anulada` on a resent anulación
+ *   - Route B (all other duplicates): a consulta reads the record AEAT holds under this identity.
+ *     A matching fingerprint and installation confirm our record. A mismatch halts; missing
+ *     evidence leaves the row pending. An anulación belongs here because `Anulada` on a resent anulación
  *     is most likely AEAT holding that very anulación: the verifactu library's live preproduction
  *     check asserts that the final consulta "reports the invoice as `Anulado` with the cancellation
  *     record's hash" (`sources/README.md`; the "final cancelled-record consulta" stage in
@@ -803,8 +904,10 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean> {
 async function handleDuplicate(
   tx: Transaction,
   row: DueRow,
+  linea: RespuestaLinea,
   efectivo: EstadoEfectivo,
   lookup: Lookup | null,
+  duplicateAcceptedWithErrors: boolean,
   csv: string | null,
   now: Date,
   result: DrainResult,
@@ -814,8 +917,32 @@ async function handleDuplicate(
   if (lookup !== null) {
     if ("failed" in lookup) throw lookup.failed;
     if (lookup.matched) {
-      await setEstado(tx, row.id, "aceptado", now, { csv, confirmadoEn: now });
+      await setEstado(
+        tx,
+        row.id,
+        duplicateAcceptedWithErrors ? "aceptado_con_errores" : "aceptado",
+        now,
+        { csv, confirmadoEn: now },
+      );
+      if (duplicateAcceptedWithErrors) {
+        await raiseIncident(
+          tx,
+          row,
+          "warning",
+          new AppError("fiscal.aceptado_con_errores", {
+            registroId: row.id,
+            codigo: linea.CodigoErrorRegistro ?? null,
+            mensaje: linea.DescripcionErrorRegistro ?? null,
+          }),
+          now,
+          result,
+        );
+      }
       result.recordsAccepted += 1;
+      return;
+    }
+    if (lookup.matched === null) {
+      await awaitReadableAnswer(tx, row, linea, csv, now, result);
       return;
     }
   }

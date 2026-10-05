@@ -2827,7 +2827,8 @@ a separately owned Cloud registry workstream. The owner approved the revised pla
 it replaces the 2026-10-03 task list while W41s remains the backlog item. **Next action:** review
 the proposed allocation and recovery contract in the revised design's §9, then record any narrow
 H2 scope exception before its dependent identity work. Independent queue items may proceed under
-the plan. No implementation or new live probe is claimed by this checkpoint. The following
+the plan. Task 2's ordered filing and duplicate-evidence changes were implemented on a separate
+branch on 2026-10-05 and await owner review; the live AEAT probes remain outstanding. The following
 paragraph records the 2026-10-03 state;
 its old next action and allocation assumptions are superseded by this update.
 
