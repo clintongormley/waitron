@@ -3,8 +3,9 @@ import { eq } from "drizzle-orm";
 import { products, withTransaction, type Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { createCatalogue, createProduct, listProducts, updateProduct } from "./operations.js";
-import { setProductColor } from "./product-colors.js";
+import { readEffectiveColors, setProductColor } from "./product-colors.js";
 import { setProductVariants } from "./variants.js";
+import { createCategory } from "./categories.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 
 const fx = useCatalogueDb();
@@ -103,4 +104,18 @@ it("sets the colour through updateProduct, and leaves it when the patch has none
   expect(await storedColor(productId)).toBe("#256bb1");
   await app((tx) => updateProduct(tx, productId, { color: null }));
   expect(await storedColor(productId)).toBeNull();
+});
+
+it("reads each product's effective colour, a variant's as its parent's whatever its row holds", async () => {
+  const drinks = await app((tx) => createCategory(tx, { name: "Drinks", color: "#256bb1" }));
+  await app((tx) => updateProduct(tx, productId, { categoryId: drinks.id }));
+  await fx.db.update(products).set({ color: "#b12525" }).where(eq(products.id, variantId));
+  const unknown = crypto.randomUUID();
+  expect(await app((tx) => readEffectiveColors(tx, [productId, variantId, unknown]))).toEqual(
+    new Map([
+      [productId, "#256bb1"],
+      [variantId, "#256bb1"],
+    ]),
+  );
+  expect(await app((tx) => readEffectiveColors(tx, []))).toEqual(new Map());
 });

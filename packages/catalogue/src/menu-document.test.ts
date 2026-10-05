@@ -19,6 +19,7 @@ import {
   type MenuDocument,
 } from "./menu-document.js";
 import * as vatRates from "./vat-rates.js";
+import { createCategory, updateCategory } from "./categories.js";
 import {
   deactivateProduct,
   updateMenuDetails,
@@ -289,6 +290,55 @@ describe("buildMenuDocument", () => {
       "Terrace",
     ]);
     expect(document.homeLayouts[0]!.id).toBe(home);
+  });
+});
+
+describe("each offer's colour", () => {
+  const offersOf = (document: MenuDocument, productId: string) =>
+    Object.values(document.offers).filter((offer) => offer.productId === productId);
+  const offerFor = async (menuId: string, productId: string) => {
+    const [offer, ...more] = offersOf(await build(menuId), productId);
+    expect(more).toEqual([]);
+    return offer!;
+  };
+
+  it("gives each offer its product's effective colour", async () => {
+    const f = await menusFixture(fx.db);
+    expect(await offerFor(f.lunch, f.lemonade)).toHaveProperty("color", null);
+    await app((tx) => updateCategory(tx, f.softDrinks, { color: "#256bb1" }));
+    expect(await offerFor(f.lunch, f.lemonade)).toHaveProperty("color", "#256bb1");
+    await app((tx) => updateProduct(tx, f.lemonade, { color: "#b12525" }));
+    const lemonade = await offerFor(f.lunch, f.lemonade);
+    expect(lemonade).toHaveProperty("color", "#b12525");
+    expect(lemonade.variants[0]).not.toHaveProperty("color");
+    await app(async (tx) => {
+      await updateCategory(tx, f.coldDrinks, { parentId: f.softDrinks });
+      const soups = await createCategory(tx, { name: "Soups", parentId: f.coldDrinks });
+      await updateProduct(tx, f.soup, { categoryId: soups.id });
+    });
+    expect(await offerFor(f.lunch, f.soup)).toHaveProperty("color", "#256bb1");
+  });
+
+  it("keeps a section's colour on the section only", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      await updateMenuDetails(tx, f.drinksMenu, { color: "#b12525" });
+      await updateProduct(tx, f.lemonade, { color: "#25b125" });
+    });
+    const document = await build(f.lunch);
+    expect(document.root.members[0]).toMatchObject({ sectionId: f.drinks, color: "#b12525" });
+    expect(offersOf(document, f.lemonade)).toMatchObject([{ color: "#25b125" }]);
+    expect(offersOf(document, f.lager)).toMatchObject([{ color: null }]);
+  });
+
+  it("gives a product placed twice the same colour on every menu", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      await addMember(tx, f.lunchRoot, product(f.lemonade));
+      await updateCategory(tx, f.softDrinks, { color: "#256bb1" });
+    });
+    expect(await offerFor(f.lunch, f.lemonade)).toHaveProperty("color", "#256bb1");
+    expect(await offerFor(f.dinner, f.lemonade)).toHaveProperty("color", "#256bb1");
   });
 });
 

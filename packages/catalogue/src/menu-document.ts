@@ -10,6 +10,7 @@ import { listMenuOffers } from "./operations.js";
 import { effectiveDefaultLabelId } from "./option-default.js";
 import { menuDetails } from "./schema/menu.js";
 import { optionLabels } from "./schema/options.js";
+import { readEffectiveColors } from "./product-colors.js";
 import { sections } from "./schema/sections.js";
 import { loadSectionGraph, type SectionGraph } from "./section-graph.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
@@ -125,7 +126,9 @@ export async function buildMenuDocuments(
     details.map((row) => row.menuId),
     { includeEveryModifierItem: true, graph: loaded },
   );
-  const dishFacts = await readDishFacts(tx, [...new Set(offers.map((offer) => offer.productId))]);
+  const offeredProducts = [...new Set(offers.map((offer) => offer.productId))];
+  const dishFacts = await readDishFacts(tx, offeredProducts);
+  const colors = await readEffectiveColors(tx, offeredProducts);
   const extraImages = await readEffectiveImages(tx, [
     ...new Set(
       offers.flatMap((offer) =>
@@ -167,7 +170,12 @@ export async function buildMenuDocuments(
     const onMenu = new Map(
       (offersByMenu.get(row.menuId) ?? []).map((offer) => [
         offer.productId,
-        freezeOffer(offer, dishFacts.get(offer.productId)!, extraImages),
+        freezeOffer(
+          offer,
+          dishFacts.get(offer.productId)!,
+          colors.get(offer.productId)!,
+          extraImages,
+        ),
       ]),
     );
     const reachedSections = new Set<string>();
@@ -302,12 +310,14 @@ function without<T extends object, K extends keyof T>(value: T, keys: readonly K
 function freezeOffer(
   offer: MenuOffer,
   facts: { image: string | null; description: Record<string, string> | null },
+  color: string | null,
   extraImages: ReadonlyMap<string, string | null>,
 ): FrozenOffer {
   return {
     ...without(offer, ["courseId", "category", "offeredModifiers", "variants", "combined"]),
     image: facts.image,
     description: facts.description,
+    color,
     variants: offer.variants.map((variant) =>
       without(variant, ["available", "courseId", "category"]),
     ),
@@ -651,6 +661,7 @@ const PRODUCT_FIELD_ORDER: readonly ProductChangeField[] = [
   "names",
   "description",
   "image",
+  "color",
   "unit",
   "allergens",
   "diet",
@@ -721,6 +732,7 @@ function productFields(
   const included = new Map<string, { id: string; name: string }>();
   changedFacts(PRODUCT_FACTS, a, b, shared);
   if (!same(a.description, b.description)) shared.add("description");
+  if (!same(a.color, b.color)) shared.add("color");
   if (a.ordering !== b.ordering) shared.add("ordering");
   if (
     !same(

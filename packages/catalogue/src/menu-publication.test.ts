@@ -39,6 +39,7 @@ import {
   updateMenuItem,
   updateProduct,
 } from "./operations.js";
+import { updateCategory } from "./categories.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { extraListItems } from "./schema/extras.js";
 import { createUnit, updateUnit } from "./units.js";
@@ -533,6 +534,118 @@ describe("a live version published while its document froze a VAT rate", () => {
     expect(await states(f)).toEqual({ lunch: "changed", dinner: "current" });
     await publish(f.lunch);
     expect(await states(f)).toEqual({ lunch: "current", dinner: "current" });
+  });
+});
+
+/** Each live offer's colour on the menu's live version, by product id. */
+async function liveColors(menuId: string): Promise<Map<string, string | null | undefined>> {
+  const document = (await app((tx) => readLiveDocuments(tx, [menuId]))).get(menuId)!.document;
+  const offers = (await app((tx) => applyLiveFields(tx, [document]))).get(menuId)!;
+  return new Map(offers.map((offer) => [offer.productId, offer.color]));
+}
+
+const colorChange = (productId: string, name: string) => ({
+  kind: "product_changed",
+  productId,
+  name,
+  fields: ["color"],
+  source: "shared_product",
+});
+
+describe("a category's colour", () => {
+  it("a category colour edit is a shared change each menu publishes on its own", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.lunch);
+    await publish(f.dinner);
+    await app((tx) => updateCategory(tx, f.softDrinks, { color: "#256bb1" }));
+    expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
+    expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toContainEqual({
+      ...colorChange(f.lemonade, "Lemonade"),
+      alsoOn: ["Dinner Menu"],
+    });
+    expect((await liveColors(f.lunch)).get(f.lemonade)).toBeNull();
+    await publish(f.lunch);
+    expect((await liveColors(f.lunch)).get(f.lemonade)).toBe("#256bb1");
+    expect((await liveColors(f.dinner)).get(f.lemonade)).toBeNull();
+    await publish(f.dinner);
+    expect((await liveColors(f.dinner)).get(f.lemonade)).toBe("#256bb1");
+  });
+
+  it("moving an uncoloured category under a coloured one changes the next document", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => updateCategory(tx, f.coldDrinks, { color: "#25b125" }));
+    await publish(f.lunch);
+    expect(await states(f)).toMatchObject({ lunch: "current" });
+    await app((tx) => updateCategory(tx, f.softDrinks, { parentId: f.coldDrinks }));
+    expect(await states(f)).toMatchObject({ lunch: "changed" });
+    expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
+      colorChange(f.lemonade, "Lemonade"),
+      colorChange(f.lager, "Lager"),
+      colorChange(f.soup, "Soup"),
+    ]);
+    await publish(f.lunch);
+    expect(await liveColors(f.lunch)).toEqual(
+      new Map([
+        [f.lemonade, "#25b125"],
+        [f.lager, "#25b125"],
+        [f.soup, "#25b125"],
+      ]),
+    );
+  });
+});
+
+describe("a live version published before offers carried a colour", () => {
+  /** Makes the menu's live version a copy of its current one with no `color` on any offer; a
+   * section's colour predates it and stays. */
+  async function liveWithoutOfferColors(menuId: string): Promise<string> {
+    const { versionId } = await publish(menuId);
+    const [row] = await fx.db.select().from(menuVersions).where(eq(menuVersions.id, versionId));
+    const document = {
+      ...row!.document,
+      format: 2 as const,
+      offers: Object.fromEntries(
+        Object.entries(row!.document.offers).map(([id, offer]) => {
+          const earlier = { ...offer };
+          delete earlier.color;
+          return [id, earlier];
+        }),
+      ),
+    };
+    for (const offer of Object.values(document.offers)) expect(offer).not.toHaveProperty("color");
+    const [earlier] = await fx.db
+      .insert(menuVersions)
+      .values({
+        menuId,
+        number: row!.number + 1,
+        document,
+        contentHash: menuDocumentHash(document),
+        publishedAt: row!.publishedAt,
+        publishedBy: "person-1",
+      })
+      .returning({ id: menuVersions.id });
+    await fx.db
+      .update(menuPublications)
+      .set({ versionId: earlier!.id })
+      .where(eq(menuPublications.menuId, menuId));
+    return earlier!.id;
+  }
+
+  it("is still served, serves no colour, and its menu shows each offer's colour as a change", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await liveWithoutOfferColors(f.lunch);
+    const live = await app((tx) => readLiveDocuments(tx, [f.lunch]));
+    expect(live.get(f.lunch)!.versionId).toBe(lunch);
+    expect(await states(f)).toMatchObject({ lunch: "changed" });
+    expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
+      colorChange(f.lemonade, "Lemonade"),
+      colorChange(f.lager, "Lager"),
+      colorChange(f.soup, "Soup"),
+    ]);
+    const offers = (await app((tx) => applyLiveFields(tx, [live.get(f.lunch)!.document]))).get(
+      f.lunch,
+    )!;
+    expect(offers).toHaveLength(3);
+    for (const offer of offers) expect(offer).not.toHaveProperty("color");
   });
 });
 
