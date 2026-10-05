@@ -5088,7 +5088,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 and W106 QUEUED (lane C).**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE on branch `feat/device-edit-dialog` (PR number to be recorded here when it opens); W106 QUEUED (lane C).**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
@@ -5105,8 +5105,21 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   another login's check or deny is refused `join_request.claimed` and its approval
   `join_request.unclaimed`; the claiming login then names the device and picks its profile
   (`apps/server/src/join-api.ts`). A till refused with `device.pairing_closed` now tells the
-  operator to ask a manager to open Add a device. **Still owed:** W105, the device table and the
-  Edit dialog; W106, each device's battery on the Devices list.
+  operator to ask a manager to open Add a device.
+  **W105 (done on its branch):** one request, `PATCH /management-api/devices/:id`, saves a device's
+  name, profile, Shows, printers and made-here stations in one transaction, replacing the reassign
+  and made-here routes (`apps/server/src/device-api.ts`). The Devices list is a table with an Edit
+  dialog and a two-press Remove in each active row's menu; a removed device's row does not open
+  (`rowClickable`, new on `wt-data-table`). The card reader is read when the dialog opens and saved
+  second, through its own route; without `payments.manage` the field is not shown. **Still owed:**
+  W106, each device's battery on the Devices list.
+  Left OPEN by W105, not acted on: (5) a kitchen screen whose station or watcher was switched off
+  opens with Shows empty, so even a rename asks for a new one; whether to let it keep a switched-off
+  one is the owner's call. (6) the Status column still says "Revoked" (`devices.status_revoked`)
+  beside a menu that now says Remove. (7) a kitchen screen's Edit dialog hides Made here but still
+  sends the stored made-here stations that were switched on when it opened, so one switched off
+  while it is open refuses the save, at the bottom of the dialog, with "That station no longer
+  exists".
   Left OPEN by W104, not acted on: (1) a Pair save that never answers locks both dialogs, because a
   save carries no time limit (`packages/dashboard-kit/src/request.ts` limits GETs only); (2) leaving
   the Devices page with Back while a Pair save is in flight still sends a deny for that request

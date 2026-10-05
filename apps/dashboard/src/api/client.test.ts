@@ -2230,39 +2230,48 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     });
   });
 
-  it("reassignDeviceProfile POSTs { deviceProfileId } to the device's assign-device-profile route (204)", async () => {
+  it("updateDevice PATCHes the whole edit to the device's route (204)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await expect(api.reassignDeviceProfile("d1", "dp1")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/assign-device-profile", {
-      method: "POST",
+    const input = {
+      name: "Barra 2",
+      profileId: "dp3",
+      stationId: "s1",
+      receiptPrinterId: "pr1",
+      paymentSlipPrinterId: null,
+      madeHereStationIds: ["s2"],
+    };
+    await expect(api.updateDevice("d1", input)).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith("/management-api/devices/d1", {
+      method: "PATCH",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ deviceProfileId: "dp1" }),
+      body: JSON.stringify(input),
     });
   });
 
-  it("reassignDeviceProfile sends { deviceProfileId: null } to clear the assignment", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.reassignDeviceProfile("d1", null)).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/devices/d1/assign-device-profile", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ deviceProfileId: null }),
-    });
-  });
-
-  it("reassignDeviceProfile rejects with { code } on a UUID-shaped unknown/foreign profile (binding invalid)", async () => {
+  it("updateDevice rejects with the refusal's code and params", async () => {
     const fetchImpl = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ error: { code: "device.binding_invalid" } }, false, 400));
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "device.binding_invalid", params: { field: "receiptPrinterId" } } },
+          false,
+          400,
+        ),
+      );
     const api = new DashboardApi("", fetchImpl);
     await expect(
-      api.reassignDeviceProfile("d1", "11111111-1111-4111-8111-111111111111"),
+      api.updateDevice("d1", {
+        name: "Barra",
+        profileId: "dp1",
+        receiptPrinterId: "pr9",
+        paymentSlipPrinterId: null,
+        madeHereStationIds: [],
+      }),
     ).rejects.toMatchObject({
       code: "device.binding_invalid",
+      params: { field: "receiptPrinterId" },
     });
   });
 

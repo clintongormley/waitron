@@ -16,10 +16,11 @@ import type {
 } from "../api/client.js";
 
 /**
- * Scanned in the default list, the Add a device dialog (with waiting rows, with none, after its hold
- * lapsed, and after its hold was refused) and both Pair steps. The stub must resolve every list verb or a stray rejection pollutes the run. The
- * last block pins that each number button has a real accessible NAME and that pairing works from the
- * keyboard alone.
+ * Scanned in the device table, the Edit dialog with a Name error, the Add a device dialog (with
+ * waiting rows, with none, after its hold lapsed, and after its hold was refused) and both Pair
+ * steps. The stub must resolve every list verb or a stray rejection pollutes the run. The last block
+ * pins that each number button has a real accessible NAME and that pairing works from the keyboard
+ * alone.
  */
 const stations: Station[] = [
   {
@@ -189,7 +190,7 @@ function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): 
       .fn()
       .mockResolvedValue({ deviceId: "d9", name: "Pantalla pase", formFactor: "kds" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),
-    reassignDeviceProfile: vi.fn().mockResolvedValue(undefined),
+    updateDevice: vi.fn().mockResolvedValue(undefined),
     listReaders: vi.fn().mockResolvedValue([
       {
         id: "r1",
@@ -242,45 +243,61 @@ async function flush(el: DevicesScreen): Promise<void> {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (theme) => {
-  it.each([390, 1280])(
-    "renders a till's made-here station group accessibly at %ipx",
-    async (width) => {
-      await page.viewport(width, 900);
-      const till: DeviceRow = {
-        ...devices[0]!,
-        id: "till",
-        kind: "till",
-        madeHereStationIds: ["s2"],
-      };
-      const { el, host } = await mountWidget<DevicesScreen>(
-        "dashboard-devices-screen",
-        {
-          api: {
-            ...stubApi(),
-            listDevices: vi.fn().mockResolvedValue([till]),
-          } as unknown as DashboardApi,
-        },
-        theme,
-      );
-      await flush(el);
-      expect(el.shadowRoot!.querySelector('[data-test="made-here-till"]')).toBeTruthy();
-      expect(el.scrollWidth).toBeLessThanOrEqual(width);
-      await expectNoA11yViolations(host);
-      await page.screenshot({ path: `__screenshots__/made-here-${theme}-${width}.png` });
-      await page.viewport(1280, 900);
-    },
-  );
-
-  it("renders the list, each row's printers and its hardware editor accessibly", async () => {
+  it.each([390, 1280])("renders the device table accessibly at %ipx", async (width) => {
+    await page.viewport(width, 900);
     const { el, host } = await mountWidget<DevicesScreen>(
       "dashboard-devices-screen",
       { api: stubApi() },
       theme,
     );
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=device-receipt-printer-d1]")).toBeTruthy();
+    const table = el.shadowRoot!.querySelector("[data-test=devices-table]")!;
+    expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(2);
+    expect(el.scrollWidth).toBeLessThanOrEqual(width);
     await expectNoA11yViolations(host);
+    await page.viewport(1280, 900);
   });
+
+  it.each([390, 1280])(
+    "renders a till's Edit dialog with a Name error accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const till: DeviceRow = {
+        ...devices[0]!,
+        id: "till",
+        kind: "till",
+        stationId: null,
+        madeHereStationIds: ["s2"],
+      };
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        {
+          api: stubApi({
+            listDevices: vi.fn().mockResolvedValue([till]),
+            updateDevice: vi.fn().mockRejectedValue({ code: "device.name_taken" }),
+          }),
+        },
+        theme,
+      );
+      await flush(el);
+      deep(el.shadowRoot!, "[data-test=edit-device-till]")!.click();
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=edit-reader]")).not.toBeNull(),
+      );
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=edit-made-here]")).not.toBeNull();
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-save]")!.click();
+      await vi.waitFor(() =>
+        expect(
+          (el.shadowRoot!.querySelector("[data-test=edit-name]") as HTMLElement & { error: string })
+            .error,
+        ).not.toBe(""),
+      );
+      await flush(el);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
 
   it.each([390, 1280])(
     "renders the Add a device dialog with waiting rows accessibly at %ipx",

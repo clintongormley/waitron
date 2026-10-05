@@ -13,7 +13,6 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -21,8 +20,14 @@ import "@waitron/ui/src/components/wt-spinner.js";
 import { PairingHold, type PairingHoldStatus } from "../api/pairing-hold.js";
 import { bottomMessage, refusal } from "../i18n/form-message.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
+import "../widgets/row-actions.js";
 import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
-import { registerCatalogue, type CardProviderPanel, t as tRaw } from "@waitron/dashboard-kit";
+import {
+  registerCatalogue,
+  tableNoMatches,
+  type CardProviderPanel,
+  t as tRaw,
+} from "@waitron/dashboard-kit";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
@@ -41,6 +46,8 @@ import type {
 } from "../api/client.js";
 
 type PairField = "name" | "profile" | "binding";
+type EditField = PairField | "receipt" | "slip" | "reader";
+type IdentityErrors = Record<PairField, string>;
 
 /** Refusals of a pairing that are about one settings field (CLAUDE.md §3: by what the error carries). */
 const PAIR_FIELD_BY_CODE: Record<string, PairField> = {
@@ -57,6 +64,31 @@ const PAIR_FIELD_BY_PARAM: Record<string, PairField> = {
   stationId: "binding",
   watcherId: "binding",
 };
+
+/** Refusals of an edit that are about one field, by code alone; others read their params first. */
+const EDIT_FIELD_BY_CODE: Record<string, EditField> = {
+  "device.name_taken": "name",
+  "device.station_required": "binding",
+  "watcher.not_found": "binding",
+  "device_profile.not_found": "profile",
+};
+
+const EDIT_FIELD_BY_PARAM: Record<string, EditField> = {
+  ...PAIR_FIELD_BY_PARAM,
+  receiptPrinterId: "receipt",
+  paymentSlipPrinterId: "slip",
+};
+
+interface EditForm {
+  name: string;
+  profileId: string;
+  /** `station:<id>`, `watcher:<id>`, or empty. */
+  binding: string;
+  /** Empty for none. */
+  receiptPrinterId: string;
+  paymentSlipPrinterId: string;
+  madeHere: string[];
+}
 
 /**
  * Whether a joining device of this form factor binds a station or watcher: only a `kds` screen does.
@@ -112,73 +144,17 @@ export class DevicesScreen extends LitElement {
       wt-data-table::part(being-paired) {
         color: var(--wt-color-text-muted);
       }
-      .pair-fields {
-        display: grid;
-        gap: var(--wt-space-3);
-      }
-      ol {
-        list-style: none;
-        margin: 0;
-        padding: 0;
+      .pair-fields,
+      .edit-fields {
         display: grid;
         gap: var(--wt-space-3);
       }
       .empty {
         color: var(--wt-color-text-muted);
       }
-      .row {
-        display: flex;
-        gap: var(--wt-space-3);
-        align-items: center;
-        flex-wrap: wrap;
-      }
-      .details {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        min-width: 0;
-        margin-right: auto;
-      }
-      .label {
-        font-weight: var(--wt-font-weight-bold);
-        color: var(--wt-color-text);
-      }
-      .meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-      .hardware {
-        display: flex;
-        gap: var(--wt-space-3);
-        align-items: flex-end;
-        flex-wrap: wrap;
-        margin-top: var(--wt-space-3);
-        padding-top: var(--wt-space-3);
-        border-top: 1px solid var(--wt-color-border);
-      }
-      .hardware wt-combobox {
-        flex: 0 1 calc(var(--wt-space-6) * 7);
-        min-width: 0;
-      }
-      .printers {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-3);
-        margin: 0;
-      }
-      .printers dt {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-      .printers dd {
-        margin: 0;
-        color: var(--wt-color-text);
-      }
       .made-here {
-        margin: var(--wt-space-3) 0 0;
+        max-width: var(--wt-form-max-width);
+        margin: 0;
         padding: var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
@@ -226,8 +202,6 @@ export class DevicesScreen extends LitElement {
   @state() private watchers: Watcher[] = [];
   @state() private deviceProfiles: DeviceProfile[] = [];
   @state() private printers: Printer[] = [];
-  @state() private readers: ReaderRow[] = [];
-  @state() private deviceReaders: Record<string, string | null> = {};
   @state() private pairing: PairingModeState | undefined;
   @state() private pendingJoins: JoinRequestRow[] = [];
 
@@ -270,13 +244,31 @@ export class DevicesScreen extends LitElement {
   /** Set once the server has approved or deleted the request, so closing Pair has nothing to discard. */
   #pairSettled = false;
   #pairEpoch = 0;
-  @state() private armedRevokeId: string | null = null;
+  @state() private armedRemoveId: string | null = null;
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
-  @state() private madeHereRefusals: Record<string, string> = {};
-  @state() private madeHerePending: Record<string, string[]> = {};
-  readonly #madeHereSaving = new Set<string>();
+
+  @state() private editing: DeviceRow | null = null;
+  @state() private editForm: EditForm = {
+    name: "",
+    profileId: "",
+    binding: "",
+    receiptPrinterId: "",
+    paymentSlipPrinterId: "",
+    madeHere: [],
+  };
+  @state() private editAttempted = false;
+  @state() private editRefusal: { field: EditField; code: string } | null = null;
+  @state() private editError: string | null = null;
+  @state() private editSaving = false;
+  /** "hidden" when the person may not manage card readers. */
+  @state() private readerState: "loading" | "ready" | "hidden" | "failed" = "loading";
+  @state() private readers: ReaderRow[] = [];
+  @state() private readerReadError: string | null = null;
+  @state() private chosenReaderId = "";
+  #storedReaderId: string | null = null;
+  #editEpoch = 0;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -287,19 +279,11 @@ export class DevicesScreen extends LitElement {
 
   async #load(): Promise<void> {
     this.#showError(null);
-    this.armedRevokeId = null;
+    this.armedRemoveId = null;
     try {
       await Promise.all([
-        this.#queries.watch("listDevices", [], async (value) => {
+        this.#queries.watch("listDevices", [], (value) => {
           this.devices = value;
-          // Each active device's default reader is a PER-DEVICE read (there is no list form), so it
-          // is one request per active device, re-run whenever the reactive device list changes.
-          const entries = await Promise.all(
-            value
-              .filter((d) => d.active)
-              .map(async (d) => [d.id, (await this.api.getDeviceReader(d.id)).readerId] as const),
-          );
-          this.deviceReaders = Object.fromEntries(entries);
         }),
         this.#queries.watch("listStations", [], (value) => {
           this.stations = value;
@@ -312,9 +296,6 @@ export class DevicesScreen extends LitElement {
         }),
         this.#queries.watch("listPrinters", [], (value) => {
           this.printers = value;
-        }),
-        this.#queries.watch("listReaders", [], (value) => {
-          this.readers = value;
         }),
         this.#queries.watch("pairingMode", [], (value) => {
           this.pairing = value;
@@ -340,6 +321,7 @@ export class DevicesScreen extends LitElement {
 
   override disconnectedCallback(): void {
     this.#endAdding();
+    this.#endEdit();
     super.disconnectedCallback();
   }
 
@@ -473,26 +455,37 @@ export class DevicesScreen extends LitElement {
     }
   }
 
-  #chosenProfile(): DeviceProfile | undefined {
-    return this.deviceProfiles.find((p) => p.id === this.chosenProfileId);
-  }
-
-  #bindingShown(): boolean {
-    const profile = this.#chosenProfile();
+  #bindingShownFor(profileId: string): boolean {
+    const profile = this.deviceProfiles.find((p) => p.id === profileId);
     return profile !== undefined && bindsStation(profile.formFactor);
   }
 
-  /** The form's own checks, which hold Pair disabled once a submission has been tried. */
-  #ownErrors(): Record<PairField, string> {
-    if (!this.formAttempted) return { name: "", profile: "", binding: "" };
+  #bindingShown(): boolean {
+    return this.#bindingShownFor(this.chosenProfileId);
+  }
+
+  /** The checks Pair and Edit share, which hold the action disabled once a submission was tried. */
+  #identityErrors(
+    attempted: boolean,
+    values: { name: string; profileId: string; binding: string },
+  ): IdentityErrors {
+    if (!attempted) return { name: "", profile: "", binding: "" };
     return {
-      name: this.pairName.trim() === "" ? t("form.name_required") : "",
-      profile: this.chosenProfileId === "" ? t("devices.join_pick_profile") : "",
+      name: values.name.trim() === "" ? t("form.name_required") : "",
+      profile: values.profileId === "" ? t("devices.join_pick_profile") : "",
       binding:
-        this.#bindingShown() && this.chosenBinding === ""
+        this.#bindingShownFor(values.profileId) && values.binding === ""
           ? codeMessage("device.station_required")
           : "",
     };
+  }
+
+  #ownErrors(): IdentityErrors {
+    return this.#identityErrors(this.formAttempted, {
+      name: this.pairName,
+      profileId: this.chosenProfileId,
+      binding: this.chosenBinding,
+    });
   }
 
   #pairErrors(): Record<PairField, string> {
@@ -566,37 +559,24 @@ export class DevicesScreen extends LitElement {
   }
 
   async #reloadDevices(): Promise<void> {
-    this.armedRevokeId = null;
+    this.armedRemoveId = null;
     this.devices = await this.api.listDevices();
   }
 
-  #onRevoke(id: string): void {
-    if (this.armedRevokeId === id) {
-      this.armedRevokeId = null;
-      void this.#revoke(id);
+  #onRemove(id: string): void {
+    if (this.armedRemoveId === id) {
+      this.armedRemoveId = null;
+      void this.#remove(id);
       return;
     }
-    this.armedRevokeId = id;
+    this.armedRemoveId = id;
   }
 
-  async #revoke(id: string): Promise<void> {
+  async #remove(id: string): Promise<void> {
     this.#showError(null);
     let written = false;
     try {
       await this.api.revokeDevice(id);
-      written = true;
-      await this.#reloadDevices();
-    } catch (error) {
-      if (written) this.#showReadError(error);
-      else this.#showError(codeOf(error));
-    }
-  }
-
-  async #onReassign(id: string, deviceProfileId: string | null): Promise<void> {
-    this.#showError(null);
-    let written = false;
-    try {
-      await this.api.reassignDeviceProfile(id, deviceProfileId);
       written = true;
       await this.#reloadDevices();
     } catch (error) {
@@ -618,70 +598,8 @@ export class DevicesScreen extends LitElement {
     return `${reader.name} (${this.#providerName(reader.provider)})`;
   }
 
-  /** Written immediately, not staged. A rejection leaves `deviceReaders` untouched, so the control
-   * shows the stored default again. */
-  async #onReaderChange(id: string, value: string): Promise<void> {
-    this.#showError(null);
-    const readerId = value === "" ? null : value;
-    try {
-      await this.api.setDeviceReader(id, readerId);
-      this.deviceReaders = { ...this.deviceReaders, [id]: readerId };
-    } catch (error) {
-      this.#showError(codeOf(error));
-    }
-  }
-
-  #onMadeHereChange(device: DeviceRow): void {
-    const group = this.shadowRoot?.querySelector(`[data-test="made-here-${device.id}"]`);
-    const stationIds = [
-      ...(group?.querySelectorAll<HTMLInputElement>('input[name="stationIds"]') ?? []),
-    ]
-      .filter((box) => box.checked)
-      .map((box) => box.value);
-    this.madeHerePending = { ...this.madeHerePending, [device.id]: stationIds };
-    this.madeHereRefusals = Object.fromEntries(
-      Object.entries(this.madeHereRefusals).filter(([id]) => id !== device.id),
-    );
-    void this.#saveMadeHere(device.id);
-  }
-
-  async #saveMadeHere(deviceId: string): Promise<void> {
-    // One writer per device keeps responses in tap order while the latest choice survives renders.
-    if (this.#madeHereSaving.has(deviceId)) return;
-    this.#madeHereSaving.add(deviceId);
-    try {
-      while (this.madeHerePending[deviceId] !== undefined) {
-        const stationIds = this.madeHerePending[deviceId];
-        try {
-          await this.api.setDeviceMadeHere(deviceId, stationIds);
-        } catch (error) {
-          this.madeHerePending = Object.fromEntries(
-            Object.entries(this.madeHerePending).filter(([id]) => id !== deviceId),
-          );
-          this.madeHereRefusals = { ...this.madeHereRefusals, [deviceId]: codeOf(error) };
-          return;
-        }
-        this.devices = this.devices.map((row) =>
-          row.id === deviceId ? { ...row, madeHereStationIds: stationIds } : row,
-        );
-        const latest = this.madeHerePending[deviceId];
-        if (latest.length === stationIds.length && latest.every((id, i) => id === stationIds[i])) {
-          this.madeHerePending = Object.fromEntries(
-            Object.entries(this.madeHerePending).filter(([id]) => id !== deviceId),
-          );
-        }
-      }
-    } finally {
-      this.#madeHereSaving.delete(deviceId);
-    }
-  }
-
   #profileName(deviceProfileId: string | null): string {
-    if (deviceProfileId === null) return t("devices.device_profile_none");
-    return (
-      this.deviceProfiles.find((p) => p.id === deviceProfileId)?.name ??
-      t("devices.device_profile_none")
-    );
+    return this.deviceProfiles.find((p) => p.id === deviceProfileId)?.name ?? "";
   }
 
   #stationName(stationId: string | null): string {
@@ -704,134 +622,326 @@ export class DevicesScreen extends LitElement {
     return formatIsoMinute(iso);
   }
 
-  /** A device may stay on a printer switched off since it chose it, so that one is shown too. */
-  #printerName(printerId: string | null): string {
-    const printer = this.printers.find((p) => p.id === printerId);
-    if (printer === undefined) return t("devices.no_printer");
-    return printerLabel(printer);
+  // ── The Edit dialog ──────────────────────────────────────────────────────────────────────────────
+
+  /** The first printer in `ids` that is switched on, as the server's `firstUsablePrinters` picks. */
+  #firstSwitchedOn(ids: readonly string[]): string {
+    return ids.find((id) => this.printers.find((p) => p.id === id)?.active) ?? "";
   }
 
-  /** Read-only: a device picks its own printers from its profile's lists. */
-  #renderHardware(device: DeviceRow): TemplateResult {
-    const activeReaders = this.readers.filter((r) => r.active);
-    return html`<div class="hardware" data-test="hardware-${device.id}">
-      <dl class="printers">
-        <div>
-          <dt>${t("devices.receipt_printer_now")}</dt>
-          <dd data-test="device-receipt-printer-${device.id}">
-            ${this.#printerName(device.receiptPrinterId)}
-          </dd>
-        </div>
-        <div>
-          <dt>${t("devices.slip_printer_now")}</dt>
-          <dd data-test="device-slip-printer-${device.id}">
-            ${this.#printerName(device.paymentSlipPrinterId)}
-          </dd>
-        </div>
-      </dl>
-      <wt-combobox
-        data-test="hw-reader-${device.id}"
-        name="defaultReaderId"
-        label=${t("devices.default_reader")}
-        search="auto"
-        placeholder=${t("devices.default_reader_none")}
-        searchPlaceholder=${t("categories.combobox_search")}
-        noResultsLabel=${t("categories.combobox_no_results")}
-        .options=${[
-          { value: "", label: t("devices.default_reader_none") },
-          ...activeReaders.map((r) => ({ value: r.id, label: this.#readerLabel(r) })),
-        ]}
-        .value=${live(this.deviceReaders[device.id] ?? "")}
-        @wt-change=${(e: CustomEvent<{ value: string }>) =>
-          void this.#onReaderChange(device.id, e.detail.value)}
-      ></wt-combobox>
-    </div>`;
+  #storedBinding(device: DeviceRow): string {
+    if (
+      device.stationId !== null &&
+      this.stations.some((s) => s.id === device.stationId && s.active)
+    )
+      return `station:${device.stationId}`;
+    if (
+      device.watcherId !== null &&
+      this.watchers.some((w) => w.id === device.watcherId && w.active)
+    )
+      return `watcher:${device.watcherId}`;
+    return "";
   }
 
-  #renderDevice(device: DeviceRow): TemplateResult {
-    const armed = this.armedRevokeId === device.id;
-    const madeHereStationIds = this.madeHerePending[device.id] ?? device.madeHereStationIds;
-    return html`<li data-test="device-row-${device.id}">
-      <wt-card>
-        <div class="row">
-          <div class="details">
-            <span class="label" data-test="device-label-${device.id}">${device.label}</span>
-            <span class="meta">
-              <span data-test="device-profile-${device.id}"
-                >${this.#profileName(device.deviceProfileId)}</span
-              >
-              <span data-test="device-station-${device.id}">${this.#bindingName(device)}</span>
-              <span data-test="device-status-${device.id}"
-                >${device.active ? t("devices.status_active") : t("devices.status_revoked")}</span
-              >
-              <span data-test="device-last-seen-${device.id}"
-                >${this.#lastSeen(device.lastSeenAt)}</span
-              >
-            </span>
-          </div>
-          ${
-            device.active
-              ? html`<wt-combobox
-                  data-test="reassign-${device.id}"
-                  name="deviceProfileId"
-                  label=${`${t("devices.reassign")} ${device.label}`}
-                  hide-label
-                  search="auto"
-                  placeholder=${t("devices.device_profile_none")}
-                  searchPlaceholder=${t("categories.combobox_search")}
-                  noResultsLabel=${t("categories.combobox_no_results")}
-                  .options=${[
-                    { value: "", label: t("devices.device_profile_none") },
-                    ...this.deviceProfiles.map((profile) => ({
-                      value: profile.id,
-                      label: profile.name,
-                    })),
-                  ]}
-                  .value=${live(device.deviceProfileId ?? "")}
-                  @wt-change=${(e: CustomEvent<{ value: string }>) =>
-                    void this.#onReassign(device.id, e.detail.value === "" ? null : e.detail.value)}
-                ></wt-combobox>`
-              : nothing
-          }
-          ${
-            device.active
-              ? html`<wt-button
-                  variant="danger"
-                  size="sm"
-                  data-test="revoke-${device.id}"
-                  data-armed=${armed ? "true" : nothing}
-                  aria-label=${`${armed ? t("devices.revoke_confirm") : t("devices.revoke")} ${device.label}`}
-                  @click=${() => this.#onRevoke(device.id)}
-                  >${armed ? t("devices.revoke_confirm") : t("devices.revoke")}</wt-button
-                >`
-              : nothing
-          }
-        </div>
-        ${device.active ? this.#renderHardware(device) : nothing}
-        ${
-          device.active && device.kind !== "kds_station"
-            ? html`<fieldset class="made-here" data-test="made-here-${device.id}">
-                <legend>${t("devices.made_here")}</legend>
-                <p class="hint">${t("devices.made_here_hint")}</p>
-                ${this.stations.map(
-                  (station) =>
-                    html`<label class="check">
-                      <input
-                        type="checkbox"
-                        name="stationIds"
-                        value=${station.id}
-                        .checked=${live(madeHereStationIds.includes(station.id))}
-                        @change=${() => this.#onMadeHereChange(device)}
-                      />
-                      ${station.name}</label
-                    >`,
-                )}
-                ${this.madeHereRefusals[device.id] === undefined ? nothing : html`<p class="error" role="alert">${codeMessage(this.madeHereRefusals[device.id]!)}</p>`}
-              </fieldset>`
-            : nothing
-        }
-      </wt-card>
-    </li>`;
+  #openEdit(device: DeviceRow): void {
+    const epoch = ++this.#editEpoch;
+    this.editing = device;
+    this.editForm = {
+      name: device.label,
+      profileId: device.deviceProfileId ?? "",
+      binding: this.#storedBinding(device),
+      receiptPrinterId: device.receiptPrinterId ?? "",
+      paymentSlipPrinterId: device.paymentSlipPrinterId ?? "",
+      madeHere: device.madeHereStationIds,
+    };
+    this.editAttempted = false;
+    this.editRefusal = null;
+    this.editError = null;
+    this.editSaving = false;
+    this.readerState = "loading";
+    this.readers = [];
+    this.readerReadError = null;
+    this.chosenReaderId = "";
+    this.#storedReaderId = null;
+    void this.#loadReader(device.id, epoch);
+  }
+
+  /** The reader is the payments module's, under its own permission: without it the field is gone. */
+  async #loadReader(deviceId: string, epoch: number): Promise<void> {
+    try {
+      const [{ readerId }, readers] = await Promise.all([
+        this.api.getDeviceReader(deviceId),
+        this.api.listReaders(),
+      ]);
+      if (epoch !== this.#editEpoch) return;
+      this.readers = readers.filter((reader) => reader.active);
+      this.#storedReaderId = readerId;
+      this.chosenReaderId = readerId ?? "";
+      this.readerState = "ready";
+    } catch (error) {
+      if (epoch !== this.#editEpoch) return;
+      const code = codeOf(error);
+      if (code === "authorization.not_permitted") this.readerState = "hidden";
+      else {
+        this.readerState = "failed";
+        this.readerReadError = code;
+      }
+    }
+  }
+
+  #endEdit(): void {
+    if (this.editing === null) return;
+    this.#editEpoch++;
+    this.editing = null;
+    this.editSaving = false;
+  }
+
+  #editBindingShown(): boolean {
+    return this.#bindingShownFor(this.editForm.profileId);
+  }
+
+  #editOwnErrors(): IdentityErrors {
+    return this.#identityErrors(this.editAttempted, this.editForm);
+  }
+
+  #editErrors(): Record<EditField, string> {
+    const errors: Record<EditField, string> = {
+      ...this.#editOwnErrors(),
+      receipt: "",
+      slip: "",
+      reader: "",
+    };
+    const refused = this.editRefusal;
+    if (refused !== null && errors[refused.field] === "")
+      errors[refused.field] = codeMessage(refused.code);
+    return errors;
+  }
+
+  /** The field a refusal of the edit is about, when the dialog shows that field. */
+  #editRefusedField(error: unknown): EditField | null {
+    const code = codeOf(error);
+    const params = (error as { params?: Record<string, unknown> } | null)?.params ?? {};
+    let field: EditField | undefined;
+    if (code === "management.request_invalid" || code === "device.binding_invalid")
+      field = typeof params.field === "string" ? EDIT_FIELD_BY_PARAM[params.field] : undefined;
+    // A made-here station refused the same way names no field the dialog marks.
+    else if (code === "station.not_found")
+      field =
+        this.editForm.binding === `station:${String(params.stationId)}` ? "binding" : undefined;
+    else field = EDIT_FIELD_BY_CODE[code];
+    if (field === undefined) return null;
+    return field !== "binding" || this.#editBindingShown() ? field : null;
+  }
+
+  #clearEditRefusal(...fields: EditField[]): void {
+    if (this.editRefusal !== null && fields.includes(this.editRefusal.field))
+      this.editRefusal = null;
+  }
+
+  #setEdit(patch: Partial<EditForm>, ...fields: EditField[]): void {
+    this.editForm = { ...this.editForm, ...patch };
+    this.#clearEditRefusal(...fields);
+  }
+
+  #onEditProfile(profileId: string): void {
+    const profile = this.deviceProfiles.find((p) => p.id === profileId);
+    this.#setEdit(
+      {
+        profileId,
+        receiptPrinterId: this.#firstSwitchedOn(profile?.receiptPrinterIds ?? []),
+        paymentSlipPrinterId: this.#firstSwitchedOn(profile?.paymentSlipPrinterIds ?? []),
+      },
+      "profile",
+      "binding",
+      "receipt",
+      "slip",
+    );
+  }
+
+  /** Switched-off printers are left out, except one the device holds on the profile it keeps. */
+  #printerOptions(ids: readonly string[], held: string | null): { value: string; label: string }[] {
+    const keep = this.editForm.profileId === this.editing?.deviceProfileId ? held : null;
+    const listed = ids.flatMap((id) => {
+      const printer = this.printers.find((p) => p.id === id);
+      return printer !== undefined && (printer.active || printer.id === keep) ? [printer] : [];
+    });
+    return [
+      { value: "", label: t("devices.no_printer") },
+      ...listed.map((p) => ({ value: p.id, label: printerLabel(p) })),
+    ];
+  }
+
+  /** Only switched-on stations can be saved, so a stored one since switched off is dropped. */
+  #madeHereToSend(): string[] {
+    return this.stations
+      .filter((station) => station.active && this.editForm.madeHere.includes(station.id))
+      .map((station) => station.id);
+  }
+
+  #onMadeHereChange(stationId: string, checked: boolean): void {
+    const rest = this.editForm.madeHere.filter((id) => id !== stationId);
+    this.#setEdit({ madeHere: checked ? [...rest, stationId] : rest });
+  }
+
+  async #submitEdit(): Promise<void> {
+    const device = this.editing;
+    if (device === null || this.editSaving) return;
+    this.editAttempted = true;
+    const own = this.#editOwnErrors();
+    if (own.name || own.profile || own.binding) {
+      void this.updateComplete.then(() => {
+        const modal = this.renderRoot.querySelector("[data-test=edit-device-modal]");
+        if (modal) void focusFirstInvalid(modal);
+      });
+      return;
+    }
+    const form = this.editForm;
+    const binding = this.#editBindingShown() ? form.binding : "";
+    const epoch = this.#editEpoch;
+    this.editSaving = true;
+    this.editError = null;
+    this.editRefusal = null;
+    try {
+      await this.api.updateDevice(device.id, {
+        name: form.name.trim(),
+        profileId: form.profileId,
+        ...(binding.startsWith("station:") ? { stationId: binding.slice("station:".length) } : {}),
+        ...(binding.startsWith("watcher:") ? { watcherId: binding.slice("watcher:".length) } : {}),
+        receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
+        paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
+        madeHereStationIds: this.#madeHereToSend(),
+      });
+    } catch (error) {
+      if (epoch !== this.#editEpoch) return;
+      this.editSaving = false;
+      const field = this.#editRefusedField(error);
+      if (field === null) this.editError = codeOf(error);
+      else this.editRefusal = { field, code: codeOf(error) };
+      return;
+    }
+    this.#reloadDevices().catch((error: unknown) => this.#showReadError(error));
+    if (epoch !== this.#editEpoch) return;
+    const readerId = this.chosenReaderId === "" ? null : this.chosenReaderId;
+    if (this.readerState === "ready" && readerId !== this.#storedReaderId) {
+      // Saved separately: the reader belongs to the payments module and its own permission (spec §5).
+      try {
+        await this.api.setDeviceReader(device.id, readerId);
+      } catch (error) {
+        if (epoch !== this.#editEpoch) return;
+        this.editSaving = false;
+        this.editRefusal = { field: "reader", code: codeOf(error) };
+        return;
+      }
+      if (epoch !== this.#editEpoch) return;
+      this.#storedReaderId = readerId;
+    }
+    this.editSaving = false;
+    await this.#closeModal("edit-device-modal");
+    this.#endEdit();
+  }
+
+  #deviceActions(device: DeviceRow): TemplateResult | typeof nothing {
+    if (!device.active) return nothing;
+    const armed = this.armedRemoveId === device.id;
+    return html`<dashboard-row-actions .label=${`${t("devices.actions")}: ${device.label}`}>
+      <wt-button data-test=${`edit-device-${device.id}`} @click=${() => this.#openEdit(device)}
+        >${t("devices.edit")}</wt-button
+      >
+      <wt-button
+        variant="danger"
+        data-keep-open
+        data-test=${`remove-${device.id}`}
+        data-armed=${armed ? "true" : nothing}
+        @click=${() => this.#onRemove(device.id)}
+        >${armed ? t("devices.remove_confirm") : t("devices.remove")}</wt-button
+      >
+    </dashboard-row-actions>`;
+  }
+
+  #renderDevicesTable(): TemplateResult {
+    const columns: DataTableColumn<DeviceRow>[] = [
+      {
+        key: "name",
+        label: t("devices.name"),
+        sortValue: (d) => d.label,
+        cell: (d) =>
+          html`<span data-test=${`device-row-${d.id}`}
+            ><span data-test=${`device-label-${d.id}`}>${d.label}</span></span
+          >`,
+      },
+      {
+        key: "profile",
+        choosable: "shown",
+        label: t("devices.device_profile"),
+        sortValue: (d) => this.#profileName(d.deviceProfileId),
+        cell: (d) =>
+          html`<span data-test=${`device-profile-${d.id}`}
+            >${this.#profileName(d.deviceProfileId)}</span
+          >`,
+      },
+      {
+        key: "shows",
+        choosable: "shown",
+        label: t("devices.column_shows"),
+        cell: (d) =>
+          html`<span data-test=${`device-station-${d.id}`}
+            >${d.kind === "kds_station" ? this.#bindingName(d) : ""}</span
+          >`,
+      },
+      {
+        key: "status",
+        choosable: "shown",
+        label: t("devices.column_status"),
+        cell: (d) =>
+          html`<span data-test=${`device-status-${d.id}`}
+            >${d.active ? t("devices.status_active") : t("devices.status_revoked")}</span
+          >`,
+      },
+      {
+        key: "lastSeen",
+        choosable: "shown",
+        label: t("devices.column_last_seen"),
+        sortValue: (d) => d.lastSeenAt,
+        cell: (d) =>
+          html`<span data-test=${`device-last-seen-${d.id}`}
+            >${this.#lastSeen(d.lastSeenAt)}</span
+          >`,
+      },
+      {
+        key: "actions",
+        label: t("devices.actions"),
+        pinned: "end",
+        cell: (d) => this.#deviceActions(d),
+      },
+    ];
+    return html`<wt-data-table
+      noMatchesMessage=${tableNoMatches()}
+      filterSearchPlaceholder=${t("categories.combobox_search")}
+      filterNoResultsLabel=${t("categories.combobox_no_results")}
+      data-test="devices-table"
+      viewKey="devices"
+      customiseColumnsLabel=${t("table.customise_columns")}
+      customiseLabel=${t("table.customise")}
+      restoreColumnsLabel=${t("table.restore_columns")}
+      doneLabel=${t("table.done")}
+      moveColumnLabel=${t("table.move_column")}
+      showColumnLabel=${t("table.show_column")}
+      hideColumnLabel=${t("table.hide_column")}
+      alwaysShownColumnLabel=${t("table.column_always_shown")}
+      lastShownColumnLabel=${t("table.column_last_shown")}
+      columnPositionLabel=${t("table.column_position")}
+      filtersLabel=${t("table.filters")}
+      filteredColumnLabel=${t("table.filtered_column")}
+      filtersClearAllLabel=${t("table.filters_clear_all")}
+      filtersCloseLabel=${t("table.filters_close")}
+      aria-label=${t("devices.title")}
+      .rows=${this.devices}
+      .columns=${columns}
+      .rowKey=${(d: DeviceRow) => d.id}
+      .rowClick=${(d: DeviceRow) => this.#openEdit(d)}
+      .rowClickable=${(d: DeviceRow) => d.active}
+      .rowClickLabel=${(d: DeviceRow) => t("devices.edit_title").replace("{name}", d.label)}
+    ></wt-data-table>`;
   }
 
   #renderAddButton(): TemplateResult {
@@ -958,63 +1068,35 @@ export class DevicesScreen extends LitElement {
       </div>`;
   }
 
-  #renderBindingPicker(error: string): TemplateResult | typeof nothing {
-    if (!this.#bindingShown()) return nothing;
-    return html`<wt-combobox
-      data-test="pair-binding"
-      name="binding"
-      required
-      label=${t("devices.shows")}
-      search="auto"
-      placeholder=${t("devices.join_pick_binding")}
-      searchPlaceholder=${t("categories.combobox_search")}
-      noResultsLabel=${t("categories.combobox_no_results")}
-      .options=${[
-        ...this.stations
-          .filter((station) => station.active)
-          .map((station) => ({
-            value: `station:${station.id}`,
-            label: station.name,
-            group: t("devices.stations_group"),
-          })),
-        ...this.watchers
-          .filter((watcher) => watcher.active)
-          .map((watcher) => ({
-            value: `watcher:${watcher.id}`,
-            label: watcher.name,
-            group: t("devices.watchers_group"),
-          })),
-      ]}
-      .value=${this.chosenBinding}
-      .error=${error}
-      .invalid=${error !== ""}
-      @wt-change=${(e: CustomEvent<{ value: string }>) => {
-        this.chosenBinding = e.detail.value;
-        this.#clearRefusal("binding");
-      }}
-    ></wt-combobox>`;
-  }
-
-  #renderSettingsStep(errors: Record<PairField, string>): TemplateResult {
-    return html`<div class="pair-fields">
-      <wt-input
-        data-test="pair-name"
+  /** The name, profile and Shows fields that Pair's settings step and the Edit dialog share. */
+  #renderIdentityFields(
+    prefix: "pair" | "edit",
+    values: { name: string; profileId: string; binding: string },
+    errors: IdentityErrors,
+    on: { name(value: string): void; profile(value: string): void; binding(value: string): void },
+  ): TemplateResult {
+    return html`<wt-input
+        data-test=${`${prefix}-name`}
         name="name"
         required
         label=${t("devices.name")}
-        .value=${live(this.pairName)}
+        .value=${live(values.name)}
         .error=${errors.name}
         .invalid=${errors.name !== ""}
         @keydown=${(e: KeyboardEvent) =>
-          submitOnEnter(e, this.renderRoot.querySelector<HTMLElement>("[data-test=pair-submit]"))}
+          submitOnEnter(
+            e,
+            this.renderRoot.querySelector<HTMLElement>(
+              `[data-test=${prefix === "pair" ? "pair-submit" : "edit-save"}]`,
+            ),
+          )}
         @wt-change=${(e: CustomEvent<{ value: string }>) => {
           e.stopPropagation();
-          this.pairName = e.detail.value;
-          this.#clearRefusal("name");
+          on.name(e.detail.value);
         }}
       ></wt-input>
       <wt-combobox
-        data-test="pair-profile"
+        data-test=${`${prefix}-profile`}
         name="profileId"
         required
         label=${t("devices.device_profile")}
@@ -1023,17 +1105,74 @@ export class DevicesScreen extends LitElement {
         searchPlaceholder=${t("categories.combobox_search")}
         noResultsLabel=${t("categories.combobox_no_results")}
         .options=${this.deviceProfiles.map((p) => ({ value: p.id, label: p.name }))}
-        .value=${this.chosenProfileId}
+        .value=${values.profileId}
         .error=${errors.profile}
         .invalid=${errors.profile !== ""}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => {
-          this.chosenProfileId = e.detail.value;
-          this.chosenBinding = "";
-          this.#clearRefusal("profile");
-          this.#clearRefusal("binding");
-        }}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => on.profile(e.detail.value)}
       ></wt-combobox>
-      ${this.#renderBindingPicker(errors.binding)}
+      ${
+        this.#bindingShownFor(values.profileId)
+          ? html`<wt-combobox
+              data-test=${`${prefix}-binding`}
+              name="binding"
+              required
+              label=${t("devices.shows")}
+              search="auto"
+              placeholder=${t("devices.join_pick_binding")}
+              searchPlaceholder=${t("categories.combobox_search")}
+              noResultsLabel=${t("categories.combobox_no_results")}
+              .options=${this.#bindingOptions()}
+              .value=${values.binding}
+              .error=${errors.binding}
+              .invalid=${errors.binding !== ""}
+              @wt-change=${(e: CustomEvent<{ value: string }>) => on.binding(e.detail.value)}
+            ></wt-combobox>`
+          : nothing
+      }`;
+  }
+
+  #bindingOptions(): { value: string; label: string; group: string }[] {
+    return [
+      ...this.stations
+        .filter((station) => station.active)
+        .map((station) => ({
+          value: `station:${station.id}`,
+          label: station.name,
+          group: t("devices.stations_group"),
+        })),
+      ...this.watchers
+        .filter((watcher) => watcher.active)
+        .map((watcher) => ({
+          value: `watcher:${watcher.id}`,
+          label: watcher.name,
+          group: t("devices.watchers_group"),
+        })),
+    ];
+  }
+
+  #renderSettingsStep(errors: IdentityErrors): TemplateResult {
+    return html`<div class="pair-fields">
+      ${this.#renderIdentityFields(
+        "pair",
+        { name: this.pairName, profileId: this.chosenProfileId, binding: this.chosenBinding },
+        errors,
+        {
+          name: (value) => {
+            this.pairName = value;
+            this.#clearRefusal("name");
+          },
+          profile: (value) => {
+            this.chosenProfileId = value;
+            this.chosenBinding = "";
+            this.#clearRefusal("profile");
+            this.#clearRefusal("binding");
+          },
+          binding: (value) => {
+            this.chosenBinding = value;
+            this.#clearRefusal("binding");
+          },
+        },
+      )}
     </div>`;
   }
 
@@ -1082,6 +1221,139 @@ export class DevicesScreen extends LitElement {
     </wt-modal>`;
   }
 
+  #renderEditDialog(): TemplateResult | typeof nothing {
+    const device = this.editing;
+    if (device === null) return nothing;
+    const form = this.editForm;
+    const errors = this.#editErrors();
+    const own = this.#editOwnErrors();
+    const blocked = own.name !== "" || own.profile !== "" || own.binding !== "";
+    const marked = Object.values(errors).some((error) => error !== "");
+    const profile = this.deviceProfiles.find((p) => p.id === form.profileId);
+    const kitchen = this.#editBindingShown();
+    return html`<wt-modal
+      size="standard"
+      data-test="edit-device-modal"
+      heading=${t("devices.edit_title").replace("{name}", device.label)}
+      .open=${true}
+      .dismissible=${!this.editSaving}
+      @wt-close=${() => this.#endEdit()}
+    >
+      <div class="edit-fields">
+        ${this.#renderIdentityFields("edit", form, errors, {
+          name: (value) => this.#setEdit({ name: value }, "name"),
+          profile: (value) => this.#onEditProfile(value),
+          binding: (value) => this.#setEdit({ binding: value }, "binding"),
+        })}
+        <wt-combobox
+          data-test="edit-receipt-printer"
+          name="receiptPrinterId"
+          label=${t("devices.receipt_printer_now")}
+          search="auto"
+          searchPlaceholder=${t("categories.combobox_search")}
+          noResultsLabel=${t("categories.combobox_no_results")}
+          .options=${this.#printerOptions(profile?.receiptPrinterIds ?? [], device.receiptPrinterId)}
+          .value=${form.receiptPrinterId}
+          .error=${errors.receipt}
+          .invalid=${errors.receipt !== ""}
+          @wt-change=${(e: CustomEvent<{ value: string }>) =>
+            this.#setEdit({ receiptPrinterId: e.detail.value }, "receipt")}
+        ></wt-combobox>
+        <wt-combobox
+          data-test="edit-slip-printer"
+          name="paymentSlipPrinterId"
+          label=${t("devices.slip_printer_now")}
+          search="auto"
+          searchPlaceholder=${t("categories.combobox_search")}
+          noResultsLabel=${t("categories.combobox_no_results")}
+          .options=${this.#printerOptions(
+            profile?.paymentSlipPrinterIds ?? [],
+            device.paymentSlipPrinterId,
+          )}
+          .value=${form.paymentSlipPrinterId}
+          .error=${errors.slip}
+          .invalid=${errors.slip !== ""}
+          @wt-change=${(e: CustomEvent<{ value: string }>) =>
+            this.#setEdit({ paymentSlipPrinterId: e.detail.value }, "slip")}
+        ></wt-combobox>
+        ${kitchen ? nothing : this.#renderMadeHere()}
+        ${this.readerState === "hidden" ? nothing : this.#renderReader(errors.reader)}
+      </div>
+      <wt-form-actions
+        slot="footer"
+        data-test="edit-actions"
+        .error=${bottomMessage(
+          refusal(this.editError),
+          refusal(this.readerReadError),
+          marked ? t("form.fix_fields") : null,
+        )}
+      >
+        <wt-button
+          slot="cancel"
+          data-test="edit-cancel"
+          ?disabled=${this.editSaving}
+          @click=${() => void this.#closeModal("edit-device-modal")}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button
+          variant="primary"
+          data-test="edit-save"
+          ?loading=${this.editSaving}
+          ?disabled=${blocked}
+          @click=${() => void this.#submitEdit()}
+          >${t("action.save")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-modal>`;
+  }
+
+  #renderMadeHere(): TemplateResult {
+    return html`<fieldset class="made-here" data-test="edit-made-here">
+      <legend>${t("devices.made_here")}</legend>
+      <p class="hint">${t("devices.made_here_hint")}</p>
+      ${this.stations
+        .filter((station) => station.active)
+        .map(
+          (station) =>
+            html`<label class="check">
+              <input
+                type="checkbox"
+                name="madeHereStationIds"
+                value=${station.id}
+                .checked=${live(this.editForm.madeHere.includes(station.id))}
+                @change=${(e: Event) =>
+                  this.#onMadeHereChange(station.id, (e.target as HTMLInputElement).checked)}
+              />
+              ${station.name}</label
+            >`,
+        )}
+    </fieldset>`;
+  }
+
+  #renderReader(error: string): TemplateResult {
+    return html`<wt-combobox
+      data-test="edit-reader"
+      name="defaultReaderId"
+      label=${t("devices.default_reader")}
+      search="auto"
+      placeholder=${t("devices.default_reader_none")}
+      searchPlaceholder=${t("categories.combobox_search")}
+      noResultsLabel=${t("categories.combobox_no_results")}
+      ?disabled=${this.readerState !== "ready"}
+      .options=${[
+        { value: "", label: t("devices.default_reader_none") },
+        ...this.readers.map((r) => ({ value: r.id, label: this.#readerLabel(r) })),
+      ]}
+      .value=${this.chosenReaderId}
+      .error=${error}
+      .invalid=${error !== ""}
+      @wt-change=${(e: CustomEvent<{ value: string }>) => {
+        this.chosenReaderId = e.detail.value;
+        this.#clearEditRefusal("reader");
+      }}
+    ></wt-combobox>`;
+  }
+
   override render(): TemplateResult {
     return html`
       <div class="heading">
@@ -1094,9 +1366,7 @@ export class DevicesScreen extends LitElement {
           this.devices.length === 0
             ? html`<p class="empty" data-test="no-devices">${t("devices.no_devices")}</p>
                 ${this.#renderAddButton()}`
-            : html`<ol>
-                ${this.devices.map((device) => this.#renderDevice(device))}
-              </ol>`
+            : this.#renderDevicesTable()
         }
       </section>
 
@@ -1107,7 +1377,7 @@ export class DevicesScreen extends LitElement {
             </p>`
           : nothing
       }
-      ${this.#renderAddDialog()} ${this.#renderPairDialog()}
+      ${this.#renderAddDialog()} ${this.#renderPairDialog()} ${this.#renderEditDialog()}
     `;
   }
 }

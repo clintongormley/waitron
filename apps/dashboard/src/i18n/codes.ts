@@ -514,8 +514,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ya hay un dispositivo activo con ese nombre aquí. Elige otro",
   },
   "device.binding_invalid": {
-    en: "That profile is no longer available",
-    es: "Ese perfil ya no está disponible",
+    en: "This profile cannot use that printer, or it has been switched off. Choose another",
+    es: "Este perfil no puede usar esa impresora, o la impresora se ha desactivado. Elige otra",
   },
   "shared.invalid_id": {
     en: "That identifier isn't valid",
