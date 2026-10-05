@@ -1238,7 +1238,7 @@ pending update has run, the Modifiers control, an attached row's button, and foc
 field during the wait — each failed with its part of the fix removed. The course box is still
 focused once with no wait, because the editor never draws it disabled.
 
-**A click on a switch's knob, track, gap or label flips it once (W76, owner 2026-10-04) — DONE.** The
+**A click on a switch's knob, track, gap or label flips it once (W76, owner 2026-10-04) — DONE (#1218).** The
 owner, on the Extras editor: _"make the toggle field work when you click anywhere on it, not just on
 one side or the other"_. In the shared `packages/ui/src/components/wt-switch.ts` a click on the round
 knob, in the gap between the switch and its label, or just above the label did nothing before:
@@ -2155,7 +2155,7 @@ lies over its name, price and badges, named "Edit: <variant>" and disabled while
 or another of the editor's windows is open. The drag handle, the Available switch and the row menu
 are lifted above it and keep their own clicks. Left open from its review: a click exactly on the
 Available switch's round knob does not flip it — the run-it reviewer reported the same on `main`
-before the branch, so it is in the shared `wt-switch`, not the row; DONE by W76 (the knob now flips
+before the branch, so it is in the shared `wt-switch`, not the row; DONE by W76 (#1218; the knob now flips
 the switch; tested on the switch itself, not in this table).
 
 **The price's unit button says "Each" or "per kg", never "per Each" (A216) — DONE (#1057).** The owner:
@@ -4177,7 +4177,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       `wt-switch` that is on does not turn it off (clicking the label or its left edge, or Space,
       does), seen on the Device profiles screen, on the existing "Integrated card payment" switch
       too — the same knob already left open under A215 (clicking a variant's row); `packages/ui`
-      is untouched by C130. The knob is DONE by W76.
+      is untouched by C130. The knob is DONE by W76 (#1218).
     - **Done (C133, #1045) — the till's tabs fit one screen, with or without a notice above them.**
       The page gives the till the screen less its padding (`apps/till/index.html`), and the error
       banner and the other notices above the tabs take their height from the tab shell, so the
