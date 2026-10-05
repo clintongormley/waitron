@@ -1,7 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import type { LitElement } from "lit";
 import { userEvent } from "vitest/browser";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   CatalogueSummary,
   CategorySummary,
@@ -26,7 +26,7 @@ import type { CatalogueBrowser } from "../widgets/catalogue-browser.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { CatalogueScreen } from "./catalogue-screen.js";
 import { ROOT_KEY } from "../widgets/product-list.js";
 
@@ -1528,6 +1528,97 @@ describe("catalogue-screen", () => {
       editor(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!
         .disabled,
     ).toBe(false);
+  });
+
+  describe("a staff name another Active product already has", () => {
+    let locale: string;
+    beforeEach(() => {
+      locale = currentLocale();
+      setLocale("en-GB");
+    });
+    afterEach(() => setLocale(locale));
+    const MESSAGE = "Another active product or variant already has this name.";
+    const variantRow = {
+      customerName: null,
+      kitchenName: null,
+      image: null,
+      unitPrice: null,
+      available: true,
+      active: true,
+    };
+    const sent = {
+      ...value,
+      name: "Croquetas",
+      variants: [
+        { ...variantRow, id: "v1", name: "Media" },
+        { ...variantRow, id: "v2", name: "Entera" },
+      ],
+    };
+    async function refuse(field: string) {
+      const api = stubApi({
+        getProductEditor: vi.fn().mockResolvedValue(sent),
+        updateProductEditor: vi.fn().mockRejectedValue({
+          code: "product.name_taken",
+          params: { field, name: "Entera" },
+          status: 409,
+        }),
+      });
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      emit(editor(el), "wt-submit", { value: sent });
+      await flush(el);
+      await editor(el).updateComplete;
+      return el;
+    }
+
+    it("puts the refusal beside the product's Name with its own message, keeping the draft", async () => {
+      const el = await refuse("name");
+      expect(editor(el).open).toBe(true);
+      expect(editor(el).fieldErrors).toEqual({ name: MESSAGE });
+      const name = editor(el).shadowRoot!.querySelector("[name=name]") as unknown as {
+        error: string;
+        value: string;
+      };
+      expect(name).toMatchObject({ error: MESSAGE, value: "Croquetas" });
+      expect(await bottomOf(editor(el))).toBe(t("form.fix_fields"));
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    });
+
+    it("puts the refusal beside the variant row's Name", async () => {
+      const el = await refuse("variants.1.name");
+      expect(editor(el).fieldErrors).toEqual({ "variant-1-name": MESSAGE });
+      const table = editor(el).shadowRoot!.querySelector("dashboard-variant-table")!;
+      await table.updateComplete;
+      expect(table.shadowRoot!.querySelector("[data-test=error-1]")?.textContent).toContain(
+        MESSAGE,
+      );
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    });
+
+    it("says it in Spanish", async () => {
+      setLocale("es");
+      const el = await refuse("name");
+      expect(editor(el).fieldErrors).toEqual({
+        name: "Ya hay otro producto o variante activo con este nombre.",
+      });
+    });
+
+    it("names the clash in the screen's banner when a restore from the list is refused", async () => {
+      const api = stubApi({
+        updateProductEditor: vi.fn().mockRejectedValue({
+          code: "product.name_taken",
+          params: { field: "name", name: "Croquetas" },
+          status: 409,
+        }),
+      });
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "restore-product", { productId: "p1" });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(MESSAGE);
+    });
   });
 
   it("marks the variant whose translation the save refused, and reaches its window", async () => {

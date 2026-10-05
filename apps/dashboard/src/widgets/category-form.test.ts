@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, onTestFinished } from "vitest";
 import {
   categoryAncestors,
   categoryPath,
@@ -6,6 +6,7 @@ import {
   categoryWithDescendants,
 } from "./category-form.js";
 import { codeMessage } from "../i18n/codes.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import type { CategorySummary } from "../api/client.js";
 
 const food: CategorySummary = {
@@ -67,6 +68,15 @@ it("puts a refused category write beside the form field it concerns", () => {
   expect(categoryRefusalErrors(refusal("category.not_found", { categoryId: "c1" }), "c1")).toEqual({
     parent: codeMessage("category.not_found"),
   });
+});
+
+it("puts a duplicate sibling name beside the Name field with a message of its own", () => {
+  const locale = currentLocale();
+  onTestFinished(() => setLocale(locale));
+  setLocale("en-GB");
+  expect(
+    categoryRefusalErrors(refusal("category.name_taken", { field: "name", name: "Mains" })),
+  ).toEqual({ name: "Another category in the same place already has this name." });
 });
 
 it("keeps a refused category write that names no field of the form for the bottom message alone", () => {

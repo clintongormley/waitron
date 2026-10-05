@@ -52,6 +52,7 @@ export function categoryWithDescendants(
 
 const FIELD_BY_CODE = new Map([
   ["category.invalid", "name"],
+  ["category.name_taken", "name"],
   ["category.parent_cycle", "parent"],
 ]);
 const FIELD_BY_REQUEST_FIELD = new Map([
