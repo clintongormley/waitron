@@ -1706,6 +1706,283 @@ describe("the product list at phone width", () => {
       }),
   );
 
+  const longCategory = {
+    id: "long",
+    name: "Embutidos ibéricos y quesos curados de la casa",
+    parentId: null,
+  };
+  const longProduct = () =>
+    product({
+      id: "croquetas",
+      name: "Croquetas caseras de jamón ibérico de bellota",
+      primaryCategoryId: "long",
+      variants: [
+        { ...bunVariant, id: "r10", name: "Ración de diez croquetas caseras de jamón" },
+        { ...bunVariant, id: "r6", name: "Media ración de seis croquetas" },
+        { ...bunVariant, id: "r4", name: "Tapa de cuatro" },
+        { ...bunVariant, id: "r2", name: "Dos" },
+      ],
+    });
+  const singleWords = () => ({
+    categories: [{ id: "long", name: "Embutidosibéricosyquesoscuradosdelacasa", parentId: null }],
+    products: [
+      product({
+        id: "croquetas",
+        name: "Croquetascaserasdejamónibéricodebellota",
+        primaryCategoryId: "long",
+        variants: [
+          { ...bunVariant, id: "r10", name: "Racióndediezcroquetascaserasdejamón" },
+          { ...bunVariant, id: "r6", name: "Mediaración" },
+        ],
+      }),
+    ],
+  });
+
+  async function mountLong(props: Partial<ProductList> = {}, bounded = false) {
+    const { el, host } = await mountWidget<ProductList>("dashboard-product-list", {
+      categories: [longCategory],
+      products: [longProduct()],
+      unroutedFolderIds: ["long"],
+      stickyHeader: bounded,
+      ...props,
+    });
+    if (bounded) {
+      host.style.display = "flex";
+      host.style.flexDirection = "column";
+      host.style.height = "600px";
+    }
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = await tableRoot(el);
+    await frames();
+    return { el, table, root };
+  }
+
+  const frames = async () => {
+    for (let frame = 0; frame < 2; frame++) await new Promise(requestAnimationFrame);
+  };
+
+  async function openEverything(el: ProductList, root: ShadowRoot) {
+    await openRow(el, "folder:long");
+    root.querySelector<HTMLElement>('tr[data-row-key="croquetas"] .tree-toggle')!.click();
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+  }
+
+  /** Each name text in the Name column of the drawn rows — its glyphs' own extent, not its box —
+   * against the row's pinned cell and the scroller's start. */
+  async function nameTexts(root: ShadowRoot) {
+    await frames();
+    const start = root.querySelector(".scroll")!.getBoundingClientRect().left;
+    const nameColumn = [...root.querySelectorAll("thead th")].findIndex((cell) =>
+      cell.textContent!.trim().startsWith(t("product.name")),
+    );
+    return [...root.querySelectorAll<HTMLElement>("tbody tr[data-row-key]")].flatMap((row) => {
+      const pinned = row.querySelector('td[data-pinned="end"]')!.getBoundingClientRect().left;
+      const cell = [...row.querySelectorAll("td")][nameColumn]!;
+      return [
+        ...cell.querySelectorAll<HTMLElement>(
+          'strong, [part~="count"], [part~="unrouted-folder"], [part~="variant-count"], [part~="variant-name"]',
+        ),
+      ].map((element) => {
+        const text = document.createRange();
+        text.selectNodeContents(element);
+        const lines = new Set([...text.getClientRects()].map(({ bottom }) => Math.round(bottom)));
+        const { left, right, bottom, top } = text.getBoundingClientRect();
+        return {
+          key: row.getAttribute("data-row-key")!,
+          text: element.textContent!.trim(),
+          left,
+          right,
+          top,
+          bottom,
+          lines: lines.size,
+          start,
+          pinned,
+        };
+      });
+    });
+  }
+
+  function expectNamesClear(texts: Awaited<ReturnType<typeof nameTexts>>, keys: string[]) {
+    expect(new Set(texts.map(({ key }) => key))).toEqual(new Set(keys));
+    for (const text of texts) {
+      expect(text.left, text.text).toBeGreaterThanOrEqual(text.start);
+      expect(text.right, text.text).toBeLessThanOrEqual(text.pinned);
+    }
+  }
+
+  const everyRow = [
+    ROOT_KEY,
+    "folder:long",
+    "croquetas",
+    "croquetas:r10",
+    "croquetas:r6",
+    "croquetas:r4",
+    "croquetas:r2",
+  ];
+
+  it.each(["en-GB", "es-ES"])(
+    "wraps every long name, count and variant name before the pinned actions at 390 px, unscrolled (%s)",
+    (locale) =>
+      onPhone(locale, 390, async () => {
+        const { el, root } = await mountLong();
+        await openEverything(el, root);
+        const texts = await nameTexts(root);
+        expect(root.querySelector<HTMLElement>(".scroll")!.scrollLeft).toBe(0);
+        expectNamesClear(texts, everyRow);
+        expect(texts.map(({ text }) => text)).toEqual(
+          expect.arrayContaining([
+            t("folders.all_products"),
+            longCategory.name,
+            "*",
+            longProduct().name,
+            t("product.variant_count").replace("{count}", "4"),
+            "Ración de diez croquetas caseras de jamón",
+          ]),
+        );
+        const wrapped = texts.filter(({ lines }) => lines > 1).map(({ text }) => text);
+        expect(wrapped).toEqual(
+          expect.arrayContaining([
+            longCategory.name,
+            longProduct().name,
+            "Ración de diez croquetas caseras de jamón",
+          ]),
+        );
+      }),
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "wraps a single long word inside the room before the pinned actions at 390 px (%s)",
+    (locale) =>
+      onPhone(locale, 390, async () => {
+        const { el, root } = await mountLong(singleWords());
+        await openEverything(el, root);
+        const texts = await nameTexts(root);
+        expect(root.querySelector<HTMLElement>(".scroll")!.scrollLeft).toBe(0);
+        expectNamesClear(texts, [
+          ROOT_KEY,
+          "folder:long",
+          "croquetas",
+          "croquetas:r10",
+          "croquetas:r6",
+        ]);
+        const wrapped = texts.filter(({ lines }) => lines > 1).map(({ text }) => text);
+        expect(wrapped).toEqual(
+          expect.arrayContaining([
+            "Embutidosibéricosyquesoscuradosdelacasa",
+            "Croquetascaserasdejamónibéricodebellota",
+            "Racióndediezcroquetascaserasdejamón",
+          ]),
+        );
+      }),
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "fits a variant's long name opened after the list first drew, in a bounded list at 390 px (%s)",
+    (locale) =>
+      onPhone(locale, 390, async () => {
+        const { el, root } = await mountLong({}, true);
+        await openRow(el, "folder:long");
+        await frames();
+        root.querySelector<HTMLElement>('tr[data-row-key="croquetas"] .tree-toggle')!.click();
+        await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+        expectNamesClear(await nameTexts(root), everyRow);
+      }),
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "fits the names again when the screen narrows from 430 to 390 px (%s)",
+    (locale) =>
+      onPhone(locale, 430, async () => {
+        const { el, root } = await mountLong();
+        await openEverything(el, root);
+        expectNamesClear(await nameTexts(root), everyRow);
+        await page.viewport(390, 844);
+        expectNamesClear(await nameTexts(root), everyRow);
+      }),
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "fits the names again when selection adds a column before them in a bounded list at 390 px (%s)",
+    (locale) =>
+      onPhone(locale, 390, async () => {
+        const { el, root } = await mountLong({}, true);
+        await openEverything(el, root);
+        const before = await nameTexts(root);
+        expectNamesClear(before, everyRow);
+        el.selecting = true;
+        await el.updateComplete;
+        await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+        expect(
+          root.querySelector('tr[data-row-key="folder:long"] input[type="checkbox"]'),
+        ).not.toBeNull();
+        const after = await nameTexts(root);
+        expectNamesClear(after, everyRow);
+        expect(after.map(({ pinned }) => pinned)).toEqual(before.map(({ pinned }) => pinned));
+      }),
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "measures the names' room as if unscrolled when branches open with the table scrolled sideways at 390 px (%s)",
+    (locale) =>
+      onPhone(locale, 390, async () => {
+        const { el, root } = await mountLong();
+        const scroll = root.querySelector<HTMLElement>(".scroll")!;
+        scroll.scrollLeft = 120;
+        expect(scroll.scrollLeft).toBe(120);
+        await openEverything(el, root);
+        await frames();
+        expect(scroll.scrollLeft).toBe(120);
+        scroll.scrollLeft = 0;
+        expectNamesClear(await nameTexts(root), everyRow);
+      }),
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "fits a long product name a search reveals, in a bounded list at 390 px (%s)",
+    (locale) =>
+      onPhone(locale, 390, async () => {
+        const { el, root } = await mountLong({}, true);
+        expectNamesClear(await nameTexts(root), [ROOT_KEY, "folder:long"]);
+        el.search = "bellota";
+        await el.updateComplete;
+        await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+        expect(rowKeys(root)).toContain("croquetas");
+        const texts = await nameTexts(root);
+        expect(texts.map(({ text }) => text)).toContain(longProduct().name);
+        expectNamesClear(texts, [ROOT_KEY, "folder:long", "croquetas"]);
+      }),
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "keeps a normal name, its count and its variants on one line each at 1280 px (%s)",
+    (locale) =>
+      onPhone(locale, 1280, async () => {
+        const { el, root } = await mountLong({
+          categories: [{ id: "long", name: "Embutidos", parentId: null }],
+          products: [
+            product({
+              id: "croquetas",
+              primaryCategoryId: "long",
+              variants: [
+                { ...bunVariant, id: "r10", name: "Ración de diez" },
+                { ...bunVariant, id: "r6", name: "Media ración" },
+              ],
+            }),
+          ],
+        });
+        await openEverything(el, root);
+        const texts = await nameTexts(root);
+        expect(new Set(texts.map(({ key }) => key))).toEqual(
+          new Set([ROOT_KEY, "folder:long", "croquetas", "croquetas:r10", "croquetas:r6"]),
+        );
+        for (const text of texts) expect(text.lines, text.text).toBe(1);
+        for (const key of [ROOT_KEY, "folder:long"]) {
+          const [name, ...after] = texts.filter((text) => text.key === key);
+          for (const text of after) expect(text.top, text.text).toBeLessThan(name!.bottom);
+        }
+      }),
+  );
+
   it("lines each name up with the price beside it, with a thumbnail, a placeholder or neither", async () => {
     const products = [
       product({ id: "pictured", image: "abc123.webp" }),

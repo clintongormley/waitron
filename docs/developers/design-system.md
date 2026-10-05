@@ -881,7 +881,12 @@ slot — on a product row, the product's photo, or its empty placeholder frame w
 `--wt-space-3` and the name. So on those rows names step in by the table's indent per level whether
 the row is a category or a product, and the Name heading sits over the All products name. A
 variant's row draws no grip and no photo slot; its name is indented to start under its product's
-name.
+name. Each name, with what follows it on its row (a category's count and the asterisk that marks a
+category with no active station, a product's variant count), takes only the room between its own
+start and the row's pinned Actions cell, measured as if the table were unscrolled, and wraps inside
+it, a single long word included; a name that fits stays on one line (`#fitNames`,
+`apps/dashboard/src/widgets/product-list.ts`). The one exception: while a category is being renamed,
+its count and asterisk follow the name box and are not capped.
 
 Use `wt-modal` for an add or edit form. Its fields stop at `--wt-form-max-width` (see "Structure"
 above). Give it a `size` chosen by its content:
