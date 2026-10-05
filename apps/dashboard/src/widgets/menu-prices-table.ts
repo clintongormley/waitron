@@ -11,6 +11,7 @@ import { describeSetting, placeName } from "./price-source.js";
 import {
   productInherited,
   sizeClash,
+  sizeSetting,
   sizesInheritedFrom,
   variantInherited,
   variantInheritedFrom,
@@ -337,9 +338,7 @@ export class MenuPricesTable extends LitElement {
   }
 
   #priceSetting({ item, variant }: Line): Setting<Decimal> {
-    return variant
-      ? item.combined.variants.find((v) => v.variantId === variant.variantId)!.price
-      : item.combined.price;
+    return variant ? sizeSetting(item, variant.variantId) : item.combined.price;
   }
 
   #readLines(): void {

@@ -38,7 +38,7 @@ function parentSetting(row: MenuPriceRow, parent: ParentPrice): Setting<Decimal>
     : { state: "decided", value: parent as Decimal, source: { kind: "own" }, otherwise: under };
 }
 
-const sizeSetting = (row: MenuPriceRow, variantId: string) =>
+export const sizeSetting = (row: MenuPriceRow, variantId: string) =>
   row.combined.variants.find((v) => v.variantId === variantId)!.price;
 
 export function variantInheritedFrom(

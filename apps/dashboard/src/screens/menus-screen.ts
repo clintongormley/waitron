@@ -111,10 +111,9 @@ function refusal(error: unknown): Record<string, string> {
  * `namesTheName` in `course-list.ts` decides for a course's name. */
 function namesThePrice(error: unknown, save: PriceSave): boolean {
   const code = codeOf(error);
-  const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
   return (
-    (code === "product.variant_invalid" && field === "price") ||
-    (code === "management.request_invalid" && (field === "grossPrice" || field === "price")) ||
+    (code === "product.variant_invalid" && fieldOf(error) === "price") ||
+    (code === "management.request_invalid" && ["grossPrice", "price"].includes(fieldOf(error))) ||
     (code === "product.variant_not_found" && save.variantId !== null)
   );
 }
