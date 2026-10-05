@@ -932,6 +932,29 @@ describe("routing outcomes and menu readiness", () => {
 });
 
 describe("departments", () => {
+  it("resolves a recorded zone's receipt policy after the zone is deactivated", async () => {
+    const locationId = brandLocationId(await seedLocation("Retained sale policy"));
+    const zoneId = await seedZone(locationId, "Old counter");
+    const cfg = { locationId };
+    await scoped(async (tx) => {
+      const department = await createDepartment(tx, cfg, {
+        name: "Restaurant",
+        defaultServiceMode: "prepay",
+      });
+      await configureZone(tx, cfg, { zoneId, departmentId: department.id });
+      await setZoneSalePolicyOverride(tx, cfg, zoneId, "receiptPrintMode", "never");
+      await deactivateServiceZone(tx, cfg, zoneId);
+    });
+
+    await expect(scoped((tx) => resolveSalePolicy(tx, cfg, zoneId))).resolves.toMatchObject({
+      zoneId,
+      receiptPrintMode: "never",
+    });
+    await expect(
+      scoped((tx) => setZoneSalePolicyOverride(tx, cfg, zoneId, "receiptPrintMode", "auto")),
+    ).rejects.toMatchObject({ code: "service_zone.not_found" });
+  });
+
   it("clears one zone override without changing another policy field", async () => {
     const locationId = brandLocationId(await seedLocation("Cleared sale override"));
     const zoneId = await seedZone(locationId, "Terrace");

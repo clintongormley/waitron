@@ -641,8 +641,6 @@ export async function resolveSalePolicy(
       and(
         eq(zoneServicePolicies.locationId, cfg.locationId),
         eq(zoneServicePolicies.zoneId, zoneId),
-        eq(floorZones.active, true),
-        eq(departments.active, true),
       ),
     );
   if (row === undefined) throw new AppError("service_zone.not_found", { zoneId });
@@ -757,7 +755,9 @@ export async function setZoneSalePolicyOverride<K extends keyof ZonePolicyField>
   field: K,
   value: ZonePolicyField[K],
 ): Promise<void> {
-  await resolveSalePolicy(tx, cfg, zoneId);
+  if (!(await listServiceZones(tx, cfg)).some((zone) => zone.id === zoneId)) {
+    throw new AppError("service_zone.not_found", { zoneId });
+  }
   await tx
     .update(zoneSalePolicies)
     .set({ [field]: value })

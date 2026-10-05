@@ -490,6 +490,48 @@ describe("venue service management routes", () => {
     expect(await foreign.json()).toMatchObject({ error: { code: "department.not_found" } });
   });
 
+  it("refuses an unknown zone policy field without clearing the receipt override", async () => {
+    const fx = await fixture();
+    const department = await withTransaction(db, async (tx) => {
+      const row = await createDepartment(
+        tx,
+        { locationId: fx.locationId },
+        {
+          name: "Restaurant",
+          defaultServiceMode: "prepay",
+        },
+      );
+      await configureZone(
+        tx,
+        { locationId: fx.locationId },
+        {
+          zoneId: fx.zoneId,
+          departmentId: row.id,
+        },
+      );
+      return row;
+    });
+    expect(department.id).toBeTruthy();
+    const base = `/management-api/venue-service/zones/${fx.zoneId}/sale-policy`;
+    expect(
+      (
+        await send(fx.app, "PATCH", `${base}/receiptPrintMode`, fx.managerCookie, {
+          value: "never",
+        })
+      ).status,
+    ).toBe(204);
+    const unknown = await send(fx.app, "PATCH", `${base}/nonsense`, fx.managerCookie, {
+      value: null,
+    });
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "nonsense" } },
+    });
+    const saved = await db.execute<{ receipt_print_mode: string | null }>(sql`
+      select receipt_print_mode from zone_sale_policies where zone_id = ${fx.zoneId}`);
+    expect(saved.rows).toEqual([{ receipt_print_mode: "never" }]);
+  });
+
   it("saves station hours and validates each interval", async () => {
     const fx = await fixture();
     const path = `/management-api/venue-service/stations/${fx.stationId}/hours`;

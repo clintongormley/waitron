@@ -94,7 +94,12 @@ const COLLECTION_NUMBER = new Set(["none", "numbered"]);
 const RECEIPT_PRINT_MODE = new Set(["auto", "on_request", "never"]);
 
 function requireSalePolicyField(field: string, value: unknown, zone: boolean) {
-  if (zone && value === null && field !== "printTradingName") return null;
+  if (
+    zone &&
+    value === null &&
+    (field === "paidWhen" || field === "collectionNumber" || field === "receiptPrintMode")
+  )
+    return null;
   if (field === "paidWhen" && PAID_WHEN.has(value as string))
     return value as "prepay" | "ticket_then_pay";
   if (field === "collectionNumber" && COLLECTION_NUMBER.has(value as string))
@@ -701,7 +706,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               field,
               value as "none" | "numbered" | null,
             );
-          else
+          else if (field === "receiptPrintMode")
             await setZoneSalePolicyOverride(
               tx,
               ctx.cfg,
@@ -709,6 +714,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               "receiptPrintMode",
               value as "auto" | "on_request" | "never" | null,
             );
+          else throw new AppError("management.request_invalid", { field });
         });
         return c.body(null, 204);
       }),
