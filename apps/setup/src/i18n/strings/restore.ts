@@ -120,6 +120,8 @@ export const restoreEn = {
   "fiscal_test.heading": "Check fiscal readiness",
   "fiscal_test.intro":
     "Waitron will file one small sample with the AEAT test service using this restaurant's tax identity and certificate. It does not file to AEAT's production service.",
+  "fiscal_test.name_limit":
+    "An accepted test submission does not prove the registered name matches. Check that your legal name and tax ID match your tax registration.",
   "fiscal_test.accepted": "AEAT accepted the test submission.",
   "fiscal_test.rejected":
     "AEAT rejected the test submission. Correct the certificate or restaurant details, then try again.",
@@ -258,6 +260,8 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "fiscal_test.heading": "Comprueba la preparación fiscal",
   "fiscal_test.intro":
     "Waitron enviará un pequeño registro de muestra al servicio de pruebas de la AEAT con la identidad fiscal y el certificado de este restaurante. No se envía nada al servicio de producción de la AEAT.",
+  "fiscal_test.name_limit":
+    "Un envío de prueba aceptado no demuestra que el nombre coincida con el registrado. Comprueba que tu razón social y NIF coincidan con tus datos fiscales.",
   "fiscal_test.accepted": "La AEAT ha aceptado el envío de prueba.",
   "fiscal_test.rejected":
     "La AEAT ha rechazado el envío de prueba. Corrige el certificado o los datos del restaurante e inténtalo de nuevo.",

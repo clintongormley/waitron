@@ -401,6 +401,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getContentLanguages: vi
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
+    clockStatus: vi.fn().mockResolvedValue({ state: "not-applicable" }),
     getTill: vi.fn().mockResolvedValue(till),
     listStaff: vi.fn().mockResolvedValue([{ personId: "p1", displayName: "Ana" }]),
     login: vi.fn().mockResolvedValue({ personId: "p1", permissions: [], locale: "en-GB" }),
@@ -13096,4 +13097,37 @@ describe("the device's printers, switched from the header", () => {
 
     expect(printersDialog(el)).toBeNull();
   });
+});
+
+it("shows measured clock drift without stopping a cash sale", async () => {
+  const { el } = await mountApp({
+    clockStatus: async () => ({
+      state: "warning",
+      driftSeconds: 86400,
+      measuredAt: "2026-10-06T12:00:00Z",
+    }),
+  });
+  await toTicket(el);
+  setLocale("en-GB");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=clock-warning]")?.textContent ?? "").toContain(
+    "Check the server's date and time",
+  );
+  expect(ticket(el)).not.toBeNull();
+});
+
+it("shows an unavailable authority comparison as unknown without stopping a sale", async () => {
+  const { el } = await mountApp({
+    clockStatus: async () => {
+      throw new Error("offline");
+    },
+  });
+  await toTicket(el);
+  setLocale("en-GB");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=clock-unknown]")?.textContent ?? "").toContain(
+    "has not been verified",
+  );
+  expect(el.shadowRoot!.querySelector("[data-test=clock-warning]")).toBeNull();
+  expect(ticket(el)).not.toBeNull();
 });

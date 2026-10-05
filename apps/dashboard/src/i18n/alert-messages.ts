@@ -21,6 +21,10 @@ const NOT_RECHECKED_ES =
 export const ALERT_MESSAGES: Readonly<
   Record<string, { readonly en: string; readonly es: string }>
 > = {
+  "fiscal.clock_drift": {
+    en: "The server's last clock comparison with AEAT differed by {seconds} seconds. Check its date and time; you can continue selling.",
+    es: "La última comparación del reloj del servidor con la AEAT mostró una diferencia de {seconds} segundos. Comprueba su fecha y hora; puedes seguir vendiendo.",
+  },
   "alert.source_unavailable": {
     en: "One of Waitron's checks could not run. It will try again in a minute.",
     es: "Una de las comprobaciones de Waitron no se ha podido ejecutar. Lo volverá a intentar en un minuto.",

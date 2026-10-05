@@ -1,3 +1,8 @@
+import {
+  createAuthorityClockStatus,
+  authorityClockAlertSource,
+  mountAuthorityClockApi,
+} from "./time-health.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { createCloudSnapshotArchive } from "./cloud-snapshot-archive.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
@@ -986,7 +991,7 @@ async function bootServer(
           const moduleVersions = await schemaVersionsByModule(db, modules);
           await createFiscalReadinessStore(
             config.stateDir,
-            async () => "uncertain",
+            async () => ({ status: "uncertain" }),
             ring.current.key,
           ).assertReady(
             fiscalReadinessInput({
@@ -1226,6 +1231,7 @@ async function bootServer(
   // Shared by reference between the fiscal pass that WRITES it and the box-status read that surfaces
   // it: a node without a `fiscal.aeat` cert sells and chains locally, and its drain skips filing.
   const awaitingFiscalCert = { current: false };
+  const authorityClock = createAuthorityClockStatus();
   const isMirror = holders.mode.current === "mirror";
   // The boot-captured read-only posture; the gate's own per-request predicate re-reads `mode` live,
   // so a promotion lifts it without a restart.
@@ -1401,6 +1407,17 @@ async function bootServer(
     incidents: recordIncidentOnce,
   });
   const tillClock = systemClock();
+  mountAuthorityClockApi(
+    app,
+    {
+      db,
+      read: () =>
+        enabledFiscal.activationReadiness === "not-applicable"
+          ? { state: "not-applicable" }
+          : authorityClock.read(),
+    },
+    log,
+  );
   mountTillApi(
     app,
     {
@@ -1724,6 +1741,7 @@ async function bootServer(
     sealedStateAlertSource(sealedStateStatus),
     firstStartAlertSource(firstStart),
     awaitingCertAlertSource(awaitingFiscalCert),
+    authorityClockAlertSource(authorityClock.read),
     printingAlertSource(),
     stationOutputAlertSource({
       locationId: till.locationId,
@@ -1991,7 +2009,14 @@ async function bootServer(
     reset: (at) => enabledFiscal.resetInFlight({ db }, at),
     drain: (at) =>
       enabledFiscal.drain(
-        { db, ring, environment: config.environment, skipRetryMs: config.skipRetryMs, log },
+        {
+          db,
+          ring,
+          environment: config.environment,
+          skipRetryMs: config.skipRetryMs,
+          log,
+          observeAuthorityTime: authorityClock.observe,
+        },
         at,
       ),
     skipRetryMs: config.skipRetryMs,

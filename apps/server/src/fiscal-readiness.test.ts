@@ -33,7 +33,7 @@ async function stateDir(): Promise<string> {
 describe("fiscal activation readiness", () => {
   it("persists accepted server evidence across a restart and binds it to the inputs", async () => {
     const dir = await stateDir();
-    const submit = vi.fn().mockResolvedValue("accepted");
+    const submit = vi.fn().mockResolvedValue({ status: "accepted" });
     const first = createFiscalReadinessStore(dir, submit, evidenceKey);
     await expect(first.run(input)).resolves.toMatchObject({ status: "accepted" });
     expect(submit).toHaveBeenCalledOnce();
@@ -50,7 +50,7 @@ describe("fiscal activation readiness", () => {
     async (outcome) => {
       const store = createFiscalReadinessStore(
         await stateDir(),
-        vi.fn().mockResolvedValue(outcome),
+        vi.fn().mockResolvedValue({ status: outcome }),
         evidenceKey,
       );
       await expect(store.run(input)).resolves.toMatchObject({ status: outcome });
@@ -71,9 +71,11 @@ describe("fiscal activation readiness", () => {
 
   it("refuses forged accepted evidence even when its binding matches", async () => {
     const dir = await stateDir();
-    await createFiscalReadinessStore(dir, vi.fn().mockResolvedValue("accepted"), evidenceKey).run(
-      input,
-    );
+    await createFiscalReadinessStore(
+      dir,
+      vi.fn().mockResolvedValue({ status: "accepted" }),
+      evidenceKey,
+    ).run(input);
     const path = join(dir, "fiscal-readiness.json");
     const evidence = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
     await writeFile(path, JSON.stringify({ ...evidence, mac: "00".repeat(32) }));
@@ -85,7 +87,7 @@ describe("fiscal activation readiness", () => {
 
   it("reuses accepted evidence for unchanged inputs instead of submitting again", async () => {
     const dir = await stateDir();
-    const submit = vi.fn().mockResolvedValue("accepted");
+    const submit = vi.fn().mockResolvedValue({ status: "accepted" });
     const first = await createFiscalReadinessStore(dir, submit, evidenceKey).run(input);
     const again = await createFiscalReadinessStore(dir, submit, evidenceKey).run(input);
     expect(again).toEqual(first);
@@ -100,9 +102,11 @@ describe("fiscal activation readiness", () => {
     ["no signature", { mac: undefined }],
   ])("ignores stored evidence with %s", async (_label, change) => {
     const dir = await stateDir();
-    await createFiscalReadinessStore(dir, vi.fn().mockResolvedValue("accepted"), evidenceKey).run(
-      input,
-    );
+    await createFiscalReadinessStore(
+      dir,
+      vi.fn().mockResolvedValue({ status: "accepted" }),
+      evidenceKey,
+    ).run(input);
     const path = join(dir, "fiscal-readiness.json");
     const evidence = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
     await writeFile(path, JSON.stringify({ ...evidence, ...change }));
@@ -115,7 +119,7 @@ describe("fiscal activation readiness", () => {
   it("treats unreadable stored evidence as absent and submits again", async () => {
     const dir = await stateDir();
     await writeFile(join(dir, "fiscal-readiness.json"), "not json");
-    const submit = vi.fn().mockResolvedValue("accepted");
+    const submit = vi.fn().mockResolvedValue({ status: "accepted" });
     const store = createFiscalReadinessStore(dir, submit, evidenceKey);
     await expect(store.assertReady(input)).rejects.toMatchObject({
       code: "setup.fiscal_test_required",
@@ -123,5 +127,23 @@ describe("fiscal activation readiness", () => {
     await expect(store.run(input)).resolves.toMatchObject({ status: "accepted" });
     expect(submit).toHaveBeenCalledOnce();
     await expect(store.assertReady(input)).resolves.toBeUndefined();
+  });
+});
+
+it("returns saved rejection details without authorising activation", async () => {
+  const store = createFiscalReadinessStore(
+    await stateDir(),
+    async () => ({
+      status: "rejected",
+      rejections: [{ code: "1161", message: "Importe total incorrecto" }],
+    }),
+    evidenceKey,
+  );
+  await expect(store.run(input)).resolves.toEqual({
+    status: "rejected",
+    rejections: [{ code: "1161", message: "Importe total incorrecto" }],
+  });
+  await expect(store.assertReady(input)).rejects.toMatchObject({
+    code: "setup.fiscal_test_required",
   });
 });

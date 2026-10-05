@@ -191,3 +191,33 @@ describe("the fiscal deployment probe before fiscal migrations", () => {
     await expect(FISCAL_SLOT.hasNonproductionRecords!(suite.db)).resolves.toBe(false);
   });
 });
+
+describe("the fiscal readiness rejection reader", () => {
+  const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
+
+  it("returns saved rejection details without changing fiscal records or other outcomes", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+    const [rejected, halted, pending] = seeded.registroIds;
+    await withTransaction(suite.db, async (tx) => {
+      await tx.execute(
+        sql`update envios set estado = 'rechazado', codigo_error = '1161', mensaje_error = 'Importe total incorrecto' where registro_id = ${rejected}`,
+      );
+      await tx.execute(sql`update envios set estado = 'detenido' where registro_id = ${halted}`);
+      await tx.execute(
+        sql`update envios set codigo_error = '999', mensaje_error = 'Retry later' where registro_id = ${pending}`,
+      );
+    });
+    const before = await suite.db.execute(sql`select * from registros_facturacion order by id`);
+    expect(await FISCAL_SLOT.readinessRejections?.(suite.db)).toEqual([
+      { code: "1161", message: "Importe total incorrecto" },
+    ]);
+    expect(await suite.db.execute(sql`select * from registros_facturacion order by id`)).toEqual(
+      before,
+    );
+  });
+
+  it("does not manufacture details when no rejection was saved", async () => {
+    await seedPendingEnvios(suite.db, { count: 1 });
+    expect(await FISCAL_SLOT.readinessRejections?.(suite.db)).toEqual([]);
+  });
+});

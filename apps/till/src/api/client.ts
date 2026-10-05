@@ -147,6 +147,10 @@ export interface TillInfo {
  * One venue-routable server as the boot payload carries it. `evicted` nodes are excluded server-side,
  * so `standing` is the three serving/sell states only.
  */
+export type AuthorityClockStatus =
+  | { state: "unknown" | "not-applicable" }
+  | { state: "ok" | "warning"; driftSeconds: number; measuredAt: string };
+
 export interface TillServer {
   nodeId: string;
   url: string;
@@ -1898,6 +1902,15 @@ export class TillApi {
   constructor(baseUrl = "", fetchImpl: FetchLike = fetch) {
     this.#baseUrl = baseUrl;
     this.#fetchImpl = fetchImpl;
+  }
+
+  clockStatus(options: ReadOptions = {}): Promise<AuthorityClockStatus> {
+    return this.#request<AuthorityClockStatus>(
+      "/api/clock-status",
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   getTill(): Promise<TillInfo> {

@@ -1,3 +1,5 @@
+import { page } from "vitest/browser";
+import { setLocale } from "./i18n/t.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupWidgets,
@@ -45,6 +47,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       venueDefault: "es-ES",
       loginDefault: "es-ES",
     }),
+    clockStatus: vi.fn().mockResolvedValue({ state: "not-applicable" }),
     getTill: vi.fn().mockResolvedValue({
       locale: "es-ES",
       venueName: "Bar Pepe",
@@ -390,5 +393,61 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
     expect(el.shadowRoot!.querySelector("till-table-order-screen")).toBeNull();
     await toast.updateComplete;
     await expectNoA11yViolations(host);
+  });
+});
+
+describe.each(["light", "dark"] as const)("clock banner (%s theme)", (theme) => {
+  it.each(["warning", "unknown"] as const)("is readable and accessible for %s", async (state) => {
+    const { el, host } = await mountWidget<TillApp>(
+      "till-app",
+      {
+        api: stubApi({
+          getTill: async () => ({
+            locale: "es-ES",
+            venueName: "Bar Pepe",
+            nif: "B12345678",
+            orderFlow: "prepay",
+            courses: [],
+            capabilities: [],
+            canvas: counterCanvas,
+          }),
+          clockStatus: async () => ({
+            state,
+            driftSeconds: 86400,
+            measuredAt: "2026-10-06T12:00:00Z",
+          }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector("till-lock-screen")!.dispatchEvent(
+      new CustomEvent("logged-in", {
+        detail: { personId: "p1", displayName: "Ana", permissions: [] },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    try {
+      for (const locale of ["en-GB", "es-ES"] as const) {
+        setLocale(locale);
+        await el.updateComplete;
+        for (const width of [390, 1280]) {
+          await page.viewport(width, 900);
+          const banner = el.shadowRoot!.querySelector<HTMLElement>(`[data-test=clock-${state}]`)!;
+          expect(banner.textContent?.trim().length).toBeGreaterThan(20);
+          expect(banner.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+          await expectNoA11yViolations(host);
+          if (import.meta.env.VITE_W41S_VISUAL === "1")
+            await page.screenshot({
+              path: `__screenshots__/w41s-clock-${state}-${theme}-${locale}-${width}.png`,
+            });
+        }
+      }
+    } finally {
+      await page.viewport(1280, 720);
+      setLocale("es-ES");
+    }
   });
 });

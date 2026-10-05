@@ -3776,6 +3776,12 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         });
         expect(login.status, await login.clone().text()).toBe(200);
         const cookies = `${login.headers.get("set-cookie")!.split(";")[0]!}; ${deviceCookie}`;
+        const clockStatus = await fetch(`${base}/api/clock-status`, {
+          ...via,
+          headers: { cookie: cookies },
+        });
+        expect(clockStatus.status).toBe(200);
+        expect(await clockStatus.json()).toEqual({ state: "unknown" });
         const sale = await fetch(`${base}/api/sales`, {
           ...via,
           method: "POST",

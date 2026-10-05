@@ -18,7 +18,7 @@ import {
 import {
   fiscalReadinessBinding,
   type FiscalReadinessInput,
-  type FiscalTestStatus,
+  type FiscalTestResult,
 } from "./fiscal-readiness.js";
 import { recoverProvisionedVenue } from "./provision.js";
 import { systemClock } from "./till-backend.js";
@@ -76,8 +76,8 @@ export async function submitFiscalReadiness(args: {
   ring: KeyRing;
   readinessInput: FiscalReadinessInput;
   now?: () => Date;
-}): Promise<FiscalTestStatus> {
-  if (args.contribution.activationReadiness === "not-applicable") return "accepted";
+}): Promise<FiscalTestResult> {
+  if (args.contribution.activationReadiness === "not-applicable") return { status: "accepted" };
   const testIdentity = fiscalReadinessDatabaseKey(args.readinessInput);
   // Its own venue DIRECTORY under the state root, retained between runs: the readiness sample is a
   // real preproduction sale on a real chain, so it must not share a file with the box's own venue
@@ -139,11 +139,14 @@ export async function submitFiscalReadiness(args: {
         (args.now ?? (() => new Date()))(),
       );
     } catch {
-      return "uncertain";
+      return { status: "uncertain" };
     }
-    if (result.recordsAccepted > 0) return "accepted";
-    if (result.recordsHalted > 0) return "rejected";
-    return "uncertain";
+    if (result.recordsAccepted > 0) return { status: "accepted" };
+    const rejections = await args.contribution.readinessRejections?.(db);
+    if (result.recordsHalted > 0 || (rejections?.length ?? 0) > 0) {
+      return rejections === undefined ? { status: "rejected" } : { status: "rejected", rejections };
+    }
+    return { status: "uncertain" };
   } finally {
     await store.close();
   }

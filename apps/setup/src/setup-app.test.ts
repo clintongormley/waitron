@@ -2767,6 +2767,31 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     expect(screen.shadowRoot!.querySelector("[data-test=continue]")).not.toBeNull();
   });
 
+  it("shows the authority rejection from the API and clears it after an uncertain retry", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        runFiscalTest: vi
+          .fn()
+          .mockResolvedValueOnce({
+            status: "rejected",
+            rejections: [{ code: "1161", message: "Importe total incorrecto" }],
+          })
+          .mockResolvedValueOnce({ status: "uncertain" }),
+      }),
+    );
+    goto(el, "fiscal-test");
+    fiscalTestRequest(el);
+    await flush(el);
+    expect(await screenText(el, "fiscal-test", "[role=alert]")).toContain("1161");
+    expect(await screenText(el, "fiscal-test", "[role=alert]")).toContain(
+      "Importe total incorrecto",
+    );
+    fiscalTestRequest(el);
+    await flush(el);
+    expect(await screenText(el, "fiscal-test", "[role=alert]")).not.toContain("1161");
+    expect(await screenText(el, "fiscal-test", "[role=alert]")).toContain("uncertain");
+  });
+
   it("reports a fiscal test that could not run and offers the run again", async () => {
     const el = await mountSetupApp(
       stubApi({ runFiscalTest: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")) }),

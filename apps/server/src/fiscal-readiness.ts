@@ -22,8 +22,12 @@ export interface FiscalReadinessInput {
 }
 
 export type FiscalTestStatus = "accepted" | "rejected" | "uncertain";
+export type FiscalTestResult = {
+  status: FiscalTestStatus;
+  rejections?: { code: string | null; message: string | null }[];
+};
 export type FiscalReadinessResult =
-  { status: FiscalTestStatus; testedAt?: string } | { status: "not-applicable" };
+  (FiscalTestResult & { testedAt?: string }) | { status: "not-applicable" };
 
 type Evidence = {
   version: 1;
@@ -92,7 +96,7 @@ async function readEvidence(stateDir: string, key: Buffer): Promise<Evidence | n
  * create the evidence that authorizes a production activation. */
 export function createFiscalReadinessStore(
   stateDir: string,
-  submit: (input: FiscalReadinessInput) => Promise<FiscalTestStatus>,
+  submit: (input: FiscalReadinessInput) => Promise<FiscalTestResult>,
   evidenceKey: Buffer,
 ): {
   run(input: FiscalReadinessInput): Promise<FiscalReadinessResult>;
@@ -106,8 +110,8 @@ export function createFiscalReadinessStore(
       if (existing?.binding === binding) {
         return { status: "accepted", testedAt: existing.testedAt };
       }
-      const status = await submit(input);
-      if (status !== "accepted") return { status };
+      const result = await submit(input);
+      if (result.status !== "accepted") return result;
       const testedAt = new Date().toISOString();
       const evidence = {
         version: 1,
@@ -120,7 +124,7 @@ export function createFiscalReadinessStore(
         JSON.stringify({ ...evidence, mac: evidenceMac(evidenceKey, evidence) } satisfies Evidence),
         0o600,
       );
-      return { status, testedAt };
+      return { status: "accepted", testedAt };
     },
     async assertReady(input) {
       if (input.requirement === "not-applicable") return;
