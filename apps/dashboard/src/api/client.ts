@@ -1904,6 +1904,20 @@ export class DashboardApi {
     );
   }
 
+  /** A null `price` clears this menu's price for the variant, so it inherits again. */
+  setMenuVariantPrice(
+    menuId: string,
+    menuItemId: string,
+    variantId: string,
+    price: string | null,
+  ): Promise<void> {
+    return this.#request<void>(
+      `/management-api/catalogues/${menuId}/items/${menuItemId}/variants/${variantId}`,
+      "PATCH",
+      { price },
+    );
+  }
+
   // ── Location menus (which catalogues a location sells) ─────────────────────────────────────────
 
   listLocationCatalogues(locationId: string): Promise<LocationCatalogueSummary[]> {

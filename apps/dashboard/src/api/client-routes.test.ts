@@ -809,17 +809,20 @@ describe("DashboardApi routes", () => {
       .fn()
       .mockResolvedValueOnce(jsonResponse([row]))
       .mockResolvedValueOnce(emptyResponse())
-      .mockResolvedValueOnce(jsonResponse(variants));
+      .mockResolvedValueOnce(jsonResponse(variants))
+      .mockResolvedValueOnce(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
 
     await expect(api.getMenuPrices("c1")).resolves.toEqual([row]);
     await expect(api.updateMenuItem("c1", "mi1", { grossPrice: null })).resolves.toBeUndefined();
     await expect(api.setMenuVariants("c1", "mi1", variants)).resolves.toEqual(variants);
+    await expect(api.setMenuVariantPrice("c1", "mi1", "v1", "2.20")).resolves.toBeUndefined();
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/catalogues/c1/prices", "GET", undefined],
       ["/management-api/catalogues/c1/items/mi1", "PATCH", { grossPrice: null }],
       ["/management-api/catalogues/c1/items/mi1/variants", "PUT", { variants }],
+      ["/management-api/catalogues/c1/items/mi1/variants/v1", "PATCH", { price: "2.20" }],
     ]);
   });
 

@@ -1602,6 +1602,94 @@ describe("mountCatalogueApi — products", () => {
     });
   });
 
+  it("sets or clears one size's price on a menu alone", async () => {
+    const app = mountApp();
+    const menuId = await createCatalogueVia(app, "Size prices");
+    const productId = await createNamedProductVia(app, `Wine ${crypto.randomUUID()}`);
+    const editorPath = `/management-api/products/${productId}/editor`;
+    const editor = (await (await send(app, "GET", editorPath)).json()) as Record<string, unknown>;
+    const size = {
+      customerName: null,
+      kitchenName: null,
+      image: null,
+      unitPrice: null,
+      available: true,
+      active: true,
+    };
+    const saved = await send(app, "PUT", editorPath, {
+      body: {
+        ...editor,
+        variants: [
+          { ...size, name: "Glass" },
+          { ...size, name: "Bottle" },
+        ],
+      },
+    });
+    expect(saved.status).toBe(200);
+    const [first, second] = ((await saved.json()) as { variants: { id: string }[] }).variants.map(
+      (variant) => variant.id,
+    );
+    const itemId = await offerVia(app, menuId, productId);
+    const listPath = `/management-api/catalogues/${menuId}/items/${itemId}/variants`;
+    const path = `${listPath}/${second}`;
+    const read = async () => {
+      const res = await send(app, "GET", listPath);
+      expect(res.status).toBe(200);
+      return res.json();
+    };
+    const listed = await send(app, "PUT", listPath, {
+      body: { variants: [{ variantId: first, price: "4.10" }] },
+    });
+    expect(listed.status).toBe(200);
+
+    const set = await send(app, "PATCH", path, { body: { price: "2.20" } });
+    expect(set.status).toBe(204);
+    expect(await read()).toEqual([
+      { variantId: first, price: "4.10" },
+      { variantId: second, price: "2.20" },
+    ]);
+
+    const refusals: [unknown, string, string][] = [
+      [{ price: 2.2 }, "management.request_invalid", "price"],
+      [{}, "management.request_invalid", "price"],
+      [{ price: true }, "management.request_invalid", "price"],
+      [{ price: "9.90", offered: false }, "management.request_invalid", "offered"],
+      [{ price: "9.90", variantId: first }, "management.request_invalid", "variantId"],
+      [{ price: "-1.00" }, "product.variant_invalid", "price"],
+    ];
+    for (const [body, code, field] of refusals) {
+      const refused = await send(app, "PATCH", path, { body });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({ error: { code, params: { field } } });
+    }
+    const stray = crypto.randomUUID();
+    const unknown = await send(app, "PATCH", `${listPath}/${stray}`, { body: { price: "9.90" } });
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toMatchObject({
+      error: { code: "product.variant_not_found", params: { variantId: stray } },
+    });
+    const malformed = await send(app, "PATCH", `${listPath}/bad-id`, { body: { price: "9.90" } });
+    expect(malformed.status).toBe(400);
+    expect(await malformed.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+    expect((await send(app, "PATCH", path, { body: { price: "9.90" }, cookie: null })).status).toBe(
+      401,
+    );
+    expect(
+      (await send(app, "PATCH", path, { body: { price: "9.90" }, cookie: staffCookie })).status,
+    ).toBe(403);
+    expect(await read()).toEqual([
+      { variantId: first, price: "4.10" },
+      { variantId: second, price: "2.20" },
+    ]);
+
+    const cleared = await send(app, "PATCH", path, { body: { price: null } });
+    expect(cleared.status).toBe(204);
+    expect(await read()).toEqual([
+      { variantId: first, price: "4.10" },
+      { variantId: second, price: null },
+    ]);
+  });
+
   /** The smallest body the editor parser accepts, plus whatever a test wants on top. */
   async function editorBody(
     app: Hono,

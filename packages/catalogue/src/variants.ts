@@ -422,6 +422,39 @@ export async function setMenuVariants(
 }
 
 /**
+ * Sets or clears this menu's price for one variant of the offer's product, Active or not, and
+ * leaves every other variant's row as it is.
+ */
+export async function setMenuVariantPrice(
+  tx: Transaction,
+  menuItemId: string,
+  variantId: string,
+  price: string | null,
+  menuId?: string,
+): Promise<void> {
+  const productId = await offerProduct(tx, menuItemId, menuId);
+  if (!(await listProductVariants(tx, productId)).some(({ id }) => id === variantId))
+    throw new AppError("product.variant_not_found", { variantId });
+  const value = validatePrice(price, "price");
+  const row = and(
+    eq(menuItemVariantOverrides.menuItemId, menuItemId),
+    eq(menuItemVariantOverrides.variantId, variantId),
+  );
+  if (value === null) {
+    await tx.delete(menuItemVariantOverrides).where(row);
+    return;
+  }
+  const cents = decimalToCents(value);
+  await tx
+    .insert(menuItemVariantOverrides)
+    .values({ menuItemId, productId, variantId, price: cents })
+    .onConflictDoUpdate({
+      target: [menuItemVariantOverrides.menuItemId, menuItemVariantOverrides.variantId],
+      set: { price: cents },
+    });
+}
+
+/**
  * The line an offer sells, as {@link selectMenuVariant} resolves it: the three names of the offer's
  * product beside the chosen variant's own three, and the price charged.
  */

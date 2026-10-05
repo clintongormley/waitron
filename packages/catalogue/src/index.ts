@@ -117,6 +117,7 @@ export {
   listProductVariants,
   parentsWithActiveVariants,
   selectMenuVariant,
+  setMenuVariantPrice,
   setMenuVariants,
   setProductVariants,
 } from "./variants.js";
