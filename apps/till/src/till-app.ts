@@ -19,6 +19,7 @@ import { diag } from "./diagnostics.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
 import { TillApi, isNetworkFailure, type MadeHereItem } from "./api/client.js";
 import type { ServerRouter } from "./api/server-router.js";
+import { startBatteryReport, type BatteryLike } from "./api/battery-report.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import {
   displayQuantity,
@@ -1071,6 +1072,7 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#battery?.stop();
     this.#menuPoll.stop();
     this.#draftSync?.drop();
     this.#abandonListRefreshes();
@@ -1083,6 +1085,8 @@ export class TillApp extends LitElement {
     void this.sessionActivity.stop();
     super.disconnectedCallback();
   }
+
+  #battery?: { stop(): void };
 
   /** The one basket the whole flow shares. A stable reference (widgets subscribe to it directly). */
   readonly #store = new WorkingOrderStore();
@@ -1686,6 +1690,7 @@ export class TillApp extends LitElement {
   }
 
   async #boot(): Promise<void> {
+    this.#battery?.stop();
     const localeBootGeneration = ++this.#localeBootGeneration;
     this.#browserLocale = undefined;
     this.#browserLocaleVenue = undefined;
@@ -1783,6 +1788,15 @@ export class TillApp extends LitElement {
         this.makeNow = [];
       this.deviceName = identity.name;
       this.deviceId = identity.deviceId;
+      this.#battery?.stop();
+      // `disconnectedCallback` has already run for a torn-down app, so nothing would stop this one.
+      if (this.isConnected) {
+        const nav = navigator as Navigator & { getBattery?: () => Promise<BatteryLike> };
+        this.#battery = startBatteryReport(
+          (r) => this.api.reportBattery(r),
+          nav.getBattery === undefined ? undefined : () => nav.getBattery!(),
+        );
+      }
       this.#holdIdentity(identity);
       this.#restoreMakeNow();
       const kind = kindOfFormFactor(identity.formFactor);

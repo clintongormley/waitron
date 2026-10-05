@@ -413,6 +413,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       loginDefault: "es-ES",
     }),
     putLocale: vi.fn().mockResolvedValue(undefined),
+    reportBattery: vi.fn().mockResolvedValue(undefined),
     listProducts: vi.fn().mockResolvedValue({ menus: [defaultMenu], products: [cafe] }),
     recordSale: vi.fn().mockResolvedValue(saleResult),
     pay: vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult }),
