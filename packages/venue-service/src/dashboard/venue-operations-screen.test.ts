@@ -521,13 +521,16 @@ describe("venue operations screen", () => {
     } as unknown as VenueServiceApi);
     const tree = table(el, "policy-tree").shadowRoot!.querySelector('[role="treegrid"]')!;
     const rows = [...tree.querySelectorAll('tbody [role="row"]')];
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
     expect(rows[0].getAttribute("aria-level")).toBe("1");
     expect(rows[0].textContent).toContain("Every zone");
     expect(rows[0].textContent).toContain("Casa Delgado");
     expect(rows[1].getAttribute("aria-level")).toBe("2");
     expect(rows[1].textContent).toContain("Dining room");
     expect(rows[1].textContent).not.toContain("Casa Delgado");
+    expect(rows[2].getAttribute("aria-level")).toBe("1");
+    expect(rows[2].textContent).toContain("Deli counter");
+    expect(rows[2].textContent).toContain("Not configured");
   });
 
   it("groups receipt, quick sale and every sale settings above their column labels", async () => {
@@ -565,10 +568,12 @@ describe("venue operations screen", () => {
     } as unknown as VenueServiceApi);
     const tree = table(el, "policy-tree").shadowRoot!;
     const rows = [...tree.querySelectorAll('tbody [role="row"]')];
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
     expect(tree.querySelector('th[data-actions][data-pinned="end"]')).not.toBeNull();
     expect(rows[0].querySelector("wt-row-actions")!.textContent).toContain("Opening hours");
     expect(rows[1].querySelector("wt-row-actions")!.textContent).toContain("Remove");
+    expect(rows[3].textContent).toContain("Deli counter");
+    expect(rows[3].querySelector("wt-row-actions")!.textContent).toContain("Edit");
     const rename = rows[1].querySelector<HTMLElement>('[data-test="rename-tree-zone-z1"]')!;
     rename
       .closest("wt-row-actions")!
@@ -601,6 +606,44 @@ describe("venue operations screen", () => {
       departmentId: "d2",
       serviceMode: "prepay",
     });
+  });
+
+  it("shows an unconfigured floor zone in the tree and lets it join a department", async () => {
+    const configureZone = vi.fn().mockResolvedValue(undefined);
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      configureZone,
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const row = [...tree.querySelectorAll('tbody [role="row"]')].find((candidate) =>
+      candidate.textContent?.includes("Deli counter"),
+    );
+    expect(row).toBeDefined();
+    expect(row!.getAttribute("aria-level")).toBe("1");
+    expect(row!.textContent).toContain("Not configured");
+    await action(el, "configure-tree-zone-z2");
+    const department = find(el, 'wt-combobox[name="zone-department-z2"]')! as HTMLElement & {
+      value: string;
+    };
+    await chooseOption(department, "d2");
+    await action(el, "save-editor");
+    expect(configureZone).toHaveBeenCalledWith("z2", {
+      departmentId: "d2",
+      serviceMode: null,
+    });
+  });
+
+  it("does not label a zone of an inactive department as unconfigured", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        departments: [{ ...model.departments[0], active: false }, model.departments[1]],
+      }),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const rows = [...tree.querySelectorAll('tbody [role="row"]')];
+    expect(rows.some((row) => row.textContent?.includes("Deli counter"))).toBe(true);
+    expect(rows.some((row) => row.textContent?.includes("Dining room"))).toBe(false);
   });
 
   it("confirms removal of a zone from its policy-tree row", async () => {
@@ -723,7 +766,7 @@ describe("venue operations screen", () => {
       }),
     } as unknown as VenueServiceApi);
     const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(4);
     expect(rows[0].textContent).toContain("Pay before preparation");
     expect(rows[0].textContent).toContain("None");
     expect(rows[0].textContent).toContain("Always");
@@ -733,6 +776,8 @@ describe("venue operations screen", () => {
     expect(rows[2].textContent).toContain("Pay on collection");
     expect(rows[2].textContent).toContain("Numbered");
     expect(rows[2].textContent).toContain("On request");
+    expect(rows[3].textContent).toContain("Not configured");
+    expect(rows[3].querySelector('[data-test="edit-paid"]')).toBeNull();
   });
 
   it("mutes an inherited zone value while leaving its own override prominent", async () => {

@@ -51,7 +51,7 @@ type Editor =
 type Action = { key: string; label: string; run: () => void; disabled?: boolean };
 type PolicyRow =
   | { kind: "department"; department: Department }
-  | { kind: "zone"; zone: FloorZone; departmentId: string };
+  | { kind: "zone"; zone: FloorZone; departmentId: string | null };
 /** `check` reads the fields and returns a message per invalid one; `save` runs only once `check`
  * returns none. */
 type EditorContent = {
@@ -569,6 +569,14 @@ export class VenueOperationsScreen extends LitElement {
             : [];
         }),
     ]);
+    rows.push(
+      ...model.floorZones
+        .filter(
+          (zone) =>
+            zone.active !== false && !model.zones.some((configured) => configured.id === zone.id),
+        )
+        .map((zone) => ({ kind: "zone" as const, zone, departmentId: null })),
+    );
     const policyFor = (row: PolicyRow) =>
       row.kind === "department"
         ? model.salePolicies.departments.find((policy) => policy.departmentId === row.department.id)
@@ -632,7 +640,7 @@ export class VenueOperationsScreen extends LitElement {
                   >
                     ${row.zone.name}
                   </button>`
-            }${model.readiness
+            }${row.departmentId === null ? html` ${t("venue.unconfigured")}` : nothing}${model.readiness
               .filter((issue) => "zoneId" in issue && issue.zoneId === row.zone.id)
               .map(
                 (issue) =>
@@ -1095,11 +1103,14 @@ export class VenueOperationsScreen extends LitElement {
                     this.zoneNameEditor = row.zone.id;
                   },
                 },
-                ...(departments.length > 1
+                ...(row.departmentId === null || departments.length > 1
                   ? [
                       {
-                        key: `move-tree-zone-${row.zone.id}`,
-                        label: t("venue.move_to_department"),
+                        key: `${row.departmentId === null ? "configure" : "move"}-tree-zone-${row.zone.id}`,
+                        label:
+                          row.departmentId === null
+                            ? t("venue.edit")
+                            : t("venue.move_to_department"),
                         run: () => this.#open({ kind: "zone", row: row.zone }),
                       },
                     ]
@@ -1111,11 +1122,18 @@ export class VenueOperationsScreen extends LitElement {
                     this.zoneId = row.zone.id;
                   },
                 },
-                {
-                  key: `remove-tree-zone-${row.zone.id}`,
-                  label: t("venue.remove"),
-                  run: () => void this.#confirmZone(row.zone, row.departmentId),
-                },
+                ...(row.departmentId === null
+                  ? []
+                  : [
+                      {
+                        key: `remove-tree-zone-${row.zone.id}`,
+                        label: t("venue.remove"),
+                        run: () => {
+                          if (row.departmentId !== null)
+                            void this.#confirmZone(row.zone, row.departmentId);
+                        },
+                      },
+                    ]),
               ]),
       },
     ];
@@ -1133,7 +1151,9 @@ export class VenueOperationsScreen extends LitElement {
         .rowKey=${(row: PolicyRow) =>
           row.kind === "department" ? `department-${row.department.id}` : `zone-${row.zone.id}`}
         .rowParent=${(row: PolicyRow) =>
-          row.kind === "department" ? null : `department-${row.departmentId}`}
+          row.kind === "department" || row.departmentId === null
+            ? null
+            : `department-${row.departmentId}`}
         .rowCollapsible=${() => false}
         .rowActivation=${() => "none" as const}
         .emptyMessage=${t("venue.no_departments")}
