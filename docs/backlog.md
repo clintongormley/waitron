@@ -1238,7 +1238,7 @@ pending update has run, the Modifiers control, an attached row's button, and foc
 field during the wait — each failed with its part of the fix removed. The course box is still
 focused once with no wait, because the editor never draws it disabled.
 
-**A click anywhere on a switch, knob included, flips it once (W76, owner 2026-10-04) — DONE.** The
+**A click on a switch's knob, track, gap or label flips it once (W76, owner 2026-10-04) — DONE.** The
 owner, on the Extras editor: _"make the toggle field work when you click anywhere on it, not just on
 one side or the other"_. In the shared `packages/ui/src/components/wt-switch.ts` a click on the round
 knob, in the gap between the switch and its label, or just above the label did nothing before:
