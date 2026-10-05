@@ -2356,6 +2356,14 @@ before loading products. Adding that method to the temporary probe and waiting f
 read opens the confirmation. Follow-up: complete that accessibility fixture and assert the native
 dialog is open before its scan. The existing suite was not changed by W70a.
 
+**Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
+The [design](superpowers/specs/2026-10-05-unsaved-changes-warning-design.md),
+[owner audit](superpowers/plans/2026-10-05-unsaved-changes-audit.md) and
+[implementation plan](superpowers/plans/2026-10-05-unsaved-changes-warning.md) cover editable
+modals and pages across the dashboard, till, setup and contributed screens. Build the shared
+mechanism and modal rollout, then page/navigation coverage; neither rollout is implemented yet.
+Keep automatic saves and forced session exits on their existing paths.
+
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).** The owner: _"the Kitchen name, and
 customer facing names aren't showing the internal name as the default value, at least when I add a variant and fill in
