@@ -565,7 +565,8 @@ export class CatalogueBrowser extends LitElement {
     const parentId = draft.kind === "create" ? draft.parentId : null;
     const color = this.nameColor;
     // Sent only when the box changed it, so a plain create or rename sends what it always did.
-    const colored = color !== undefined && color !== this.#boxCurrentColor(draft) ? { color } : {};
+    const current = this.#renamed(draft)?.color ?? null;
+    const colored = color !== undefined && color !== current ? { color } : {};
     try {
       if (draft.kind === "create")
         await this.api.createCategory({ name: event.detail.name, parentId, ...colored });
@@ -577,14 +578,10 @@ export class CatalogueBrowser extends LitElement {
       else this.dropError = message;
     }
   }
-  #boxCurrentColor(draft: CategoryNameDraft): string | null {
-    return draft.kind === "rename"
-      ? (this.categories.find(({ id }) => id === draft.categoryId)?.color ?? null)
-      : null;
-  }
-  #boxColor(): string | null {
-    if (this.nameColor !== undefined) return this.nameColor;
-    return this.nameDraft ? this.#boxCurrentColor(this.nameDraft) : null;
+  #renamed(draft: CategoryNameDraft | null): CategorySummary | undefined {
+    return draft?.kind === "rename"
+      ? this.categories.find(({ id }) => id === draft.categoryId)
+      : undefined;
   }
   /** From a row the colour is sent alone, never a name or a parent, so a rename or a move made
    * while the chooser was open is kept. */
@@ -608,20 +605,16 @@ export class CatalogueBrowser extends LitElement {
       this.colorBusy = false;
     }
   }
-  #colorHeading(): string {
+  #colorHeading(renamed: CategorySummary | undefined): string {
     const target = this.colorTarget;
-    const draft = this.nameDraft;
-    const name =
-      target?.kind === "row"
-        ? target.category.name
-        : draft?.kind === "rename"
-          ? this.categories.find(({ id }) => id === draft.categoryId)?.name
-          : undefined;
+    const name = target?.kind === "row" ? target.category.name : renamed?.name;
     return name === undefined
       ? t("folders.new_color_heading")
       : t("folders.color_heading").replace("{name}", name);
   }
   override render() {
+    const renamed = this.#renamed(this.nameDraft);
+    const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
     return html`<dashboard-product-list
         @drop-items=${(event: CustomEvent<{ keys: string[]; folderId: string | null }>) => {
           event.stopPropagation();
@@ -680,7 +673,7 @@ export class CatalogueBrowser extends LitElement {
           this.colorErrors = {};
           this.colorTarget = { kind: "row", category };
         }}
-        .nameColor=${this.#boxColor()}
+        .nameColor=${boxColor}
         .choosingColor=${this.colorTarget?.kind === "box"}
         @name-color=${(event: Event) => {
           event.stopPropagation();
@@ -770,8 +763,8 @@ export class CatalogueBrowser extends LitElement {
       ${this.#operationDialog()}<dashboard-category-color-form
         .open=${this.colorTarget !== null}
         .busy=${this.colorBusy}
-        heading=${this.colorTarget ? this.#colorHeading() : ""}
-        .color=${this.colorTarget?.kind === "row" ? this.colorTarget.category.color : this.#boxColor()}
+        heading=${this.colorTarget ? this.#colorHeading(renamed) : ""}
+        .color=${this.colorTarget?.kind === "row" ? this.colorTarget.category.color : boxColor}
         .errors=${this.colorErrors}
         @wt-choose=${(event: CustomEvent<{ color: string | null }>) => {
           event.stopPropagation();
