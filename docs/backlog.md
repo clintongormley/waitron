@@ -3179,12 +3179,16 @@ checks_ table (`docs/superpowers/plans/2026-10-05-w90-remove-menu-offered-switch
 cannot migrate: migrating it fails on
 `CHECK constraint failed: menu_item_variant_overrides_overrides_ck`. Reset a dev venue with
 `wa-wt reset demo <name>`; reset any other venue, or clear those choices before upgrading. After
-upgrading, publish every menu again: a version published before still carries the old keys, so
-each menu reads as changed, and a size switched off in it is no longer held back (both read, not
-run). A configuration bundle exported before W90 must be exported again after upgrading: one exported
-just before W90 is refused `setup.request_invalid` with `field: "module:catalogue"`, because its
-catalogue migration count is one short (seen 2026-10-05 in a throwaway test, not kept); an older
-one is refused at the first module, in the order they are checked, whose count differs.
+upgrading, a size switched off on a menu is sold, published again or not (read, not run:
+`applyLiveFields` sets a size's `available` from its Active and Available state alone); make it
+Unavailable or Inactive if it must not sell. Publish every menu again: a menu with products on it,
+or one that includes another menu, reads as changed until it is (seen 2026-10-05 by the pre-merge
+review for a populated menu, which read as changed, and an empty menu that includes nothing, which
+stayed current; the included-menu case is read, not run). A configuration bundle exported before
+W90 must be exported again after upgrading: one exported just before W90 is refused
+`setup.request_invalid` with `field: "module:catalogue"`, because its catalogue migration count is
+one short (seen 2026-10-05 in a throwaway test, not kept); an older one is refused at the first
+module, in the order they are checked, whose count differs.
 
 **A Products drag does not notice when a refresh removes what it is dragging or where it is going —
 OPEN (found 2026-10-05 by W88's pre-merge review).** W88's review found the Menus tree's drag broke

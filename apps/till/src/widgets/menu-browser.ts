@@ -31,9 +31,9 @@ interface MenuIndex {
 }
 
 /**
- * A product member whose offer is not among `products` is left out (switched off on this menu, D5),
- * and so is one not sold separately, which is ordered only as an extra on another dish, and a
- * section left with nothing to order. Staff only is shown: every till screen is staff's.
+ * A product member whose offer is not among `products` is left out, and so is one not sold
+ * separately, which is ordered only as an extra on another dish, and a section left with nothing
+ * to order. Staff only is shown: every till screen is staff's.
  */
 function indexMenu(menu: TillZoneMenu, products: TillProduct[]): MenuIndex {
   const offers = new Map(

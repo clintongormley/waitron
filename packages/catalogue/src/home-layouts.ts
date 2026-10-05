@@ -79,8 +79,8 @@ async function insertLayout(tx: Transaction, menuId: string, name: string): Prom
   return row!.id;
 }
 
-/** Whether the menu's working structure reaches a tile's target, whatever the menu's, the
- * product's or the offer's switches. Publishing applies its own, narrower test. */
+/** Whether the menu's working structure reaches a tile's target, whatever the menu's or the
+ * product's switches. Publishing applies its own, narrower test. */
 function structuralReach(graph: SectionGraph, rootSectionId: string): (ref: TileRef) => boolean {
   const reached = reachableFrom(graph, rootSectionId);
   const reachedProducts = new Set(reached.products);

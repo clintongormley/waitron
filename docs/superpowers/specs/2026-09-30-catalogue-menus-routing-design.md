@@ -190,6 +190,9 @@ places lager nowhere else, so it sells lager at €3.50 with no clash.
 a disagreement is a clash. Evening can switch off lemonade without touching Drinks. This is not
 "sold out tonight", which the till handles during service.
 
+_(Superseded 2026-10-05 by W90: a menu has no on/off setting of its own for a product or a variant;
+see [the W90 design](2026-10-05-w90-remove-menu-offered-switch-design.md).)_
+
 **Where prices are stored today.** Every product has its own price (`products.unit_price`). Every
 menu can override it (`menu_items.gross_price`, empty meaning "use the product's price";
 `packages/catalogue/src/schema/menu.ts:74`), and switch it off (`menu_items.active`). The new part

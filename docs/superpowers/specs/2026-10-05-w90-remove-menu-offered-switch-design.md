@@ -126,13 +126,18 @@ languages.
   version published before this change still carries them in `menu_versions.document`, and its
   variant `offered: false` would no longer be read, so that variant would sell. Following the reset
   policy (CLAUDE.md §3, "No backwards-compatibility or data-migration code"), nothing reads or
-  rewrites old documents and `MENU_DOCUMENT_FORMAT` stays 2: a venue that published a menu with a
-  variant switched off republishes it or is reset. Rejected alternative: bump the format to 3 as
-  #720 did (`menu-publication.ts:160` then serves no old version), which would take every venue's
-  menus off its tills until republished, for a case a republish already fixes. Every live version
-  also reads as changed after the upgrade, because the proposed document no longer has the keys;
-  republishing clears it (read, not run: `statusOf`, `menu-publication.ts:67`–`77`, compares the
-  working document's `menuDocumentHash` with the live version's `contentHash`).
+  rewrites old documents and `MENU_DOCUMENT_FORMAT` stays 2: a variant switched off in a published
+  version is sold after the upgrade, republished or not; a venue that must not sell it makes it
+  Unavailable or Inactive, or is reset. Rejected alternative: bump the format to 3 as #720 did
+  (`menu-publication.ts:160` then serves no old version), which would take every venue's menus off
+  its tills until republished. A live version holding any offer also reads as changed after the
+  upgrade, because the proposed document no longer has the keys, and so does one that includes
+  another menu, because `includedMenuHashes` holds each included menu's working hash, which no
+  longer folds in `ownDecisions` (read, not run). Seen 2026-10-05 by the pre-merge review: a
+  populated menu published before the change read as changed after it, and an empty one that
+  includes nothing stayed current. Republishing clears it (read, not run: `statusOf`,
+  `menu-publication.ts:67`–`77`, compares the working document's `menuDocumentHash` with the live
+  version's `contentHash`).
 
 ## Till
 

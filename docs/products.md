@@ -1,8 +1,8 @@
 # Build a product once, then decide where to sell it
 
-A product describes what you sell. A menu decides whether that product, its variants and its
-modifiers are available in a particular service. Keeping those jobs separate lets you reuse one
-coffee on several menus without copying its kitchen name, dietary declarations or choices.
+A product describes what you sell. A menu decides whether that product is sold in a particular
+service, and at what price. Keeping those jobs separate lets you reuse one coffee on several menus
+without copying its kitchen name, dietary declarations or choices.
 
 Open **Products** in the management dashboard and choose **Add product**. Give the product a name,
 enter its price and choose its tax treatment. A product is sold by the each unless you say otherwise,
@@ -130,10 +130,10 @@ from its product's, the list notes it under the variant's price. A variant's row
 **Status** filter from **Active**.
 
 A variant follows its product onto every menu the product is on, including a variant you add later.
-On the menu you can give it a price of its own, switch it off, or let it follow the menus it comes
-from. A price you set for this menu wins. Otherwise, prices set for that size on included menus
-and on the product contribute to its price. If there is no size-level price, it follows the
-combined product price.
+On the menu you can give it a price of its own, or let it follow the menus it comes from. A price
+you set for this menu wins. Otherwise, prices set for that size on included menus and on the
+product contribute to its price. If there is no size-level price, it follows the combined product
+price.
 
 Leave a menu price empty to let those contributions decide it. For example, if Drinks prices beer
 at €3.00 and Evening includes only Drinks' beer, Evening charges €3.00. If Evening also puts that
