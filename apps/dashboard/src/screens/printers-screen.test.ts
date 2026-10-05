@@ -6160,18 +6160,22 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     expect(api.updatePrinter).not.toHaveBeenCalled();
   });
 
-  it("leaves a printer's Save working after a refusal that names no field", async () => {
+  it("leaves the inline printer name Save working after a refusal that names no field", async () => {
+    history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
     const { el, api } = await mounted({
       updatePrinter: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
     });
-    await openPrinter(el, "p1");
-    typeField(el, "[data-test=printer-name-p1]", "Cocina 2");
-    q(el, "[data-test=save-printer-p1]")!.click();
+    q(el, "[data-test=edit-printer-name]")!.click();
     await flush(el);
-    expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(false);
-    q(el, "[data-test=save-printer-p1]")!.click();
+    typeField(el, '[name="printer-detail-name"]', "Cocina 2");
+    q(el, "[data-test=save-printer-name]")!.click();
     await flush(el);
-    expect(api.updatePrinter).toHaveBeenCalledTimes(2);
+    expect(text(el, "[data-test=printer-name-refusal]")).toBe(codeMessage("printer.not_found"));
+    expect(isDisabled(el, "[data-test=save-printer-name]")).toBe(false);
+    q(el, "[data-test=save-printer-name]")!.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenNthCalledWith(1, "p1", { name: "Cocina 2" });
+    expect(api.updatePrinter).toHaveBeenNthCalledWith(2, "p1", { name: "Cocina 2" });
   });
 
   it("starts the inline printer name form again when it is reopened", async () => {
