@@ -1063,6 +1063,32 @@ describe("product-list", () => {
     ]);
   });
 
+  it("offers Enable and not Disable on a disabled product's own row, and Disable on an active one", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "bun" }), product({ id: "off", name: "Anchoas", active: false })],
+    });
+    await choose(el, "active", "");
+    const root = await tableRoot(el);
+    const off = root.querySelector<HTMLElement>('[data-test="actions-off"]')!;
+    expect(off.querySelector('[data-test="delete-off"]')).toBeNull();
+    expect(off.querySelector('[data-test="restore-off"]')!.textContent).toContain(
+      t("product.enable"),
+    );
+    const bun = root.querySelector<HTMLElement>('[data-test="actions-bun"]')!;
+    expect(bun.querySelector('[data-test="restore-bun"]')).toBeNull();
+    expect(bun.querySelector('[data-test="delete-bun"]')!.textContent).toContain(
+      t("product.disable"),
+    );
+
+    const seen: [string, string][] = [];
+    for (const name of ["delete-product", "restore-product"])
+      el.addEventListener(name, (event) =>
+        seen.push([name, (event as CustomEvent<{ productId: string }>).detail.productId]),
+      );
+    off.querySelector<HTMLElement>('[data-test="restore-off"]')!.click();
+    expect(seen).toEqual([["restore-product", "off"]]);
+  });
+
   // The three-state allergen invariant: null=PENDING, {}=none, {…}=declared. PENDING and none MUST
   // be distinguishable — fourteen blank cells must never silently claim "allergen-free".
   it("renders a PENDING allergen pill when allergens is null", async () => {

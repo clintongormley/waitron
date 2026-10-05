@@ -2271,6 +2271,35 @@ it("says Disable for products alone in Spanish, and Delete once a category is se
     "Eliminar",
   );
 });
+const withDisabled = [
+  product("bread", "Bread", null),
+  product("old", "Old", null, false),
+  product("gone", "Gone", null, false),
+];
+it("offers no Disable for a selection of products that are all disabled already, keeping Move and Cancel", async () => {
+  const el = await mountBrowser({ products: withDisabled });
+  await chooseFilter(el, "active", "");
+  await selectKeys(el, ["old", "gone"]);
+  expect(el.shadowRoot!.querySelector('[data-test="selected-count"]')).not.toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="delete"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="move"]')).not.toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="cancel-selection"]')).not.toBeNull();
+});
+it("keeps Disable for a selection mixing active and disabled products, and sends both", async () => {
+  const el = await mountBrowser({ products: withDisabled });
+  await chooseFilter(el, "active", "");
+  await selectKeys(el, ["bread", "old"]);
+  expect(el.shadowRoot!.querySelector('[data-test="delete"]')!.textContent!.trim()).toBe("Disable");
+  await press(el, "delete");
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+      { productIds: ["bread", "old"], categoryIds: [] },
+      "move_up",
+      [],
+    ),
+  );
+});
 it.each(["move", "delete"])(
   "keeps %s refusal open at bottom of body and blocks Escape while busy",
   async (action) => {

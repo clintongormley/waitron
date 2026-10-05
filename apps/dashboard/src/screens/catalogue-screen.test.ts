@@ -552,6 +552,49 @@ describe("catalogue-screen", () => {
     expect(dialog.textContent).not.toContain(codeMessage("server.internal"));
   });
 
+  it("enables a disabled product from its own row through the editor's write, then shows the row as active", async () => {
+    const disabled = [{ ...products[0]!, active: false }];
+    const api = stubApi({
+      listProducts: vi
+        .fn()
+        .mockImplementation((id: string) => Promise.resolve(id === "cat-a" ? disabled : [])),
+      getProductEditor: vi.fn().mockResolvedValue({ ...value, active: false }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    const table = await productTable(el);
+    await chooseOption(
+      table.shadowRoot!.querySelector<HTMLElement>('wt-combobox[data-filter="active"]')!,
+      "",
+    );
+    table.setExpanded("folder:c1", true);
+    await table.updateComplete;
+    const row = () => table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="p1"]')!;
+    expect(row().querySelector("[data-test=active-badge]")!.getAttribute("data-active")).toBe(
+      "false",
+    );
+
+    vi.mocked(api.listProducts).mockImplementation((id: string) =>
+      Promise.resolve(id === "cat-a" ? products : []),
+    );
+    const enable = row().querySelector<HTMLElement>('[data-test="restore-p1"]');
+    expect(enable).not.toBeNull();
+    expect(enable!.textContent).toContain(t("product.enable"));
+    enable!.click();
+    await flush(el);
+    expect(api.getProductEditor).toHaveBeenCalledWith("p1");
+    expect(api.updateProductEditor).toHaveBeenCalledOnce();
+    expect(api.updateProductEditor).toHaveBeenCalledWith("p1", { ...value, active: true });
+    await vi.waitFor(() =>
+      expect(row().querySelector("[data-test=active-badge]")!.getAttribute("data-active")).toBe(
+        "true",
+      ),
+    );
+    expect(row().querySelector('[data-test="delete-p1"]')).not.toBeNull();
+    expect(row().querySelector('[data-test="restore-p1"]')).toBeNull();
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  });
+
   it("creates the complete aggregate once, closes, then refreshes the list", async () => {
     let release!: () => void;
     const pending = new Promise<ProductEditorValue>((resolve) => {

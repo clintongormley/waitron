@@ -1079,8 +1079,8 @@ export class ProductList extends LitElement {
         align: "end",
         pinned: "end",
         cell: ({ product, variant }) => {
-          const { id, name } = variant ?? product;
-          const restore = variant !== null && !variant.active;
+          const { id, name, active } = variant ?? product;
+          const restore = !active;
           const removal = restore
             ? { event: "restore-product" as const, test: "restore", label: t("product.enable") }
             : {
