@@ -13,9 +13,12 @@ import { describeSetting, placeName } from "./price-source.js";
 import {
   productInherited,
   sizeClash,
+  sizesInheritedFrom,
   variantInherited,
+  variantInheritedFrom,
   withoutOwn,
   type Inherited,
+  type InheritedFrom,
   type ParentPrice,
 } from "./menu-price-inheritance.js";
 import type { Setting } from "../api/client.js";
@@ -335,29 +338,33 @@ export class MenuPricesTable extends LitElement {
     return variant ? `${item.name} — ${this.#variantName(variant.variantId)}` : item.name;
   }
 
-  /** Where the price a blank field would take comes from; a product with sizes explains each of
-   * its Active sizes. */
+  /** Where the price a blank field would take comes from, read from the same settings as its
+   * placeholder; a product with sizes explains each of its Active sizes. */
   #tip(line: Line) {
     const { item, variant } = line;
     const names = { product: item.name };
-    const sizes = variant === null ? item.variants.filter((size) => size.active) : [];
+    const explain = ({ setting, follows }: InheritedFrom) =>
+      follows
+        ? `${t("menu_prices.source_parent").replace("{name}", item.name)}. ${describeSetting(setting, names, t)}`
+        : describeSetting(setting, names, t);
     let explanation: string;
-    if (variant) {
-      const under = withoutOwn(this.#priceSetting(line));
-      explanation = describeSetting(under, names, t);
-      if (under.state === "decided" && under.source.kind === "parent")
-        explanation += ` ${describeSetting(withoutOwn(item.combined.price), names, t)}`;
-    } else if (sizes.length === 0)
-      explanation = describeSetting(withoutOwn(item.combined.price), names, t);
-    else
-      explanation = sizes
-        .map((size) => {
-          const setting = this.#priceSetting({ item, variant: size });
-          const price =
-            setting.state === "decided" ? priceText(setting.value) : t("menu_prices.clash");
-          return `${this.#variantName(size.variantId)}: ${price}. ${describeSetting(setting, names, t)}`;
-        })
-        .join(" ");
+    if (variant)
+      explanation = explain(variantInheritedFrom(item, variant.variantId, this.#parentPrice()));
+    else {
+      const sizes = sizesInheritedFrom(item);
+      explanation =
+        sizes.length === 0
+          ? describeSetting(withoutOwn(item.combined.price), names, t)
+          : sizes
+              .map((size) => {
+                const price =
+                  size.setting.state === "decided"
+                    ? priceText(size.setting.value)
+                    : t("menu_prices.clash");
+                return `${this.#variantName(size.variantId)}: ${price}. ${explain(size)}`;
+              })
+              .join(" ");
+    }
     return html`<wt-help-tooltip
       aria-label=${t("menu_prices.tip_inherited").replace("{name}", this.#lineName(line))}
       >${explanation}</wt-help-tooltip

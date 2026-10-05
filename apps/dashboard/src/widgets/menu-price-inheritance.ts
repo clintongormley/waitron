@@ -20,19 +20,31 @@ export function withoutOwn(setting: Setting<Decimal>): Setting<Decimal> {
     : setting;
 }
 
-function parentPrice(row: MenuPriceRow, parent: ParentPrice): Inherited {
-  if (parent === undefined) return single(row.combined.price);
-  return parent === null ? single(withoutOwn(row.combined.price)) : price(parent);
+/** Where a blank field takes its price from, and whether that is the product's price, which the
+ * size follows. */
+export interface InheritedFrom {
+  setting: Setting<Decimal>;
+  follows: boolean;
+}
+
+/** The product's price as its field reads now; a price typed there is this menu's own over
+ * whatever the menu would otherwise charge. */
+function parentSetting(row: MenuPriceRow, parent: ParentPrice): Setting<Decimal> {
+  if (parent === undefined) return row.combined.price;
+  const under = withoutOwn(row.combined.price);
+  return parent === null
+    ? under
+    : { state: "decided", value: parent as Decimal, source: { kind: "own" }, otherwise: under };
 }
 
 const sizeSetting = (row: MenuPriceRow, variantId: string) =>
   row.combined.variants.find((v) => v.variantId === variantId)!.price;
 
-export function variantInherited(
+export function variantInheritedFrom(
   row: MenuPriceRow,
   variantId: string,
   parent: ParentPrice,
-): Inherited {
+): InheritedFrom {
   const setting = sizeSetting(row, variantId);
   const under = withoutOwn(setting);
   // A size with no override on this menu and no size price from any source carries its product's
@@ -40,7 +52,15 @@ export function variantInherited(
   // packages/catalogue/src/menu-combine.ts).
   const follows =
     setting.level === "product" || (under.state === "decided" && under.source.kind === "parent");
-  return follows ? parentPrice(row, parent) : single(under);
+  return follows ? { setting: parentSetting(row, parent), follows } : { setting: under, follows };
+}
+
+export function variantInherited(
+  row: MenuPriceRow,
+  variantId: string,
+  parent: ParentPrice,
+): Inherited {
+  return single(variantInheritedFrom(row, variantId, parent).setting);
 }
 
 /** An Active size's own price clashes, which a price for the product would not settle. */
@@ -51,16 +71,23 @@ export function sizeClash(row: MenuPriceRow): boolean {
   );
 }
 
+/** What each Active size charges if this menu sets no price for the product: its own price on this
+ * menu, else what it inherits. */
+export function sizesInheritedFrom(row: MenuPriceRow): (InheritedFrom & { variantId: string })[] {
+  return row.variants
+    .filter((v) => v.active)
+    .map(({ variantId }) => {
+      const setting = sizeSetting(row, variantId);
+      return setting.state === "decided" && setting.source.kind === "own"
+        ? { variantId, setting, follows: false }
+        : { variantId, ...variantInheritedFrom(row, variantId, null) };
+    });
+}
+
 /** What the product charges across its Active sizes if this menu sets no price for the product. */
 export function productInherited(row: MenuPriceRow): Inherited {
-  const active = row.variants.filter((v) => v.active);
-  if (active.length === 0) return single(withoutOwn(row.combined.price));
-  const each = active.map(({ variantId }) => {
-    const setting = sizeSetting(row, variantId);
-    return setting.state === "decided" && setting.source.kind === "own"
-      ? price(setting.value)
-      : variantInherited(row, variantId, null);
-  });
+  const each = sizesInheritedFrom(row).map(({ setting }) => single(setting));
+  if (each.length === 0) return single(withoutOwn(row.combined.price));
   const prices = each.filter((value): value is Priced => value.state === "price");
   if (prices.length < each.length) return CLASH;
   const amounts = prices.map(({ low: value }) => ({ value, cents: stringToCents(value) }));

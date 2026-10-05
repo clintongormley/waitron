@@ -1743,6 +1743,20 @@ it("opens the product page in the dashboard on a plain click, and leaves a modif
   expect(heard).toHaveBeenCalledOnce();
 });
 
+it("opens a size's own page from its status link", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  const heard = vi.fn();
+  el.addEventListener("wt-edit-product", (event) => heard((event as CustomEvent).detail));
+  cell(el, "status", "mi-lemonade:v-small")
+    .querySelector<HTMLAnchorElement>("a")!
+    .dispatchEvent(
+      new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, button: 0 }),
+    );
+  expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "v-small" });
+});
+
 it("keeps Active apart from Available: a sold-out Active product reads Active", async () => {
   // `MenuPriceRow` carries no Available; the read lists a sold-out product as Active (Task 1).
   const el = await mount({ rows: [{ ...burger, active: true }] });
@@ -1955,10 +1969,19 @@ it("gives a size one localized tooltip, and its product's tooltip describes each
     "De dónde viene el precio heredado de Lemonade — Large",
   ]);
   expect(tips[0]!.textContent!.trim()).toBe("El precio propio del producto.");
+  // The small follows the product's price on this menu, which is this menu's own 2.50.
+  const smallTip = cell(el, "override", "mi-lemonade:v-small").querySelector("wt-help-tooltip")!;
+  expect(smallTip.textContent!.trim()).toBe(
+    "Sigue el precio de Lemonade en esta carta. Esta carta fija 2,50\u00a0€. Sin él: 3,00\u00a0€, el precio propio del producto.",
+  );
+  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("2.50");
+  // With the product's field blank the small would follow the product's own 3.00, which is what
+  // the product's placeholder, 3.00 – 3.75, counts.
   const productTip = cell(el, "override", "mi-lemonade").querySelector("wt-help-tooltip")!;
   expect(productTip.textContent!.trim()).toBe(
-    "Small: 2,50\u00a0€. Sigue el precio de Lemonade en esta carta. Large: 3,75\u00a0€. Esta carta fija 3,75\u00a0€. Sin él: 3,40\u00a0€, el precio propio del producto.",
+    "Small: 3,00\u00a0€. Sigue el precio de Lemonade en esta carta. El precio propio del producto. Large: 3,75\u00a0€. Esta carta fija 3,75\u00a0€. Sin él: 3,40\u00a0€, el precio propio del producto.",
   );
+  expect(override(el, "mi-lemonade").placeholder).toBe("3.00 – 3.75");
 });
 
 it("counts equal-price direct sources once and excludes roots nested inside another menu", async () => {

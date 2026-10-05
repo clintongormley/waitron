@@ -5,7 +5,9 @@ import type { MenuPriceRow, Setting } from "../api/client.js";
 import {
   productInherited,
   sizeClash,
+  sizesInheritedFrom,
   variantInherited,
+  variantInheritedFrom,
   withoutOwn,
 } from "./menu-price-inheritance.js";
 import { combinedFixture } from "./test-helpers.js";
@@ -331,6 +333,59 @@ describe("variantInherited", () => {
   it("past a size's own price over a clash, stays a clash whatever the product's field holds", () => {
     expect(variantInherited(sizeOwnOverClash, "v-small", "2.80")).toEqual(CLASH);
     expect(variantInherited(sizeOwnOverClash, "v-small", undefined)).toEqual(CLASH);
+  });
+});
+
+describe("variantInheritedFrom", () => {
+  it("gives a following size the product's price as its field reads now", () => {
+    expect(variantInheritedFrom(lemonade, "v-small", undefined)).toEqual({
+      setting: lemonade.combined.price,
+      follows: true,
+    });
+    expect(variantInheritedFrom(lemonade, "v-small", null)).toEqual({
+      setting: withoutOwn(lemonade.combined.price),
+      follows: true,
+    });
+    expect(variantInheritedFrom(lemonade, "v-small", "2.80")).toEqual({
+      setting: {
+        state: "decided",
+        value: "2.80",
+        source: { kind: "own" },
+        otherwise: withoutOwn(lemonade.combined.price),
+      },
+      follows: true,
+    });
+  });
+
+  it("gives a size that does not follow its product its setting past its own override", () => {
+    expect(variantInheritedFrom(lemonade, "v-large", undefined)).toEqual({
+      setting: withoutOwn(sizeOf(lemonade, "v-large")),
+      follows: false,
+    });
+    expect(variantInheritedFrom(sizeLevelClash, "v-large", "2.80")).toEqual({
+      setting: sizeOf(sizeLevelClash, "v-large"),
+      follows: false,
+    });
+  });
+
+  it("gives a size following a clashing product the clash", () => {
+    expect(variantInheritedFrom(productClash, "v-small", undefined)).toEqual({
+      setting: productClash.combined.price,
+      follows: true,
+    });
+  });
+});
+
+describe("sizesInheritedFrom", () => {
+  it("gives each Active size its own price on this menu, else the setting it inherits with the product left blank", () => {
+    expect(sizesInheritedFrom(withInactive(wine, "v-carafe"))).toEqual([
+      { variantId: "v-glass", setting: sizeOf(wine, "v-glass"), follows: false },
+      { variantId: "v-bottle", setting: withoutOwn(wine.combined.price), follows: true },
+    ]);
+  });
+
+  it("is empty for a product with no Active size", () => {
+    expect(sizesInheritedFrom(withInactive(lemonade, "v-small", "v-large"))).toEqual([]);
   });
 });
 
