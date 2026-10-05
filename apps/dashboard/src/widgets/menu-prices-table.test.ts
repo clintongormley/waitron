@@ -1921,7 +1921,9 @@ describe("variants", () => {
     box(el, "category").click();
     await table(el).updateComplete;
     expect(headers(el)).not.toContain("category");
-    expect(JSON.parse(localStorage.getItem("waitron.menus.price-overrides:columns")!)).toEqual({
+    expect(
+      JSON.parse(localStorage.getItem("waitron.menus.price-overrides.table:columns")!),
+    ).toEqual({
       category: false,
     });
     const again = await mountVariants();
@@ -2115,7 +2117,7 @@ it("shows a clash honestly: no price in the field, a red Clash beside it, the re
 });
 
 it.each([
-  ["en-GB", "A size's sources disagree — set that size's price"],
+  ["en-GB", "A variant's sources disagree — set that variant's price"],
   ["es-ES", "Los orígenes de una variante discrepan: fijar el precio de esa variante"],
 ])(
   "sends a product row whose only clash is a size's to that size, offering no price of its own (%s)",
@@ -2352,7 +2354,7 @@ it("shows each row's own Active state as a link to its product page, a size by i
       "/manage/catalogue/product/v-small",
     );
     expect(visibleText(cell(el, "status", "mi-lemonade:v-small"))).toBe(
-      "Inactive its product is Inactive",
+      "Inactive its product is inactive",
     );
   } finally {
     setLocale("es-ES");

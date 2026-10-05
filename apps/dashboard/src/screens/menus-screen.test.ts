@@ -3779,7 +3779,7 @@ describe("the Structure tree", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The Prices tab
+// The Price overrides tab
 
 function prices(el: MenusScreen): MenuPricesTable {
   return q<MenuPricesTable>(el, "dashboard-menu-prices-table")!;
@@ -3868,7 +3868,7 @@ it("keeps its tab when a change event bubbles up from a control inside a tab's c
   expect(location.pathname).toBe(PRICES_PATH);
 });
 
-it("opens the Prices tab the address names, with the structure's sections, categories and products", async () => {
+it("opens the Price overrides tab the address names, with the structure's sections, categories and products", async () => {
   const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
   const el = await mountPrices(client);
   expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("prices");
@@ -4152,7 +4152,7 @@ it("stops following the prices while the Structure tab is shown, and reads them 
   expect(client.getMenuPrices).toHaveBeenLastCalledWith("menu-lunch");
 });
 
-it("shows the prices as loading on return to the Prices tab until they are read again", async () => {
+it("shows the prices as loading on return to the Price overrides tab until they are read again", async () => {
   const client = api();
   const el = await mountPrices(client);
   await chooseTab(el, "structure");
@@ -4169,7 +4169,7 @@ it("shows the prices as loading on return to the Prices tab until they are read 
   expect(prices(el).loading).toBe(false);
 });
 
-it("starts no second read when the address is read again on the Prices tab it already shows", async () => {
+it("starts no second read when the address is read again on the Price overrides tab it already shows", async () => {
   const client = api();
   const el = await mountPrices(client);
   const reads = client.getMenuPrices.mock.calls.length;
@@ -4180,7 +4180,7 @@ it("starts no second read when the address is read again on the Prices tab it al
   expect(prices(el).rows.length).toBe(3);
 });
 
-it("reads no prices when a save finishes after the person has left the Prices tab", async () => {
+it("reads no prices when a save finishes after the person has left the Price overrides tab", async () => {
   const pending = deferred<void>();
   const client = api({ updateMenuItem: vi.fn(() => pending.promise) });
   const el = await mountPrices(client);
@@ -4211,7 +4211,7 @@ it("saves an edit left by choosing another tab", async () => {
   );
 });
 
-it("reports beside the Structure tab a save refused after Back left the Prices tab", async () => {
+it("reports beside the Structure tab a save refused after Back left the Price overrides tab", async () => {
   const pending = deferred<void>();
   const client = api({ updateMenuItem: vi.fn(() => pending.promise) });
   const el = await mountLunch(client);

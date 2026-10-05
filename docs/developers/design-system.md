@@ -1286,8 +1286,7 @@ A few lists edit a value in its own row, saving each change as it is made, with 
 (`apps/dashboard/src/widgets/menu-prices-table.ts`) is the second. Each field is a one-field edit
 of its own, so the rules above for a form with a primary action apply like this instead:
 
-- the field takes `hide-label`, and its `label` names its row ("Price override for Lemonade —
-  Large"), so a screen reader hears which row the field belongs to;
+- the field takes `hide-label`, so its `label` is read to a screen reader but not drawn;
 - typing sends nothing; Enter, or leaving the field, saves it, and Escape puts back the saved value;
 - the field's own check runs when it is saved, and a failure puts its sentence under the field and
   sends nothing;
@@ -1302,9 +1301,12 @@ Where the two differ, and why:
   a slow save would otherwise freeze the field the person wants to correct. Its saves go one at a
   time in the order they were made (`ListWriteQueue`, `apps/dashboard/src/widgets/section-writes.ts`),
   and a save of a value the field already holds sends nothing.
+- The price table's `label` names its row ("Price override for Lemonade — Large"), so a screen
+  reader hears which row the field belongs to. The course list's label names no row: a course's
+  field is labelled "Name", and the new course's field "New course" (`#nameField`).
 - The price table moves focus to the field a refusal names, even when the person has moved on to
-  another row (a size whose product is folded shut has no field drawn, so nothing takes focus). The
-  course list marks the field and moves focus nowhere (`#commit`).
+  another row, opening a size's product first if it is folded shut (`#focusField`). The course list
+  marks the field and moves focus nowhere (`#commit`).
 - The course list shows any other refusal as an alert under the list. The price table says every
   outcome in a status line that stays in view at the bottom of the tab while the rows scroll (a
   refusal, including one already shown under its field, or what was saved, with an Undo that writes

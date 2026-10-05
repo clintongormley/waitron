@@ -550,8 +550,8 @@ export class MenusScreen extends LitElement {
       this.pricesError = true;
     },
   );
-  /** The menu whose prices are being watched, so showing the Prices tab while they already are
-   * starts no second read. */
+  /** The menu whose prices are being watched, so showing the Price overrides tab while they already
+   * are starts no second read. */
   #pricesFor: string | null = null;
   readonly #statusQueries = new DashboardQueries(
     this,
@@ -927,8 +927,8 @@ export class MenusScreen extends LitElement {
     this.pricesError = false;
   }
 
-  /** The prices are watched only while the Prices tab is shown: the structure edits made on the
-   * other tab write tables the prices read depends on. The preview likewise. */
+  /** The prices are watched only while the Price overrides tab is shown: the structure edits made
+   * on the other tab write tables the prices read depends on. The preview likewise. */
   #showView(view: Tab): void {
     this.view = view;
     this.#followStatus();

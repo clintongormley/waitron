@@ -921,7 +921,7 @@ export class MenuPricesTable extends LitElement {
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}
         aria-label=${t("menu_prices.label").replace("{menu}", this.menuName)}
-        viewKey="waitron.menus.price-overrides"
+        viewKey="waitron.menus.price-overrides.table"
         searchable
         searchLabel=${t("menu_prices.search")}
         customiseColumnsLabel=${t("table.customise_columns")}

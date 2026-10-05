@@ -3220,16 +3220,16 @@ module, in the order they are checked, whose count differs.
 propios"); its address keeps `view/prices`. Each product and each size has one price field in its
 row: blank, it shows the price it inherits as its placeholder — one amount, the range across a
 product's Active sizes, or "Set a price" beside a red Clash when its sources disagree (a product
-whose only clash is in one of its sizes shows "—" and says that a size's sources disagree and that
-size's price should be set); with an override, it shows that price. Enter or leaving the field
-saves it, Escape puts the stored price back, and emptying it gives the inheritance back. A refusal
-about the price also goes under its field and takes focus there; a status line that stays in view
-says what each save did — refused, or saved, with Undo. The window behind the product name, and the
-Before this menu, Menu price, Effective price, Price on this menu and From columns, are gone. Main
-category starts shown and keeps its filter; the table keeps its column choices under a new key
-(`waitron.menus.price-overrides`), so a choice saved for the old columns is not read (as W87 did
-for the Menus list). A Status column says Active or Inactive and links to the product's page; the
-tab now lists Inactive products and sizes (the management prices read includes them, each with
+whose only clash is in one of its sizes shows "—" and says that a variant's sources disagree and
+that variant's price should be set); with an override, it shows that price. Enter or leaving the
+field saves it, Escape puts the stored price back, and emptying it gives the inheritance back. A
+refusal about the price also goes under its field and takes focus there; a status line that stays in
+view says what each save did — refused, or saved, with Undo. The window behind the product name, and
+the Before this menu, Menu price, Effective price, Price on this menu and From columns, are gone.
+Main category starts shown and keeps its filter; the table keeps its column choices under a new key
+(`waitron.menus.price-overrides.table`), so a choice saved for the old columns is not read (as W87
+did for the Menus list). A Status column says Active or Inactive and links to the product's page;
+the tab now lists Inactive products and sizes (the management prices read includes them, each with
 `active`), while a menu's offers, and what it publishes, still leave them out. A new route,
 `PATCH /management-api/catalogues/:id/items/:itemId/variants/:variantId`, sets one size's price
 alone ([product-categories.md](developers/product-categories.md)); the dashboard no longer calls
