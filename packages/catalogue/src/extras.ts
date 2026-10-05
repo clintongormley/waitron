@@ -22,7 +22,8 @@ import { findContentTranslationGap } from "./content-languages.js";
 import { parentsWithActiveVariants } from "./variants.js";
 import { productUnits, units } from "./schema/units.js";
 import { parentJoin, parentProducts, unitOwnerJoin } from "./variant-fallback.js";
-import { assertQuantityPrecision } from "./unit-validation.js";
+import { assertQuantityPrecision, EACH_UNIT_ID } from "./unit-validation.js";
+import { isEachUnit } from "./units.js";
 import { priceForExtraPortion } from "./extra-contract.js";
 import "./errors.js";
 
@@ -206,8 +207,9 @@ const ONE_PORTION = decimalToThousandths(decimal("1"));
 /**
  * Checks each item's portion and returns the thousandths to store for it, in the body's order. An
  * item sent without one stores one when its product is Each, keeps the portion saved under its id
- * when the list holds it for the same product, and is refused otherwise. `savedById` holds this
- * list's saved rows for the ids the body sends.
+ * when the list holds it for the same product, and is refused otherwise. An Each product takes no
+ * portion but one, even on an item whose saved portion predates it becoming Each. `savedById`
+ * holds this list's saved rows for the ids the body sends.
  */
 async function itemPortions(
   tx: Transaction,
@@ -236,7 +238,8 @@ async function itemPortions(
   return input.items.map((item, index) => {
     const unit = unitByProduct.get(item.productId);
     const precision = unit?.precision ?? 0;
-    const each = unit?.unitId === null || unit?.seedKey === "each";
+    const each =
+      unit !== undefined && isEachUnit({ id: unit.unitId ?? EACH_UNIT_ID, seedKey: unit.seedKey });
     const saved = item.id === undefined ? undefined : savedById.get(item.id);
     // Held means the list holds a row for the item's product under its id, not that an id was sent:
     // the dashboard's editor sends one for every row it adds.
@@ -247,9 +250,14 @@ async function itemPortions(
       return saved.portion;
     }
     const portion = decimalToThousandths(decimal(item.portion));
+    if (each) {
+      if (item.portion !== "1.000") {
+        throw new AppError("extras.invalid", { field: `items.${index}.portion` });
+      }
+      return portion;
+    }
     if (held && saved.portion === portion) return portion;
     try {
-      if (each && item.portion !== "1.000") throw new Error("Each portion must be one");
       assertQuantityPrecision(item.portion, precision, {
         positive: true,
       });

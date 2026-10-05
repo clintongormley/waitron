@@ -1341,8 +1341,11 @@ before the Each check in `itemPortions` — as it was before #1221. Tried 2026-1
 with a throwaway test: a kg item saved at `0.050`, its product's unit cleared, then
 `updateExtraList` with `{ id, productId, portion: "0.050" }` was not refused and read back `0.050`.
 The Extras editor sends no portion for an Each product, so this is reachable through the API only.
-Next step, if wanted: run the Each check before the equal-to-saved shortcut, so such an item is
-refused on `items.<n>.portion`.
+_2026-10-05: SETTLED by W75e (owner chose to refuse it)._ `itemPortions` now judges an Each product
+before the equal-to-saved shortcut, deciding Each with `isEachUnit` (`packages/catalogue/src/units.ts`):
+such an item sent with any portion but one is refused on `items.<n>.portion` with `extras.invalid`
+and nothing is saved, while the same item sent without a portion, or with `1.000`, stores one. Tests
+in `packages/catalogue/src/extras.test.ts`.
 
 **A folded Customer-facing names section shows every language's name, inherited ones in italic
 (W77, owner 2026-10-04) — DONE (#1197).** The owner, on an Extras list: _"missing the summary of the values
@@ -1913,7 +1916,8 @@ W53 changes the filed display surfaces.
   the server still accepts a new item of a whole unit with no hardware link (ml, say) without one,
   and stores 1._ _2026-10-05 (W75c): the server now refuses that too. (W75d): an item the list
   already holds under its id for the same product, sent again without a portion, keeps its saved
-  one unless its product is Each._
+  one unless its product is Each. (W75e): an item whose product is Each is refused with any
+  portion but one, even when that portion equals the one saved before the product became Each._
 - each pick adds one portion: three picks of 50 g are 150 g, and a dish × 2 doubles that, as the
   count does today;
 - the item's **Price is per portion**: blank, it is the portion × the product's unit price (50 g ×
