@@ -572,8 +572,8 @@ async function mount(client: Api = api(), path = "/manage/menus") {
 /** Opens Lunch from its address and waits for its structure. */
 async function mountLunch(client: Api = api()) {
   const el = await mount(client, LUNCH_PATH);
-  await vi.waitFor(() => expect(tree(el)).not.toBeNull());
-  await tree(el).updateComplete;
+  await vi.waitFor(() => expect(structure(el)).not.toBeNull());
+  await structure(el).updateComplete;
   return el;
 }
 
@@ -643,43 +643,14 @@ function emit(target: Element, name: string, detail: unknown): void {
   target.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
 }
 
-function tree(el: MenusScreen): MenuStructureTree {
-  return q<MenuStructureTree>(el, "dashboard-menu-structure-tree")!;
-}
-
-function inTree(el: MenusScreen, selector: string): HTMLElement | null {
-  return tree(el).shadowRoot!.querySelector<HTMLElement>(selector);
-}
-
-async function clickInTree(el: MenusScreen, testId: string): Promise<void> {
-  inTree(el, `[data-test="${testId}"]`)!.click();
-  await tree(el).updateComplete;
-  await el.updateComplete;
-}
-
-/** The tree's entries at the menu's own top level, whose paths are one member long. */
-function topLevel(el: MenusScreen): HTMLElement[] {
-  return [...tree(el).shadowRoot!.querySelectorAll<HTMLElement>("li[data-path]")].filter(
-    (item) => !item.dataset.path!.includes("/"),
-  );
-}
-
-function memberList(el: MenusScreen): MemberListEditor {
-  return q<MemberListEditor>(el, "dashboard-member-list-editor")!;
-}
-
 function text(node: Element | null): string {
   return (node?.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
-function breadcrumb(el: MenusScreen): string {
-  return text(q(el, '[data-test="breadcrumb"]'));
-}
-
 /** Opens a list for editing the way a person does, through the tree. */
 async function editDrinks(el: MenusScreen): Promise<void> {
-  await clickInTree(el, "edit-m-drinks");
-  await vi.waitFor(() => expect(breadcrumb(el)).toBe("Lunch Menu › Drinks"));
+  await toggleRow(el, "m-drinks");
+  await vi.waitFor(() => expect(currentPlace(el)).toBe("Lunch Menu › Drinks"));
 }
 
 /** Another change's update, leaving Lunch with Burger alone, so the editor falls back to the top. */
@@ -699,7 +670,7 @@ async function takeDrinksOff(el: MenusScreen, client: Api, live: LiveData): Prom
     nodes: [productNode("m-burger", "p-burger")],
   });
   live.invalidate([{ type: "section_members" }]);
-  await vi.waitFor(() => expect(breadcrumb(el)).toBe("Lunch Menu"));
+  await vi.waitFor(() => expect(currentPlace(el)).toBe("Lunch Menu"));
 }
 
 function deferred<T>() {
@@ -715,6 +686,114 @@ function deferred<T>() {
 async function click(el: MenusScreen, testId: string): Promise<void> {
   q(el, `[data-test="${testId}"]`)!.click();
   await el.updateComplete;
+}
+
+type StructureTable = HTMLElementTagNameMap["dashboard-menu-structure-table"];
+
+function structure(el: MenusScreen): StructureTable {
+  return q<StructureTable>(el, "dashboard-menu-structure-table")!;
+}
+
+/** The tree's own table, whose shadow root holds the rows. */
+function structureRows(el: MenusScreen): Table {
+  return structure(el).shadowRoot!.querySelector<Table>("wt-data-table")!;
+}
+
+function inStructure<T extends Element = HTMLElement>(el: MenusScreen, selector: string): T | null {
+  return structureRows(el).shadowRoot.querySelector<T>(selector);
+}
+
+function allInStructure<T extends Element = HTMLElement>(el: MenusScreen, selector: string): T[] {
+  return [...structureRows(el).shadowRoot.querySelectorAll<T>(selector)];
+}
+
+/** Waits for the screen, the tree and the tree's table to draw what the screen holds. */
+async function settleStructure(el: MenusScreen): Promise<void> {
+  for (let round = 0; round < 3; round++) {
+    await el.updateComplete;
+    const tree = q<StructureTable>(el, "dashboard-menu-structure-table");
+    await tree?.updateComplete;
+    await tree?.shadowRoot!.querySelector<Table>("wt-data-table")?.updateComplete;
+  }
+}
+
+function rowOf(el: MenusScreen, key: string): HTMLElement | null {
+  return inStructure(el, `tr[data-row-key="${CSS.escape(key)}"]`);
+}
+
+/** Opens or closes a section by its row, as a click on it does. */
+async function toggleRow(el: MenusScreen, key: string): Promise<void> {
+  rowOf(el, key)!.querySelector<HTMLElement>(".row-activate")!.click();
+  await settleStructure(el);
+}
+
+/** Opens a row's ⋮ and chooses `action` in it, focusing the item first as a person's click
+ * leaves it. */
+async function rowAction(el: MenusScreen, key: string, action: string): Promise<void> {
+  await settleStructure(el);
+  inStructure<HTMLElementTagNameMap["wt-row-actions"]>(
+    el,
+    `[data-test="${CSS.escape(`actions-${key}`)}"]`,
+  )!.show();
+  const item = inStructure(el, `[data-test="${CSS.escape(`${action}-${key}`)}"]`)!;
+  item.focus();
+  item.click();
+  await settleStructure(el);
+}
+
+/** The keys of the rows drawn at the menu's own top level, in order. */
+function topLevelKeys(el: MenusScreen): string[] {
+  return allInStructure(el, 'tbody tr[aria-level="2"]').map((row) => row.dataset.rowKey!);
+}
+
+/** The keys of the rows drawn directly under `key`'s row, in order. */
+function childKeys(el: MenusScreen, key: string): string[] {
+  const depth = key === "root" ? 0 : key.split("/").length;
+  return allInStructure(el, "tbody tr[data-row-key]")
+    .map((row) => row.dataset.rowKey!)
+    .filter(
+      (shown) =>
+        shown !== "root" &&
+        shown.split("/").length === depth + 1 &&
+        (depth === 0 || shown.startsWith(`${key}/`)),
+    );
+}
+
+/** The menu's name, then the names down to the row marked current, or "" when no row is. */
+function currentPlace(el: MenusScreen): string {
+  const key = inStructure(el, '[aria-current="true"]')?.closest("tr")?.dataset.rowKey;
+  if (key === undefined) return "";
+  const segments = key === "root" ? [] : key.split("/");
+  return [
+    structure(el).menuName,
+    ...segments.map((_, index) =>
+      text(rowOf(el, segments.slice(0, index + 1).join("/"))!.querySelector('[data-test="name"]')),
+    ),
+  ].join(" › ");
+}
+
+/** The key of the row marked current. */
+function currentKey(el: MenusScreen): string {
+  return inStructure(el, '[aria-current="true"]')!.closest("tr")!.dataset.rowKey!;
+}
+
+/** Lunch's structure holding `nodes` at its top level. */
+function lunchWith(nodes: MenuStructureNode[], extra: Partial<MenuStructure> = {}): MenuStructure {
+  return {
+    rootSectionId: "root-lunch",
+    root: {
+      id: "root-lunch",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
+    nodes,
+    ...extra,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1062,6 +1141,44 @@ describe("the menus list's columns", () => {
       });
     },
   );
+
+  describe("before the list reports a size", () => {
+    // No size report ever arrives, so the layout can come only from the list as it is drawn.
+    beforeEach(() => {
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      onTestFinished(() => void vi.unstubAllGlobals());
+    });
+
+    it("draws a phone-width list in its phone layout the first time it is shown (390 px)", async () => {
+      await at([390, 844], "en-GB", async () => {
+        const el = await mount();
+        await vi.waitFor(async () => {
+          await table(el).updateComplete;
+          expect(table(el).shadowRoot.querySelectorAll("tbody tr")).toHaveLength(2);
+        });
+        expect(table(el).classList.contains("narrow")).toBe(true);
+        expect(table(el).shadowRoot.querySelector(".columns-trigger")).toBeNull();
+      });
+    });
+
+    it("draws the phone layout again on coming back to the list from a menu (390 px)", async () => {
+      await at([390, 844], "en-GB", async () => {
+        const el = await mount(api(), LUNCH_PATH);
+        await vi.waitFor(() => expect(structure(el)).not.toBeNull());
+        await click(el, "back");
+        await vi.waitFor(() => expect(table(el)).not.toBeNull());
+        await table(el).updateComplete;
+        expect(table(el).classList.contains("narrow")).toBe(true);
+      });
+    });
+  });
 
   it("ignores a column choice saved under the list's previous key: Status, and the Lunch row's state on a phone, stay shown", async () => {
     localStorage.setItem("waitron.menus.table:columns", JSON.stringify({ status: false }));
@@ -1769,67 +1886,57 @@ it("says the menus could not be loaded, and tries again", async () => {
 
 it("shows the root's members, and expanding Drinks shows its members inline", async () => {
   const el = await mountLunch();
-  const names = () =>
-    [...tree(el).shadowRoot!.querySelectorAll('[data-test="name"]')].map((name) => text(name));
+  const names = () => allInStructure(el, '[data-test="name"]').map((name) => text(name));
   expect(names()).toEqual(["Burger", "Drinks", "Favourites"]);
-  await clickInTree(el, "toggle-m-drinks");
+  await toggleRow(el, "m-drinks");
   expect(names()).toEqual(["Burger", "Drinks", "Lager", "Beer", "Lemonade", "Favourites"]);
   // Staff names only.
-  const shown = text(tree(el).shadowRoot!.querySelector("ul"));
+  const shown = text(inStructure(el, "tbody"));
   for (const wrong of ["Bebidas", "Something to drink", "for guests", "COCINA"])
     expect(shown).not.toContain(wrong);
 });
 
 it("edits the menu's own top level first, with no sharing to report and nothing to duplicate", async () => {
   const el = await mountLunch();
-  expect(breadcrumb(el)).toBe("Lunch Menu");
-  expect(memberList(el).members.map((member) => member.id)).toEqual([
-    "m-burger",
-    "m-drinks",
-    "m-fav",
-  ]);
-  expect(memberList(el).members.map((member) => member.position)).toEqual([0, 1, 2]);
+  expect(currentPlace(el)).toBe("Lunch Menu");
+  expect(childKeys(el, "root")).toEqual(["m-burger", "m-drinks", "m-fav"]);
   expect(q(el, '[data-test="shared"]')).toBeNull();
   expect(q(el, '[data-test="duplicate-here"]')).toBeNull();
 });
 
-it("edits a section in place, showing the path followed as a text breadcrumb", async () => {
+it("edits a section in place, marking the path followed in the tree", async () => {
   const el = await mountLunch();
   await editDrinks(el);
-  expect(memberList(el).members.map((member) => member.id)).toEqual([
+  expect(childKeys(el, "m-drinks").map((key) => key.split("/").at(-1))).toEqual([
     "m-lager",
     "m-beer",
     "m-lemonade",
   ]);
-  emit(memberList(el), "wt-member-open", { sectionId: "s-beer" });
-  await el.updateComplete;
-  expect(breadcrumb(el)).toBe("Lunch Menu › Drinks › Beer");
-  expect(memberList(el).members.map((member) => member.id)).toEqual(["m-lager-2"]);
-  const crumbs = q(el, '[data-test="breadcrumb"]')!;
-  expect(crumbs.tagName).toBe("NAV");
-  expect(crumbs.querySelector('[aria-current="location"]')!.textContent!.trim()).toBe("Beer");
+  await toggleRow(el, "m-drinks/m-beer");
+  expect(currentPlace(el)).toBe("Lunch Menu › Drinks › Beer");
+  expect(childKeys(el, "m-drinks/m-beer")).toEqual(["m-drinks/m-beer/m-lager-2"]);
   // The tree marks the same place.
-  await tree(el).updateComplete;
-  expect(inTree(el, '[data-test="edit-m-drinks/m-beer"]')!.getAttribute("aria-current")).toBe(
-    "true",
-  );
-  await click(el, "crumb-1");
-  expect(breadcrumb(el)).toBe("Lunch Menu › Drinks");
-  await click(el, "crumb-0");
-  expect(breadcrumb(el)).toBe("Lunch Menu");
+  await settleStructure(el);
+  expect(
+    rowOf(el, "m-drinks/m-beer")!.querySelector('[data-test="name"]')!.getAttribute("aria-current"),
+  ).toBe("true");
+  await toggleRow(el, "m-drinks/m-beer");
+  expect(currentPlace(el)).toBe("Lunch Menu › Drinks");
+  await toggleRow(el, "m-drinks");
+  expect(currentPlace(el)).toBe("Lunch Menu");
 });
 
-it("keeps the current list's Add actions beside the Structure tab", async () => {
+it("keeps the current list's Add actions in its own row's ⋮, not beside the Structure tab", async () => {
   const el = await mountLunch(api());
   await editDrinks(el);
   const tabs = q(el, 'wt-tabs[data-test="menu-tabs"]')!;
-  for (const action of ["new-section", "include-menu", "open-add-products"]) {
-    expect(tabs.querySelector(`[slot="actions"] [data-test="${action}"]`)).not.toBeNull();
-    expect(tabs.querySelector<HTMLElement>(`[data-test="${action}"]`)!.checkVisibility()).toBe(
-      true,
-    );
-    expect(tabs.querySelector(`[slot="structure"] [data-test="${action}"]`)).toBeNull();
-  }
+  for (const key of ["root", "m-drinks"])
+    for (const action of ["new-section", "include-menu", "open-add-products"])
+      expect(
+        inStructure(el, `[data-test="actions-${key}"] [data-test="${action}-${key}"]`),
+        `${action}-${key}`,
+      ).not.toBeNull();
+  expect(tabs.querySelector('[slot="actions"]')).toBeNull();
 });
 
 it("keeps the new-section form open and explains a refused section", async () => {
@@ -1838,7 +1945,7 @@ it("keeps the new-section form open and explains a refused section", async () =>
   });
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "new-section");
+  await rowAction(el, "m-drinks", "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
@@ -1853,7 +1960,7 @@ it("creates a section without leaving the editor and adds it to the list being e
   const client = api();
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "new-section");
+  await rowAction(el, "m-drinks", "new-section");
   expect(modal(el, "new-section").open).toBe(true);
   const name = inModal<HTMLElementTagNameMap["wt-input"]>(
     el,
@@ -1878,7 +1985,7 @@ it("creates a section without leaving the editor and adds it to the list being e
     color: null,
   });
   expect(client.addSectionMember).not.toHaveBeenCalled();
-  expect(breadcrumb(el)).toBe("Lunch Menu › Drinks");
+  expect(currentPlace(el)).toBe("Lunch Menu › Drinks");
 });
 
 it("closes the new-section form, sending nothing, when another change takes its list off the menu before Save", async () => {
@@ -1886,7 +1993,7 @@ it("closes the new-section form, sending nothing, when another change takes its 
   const client = api({ liveData: live });
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "new-section");
+  await rowAction(el, "m-drinks", "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
   await el.updateComplete;
   await takeDrinksOff(el, client, live);
@@ -1906,7 +2013,7 @@ it("keeps the new-section form open while its section is being created and its l
   const client = api({ liveData: live, createSectionIn: vi.fn(() => creating.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "new-section");
+  await rowAction(el, "m-drinks", "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
@@ -1940,7 +2047,7 @@ it("says a created section was added to its list when that list left the menu wh
   const client = api({ liveData: live, createSectionIn: vi.fn(() => creating.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "new-section");
+  await rowAction(el, "m-drinks", "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
@@ -1967,13 +2074,13 @@ it("shows no message when the person opens another list while a section is being
   const client = api({ createSectionIn: vi.fn(() => adding.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "new-section");
+  await rowAction(el, "m-drinks", "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
   await vi.waitFor(() => expect(client.createSectionIn).toHaveBeenCalledOnce());
-  await click(el, "crumb-0");
-  expect(breadcrumb(el)).toBe("Lunch Menu");
+  await toggleRow(el, "m-drinks");
+  expect(currentPlace(el)).toBe("Lunch Menu");
   adding.resolve({ ...sections()[3]!, id: "s-new", internalName: "Ciders" });
   await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
   await new Promise((resolve) => setTimeout(resolve));
@@ -1984,15 +2091,24 @@ it("shows no message when the person opens another list while a section is being
 it("names the list a product removal takes a member out of, and offers section editing and deletion", async () => {
   const client = api();
   const el = await mountLunch(client);
-  const list = () => memberList(el);
-  expect(list().listName).toBe("Lunch Menu");
+  expect(text(inStructure(el, '[data-test="remove-m-burger"]'))).toBe(
+    t("members.remove_from").replace("{list}", "Lunch Menu"),
+  );
   await editDrinks(el);
-  expect(list().listName).toBe("Drinks");
-  await list().updateComplete;
-  const actions = list().shadowRoot!.querySelector('[data-test="actions-m-beer"]')!;
+  expect(text(inStructure(el, '[data-test="remove-m-drinks/m-lemonade"]'))).toBe(
+    t("members.remove_from").replace("{list}", "Drinks"),
+  );
+  await settleStructure(el);
+  const actions = inStructure(el, '[data-test="actions-m-drinks/m-beer"]')!;
   const labels = [...actions.querySelectorAll("wt-button")].map((button) => text(button));
-  expect(labels).toEqual([t("members.open"), t("action.edit"), t("action.delete")]);
-  list().shadowRoot!.querySelector<HTMLElement>('[data-test="remove-m-lemonade"]')!.click();
+  expect(labels).toEqual([
+    t("menus.new_section"),
+    t("menus.include_menu"),
+    t("sections.add_products"),
+    t("action.edit"),
+    t("action.delete"),
+  ]);
+  await rowAction(el, "m-drinks/m-lemonade", "remove");
   await vi.waitFor(() =>
     expect(client.removeSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", "m-lemonade"),
   );
@@ -2016,8 +2132,7 @@ it("edits section details and deletes its owned descendants while keeping includ
   };
   const client = api({ getMenuStructure: vi.fn().mockResolvedValue(snapshot) });
   const el = await mountLunch(client);
-  emit(memberList(el), "wt-member-edit", { sectionId: "s-drinks" });
-  await el.updateComplete;
+  await rowAction(el, "m-drinks", "edit");
   const form = q<HTMLElementTagNameMap["dashboard-section-details-form"]>(
     el,
     '[data-test="section-form"]',
@@ -2053,8 +2168,7 @@ it("edits section details and deletes its owned descendants while keeping includ
       },
     ],
   });
-  emit(memberList(el), "wt-member-delete", { sectionId: "s-drinks" });
-  await el.updateComplete;
+  await rowAction(el, "m-drinks", "delete");
   expect(modal(el, "delete-section").textContent).toContain(
     t("menus.delete_section_one").replace("{name}", "Drinks"),
   );
@@ -2063,42 +2177,22 @@ it("edits section details and deletes its owned descendants while keeping includ
   expect(client.removeSectionMember).not.toHaveBeenCalled();
 });
 
-it("adds a product or section chosen in the list to the list being edited", async () => {
-  const client = api();
-  const el = await mountLunch(client);
-  await editDrinks(el);
-  emit(memberList(el), "wt-member-add", { ref: { kind: "product", productId: "p-chips" } });
-  await vi.waitFor(() =>
-    expect(client.addSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", {
-      kind: "product",
-      productId: "p-chips",
-    }),
-  );
-  await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
-});
-
 it("ArrowUp and ArrowDown reorder the list being edited, and focus stays on the moved row", async () => {
   const client = api();
   const el = await mountLunch(client);
-  const list = memberList(el);
+  const list = structureRows(el);
   const handle = () =>
-    list.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="drag-m-burger"]')!;
+    list.shadowRoot.querySelector<HTMLButtonElement>('[data-test="drag-m-burger"]')!;
   const order = () =>
-    [...list.shadowRoot!.querySelectorAll("tbody tr")].map((row) =>
-      row.getAttribute("data-member"),
+    [...list.shadowRoot.querySelectorAll('tbody tr[aria-level="2"]')].map((row) =>
+      row.getAttribute("data-row-key"),
     );
   handle().focus();
   handle().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
   await vi.waitFor(() =>
     expect(client.moveSectionMember).toHaveBeenCalledWith("root-lunch", "m-burger", 1),
   );
-  await vi.waitFor(() =>
-    expect(topLevel(el).map((item) => item.dataset.path)).toEqual([
-      "m-drinks",
-      "m-burger",
-      "m-fav",
-    ]),
-  );
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-drinks", "m-burger", "m-fav"]));
   await el.updateComplete;
   await list.updateComplete;
   expect(order()).toEqual(["m-drinks", "m-burger", "m-fav"]);
@@ -2109,13 +2203,7 @@ it("ArrowUp and ArrowDown reorder the list being edited, and focus stays on the 
     expect(client.moveSectionMember).toHaveBeenLastCalledWith("root-lunch", "m-burger", 0),
   );
   // The tree follows the order the server answered.
-  await vi.waitFor(() =>
-    expect(topLevel(el).map((item) => item.dataset.path)).toEqual([
-      "m-burger",
-      "m-drinks",
-      "m-fav",
-    ]),
-  );
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-burger", "m-drinks", "m-fav"]));
   await el.updateComplete;
   await list.updateComplete;
   expect(order()).toEqual(["m-burger", "m-drinks", "m-fav"]);
@@ -2126,32 +2214,20 @@ it("ArrowUp and ArrowDown reorder the list being edited, and focus stays on the 
 it("shows the order the last of several queued moves answered", async () => {
   const client = api();
   const el = await mountLunch(client);
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 1 });
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 2 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 2 });
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledTimes(2));
-  await vi.waitFor(() =>
-    expect(topLevel(el).map((item) => item.dataset.path)).toEqual([
-      "m-drinks",
-      "m-fav",
-      "m-burger",
-    ]),
-  );
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-drinks", "m-fav", "m-burger"]));
   expect(client.getMenuStructure).toHaveBeenCalledOnce();
 });
 
 it("shows the order the last of several queued moves of different members answered, without reading the menu again", async () => {
   const client = api();
   const el = await mountLunch(client);
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 1 });
-  emit(memberList(el), "wt-member-move", { memberId: "m-fav", to: 0 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-fav", to: 0 });
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledTimes(2));
-  await vi.waitFor(() =>
-    expect(topLevel(el).map((item) => item.dataset.path)).toEqual([
-      "m-fav",
-      "m-drinks",
-      "m-burger",
-    ]),
-  );
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-fav", "m-drinks", "m-burger"]));
   await new Promise((resolve) => setTimeout(resolve));
   expect(client.getMenuStructure).toHaveBeenCalledOnce();
 });
@@ -2164,7 +2240,7 @@ it("keeps another change's order that lands while a move is out, reading the men
     moveSectionMember: vi.fn(() => new Promise((resolve) => (answer = resolve))),
   });
   const el = await mountLunch(client);
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 1 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
   // Another change's order reaches the screen before the move's answer does.
   const newer = lunchNodes().reverse();
@@ -2183,13 +2259,7 @@ it("keeps another change's order that lands while a move is out, reading the men
     nodes: newer,
   });
   live.invalidate([{ type: "section_members" }]);
-  await vi.waitFor(() =>
-    expect(topLevel(el).map((item) => item.dataset.path)).toEqual([
-      "m-fav",
-      "m-drinks",
-      "m-burger",
-    ]),
-  );
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-fav", "m-drinks", "m-burger"]));
   answer([
     sectionMember("m-drinks", 0, "s-drinks"),
     productMember("m-burger", 1, "p-burger"),
@@ -2197,14 +2267,10 @@ it("keeps another change's order that lands while a move is out, reading the men
   ]);
   await new Promise((resolve) => setTimeout(resolve));
   await el.updateComplete;
-  expect(topLevel(el).map((item) => item.dataset.path)).toEqual(["m-fav", "m-drinks", "m-burger"]);
+  expect(topLevelKeys(el)).toEqual(["m-fav", "m-drinks", "m-burger"]);
   await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(3));
   await el.updateComplete;
-  expect(memberList(el).members.map((member) => member.id)).toEqual([
-    "m-fav",
-    "m-drinks",
-    "m-burger",
-  ]);
+  expect(topLevelKeys(el)).toEqual(["m-fav", "m-drinks", "m-burger"]);
 });
 
 it("reads the menu again when another change moves a different item past the moved one while the move is out", async () => {
@@ -2212,7 +2278,7 @@ it("reads the menu again when another change moves a different item past the mov
   const moving = deferred<SectionMember[]>();
   const client = api({ liveData: live, moveSectionMember: vi.fn(() => moving.promise) });
   const el = await mountLunch(client);
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 1 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
   // Someone else's change: Favourites moved up past Burger, after our move reached the server.
   const [burger, drinks, fav] = lunchNodes();
@@ -2231,13 +2297,7 @@ it("reads the menu again when another change moves a different item past the mov
     nodes: [drinks!, fav!, burger!],
   });
   live.invalidate([{ type: "section_members" }]);
-  await vi.waitFor(() =>
-    expect(topLevel(el).map((item) => item.dataset.path)).toEqual([
-      "m-drinks",
-      "m-fav",
-      "m-burger",
-    ]),
-  );
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-drinks", "m-fav", "m-burger"]));
   moving.resolve([
     sectionMember("m-drinks", 0, "s-drinks"),
     productMember("m-burger", 1, "p-burger"),
@@ -2246,11 +2306,7 @@ it("reads the menu again when another change moves a different item past the mov
   await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(3));
   await new Promise((resolve) => setTimeout(resolve));
   await el.updateComplete;
-  expect(memberList(el).members.map((member) => member.id)).toEqual([
-    "m-drinks",
-    "m-fav",
-    "m-burger",
-  ]);
+  expect(topLevelKeys(el)).toEqual(["m-drinks", "m-fav", "m-burger"]);
 });
 
 it("takes a move's answer without reading the menu again when a read already showing that order lands first", async () => {
@@ -2258,7 +2314,7 @@ it("takes a move's answer without reading the menu again when a read already sho
   const moving = deferred<SectionMember[]>();
   const client = api({ liveData: live, moveSectionMember: vi.fn(() => moving.promise) });
   const el = await mountLunch(client);
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 1 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
   const [burger, drinks, fav] = lunchNodes();
   client.getMenuStructure.mockResolvedValue({
@@ -2277,13 +2333,7 @@ it("takes a move's answer without reading the menu again when a read already sho
   });
   live.invalidate([{ type: "section_members" }]);
   await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
-  await vi.waitFor(() =>
-    expect(topLevel(el).map((item) => item.dataset.path)).toEqual([
-      "m-drinks",
-      "m-burger",
-      "m-fav",
-    ]),
-  );
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-drinks", "m-burger", "m-fav"]));
   moving.resolve([
     sectionMember("m-drinks", 0, "s-drinks"),
     productMember("m-burger", 1, "p-burger"),
@@ -2292,11 +2342,7 @@ it("takes a move's answer without reading the menu again when a read already sho
   await new Promise((resolve) => setTimeout(resolve));
   await el.updateComplete;
   expect(client.getMenuStructure).toHaveBeenCalledTimes(2);
-  expect(memberList(el).members.map((member) => member.id)).toEqual([
-    "m-drinks",
-    "m-burger",
-    "m-fav",
-  ]);
+  expect(topLevelKeys(el)).toEqual(["m-drinks", "m-burger", "m-fav"]);
 });
 
 it("takes the last queued move's answer when the earlier move's own update lands while it is out", async () => {
@@ -2315,8 +2361,8 @@ it("takes the last queued move's answer when the earlier move's own update lands
       return second.promise;
     });
   const el = await mountLunch(client);
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 1 });
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 2 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 2 });
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledTimes(2));
   // The first move's update, read before the second move was made.
   const [burger, drinks, fav] = lunchNodes();
@@ -2335,25 +2381,13 @@ it("takes the last queued move's answer when the earlier move's own update lands
     nodes: [drinks!, burger!, fav!],
   });
   live.invalidate([{ type: "section_members" }]);
-  await vi.waitFor(() =>
-    expect(topLevel(el).map((item) => item.dataset.path)).toEqual([
-      "m-drinks",
-      "m-burger",
-      "m-fav",
-    ]),
-  );
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-drinks", "m-burger", "m-fav"]));
   second.resolve([
     sectionMember("m-drinks", 0, "s-drinks"),
     sectionMember("m-fav", 1, "s-fav"),
     productMember("m-burger", 2, "p-burger"),
   ]);
-  await vi.waitFor(() =>
-    expect(topLevel(el).map((item) => item.dataset.path)).toEqual([
-      "m-drinks",
-      "m-fav",
-      "m-burger",
-    ]),
-  );
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-drinks", "m-fav", "m-burger"]));
   await new Promise((resolve) => setTimeout(resolve));
   expect(client.getMenuStructure).toHaveBeenCalledTimes(2);
 });
@@ -2362,18 +2396,12 @@ it("reads the menu again when a later move is out and a read lands in the order 
   const live = new LiveData();
   const client = api({ liveData: live });
   const el = await mountLunch(client);
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 1 });
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 2 });
-  await vi.waitFor(() =>
-    expect(topLevel(el).map((item) => item.dataset.path)).toEqual([
-      "m-drinks",
-      "m-fav",
-      "m-burger",
-    ]),
-  );
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 2 });
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-drinks", "m-fav", "m-burger"]));
   const third = deferred<SectionMember[]>();
   client.moveSectionMember.mockImplementationOnce(() => third.promise);
-  emit(memberList(el), "wt-member-move", { memberId: "m-fav", to: 0 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-fav", to: 0 });
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledTimes(3));
   // Another change's read, in the order the first move answered.
   const [burger, drinks, fav] = lunchNodes();
@@ -2392,13 +2420,7 @@ it("reads the menu again when a later move is out and a read lands in the order 
     nodes: [drinks!, burger!, fav!],
   });
   live.invalidate([{ type: "section_members" }]);
-  await vi.waitFor(() =>
-    expect(topLevel(el).map((item) => item.dataset.path)).toEqual([
-      "m-drinks",
-      "m-burger",
-      "m-fav",
-    ]),
-  );
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-drinks", "m-burger", "m-fav"]));
   third.resolve([
     sectionMember("m-fav", 0, "s-fav"),
     sectionMember("m-drinks", 1, "s-drinks"),
@@ -2407,11 +2429,7 @@ it("reads the menu again when a later move is out and a read lands in the order 
   await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(3));
   await new Promise((resolve) => setTimeout(resolve));
   await el.updateComplete;
-  expect(memberList(el).members.map((member) => member.id)).toEqual([
-    "m-drinks",
-    "m-burger",
-    "m-fav",
-  ]);
+  expect(topLevelKeys(el)).toEqual(["m-drinks", "m-burger", "m-fav"]);
 });
 
 it("reads the menu again when a move made after a refusal is out and a read lands in the order a move before the refusal answered", async () => {
@@ -2439,21 +2457,15 @@ it("reads the menu again when a move made after a refusal is out and a read land
     includedBy: [],
     nodes: [fav!, drinks!, burger!],
   });
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 1 });
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 2 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 2 });
   await vi.waitFor(() =>
     expect(text(q(el, '[data-test="member-error"]'))).toBe(codeMessage("menu_section.invalid")),
   );
-  await vi.waitFor(() =>
-    expect(topLevel(el).map((item) => item.dataset.path)).toEqual([
-      "m-fav",
-      "m-drinks",
-      "m-burger",
-    ]),
-  );
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-fav", "m-drinks", "m-burger"]));
   const third = deferred<SectionMember[]>();
   client.moveSectionMember.mockImplementationOnce(() => third.promise);
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 0 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 0 });
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledTimes(3));
   // Another change's read, in the order the first move answered before the refusal.
   client.getMenuStructure.mockResolvedValue({
@@ -2471,13 +2483,7 @@ it("reads the menu again when a move made after a refusal is out and a read land
     nodes: [drinks!, burger!, fav!],
   });
   live.invalidate([{ type: "section_members" }]);
-  await vi.waitFor(() =>
-    expect(topLevel(el).map((item) => item.dataset.path)).toEqual([
-      "m-drinks",
-      "m-burger",
-      "m-fav",
-    ]),
-  );
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-drinks", "m-burger", "m-fav"]));
   third.resolve([
     productMember("m-burger", 0, "p-burger"),
     sectionMember("m-fav", 1, "s-fav"),
@@ -2486,18 +2492,14 @@ it("reads the menu again when a move made after a refusal is out and a read land
   await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(4));
   await new Promise((resolve) => setTimeout(resolve));
   await el.updateComplete;
-  expect(memberList(el).members.map((member) => member.id)).toEqual([
-    "m-drinks",
-    "m-burger",
-    "m-fav",
-  ]);
+  expect(topLevelKeys(el)).toEqual(["m-drinks", "m-burger", "m-fav"]);
 });
 
 it("drops a move's answer that lands after the person has left the menu", async () => {
   const moving = deferred<SectionMember[]>();
   const client = api({ moveSectionMember: vi.fn(() => moving.promise) });
   const el = await mountLunch(client);
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 1 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
   await click(el, "back");
   moving.resolve([
@@ -2521,8 +2523,8 @@ it("reads the menu again when a move sent while no menu was shown is answered af
       .mockImplementationOnce(() => second.promise),
   });
   const el = await mountLunch(client);
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 1 });
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 2 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 2 });
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
   await click(el, "back");
   first.resolve([
@@ -2532,7 +2534,7 @@ it("reads the menu again when a move sent while no menu was shown is answered af
   ]);
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledTimes(2));
   await inTable(el, "open-menu-lunch");
-  await vi.waitFor(() => expect(tree(el)).not.toBeNull());
+  await vi.waitFor(() => expect(structure(el)).not.toBeNull());
   expect(client.getMenuStructure).toHaveBeenCalledTimes(2);
   second.resolve([
     sectionMember("m-drinks", 0, "s-drinks"),
@@ -2572,20 +2574,17 @@ it("a move reorders the owned section and keeps the other owned section unchange
   });
   const el = await mountLunch(client);
   await editDrinks(el);
-  emit(memberList(el), "wt-member-move", { memberId: "m-beer", to: 2 });
+  emit(structure(el), "wt-member-move", { path: ["m-drinks"], memberId: "m-beer", to: 2 });
   await vi.waitFor(() =>
-    expect(memberList(el).members.map((member) => member.id)).toEqual([
+    expect(childKeys(el, "m-drinks").map((key) => key.split("/").at(-1))).toEqual([
       "m-lager",
       "m-lemonade",
       "m-beer",
     ]),
   );
   expect(client.moveSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", "m-beer", 2);
-  await clickInTree(el, "toggle-m-fav");
-  const inside = (path: string) =>
-    [...tree(el).shadowRoot!.querySelectorAll<HTMLElement>("li[data-path]")]
-      .map((item) => item.dataset.path!)
-      .filter((key) => key.startsWith(`${path}/`) && !key.slice(path.length + 1).includes("/"));
+  await toggleRow(el, "m-fav");
+  const inside = (path: string) => childKeys(el, path);
   expect(inside("m-drinks")).toEqual([
     "m-drinks/m-lager",
     "m-drinks/m-lemonade",
@@ -2608,7 +2607,7 @@ it("reads the menu again when a move's answer names members the menu does not sh
   });
   const el = await mountLunch(client);
   await editDrinks(el);
-  emit(memberList(el), "wt-member-move", { memberId: "m-lager", to: 0 });
+  emit(structure(el), "wt-member-move", { path: ["m-drinks"], memberId: "m-lager", to: 0 });
   await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
 });
 
@@ -2621,8 +2620,8 @@ it("explains a refused move, reads the menu again, and drops the moves queued be
     () => new Promise((_, reject) => (refuse = reject)),
   );
   const el = await mountLunch(client);
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 1 });
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 2 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 2 });
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
   refuse({ code: "menu_section.invalid" });
   await vi.waitFor(() =>
@@ -2632,7 +2631,7 @@ it("explains a refused move, reads the menu again, and drops the moves queued be
   expect(client.moveSectionMember).toHaveBeenCalledOnce();
   // A move made after the refusal is sent.
   client.moveSectionMember.mockImplementation(move);
-  emit(memberList(el), "wt-member-move", { memberId: "m-fav", to: 0 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-fav", to: 0 });
   await vi.waitFor(() =>
     expect(client.moveSectionMember).toHaveBeenLastCalledWith("root-lunch", "m-fav", 0),
   );
@@ -2646,7 +2645,7 @@ it("adds products to a section, leaving out the section's own and marking this m
   const client = api();
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "open-add-products");
+  await rowAction(el, "m-drinks", "open-add-products");
   expect(modal(el, "add-products").open).toBe(true);
   const picker = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
   expect([...picker.onMenu!].sort()).toEqual(["p-burger", "p-lager", "p-lemonade"]);
@@ -2683,7 +2682,7 @@ it("keeps the picker open and explains a refused product add", async () => {
   });
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "open-add-products");
+  await rowAction(el, "m-drinks", "open-add-products");
   const picker = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
   emit(picker, "wt-add-products", { productIds: ["p-chips"] });
   await vi.waitFor(() =>
@@ -2699,7 +2698,7 @@ it("closes the product picker, sending nothing, when another change takes its se
   const client = api({ liveData: live });
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "open-add-products");
+  await rowAction(el, "m-drinks", "open-add-products");
   const picker = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
   // A change that leaves Drinks in place keeps the picker open.
   client.getMenuStructure.mockResolvedValue({
@@ -2717,13 +2716,7 @@ it("closes the product picker, sending nothing, when another change takes its se
     nodes: lunchNodes().reverse(),
   });
   live.invalidate([{ type: "section_members" }]);
-  await vi.waitFor(() =>
-    expect(topLevel(el).map((item) => item.dataset.path)).toEqual([
-      "m-fav",
-      "m-drinks",
-      "m-burger",
-    ]),
-  );
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-fav", "m-drinks", "m-burger"]));
   expect(modal(el, "add-products").open).toBe(true);
 
   await takeDrinksOff(el, client, live);
@@ -2742,7 +2735,7 @@ it("keeps the product picker open while its add is out and its section leaves th
   const client = api({ liveData: live, addSectionProducts: vi.fn(() => adding.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "open-add-products");
+  await rowAction(el, "m-drinks", "open-add-products");
   const picker = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
   emit(picker, "wt-add-products", { productIds: ["p-chips"] });
   await vi.waitFor(() => expect(client.addSectionProducts).toHaveBeenCalledOnce());
@@ -2776,7 +2769,7 @@ it("finishes a product add that was out when its section left the menu, closing 
   const client = api({ liveData: live, addSectionProducts: vi.fn(() => adding.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "open-add-products");
+  await rowAction(el, "m-drinks", "open-add-products");
   const picker = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
   emit(picker, "wt-add-products", { productIds: ["p-chips"] });
   await vi.waitFor(() => expect(client.addSectionProducts).toHaveBeenCalledOnce());
@@ -2798,7 +2791,7 @@ it("hides no products from another list in a picker whose section left the menu 
   const client = api({ liveData: live, addSectionProducts: vi.fn(() => adding.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "open-add-products");
+  await rowAction(el, "m-drinks", "open-add-products");
   const picker = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
   expect([...picker.inSection].sort()).toEqual(["p-lager", "p-lemonade"]);
   emit(picker, "wt-add-products", { productIds: ["p-chips"] });
@@ -2816,7 +2809,7 @@ it("sends one product add when a second add-products event arrives while the fir
   const client = api({ addSectionProducts: vi.fn(() => adding.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "open-add-products");
+  await rowAction(el, "m-drinks", "open-add-products");
   const picker = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
   emit(picker, "wt-add-products", { productIds: ["p-chips"] });
   await vi.waitFor(() => expect(client.addSectionProducts).toHaveBeenCalledOnce());
@@ -2832,7 +2825,7 @@ async function visit(el: MenusScreen, path: string, heading: string): Promise<vo
   history.pushState(null, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
   await vi.waitFor(() => expect(text(q(el, "h1"))).toBe(heading));
-  await vi.waitFor(() => expect(tree(el)).not.toBeNull());
+  await vi.waitFor(() => expect(structure(el)).not.toBeNull());
   await el.updateComplete;
 }
 
@@ -2840,7 +2833,7 @@ const DINNER_PATH = "/manage/menus/menu/menu-dinner/view/structure";
 
 it("closes an open window without a message when the person goes to another menu", async () => {
   const el = await mountLunch();
-  await click(el, "new-section");
+  await rowAction(el, "root", "new-section");
   expect(modal(el, "new-section").heading).toBe(
     t("menus.new_section_heading").replace("{list}", "Lunch Menu"),
   );
@@ -2848,7 +2841,7 @@ it("closes an open window without a message when the person goes to another menu
   expect(modal(el, "new-section").open).toBe(false);
   expect(q(el, '[data-test="member-error"]')).toBeNull();
 
-  await click(el, "open-add-products");
+  await rowAction(el, "root", "open-add-products");
   await visit(el, LUNCH_PATH, "Lunch Menu");
   await editDrinks(el);
   expect(modal(el, "add-products").open).toBe(false);
@@ -2881,7 +2874,7 @@ it("keeps a picker whose add is out open when the person goes to another menu, m
   );
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "open-add-products");
+  await rowAction(el, "m-drinks", "open-add-products");
   const picker = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
   emit(picker, "wt-add-products", { productIds: ["p-chips"] });
   await vi.waitFor(() => expect(client.addSectionProducts).toHaveBeenCalledOnce());
@@ -2905,7 +2898,7 @@ it("closes a picker whose add is refused while the person is on another menu, na
   const client = api({ addSectionProducts: vi.fn(() => adding.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "open-add-products");
+  await rowAction(el, "m-drinks", "open-add-products");
   const picker = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
   emit(picker, "wt-add-products", { productIds: ["p-chips"] });
   await vi.waitFor(() => expect(client.addSectionProducts).toHaveBeenCalledOnce());
@@ -2928,7 +2921,7 @@ it("closes a new-section form whose section is refused while the person is on th
   const creating = deferred<SectionDetails>();
   const client = api({ createSectionIn: vi.fn(() => creating.promise) });
   const el = await mountLunch(client);
-  await click(el, "new-section");
+  await rowAction(el, "root", "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Specials");
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
@@ -2946,27 +2939,27 @@ it("closes a new-section form whose section is refused while the person is on th
   expect(client.addSectionMember).not.toHaveBeenCalled();
 
   await inTable(el, "open-menu-lunch");
-  await vi.waitFor(() => expect(tree(el)).not.toBeNull());
+  await vi.waitFor(() => expect(structure(el)).not.toBeNull());
   await el.updateComplete;
   expect(modal(el, "new-section").open).toBe(false);
   expect(q(el, '[data-test="member-error"]')).toBeNull();
 });
 
 it("names the list on the menus list when a change to it is refused after the person pressed Back", async () => {
-  const adding = deferred<SectionMember>();
-  const client = api({ addSectionMember: vi.fn(() => adding.promise) });
+  const removing = deferred<void>();
+  const client = api({ removeSectionMember: vi.fn(() => removing.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
-  emit(memberList(el), "wt-member-add", { ref: { kind: "section", sectionId: "s-fav" } });
-  await vi.waitFor(() => expect(client.addSectionMember).toHaveBeenCalledOnce());
+  await rowAction(el, "m-drinks/m-lemonade", "remove");
+  await vi.waitFor(() => expect(client.removeSectionMember).toHaveBeenCalledOnce());
   await click(el, "back");
   expect(table(el)).not.toBeNull();
-  adding.reject({ code: "menu_section.member_duplicate" });
+  removing.reject({ code: "menu_section.not_found" });
   await vi.waitFor(() =>
     expect(text(q(el, '[data-test="member-error"]'))).toBe(
       t("menus.change_not_saved")
         .replace("{name}", "Drinks")
-        .replace("{reason}", codeMessage("menu_section.member_duplicate")),
+        .replace("{reason}", codeMessage("menu_section.not_found")),
     ),
   );
 });
@@ -2975,7 +2968,7 @@ it("names the list on the menus list when a move in it is refused after the pers
   const moving = deferred<SectionMember[]>();
   const client = api({ moveSectionMember: vi.fn(() => moving.promise) });
   const el = await mountLunch(client);
-  emit(memberList(el), "wt-member-move", { memberId: "m-burger", to: 1 });
+  emit(structure(el), "wt-member-move", { path: [], memberId: "m-burger", to: 1 });
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
   await click(el, "back");
   expect(table(el)).not.toBeNull();
@@ -2990,20 +2983,20 @@ it("names the list on the menus list when a move in it is refused after the pers
 });
 
 it("names the list when a change to it is refused after the person went up to the menu's top level", async () => {
-  const adding = deferred<SectionMember>();
-  const client = api({ addSectionMember: vi.fn(() => adding.promise) });
+  const removing = deferred<void>();
+  const client = api({ removeSectionMember: vi.fn(() => removing.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
-  emit(memberList(el), "wt-member-add", { ref: { kind: "section", sectionId: "s-fav" } });
-  await vi.waitFor(() => expect(client.addSectionMember).toHaveBeenCalledOnce());
-  await click(el, "crumb-0");
-  expect(breadcrumb(el)).toBe("Lunch Menu");
-  adding.reject({ code: "menu_section.member_duplicate" });
+  await rowAction(el, "m-drinks/m-lemonade", "remove");
+  await vi.waitFor(() => expect(client.removeSectionMember).toHaveBeenCalledOnce());
+  await toggleRow(el, "m-drinks");
+  expect(currentPlace(el)).toBe("Lunch Menu");
+  removing.reject({ code: "menu_section.not_found" });
   await vi.waitFor(() =>
     expect(text(q(el, '[data-test="member-error"]'))).toBe(
       t("menus.change_not_saved")
         .replace("{name}", "Drinks")
-        .replace("{reason}", codeMessage("menu_section.member_duplicate")),
+        .replace("{reason}", codeMessage("menu_section.not_found")),
     ),
   );
 });
@@ -3013,10 +3006,10 @@ it("names the list when a move in it is refused after the person went up to the 
   const client = api({ moveSectionMember: vi.fn(() => moving.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
-  emit(memberList(el), "wt-member-move", { memberId: "m-lager", to: 1 });
+  emit(structure(el), "wt-member-move", { path: ["m-drinks"], memberId: "m-lager", to: 1 });
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
-  await click(el, "crumb-0");
-  expect(breadcrumb(el)).toBe("Lunch Menu");
+  await toggleRow(el, "m-drinks");
+  expect(currentPlace(el)).toBe("Lunch Menu");
   moving.reject({ code: "menu_section.invalid" });
   await vi.waitFor(() =>
     expect(text(q(el, '[data-test="member-error"]'))).toBe(
@@ -3032,13 +3025,13 @@ it("shows a refused move without naming the list when the person is still on its
   const client = api({ moveSectionMember: vi.fn(() => moving.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
-  emit(memberList(el), "wt-member-move", { memberId: "m-lager", to: 1 });
+  emit(structure(el), "wt-member-move", { path: ["m-drinks"], memberId: "m-lager", to: 1 });
   await vi.waitFor(() => expect(client.moveSectionMember).toHaveBeenCalledOnce());
   moving.reject({ code: "menu_section.invalid" });
   await vi.waitFor(() =>
     expect(text(q(el, '[data-test="member-error"]'))).toBe(codeMessage("menu_section.invalid")),
   );
-  expect(tree(el)).not.toBeNull();
+  expect(structure(el)).not.toBeNull();
 });
 
 /** Refuses an add from Lunch's add-products picker once Dinner is open, Dinner's structure being
@@ -3050,7 +3043,7 @@ async function refuseAddWhileDinnerReads(
   const client = api({ addSectionProducts: vi.fn(() => adding.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "open-add-products");
+  await rowAction(el, "m-drinks", "open-add-products");
   const picker = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
   emit(picker, "wt-add-products", { productIds: ["p-chips"] });
   await vi.waitFor(() => expect(client.addSectionProducts).toHaveBeenCalledOnce());
@@ -3091,7 +3084,7 @@ it("shows why a refused picker closed while the other menu's structure is still 
     includedBy: [],
     nodes: [],
   });
-  await vi.waitFor(() => expect(tree(el)).not.toBeNull());
+  await vi.waitFor(() => expect(structure(el)).not.toBeNull());
   await el.updateComplete;
   const shown = el.shadowRoot!.querySelectorAll('[data-test="member-error"]');
   expect([...shown].map((node) => text(node))).toEqual([drinksNotSaved()]);
@@ -3107,7 +3100,7 @@ it("closes a new-section form quietly when its section is created and added whil
   const creating = deferred<SectionDetails>();
   const client = api({ createSectionIn: vi.fn(() => creating.promise) });
   const el = await mountLunch(client);
-  await click(el, "new-section");
+  await rowAction(el, "root", "new-section");
   type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Specials");
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
@@ -3133,7 +3126,7 @@ it("keeps a picker whose add was refused open, and sends a second add, when the 
   const client = api({ addSectionProducts: vi.fn(() => adding.promise) });
   const el = await mountLunch(client);
   await editDrinks(el);
-  await click(el, "open-add-products");
+  await rowAction(el, "m-drinks", "open-add-products");
   const picker = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
   emit(picker, "wt-add-products", { productIds: ["p-chips"] });
   await vi.waitFor(() => expect(client.addSectionProducts).toHaveBeenCalledOnce());
@@ -3181,7 +3174,7 @@ it("reports no lost list when a product add is saved while its menu's structure 
   const adding = deferred<{ added: number }>();
   const client = api({ addSectionProducts: vi.fn(() => adding.promise) });
   const el = await mountLunch(client);
-  await click(el, "open-add-products");
+  await rowAction(el, "root", "open-add-products");
   const picker = inModal<SectionAddProducts>(el, "add-products", "dashboard-section-add-products");
   emit(picker, "wt-add-products", { productIds: ["p-chips"] });
   await vi.waitFor(() => expect(client.addSectionProducts).toHaveBeenCalledOnce());
@@ -3198,21 +3191,19 @@ it("reports no lost list when a product add is saved while its menu's structure 
   await new Promise((resolve) => setTimeout(resolve));
 
   await click(el, "structure-retry");
-  await vi.waitFor(() => expect(tree(el)).not.toBeNull());
+  await vi.waitFor(() => expect(structure(el)).not.toBeNull());
   await el.updateComplete;
   expect(q(el, '[data-test="member-error"]')).toBeNull();
 });
 
 it("shows a refused change beside the list", async () => {
   const client = api({
-    addSectionMember: vi.fn().mockRejectedValue({ code: "menu_section.member_cycle" }),
+    removeSectionMember: vi.fn().mockRejectedValue({ code: "menu_section.not_found" }),
   });
   const el = await mountLunch(client);
-  emit(memberList(el), "wt-member-add", { ref: { kind: "section", sectionId: "s-fav" } });
+  await rowAction(el, "m-burger", "remove");
   await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="member-error"]'))).toBe(
-      codeMessage("menu_section.member_cycle"),
-    ),
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(codeMessage("menu_section.not_found")),
   );
   expect(q(el, '[data-test="structure-error"]')).toBeNull();
 });
@@ -3221,7 +3212,7 @@ it("a change that saved but could not then be reloaded is a load failure, not a 
   const client = api();
   const el = await mountLunch(client);
   client.getMenuStructure.mockRejectedValue(new Error("down"));
-  emit(memberList(el), "wt-member-remove", { memberId: "m-burger" });
+  emit(structure(el), "wt-member-remove", { path: [], memberId: "m-burger" });
   await vi.waitFor(() => expect(q(el, '[data-test="structure-error"]')).not.toBeNull());
   expect(q(el, '[data-test="member-error"]')).toBeNull();
   expect(client.removeSectionMember).toHaveBeenCalledOnce();
@@ -3233,8 +3224,562 @@ it("says the menu's structure could not be loaded, and tries again", async () =>
   const el = await mount(client, LUNCH_PATH);
   await vi.waitFor(() => expect(q(el, '[data-test="structure-error"]')).not.toBeNull());
   await click(el, "structure-retry");
-  await vi.waitFor(() => expect(tree(el)).not.toBeNull());
+  await vi.waitFor(() => expect(structure(el)).not.toBeNull());
   expect(q(el, '[data-test="structure-error"]')).toBeNull();
+});
+
+describe("the Structure tree", () => {
+  /** Wines is another menu, included at Lunch's top level after Lunch's own members. */
+  function wines(): MenuStructureNode {
+    return {
+      memberId: "included-wine",
+      ref: { kind: "section", sectionId: "wine-root" },
+      internalName: "Wines",
+      includedMenuId: "wine",
+      ownerMenuId: "wine",
+      children: [
+        {
+          memberId: "wine-red",
+          ref: { kind: "section", sectionId: "red-wines" },
+          internalName: "Red wines",
+          ownerMenuId: "wine",
+          children: [productNode("wine-lager", "p-lager")],
+        },
+        productNode("wine-chips", "p-chips"),
+      ],
+    };
+  }
+
+  /** Lunch, with Wines among the menus it could include. */
+  function includeClient(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
+    const client = api(overrides);
+    const read = client.getMenuStructure.getMockImplementation()! as (
+      id: string,
+    ) => Promise<MenuStructure>;
+    client.getMenuStructure.mockImplementation(async (id: string) => ({
+      ...(await read(id)),
+      includable: [{ id: "wine", name: "Wines", rootSectionId: "wine-root" }],
+    }));
+    return client;
+  }
+
+  const NEW_SECTION = { internalName: "Ciders", names: {}, image: null, color: null };
+
+  /** The Drinks shown inside Favourites is the same list as the Drinks at the top level. */
+  const places = [
+    { key: "m-fav/m-fav-drinks", open: ["m-fav"], list: "s-drinks", name: "Drinks" },
+    { key: "m-fav", open: [], list: "s-fav", name: "Favourites" },
+    { key: "root", open: [], list: "root-lunch", name: "Lunch Menu" },
+  ];
+
+  it.each(places)(
+    "adds products to the list of the row they are chosen from: $key",
+    async (row) => {
+      const client = api();
+      const el = await mountLunch(client);
+      for (const key of row.open) await toggleRow(el, key);
+      await rowAction(el, row.key, "open-add-products");
+      expect(modal(el, "add-products").heading).toBe(
+        t("sections.add_products_heading").replace("{name}", row.name),
+      );
+      const picker = inModal<SectionAddProducts>(
+        el,
+        "add-products",
+        "dashboard-section-add-products",
+      );
+      // What that list already holds is left out of the offer.
+      const held: Record<string, string[]> = {
+        "s-drinks": ["p-lager", "p-lemonade"],
+        "s-fav": ["p-lemonade"],
+        "root-lunch": ["p-burger"],
+      };
+      expect([...picker.inSection].sort()).toEqual(held[row.list]);
+      emit(picker, "wt-add-products", { productIds: ["p-chips"] });
+      await vi.waitFor(() =>
+        expect(client.addSectionProducts).toHaveBeenCalledExactlyOnceWith(row.list, ["p-chips"]),
+      );
+    },
+  );
+
+  it.each(places)(
+    "creates a section in the list of the row it is chosen from: $key",
+    async (row) => {
+      const client = api();
+      const el = await mountLunch(client);
+      for (const key of row.open) await toggleRow(el, key);
+      await rowAction(el, row.key, "new-section");
+      expect(modal(el, "new-section").heading).toBe(
+        t("menus.new_section_heading").replace("{list}", row.name),
+      );
+      emit(q(el, '[data-test="section-form"]')!, "wt-submit", NEW_SECTION);
+      await vi.waitFor(() =>
+        expect(client.createSectionIn).toHaveBeenCalledExactlyOnceWith(row.list, NEW_SECTION),
+      );
+    },
+  );
+
+  it.each(places)("includes a menu in the list of the row it is chosen from: $key", async (row) => {
+    const client = includeClient();
+    const el = await mountLunch(client);
+    for (const key of row.open) await toggleRow(el, key);
+    await rowAction(el, row.key, "include-menu");
+    await chooseOption(inModal(el, "include", '[name="included-menu"]'), "wine-root");
+    await vi.waitFor(() =>
+      expect(client.addSectionMember).toHaveBeenCalledExactlyOnceWith(row.list, {
+        kind: "section",
+        sectionId: "wine-root",
+      }),
+    );
+  });
+
+  it("makes the row an add is chosen from current, leaves a refusal in that list unnamed, and names a refused move in another", async () => {
+    const moving = deferred<SectionMember[]>();
+    const client = api({
+      removeSectionMember: vi.fn().mockRejectedValue({ code: "menu_section.not_found" }),
+      moveSectionMember: vi.fn(() => moving.promise),
+    });
+    const el = await mountLunch(client);
+    expect(currentPlace(el)).toBe("Lunch Menu");
+    await rowAction(el, "m-fav", "open-add-products");
+    expect(currentPlace(el)).toBe("Lunch Menu › Favourites");
+    inModal(el, "add-products", '[data-test="add-products-cancel"]').click();
+    await vi.waitFor(() => expect(modal(el, "add-products").open).toBe(false));
+
+    await rowAction(el, "m-fav/m-fav-lemonade", "remove");
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="member-error"]'))).toBe(codeMessage("menu_section.not_found")),
+    );
+    expect(client.removeSectionMember).toHaveBeenCalledExactlyOnceWith("s-fav", "m-fav-lemonade");
+
+    await settleStructure(el);
+    const grip = inStructure<HTMLButtonElement>(el, '[data-test="drag-m-burger"]')!;
+    grip.focus();
+    grip.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    await vi.waitFor(() =>
+      expect(client.moveSectionMember).toHaveBeenCalledExactlyOnceWith("root-lunch", "m-burger", 1),
+    );
+    moving.reject({ code: "menu_section.invalid" });
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="member-error"]'))).toBe(
+        t("menus.change_not_saved")
+          .replace("{name}", "Lunch Menu")
+          .replace("{reason}", codeMessage("menu_section.invalid")),
+      ),
+    );
+  });
+
+  it("moves a member inside Drinks and shows the answer in both places Drinks appears, without reading the menu again", async () => {
+    // An answer unlike the move itself, so the order shown is the answer's, not the tree's own.
+    const client = api({
+      moveSectionMember: vi
+        .fn()
+        .mockResolvedValue([
+          productMember("m-lemonade", 0, "p-lemonade"),
+          sectionMember("m-beer", 1, "s-beer"),
+          productMember("m-lager", 2, "p-lager"),
+        ]),
+    });
+    const el = await mountLunch(client);
+    await toggleRow(el, "m-drinks");
+    await toggleRow(el, "m-fav");
+    await toggleRow(el, "m-fav/m-fav-drinks");
+    const grip = inStructure<HTMLButtonElement>(el, '[data-test="drag-m-drinks/m-lager"]')!;
+    grip.focus();
+    grip.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    await vi.waitFor(() =>
+      expect(client.moveSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", "m-lager", 1),
+    );
+    await vi.waitFor(() =>
+      expect(childKeys(el, "m-drinks")).toEqual([
+        "m-drinks/m-lemonade",
+        "m-drinks/m-beer",
+        "m-drinks/m-lager",
+      ]),
+    );
+    expect(childKeys(el, "m-fav/m-fav-drinks")).toEqual([
+      "m-fav/m-fav-drinks/m-lemonade",
+      "m-fav/m-fav-drinks/m-beer",
+      "m-fav/m-fav-drinks/m-lager",
+    ]);
+    expect(client.getMenuStructure).toHaveBeenCalledOnce();
+  });
+
+  it("removes a member from the list holding it, though another list is current", async () => {
+    const client = api();
+    const el = await mountLunch(client);
+    await toggleRow(el, "m-drinks");
+    await toggleRow(el, "m-fav");
+    expect(currentPlace(el)).toBe("Lunch Menu › Favourites");
+    await rowAction(el, "m-drinks/m-lemonade", "remove");
+    await vi.waitFor(() =>
+      expect(client.removeSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", "m-lemonade"),
+    );
+  });
+
+  describe("an included menu", () => {
+    async function mountWithWines(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
+      const client = includeClient({
+        getMenuStructure: vi.fn().mockResolvedValue(lunchWith([...lunchNodes(), wines()])),
+        ...overrides,
+      });
+      return { client, el: await mountLunch(client) };
+    }
+
+    it("opens for browsing, and offers no ⋮ or grip on anything inside it", async () => {
+      const { el } = await mountWithWines();
+      await toggleRow(el, "included-wine");
+      expect(childKeys(el, "included-wine")).toEqual([
+        "included-wine/wine-red",
+        "included-wine/wine-chips",
+      ]);
+      await toggleRow(el, "included-wine/wine-red");
+      expect(childKeys(el, "included-wine/wine-red")).toEqual([
+        "included-wine/wine-red/wine-lager",
+      ]);
+      expect(currentPlace(el)).toBe("Lunch Menu");
+      for (const key of [
+        "included-wine/wine-red",
+        "included-wine/wine-chips",
+        "included-wine/wine-red/wine-lager",
+      ]) {
+        expect(rowOf(el, key)!.querySelector("wt-row-actions"), key).toBeNull();
+        expect(rowOf(el, key)!.querySelector('[part~="drag-grip"]'), key).toBeNull();
+      }
+    });
+
+    it("removes the inclusion from this menu alone, and links to the included menu's own Structure tab", async () => {
+      const { client, el } = await mountWithWines();
+      expect(inStructure(el, '[data-test="source-included-wine"]')!.getAttribute("href")).toBe(
+        "/manage/menus/menu/wine/view/structure",
+      );
+      await rowAction(el, "included-wine", "remove");
+      await vi.waitFor(() =>
+        expect(client.removeSectionMember).toHaveBeenCalledExactlyOnceWith(
+          "root-lunch",
+          "included-wine",
+        ),
+      );
+      await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+      expect(writeCalls(client)).toEqual(["removeSectionMember"]);
+    });
+
+    it("keeps a refused inclusion in the include window", async () => {
+      const { client, el } = await mountWithWines({
+        addSectionMember: vi.fn().mockRejectedValue({ code: "menu_section.member_cycle" }),
+      });
+      await rowAction(el, "root", "include-menu");
+      await chooseOption(inModal(el, "include", '[name="included-menu"]'), "wine-root");
+      await vi.waitFor(async () =>
+        expect(await bottom(el, "include")).toBe(codeMessage("menu_section.member_cycle")),
+      );
+      expect(modal(el, "include").open).toBe(true);
+      expect(q(el, '[data-test="member-error"]')).toBeNull();
+      expect(client.addSectionMember).toHaveBeenCalledOnce();
+    });
+  });
+
+  /** The ⋮ that has focus in the tree's table, as its row's key. */
+  function focusedRowMenu(el: MenusScreen): string | undefined {
+    const focused = structureRows(el).shadowRoot.activeElement;
+    return focused?.localName === "wt-row-actions"
+      ? focused.closest("tr")?.dataset.rowKey
+      : `not a row menu: ${focused?.localName ?? "nothing"}`;
+  }
+
+  async function closeSectionForm(el: MenusScreen): Promise<void> {
+    inModal(el, "new-section", '[data-test="new-section-cancel"]').click();
+    await vi.waitFor(() => expect(modal(el, "new-section").open).toBe(false));
+  }
+
+  const windows: {
+    name: string;
+    client?: () => Api;
+    open: (el: MenusScreen) => Promise<void>;
+    close: (el: MenusScreen, client: Api) => Promise<void>;
+    focused: string;
+  }[] = [
+    {
+      name: "New section here, cancelled",
+      open: (el) => rowAction(el, "m-drinks", "new-section"),
+      close: closeSectionForm,
+      focused: "m-drinks",
+    },
+    {
+      name: "New section here, saved",
+      open: (el) => rowAction(el, "m-drinks", "new-section"),
+      close: async (el, client) => {
+        type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
+        await el.updateComplete;
+        inModal(el, "new-section", '[data-test="new-section-save"]').click();
+        await vi.waitFor(() => expect(modal(el, "new-section").open).toBe(false));
+        await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+      },
+      focused: "m-drinks",
+    },
+    {
+      name: "New section here, refused and then cancelled",
+      client: () =>
+        api({ createSectionIn: vi.fn().mockRejectedValue({ code: "menu_section.invalid" }) }),
+      open: (el) => rowAction(el, "m-drinks", "new-section"),
+      close: async (el) => {
+        type(inModal(el, "new-section", 'wt-input[name="internalName"]'), "Ciders");
+        await el.updateComplete;
+        inModal(el, "new-section", '[data-test="new-section-save"]').click();
+        await vi.waitFor(async () =>
+          expect(await bottom(el, "new-section")).toBe(codeMessage("menu_section.invalid")),
+        );
+        await closeSectionForm(el);
+      },
+      focused: "m-drinks",
+    },
+    {
+      name: "Add products, cancelled",
+      open: (el) => rowAction(el, "m-fav", "open-add-products"),
+      close: async (el) => {
+        inModal(el, "add-products", '[data-test="add-products-cancel"]').click();
+        await vi.waitFor(() => expect(modal(el, "add-products").open).toBe(false));
+      },
+      focused: "m-fav",
+    },
+    {
+      name: "Add products, saved",
+      open: (el) => rowAction(el, "m-fav", "open-add-products"),
+      close: async (el, client) => {
+        emit(inModal(el, "add-products", "dashboard-section-add-products"), "wt-add-products", {
+          productIds: ["p-chips"],
+        });
+        await vi.waitFor(() => expect(modal(el, "add-products").open).toBe(false));
+        await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+      },
+      focused: "m-fav",
+    },
+    {
+      name: "Include a menu, cancelled",
+      open: (el) => rowAction(el, "root", "include-menu"),
+      close: async (el) => {
+        await click(el, "include-cancel");
+        await vi.waitFor(() => expect(modal(el, "include").open).toBe(false));
+      },
+      focused: "root",
+    },
+    {
+      name: "Edit, cancelled",
+      open: (el) => rowAction(el, "m-drinks", "edit"),
+      close: closeSectionForm,
+      focused: "m-drinks",
+    },
+    {
+      name: "Delete, confirmed",
+      client: () => {
+        const client = api();
+        const noBeer = lunchNodes().map((node) =>
+          node.memberId === "m-fav"
+            ? node
+            : {
+                ...node,
+                children: node.children?.filter((child) => child.memberId !== "m-beer"),
+              },
+        );
+        client.deleteSection.mockImplementation(async () => {
+          client.getMenuStructure.mockResolvedValue(lunchWith(noBeer));
+        });
+        return client;
+      },
+      open: async (el) => {
+        await toggleRow(el, "m-drinks");
+        await rowAction(el, "m-drinks/m-beer", "delete");
+      },
+      close: async (el, client) => {
+        inModal(el, "delete-section", '[data-test="delete-section-save"]').click();
+        await vi.waitFor(() => expect(modal(el, "delete-section").open).toBe(false));
+        await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+      },
+      // Beer's row is gone, so the nearest row still drawn is Drinks.
+      focused: "m-drinks",
+    },
+  ];
+
+  it.each(windows)("hands focus back to the ⋮ a window was opened from: $name", async (each) => {
+    const client = each.client?.() ?? api();
+    const el = await mountLunch(client);
+    await each.open(el);
+    await each.close(el, client);
+    await afterDialogCloses(el);
+    await settleStructure(el);
+    expect(focusedRowMenu(el)).toBe(each.focused);
+  });
+
+  it("hands focus back only once the menu is read again after the save, so it lands on the row's own ⋮", async () => {
+    const reading = deferred<MenuStructure>();
+    const client = api();
+    const el = await mountLunch(client);
+    await rowAction(el, "m-fav", "open-add-products");
+    // The read after the save is held, and then answers with a product added above Favourites,
+    // which redraws every row from there down.
+    client.getMenuStructure.mockImplementationOnce(() => reading.promise);
+    emit(inModal(el, "add-products", "dashboard-section-add-products"), "wt-add-products", {
+      productIds: ["p-chips"],
+    });
+    await vi.waitFor(() => expect(modal(el, "add-products").open).toBe(false));
+    await afterDialogCloses(el);
+    reading.resolve(lunchWith([productNode("m-new-chips", "p-chips"), ...lunchNodes()]));
+    await vi.waitFor(() =>
+      expect(topLevelKeys(el)).toEqual(["m-new-chips", "m-burger", "m-drinks", "m-fav"]),
+    );
+    await afterDialogCloses(el);
+    await settleStructure(el);
+    expect(focusedRowMenu(el)).toBe("m-fav");
+  });
+
+  it("hands focus back from a second window, opened after the first one closed", async () => {
+    const el = await mountLunch();
+    await rowAction(el, "m-fav", "open-add-products");
+    inModal(el, "add-products", '[data-test="add-products-cancel"]').click();
+    await vi.waitFor(() => expect(modal(el, "add-products").open).toBe(false));
+    await afterDialogCloses(el);
+    await settleStructure(el);
+    expect(focusedRowMenu(el)).toBe("m-fav");
+    await rowAction(el, "m-drinks", "new-section");
+    await afterDialogCloses(el);
+    await settleStructure(el);
+    await closeSectionForm(el);
+    await afterDialogCloses(el);
+    await settleStructure(el);
+    expect(focusedRowMenu(el)).toBe("m-drinks");
+  });
+
+  it("hands focus to the holding section's ⋮ after a removal", async () => {
+    const client = api();
+    const el = await mountLunch(client);
+    await toggleRow(el, "m-drinks");
+    await rowAction(el, "m-drinks/m-lemonade", "remove");
+    await vi.waitFor(() =>
+      expect(client.removeSectionMember).toHaveBeenCalledExactlyOnceWith("s-drinks", "m-lemonade"),
+    );
+    await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+    await settleStructure(el);
+    await vi.waitFor(() => expect(focusedRowMenu(el)).toBe("m-drinks"));
+  });
+
+  it("hands focus to the nearest row still drawn when a window closes because its list left", async () => {
+    const live = new LiveData();
+    const client = api({ liveData: live });
+    const el = await mountLunch(client);
+    await toggleRow(el, "m-drinks");
+    await rowAction(el, "m-drinks/m-beer", "open-add-products");
+    // Another change takes Beer out of Drinks.
+    const nodes = lunchNodes();
+    nodes[1]!.children = nodes[1]!.children!.filter((node) => node.memberId !== "m-beer");
+    client.getMenuStructure.mockResolvedValue(lunchWith(nodes));
+    live.invalidate([{ type: "section_members" }]);
+    await vi.waitFor(() => expect(modal(el, "add-products").open).toBe(false));
+    await afterDialogCloses(el);
+    await settleStructure(el);
+    expect(focusedRowMenu(el)).toBe("m-drinks");
+  });
+
+  it("returns no focus to a menu the person has since left", async () => {
+    const el = await mountLunch();
+    await rowAction(el, "root", "include-menu");
+    await visit(el, DINNER_PATH, "Dinner Menu");
+    await afterDialogCloses(el);
+    await settleStructure(el);
+    expect(focusedRowMenu(el)).not.toBe("root");
+  });
+
+  it.each(["an add", "a removal"] as const)(
+    "disables every ⋮ action and grip while %s is out",
+    async (write) => {
+      const held = deferred<unknown>();
+      const client = api({
+        addSectionProducts: vi.fn(() => held.promise),
+        removeSectionMember: vi.fn(() => held.promise),
+      });
+      const el = await mountLunch(client);
+      await toggleRow(el, "m-drinks");
+      if (write === "an add") {
+        await rowAction(el, "m-drinks", "open-add-products");
+        emit(inModal(el, "add-products", "dashboard-section-add-products"), "wt-add-products", {
+          productIds: ["p-chips"],
+        });
+      } else await rowAction(el, "m-drinks/m-lemonade", "remove");
+      await settleStructure(el);
+      const controls = () => [
+        ...allInStructure<HTMLButtonElement>(el, '[part~="drag-grip"]'),
+        ...allInStructure<HTMLElementTagNameMap["wt-button"]>(el, "wt-row-actions wt-button"),
+      ];
+      expect(controls().length).toBeGreaterThan(10);
+      for (const control of controls()) expect(control.disabled).toBe(true);
+      held.resolve({ added: 1 });
+      await vi.waitFor(() => expect(client.getMenuStructure).toHaveBeenCalledTimes(2));
+      await settleStructure(el);
+      for (const control of controls()) expect(control.disabled).toBe(false);
+    },
+  );
+
+  it("puts nothing beside the tabs and draws no Add a product picker", async () => {
+    const el = await mountLunch();
+    await settleStructure(el);
+    const tabs = q(el, 'wt-tabs[data-test="menu-tabs"]')!;
+    expect(tabs.querySelector('[slot="actions"]')).toBeNull();
+    expect(q(el, "dashboard-member-list-editor")).toBeNull();
+    expect(q(el, '[name="member-ref"]')).toBeNull();
+    expect(inStructure(el, '[name="member-ref"]')).toBeNull();
+  });
+
+  it("fits a phone: the tab does not scroll sideways and every row's ⋮ is on screen (390 px)", async () => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    await page.viewport(390, 844);
+    onTestFinished(() => page.viewport(width, height));
+    const el = await mountLunch();
+    await toggleRow(el, "m-drinks");
+    await toggleRow(el, "m-drinks/m-beer");
+    expect(window.innerWidth).toBe(390);
+    expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    const menus = allInStructure(el, "wt-row-actions");
+    expect(menus.map((menu) => menu.closest("tr")!.dataset.rowKey)).toEqual([
+      "root",
+      "m-burger",
+      "m-drinks",
+      "m-drinks/m-lager",
+      "m-drinks/m-beer",
+      "m-drinks/m-beer/m-lager-2",
+      "m-drinks/m-lemonade",
+      "m-fav",
+    ]);
+    for (const menu of menus) {
+      const key = menu.closest("tr")!.dataset.rowKey!;
+      const button = menu.shadowRoot!.querySelector("button")!;
+      window.scrollTo(0, button.getBoundingClientRect().top + window.scrollY - 100);
+      const at = button.getBoundingClientRect();
+      expect(at.left, key).toBeGreaterThanOrEqual(0);
+      expect(at.right, key).toBeLessThanOrEqual(window.innerWidth);
+      const hit = menu.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
+      expect(hit !== null && button.contains(hit), `${key} is covered`).toBe(true);
+    }
+  });
+
+  it("keeps the open sections and the current one through a refresh that leaves them in place", async () => {
+    const live = new LiveData();
+    const client = api({ liveData: live });
+    const el = await mountLunch(client);
+    await toggleRow(el, "m-drinks");
+    await toggleRow(el, "m-drinks/m-beer");
+    expect(currentPlace(el)).toBe("Lunch Menu › Drinks › Beer");
+    client.getMenuStructure.mockResolvedValue(lunchWith(lunchNodes().slice(1)));
+    live.invalidate([{ type: "section_members" }]);
+    await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-drinks", "m-fav"]));
+    await settleStructure(el);
+    expect(client.getMenuStructure).toHaveBeenCalledTimes(2);
+    expect(rowOf(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("true");
+    expect(rowOf(el, "m-drinks/m-beer")!.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      rowOf(el, "m-drinks/m-beer")!
+        .querySelector('[data-test="name"]')!
+        .getAttribute("aria-current"),
+    ).toBe("true");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -3691,8 +4236,8 @@ it("closes the offer window when Back leaves the Prices tab, leaving the Structu
   );
   await vi.waitFor(() => expect(offerDialogOpen(el)).toBe(false));
   expect(prices(el).editing).toBeNull();
-  await clickInTree(el, "edit-m-drinks");
-  await vi.waitFor(() => expect(breadcrumb(el)).toBe("Lunch Menu › Drinks"));
+  await toggleRow(el, "m-drinks");
+  await vi.waitFor(() => expect(currentPlace(el)).toBe("Lunch Menu › Drinks"));
 });
 
 it("reports beside the Structure tab a save refused after Back left the Prices tab", async () => {
@@ -5280,8 +5825,8 @@ describe("the name forms", () => {
       write: "createSectionIn",
       path: LUNCH_PATH,
       open: async (el) => {
-        if (breadcrumb(el) !== "Lunch Menu › Drinks") await editDrinks(el);
-        await click(el, "new-section");
+        if (currentPlace(el) !== "Lunch Menu › Drinks") await editDrinks(el);
+        await rowAction(el, "m-drinks", "new-section");
       },
     },
     {
@@ -5300,7 +5845,7 @@ describe("the name forms", () => {
 
   async function opened(form: NameForm, client: Api = api()) {
     const el = await mount(client, form.path);
-    if (form.path === LUNCH_PATH) await vi.waitFor(() => expect(tree(el)).not.toBeNull());
+    if (form.path === LUNCH_PATH) await vi.waitFor(() => expect(structure(el)).not.toBeNull());
     if (form.path === HOME_PATH)
       await vi.waitFor(() => expect(q(el, "dashboard-home-layout-editor")).not.toBeNull());
     await form.open(el);
@@ -5477,7 +6022,7 @@ it("creates a section with its customer name, image and colour in one request", 
   });
   Object.assign(client, { createSectionIn });
   const el = await mountLunch(client);
-  await click(el, "new-section");
+  await rowAction(el, "root", "new-section");
   const form = el.shadowRoot!.querySelector("dashboard-section-details-form");
   expect(form).not.toBeNull();
   form!.dispatchEvent(
@@ -5521,7 +6066,7 @@ it("offers only menus that can be included, and includes one as a folder", async
     }),
   });
   const el = await mountLunch(client);
-  await click(el, "include-menu");
+  await rowAction(el, "root", "include-menu");
   const picker = el.shadowRoot!.querySelector<
     HTMLElement & {
       required: boolean;
@@ -5590,7 +6135,7 @@ describe("the include-a-menu field", () => {
   it("includes the chosen menu without a second action", async () => {
     const client = includeClient();
     const el = await mountLunch(client);
-    await click(el, "include-menu");
+    await rowAction(el, "root", "include-menu");
     const picker = inModal<Combobox>(el, "include", 'wt-combobox[name="included-menu"]');
     await chooseOption(picker, "wine-root");
     await vi.waitFor(() =>
@@ -5606,7 +6151,7 @@ describe("the include-a-menu field", () => {
     const adding = deferred<SectionMember>();
     const client = includeClient({ addSectionMember: vi.fn(() => adding.promise) });
     const el = await mountLunch(client);
-    await click(el, "include-menu");
+    await rowAction(el, "root", "include-menu");
     const picker = inModal<Combobox>(el, "include", 'wt-combobox[name="included-menu"]');
     expect(picker).not.toBeNull();
     expect(picker.label).toBe(t("menus.include_menu"));
@@ -5632,7 +6177,7 @@ describe("the include-a-menu field", () => {
 
   it("closes an open list on Escape and leaves the dialog open", async () => {
     const el = await mountLunch(includeClient());
-    await click(el, "include-menu");
+    await rowAction(el, "root", "include-menu");
     const picker = inModal<Combobox>(el, "include", 'wt-combobox[name="included-menu"]');
     const list = picker.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
     await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
@@ -5698,7 +6243,7 @@ describe("review fix: inclusion target and validation", () => {
     return client;
   }
   async function openInclude(el: MenusScreen, choose = true) {
-    await click(el, "include-menu");
+    await rowAction(el, currentKey(el), "include-menu");
     const picker = inModal<HTMLElement & { error: string; value: string }>(
       el,
       "include",
@@ -6074,7 +6619,7 @@ describe("after the server comes back", () => {
     answer();
     live.refresh();
 
-    await vi.waitFor(() => expect(tree(el)).not.toBeNull());
+    await vi.waitFor(() => expect(structure(el)).not.toBeNull());
     expect(q(el, '[data-test="structure-error"]')).toBeNull();
     await vi.waitFor(() =>
       expect(text(q(el, '[data-test="menu-status"]'))).not.toBe(t("menus.status_error")),
