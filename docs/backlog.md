@@ -3196,7 +3196,7 @@ one short (seen 2026-10-05 in a throwaway test, not kept); an older one is refus
 module, in the order they are checked, whose count differs.
 
 **A Products drag does not notice when a refresh removes what it is dragging or where it is going —
-DONE (W88a, 2026-10-05).** Found by W88's pre-merge review. The Products tree
+DONE (W88a, #1228, 2026-10-05).** Found by W88's pre-merge review. The Products tree
 (`apps/dashboard/src/widgets/product-list.ts`) now checks a drag against the rows the list holds
 after a refresh. A drag whose pressed row a refresh removed before the pointer moved far enough does
 not start (no drag picture, no grabbing cursor, no `drag-items` naming the row). A target category
