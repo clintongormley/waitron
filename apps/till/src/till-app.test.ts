@@ -2465,6 +2465,59 @@ describe("till-app", () => {
     }
   });
 
+  it("forgets a remembered dev device the server no longer knows and shows the chooser", async () => {
+    sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "deleted-by-reset");
+    try {
+      const list: DevDeviceList = { devices: [] };
+      const { el } = await mountApp({
+        getDevDevices: vi.fn().mockResolvedValue(list),
+        getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+      });
+      await flush(el);
+      expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBeNull();
+      expect(chooser(el)).not.toBeNull();
+      expect(chooser(el)!.list).toEqual(list);
+      expect(el.shadowRoot!.querySelector("till-enrol-screen")).toBeNull();
+      expect((el as unknown as { frontDoor?: string }).frontDoor).toBe("chooser");
+    } finally {
+      sessionStorage.removeItem(DEV_DEVICE_STORAGE_KEY);
+    }
+  });
+
+  it("keeps the join screen for an unknown device outside development, even with a remembered id", async () => {
+    sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "deleted-by-reset");
+    try {
+      const { el } = await mountApp({
+        getDevDevices: vi.fn().mockRejectedValue({ code: "server.not_found" }),
+        getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+      });
+      await flush(el);
+      expect(chooser(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector("till-enrol-screen")).not.toBeNull();
+      expect((el as unknown as { frontDoor?: string }).frontDoor).toBe("enrol");
+    } finally {
+      sessionStorage.removeItem(DEV_DEVICE_STORAGE_KEY);
+    }
+  });
+
+  it("keeps a remembered dev device when its identity read fails for another reason", async () => {
+    sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "adopted-1");
+    try {
+      const getDevDevices = vi.fn().mockResolvedValue({ devices: [] });
+      const { el } = await mountApp({
+        getDevDevices,
+        getDeviceIdentity: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      });
+      await flush(el);
+      expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBe("adopted-1");
+      expect(chooser(el)).toBeNull();
+      expect(lock(el)).not.toBeNull();
+      expect(getDevDevices).not.toHaveBeenCalled();
+    } finally {
+      sessionStorage.removeItem(DEV_DEVICE_STORAGE_KEY);
+    }
+  });
+
   it("the login screen offers a dev-only Switch device link that clears the tab device and returns to the chooser", async () => {
     // This tab adopted a device (dev), so boot lands on the login screen WITH the switch affordance.
     // Switching clears the tab device and re-boots; with no tab device the re-boot re-detects dev mode

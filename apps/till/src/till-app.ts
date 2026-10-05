@@ -1771,16 +1771,7 @@ export class TillApp extends LitElement {
     this.#setScreen("lock");
     // The till has no server flag for dev mode: the dev-only `GET /api/dev/devices` answers only there,
     // and its list is also the chooser's data.
-    if (!this.devTab) {
-      try {
-        this.devDevices = await this.api.getDevDevices();
-        if (!this.isConnected) return;
-        this.frontDoor = "chooser";
-        return;
-      } catch {
-        // Not dev mode, or a transient failure.
-      }
-    }
+    if (!this.devTab && (await this.#openDevChooser())) return;
     // A KDS boots straight into its station, prefetching the queue; any other or unknown kind waits on
     // the lock screen for a sign-in. A browser with no device cookie answers `device.unauthorized` and
     // gets the join screen, which is not a boot failure.
@@ -1818,9 +1809,31 @@ export class TillApp extends LitElement {
       // Only a genuine `device.unauthorized` goes to the join screen. Any other failure is transient,
       // and stranding a sellable till behind an approval it cannot get would block sales, so it falls
       // through to the login screen.
-      if ((error as { code?: string }).code === "device.unauthorized") this.frontDoor = "enrol";
+      if ((error as { code?: string }).code === "device.unauthorized") {
+        // A dev tab's remembered device can be gone (a venue reset deletes it). In dev mode the server
+        // reads the header instead of the device cookie, so joining from this tab could not recover it.
+        if (this.devTab) {
+          clearDevDeviceId();
+          this.devTab = false;
+          if (await this.#openDevChooser()) return;
+        }
+        this.frontDoor = "enrol";
+      }
     }
     this.#configureSessionActivity();
+  }
+
+  /** True when dev mode answered and the chooser is now the front door. */
+  async #openDevChooser(): Promise<boolean> {
+    try {
+      this.devDevices = await this.api.getDevDevices();
+      if (!this.isConnected) return true;
+      this.frontDoor = "chooser";
+      return true;
+    } catch {
+      // Not dev mode, or a transient failure.
+      return false;
+    }
   }
 
   async #onLoggedIn(event: Event): Promise<void> {
