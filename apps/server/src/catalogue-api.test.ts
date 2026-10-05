@@ -79,7 +79,15 @@ describe("folder selection routes", () => {
     expect(
       (
         await send(app, "POST", "/management-api/folders/delete", {
-          body: { productIds: [], categoryIds: [parent, child], contents: "delete" },
+          body: {
+            productIds: [],
+            categoryIds: [parent, child],
+            contents: "delete",
+            shown: [
+              { id: parent, folders: 1, activeProducts: 0, routes: 0 },
+              { id: child, folders: 0, activeProducts: 0, routes: 0 },
+            ],
+          },
         })
       ).status,
     ).toBe(204);
@@ -145,7 +153,12 @@ describe("folder selection routes", () => {
       expect(
         (
           await send(app, "POST", "/management-api/folders/delete", {
-            body: { productIds: [], categoryIds: [empty], contents },
+            body: {
+              productIds: [],
+              categoryIds: [empty],
+              contents,
+              shown: [{ id: empty, folders: 0, activeProducts: 0, routes: 0 }],
+            },
           })
         ).status,
       ).toBe(204);
@@ -165,6 +178,93 @@ describe("folder selection routes", () => {
       expect(await products()).toEqual(before);
     },
   );
+
+  describe("the counts the person was shown", () => {
+    const counts = (id: string, folders = 0, activeProducts = 0, routes = 0) => ({
+      id,
+      folders,
+      activeProducts,
+      routes,
+    });
+    async function addProduct(app: Hono, categoryId: string, name: string) {
+      const created = await send(app, "POST", "/management-api/products", {
+        body: {
+          catalogueId: await createCatalogueVia(app, `${name} menu`),
+          categoryId,
+          name,
+          pricingUnit: "each",
+          unitPrice: "2",
+          vatClass: "general",
+        },
+      });
+      expect(created.status).toBe(201);
+    }
+
+    it("refuses a delete whose counts have changed with 409 category.contents_changed, deleting nothing", async () => {
+      const app = mountApp();
+      const parent = await folder(app, "Drinks");
+      const child = await folder(app, "Beer", parent);
+      await addProduct(app, child, "Lager");
+      const response = await send(app, "POST", "/management-api/folders/delete", {
+        body: {
+          productIds: [],
+          categoryIds: [parent],
+          contents: "delete",
+          shown: [counts(parent, 1, 0, 0)],
+        },
+      });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        error: { code: "category.contents_changed", params: { categoryId: parent } },
+      });
+      expect((await send(app, "GET", `/management-api/categories/${child}`)).status).toBe(200);
+    });
+
+    it("deletes when the counts shown still hold", async () => {
+      const app = mountApp();
+      const parent = await folder(app, "Drinks");
+      const child = await folder(app, "Beer", parent);
+      await addProduct(app, child, "Lager");
+      const response = await send(app, "POST", "/management-api/folders/delete", {
+        body: {
+          productIds: [],
+          categoryIds: [parent],
+          contents: "delete",
+          shown: [counts(parent, 1, 1, 0)],
+        },
+      });
+      expect(response.status).toBe(204);
+      expect((await send(app, "GET", `/management-api/categories/${child}`)).status).toBe(404);
+    });
+
+    const id = "33333333-3333-4333-8333-333333333333";
+    const other = "44444444-4444-4444-8444-444444444444";
+    it.each([
+      ["missing", { categoryIds: [id] }],
+      ["not a list", { categoryIds: [id], shown: counts(id) }],
+      ["an entry that is not an object", { categoryIds: [id], shown: [id] }],
+      ["a malformed id", { categoryIds: [id], shown: [counts("invalid")] }],
+      ["a negative count", { categoryIds: [id], shown: [counts(id, -1)] }],
+      ["a fractional count", { categoryIds: [id], shown: [counts(id, 0, 0.5)] }],
+      ["a count given as text", { categoryIds: [id], shown: [{ ...counts(id), routes: "0" }] }],
+      ["a missing count", { categoryIds: [id], shown: [{ id, folders: 0, activeProducts: 0 }] }],
+      ["a repeated id", { categoryIds: [id, other], shown: [counts(id), counts(id)] }],
+      ["a selected category left out", { categoryIds: [id, other], shown: [counts(id)] }],
+      [
+        "a category that is not selected",
+        { categoryIds: [id], shown: [counts(id), counts(other)] },
+      ],
+      ["a different category", { categoryIds: [id], shown: [counts(other)] }],
+    ])("refuses a delete of categories whose shown counts are %s", async (_case, body) => {
+      const response = await send(mountApp(), "POST", "/management-api/folders/delete", {
+        body: { productIds: [], contents: "delete", ...body },
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "shown" } },
+      });
+    });
+  });
 
   it("answers a cycle with 409 and leaves the selected product where it was", async () => {
     const app = mountApp();
@@ -1023,7 +1123,12 @@ describe("unique category and product names", () => {
     );
     await refused(
       await send(app, "POST", "/management-api/folders/delete", {
-        body: { productIds: [], categoryIds: [holder], contents: "move_up" },
+        body: {
+          productIds: [],
+          categoryIds: [holder],
+          contents: "move_up",
+          shown: [{ id: holder, folders: 1, activeProducts: 0, routes: 0 }],
+        },
       }),
       "category.name_taken",
       { field: "name", name },
