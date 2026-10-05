@@ -133,10 +133,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       enrolLimiter.check();
       // devMode accepts the knock immediately with the venue's default `till` profile, through the
       // REAL join + accept verbs, so demo mode exercises the production path. The window is not
-      // consulted, so `noteRefused` never fires in dev.
+      // consulted.
       const auto = deps.devMode === true;
       if (!auto && !deps.pairingMode.isOpen()) {
-        deps.pairingMode.noteRefused();
         throw new AppError("device.pairing_closed", {});
       }
       const body = await readJsonBody<{ name?: unknown }>(c);

@@ -6,7 +6,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { authorizeManager, withPassiveManagementRead, type Permission } from "@waitron/identity";
+import { authorizeManager, type Permission } from "@waitron/identity";
 import {
   createErrorBoundary,
   readJsonBody,
@@ -132,40 +132,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       return c.json({
         open: deps.pairingMode.isOpen(),
         openUntil: deps.pairingMode.openUntil(),
-        refusedRecently: deps.pairingMode.refusedRecently(),
       });
-    }),
-  );
-
-  // ── Open or extend the window (device.manage) ───────────────────────────────────────────────────
-  app.post("/management-api/pairing-mode", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      await gated(sessionId, "device.manage", async () => undefined);
-      return c.json(deps.pairingMode.open(), 200);
-    }),
-  );
-
-  // ── Renew the window while an enrolment dialog is open (device.manage) ──────────────────────────
-  app.post("/management-api/pairing-mode/renew", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      // A dialog can reopen a lapsed window, but renewal never counts as human session activity.
-      await withPassiveManagementRead(() =>
-        gated(sessionId, "device.manage", async () => undefined),
-      );
-      return c.json(deps.pairingMode.open(), 200);
-    }),
-  );
-
-  // ── Shut the window (device.manage) ─────────────────────────────────────────────────────────────
-  app.delete("/management-api/pairing-mode", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      await gated(sessionId, "device.manage", async () => undefined);
-      // Shutting refuses the NEXT knock only; requests already pending stay acceptable.
-      deps.pairingMode.close();
-      return c.body(null, 204);
     }),
   );
 

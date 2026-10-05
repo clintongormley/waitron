@@ -388,7 +388,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // creates no row.
       enrolLimiter.check();
       if (!deps.pairingMode.isOpen()) {
-        deps.pairingMode.noteRefused();
         throw new AppError("device.pairing_closed", {});
       }
       const body = await readJsonBody<{ name?: unknown }>(c);
