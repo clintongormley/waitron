@@ -1251,6 +1251,28 @@ const UNUSED_SESSION_OPERATOR = {
 // (`installAppendOnlyTriggers`, applied per migration set by `useVenueDb`), so a rewrite is refused
 // by the trigger alone.
 describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
+  it("does not issue an invoice from the retired venue flow when an order has no service context", async () => {
+    const { cfg, cafe, zoneId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+    await suite.db.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
+
+    const placed = await placeOrder(
+      { db: suite.db, backend, clock },
+      { ...cfg, orderFlow: "invoice_first" },
+      id,
+      OPERATOR,
+    );
+
+    expect(placed).toEqual({ id, status: "placed" });
+    expect(await saleCount(id)).toBe(0);
+    expect(await registroCount(id)).toBe(0);
+  });
+
   it("placeOrder: open → placed, freezes composition, opens the log with a genesis order_placed entry", async () => {
     const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();

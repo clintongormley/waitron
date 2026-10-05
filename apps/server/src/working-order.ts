@@ -5413,7 +5413,7 @@ export async function placeOrder(
     // whose collect `refuseBillWithPayments` refuses.
     await refuseBillWithPayments(tx, id);
     const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
-    const orderFlow = serviceContext?.serviceMode ?? cfg.orderFlow;
+    const orderFlow = serviceContext?.serviceMode ?? "prepay";
 
     // Placing changes no line's quantity, course or note, so the lines read now are the ones fired.
     // Read before the stamp below. A bill moved here from a table has dishes already sent.
