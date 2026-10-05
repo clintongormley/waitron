@@ -2977,15 +2977,26 @@ describe("printers-screen", () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await openPrinter(el, "p2");
-
-    typeField(el, "[data-test=printer-poll-id-p2]", "");
-    await el.updateComplete;
-    q(el, "[data-test=save-printer-p2]")!.click();
+    await selectTab(el, "printers");
+    await filterPrinters(el, "all");
+    q(el, "[data-test=printer-row-p2]")!.click();
+    await flush(el);
+    q(el, "[data-test=printer-section-connection]")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
     await flush(el);
 
-    expect(q(el, "[data-test=printer-poll-id-p2] input")).toBeNull();
-    expect(api.updatePrinter).toHaveBeenCalledWith("p2", { name: "Nube", active: false });
+    expect(text(el, "[data-test=printer-section-connection]")).toContain("poll-1");
+    expect(q(el, '[name="printer-detail-poll-id"]')).toBeNull();
+    q(el, "[data-test=edit-printer-name]")!.click();
+    await flush(el);
+    typeField(el, '[name="printer-detail-name"]', "Nube 2");
+    q(el, "[data-test=save-printer-name]")!.click();
+    await flush(el);
+
+    expect(api.updatePrinter).toHaveBeenCalledWith("p2", { name: "Nube 2" });
+    const [, patch] = vi.mocked(api.updatePrinter).mock.calls[0]!;
+    expect(patch).not.toHaveProperty("pollId");
   });
 
   it("shows an error banner when saving a printer edit is rejected", async () => {
