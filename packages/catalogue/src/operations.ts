@@ -38,7 +38,7 @@ import { addMember, sectionPatchValues } from "./sections.js";
 import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
-import { assertNotOfferedAsExtra, menuPriceVariantsOfItems } from "./variants.js";
+import { assertNotOfferedAsExtra, menuVariantsOfItems } from "./variants.js";
 import {
   assertFamilyNamesFree,
   assertUpdatedNamesFree,
@@ -691,9 +691,10 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
   const combinedByProduct = new Map(combinedOffers.map((offer) => [offer.productId, offer]));
   const { rows } = await offerRowsOn(tx, roots, graph, true);
   if (rows.length === 0) return [];
-  const variantsByItem = await menuPriceVariantsOfItems(
+  const variantsByItem = await menuVariantsOfItems(
     tx,
     rows.map((row) => row.id),
+    true,
   );
   return rows
     .filter((row) => combinedByProduct.has(row.productId))

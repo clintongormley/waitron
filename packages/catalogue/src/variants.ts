@@ -295,51 +295,20 @@ export async function listMenuVariants(
 }
 
 async function menuVariantsOf(tx: Transaction, menuItemId: string): Promise<MenuVariant[]> {
-  return (await menuVariantsOfItems(tx, [menuItemId])).get(menuItemId) ?? [];
+  return ((await menuVariantsOfItems(tx, [menuItemId])).get(menuItemId) ?? []).map(
+    ({ variantId, price }) => ({ variantId, price }),
+  );
 }
 
 /**
- * This menu's settings for the Active variants of each menu item's product, keyed by menu-item id,
- * in variant order, in one query per batch of ids.
+ * This menu's settings for the variants of each menu item's product, with each one's Active state,
+ * keyed by menu-item id, in variant order, in one query per batch of ids. Only Active variants
+ * unless `includeInactive`.
  */
 export async function menuVariantsOfItems(
   tx: Transaction,
   menuItemIds: readonly string[],
-): Promise<Map<string, MenuVariant[]>> {
-  const grouped = new Map<string, MenuVariant[]>();
-  for (const batch of batches(menuItemIds))
-    for (const row of await tx
-      .select({
-        menuItemId: menuItems.id,
-        variantId: products.id,
-        price: menuItemVariantOverrides.price,
-      })
-      .from(menuItems)
-      .innerJoin(products, eq(products.parentId, menuItems.productId))
-      .leftJoin(
-        menuItemVariantOverrides,
-        and(
-          eq(menuItemVariantOverrides.menuItemId, menuItems.id),
-          eq(menuItemVariantOverrides.variantId, products.id),
-        ),
-      )
-      .where(and(inArray(menuItems.id, batch), eq(products.active, true)))
-      .orderBy(menuItems.id, products.variantOrder, products.id)) {
-      const held = grouped.get(row.menuItemId) ?? [];
-      held.push({
-        variantId: row.variantId,
-        price: priceOrNull(row.price),
-      });
-      grouped.set(row.menuItemId, held);
-    }
-  return grouped;
-}
-
-/** This menu's price for every variant of each menu item's product, Inactive ones too, with each
- * one's Active state, keyed by menu-item id, in variant order. For the management prices read. */
-export async function menuPriceVariantsOfItems(
-  tx: Transaction,
-  menuItemIds: readonly string[],
+  includeInactive = false,
 ): Promise<Map<string, MenuPriceVariant[]>> {
   const grouped = new Map<string, MenuPriceVariant[]>();
   for (const batch of batches(menuItemIds))
@@ -359,7 +328,9 @@ export async function menuPriceVariantsOfItems(
           eq(menuItemVariantOverrides.variantId, products.id),
         ),
       )
-      .where(inArray(menuItems.id, batch))
+      .where(
+        and(inArray(menuItems.id, batch), includeInactive ? undefined : eq(products.active, true)),
+      )
       .orderBy(menuItems.id, products.variantOrder, products.id)) {
       const held = grouped.get(row.menuItemId) ?? [];
       held.push({ variantId: row.variantId, price: priceOrNull(row.price), active: row.active });
