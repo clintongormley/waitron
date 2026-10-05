@@ -3450,13 +3450,19 @@ code, not run: the category tree's red asterisk ("No kitchen routing rule covers
 `#unroutedFolderIds` in `apps/dashboard/src/widgets/catalogue-browser.ts`) works the route out with
 no station timing, so it does not follow a switched-off station's fallback, while Made at does; a
 category claiming a switched-off station that has a fallback can show the asterisk and a station in
-Made at in the same row; (5) the "some items made elsewhere" note does not look at whether the categories involved hold any
+Made at in the same row. _2026-10-05: settled by W86a (owner: "follow fallbacks"): the asterisk
+now reads the same route as Made at (`coveredByRule`, in
+`apps/dashboard/src/widgets/folder-made-at.ts`), so a category whose claimed station is switched
+off and whose fallback chain reaches a station that is switched on shows that station in Made at
+and no asterisk, while one whose chain reaches none keeps the asterisk and reads No replacement._
+(5) the "some items made elsewhere" note does not look at whether the categories involved hold any
 products, so it can claim items that do not exist yet: a subcategory with no products whose own
 claim routes elsewhere marks its parent (judged from the code, not run), and an empty category
 covered by a zone exception, or routed to a station that keeps hours or was closed by hand today,
 carries the note itself (the zone and timing cases in
 `apps/dashboard/src/widgets/folder-made-at.test.ts` expect it on categories holding no products);
-whether the words should change is the owner's call.
+whether the words should change is the owner's call. _2026-10-05: the owner chose to keep these
+words._
 
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through
