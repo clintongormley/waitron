@@ -1,9 +1,10 @@
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { products, withTransaction, type Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { createCatalogue, createProduct, listProducts, updateProduct } from "./operations.js";
-import { readEffectiveColors, setProductColor } from "./product-colors.js";
+import { readDishFacts } from "./menu-document.js";
+import { setProductColor } from "./product-colors.js";
 import { setProductVariants } from "./variants.js";
 import { createCategory } from "./categories.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
@@ -111,6 +112,8 @@ it("reads each product's effective colour, a variant's as its parent's whatever 
   await app((tx) => updateProduct(tx, productId, { categoryId: drinks.id }));
   await fx.db.update(products).set({ color: "#b12525" }).where(eq(products.id, variantId));
   const unknown = crypto.randomUUID();
+  const readEffectiveColors = async (tx: Transaction, ids: string[]) =>
+    new Map([...(await readDishFacts(tx, ids))].map(([id, facts]) => [id, facts.color]));
   expect(await app((tx) => readEffectiveColors(tx, [productId, variantId, unknown]))).toEqual(
     new Map([
       [productId, "#256bb1"],
@@ -118,4 +121,16 @@ it("reads each product's effective colour, a variant's as its parent's whatever 
     ]),
   );
   expect(await app((tx) => readEffectiveColors(tx, []))).toEqual(new Map());
+});
+
+it("reads the category tree once and the products once per batch, with no separate colour read", async () => {
+  await app(async (tx) => {
+    const reads = vi.spyOn(tx, "select");
+    try {
+      await readDishFacts(tx, [productId, variantId]);
+      expect(reads).toHaveBeenCalledTimes(2);
+    } finally {
+      reads.mockRestore();
+    }
+  });
 });
