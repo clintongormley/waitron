@@ -1748,8 +1748,8 @@ describe("where focus goes when the list editor an attached row asked for closes
   });
 });
 
-// The screen shuts the nested form and hands focus back at once, so the hand-back can arrive while
-// the control it aims at is still drawn disabled.
+// The screen hands focus back once the nested form and its dialog have updated, without waiting for
+// this editor, so the control can still be drawn disabled.
 describe("focus handed back before the editor draws its controls enabled again", () => {
   async function openNestedForm(el: ProductEditor) {
     el.childOpen = true;
