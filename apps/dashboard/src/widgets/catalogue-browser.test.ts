@@ -2497,7 +2497,9 @@ it("keeps the old name, and sends nothing more, when a refused Edit dialog is le
   await saveEdit(el);
   const box = await editName(el);
   await vi.waitFor(() => expect(box.error).not.toBe(""));
-  box.focus();
+  await vi.waitFor(() =>
+    expect(editDialog(el).shadowRoot!.activeElement?.getAttribute("name")).toBe("category-name"),
+  );
   await userEvent.keyboard("{Escape}");
   const table = await tableOf(el);
   await vi.waitFor(() => expect(editDialog(el).open).toBe(false));

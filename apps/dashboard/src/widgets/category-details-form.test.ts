@@ -139,6 +139,12 @@ it("sends nothing, and cannot be dismissed, while a save is in flight", async ()
   expect(sent).toEqual([]);
   expect(cancels).not.toHaveBeenCalled();
   expect(nameField(el).disabled).toBe(true);
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  modal.shadowRoot!.querySelector<HTMLElement>(".body")!.focus();
+  await userEvent.keyboard("{Escape}");
+  for (let frame = 0; frame < 2; frame++) await new Promise(requestAnimationFrame);
+  expect(cancels).not.toHaveBeenCalled();
+  expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
 });
 
 it("opens again holding the category it is given, with no leftover refusal", async () => {
