@@ -25,7 +25,14 @@ item W92 quoted in it. Read the spec's Decisions before any task.
 
 ## Global constraints
 
-- A stored colour is lowercase `#rrggbb` or null. No CHECK constraint on either new column.
+- A stored colour is lowercase `#rrggbb` or null; `""` is refused, never read as null. No CHECK
+  constraint on either new column.
+- `color` is OPTIONAL on `FrozenOffer`, `LiveOffer` and `TillProduct` (`color?: string | null`), as
+  `ordering` is (`PublishedOrdering`, `packages/catalogue/src/menu-document-types.ts:31-33`): a
+  version published before W92 holds none and is never rewritten. Do NOT raise
+  `MENU_DOCUMENT_FORMAT` (`packages/catalogue/src/menu-document.ts:37`): `readLiveDocuments` serves
+  only a version in the current format (`packages/catalogue/src/menu-publication.ts:159`), so a raise
+  would stop every menu published before W92 from selling.
 - A variant stores no colour; its effective colour is its parent's. No variant override.
 - No colour on a menu placement, a menu item or the Price overrides tab.
 - A section's colour paints only that section's tile; never the products inside it.
@@ -35,7 +42,8 @@ item W92 quoted in it. Read the spec's Decisions before any task.
   Spanish a menu is "carta" and a colour "color".
 - Forms: design-system.md → Forms. Required Name marked; a refusal under its field; one message at
   the end of the dialog body; inputs named `category-name`, `category-color`, `product-color`.
-  Dialogs are `wt-modal size="standard"`.
+  Dialogs are `wt-modal size="standard"`. No explanatory line under a field: "A field's hint is its
+  placeholder, not a line under it" (`docs/developers/design-system.md:1394`).
 - Colours other than the stored data colour read `--wt-*` tokens. The till's two local custom
   properties are `--tile-fill` and `--tile-ink` (not `--wt-*`).
 - Focused runs only (CLAUDE.md §2); CI owns package suites. Read the `Tests` count, never a pipe's
@@ -66,10 +74,15 @@ item W92 quoted in it. Read the spec's Decisions before any task.
 
 ### Task 0: Post the owner questions, then carry on
 
-- [ ] Add one entry to `/Users/clintongormley/waitron-campaign-b/questions.md` headed
+- [x] Add one entry to `/Users/clintongormley/waitron-campaign-b/questions.md` headed
   `W92 — Add category stays inline; rename checks rewritten for the Edit dialog (no answer needed to continue)`,
-  with the design's two "Questions for the owner" verbatim. Do not wait. Create the ledger
+  with the design's "Questions for the owner" verbatim. Do not wait. Create the ledger
   `docs/handoffs/2026-10-05-w92-product-colours.md` (`Status: in progress`) if it does not exist.
+  Done by the runner, with questions 1 and 2.
+- [ ] **For the controller, not an implementer:** append to that same entry the design's question 3
+  (the Home page tab's tile preview stays uncoloured until W93) verbatim, and the sentence question 2
+  gained after it was posted (W72e's five phone-width checks that open a rename box move to the box
+  for a new category, with the same assertions).
 
 ### Task 1: Storage, the colour rule, and a category's colour
 
@@ -183,7 +196,8 @@ export function effectiveColor(
 
 - [ ] **Step 3: schema and migrations.** Add `color: label("color"),` to `products` after `image`
   (`packages/db/src/schema/catalogue.ts:88`) with the comment
-  `// Its own tile colour, lowercase #rrggbb; null takes its category's. Always null on a variant.`
+  `// Its own tile colour, lowercase #rrggbb; null takes its category's. A variant's own value is ignored: it reads its parent's.`
+  (worded as `categoryId`'s comment is, `:49`)
   and to `category_details` (import `label` from `@waitron/db`). No `check()`. Generate:
   `pnpm --filter @waitron/db db:generate --name product_color` and
   `pnpm --filter @waitron/catalogue db:generate --name category_color`. Read both SQL files: each
@@ -247,8 +261,10 @@ if (body.color !== undefined) {
     (`:145-168`); `color` joins the entries the variant cannot set (`:566`); the `INHERITED_KEYS`
     pin (`:713-729`) gains `"color"`.
   - `product-editor-input.test.ts`: a top-level body with `color: "#b12525"` parses to that colour;
-    an absent or null `color` parses to null; a variant body (`isVariant: true`) with
-    `color: "#b12525"` is refused `product.invalid` `{ field: "color" }`, and with `color: null` parses.
+    an absent or null `color` parses to null; `""`, `"  "`, `"#B12525"`, `"red"` and `5` are each
+    refused `product.invalid` `{ field: "color" }` (so `""` is never read as "no colour", as
+    categories and sections refuse it); a variant body (`isVariant: true`) with `color: "#b12525"`
+    is refused `product.invalid` `{ field: "color" }`, and with `color: null` parses.
   - `product-editor.test.ts` (catalogue): saving a product with `color: "#256bb1"` reads back
     `color: "#256bb1"`; saving it again with `color: null` reads back null (the reset);
     `listProducts` returns `color` for it; saving a variant writes its stored `color` back to null
@@ -295,11 +311,19 @@ export async function setProductColor(
 }
 ```
 
-  - `product-editor-input.ts`, beside the category check (`:148-150`):
-    `const color = nullableText(body.color, "color");` then
-    `if (color !== null && isVariant) invalid("color");` and return `color` (the value check is
-    `setProductColor`'s). `ProductEditorInput` gains `/** Its own tile colour; null takes its
-    category's. Always null on a variant. */ color: string | null;`.
+  - `product-editor-input.ts`, beside the category check (`:148-150`), validate in the parser, NOT
+    through `nullableText` (`:78-82`), which trims and turns `""` into null:
+
+```ts
+const color = body.color ?? null;
+if (color !== null && !isStoredColor(color)) invalid("color");
+// A variant's colour is always its parent's.
+if (isVariant && color !== null) invalid("color");
+```
+
+  (importing `isStoredColor` from `./color-inheritance.js`) and return `color`. `setProductColor`
+  keeps its own check for the PATCH route. `ProductEditorInput` gains `/** Its own tile colour;
+  null takes its category's, and is the only value a variant's body may hold. */ color: string | null;`.
   - `product-editor.ts`: `columns` gains `color: products.color`; `readProductEditor`'s variant
     branch (`:95-103`) returns `color: null` beside `primaryCategoryId: null`, so a colour a variant
     row still holds is never read back; the variant branch's update
@@ -319,7 +343,9 @@ export async function setProductColor(
   `@waitron/venue-service`, `@waitron/dashboard`, `@waitron/till`; then run every suite holding a
   typed `Product` or `ProductEditorInput` fixture that typecheck flagged, and
   `pnpm --filter @waitron/catalogue exec vitest run src/variants.test.ts src/variants.db.test.ts`
-  (`blankInherited` now also blanks `color`). `pnpm format:check`.
+  (`blankInherited` now also blanks `color`). From the root,
+  `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/catalogue-engine-neutral.test.ts`
+  (the new `product-colors.ts` imports `./errors.js` and the database). `pnpm format:check`.
 - [ ] **Step 4: commit:** "Products: an own colour, set in the editor or by PATCH; a variant has none".
 
 ### Task 3: The published document carries each product's effective colour
@@ -331,7 +357,7 @@ export async function setProductColor(
 
 **Interfaces:**
 - Consumes: `effectiveColor`, `effectiveProductColumns.color`, `listCategories` returning `color`.
-- Produces: `readEffectiveColors(tx: Transaction, productIds: readonly string[]): Promise<Map<string, string | null>>`; `FrozenOffer.color: string | null`; `LiveOffer.color: string | null`; `ProductChangeField` includes `"color"`.
+- Produces: `readEffectiveColors(tx: Transaction, productIds: readonly string[]): Promise<Map<string, string | null>>`; `FrozenOffer.color?: string | null` and `LiveOffer.color?: string | null` (optional: Global constraints), always set by `freezeOffer` from now on; `ProductChangeField` includes `"color"`. `MENU_DOCUMENT_FORMAT` stays 2.
 
 - [ ] **Step 1: failing tests** (`menusFixture`, `packages/catalogue/test/menus-fixture.ts:54`):
   - `menu-document.test.ts` — "gives each offer its product's effective colour": Soft drinks gets
@@ -354,6 +380,15 @@ export async function setProductColor(
     is published.
   - same file — "moving an uncoloured category under a coloured one changes the next document"
     (Review focus 4).
+  - same file — "a live version published before W92 holds no colour": build it as
+    `liveInEarlierFormat` does (`menu-publication.test.ts:443-468`), but keep `format: 2` and drop
+    only each offer's `color` key (`offers: Object.fromEntries(Object.entries(doc.offers).map(([id,
+    { color, ...offer }]) => [id, offer]))`; a section's `color` predates W92 and stays), and assert
+    the copy holds no offer `color`. Then: `readLiveDocuments` still serves it (unlike the
+    earlier-format case at `:470`); `menuStatus` is `changed`; `previewMenu` lists a
+    `product_changed` for each of its offers with `fields: ["color"]`; and `applyLiveFields` on it
+    gives offers with no `color` property (`not.toHaveProperty("color")`), which the till draws
+    neutral (Task 4 pins that end).
   - `live-queries.test.ts` — "refreshes the menu status and preview when a category changes":
     the `it.each` shape at `:189`, invalidating `categories` and `category_details`.
   - `menu-preview.test.ts` — a `product_changed` with `fields: ["color"]` reads "colour" (and
@@ -394,7 +429,9 @@ export async function readEffectiveColors(
   `const colors = await readEffectiveColors(tx, [...new Set(offers.map((offer) => offer.productId))]);`
   and pass `colors.get(offer.productId)!` to `freezeOffer`, which sets `color` beside `image` and
   `description`. `FrozenOffer` and `LiveOffer` gain
-  `/** The product's effective colour (color-inheritance.ts), frozen when the version is built; null draws the neutral tile. */ color: string | null;`.
+  `/** The product's effective colour (color-inheritance.ts), frozen when the version is built; null draws the neutral tile. Absent from a version published before it existed. */ color?: string | null;`
+  — on `FrozenOffer` inside the `PublishedOrdering & { … }` object, on `LiveOffer` beside `image`.
+  Do not touch `MENU_DOCUMENT_FORMAT`.
   `ProductChangeField` gains `"color"`; `PRODUCT_FIELD_ORDER` puts it after `"image"`;
   `productFields` adds `if (!same(a.color, b.color)) shared.add("color");` after the description
   line. Dashboard: `PRODUCT_FIELDS` gains `color: "menu_preview.field_color"` (the compiler requires
@@ -408,12 +445,20 @@ export async function readEffectiveColors(
   (whole-offer `toEqual`s gain the key: fixture-only unless a value changes), and
   `pnpm exec vitest run scripts/dashboard-browser-purity.test.ts scripts/catalogue-engine-neutral.test.ts`
   from the root. Typecheck catalogue, venue-service, server, dashboard, till. Format check.
+  The till: no till code changes in this task (`menuOfferToTillProduct` copies `color` in Task 4),
+  and because `color` is optional no typed `LiveOffer`/`TillMenuOffer` fixture needs it, so the
+  expected answer is that no till fixture changes and `pnpm --filter @waitron/till typecheck`
+  passes. If typecheck flags one anyway, add the key there and run that file; the till files
+  holding typed offers are `src/api/client.test.ts`, `src/state/menu-refresh.test.ts`,
+  `src/state/draft-lines.test.ts`, `src/state/working-order.test.ts`,
+  `src/till-app-menu-refresh.test.ts` and `src/till-app-drafts.test.ts`. The same holds for the
+  dashboard's `src/widgets/test-helpers.ts`.
 - [ ] **Step 4: commit:** "Menus: each published offer carries its product's colour; a colour edit is a change to publish".
 
 ### Task 4: The till paints product and section tiles
 
 **Files:**
-- Modify: `apps/till/src/api/client.ts` (`TillProduct` `:237`, `menuOfferToTillProduct` `:405`), `apps/till/src/widgets/menu-browser.ts` (styles near `:124-164`, `#productButton` `:327`, `#sectionButton` `:338`)
+- Modify: `apps/till/src/api/client.ts` (`TillProduct` `:237`, `menuOfferToTillProduct` `:405`), `apps/till/src/widgets/menu-browser.ts` (styles near `:124-164`, `#productButton` `:327`, `#sectionButton` `:339`)
 - Test: `apps/till/src/api/client.test.ts`, `apps/till/src/widgets/menu-browser.test.ts`, `apps/till/src/widgets/menu-browser.a11y.test.ts`
 
 **Interfaces:**
@@ -421,17 +466,29 @@ export async function readEffectiveColors(
 - Produces: `TillProduct.color?: string | null`.
 
 - [ ] **Step 1: failing tests.**
-  - `client.test.ts`: `menuOfferToTillProduct` copies `color` (`"#256bb1"` and `null`).
+  - `client.test.ts`: `menuOfferToTillProduct` copies `color` (`"#256bb1"` and `null`), and an
+    offer with no `color` key (a version published before W92) gives a product with no `color`
+    property, as the `ordering` case beside it does (`:3752`).
   - `menu-browser.test.ts`, new `describe("tile colours")`: a product with `color: "#256bb1"` draws
     a tile whose inner button (`tile.shadowRoot.querySelector("button")`) computes
     `background-color: rgb(37, 107, 177)` and whose `.name`, `.price` and `.sold-out` (make one
     `available: false`) compute `rgb(255, 255, 255)`; with `#edabab`, `rgb(0, 0, 0)`; a section
     with `color: "#b12525"` paints its tile and its `.kind` label the same way; a product with
-    `color: null`, and one with `color: "not-a-colour"`, keeps the neutral look (its button's
-    background equals an uncoloured sibling's, and it has no `style` attribute); a product with
-    no colour inside a coloured section is not painted (Review focus 3). Run each assertion under
-    `data-theme="light"` and `"dark"` (`mountWidget`'s third argument, as the a11y file does at
-    `:83-88`).
+    `color: null`, one with no `color` property, and one with `color: "not-a-colour"`, keep the
+    neutral look (each button's background equals an uncoloured sibling's, and the tile has no
+    `style` attribute); a product with no colour inside a coloured section is not painted (Review
+    focus 3). Run each assertion under `data-theme="light"` and `"dark"` (`mountWidget`'s third
+    argument, as the a11y file does at `:83-88`).
+  - same `describe` — "a painted tile keeps the button's feedback". `wt-button`'s feedback is
+    opacity alone: a hover dip (`button:hover:not(:disabled)`,
+    `packages/ui-core/src/components/wt-button.ts:52-54`) and the disabled fade (`:44-46`); it has
+    NO pressed (`:active`) style of its own, so there is no pressed state for the painted rule to
+    override, and this test does not claim one. Pin what exists: hovering a painted sellable tile
+    (`userEvent.hover`) gives its inner button the same computed `opacity` as a hovered neutral
+    tile, and one below 1; a painted sold-out tile (`available: false`) computes the same `opacity`
+    as a neutral sold-out tile, below 1, still shows "Sold out" in the tile's ink, and its button
+    is `disabled`. If Task 8's look at the till finds a pressed state wanted, that is a new
+    finding for the owner, not part of this test.
   - `menu-browser.a11y.test.ts`: the `products` fixture (`:74-81`) gains one dark and one pale
     coloured product and the menu one coloured section; the existing light/dark `describe.each`
     (`:101`) then runs axe, colour contrast included, over them.
@@ -466,9 +523,12 @@ function tilePaint(color: string | null | undefined): string | undefined {
 }
 ```
 
-  `TillProduct` gains `/** The offer's effective colour; absent on a retrieved held line. */ color?: string | null;`
-  and `menuOfferToTillProduct` sets `color: offer.color`. Variants stay choices in the modifier
-  picker, unpainted.
+  The painted rule sets only `background`, `border-color` and `color`: never `opacity`, which
+  carries `wt-button`'s hover and disabled feedback.
+  `TillProduct` gains `/** The offer's effective colour; absent on a retrieved held line and from a version published before it existed. */ color?: string | null;`
+  and `menuOfferToTillProduct` copies it as it copies `ordering` (`client.ts:412`):
+  `...(offer.color === undefined ? {} : { color: offer.color })`. Variants stay choices in the
+  modifier picker, unpainted.
 - [ ] **Step 3: run** Step 1's command plus `src/state/working-order.test.ts src/state/draft-lines.test.ts`;
   typecheck and lint `@waitron/till`; format check.
 - [ ] **Step 4: commit:** "Till: product and section tiles paint their colour with readable labels".
@@ -476,33 +536,43 @@ function tilePaint(color: string | null | undefined): string | undefined {
 ### Task 5: Products tree — Edit replaces Rename, with a colour swatch
 
 **Files:**
-- Modify: `apps/dashboard/src/widgets/color-field.ts` (options), `apps/dashboard/src/api/client.ts:296-303` (`CategorySummary.color`, `CategoryInput.color?`), `apps/dashboard/src/widgets/category-form.ts:53-78` (`categoryRefusalErrors`), `apps/dashboard/src/widgets/product-list.ts` (`:55-56`, `:516-525`, `:615-618`, folder cell `:1045-1047`, menu `:1067-1073`), `apps/dashboard/src/widgets/catalogue-browser.ts` (`#saveName` `:540-555`, events `:604-608`)
-- Create: `apps/dashboard/src/widgets/category-details-form.ts` (`dashboard-category-form`), with `category-details-form.test.ts` and `category-details-form.a11y.test.ts`
+- Modify: `apps/dashboard/src/widgets/color-field.ts` (options; the none button `:143-156`), `apps/dashboard/src/api/client.ts:296-304` (`CategorySummary.color`, `CategoryInput.color?`), `apps/dashboard/src/widgets/category-form.ts:53-78` (`categoryRefusalErrors`), `apps/dashboard/src/widgets/product-list.ts` (line numbers at c2b886e99, after W72e: `CategoryNameDraft` `:55-56`, `willUpdate`'s rename branch `:537-540`, `#renaming` `:665-667`, folder cell `:1094-1096`, menu's Rename `:1116-1122`, `rowActivation` `:1274-1275`), `apps/dashboard/src/widgets/catalogue-browser.ts` (`#saveName` `:538-556`, `@rename-folder` `:604-608`)
+- Keep unchanged: W72e's `#fitNameBox` and `#scheduleFit` (`product-list.ts:634-663`), which then serve only the box for a new category
+- Create: `apps/dashboard/src/widgets/category-details-form.ts` (`dashboard-category-details-form`), with `category-details-form.test.ts` and `category-details-form.a11y.test.ts`
 - Modify: `apps/dashboard/src/i18n/strings.ts`
 - Test: `color-field.test.ts`, `category-form.test.ts`, `product-list.test.ts`, `catalogue-browser.test.ts`, `catalogue-browser.a11y.test.ts`, `product-list.a11y.test.ts`
 
 **Interfaces:**
 - Consumes: `effectiveColor` is not needed here; categories carry their own `color` (Task 1).
-- Produces: `ColorFieldOptions` gains `noneLabel?: string` and `inherited?: string | null` (absent: today's "No colour" button, unchanged); `dashboard-category-form` with properties `open: boolean`, `busy: boolean`, `value: CategorySummary | null`, `errors: Record<string, string>` (keys `name`, `color`, `_form`), events `wt-submit` `{ name: string; color: string | null }` and `wt-cancel`; `dashboard-product-list` event `edit-folder` `{ folderId }` (replacing `rename-folder`).
+- Produces: `ColorFieldOptions` gains `noneLabel?: string` and `inherited?: string | null` (absent: today's "No colour" button, unchanged); `dashboard-category-details-form` with properties `open: boolean`, `busy: boolean`, `value: CategorySummary | null`, `errors: Record<string, string>` (keys `name`, `color`, `_form`), events `wt-submit` `{ name: string; color: string | null }` and `wt-cancel`; `dashboard-product-list` event `edit-folder` `{ folderId }` (replacing `rename-folder`).
 
 - [ ] **Step 1: failing tests.**
   - `color-field.test.ts`: with `noneLabel: "Use category colour"` and `inherited: "#25b125"` the
-    no-colour button reads that label and holds a chip whose computed background is
-    `rgb(37, 177, 37)`; with `inherited: null` it reads the label and the field shows "Its category
-    has no colour."; with neither option it is exactly today's button (existing cases stay green).
+    no-colour button is named by that label alone, holds a chip whose computed background is
+    `rgb(37, 177, 37)`, and its accessible description is `#25b125` (each palette swatch is named
+    by its value); with `inherited: null` it is named by the label and, INSIDE the button, a second
+    line reads "Its category has no colour." and is the button's accessible description
+    (`aria-describedby`), and nothing in the fieldset sits between the options and the error
+    line; with neither option it is exactly today's button (existing cases stay green).
   - `category-details-form.test.ts`: opens holding the category's name and colour; Name is
     required (marked, and a blank name shows `folders.name_required` beside it, the bottom message,
     and disables Save); choosing a swatch and Save emits `{ name, color }`; "No colour" emits
     `color: null`; `errors.color` shows under the chooser, `errors.name` under Name, `errors._form`
     at the end of the body; Esc and Cancel emit `wt-cancel`; inputs are named `category-name` and
-    `category-color`.
+    `category-color`. At 390 × 844 (`page.viewport`, restored afterwards as W72e's `onPhone` helper
+    does, `product-list.test.ts:1566-1580`), in English and Spanish, with
+    `errors.name = codeMessage("category.name_taken")`: the Name input and its refusal each lie
+    inside the dialog's visible box (left ≥ its left, right ≤ its right, both within 0–390) and the
+    refusal does not overflow (`scrollWidth ≤ clientWidth`), the check W72e makes of the tree's box.
   - `category-form.test.ts`: `categoryRefusalErrors({ code: "category.invalid", params: { field: "color" } })`
     gives `{ color: t("editor.field_rejected") }`; `management.request_invalid` `field: "color"`
     gives `color`; `category.invalid` with `field: "name"` or no params still gives `name`.
-  - `product-list.test.ts`: per the Changed test checks table; plus "draws a swatch beside a
-    category's name in its colour, outlined when it has none, and its click sends `edit-folder`
-    without opening or closing the row" (Review focus 2: the row's `aria-expanded` is unchanged
-    and no `category-toggle` is sent).
+  - `product-list.test.ts`: per the Changed test checks table — including W72e's five phone-width
+    cases that open a rename box (`describe("the product list at phone width")`, from `:1521`),
+    which stop compiling once the `rename` kind goes and move to the box for a new category with
+    the same assertions; plus "draws a swatch beside a category's name in its colour, outlined when
+    it has none, and its click sends `edit-folder` without opening or closing the row" (Review
+    focus 2: the row's `aria-expanded` is unchanged and no `category-toggle` is sent).
   - `catalogue-browser.test.ts`: per the table; plus "keeps a move made while the Edit dialog is
     open" (open Edit on `b`, drag `b` into `f`, Save: `moveCatalogueItems` was called and
     `updateCategory` received `("b", { name: "Bottles", color: null })` with no `parentId`) and
@@ -512,17 +582,26 @@ function tilePaint(color: string | null | undefined): string | undefined {
   Check memory; run `pnpm --filter @waitron/dashboard exec vitest run src/widgets/color-field.test.ts src/widgets/category-details-form.test.ts src/widgets/category-form.test.ts src/widgets/product-list.test.ts src/widgets/catalogue-browser.test.ts`.
 
 - [ ] **Step 2: implement.**
-  - `colorField`: the none button renders `noneLabel ?? t("editor.color_none")`, and when
-    `inherited` is a string a `<span class="chip" style=${`background:${inherited}`}></span>`
-    before the label; when `noneLabel` is set and `inherited === null`, a
-    `<span class="hint">${t("editor.color_category_none")}</span>` under the options. Style
-    `.chip` like `.swatch` at `--wt-space-4`; `.hint` in `--wt-color-text-muted`,
-    `--wt-font-size-sm`.
-  - `dashboard-category-form`: modelled on `section-details-form.ts` (`wt-modal size="standard"`,
+  - `colorField` (the none button, `color-field.ts:143-156`): it renders
+    `<span id=${`${name}-none-label`}>${noneLabel ?? t("editor.color_none")}</span>` and is named
+    by that span alone (`aria-labelledby`). When `inherited` is a string, an `aria-hidden` chip
+    `<span class="chip" style=${`background:${inherited}`}></span>` sits before the label and the
+    button's description is the colour's value. When `noneLabel` is set and `inherited === null`,
+    the button holds, under its label, a second line
+    `<span class="note" id=${`${name}-none-note`}>${t("editor.color_category_none")}</span>`, and
+    `aria-describedby` points at it — the label-plus-description pattern `wt-combobox` uses for an
+    option's description (design-system.md, the `wt-combobox` row). Nothing is drawn under the
+    field: design-system.md:1394. Style `.chip` like `.swatch` at `--wt-space-4`; `.note` in
+    `--wt-color-text-muted`, `--wt-font-size-sm`, as its own line inside the button (the button
+    grows to two lines).
+  - `dashboard-category-details-form`: modelled on `section-details-form.ts` (`wt-modal size="standard"`,
     `textField` for Name with `folders.name`, `colorField` named `category-color`, error id
     `category-color-error`, heading `folders.edit_heading`, bottom message as that form builds it,
     `wt-form-actions` Cancel/Save).
-  - `product-list.ts`: `CategoryNameDraft` loses its `rename` kind and `#renaming`; the folder cell
+  - `product-list.ts`: `CategoryNameDraft` loses its `rename` kind and `#renaming` (`:665-667`);
+    `willUpdate`'s rename branch (`:537-540`) goes, leaving `#nameValue = ""`; `rowActivation`
+    (`:1274-1275`) makes every folder row `"toggle"`; W72e's `#fitNameBox` and `#scheduleFit` stay
+    as they are. The folder cell (`:1094-1096`)
     always shows `<strong>${folder.name}</strong>` unless it is the create draft, and draws before it
     `<button part="swatch-button" type="button" data-test=${`color-${folder.id}`}
     aria-label=${t("folders.edit_color").replace("{name}", folder.name)}
@@ -531,7 +610,7 @@ function tilePaint(color: string | null | undefined): string | undefined {
     style=${folder.color ? `background:${folder.color}` : nothing}></span></button>`; styles:
     `wt-data-table::part(swatch-button)` a `--wt-tap-min` square, no border, transparent;
     `wt-data-table::part(color-swatch)` `--wt-space-5` square, `1px solid var(--wt-color-border)`,
-    `--wt-radius-sm`. The menu's Rename (`:1067-1073`) becomes `data-test=edit-${id}`,
+    `--wt-radius-sm`. The menu's Rename (`:1116-1122`) becomes `data-test=edit-${id}`,
     `t("action.edit")`, sending `edit-folder`.
   - `catalogue-browser.ts`: state `editingCategory: CategorySummary | null`, `categoryBusy`,
     `categoryErrors`; `@edit-folder` opens the dialog; `wt-submit` calls
@@ -547,7 +626,15 @@ function tilePaint(color: string | null | undefined): string | undefined {
     Delete `folders.rename` in both languages once a grep finds no reader.
 - [ ] **Step 3: run** Step 1's command plus the two a11y files and `src/screens/catalogue-screen.test.ts`;
   typecheck, lint `@waitron/dashboard`; format check; `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts`.
-- [ ] **Step 4: commit:** "Products: Edit replaces Rename for a category, with its colour and a swatch".
+- [ ] **Step 4: W72e at phone width, after the swatch.** The swatch button makes every category
+  row's name cell a `--wt-tap-min` wider, which can widen the table and move the pinned column.
+  Re-run W72e's phone-width cases on their own, with the swatch in place:
+  `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-list.test.ts -t "the product list at phone width"`,
+  and read the `Tests` count: it must include every case of that `describe` (the moved ones and
+  the create case at `:1697`), none skipped. Then the 390 px case for the Edit dialog's Name refusal
+  (Step 1, `category-details-form.test.ts`). A failure here is fixed in this task, never by
+  loosening a W72e assertion.
+- [ ] **Step 5: commit:** "Products: Edit replaces Rename for a category, with its colour and a swatch".
 
 ### Task 6: Product editor — the colour chooser and "Use category colour"
 
@@ -560,8 +647,9 @@ function tilePaint(color: string | null | undefined): string | undefined {
 
 - [ ] **Step 1: failing tests** (`product-editor.test.ts`): a product with no parent shows the
   colour group, named `product-color`; its "Use category colour" choice shows the colour of the
-  draft's category, and after choosing another category (no save) shows that one's, or "Its
-  category has no colour."; choosing a swatch then Save sends `color: "#b12525"`; choosing "Use
+  draft's category, and after choosing another category (no save) shows that one's, or, for an
+  uncoloured category, carries "Its category has no colour." as its own second line and
+  accessible description (inside the choice, not under the field); choosing a swatch then Save sends `color: "#b12525"`; choosing "Use
   category colour" then Save sends `color: null` (the reset); a product opened with an own colour
   shows that swatch selected; a variant (`inherited` set) shows no colour group and sends
   `color: null`; `productEditorField("color", "en")` is `"color"` and a refusal with that field
@@ -674,7 +762,7 @@ under "Changed test checks".
 
 ## Changed test checks
 
-Line numbers at 520f9cd20: the `it(` line, then the assertions. **Reasons:** **R1** design
+Line numbers at c2b886e99 (after W72e, #1241; only `product-list.test.ts` moved since 520f9cd20): the `it(` or `it.each(` line, then the assertions. **Reasons:** **R1** design
 Decision 1 (a category has a colour column; the 2026-09-30 "no colour" is superseded); **R2**
 Decision 3 (colour is a parent-always field of a variant); **R3** Decision 8, Products tree (Edit
 dialog replaces the inline rename box); **R4** a new key on a whole-shape pin. Implementers append
@@ -687,15 +775,20 @@ behaviour.
 | 1 | `packages/media/src/image-references.test.ts:116` (`:120`) | `category_details` columns are `category_id, parent_id`; title says "no image or colour column" | columns `category_id, color, parent_id`; title "gives category_details no image column and no trigger naming it"; the trigger check unchanged | R1 |
 | 2 | `packages/catalogue/src/variant-fallback.test.ts:709` (`:713-729`) | `INHERITED_KEYS` is the fourteen keys | the same plus `color` | R2 |
 | 2 | `…variant-fallback.test.ts:542` (`:566`; fixture `:119-125`, `:145-168`) | category and pricing unit are the entries a variant cannot set | `color` joins them; the fixture gives parent `#256bb1`, Wine 175 `#b12525` so the "different on each side" guarantee holds | R2 |
-| 5 | `apps/dashboard/src/widgets/product-list.test.ts:1759` (`:1768`) | a category's menu: …, Rename, Move to…, Delete | …, Edit, Move to…, Delete | R3 |
-| 5 | `…product-list.test.ts:1967` | Rename turns the name into a box holding it | Edit sends `edit-folder` `{ folderId: "d" }` and the row still shows its name, with no box | R3 |
-| 5 | `…product-list.test.ts:1996` (`:2004`) | a rename box replaced by another box sends nothing | a create box replaced by a second create box (in another category) sends nothing | R3 |
-| 5 | `…product-list.test.ts:2010` (`:2013-2021`) | choosing Rename closes the menu and sends `rename-folder` | choosing Edit closes it and sends `edit-folder` | R3 |
-| 5 | `…product-list.test.ts:2097` | a rename box sends a cancel on Esc and on leaving it blank | moved to `catalogue-browser.test.ts`: the Edit dialog sends no update on Esc or Cancel, and a blank Name disables Save with its message | R3 |
+| 5 | `apps/dashboard/src/widgets/product-list.test.ts:1948` (`:1957`) | a category's menu: …, Rename, Move to…, Delete | …, Edit, Move to…, Delete | R3 |
+| 5 | `…product-list.test.ts:2156` | Rename turns the name into a box holding it | Edit sends `edit-folder` `{ folderId: "d" }` and the row still shows its name, with no box | R3 |
+| 5 | `…product-list.test.ts:2185` (`:2193`, `:2196`) | a create box replaced by a rename box sends nothing | a create box replaced by a second create box (in another category) sends nothing | R3 |
+| 5 | `…product-list.test.ts:2199` (`:2202-2211`) | choosing Rename closes the menu and sends `rename-folder` | choosing Edit closes it and sends `edit-folder` | R3 |
+| 5 | `…product-list.test.ts:2286` (`:2294`, `:2302`) | a rename box sends a cancel on Esc and on leaving it blank | moved to `catalogue-browser.test.ts`: the Edit dialog sends no update on Esc or Cancel, and a blank Name disables Save with its message | R3 |
+| 5 | `…product-list.test.ts:1521` (`:1537`; `:1548-1557`) | W72e: a rename box in `f` and in `b`, refused `category.name_taken` and `category.invalid`, English and Spanish, at 390 px: the table not scrolled sideways, the input and the refusal between the scroller's start and the pinned Actions cell, the refusal not overflowing | the box for a new category at the same two depths (`{ kind: "create", parentId: null }` for `f`'s, `parentId: "d"` for `b`'s), same codes, languages and assertions; title says "a new category's" | R3 |
+| 5 | `…product-list.test.ts:1627` (`:1632`; `:1634`) | W72e: an open rename box in `f` with a refusal is fitted again when the screen narrows from 430 to 390 px | the same with the box for a new category, `parentId: null`; the same `expectInView` | R3 |
+| 5 | `…product-list.test.ts:1638` (`:1643`; `:1648-1652`) | W72e: an open rename box in `f` is fitted again when selection adds a column in a bounded list | the same with the box for a new category, `parentId: null`; same assertions (the `folder:f` checkbox drawn, box in view, pinned column unmoved) | R3 |
+| 5 | `…product-list.test.ts:1656` (`:1669`, `:1672`; `:1678`) | W72e: a rename box in `f`, the table scrolled sideways before or after it opens, shows the box and refusal from their first letter | the same with the box for a new category, `parentId: null`, opened by setting `nameDraft`; same scroll of 172 px and `expectInView`; title says "the box opens" | R3 |
+| 5 | `…product-list.test.ts:1682` (`:1687`; `:1693`) | W72e: an open rename box in `f` is fitted again after the list is moved on the page and the screen narrows | the same with the box for a new category, `parentId: null`; same `expectInView` | R3 |
 | 5 | `apps/dashboard/src/widgets/catalogue-browser.test.ts:1005` | renames in place; sends `("d", { name: "Beverages" })` | Edit opens the dialog holding "Drinks"; Save sends `("d", { name: "Beverages", color: null })` | R3 |
 | 5 | `…catalogue-browser.test.ts:1015` (`:1030-1034`) | a rename after a move sends the name only | Edit after the move sends `[["b", { name: "Beer", color: null }]]`, no `parentId`; plus the move-while-open case | R3 |
 | 5 | `…catalogue-browser.test.ts:1048` (`:1061-1066`) | a duplicate name stays in the rename box with the refusal under it (both languages) | stays in the dialog's Name field with the refusal under it (both languages); the row keeps "Drinks" | R3 |
 | 5 | `…catalogue-browser.test.ts:2248` (`:2260-2269`) | a rename box opened while a create saves keeps "Food" | a second create box opened while the first saves is still open, empty, after the first finishes | R3 |
-| 5 | `…catalogue-browser.test.ts:2273` (`:2290-2297`, `:2306`) | rename box steps (Esc; "Fresh" Enter) during a pending create | create box steps in `f` (Esc; "Fresh" Enter); `createCategory` calls are Juice/d, Fresh/f, Tea/null; `updateCategory` never called | R3 |
+| 5 | `…catalogue-browser.test.ts:2273` (`:2290-2298`, `:2305-2308`, `:2311`) | rename box steps (Esc; "Fresh" Enter) during a pending create | create box steps in `f` (Esc; "Fresh" Enter); `createCategory` calls are Juice/d, Fresh/f, Tea/null; `updateCategory` never called | R3 |
 | 5 | `…catalogue-browser.test.ts:2315` (`:2327-2335`) | a refusal shows at the bottom, not under a rename box opened since | not under a create box opened since | R3 |
 | 5 | `…catalogue-browser.test.ts:2349` | a refused rename left with Esc keeps the old name, one update sent | a refused Edit dialog left with Esc keeps "Drinks" in the row, one update sent | R3 |
