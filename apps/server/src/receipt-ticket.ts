@@ -30,6 +30,7 @@ import {
   withQuietZone,
   wrapText,
   type EscSetting,
+  type MonoRaster,
 } from "@waitron/printing";
 import { customerOptionSnapshotLabels } from "@waitron/catalogue";
 import type { ReceiptLabels } from "@waitron/country";
@@ -54,11 +55,13 @@ export interface ReceiptIssuer {
 }
 
 /**
- * The owner-authored NON-FISCAL trim: a subtitle under the venue name and a message after the
- * payment lines. No field here can suppress or reorder a mandated element.
+ * The owner-authored NON-FISCAL trim: a slogan, a phone and an email in the top block, and a message
+ * after the payment lines. No field here can suppress or reorder a mandated element.
  */
 export interface ReceiptTrim {
   headerSubtitle?: string;
+  phone?: string;
+  email?: string;
   footerMessage?: string;
 }
 
@@ -72,6 +75,10 @@ export interface FormatReceiptInput {
   receiptHeader?: { tradingName: string | null; printTradingName: boolean };
   /** The owner-authored non-fiscal header/footer trim; `{}` (or missing fields) prints no trim. */
   receipt: ReceiptTrim;
+  /** The venue's address, one printed line each; none prints no address. */
+  venueAddress?: readonly string[];
+  /** The logo already drawn for this printer's paper; none prints no logo. */
+  logo?: MonoRaster | null;
   /** The locale the fixed words are printed in and the money, discount percentages and date are FORMATTED in (e.g. "es-ES"). NOT the operator UI. */
   invoiceLocale: string;
   /** The locale goods names, unit names and option answers are looked up in; defaults to `invoiceLocale`. */
@@ -126,6 +133,8 @@ export function formatReceipt({
   issuer,
   receiptHeader,
   receipt,
+  venueAddress = [],
+  logo = null,
   invoiceLocale,
   namesLocale = invoiceLocale,
   printer,
@@ -176,16 +185,22 @@ export function formatReceipt({
     b.line().align("left");
   }
 
-  // Issuer block — venue name, optional non-fiscal subtitle, NIF (art. 7.1.d).
+  // Issuer block, centred: the venue name and NIF (art. 7.1.d) among the non-fiscal logo, slogan
+  // and contact lines.
+  b.align("center");
+  if (logo !== null) b.bitmap(logo);
   const tradingName = receiptHeader?.tradingName?.trim();
   if (receiptHeader?.printTradingName && tradingName && tradingName !== issuer.venueName.trim()) {
     text(tradingName);
   }
   text(issuer.venueName);
   if (receipt.headerSubtitle) text(receipt.headerSubtitle);
+  for (const line of venueAddress) text(line);
+  if (receipt.phone) text(`${label.phone} ${receipt.phone}`);
+  if (receipt.email) text(receipt.email);
   if (duplicate) text(label.duplicate);
   text(`${label.nif}: ${issuer.nif}`);
-  b.line();
+  b.line().align("left");
 
   text([result.orderLabel, `${label.order} ${result.orderNumber}`].filter(Boolean).join(" · "));
 
@@ -286,7 +301,11 @@ export function formatReceipt({
   }
   b.line();
 
-  if (receipt.footerMessage) text(receipt.footerMessage);
+  if (receipt.footerMessage) {
+    b.align("center");
+    text(receipt.footerMessage);
+    b.align("left");
+  }
 
   // Repeat the practice warning at the tear-off edge so either end of a separated ticket identifies
   // the document as simulated.

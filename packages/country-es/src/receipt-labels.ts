@@ -24,6 +24,7 @@ export const SPAIN_RECEIPT_LABELS = {
     reference: "Ref.",
     duplicate: "DUPLICADO",
     practice: "PRUEBA - SIN COBRO REAL",
+    phone: "Tel.",
   },
   "ca-ES": {
     nif: "NIF",
@@ -44,6 +45,7 @@ export const SPAIN_RECEIPT_LABELS = {
     reference: "Ref.",
     duplicate: "DUPLICAT",
     practice: "PROVA - SENSE COBRAMENT REAL",
+    phone: "Tel.",
   },
   "gl-ES": {
     nif: "NIF",
@@ -64,6 +66,7 @@ export const SPAIN_RECEIPT_LABELS = {
     reference: "Ref.",
     duplicate: "DUPLICADO",
     practice: "PROBA - SEN COBRO REAL",
+    phone: "Tel.",
   },
   "eu-ES": {
     nif: "IFZ",
@@ -84,5 +87,6 @@ export const SPAIN_RECEIPT_LABELS = {
     reference: "Erref.",
     duplicate: "BIKOIZKARIA",
     practice: "PROBA - BENETAKO KOBRANTZARIK GABE",
+    phone: "Tel.",
   },
 } as const satisfies Readonly<Record<string, ReceiptLabels>>;
