@@ -233,3 +233,77 @@ for (const theme of ["light", "dark"] as const) {
     }
   });
 }
+
+const uses = [
+  { kind: "product", id: "toast", catalogueId: "menu", name: "Toast", active: true },
+  {
+    kind: "product",
+    id: "old",
+    catalogueId: "menu",
+    name: "Old country toast with seeds",
+    active: false,
+  },
+  {
+    kind: "variant",
+    id: "large",
+    productId: "toast",
+    catalogueId: "menu",
+    name: "Large",
+    active: true,
+  },
+  { kind: "section", id: "breads", internalName: "Breads (internal)", ownerMenuId: "lunch" },
+  { kind: "menu_version", id: "v1", menuId: "lunch", menuName: "Weekday lunch", number: 3 },
+];
+
+async function openPreview(theme: "light" | "dark") {
+  const library = await mountLibrary(false, theme);
+  Object.assign(library.api, {
+    getImage: vi.fn().mockResolvedValue({ image: { ...card, id: "image-1" }, uses }),
+  });
+  library.shadowRoot!.querySelector<HTMLElement>("[data-test=preview-image-1]")!.click();
+  await vi.waitFor(() =>
+    expect(library.shadowRoot!.querySelectorAll("wt-modal .uses li a")).toHaveLength(5),
+  );
+  const modal = library.shadowRoot!.querySelector("wt-modal")!;
+  await modal.updateComplete;
+  const dialog = modal.shadowRoot!.querySelector<HTMLDialogElement>("dialog")!;
+  await vi.waitFor(() => expect(dialog.open).toBe(true));
+  await frame();
+  return {
+    library,
+    dialog: measured(dialog),
+    body: modal.shadowRoot!.querySelector<HTMLElement>(".body")!,
+    photo: measured(modal.querySelector(".viewer img")!),
+    list: measured(modal.querySelector(".uses")!),
+    links: [...modal.querySelectorAll(".uses li a")].map(measured),
+  };
+}
+
+for (const theme of ["light", "dark"] as const) {
+  it(`shows the preview's photo beside its list of uses on a laptop screen (${theme})`, async () => {
+    await page.viewport(1280, 800);
+    const { dialog, photo, list } = await openPreview(theme);
+    expect(photo.right).toBeLessThanOrEqual(list.left);
+    expect(photo.top).toBeLessThan(list.bottom);
+    expect(list.top).toBeLessThan(photo.bottom);
+    expect(photo.left).toBeGreaterThanOrEqual(dialog.left);
+    expect(list.right).toBeLessThanOrEqual(dialog.right);
+  });
+
+  it(`stacks the preview's photo above its list of uses on a phone, both whole and easy to tap (${theme})`, async () => {
+    await page.viewport(390, 800);
+    const { library, dialog, body, photo, list, links } = await openPreview(theme);
+    expect(photo.bottom).toBeLessThanOrEqual(list.top);
+    for (const box of [photo, list]) {
+      expect(box.left).toBeGreaterThanOrEqual(dialog.left);
+      expect(box.right).toBeLessThanOrEqual(dialog.right);
+    }
+    expect(body.clientWidth).toBeGreaterThan(0);
+    expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
+    const tapMin = token(library, "--wt-tap-min");
+    for (const link of links) {
+      expect(link.height).toBeGreaterThanOrEqual(tapMin);
+      expect(link.right).toBeLessThanOrEqual(dialog.right);
+    }
+  });
+}

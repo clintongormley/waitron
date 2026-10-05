@@ -88,4 +88,17 @@ describe.each(["light", "dark"] as const)("image library accessibility (%s)", (t
     expect(modal.querySelector("[data-test=confirm-delete]")).toBeNull();
     await expectNoA11yViolations(host);
   });
+  it("names the preview, its photo and its list of uses, opened from the thumbnail", async () => {
+    const library = await mount(theme);
+    const modal = await openDialog(library, "preview-bread");
+    await vi.waitFor(() => expect(modal.querySelector(".uses li a")?.textContent).toBe("Toast"));
+    await expectNoA11yViolations(host);
+  });
+  it("says the image is not used anywhere in the preview", async () => {
+    const library = await mount(theme);
+    vi.mocked(library.api.getImage).mockResolvedValue({ image, uses: [] });
+    const modal = await openDialog(library, "preview-bread");
+    await vi.waitFor(() => expect(modal.querySelector("[data-test=no-uses]")).not.toBeNull());
+    await expectNoA11yViolations(host);
+  });
 });

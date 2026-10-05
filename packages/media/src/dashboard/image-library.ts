@@ -151,26 +151,27 @@ export class ImageLibrary extends LitElement {
         background: var(--wt-color-primary);
         color: var(--wt-color-on-primary);
       }
-      /* Two columns, the photo first, wherever the dialog has room for both; one above the other
-         where it has not. Driven by the dialog's own width, not the viewport's. */
+      /* Side by side, the photo taking the larger share, wherever the dialog has room for both
+         bases; one above the other where it has not. Driven by the dialog's width, not the
+         viewport's. */
       .viewer {
-        display: grid;
-        grid-template-columns: repeat(
-          auto-fit,
-          minmax(min(100%, calc(var(--wt-tap-min) * 7)), 1fr)
-        );
+        display: flex;
+        flex-wrap: wrap;
         gap: var(--wt-space-4);
-        align-items: start;
+        align-items: flex-start;
       }
       .viewer img {
-        display: block;
-        width: 100%;
-        aspect-ratio: 4/3;
+        flex: 3 1 calc(var(--wt-tap-min) * 7);
+        min-width: 0;
+        height: auto;
         max-height: 60dvh;
         object-fit: contain;
         background: var(--wt-color-surface);
-        border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
+      }
+      .uses {
+        flex: 2 1 calc(var(--wt-tap-min) * 5);
+        min-width: 0;
       }
       .uses h3 {
         margin: 0 0 var(--wt-space-2);
