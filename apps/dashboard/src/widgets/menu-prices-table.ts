@@ -906,9 +906,12 @@ export class MenuPricesTable extends LitElement {
   #undoButton() {
     const outcome = this.outcome;
     if (outcome?.kind !== "saved" || outcome.save.undo) return nothing;
+    // Pressing it keeps focus where it is: a field left would save what it holds, and that new
+    // save takes this Undo away before the click lands. Undo writes over its own field's text.
     return html`<wt-button
       variant="secondary"
       data-test="price-undo"
+      @mousedown=${(event: Event) => event.preventDefault()}
       @click=${(event: Event) => {
         event.stopPropagation();
         this.#undo(outcome.save);

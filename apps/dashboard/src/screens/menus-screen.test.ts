@@ -4397,6 +4397,36 @@ it("says a save was saved once the prices are read again, and Undo writes the pr
   expect(priceUndo(el)).toBeNull();
 });
 
+it("undoes on a click while that field holds a price typed and not yet saved, sending the Undo alone", async () => {
+  let written: string | null = null;
+  const client = api({
+    updateMenuItem: vi.fn(async (_menu: string, _item: string, body: { grossPrice: string }) => {
+      written = body.grossPrice;
+    }),
+    getMenuPrices: vi.fn(async (id: string) =>
+      id === "menu-lunch"
+        ? lunchPrices().map((row) =>
+            row.menuItemId === "mi-burger" ? { ...row, override: written } : row,
+          )
+        : [],
+    ),
+  });
+  const el = await mountPrices(client);
+  await commitPrice(el, "mi-burger", "11.00");
+  await vi.waitFor(() => expect(prices(el).outcome).toEqual({ kind: "saved", save: burgerSave }));
+  await prices(el).updateComplete;
+  await userEvent.fill(priceField(el, "mi-burger").shadowRoot!.querySelector("input")!, "13.00");
+  await userEvent.click(priceUndo(el)!);
+  await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledTimes(2));
+  expect(client.updateMenuItem.mock.calls[1]![2]).toEqual({ grossPrice: null });
+  await vi.waitFor(() => expect(prices(el).saving.size).toBe(0));
+  priceField(el, "mi-burger").shadowRoot!.querySelector("input")!.blur();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(client.updateMenuItem).toHaveBeenCalledTimes(2);
+  await prices(el).updateComplete;
+  expect(priceField(el, "mi-burger").value).toBe("");
+});
+
 it.each(AWAY_FROM_PRICES)(
   "clears what the status line said about a saved price once $away is opened",
   async ({ leave }) => {

@@ -1215,6 +1215,24 @@ it("sends Undo as the save with its price and previous swapped, its click stoppe
   expect(override(el, "mi-burger").value).toBe("");
 });
 
+it("undoes on a click while another field holds a price typed and not yet saved, leaving that price typed and unsent", async () => {
+  const el = await mount({ rows: [{ ...burger, override: "11.00" }, lemonade, lager] });
+  const heard = priceSaves(el);
+  el.outcome = { kind: "saved", save: burgerSaved };
+  await el.updateComplete;
+  const typed = override(el, "mi-lager").shadowRoot!.querySelector("input")!;
+  await userEvent.fill(typed, "5.00");
+  await userEvent.click(undoButton(el)!);
+  await el.updateComplete;
+  expect(heard).toHaveBeenCalledExactlyOnceWith({
+    ...burgerSaved,
+    price: null,
+    previous: "11.00",
+    undo: true,
+  });
+  expect(override(el, "mi-lager").value).toBe("5.00");
+});
+
 it("draws no Undo for the saved outcome of an Undo", async () => {
   setLocale("en-GB");
   try {
