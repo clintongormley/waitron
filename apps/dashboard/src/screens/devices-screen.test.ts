@@ -608,6 +608,15 @@ describe("the device table", () => {
         expect(api.listDevices).toHaveBeenCalledTimes(1);
       });
 
+      it("does not keep redrawing when a report's stale moment is beyond the longest timer", async () => {
+        // A browser clock far behind the server's puts the report weeks in the future.
+        const clock = { at: new Date(NOW.getTime() - 30 * 24 * 60 * 60_000) };
+        const { el } = await mountWithClock([reported("ahead", 82, false, 1)], clock);
+        const redraws = vi.spyOn(el, "requestUpdate");
+        await vi.advanceTimersByTimeAsync(100);
+        expect(redraws).not.toHaveBeenCalled();
+      });
+
       it("leaves no timer behind once the screen is gone", async () => {
         const clock = { at: NOW };
         const { el } = await mountWithClock([reported("ageing", 82, false, 9)], clock);

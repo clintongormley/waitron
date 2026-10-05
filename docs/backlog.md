@@ -5140,14 +5140,14 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   **W106 (done on its branch):** `devices` gains three empty-by-default columns: the battery level,
   whether it is charging and when that was reported (core `0099`). A paired device sends both to
   `PUT /api/device/battery`, which refuses a level outside 0 to 100 and stores at most one report a
-  minute unless the charging state changed (`apps/server/src/device-api.ts`). The till sends a report
-  when it starts as a paired device and whenever the level or charging state changes, but only where
-  the browser has `navigator.getBattery` (`apps/till/src/api/battery-report.ts`). The Devices table's
-  Battery column, between Shows and Status, shows "82%" with a lightning mark while charging, "Not
-  reported" for a device that never sent one, and greys a report more than ten minutes old, adding
-  "as of" and the time it was taken. A report that passes ten minutes while the page is open is
-  greyed then, without the list being read again (`apps/dashboard/src/screens/devices-screen.ts`). No low-battery
-  alert: that is A272, still open.
+  minute unless the charging state changed (`apps/server/src/device-api.ts`). The till sends a
+  report when it starts as a paired device and whenever the level or charging state changes, but
+  only where the browser has `navigator.getBattery` (`apps/till/src/api/battery-report.ts`). The
+  Devices table's Battery column, between Shows and Status, shows "82%" with a lightning mark while
+  charging, "Not reported" for a device that never sent one, and greys a report more than ten
+  minutes old, adding "as of" and the time it was taken. A report that passes ten minutes while the
+  page is open is greyed then, without the list being read again
+  (`apps/dashboard/src/screens/devices-screen.ts`). No low-battery alert: that is A272, still open.
   Left OPEN by W105, not acted on: (5) a kitchen screen whose station or watcher was switched off
   opens with Shows empty, so even a rename asks for a new one; whether to let it keep a switched-off
   one is the owner's call. (6) the Status column still says "Revoked" (`devices.status_revoked`)

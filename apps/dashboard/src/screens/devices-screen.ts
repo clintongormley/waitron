@@ -136,6 +136,9 @@ const BATTERY_STALE_MS = 10 * 60_000;
 /** A lightning bolt; U+FE0E asks for the text form, which takes the cell's colour, not an emoji. */
 const CHARGING_MARK = "\u26A1\uFE0E";
 
+/** A longer `setTimeout` delay overflows and fires at once. */
+const LONGEST_TIMER_MS = 2 ** 31 - 1;
+
 /** A report taken at `reportedAt` is stale once the time is strictly past this. */
 function batteryStaleAfter(reportedAt: string): number {
   return Date.parse(reportedAt) + BATTERY_STALE_MS;
@@ -385,7 +388,10 @@ export class DevicesScreen extends LitElement {
     );
     // Stale is strictly older than the limit, so the first stale moment is a millisecond past it.
     if (next !== Infinity)
-      this.#staleTimer = setTimeout(() => this.requestUpdate(), next - now + 1);
+      this.#staleTimer = setTimeout(
+        () => this.requestUpdate(),
+        Math.min(next - now + 1, LONGEST_TIMER_MS),
+      );
   }
 
   override disconnectedCallback(): void {
