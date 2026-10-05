@@ -52,8 +52,9 @@ holds a null key and is not compared. A configuration import is checked without 
 holding two such Active rows with one name is refused whole (`validateCatalogueConfiguration`,
 `packages/catalogue/src/configuration-transfer.ts`), when setup opens the export and again when it
 is imported. It judges what the import will store: a product row with no `active` value counts as
-Active, the column's default, and one whose `active` is not 0 or 1 (what an export writes), or whose
-name is not text, is refused with `setup.request_invalid` naming the column.
+Active, the column's default; a product row whose `active` is not 0 or 1 (what an export writes),
+or a category or product row whose name is not text, is refused with `setup.request_invalid`
+naming the column.
 
 The three resolvers, one per audience:
 

@@ -575,7 +575,8 @@ export interface ConfigurationTransferTable {
   readonly locationColumns?: readonly string[];
   /** Columns holding another row's id that the schema declares no foreign key for. An import
    * rewrites `id`, these and every foreign-key column to the new ids, whatever column a key
-   * references, so a transferred table's foreign keys must hold ids. */
+   * references, so a key onto a column that is not an id would have a value equal to a bundle id
+   * replaced. */
   readonly references?: readonly string[];
   readonly reconnect?: boolean;
 }

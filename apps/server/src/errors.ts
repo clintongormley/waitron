@@ -787,7 +787,8 @@ declare module "@waitron/shared" {
      * unrecoverable (CLAUDE.md §5), so `provisionVenue` refuses before writing anything.
      */
     "setup.already_provisioned": Record<string, never>;
-    /** A setup or provisioning field cannot be used. Fiscal venue validators also raise this code;
+    /** A setup or provisioning field cannot be used. Fiscal venue validators and catalogue's
+     * configuration check (`packages/catalogue/src/configuration-transfer.ts`) also raise this code;
      * editing routes translate it to their own request error. `field` carries only the field name,
      * never its value, because certificate fields can contain credentials. */
     "setup.request_invalid": { field: string };

@@ -2640,7 +2640,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
           stubApi({
             stageConfiguration: vi
               .fn()
-              .mockRejectedValue({ code, params: { field: "name", name: "Bebidas" }, status: 400 }),
+              .mockRejectedValue({ code, params: { field: "name", name: "Bebidas" }, status: 409 }),
           }),
         );
         setLocale(locale);
@@ -2659,7 +2659,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
       stubApi({
         stageConfiguration: vi
           .fn()
-          .mockRejectedValue({ code: "product.name_taken", params: {}, status: 400 }),
+          .mockRejectedValue({ code: "product.name_taken", params: {}, status: 409 }),
       }),
     );
     configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");

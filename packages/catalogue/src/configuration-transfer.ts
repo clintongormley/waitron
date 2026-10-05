@@ -32,6 +32,8 @@ function sharedName(names: readonly string[]): string | undefined {
  * Refuses a bundle holding two categories with one parent, or two Active products or variants,
  * that share a name: the rules `assertCategoryNamesFree` and `assertFamilyNamesFree` hold on a save.
  * A category with no `category_details` row is top-level, as it is to the save's check.
+ * Also refuses (`setup.request_invalid`) a product whose `active` is not 0 or 1, or a category or
+ * product whose name is not text.
  */
 export function validateCatalogueConfiguration(tables: Readonly<Record<string, Rows>>): void {
   const parentOf = new Map(
