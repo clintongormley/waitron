@@ -1,6 +1,7 @@
 import { afterEach, describe, test } from "vitest";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
+import { page } from "vitest/browser";
 import { WtModal } from "./wt-modal.js";
 import "./wt-form-actions.js";
 import "./wt-button.js";
@@ -39,6 +40,27 @@ describe.each(["light", "dark"] as const)("wt-modal a11y (%s theme)", (theme) =>
     modal.open = true;
     await modal.updateComplete;
     await expectNoA11yViolations(host);
+  });
+
+  test.each([1280, 390])("a long compact modal with a scrolling body at %ipx", async (width) => {
+    await page.viewport(width, 600);
+    try {
+      const modal = (await mountThemed(
+        `<wt-modal heading="Review changes" size="compact">
+          <p style="height:1800px">Changes to review</p>
+          <wt-form-actions slot="footer">
+            <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
+            <wt-button>Save</wt-button>
+          </wt-form-actions>
+        </wt-modal>`,
+        theme,
+      )) as WtModal;
+      modal.open = true;
+      await modal.updateComplete;
+      await expectNoA11yViolations(host);
+    } finally {
+      await page.viewport(1280, 900);
+    }
   });
 
   test("with the form's message at the end of the body", async () => {

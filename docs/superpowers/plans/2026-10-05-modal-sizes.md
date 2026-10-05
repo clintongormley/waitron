@@ -139,3 +139,6 @@ Steps:
 
 W69 (unsaved-changes warning) also changes `wt-modal`; lane A starts it after this lands. Modal
 height, body/footer structure and message placement are unchanged.
+
+2026-10-05: W70a changes compact height to fit its content, capped by the viewport; standard and
+wide heights stay as recorded here. See `docs/developers/design-system.md`, the modal contract.

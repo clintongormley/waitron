@@ -2343,12 +2343,18 @@ that serves jobs of clearly different sizes picks one per job (the profile's det
 authenticator setup are standard, its other steps compact). Leaving the size off still gives the wide
 modal, as before. W66's Pricing unit
 chooser stays a small dialog (`wt-dialog`) rather than a full-height modal for one dropdown, held to
-the compact width. Detail: design-system.md, the `wt-modal` entry. Left open: (1) no modal's height
-changed, so a compact confirmation is still as tall as the screen, a narrow column with empty space
-under its text, and the category delete dialog (standard) keeps its empty space too — height was
-out of scope, and whether a short modal should shrink to its content is the owner's call;
-(2) in the wide Extras editor at 1280px wide, the items table scrolls sideways by 4px (978px of
-content in a 974px box), with or without the size attribute.
+the compact width. Detail: design-system.md, the `wt-modal` entry. W70a (owner, 2026-10-05,
+"compact only") makes compact modals fit their content up to the screen's height, with the body
+scrolling beyond it and footer actions held in view. Standard and wide modals retain their full
+height. The category delete dialog is standard and retains its empty space; W74's height finding
+therefore remains open. Left open: in the wide Extras editor at 1280px wide, the items table scrolls
+sideways by 4px (978px of content in a 974px box), with or without the size attribute.
+
+W70a's visual probe copied `catalogue-screen.a11y.test.ts`'s fixture and found that its product
+confirmation stayed closed: the fixture supplies no `listMadeAt`, which `#reloadProducts` awaits
+before loading products. Adding that method to the temporary probe and waiting for the product
+read opens the confirmation. Follow-up: complete that accessibility fixture and assert the native
+dialog is open before its scan. The existing suite was not changed by W70a.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).** The owner: _"the Kitchen name, and

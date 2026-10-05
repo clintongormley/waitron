@@ -28,6 +28,7 @@ export class WtModal extends WtDialog {
       /* Set on this modal's own dialog rather than passed down as a custom property, which a modal
          slotted inside this one would inherit. */
       :host([size="compact"]) dialog {
+        height: fit-content;
         width: min(var(--wt-modal-compact-width), calc(100dvw - 2 * var(--wt-modal-inline-margin)));
       }
 

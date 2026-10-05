@@ -139,6 +139,80 @@ function dialogOf(modal: WtModal): HTMLDialogElement {
   return modal.shadowRoot!.querySelector("dialog")!;
 }
 
+test.each([
+  [1280, 900],
+  [390, 600],
+])("fits short compact content at %i × %i without empty space below it", async (width, height) => {
+  await page.viewport(width, height);
+  try {
+    const modal = await openModal(
+      '<div data-content style="height: 40px">Short notice</div>',
+      'size="compact"',
+    );
+    const dialog = dialogOf(modal);
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const footer = modal.shadowRoot!.querySelector<HTMLElement>(".footer")!;
+    const content = modal.querySelector<HTMLElement>("[data-content]")!;
+    await modal.querySelector("wt-form-actions")!.updateComplete;
+    const box = dialog.getBoundingClientRect();
+    expect(window.innerWidth).toBe(width);
+    expect(box.height).toBeLessThan(height / 2);
+    expect(height - box.bottom).toBeCloseTo(box.top, 0);
+    expect(footer.getBoundingClientRect().top - content.getBoundingClientRect().bottom).toBeCloseTo(
+      parseFloat(getComputedStyle(body).paddingBottom),
+      0,
+    );
+    expect(body.scrollHeight).toBe(body.clientHeight);
+    expect(dialog.scrollHeight).toBe(dialog.clientHeight);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+test.each([
+  [1280, 900],
+  [390, 600],
+])("caps long compact content at %i × %i and scrolls only its body", async (width, height) => {
+  await page.viewport(width, height);
+  try {
+    const modal = await openModal(
+      '<div style="height: 1800px">Long notice</div>',
+      'size="compact"',
+    );
+    const dialog = dialogOf(modal);
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const footer = modal.shadowRoot!.querySelector<HTMLElement>(".footer")!;
+    const save = modal.querySelectorAll("wt-button")[1]!;
+    await save.updateComplete;
+    const box = dialog.getBoundingClientRect();
+    expect(box.top).toBeCloseTo(24, 0);
+    expect(height - box.bottom).toBeCloseTo(24, 0);
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    const buttons = footer.getBoundingClientRect();
+    const saveBox = save.getBoundingClientRect();
+    expect(saveBox.bottom).toBeLessThan(box.bottom);
+    body.scrollTop = body.scrollHeight;
+    expect(body.scrollTop).toBeGreaterThan(0);
+    expect(footer.getBoundingClientRect().top).toBe(buttons.top);
+    expect(save.getBoundingClientRect().top).toBe(saveBox.top);
+    expect(dialog.scrollHeight).toBe(dialog.clientHeight);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+test.each(["standard", "wide", "huge", ""])(
+  "keeps a steady height for %s content",
+  async (size) => {
+    await page.viewport(1280, 900);
+    const modal = await openModal("<div data-content>Short notice</div>", `size="${size}"`);
+    const dialog = dialogOf(modal);
+    expect(dialog.getBoundingClientRect().height).toBeCloseTo(852, 0);
+    modal.querySelector<HTMLElement>("[data-content]")!.style.height = "1800px";
+    expect(dialog.getBoundingClientRect().height).toBeCloseTo(852, 0);
+  },
+);
+
 // At 1280px wide the side margin is --wt-space-5 (24px), so the viewport allows 1232px.
 test.each([
   ['size="compact"', 448],
@@ -152,8 +226,9 @@ test.each([
   const rect = dialogOf(modal).getBoundingClientRect();
   expect(rect.width).toBeCloseTo(expected, 0);
   expect(1280 - rect.right).toBeCloseTo(rect.left, 0);
-  expect(rect.top).toBeCloseTo(24, 0);
-  expect(900 - rect.bottom).toBeCloseTo(24, 0);
+  expect(900 - rect.bottom).toBeCloseTo(rect.top, 0);
+  if (size === 'size="compact"') expect(rect.height).toBeLessThan(450);
+  else expect(rect.height).toBeCloseTo(852, 0);
 });
 
 // On a phone the side margin is --wt-space-1 (4px), so every size is the viewport less 8px.
@@ -234,6 +309,7 @@ test.each(["compact", "standard"])(
       const label = inner.getAttribute("size") ?? "no size";
       expect(dialogOf(inner).matches(":modal"), label).toBe(true);
       expect(dialogOf(inner).getBoundingClientRect().width, label).toBeCloseTo(1024, 0);
+      expect(dialogOf(inner).getBoundingClientRect().height, label).toBeCloseTo(852, 0);
     }
   },
 );
