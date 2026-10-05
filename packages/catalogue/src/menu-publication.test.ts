@@ -674,6 +674,33 @@ describe("menuStatus", () => {
       expect(await states(f)).toEqual({ lunch: "current", dinner: "changed" });
     });
 
+    it("flags Lunch alone when it sets Soup's own price to the 5.00 it already charged", async () => {
+      const f = await published();
+      const soupOffer = await app((tx) => offerOf(tx, f.lunch, f.soup));
+      const charged = async () =>
+        (await app((tx) => menuDocument.buildMenuDocument(tx, f.lunch))).document.offers[soupOffer]!
+          .unitPrice;
+      expect(await charged()).toBe("5.00");
+      await app((tx) => updateMenuItem(tx, f.lunch, soupOffer, { grossPrice: "5.00" }));
+      expect(await charged()).toBe("5.00");
+      expect(await states(f)).toEqual({ lunch: "changed", dinner: "current" });
+    });
+
+    it("flags Lunch alone when it sets Large's price to the 3.50 it already charged", async () => {
+      const f = await published();
+      const lemonadeOffer = await app((tx) => offerOf(tx, f.lunch, f.lemonade));
+      const charged = async () =>
+        (await app((tx) => menuDocument.buildMenuDocument(tx, f.lunch))).document.offers[
+          lemonadeOffer
+        ]!.variants.find((variant) => variant.id === f.large)!.unitPrice;
+      expect(await charged()).toBe("3.50");
+      await app((tx) =>
+        setMenuVariants(tx, lemonadeOffer, [{ variantId: f.large, price: "3.50" }], f.lunch),
+      );
+      expect(await charged()).toBe("3.50");
+      expect(await states(f)).toEqual({ lunch: "changed", dinner: "current" });
+    });
+
     it("flags both for Lemonade's allergens, each naming the shared product", async () => {
       const f = await published();
       await app((tx) =>

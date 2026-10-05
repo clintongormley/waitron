@@ -131,7 +131,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   zoneId: string;
   waterOfferId: string;
   waterProductId: string;
-  variantIds?: { double: string; unavailable: string };
+  variantIds?: { double: string; fuera: string };
   /** Every product offered at its own price in the counter zone, from a menu of the helper's own. */
   offers: ZoneOffers;
 }> {
@@ -200,7 +200,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       productId: water.id,
       grossPrice: "2.25",
     });
-    let variantIds: { double: string; unavailable: string } | undefined;
+    let variantIds: { double: string; fuera: string } | undefined;
     if (options.variants) {
       const variants = await setProductVariants(
         tx,
@@ -232,7 +232,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
         { variantId: variants[0]!.id, price: "4.10" },
         { variantId: variants[1]!.id, price: "4.80" },
       ]);
-      variantIds = { double: variants[0]!.id, unavailable: variants[1]!.id };
+      variantIds = { double: variants[0]!.id, fuera: variants[1]!.id };
     }
     await tx.execute(sql`
       insert into zone_menus (zone_id, menu_id)
@@ -304,7 +304,7 @@ describe("recordTillSale", () => {
     await suite.db
       .update(products)
       .set({ available: false })
-      .where(eq(products.id, variantIds!.unavailable));
+      .where(eq(products.id, variantIds!.fuera));
     const deps = { db: suite.db, backend, clock };
     await expect(
       recordTillSale(deps, cfg, {
@@ -316,7 +316,7 @@ describe("recordTillSale", () => {
     await expect(
       recordTillSale(deps, cfg, {
         zoneId,
-        lines: [{ menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" }],
+        lines: [{ menuItemId: waterOfferId, variantId: variantIds!.fuera, quantity: "1" }],
         tender: { method: "cash", amount: "4.80" },
       }),
     ).rejects.toMatchObject({ code: "product.variant_unavailable" });
@@ -377,7 +377,7 @@ describe("recordTillSale", () => {
     });
     const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
       zoneId,
-      lines: [{ menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" }],
+      lines: [{ menuItemId: waterOfferId, variantId: variantIds!.fuera, quantity: "1" }],
       tender: { method: "cash", amount: "3.80" },
     });
     expect(result.total).toBe("3.80");
@@ -443,7 +443,7 @@ describe("recordTillSale", () => {
     await withTransaction(suite.db, async (tx) => {
       await setMenuVariants(tx, waterOfferId, [
         { variantId: variantIds!.double, price: "4.10" },
-        { variantId: variantIds!.unavailable, price: "4.80" },
+        { variantId: variantIds!.fuera, price: "4.80" },
       ]);
       await republishMenus(tx);
       await createOpenOrder(
@@ -452,7 +452,7 @@ describe("recordTillSale", () => {
         workingOrderId,
         [
           { menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "1" },
-          { menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" },
+          { menuItemId: waterOfferId, variantId: variantIds!.fuera, quantity: "1" },
         ],
         null,
         { zoneId },
@@ -476,7 +476,7 @@ describe("recordTillSale", () => {
             available: true,
           },
           {
-            id: variantIds!.unavailable,
+            id: variantIds!.fuera,
             name: "Fuera nuevo",
             customerName: null,
             kitchenName: null,
@@ -489,7 +489,7 @@ describe("recordTillSale", () => {
       );
       await setMenuVariants(tx, waterOfferId, [
         { variantId: variantIds!.double, price: "31.00" },
-        { variantId: variantIds!.unavailable, price: "41.00" },
+        { variantId: variantIds!.fuera, price: "41.00" },
       ]);
     });
 

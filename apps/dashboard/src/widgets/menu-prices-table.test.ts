@@ -1675,18 +1675,14 @@ describe("variants", () => {
 });
 
 it("a price-only save sends the menu price and each variant's price, and nothing else", async () => {
-  const row = {
-    ...lemonade,
-    variants: lemonade.variants.map((v) => ({ ...v })),
-  };
-  const el = await mount({ editing: row.menuItemId, rows: [row] });
+  const el = await mount({ editing: lemonade.menuItemId, rows: [lemonade] });
   await type(el, "grossPrice", "2.60");
   await type(el, "variants.0.price", "1.20");
   const heard = saves(el);
   await click(el, "offer-save");
   expect(heard).toHaveBeenCalledExactlyOnceWith({
-    menuItemId: row.menuItemId,
-    name: row.name,
+    menuItemId: lemonade.menuItemId,
+    name: lemonade.name,
     item: { grossPrice: "2.60" },
     variants: [
       { variantId: "v-small", price: "1.20" },
