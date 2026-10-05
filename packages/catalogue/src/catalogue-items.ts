@@ -4,6 +4,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { categoryDetails } from "./schema/categories.js";
 import {
+  assertCategoryNamesFree,
   deleteCategory,
   listCategories,
   vacateCategories,
@@ -95,6 +96,17 @@ export async function moveCatalogueItems(
   const tree = await readTree(tx, selection);
   if (to !== null) tree.require(to);
   for (const id of selection.categoryIds) await validateParent(tx, id, to, tree.folders);
+  const names = new Map(tree.folders.map((folder) => [folder.id, folder.name]));
+  await assertCategoryNamesFree(
+    tx,
+    to,
+    selection.categoryIds.map((id) => {
+      const from = tree.parent(id);
+      // Categories moved out of one parent already sat together under their names.
+      return { id, name: names.get(id)!, group: from === to ? null : (from ?? "root") };
+    }),
+    { snapshot: tree.folders },
+  );
   for (const batch of batches(selection.productIds))
     await tx
       .update(products)
