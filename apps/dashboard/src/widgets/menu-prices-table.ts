@@ -70,6 +70,10 @@ interface Line {
 const keyOf = ({ item, variant }: Line): string =>
   variant ? `${item.menuItemId}:${variant.variantId}` : item.menuItemId;
 
+/** Whether this menu stores a price for any of the product's sizes. */
+const pricesASize = (item: MenuPriceRow): boolean =>
+  item.variants.some(({ price }) => price !== null);
+
 type Span = { low: string; high: string };
 
 const oneAmount = ({ low, high }: Span): boolean => stringToCents(low) === stringToCents(high);
@@ -359,10 +363,7 @@ export class MenuPricesTable extends LitElement {
 
   /** Whether this menu stores a price for the row, or, on a product, for any of its sizes. */
   #overridden(line: Line): boolean {
-    return (
-      this.#stored(line) !== null ||
-      (line.variant === null && line.item.variants.some(({ price }) => price !== null))
-    );
+    return this.#stored(line) !== null || (line.variant === null && pricesASize(line.item));
   }
 
   /** The product's price as its field reads now, which a size following it inherits. */
@@ -485,10 +486,7 @@ export class MenuPricesTable extends LitElement {
         ? t("menu_prices.override_help").replace("{price}", priceText(inherited.low))
         : t("menu_prices.override_help_range").replace("{range}", spanText(inherited));
     }
-    const sizesSetOne =
-      variant === null &&
-      item.override === null &&
-      item.variants.some(({ price }) => price !== null);
+    const sizesSetOne = variant === null && item.override === null && pricesASize(item);
     return html`<span part="price-cell"
       ><wt-price-input
         part="override-field"
@@ -831,8 +829,7 @@ export class MenuPricesTable extends LitElement {
       }
     };
     walk(this.nodes);
-    const priced = (row: MenuPriceRow) =>
-      row.override !== null || row.variants.some((variant) => variant.price !== null);
+    const priced = (item: MenuPriceRow) => this.#overridden({ item, variant: null });
     return html`<div data-test="price-summary">
       ${[...included.values()].map((menu) => {
         const rows = this.rows.filter((row) => menu.products.has(row.productId));
