@@ -280,6 +280,16 @@ describe("zone CRUD", () => {
     expect(z).toEqual({ id, name: "Comedor", displayOrder: 3, active: true });
   });
 
+  it("can include inactive zones for management without changing the active-only list", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Closed room" }));
+    await asApp(cfg, (tx) => deactivateZone(tx, cfg, id));
+    expect(await asApp(cfg, (tx) => listZones(tx, cfg))).toEqual([]);
+    expect(await asApp(cfg, (tx) => listZones(tx, cfg, { includeInactive: true }))).toEqual([
+      { id, name: "Closed room", displayOrder: 0, active: false },
+    ]);
+  });
+
   it("createZone defaults displayOrder to 0 when omitted", async () => {
     const cfg = await setupVenue();
     await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Solo" }));

@@ -643,7 +643,9 @@ describe("venue operations screen", () => {
     const tree = table(el, "policy-tree").shadowRoot!;
     const rows = [...tree.querySelectorAll('tbody [role="row"]')];
     expect(rows.some((row) => row.textContent?.includes("Deli counter"))).toBe(true);
-    expect(rows.some((row) => row.textContent?.includes("Dining room"))).toBe(false);
+    const zone = rows.find((row) => row.textContent?.includes("Dining room"));
+    expect(zone?.getAttribute("aria-level")).toBe("2");
+    expect(zone?.textContent).not.toContain("Not configured");
   });
 
   it("retains an inactive department in the policy tree", async () => {
@@ -656,6 +658,18 @@ describe("venue operations screen", () => {
     const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
     const department = rows.find((row) => row.textContent?.includes("Restaurant and bar"));
     expect(department?.textContent).toContain("Inactive");
+  });
+
+  it("retains an inactive configured zone in the policy tree", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        floorZones: [{ ...model.floorZones[0]!, active: false }, model.floorZones[1]!],
+      }),
+    } as unknown as VenueServiceApi);
+    const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
+    const zone = rows.find((row) => row.textContent?.includes("Dining room"));
+    expect(zone?.textContent).toContain("Inactive");
   });
 
   it("treats a sole active department as Every zone and offers no move to an inactive one", async () => {
@@ -1445,6 +1459,27 @@ describe("venue operations screen", () => {
     await selectTab(el, "zones");
     const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
     expect(selector.value).toBe("z1");
+  });
+
+  it("does not offer inactive zones or zones in inactive departments as starting zones", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        departments: [model.departments[0]!, { ...model.departments[1]!, active: false }],
+        zones: [
+          { ...model.zones[0]!, active: false },
+          { ...model.zones[0]!, id: "z2", name: "Deli counter", departmentId: "d2", active: true },
+        ],
+        floorZones: [
+          { ...model.floorZones[0]!, active: false },
+          { ...model.floorZones[1]!, active: true },
+        ],
+        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
+      }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
+    expect(selector.options.map((option) => option.value)).toEqual([""]);
   });
 
   it("returns a refused starting-zone choice to the stored counter default", async () => {

@@ -1578,7 +1578,9 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const zones = await withVenueAuth(deps, sessionId, (tx) => listZones(tx, cfg));
+      const zones = await withVenueAuth(deps, sessionId, (tx) =>
+        listZones(tx, cfg, { includeInactive: c.req.query("includeInactive") === "true" }),
+      );
       return c.json(zones);
     }),
   );

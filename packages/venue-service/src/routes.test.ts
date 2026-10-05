@@ -34,7 +34,12 @@ import { locationId, type LocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { zoneServicePolicies } from "./schema/service.js";
-import { configureZone, createDepartment, resolveNewOrderZone } from "./operations.js";
+import {
+  configureZone,
+  createDepartment,
+  listServiceZones,
+  resolveNewOrderZone,
+} from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 
@@ -919,6 +924,40 @@ describe("venue service management routes", () => {
     ).toMatchObject({
       departments: [{ id: department.id, name: "Restaurant" }],
     });
+  });
+
+  it("shows a configured inactive zone to management while excluding it from new-order choices", async () => {
+    const fx = await fixture();
+    const department = await withTransaction(db, (tx) =>
+      createDepartment(
+        tx,
+        { locationId: fx.locationId },
+        {
+          name: "Restaurant",
+          defaultServiceMode: "table_tab",
+        },
+      ),
+    );
+    await withTransaction(db, (tx) =>
+      configureZone(
+        tx,
+        { locationId: fx.locationId },
+        {
+          zoneId: fx.zoneId,
+          departmentId: department.id,
+        },
+      ),
+    );
+    await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, fx.zoneId));
+
+    const response = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
+    expect(response.status).toBe(200);
+    expect(
+      ((await response.json()) as { zones: { id: string; active: boolean }[] }).zones,
+    ).toContainEqual(expect.objectContaining({ id: fx.zoneId, active: false }));
+    expect(
+      await withTransaction(db, (tx) => listServiceZones(tx, { locationId: fx.locationId })),
+    ).not.toContainEqual(expect.objectContaining({ id: fx.zoneId }));
   });
 
   it("scopes edited departments to their venue", async () => {

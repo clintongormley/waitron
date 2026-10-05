@@ -245,7 +245,11 @@ export async function createZone(
   }
 }
 
-export async function listZones(tx: Transaction, cfg: TillConfig): Promise<FloorZone[]> {
+export async function listZones(
+  tx: Transaction,
+  cfg: TillConfig,
+  options: { includeInactive?: boolean } = {},
+): Promise<FloorZone[]> {
   return tx
     .select({
       id: floorZones.id,
@@ -254,7 +258,11 @@ export async function listZones(tx: Transaction, cfg: TillConfig): Promise<Floor
       active: floorZones.active,
     })
     .from(floorZones)
-    .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)))
+    .where(
+      options.includeInactive
+        ? eq(floorZones.locationId, cfg.locationId)
+        : and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)),
+    )
     .orderBy(floorZones.displayOrder);
 }
 

@@ -565,20 +565,17 @@ export class VenueOperationsScreen extends LitElement {
     const rows: PolicyRow[] = departments.flatMap((department) => [
       { kind: "department" as const, department },
       ...model.zones
-        .filter((zone) => department.active && zone.departmentId === department.id)
+        .filter((zone) => zone.departmentId === department.id)
         .flatMap((zone) => {
           const floorZone = model.floorZones.find((row) => row.id === zone.id);
-          return floorZone && floorZone.active !== false
+          return floorZone
             ? [{ kind: "zone" as const, zone: floorZone, departmentId: department.id }]
             : [];
         }),
     ]);
     rows.push(
       ...model.floorZones
-        .filter(
-          (zone) =>
-            zone.active !== false && !model.zones.some((configured) => configured.id === zone.id),
-        )
+        .filter((zone) => !model.zones.some((configured) => configured.id === zone.id))
         .map((zone) => ({ kind: "zone" as const, zone, departmentId: null })),
     );
     const policyFor = (row: PolicyRow) =>
@@ -644,7 +641,7 @@ export class VenueOperationsScreen extends LitElement {
                   >
                     ${row.zone.name}
                   </button>`
-            }${row.departmentId === null ? html` ${t("venue.unconfigured")}` : nothing}${model.readiness
+            }${row.zone.active === false ? html` ${t("venue.inactive")}` : row.departmentId === null ? html` ${t("venue.unconfigured")}` : nothing}${model.readiness
               .filter((issue) => "zoneId" in issue && issue.zoneId === row.zone.id)
               .map(
                 (issue) =>
@@ -1321,7 +1318,15 @@ export class VenueOperationsScreen extends LitElement {
                 noResultsLabel=${t("venue.combobox_no_results")}
                 .options=${[
                   { value: "", label: t("venue.counter_zone") },
-                  ...model.zones.map((zone) => ({ value: zone.id, label: zone.name })),
+                  ...model.zones
+                    .filter(
+                      (zone) =>
+                        zone.active !== false &&
+                        model.departments.some(
+                          (department) => department.id === zone.departmentId && department.active,
+                        ),
+                    )
+                    .map((zone) => ({ value: zone.id, label: zone.name })),
                 ]}
                 .value=${live(stored ?? "")}
                 ?disabled=${this.busy}

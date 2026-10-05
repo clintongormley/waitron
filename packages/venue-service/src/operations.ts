@@ -156,8 +156,12 @@ export async function listZoneMenuAssignments(tx: Transaction, cfg: VenueScope) 
     );
 }
 
-/** List the active, configured zones that can start a new order at this venue. */
-export async function listServiceZones(tx: Transaction, cfg: VenueScope) {
+/** The default list is restricted to zones that can start a new order. */
+export async function listServiceZones(
+  tx: Transaction,
+  cfg: VenueScope,
+  options: { includeInactive?: boolean } = {},
+) {
   const rows = await tx
     .select({
       id: floorZones.id,
@@ -166,20 +170,24 @@ export async function listServiceZones(tx: Transaction, cfg: VenueScope) {
       departmentName: departments.name,
       zoneMode: zoneServicePolicies.serviceMode,
       departmentMode: departments.defaultServiceMode,
+      active: floorZones.active,
     })
     .from(zoneServicePolicies)
     .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
     .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
     .where(
-      and(
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        eq(floorZones.active, true),
-        eq(departments.active, true),
-      ),
+      options.includeInactive
+        ? eq(zoneServicePolicies.locationId, cfg.locationId)
+        : and(
+            eq(zoneServicePolicies.locationId, cfg.locationId),
+            eq(floorZones.active, true),
+            eq(departments.active, true),
+          ),
     )
     .orderBy(floorZones.displayOrder, floorZones.name, floorZones.id);
-  return rows.map(({ zoneMode, departmentMode, ...row }) => ({
+  return rows.map(({ zoneMode, departmentMode, active, ...row }) => ({
     ...row,
+    ...(options.includeInactive ? { active } : {}),
     serviceMode: (zoneMode ?? departmentMode) as ServiceMode,
     serviceModeOverride: zoneMode as ServiceMode | null,
   }));

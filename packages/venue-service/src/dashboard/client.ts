@@ -18,6 +18,7 @@ export interface ServiceZone {
   departmentName: string;
   serviceMode: ServiceMode;
   serviceModeOverride: ServiceMode | null;
+  active?: boolean;
 }
 export interface HoursInterval {
   departmentId: string;
@@ -122,7 +123,7 @@ export class VenueServiceApi {
     const [model, menus, floorZones, devices] = await Promise.all([
       this.#read<VenueServiceModel>("/management-api/venue-service"),
       this.#read<VenueServiceChoices["menus"]>("/management-api/catalogues"),
-      this.#read<FloorZone[]>("/management-api/zones"),
+      this.#read<FloorZone[]>("/management-api/zones?includeInactive=true"),
       this.#read<VenueServiceChoices["devices"]>("/management-api/devices"),
     ]);
     return {

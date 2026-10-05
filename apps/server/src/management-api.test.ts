@@ -474,6 +474,10 @@ describe("/management-api/zones", () => {
       id: string;
     }[];
     expect(afterDel.find((z) => z.id === id)).toBeUndefined();
+    const forManagement = (await (
+      await req("/zones?includeInactive=true", { method: "GET" }, managerCookie)
+    ).json()) as { id: string; active: boolean }[];
+    expect(forManagement.find((z) => z.id === id)).toMatchObject({ active: false });
 
     // Reactivating via PATCH shows it was a soft delete.
     await req(

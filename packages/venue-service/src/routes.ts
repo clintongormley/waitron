@@ -428,7 +428,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const result = await gated(sessionId, async (tx) => ({
           departments: await listDepartments(tx, ctx.cfg),
-          zones: await listServiceZones(tx, ctx.cfg),
+          zones: await listServiceZones(tx, ctx.cfg, { includeInactive: true }),
           salePolicies: await listSalePolicies(tx, ctx.cfg),
           deviceZones: await listDeviceDefaultZones(tx, ctx.cfg),
           hours: await listDepartmentHours(tx, ctx.cfg),

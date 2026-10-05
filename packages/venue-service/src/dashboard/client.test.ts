@@ -239,7 +239,7 @@ describe("VenueServiceApi", () => {
         }),
       )
       .mockResolvedValueOnce(jsonResponse([{ id: "m1", name: "Restaurant", active: true }]))
-      .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs" }]))
+      .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs", active: false }]))
       .mockResolvedValueOnce(
         jsonResponse([{ id: "t1", label: "Till", kind: "till", active: true }]),
       );
@@ -247,13 +247,13 @@ describe("VenueServiceApi", () => {
 
     await expect(api.load()).resolves.toMatchObject({
       menus: [{ id: "m1", name: "Restaurant" }],
-      floorZones: [{ id: "z1", name: "Upstairs" }],
+      floorZones: [{ id: "z1", name: "Upstairs", active: false }],
       devices: [{ id: "t1", label: "Till", kind: "till", active: true }],
     });
     expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
       "/management-api/venue-service",
       "/management-api/catalogues",
-      "/management-api/zones",
+      "/management-api/zones?includeInactive=true",
       "/management-api/devices",
     ]);
   });
