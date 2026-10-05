@@ -3162,7 +3162,7 @@ frame of the same size when it has none. Names at one level start at one place, 
 sits over the menu's name through the table's `tree-heading` part. W88 was branched before W84
 (#1199) gave the Products tree's All products row its grip space.
 
-**A menu no longer switches a product or size off on its own — DONE (W90, this PR, 2026-10-05;
+**A menu no longer switches a product or size off on its own — DONE (W90, #1216, 2026-10-05;
 owner 2026-10-04).** Whether a product is on a menu is now decided only by the structure of an
 active menu (its own sections and the active menus it includes) and the product's Active state, and
 whether it can be sold now by Available. A size (variant) is sold wherever its product is placed, while it is Active and
