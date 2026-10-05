@@ -1703,6 +1703,40 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     }
   });
 
+  it("offers different pay timing for two zones in the same department", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const token = await openSession(suite.db);
+    const headers = { cookie: `${SESSION_COOKIE}=${token}` };
+    const [second] = await suite.db
+      .insert(floorZones)
+      .values({ locationId: cfg.locationId, name: "Collect at counter" })
+      .returning({ id: floorZones.id });
+    await suite.db.execute(sql`
+      insert into zone_service_policies (location_id, zone_id, department_id, service_mode)
+      select ${cfg.locationId}, ${second!.id}, department_id, 'prepay'
+      from zone_service_policies where zone_id = ${counterZoneId}`);
+    await suite.db.execute(sql`
+      insert into zone_sale_policies (zone_id, paid_when) values (${second!.id}, 'ticket_then_pay')`);
+    await suite.db.execute(sql`
+      insert into zone_menus (zone_id, menu_id) values (${second!.id}, ${aguaProduct.catalogueId})`);
+    try {
+      for (const [zoneId, serviceMode] of [
+        [counterZoneId, "prepay"],
+        [second!.id, "ticket_then_pay"],
+      ] as const) {
+        const response = await app.request(`/api/service-zones/${zoneId}/offers`, { headers });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({ context: { zoneId, serviceMode } });
+      }
+    } finally {
+      await suite.db.execute(sql`delete from zone_menus where zone_id = ${second!.id}`);
+      await suite.db.execute(sql`delete from zone_sale_policies where zone_id = ${second!.id}`);
+      await suite.db.execute(sql`delete from zone_service_policies where zone_id = ${second!.id}`);
+      await suite.db.delete(floorZones).where(eq(floorZones.id, second!.id));
+    }
+  });
+
   it("offers the selected zone's effective receipt choice instead of the venue-wide choice", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
