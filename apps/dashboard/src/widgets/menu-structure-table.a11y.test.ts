@@ -130,7 +130,7 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
         .click();
       await table.updateComplete;
     }
-    expect(table.shadowRoot!.querySelectorAll('[part~="color-swatch"]').length).toBeGreaterThan(5);
+    expect(table.shadowRoot!.querySelectorAll('[part~="color-swatch"]').length).toBe(8);
     await expectNoA11yViolations(host);
   });
 

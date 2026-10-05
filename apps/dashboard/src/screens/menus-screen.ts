@@ -611,6 +611,7 @@ export class MenusScreen extends LitElement {
   /** The tree row whose ⋮ gets focus back once its window has closed and nothing is out. */
   #focusReturn: { menuId: string; key: string } | null = null;
   #windowShut = false;
+  #categoryById: ReadonlyMap<string, CategorySummary> = new Map();
   /** What a home page tile may point at: the active products and the sections the structure
    * reaches. The server checks reach by membership alone; an inactive product is not offered. */
   #tileProducts: { id: string; name: string }[] = [];
@@ -654,6 +655,8 @@ export class MenusScreen extends LitElement {
         ...menu,
         status: this.statuses?.[menu.id] ?? (this.statusesError ? "failed" : "loading"),
       }));
+    if (changed.has("categories"))
+      this.#categoryById = new Map(this.categories.map((category) => [category.id, category]));
     if (changed.has("structure")) {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
     }
@@ -2286,14 +2289,7 @@ export class MenusScreen extends LitElement {
       .busy=${this.colorBusy}
       .name=${product?.name ?? ""}
       .color=${product?.color ?? null}
-      .inherited=${
-        product
-          ? categoryColor(
-              product.categoryId,
-              new Map(this.categories.map((category) => [category.id, category])),
-            )
-          : null
-      }
+      .inherited=${product ? categoryColor(product.categoryId, this.#categoryById) : null}
       .errors=${this.colorErrors}
       @wt-submit=${(event: CustomEvent<{ color: string | null }>) => {
         event.stopPropagation();

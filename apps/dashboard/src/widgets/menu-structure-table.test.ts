@@ -1379,6 +1379,19 @@ describe("colour swatches", () => {
     expect(sent).toEqual([]);
   });
 
+  it("draws a product it has no record of as an outlined box, not a button", async () => {
+    const el = await mountColoured({
+      nodes: [productNode("m-gone", "p-gone"), ...paintedLunch()],
+    });
+    const sent = sentEvents(el);
+    const swatch = swatchOf(el, "m-gone");
+    expect(swatch.tagName).not.toBe("BUTTON");
+    expect(swatch.querySelector("button")).toBeNull();
+    expect(chipOf(el, "m-gone").getAttribute("part")).toBe("color-swatch empty");
+    swatch.click();
+    expect(sent).toEqual([]);
+  });
+
   it("disables the swatches while busy, and a click on one sends nothing", async () => {
     const el = await mountColoured({ busy: true });
     const sent = sentEvents(el);

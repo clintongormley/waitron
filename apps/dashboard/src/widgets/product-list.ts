@@ -17,6 +17,7 @@ import {
 } from "../i18n/domain.js";
 import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
+import { swatchPartStyles } from "./swatch-styles.js";
 import {
   holdPageCursor,
   pointerElementsAt,
@@ -109,6 +110,7 @@ export class ProductList extends LitElement {
   static override styles = [
     baseStyles,
     treeDragStyles,
+    swatchPartStyles,
     css`
       :host([sticky-header]) {
         display: flex;
@@ -238,24 +240,6 @@ export class ProductList extends LitElement {
       wt-data-table::part(variant-name) {
         max-inline-size: var(--name-room);
         overflow-wrap: anywhere;
-      }
-      wt-data-table::part(swatch-button) {
-        display: inline-flex;
-        vertical-align: middle;
-        align-items: center;
-        justify-content: center;
-        width: var(--wt-tap-min);
-        height: var(--wt-tap-min);
-        padding: 0;
-        border: 0;
-        background: transparent;
-        cursor: pointer;
-      }
-      wt-data-table::part(color-swatch) {
-        width: var(--wt-space-5);
-        height: var(--wt-space-5);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
       }
       wt-data-table::part(name-box) {
         flex: 1 1 calc(var(--wt-tap-min) * 4);

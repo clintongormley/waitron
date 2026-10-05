@@ -25,6 +25,7 @@ import {
   type DragGhost,
   type DropGap,
 } from "./tree-drag.js";
+import { swatchPartStyles } from "./swatch-styles.js";
 import { effectiveColor } from "@waitron/catalogue/src/color-inheritance.js";
 import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
@@ -80,6 +81,7 @@ export class MenuStructureTable extends LitElement {
   static override styles = [
     baseStyles,
     treeDragStyles,
+    swatchPartStyles,
     css`
       :host {
         display: block;
@@ -161,32 +163,6 @@ export class MenuStructureTable extends LitElement {
       wt-data-table::part(name-stack) {
         display: inline-flex;
         flex-direction: column;
-      }
-      wt-data-table::part(swatch-button),
-      wt-data-table::part(swatch-box) {
-        display: inline-flex;
-        flex: none;
-        vertical-align: middle;
-        align-items: center;
-        justify-content: center;
-        width: var(--wt-tap-min);
-        height: var(--wt-tap-min);
-        padding: 0;
-        border: 0;
-        background: transparent;
-      }
-      wt-data-table::part(swatch-button) {
-        cursor: pointer;
-      }
-      wt-data-table::part(swatch-button):disabled {
-        cursor: default;
-        opacity: var(--wt-opacity-disabled);
-      }
-      wt-data-table::part(color-swatch) {
-        width: var(--wt-space-5);
-        height: var(--wt-space-5);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
       }
       wt-data-table::part(current) {
         font-weight: var(--wt-font-weight-bold);
@@ -686,7 +662,7 @@ export class MenuStructureTable extends LitElement {
         this.#categoryById,
       );
       send = () => this.#send("wt-product-color", { productId });
-      editable = !row.readOnly;
+      editable = !row.readOnly && product !== undefined;
     }
     const chip = html`<span
       part=${color ? "color-swatch" : "color-swatch empty"}
