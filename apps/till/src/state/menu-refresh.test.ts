@@ -19,7 +19,6 @@ function offer(overrides: Partial<TillMenuOffer> & Pick<TillMenuOffer, "id" | "p
     menuId: "lunch",
     grossPrice: null,
     unitPrice: "3.00",
-    offered: true,
     available: true,
     image: null,
     description: null,
@@ -112,8 +111,6 @@ function variant(id: string, unitPrice: string, overrides: Partial<LiveVariant> 
     image: null,
     unitPrice,
     menuPrice: null,
-    offered: true,
-    ownOffered: null,
     available: true,
     unit,
     pricingUnit: "each",
@@ -259,7 +256,7 @@ describe("withUnavailable", () => {
       [
         offer({
           ...wine,
-          variants: [variant("bottle", "18.00", { offered: false, available: false })],
+          variants: [variant("bottle", "18.00", { available: false })],
         }),
       ],
       NOTHING,
@@ -326,7 +323,7 @@ describe("lineBlock", () => {
     ).toEqual({ reason: "unavailable", name: "Botella" });
   });
 
-  it("blocks a variant only by the set and the offer, never by the menu's stored offered", () => {
+  it("blocks a variant only by the unavailable set and the offer's variants", () => {
     const bottle = menuOfferToTillProduct(wine, "v1");
     const line: OrderLine = {
       product: { ...bottle, variantId: "bottle", variantName: "Botella" },
@@ -334,7 +331,7 @@ describe("lineBlock", () => {
     };
     const loaded = offer({
       ...wine,
-      variants: [variant("glass", "4.00"), variant("bottle", "18.00", { offered: false })],
+      variants: [variant("glass", "4.00"), variant("bottle", "18.00")],
     });
 
     const [served] = withUnavailable([loaded], NOTHING);

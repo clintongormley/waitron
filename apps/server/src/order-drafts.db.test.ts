@@ -89,7 +89,7 @@ interface Venue {
   /** The Burger's doneness answers. */
   rare: OptionSelection;
   well: OptionSelection;
-  /** The Wine's variants: the menu offers the glass and not the bottle. */
+  /** The Wine's variants: the glass is Available and the bottle sold out. */
   glass: string;
   bottle: string;
   offer(dish: Dish): string;
@@ -198,7 +198,7 @@ async function setupVenue(): Promise<Venue> {
           kitchenName: "K-BOTTLE",
           image: null,
           unitPrice: "18.00",
-          available: true,
+          available: false,
         },
       ],
       LOCALE,
@@ -206,8 +206,8 @@ async function setupVenue(): Promise<Venue> {
     await assignCatalogueToLocation(tx, locationId, catalogue.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     await setMenuVariants(tx, offers.offerFor(productId.wine), [
-      { variantId: glass!.id, price: "4.00", offered: true },
-      { variantId: bottle!.id, price: "18.00", offered: false },
+      { variantId: glass!.id, price: "4.00" },
+      { variantId: bottle!.id, price: "18.00" },
     ]);
     const versionId = await publishWorkingMenu(tx, offers.menuId);
     return {
@@ -1339,7 +1339,7 @@ describe("unavailable lines (spec §10)", () => {
       "product.unavailable",
     ],
     [
-      "a variant the menu does not offer",
+      "a sold-out variant",
       async (v) => item(v, "wine", { variantId: v.bottle }),
       "product.variant_unavailable",
     ],
@@ -1458,7 +1458,7 @@ describe("unavailable lines (spec §10)", () => {
     expect((await draftsOf(v, partyId))[0]!.lines[0]!.unavailable).toBe(true);
   });
 
-  it("marks a line naming a variant the menu does not offer, and not one it does", async () => {
+  it("marks a line naming a sold-out or unknown variant, and not an Available one", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
     await save(v, partyId, ALEX, null, 0, [

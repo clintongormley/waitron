@@ -215,7 +215,7 @@ describe("the catalogue migration set carries no tenant column", () => {
       units_hardware_unit_ck: `"units"."hardware_unit" in ('kg', 'g', 'mg')`,
       unit_seed_states_singleton_ck: `"unit_seed_states"."id" = 1`,
       menu_item_variant_overrides_price_ck: `"menu_item_variant_overrides"."price" >= 0`,
-      menu_item_variant_overrides_overrides_ck: `"menu_item_variant_overrides"."price" is not null or "menu_item_variant_overrides"."offered" is not null`,
+      menu_item_variant_overrides_overrides_ck: `"menu_item_variant_overrides"."price" is not null`,
       extra_lists_picks_ck: `"extra_lists"."min_picks" >= 0 and ("extra_lists"."max_picks" is null or "extra_lists"."max_picks" >= "extra_lists"."min_picks")`,
       extra_list_items_qty_ck: `"extra_list_items"."max_quantity" >= 1`,
       extra_list_items_price_ck: `"extra_list_items"."price" >= 0`,
@@ -572,25 +572,21 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     ).resolves.toBeDefined();
   });
 
-  it("refuses a variant override that overrides nothing, or a negative price", async () => {
+  it("refuses a variant override with no price, or a negative price, and accepts 0", async () => {
     const c = await catalogue();
     const row = { menuItemId: c.menuItemId, productId: c.productId, variantId: c.soupBowlId };
-    for (const [values, check] of [
-      [{ price: null, offered: null }, "menu_item_variant_overrides_overrides_ck"],
-      [{ price: -1, offered: true }, "menu_item_variant_overrides_price_ck"],
+    for (const [price, check] of [
+      [null, "menu_item_variant_overrides_overrides_ck"],
+      [-1, "menu_item_variant_overrides_price_ck"],
     ] as const) {
       const error = await captureError(() =>
-        db.insert(menuItemVariantOverrides).values({ ...row, ...values }),
+        db.insert(menuItemVariantOverrides).values({ ...row, price }),
       );
       expect(isRefusal(error, CHECK_VIOLATION), check).toBe(true);
       expect(engineErrorMessage(error)).toContain(check);
     }
-    // The two ways a row may override something are each accepted on their own.
-    await db.insert(menuItemVariantOverrides).values({ ...row, price: null, offered: false });
-    await db
-      .update(menuItemVariantOverrides)
-      .set({ price: 0, offered: null })
-      .where(sql`${menuItemVariantOverrides.variantId} = ${c.soupBowlId}`);
+    await db.insert(menuItemVariantOverrides).values({ ...row, price: 0 });
+    expect(await db.select().from(menuItemVariantOverrides)).toEqual([{ ...row, price: 0 }]);
   });
 
   it("drops an offer's variant overrides with the offer, and keeps an overridden variant", async () => {
@@ -632,10 +628,18 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
   });
 });
 
-it("stores nullable offered and removes the retired item active column", async () => {
-  const columns = (
-    await db.execute<{ name: string; notnull: number }>(sql`pragma table_info('menu_items')`)
-  ).rows;
-  expect(columns.find((column) => column.name === "offered")).toMatchObject({ notnull: 0 });
-  expect(columns.map((column) => column.name)).not.toContain("active");
+it("has no offered column on either table, and no retired item active column", async () => {
+  const columnsOf = async (table: string) =>
+    (
+      await db.execute<{ name: string }>(sql`select name from pragma_table_info(${table})`)
+    ).rows.map((column) => column.name);
+  const items = await columnsOf("menu_items");
+  expect(items).toEqual(["id", "menu_id", "product_id", "gross_price"]);
+  expect(await columnsOf("menu_item_variant_overrides")).toEqual([
+    "menu_item_id",
+    "product_id",
+    "variant_id",
+    "price",
+  ]);
+  expect(items).not.toContain("active");
 });

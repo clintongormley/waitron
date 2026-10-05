@@ -1,4 +1,3 @@
-import type { CombinedOffer } from "./menu-combine-types.js";
 import { and, eq, inArray, max, sql, type SQL } from "drizzle-orm";
 import { now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
@@ -279,24 +278,13 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     list: DiffEntry[],
     rootSectionId: string,
     deleted: ReadonlySet<string>,
-    combined: ReadonlyMap<string, CombinedOffer>,
   ): Promise<void> => {
     const reached = new Set(reachableProducts(graph, rootSectionId));
     for (const entry of list) {
       const { change } = entry;
       if (change.kind === "product_removed" && reached.has(change.productId)) {
-        const decision = combined.get(change.productId)?.offered;
-        if (
-          !deleted.has(change.productId) &&
-          decision?.state === "decided" &&
-          decision.source.kind === "menu"
-        ) {
-          change.source = "included_menu";
-          change.includedMenu = { id: decision.source.menuId, name: decision.source.menuName };
-        } else {
-          change.source = deleted.has(change.productId) ? "shared_product" : "this_menu";
-          delete change.includedMenu;
-        }
+        change.source = deleted.has(change.productId) ? "shared_product" : "this_menu";
+        delete change.includedMenu;
         delete entry.section;
       }
     }
@@ -306,7 +294,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     removedExtras.map(({ productId }) => productId),
   );
   appendDeletedExtras(entries, removedExtras, deleted);
-  await refine(entries, mine.rootSectionId, deleted, mine.combined);
+  await refine(entries, mine.rootSectionId, deleted);
 
   // The other menus are built and compared only to fill in a shared change's `alsoOn`.
   if (
@@ -325,7 +313,6 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
         menuId: other,
         name: document.menuName,
         rootSectionId,
-        combined,
         entries: diffEntries(live.get(other)!.document, document, combined),
         removedExtras: removedExtraOnlyProducts(live.get(other)!.document, document),
       }))
@@ -336,7 +323,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     );
     for (const other of others) {
       appendDeletedExtras(other.entries, other.removedExtras, deleted);
-      await refine(other.entries, other.rootSectionId, deleted, other.combined);
+      await refine(other.entries, other.rootSectionId, deleted);
     }
     for (const entry of entries) {
       const alsoOn = others

@@ -92,7 +92,6 @@ export interface ZoneMenuOffer {
   readonly grossPrice: string | null;
   /** The price this offer charges, resolved along the catalogue's menu price chain. */
   readonly unitPrice: string;
-  readonly offered: boolean | null;
   readonly menuName: string;
   /** Each path of section ids from the menu's root to a list holding the product; `[]` is the top
    * level. */
@@ -125,8 +124,8 @@ export interface ZoneMenuOffer {
   readonly dietOverride: unknown;
   readonly dietaryDeclarations: readonly string[];
   /** The product's Active variants, each with its RESOLVED `unitPrice`, this menu's stored
-   * `menuPrice` override, `available` (Active, Available and offered on this menu), and its
-   * EFFECTIVE inherited values — its own where set, else its parent's. */
+   * `menuPrice` override, `available` (Active and Available), and its EFFECTIVE inherited values —
+   * its own where set, else its parent's. */
   readonly variants: readonly ZoneMenuOfferVariant[];
   readonly courseId: string | null;
   /** The product is Active and Available now. An unavailable offer is served in its place, marked. */
@@ -268,8 +267,6 @@ export interface ZoneMenuOfferVariant {
   readonly image: string | null;
   readonly unitPrice: string;
   readonly menuPrice: string | null;
-  readonly offered: boolean;
-  readonly ownOffered: boolean | null;
   readonly available: boolean;
   readonly unit: ZoneMenuOffer["unit"];
   readonly pricingUnit: string;

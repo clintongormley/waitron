@@ -11,8 +11,8 @@ import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { priceOrNull } from "./offer-price.js";
 import type { ProductPresentation } from "./product-presentation.js";
-import type { MenuOffer, MenuVariant, MenuVariantWrite } from "./menu-types.js";
-export type { MenuVariant, MenuVariantWrite } from "./menu-types.js";
+import type { MenuOffer, MenuVariant } from "./menu-types.js";
+export type { MenuVariant } from "./menu-types.js";
 import { INHERITED_KEYS, productWithId } from "./variant-fallback.js";
 import { assertFamilyNamesFree, nameColumns } from "./product-names.js";
 import "./errors.js";
@@ -313,7 +313,6 @@ export async function menuVariantsOfItems(
         menuItemId: menuItems.id,
         variantId: products.id,
         price: menuItemVariantOverrides.price,
-        offered: menuItemVariantOverrides.offered,
       })
       .from(menuItems)
       .innerJoin(products, eq(products.parentId, menuItems.productId))
@@ -330,7 +329,6 @@ export async function menuVariantsOfItems(
       held.push({
         variantId: row.variantId,
         price: priceOrNull(row.price),
-        offered: row.offered,
       });
       grouped.set(row.menuItemId, held);
     }
@@ -338,22 +336,19 @@ export async function menuVariantsOfItems(
 }
 
 /**
- * Save what this menu overrides for the Active variants of the offer's product. An entry that
- * overrides nothing — no price and no own switch — stores no row, and so does an Active variant the
- * input leaves out. An Inactive variant's row is left alone, for when it is made Active again.
+ * Save this menu's prices for the Active variants of the offer's product. An entry with no price
+ * stores no row, and so does an Active variant the input leaves out. An Inactive variant's row is
+ * left alone, for when it is made Active again.
  */
 export async function setMenuVariants(
   tx: Transaction,
   menuItemId: string,
-  inputs: readonly MenuVariantWrite[],
+  inputs: readonly MenuVariant[],
   menuId?: string,
 ): Promise<MenuVariant[]> {
   const productId = await offerProduct(tx, menuItemId, menuId);
   const ids = new Set((await activeVariants(tx, productId)).map((variant) => variant.id));
   const seen = new Set<string>();
-  const ownSwitches = new Map(
-    (await menuVariantsOf(tx, menuItemId)).map(({ variantId, offered }) => [variantId, offered]),
-  );
   const rows = [];
   for (const input of inputs) {
     if (seen.has(input.variantId))
@@ -362,16 +357,12 @@ export async function setMenuVariants(
       throw new AppError("product.variant_not_found", { variantId: input.variantId });
     seen.add(input.variantId);
     const price = validatePrice(input.price, "price");
-    const offered =
-      input.offered === undefined ? (ownSwitches.get(input.variantId) ?? null) : input.offered;
-    if (offered !== null) validateFlag(offered, "offered");
-    if (price !== null || offered !== null)
+    if (price !== null)
       rows.push({
         menuItemId,
         productId,
         variantId: input.variantId,
-        price: price === null ? null : decimalToCents(price),
-        offered,
+        price: decimalToCents(price),
       });
   }
   const kept = rows.map((row) => row.variantId);
@@ -391,7 +382,7 @@ export async function setMenuVariants(
       .values(row)
       .onConflictDoUpdate({
         target: [menuItemVariantOverrides.menuItemId, menuItemVariantOverrides.variantId],
-        set: { price: row.price, offered: row.offered },
+        set: { price: row.price },
       });
   }
   return menuVariantsOf(tx, menuItemId);

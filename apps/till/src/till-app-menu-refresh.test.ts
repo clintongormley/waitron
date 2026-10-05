@@ -47,7 +47,6 @@ function offer(
     productId,
     grossPrice: null,
     unitPrice,
-    offered: true,
     available: true,
     image: null,
     description: null,

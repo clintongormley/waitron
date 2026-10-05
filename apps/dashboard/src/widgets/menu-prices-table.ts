@@ -19,7 +19,6 @@ import type {
   MenuPriceRow,
   MenuStructureNode,
   MenuVariant,
-  MenuVariantWrite,
   Product,
 } from "../api/client.js";
 import { t } from "../i18n/t.js";
@@ -34,7 +33,7 @@ export interface OfferSave {
   /** The product's staff name, for a refusal reported away from the window. */
   name: string;
   item: { grossPrice?: string | null } | null;
-  variants: MenuVariantWrite[] | null;
+  variants: MenuVariant[] | null;
 }
 
 interface Draft {

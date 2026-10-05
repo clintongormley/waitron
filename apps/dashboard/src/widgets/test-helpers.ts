@@ -300,7 +300,6 @@ function frozenOffer(
     menuId: "menu-lunch",
     productId: member.productId,
     grossPrice: null,
-    offered: null,
     unitPrice: "3.00",
     menuName,
     name,
@@ -330,8 +329,7 @@ function frozenOffer(
 export function combinedFixture(
   productId: string,
   price: string,
-  offered: boolean,
-  variants: { variantId: string; price: string | null; offered: boolean | null }[] = [],
+  variants: { variantId: string; price: string | null }[] = [],
   ownPrice: string | null = null,
   cataloguePrice = price,
   catalogueVariants: Record<string, string | null> = {},
@@ -348,7 +346,6 @@ export function combinedFixture(
   return {
     productId,
     price: productPrice,
-    offered: decided(offered, "own", decided(true)),
     variants: variants.map((v) => {
       const catalogue = catalogueVariants[v.variantId] ?? null;
       const parent = decided(
@@ -359,7 +356,6 @@ export function combinedFixture(
       const fallback = catalogue === null ? parent : decided(catalogue as Decimal);
       return {
         variantId: v.variantId,
-        offered: v.offered === null ? decided(true) : decided(v.offered, "own", decided(true)),
         price: {
           ...(v.price === null ? fallback : decided(v.price as Decimal, "own", fallback)),
           level: v.price !== null || catalogue !== null ? "size" : "product",

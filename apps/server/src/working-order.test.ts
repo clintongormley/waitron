@@ -494,8 +494,8 @@ async function seedVariantOffer(
     LOCALE,
   );
   await setMenuVariants(tx, offer.id, [
-    { variantId: variants[0]!.id, price: "3.20", offered: true },
-    { variantId: variants[1]!.id, price: "2.20", offered: true },
+    { variantId: variants[0]!.id, price: "3.20" },
+    { variantId: variants[1]!.id, price: "2.20" },
   ]);
   await publishWorkingMenu(tx, catalogueId);
   return { offerId: offer.id, variantId: variants[0]!.id, productId: product.id };
@@ -650,8 +650,8 @@ describe("parkOrder", () => {
         LOCALE,
       );
       await setMenuVariants(tx, offer.id, [
-        { variantId: variants[0]!.id, price: "3.20", offered: true },
-        { variantId: variants[1]!.id, price: "2.20", offered: true },
+        { variantId: variants[0]!.id, price: "3.20" },
+        { variantId: variants[1]!.id, price: "2.20" },
       ]);
       await publishWorkingMenu(tx, catalogueId);
       return { offerId: offer.id, large: variants[0]!.id, small: variants[1]!.id };
@@ -1632,8 +1632,19 @@ describe("getHeldOrder", () => {
           pricing_unit = 'weight', vat_class = 'reduced',
           allergens = ${JSON.stringify({ milk: { presence: "contains" } })}
       where id = ${cafeId}`);
-    await db.execute(sql`
-      update menu_items set offered = false where id = ${premiumCafeOfferId}`);
+    await withTransaction(db, async (tx) => {
+      const menuId = (
+        await tx.execute<{ menuId: string }>(
+          sql`select menu_id as "menuId" from menu_items where id = ${premiumCafeOfferId}`,
+        )
+      ).rows[0]!.menuId;
+      const rootId = await catalogue.requireMenuRoot(tx, menuId);
+      const [member] = (await catalogue.listMembers(tx, rootId)).filter(
+        ({ ref }) => ref.kind === "product" && ref.productId === cafeId,
+      );
+      await catalogue.removeMember(tx, rootId, member!.id);
+      await republishMenus(tx);
+    });
 
     const order = await getHeldOrder({ db }, cfg, id);
     expect(order.lines).toEqual([
@@ -8355,7 +8366,7 @@ describe("a variant is sold as the product it is", () => {
     ]);
   });
 
-  it("refuses an Inactive, Unavailable, not-offered or other parent's variant", async () => {
+  it("refuses an Inactive, Unavailable or other parent's variant", async () => {
     const { cfg, zoneId, catalogueId } = await setupVenue();
     const refused = await withTransaction(db, async (tx) => {
       const wine = await seedWine(tx, cfg, catalogueId);
@@ -8376,7 +8387,7 @@ describe("a variant is sold as the product it is", () => {
         unitPrice: "6.00",
         available,
       });
-      const [, , inactive, unavailable, notOffered] = await setProductVariants(
+      const [, , inactive, unavailable] = await setProductVariants(
         tx,
         wine.parentId,
         [
@@ -8384,14 +8395,10 @@ describe("a variant is sold as the product it is", () => {
           kept(wine.wine175, "Wine 175", "5.50"),
           fresh("Wine 250"),
           fresh("Wine 500", false),
-          fresh("Wine 750"),
         ],
         LOCALE,
       );
       await tx.update(products).set({ active: false }).where(eq(products.id, inactive!.id));
-      await setMenuVariants(tx, wine.offerId, [
-        { variantId: notOffered!.id, price: null, offered: false },
-      ]);
       const cider = await createProduct(tx, {
         catalogueId,
         categoryId: null,
@@ -8403,7 +8410,7 @@ describe("a variant is sold as the product it is", () => {
       const [pint] = await setProductVariants(tx, cider.id, [fresh("Cider pint")], LOCALE);
       return {
         offerId: wine.offerId,
-        ids: [inactive!.id, unavailable!.id, notOffered!.id, pint!.id],
+        ids: [inactive!.id, unavailable!.id, pint!.id],
       };
     });
     for (const variantId of refused.ids) {

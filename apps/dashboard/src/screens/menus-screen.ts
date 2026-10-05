@@ -1509,7 +1509,7 @@ export class MenusScreen extends LitElement {
 
   // ── Prices ───────────────────────────────────────────────────────────────────────────────────
 
-  /** A PATCH for the menu item when its price or switch changed, then a PUT of its variants when
+  /** A PATCH for the menu item when its price changed, then a PUT of its variants when
    * one of them did. A refusal keeps the window open, unless it has been closed meanwhile (by
    * another menu or tab), when it is named beside the list instead. */
   async #saveOffer(save: OfferSave): Promise<void> {

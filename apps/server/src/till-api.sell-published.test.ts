@@ -358,9 +358,12 @@ describe("a basket that spans a publish (Review Focus 2)", () => {
     expect((await pay(v, [lemonadeLine(v, v3)])).status).toBe(200);
 
     // v4 takes Lemonade off Lunch.
-    await withTransaction(suite.db, (tx) =>
-      updateMenuItem(tx, v.menuId, v.lemonade.offerId, { offered: false }),
-    );
+    await withTransaction(suite.db, async (tx) => {
+      const held = await tx.execute<{ id: string }>(
+        sql`select id from section_members where section_id=${v.rootId} and product_id=${v.lemonade.productId}`,
+      );
+      await removeMember(tx, v.rootId, held.rows[0]!.id);
+    });
     const v4 = await publish(v.menuId);
     const removed = await pay(v, [lemonadeLine(v, v4)]);
     expect(removed.status).toBe(400);

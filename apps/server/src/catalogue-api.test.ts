@@ -742,7 +742,6 @@ interface MenuPriceRow {
   productId: string;
   override: string | null;
   effectivePrice: string;
-  offered: boolean | null;
 }
 
 async function menuPricesVia(app: Hono, menuId: string): Promise<MenuPriceRow[]> {
@@ -1543,8 +1542,8 @@ describe("mountCatalogueApi — products", () => {
     expect(published.status).toBe(200);
     // Every Active variant is listed, the one this menu sets nothing for with the defaults.
     expect(await published.json()).toEqual([
-      { variantId: saved.variants[0]!.id, price: "4.10", offered: null },
-      { variantId: saved.variants[1]!.id, price: null, offered: null },
+      { variantId: saved.variants[0]!.id, price: "4.10" },
+      { variantId: saved.variants[1]!.id, price: null },
     ]);
     const malformed = await send(
       app,
@@ -4097,7 +4096,7 @@ describe("a menu's structure", () => {
     });
     expect(again.status).toBe(201);
     expect(await menuPricesVia(app, menuId)).toMatchObject([
-      { menuItemId: itemId, override: null, offered: null },
+      { menuItemId: itemId, override: null },
     ]);
   });
 });
@@ -4136,7 +4135,6 @@ describe("a menu's prices", () => {
         menuItemId: itemId,
         combined: {
           productId,
-          offered: { state: "decided", value: true, source: { kind: "product" }, otherwise: null },
           price: {
             state: "decided",
             value: "1.40",
@@ -4157,7 +4155,6 @@ describe("a menu's prices", () => {
         productPrice: "1.00",
         override: "1.40",
         effectivePrice: "1.40",
-        offered: null,
         variants: [],
       },
     ]);
@@ -5549,13 +5546,13 @@ it("refuses a variants entry carrying offered, and stores a price-only entry's p
     body: { variants: [{ variantId, price: "2.50" }] },
   });
   expect(priced.status).toBe(200);
-  expect(await priced.json()).toMatchObject([
+  expect(await priced.json()).toEqual([
     { variantId, price: "2.50" },
     { variantId: otherId, price: null },
   ]);
   const read = await send(app, "GET", path);
   expect(read.status).toBe(200);
-  expect(await read.json()).toMatchObject([
+  expect(await read.json()).toEqual([
     { variantId, price: "2.50" },
     { variantId: otherId, price: null },
   ]);
@@ -5581,7 +5578,7 @@ it("refuses a variants entry carrying offered, and stores a price-only entry's p
       error: { code: "management.request_invalid", params: { field: "variants.1" } },
     });
   }
-  expect(await (await send(app, "GET", path)).json()).toMatchObject([
+  expect(await (await send(app, "GET", path)).json()).toEqual([
     { variantId, price: "2.50" },
     { variantId: otherId, price: null },
   ]);
@@ -5590,7 +5587,7 @@ it("refuses a variants entry carrying offered, and stores a price-only entry's p
     body: { variants: [{ variantId, price: null }] },
   });
   expect(cleared.status).toBe(200);
-  expect(await cleared.json()).toMatchObject([
+  expect(await cleared.json()).toEqual([
     { variantId, price: null },
     { variantId: otherId, price: null },
   ]);

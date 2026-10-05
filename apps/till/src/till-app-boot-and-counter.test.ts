@@ -115,7 +115,6 @@ function zoneOffers(
       productId: product.productId ?? product.id,
       grossPrice: product.unitPrice,
       unitPrice: product.unitPrice,
-      offered: true,
       available: true,
       image: null,
       description: null,

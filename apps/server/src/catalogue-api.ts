@@ -81,7 +81,7 @@ import {
   updateProduct,
   listMenuVariants,
   setMenuVariants,
-  type MenuVariantWrite,
+  type MenuVariant,
   readProductEditor,
   saveProductEditor,
   productWithId,
@@ -340,7 +340,7 @@ function refuseNegativePrice(value: string, field: string): void {
   if (parsed.startsWith("-")) throw new AppError("management.request_invalid", { field });
 }
 
-function parseMenuVariants(value: unknown): MenuVariantWrite[] {
+function parseMenuVariants(value: unknown): MenuVariant[] {
   if (!Array.isArray(value)) {
     throw new AppError("management.request_invalid", { field: "variants" });
   }

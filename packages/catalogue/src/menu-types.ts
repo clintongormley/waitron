@@ -25,8 +25,6 @@ export interface MenuItem {
   productId: string;
   /** The price this menu sets, or null when it sets none. */
   grossPrice: string | null;
-  /** Null leaves this menu without its own switch for the product. */
-  offered: boolean | null;
 }
 
 /** One sellable identity. The menu-item id, rather than the product id, selects its price. */
@@ -72,10 +70,7 @@ export interface MenuOfferVariant {
   unitPrice: string;
   /** The price this menu sets for the variant, or null when it sets none. */
   menuPrice: string | null;
-  /** False when this menu switches the variant off. */
-  offered: boolean;
-  ownOffered: boolean | null;
-  /** Active, Available and offered on this menu: whether a till may sell it here now. */
+  /** The variant's own Available: whether a till may sell it now. Only an Active variant is listed. */
   available: boolean;
   unit: SellableUnit;
   pricingUnit: PricingUnit;
@@ -93,10 +88,7 @@ export interface MenuOfferVariant {
 export interface MenuVariant {
   variantId: string;
   price: string | null;
-  offered: boolean | null;
 }
-
-export type MenuVariantWrite = Omit<MenuVariant, "offered"> & { offered?: boolean | null };
 
 /** One product a menu reaches, with what it costs there (`menuPrices`). */
 export interface MenuPriceRow {
@@ -114,8 +106,6 @@ export interface MenuPriceRow {
   /** The price this menu sets, or null when it sets none. */
   override: string | null;
   effectivePrice: string;
-  /** Null leaves this menu without its own switch for the product. */
-  offered: boolean | null;
   variants: MenuVariant[];
 }
 

@@ -5,7 +5,7 @@ import type {
   CategorySummary,
   SectionDetails,
   MenuPriceRow,
-  MenuVariantWrite,
+  MenuVariant,
   Product,
 } from "../api/client.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
@@ -52,7 +52,6 @@ function variant(id: string, name: string, unitPrice: string | null) {
     image: null,
     unitPrice,
     available: true,
-    offered: true,
     effective: {
       unitPrice: unitPrice ?? "3.00",
       vatClass: "general" as const,
@@ -71,7 +70,7 @@ const lemonadeProduct = {
 
 const burger: MenuPriceRow = {
   menuItemId: "mi-burger",
-  combined: combinedFixture("p-burger", "12.00", true, [], null, "12.00", {}),
+  combined: combinedFixture("p-burger", "12.00", [], null, "12.00", {}),
   productId: "p-burger",
   name: "Burger",
   categoryId: "c-mains",
@@ -79,7 +78,6 @@ const burger: MenuPriceRow = {
   productPrice: "12.00",
   override: null,
   effectivePrice: "12.00",
-  offered: true,
   variants: [],
 };
 const lemonade: MenuPriceRow = {
@@ -87,10 +85,9 @@ const lemonade: MenuPriceRow = {
   combined: combinedFixture(
     "p-lemonade",
     "2.50",
-    true,
     [
-      { variantId: "v-small", price: null, offered: true },
-      { variantId: "v-large", price: "3.75", offered: false },
+      { variantId: "v-small", price: null },
+      { variantId: "v-large", price: "3.75" },
     ],
     "2.50",
     "3.00",
@@ -103,15 +100,14 @@ const lemonade: MenuPriceRow = {
   productPrice: "3.00",
   override: "2.50",
   effectivePrice: "2.50",
-  offered: true,
   variants: [
-    { variantId: "v-small", price: null, offered: true },
-    { variantId: "v-large", price: "3.75", offered: false },
+    { variantId: "v-small", price: null },
+    { variantId: "v-large", price: "3.75" },
   ],
 };
 const lager: MenuPriceRow = {
   menuItemId: "mi-lager",
-  combined: combinedFixture("p-lager", "2.00", false, [], null, "2.00", {}),
+  combined: combinedFixture("p-lager", "2.00", [], null, "2.00", {}),
   productId: "p-lager",
   name: "Lager",
   categoryId: "c-beer",
@@ -119,7 +115,6 @@ const lager: MenuPriceRow = {
   productPrice: "2.00",
   override: null,
   effectivePrice: "2.00",
-  offered: false,
   variants: [],
 };
 
@@ -466,16 +461,14 @@ it("counts a product whose only price on this menu is a variant's as overridden,
         ...lemonade,
         override: null,
         variants: [
-          { variantId: "v-small", price: null, offered: true },
-          { variantId: "v-large", price: "4.25", offered: true },
+          { variantId: "v-small", price: null },
+          { variantId: "v-large", price: "4.25" },
         ],
       },
       {
         ...lager,
-        combined: combinedFixture("p-lager", "2.00", false, [
-          { variantId: "v-small", price: null, offered: false },
-        ]),
-        variants: [{ variantId: "v-small", price: null, offered: false }],
+        combined: combinedFixture("p-lager", "2.00", [{ variantId: "v-small", price: null }]),
+        variants: [{ variantId: "v-small", price: null }],
       },
       burger,
     ],
@@ -491,13 +484,13 @@ it("sorts the prices as amounts, not as text", async () => {
         ...lager,
         productPrice: "10.00",
         effectivePrice: "10.00",
-        combined: combinedFixture("p-lager", "10.00", false),
+        combined: combinedFixture("p-lager", "10.00"),
       },
       {
         ...burger,
         productPrice: "9.50",
         effectivePrice: "9.50",
-        combined: combinedFixture("p-burger", "9.50", true),
+        combined: combinedFixture("p-burger", "9.50"),
       },
     ],
   });
@@ -516,14 +509,14 @@ it("sorts by this menu's price and by the price charged here, not by the product
         productPrice: "10.00",
         override: "4.00",
         effectivePrice: "4.00",
-        combined: combinedFixture("p-lager", "4.00", false, [], "4.00", "10.00"),
+        combined: combinedFixture("p-lager", "4.00", [], "4.00", "10.00"),
       },
       {
         ...burger,
         productPrice: "5.00",
         override: "9.00",
         effectivePrice: "9.00",
-        combined: combinedFixture("p-burger", "9.00", true, [], "9.00", "5.00"),
+        combined: combinedFixture("p-burger", "9.00", [], "9.00", "5.00"),
       },
     ],
   });
@@ -648,7 +641,7 @@ it("edits the menu price, with the product price as the empty field's placeholde
     variants: [
       { variantId: "v-small", price: "1.90" },
       { variantId: "v-large", price: null },
-    ] satisfies MenuVariantWrite[],
+    ] satisfies MenuVariant[],
   });
 });
 
@@ -713,10 +706,9 @@ it("compares with the settings the window opened with, so a change read in meanw
     {
       ...lemonade,
       override: "2.60",
-      offered: false,
       variants: [
-        { variantId: "v-small", price: "1.00", offered: false },
-        { variantId: "v-large", price: "3.75", offered: false },
+        { variantId: "v-small", price: "1.00" },
+        { variantId: "v-large", price: "3.75" },
       ],
     },
     lager,
@@ -745,21 +737,18 @@ it("asks for the menu item alone when only the price changed on a product with v
   });
 });
 
-it.each([["a variant's price", "variants.0.price", "1.20"]] as const)(
-  "asks for the variants alone when only %s changed",
-  async (_, name, value) => {
-    const el = await mount({ editing: "mi-lemonade" });
-    await type(el, name, value);
-    const heard = saves(el);
-    await click(el, "offer-save");
-    const save = heard.mock.calls[0]![0];
-    expect(save.item).toBeNull();
-    expect(save.variants).toEqual([
-      { variantId: "v-small", price: value },
-      { variantId: "v-large", price: "3.75" },
-    ]);
-  },
-);
+it("asks for the variants alone when only a variant's price changed", async () => {
+  const el = await mount({ editing: "mi-lemonade" });
+  await type(el, "variants.0.price", "1.20");
+  const heard = saves(el);
+  await click(el, "offer-save");
+  const save = heard.mock.calls[0]![0];
+  expect(save.item).toBeNull();
+  expect(save.variants).toEqual([
+    { variantId: "v-small", price: "1.20" },
+    { variantId: "v-large", price: "3.75" },
+  ]);
+});
 
 it("'Use product price' empties the menu price, so saving clears it", async () => {
   const el = await mount({ editing: "mi-lemonade" });
@@ -1047,11 +1036,10 @@ describe("variants", () => {
     combined: combinedFixture(
       "p-wine",
       "13.00",
-      true,
       [
-        { variantId: "v-glass", price: "7.00", offered: true },
-        { variantId: "v-bottle", price: null, offered: true },
-        { variantId: "v-carafe", price: "15.00", offered: false },
+        { variantId: "v-glass", price: "7.00" },
+        { variantId: "v-bottle", price: null },
+        { variantId: "v-carafe", price: "15.00" },
       ],
       "13.00",
       "10.00",
@@ -1064,11 +1052,10 @@ describe("variants", () => {
     productPrice: "10.00",
     override: "13.00",
     effectivePrice: "13.00",
-    offered: true,
     variants: [
-      { variantId: "v-glass", price: "7.00", offered: true },
-      { variantId: "v-bottle", price: null, offered: true },
-      { variantId: "v-carafe", price: "15.00", offered: false },
+      { variantId: "v-glass", price: "7.00" },
+      { variantId: "v-bottle", price: null },
+      { variantId: "v-carafe", price: "15.00" },
     ],
   };
   /** Its only menu price is a variant's. */
@@ -1077,10 +1064,9 @@ describe("variants", () => {
     combined: combinedFixture(
       "p-juice",
       "4.00",
-      true,
       [
-        { variantId: "v-juice-small", price: "3.50", offered: true },
-        { variantId: "v-juice-large", price: null, offered: true },
+        { variantId: "v-juice-small", price: "3.50" },
+        { variantId: "v-juice-large", price: null },
       ],
       null,
       "4.00",
@@ -1093,10 +1079,9 @@ describe("variants", () => {
     productPrice: "4.00",
     override: null,
     effectivePrice: "4.00",
-    offered: true,
     variants: [
-      { variantId: "v-juice-small", price: "3.50", offered: true },
-      { variantId: "v-juice-large", price: null, offered: true },
+      { variantId: "v-juice-small", price: "3.50" },
+      { variantId: "v-juice-large", price: null },
     ],
   };
   const tea: MenuPriceRow = {
@@ -1104,8 +1089,7 @@ describe("variants", () => {
     combined: combinedFixture(
       "p-tea",
       "2.00",
-      true,
-      [{ variantId: "v-pot", price: "2.40", offered: false }],
+      [{ variantId: "v-pot", price: "2.40" }],
       null,
       "2.00",
       { "v-pot": "2.20" },
@@ -1117,8 +1101,7 @@ describe("variants", () => {
     productPrice: "2.00",
     override: null,
     effectivePrice: "2.00",
-    offered: true,
-    variants: [{ variantId: "v-pot", price: "2.40", offered: false }],
+    variants: [{ variantId: "v-pot", price: "2.40" }],
   };
   /** No menu price anywhere. */
   const cider: MenuPriceRow = {
@@ -1126,10 +1109,9 @@ describe("variants", () => {
     combined: combinedFixture(
       "p-cider",
       "4.00",
-      true,
       [
-        { variantId: "v-pint", price: null, offered: true },
-        { variantId: "v-half", price: null, offered: true },
+        { variantId: "v-pint", price: null },
+        { variantId: "v-half", price: null },
       ],
       null,
       "4.00",
@@ -1142,16 +1124,15 @@ describe("variants", () => {
     productPrice: "4.00",
     override: null,
     effectivePrice: "4.00",
-    offered: true,
     variants: [
-      { variantId: "v-pint", price: null, offered: true },
-      { variantId: "v-half", price: null, offered: true },
+      { variantId: "v-pint", price: null },
+      { variantId: "v-half", price: null },
     ],
   };
   const steak: MenuPriceRow = {
     ...burger,
     menuItemId: "mi-steak",
-    combined: combinedFixture("p-steak", "18.00", true, [], "18.00", "20.00", {}),
+    combined: combinedFixture("p-steak", "18.00", [], "18.00", "20.00", {}),
     productId: "p-steak",
     name: "Steak",
     productPrice: "20.00",
@@ -1161,7 +1142,7 @@ describe("variants", () => {
   const soup: MenuPriceRow = {
     ...burger,
     menuItemId: "mi-soup",
-    combined: combinedFixture("p-soup", "5.00", true, [], "5.00", "5.00", {}),
+    combined: combinedFixture("p-soup", "5.00", [], "5.00", "5.00", {}),
     productId: "p-soup",
     name: "Soup",
     productPrice: "5.00",
@@ -1298,7 +1279,6 @@ describe("variants", () => {
       combined: combinedFixture(
         "p-wine",
         "13.00",
-        true,
         wine.variants.map((v) => (v.variantId === "v-glass" ? { ...v, price: null } : v)),
         "13.00",
         "10.00",
@@ -1338,18 +1318,17 @@ describe("variants", () => {
           combined: combinedFixture(
             "p-juice",
             "4.00",
-            true,
             [
-              { variantId: "v-juice-small", price: "5.0", offered: true },
-              { variantId: "v-juice-large", price: null, offered: true },
+              { variantId: "v-juice-small", price: "5.0" },
+              { variantId: "v-juice-large", price: null },
             ],
             null,
             "4.00",
             { "v-juice-small": "3.00", "v-juice-large": "5.00" },
           ),
           variants: [
-            { variantId: "v-juice-small", price: "5.0", offered: true },
-            { variantId: "v-juice-large", price: null, offered: true },
+            { variantId: "v-juice-small", price: "5.0" },
+            { variantId: "v-juice-large", price: null },
           ],
         },
       ],
@@ -1548,7 +1527,7 @@ describe("variants", () => {
       }
     });
 
-    it("greys out a product with a menu price whose offered variants each charge a price of their own", async () => {
+    it("greys out a product with a menu price whose variants each charge a price of their own", async () => {
       const el = await mountVariants({
         rows: [
           {
@@ -1556,7 +1535,6 @@ describe("variants", () => {
             combined: combinedFixture(
               "p-juice",
               "4.50",
-              true,
               juice.variants.map((v) => ({ ...v, price: null })),
               "4.50",
               "4.00",
@@ -1633,18 +1611,17 @@ describe("variants", () => {
             combined: combinedFixture(
               "p-cider",
               "4.00",
-              true,
               [
-                { variantId: "v-pint", price: "4.50", offered: true },
-                { variantId: "v-half", price: null, offered: true },
+                { variantId: "v-pint", price: "4.50" },
+                { variantId: "v-half", price: null },
               ],
               null,
               "4.00",
               { "v-pint": "4.50", "v-half": "4.00" },
             ),
             variants: [
-              { variantId: "v-pint", price: "4.50", offered: true },
-              { variantId: "v-half", price: null, offered: true },
+              { variantId: "v-pint", price: "4.50" },
+              { variantId: "v-half", price: null },
             ],
           },
         ],
@@ -1654,9 +1631,9 @@ describe("variants", () => {
       expect(combined(el, "mi-cider").querySelector("s, [part~=muted]")).toBeNull();
     });
 
-    it("counts the product's menu price as applying to an offered variant with no price of its own", async () => {
+    it("counts the product's menu price as applying to a variant with no price of its own", async () => {
       const el = await mountVariants({
-        rows: [{ ...wine, variants: [{ variantId: "v-bottle", price: null, offered: true }] }],
+        rows: [{ ...wine, variants: [{ variantId: "v-bottle", price: null }] }],
       });
       await showCombined(el);
       expect(text(combined(el, "mi-wine").querySelector("s"))).toBe(eur("10.00"));
@@ -1697,11 +1674,10 @@ describe("variants", () => {
   });
 });
 
-it("price-only saves leave unset product and variant switches untouched", async () => {
+it("a price-only save sends the menu price and each variant's price, and nothing else", async () => {
   const row = {
     ...lemonade,
-    offered: null,
-    variants: lemonade.variants.map((v) => ({ ...v, offered: null })),
+    variants: lemonade.variants.map((v) => ({ ...v })),
   };
   const el = await mount({ editing: row.menuItemId, rows: [row] });
   await type(el, "grossPrice", "2.60");
@@ -1745,7 +1721,7 @@ it("puts a where-from tooltip on every shown price, overridden ones included", a
     const ownBurger = {
       ...burger,
       override: "14.00",
-      combined: combinedFixture("p-burger", "14.00", true, [], "14.00", "12.00"),
+      combined: combinedFixture("p-burger", "14.00", [], "14.00", "12.00"),
     };
     const el = await mount({ rows: [ownBurger] });
     const tips = [...row(el, "mi-burger")!.querySelectorAll("wt-help-tooltip")];
@@ -1873,7 +1849,6 @@ it("counts inherited overrides once per included menu and own item", async () =>
         ...lager,
         placements: [],
         override: "4.00",
-        offered: false,
         combined: {
           ...lager.combined,
           price: { state: "decided", value: "4.00", source: { kind: "own" }, otherwise: drinks },
@@ -1944,7 +1919,7 @@ it("counts equal-price direct sources once and excludes roots nested inside anot
     const ownBurger = {
       ...burger,
       override: "12.00",
-      combined: combinedFixture("p-burger", "12.00", true, [], "12.00", "12.00"),
+      combined: combinedFixture("p-burger", "12.00", [], "12.00", "12.00"),
     };
     const product = { memberId: "burger", ref: { kind: "product", productId: "p-burger" } };
     const wines = {
@@ -2025,10 +2000,8 @@ it("keeps the hidden comparison against catalogue price while Before this menu s
     const source = {
       ...lager,
       override: "4.00",
-      offered: true,
       combined: {
         ...lager.combined,
-        offered: { state: "decided", value: true, source: { kind: "product" }, otherwise: null },
         price: {
           state: "decided",
           value: "4.00",
@@ -2086,8 +2059,8 @@ it.each([
         ...lemonade,
         override: "4.00",
         variants: [
-          { variantId: "v-small", price: null, offered: null },
-          { variantId: "v-large", price: "14.00", offered: null },
+          { variantId: "v-small", price: null },
+          { variantId: "v-large", price: "14.00" },
         ],
         combined: {
           ...lemonade.combined,
@@ -2111,7 +2084,6 @@ it.each([
                 source: { kind: "product" },
                 otherwise: null,
               },
-              offered: lemonade.combined.offered,
             },
             {
               variantId: "v-large",
@@ -2126,7 +2098,6 @@ it.each([
                   otherwise: null,
                 },
               },
-              offered: lemonade.combined.offered,
             },
           ],
         },
@@ -2187,49 +2158,6 @@ describe("without a switch of the menu's own", () => {
     });
   });
 
-  // `combined.offered` goes from the catalogue's types in a later step of W90, and this test with it.
-  it("draws no clash and offers no resolve menu for a row whose sources disagree only on the switch", async () => {
-    const disagree = {
-      state: "clash",
-      candidates: [
-        { place: { kind: "own_sections" }, value: true, source: { kind: "product" } },
-        {
-          place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
-          value: false,
-          source: drinksSource,
-        },
-      ],
-    } as MenuPriceRow["combined"]["offered"];
-    const el = await mount({
-      rows: [
-        { ...lager, combined: { ...lager.combined, offered: disagree } },
-        {
-          ...lemonade,
-          combined: {
-            ...lemonade.combined,
-            variants: lemonade.combined.variants.map((v) => ({ ...v, offered: disagree })),
-          },
-        },
-      ],
-    });
-    row(el, "mi-lemonade")!.querySelector<HTMLButtonElement>("button.tree-toggle")!.click();
-    await table(el).updateComplete;
-    expect(shown(el)).toEqual([
-      "mi-lager",
-      "mi-lemonade",
-      "mi-lemonade:v-small",
-      "mi-lemonade:v-large",
-    ]);
-    expect(column(el, "effective-price")).toEqual([
-      eur("2.00"),
-      t("menu_prices.range").replace("{low}", eur("2.50")).replace("{high}", eur("3.75")),
-      eur("2.50"),
-      eur("3.75"),
-    ]);
-    expect(table(el).shadowRoot.querySelector("[part~=clash]")).toBeNull();
-    expect(table(el).shadowRoot.querySelector("wt-row-actions")).toBeNull();
-  });
-
   it("counts every variant's price toward the product's charged range", async () => {
     const el = await mount({ rows: [lemonade] });
     // The large's menu price, 3.75, is above the product's 2.50 that the small follows.
@@ -2254,7 +2182,7 @@ describe("without a switch of the menu's own", () => {
         rows: [
           { ...lager, override: "4.00", combined: { ...lager.combined, price: own } },
           // Stored without a price of this menu's own, so nothing here counts it.
-          { ...burger, offered: false },
+          burger,
         ],
         nodes: [
           {

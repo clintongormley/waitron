@@ -121,7 +121,6 @@ export {
 } from "./variants.js";
 export type {
   MenuVariant,
-  MenuVariantWrite,
   ProductVariant,
   ProductVariantInput,
   VariantWrite,

@@ -324,7 +324,6 @@ describe("listMenuOffers reads a variant's blanks from its parent", () => {
       kitchenName: null,
       unitPrice: "4.50",
       menuPrice: null,
-      offered: true,
       available: true,
       image: "parent.jpg",
       vatClass: "reduced",

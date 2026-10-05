@@ -138,14 +138,12 @@ async function settingsOf(tx: Transaction, menuId: string, productId: string) {
     .select({
       variantId: menuItemVariantOverrides.variantId,
       price: menuItemVariantOverrides.price,
-      offered: menuItemVariantOverrides.offered,
     })
     .from(menuItemVariantOverrides)
     .where(eq(menuItemVariantOverrides.menuItemId, row.id));
   return {
     id: row.id,
     grossPrice: row.grossPrice,
-    offered: row.offered,
     variantOverrides,
   };
 }
@@ -401,9 +399,7 @@ describe("a product that leaves a menu starts fresh there", () => {
       const dinnerItem = (await menuItemRow(tx, f.dinner, f.lemonade))!;
       await updateMenuItem(tx, f.lunch, lunchItem.id, { grossPrice: "2.50" });
       await updateMenuItem(tx, f.dinner, dinnerItem.id, { grossPrice: "3.25" });
-      await setMenuVariants(tx, lunchItem.id, [
-        { variantId: f.large, price: "3.00", offered: true },
-      ]);
+      await setMenuVariants(tx, lunchItem.id, [{ variantId: f.large, price: "3.00" }]);
       const ice = await createExtraList(tx, { name: "Ice", items: [{ productId: f.water }] }, "en");
       await writeProductModifiers(tx, f.lemonade, [{ kind: "extras", id: ice.id }]);
 
@@ -414,8 +410,7 @@ describe("a product that leaves a menu starts fresh there", () => {
     });
     expect(settings.lunch).toMatchObject({
       grossPrice: 250,
-      offered: null,
-      variantOverrides: [{ variantId: f.large, price: 300, offered: true }],
+      variantOverrides: [{ variantId: f.large, price: 300 }],
     });
     return { f, settings };
   }
@@ -438,7 +433,6 @@ describe("a product that leaves a menu starts fresh there", () => {
     expect(after.lunch).toEqual({
       id: before.lunch.id,
       grossPrice: null,
-      offered: null,
       variantOverrides: [],
     });
     expect(after.dinner).toEqual(before.dinner);
@@ -537,7 +531,7 @@ describe("a product that leaves a menu starts fresh there", () => {
       await addMember(tx, f.lunchRoot, section(f.drinks));
       const item = (await menuItemRow(tx, f.lunch, f.lemonade))!;
       await updateMenuItem(tx, f.lunch, item.id, { grossPrice: "2.50" });
-      await setMenuVariants(tx, item.id, [{ variantId: f.large, price: "3.00", offered: true }]);
+      await setMenuVariants(tx, item.id, [{ variantId: f.large, price: "3.00" }]);
       return settingsOf(tx, f.lunch, f.lemonade);
     });
     const drinksMember = await memberHolding(f.lunchRoot, section(f.drinks));
@@ -561,7 +555,7 @@ describe("a product that leaves a menu starts fresh there", () => {
       await addMember(tx, f.lunchRoot, section(f.drinks));
       const item = (await menuItemRow(tx, f.lunch, f.lemonade))!;
       await updateMenuItem(tx, f.lunch, item.id, { grossPrice: "2.50" });
-      await setMenuVariants(tx, item.id, [{ variantId: f.large, price: "3.00", offered: true }]);
+      await setMenuVariants(tx, item.id, [{ variantId: f.large, price: "3.00" }]);
     });
     const copy = await app(async (tx) => {
       const copy = await createSection(tx, { internalName: "Lunch drinks" });
@@ -578,43 +572,7 @@ describe("a product that leaves a menu starts fresh there", () => {
   });
 });
 
-describe("a menu's own switch for a product", () => {
-  it("records no own setting until changed and can clear it again", async () => {
-    const f = await fixture();
-    await app((tx) => addMember(tx, f.lunchRoot, product(f.lemonade)));
-    const read = () => app((tx) => menuItemRow(tx, f.lunch, f.lemonade));
-    const item = (await read())!;
-    expect(item.offered).toBeNull();
-    await app((tx) => updateMenuItem(tx, f.lunch, item.id, { offered: false }));
-    expect((await read())!.offered).toBe(false);
-    await app((tx) => updateMenuItem(tx, f.lunch, item.id, { offered: null }));
-    expect((await read())!.offered).toBeNull();
-    expect(await offerNames(f.lunch)).toEqual(["Lemonade (staff)"]);
-  });
-
-  it("hides a product the menu reaches on that menu alone, and turns it back on", async () => {
-    const f = await fixture();
-    await app(async (tx) => {
-      await addMember(tx, f.drinks, product(f.lemonade));
-      await addMember(tx, f.drinks, product(f.water));
-      await addMember(tx, f.lunchRoot, section(f.drinks));
-      await addMember(tx, f.dinnerRoot, section(f.drinks));
-    });
-    const item = (await app((tx) => menuItemRow(tx, f.lunch, f.lemonade)))!;
-    await app((tx) => updateMenuItem(tx, f.lunch, item.id, { offered: false }));
-    expect(await offerNames(f.lunch)).toEqual(["Water (staff)"]);
-    expect(await offerNames(f.dinner)).toEqual(["Lemonade (staff)", "Water (staff)"]);
-    // A structure change that keeps it reachable leaves the switch where it was.
-    await app((tx) => addMember(tx, f.drinks, product(f.juice)));
-    expect(await offerNames(f.lunch)).toEqual(["Water (staff)", "Juice (staff)"]);
-    await app((tx) => updateMenuItem(tx, f.lunch, item.id, { offered: true }));
-    expect(await offerNames(f.lunch)).toEqual([
-      "Lemonade (staff)",
-      "Water (staff)",
-      "Juice (staff)",
-    ]);
-  });
-
+describe("a menu's settings for a product it no longer reaches", () => {
   it("refuses a setting for a product the menu no longer reaches", async () => {
     const f = await fixture();
     await app((tx) => addMember(tx, f.lunchRoot, product(f.lemonade)));
@@ -624,15 +582,12 @@ describe("a menu's own switch for a product", () => {
     for (const write of [
       (tx: Transaction): Promise<unknown> =>
         updateMenuItem(tx, f.lunch, item.id, { grossPrice: "1.00" }),
-      (tx: Transaction) => updateMenuItem(tx, f.lunch, item.id, { offered: false }),
       (tx: Transaction) => updateMenuItem(tx, f.dinner, item.id, { grossPrice: "1.00" }),
-      (tx: Transaction) =>
-        setMenuVariants(tx, item.id, [{ variantId: f.large, price: "1.00", offered: true }]),
+      (tx: Transaction) => setMenuVariants(tx, item.id, [{ variantId: f.large, price: "1.00" }]),
     ])
       await expect(app(write)).rejects.toMatchObject({ code: "menu_item.not_found" });
     expect(await app((tx) => settingsOf(tx, f.lunch, f.lemonade))).toMatchObject({
       grossPrice: null,
-      offered: null,
       variantOverrides: [],
     });
   });
@@ -649,7 +604,6 @@ describe("putting a product on a menu's top level", () => {
       menuId: f.lunch,
       productId: f.lemonade,
       grossPrice: "2.50",
-      offered: null,
     });
     const blank = await app((tx) => addProductToMenu(tx, { menuId: f.lunch, productId: f.water }));
     expect(blank.grossPrice).toBeNull();
@@ -682,7 +636,7 @@ describe("which rows a sync resets", () => {
     return app(async (tx) => {
       const [row] = await tx
         .insert(menuItems)
-        .values({ menuId: f.lunch, productId: f.lemonade, grossPrice: 250, offered: false })
+        .values({ menuId: f.lunch, productId: f.lemonade, grossPrice: 250 })
         .returning({ id: menuItems.id });
       await tx
         .insert(menuItemVariantOverrides)
@@ -696,7 +650,7 @@ describe("which rows a sync resets", () => {
     const stray = await strayRow(f);
     await app((tx) => syncMenuOffers(tx, [f.lunch]));
     const [row] = await app((tx) => tx.select().from(menuItems).where(eq(menuItems.id, stray)));
-    expect(row).toMatchObject({ grossPrice: null, offered: null });
+    expect(row).toMatchObject({ grossPrice: null });
     expect(
       await app((tx) =>
         tx
@@ -712,7 +666,7 @@ describe("which rows a sync resets", () => {
     const stray = await strayRow(f);
     await app((tx) => addMember(tx, f.lunchRoot, product(f.water)));
     const [row] = await app((tx) => tx.select().from(menuItems).where(eq(menuItems.id, stray)));
-    expect(row).toMatchObject({ grossPrice: 250, offered: false });
+    expect(row).toMatchObject({ grossPrice: 250 });
     expect(
       await app((tx) =>
         tx
@@ -756,8 +710,7 @@ describe("a menu's prices", () => {
         productPrice: "3.00",
         override: null,
         effectivePrice: "3.00",
-        offered: null,
-        variants: [{ variantId: f.large, price: null, offered: null }],
+        variants: [{ variantId: f.large, price: null }],
       },
       {
         menuItemId: await itemOf(f.lunch, f.water),
@@ -768,7 +721,6 @@ describe("a menu's prices", () => {
         productPrice: "2.00",
         override: null,
         effectivePrice: "2.00",
-        offered: null,
         variants: [],
       },
     ]);
@@ -803,23 +755,21 @@ describe("a menu's prices", () => {
     ]);
   });
 
-  it("lists a product switched off on the menu and a sold-out one, and leaves out an inactive one", async () => {
+  it("lists a sold-out product, and leaves out an inactive one", async () => {
     const f = await fixture();
     await app(async (tx) => {
       for (const productId of [f.lemonade, f.water, f.burger, f.juice])
         await addMember(tx, f.lunchRoot, product(productId));
     });
-    const lemonadeItem = await itemOf(f.lunch, f.lemonade);
     await app(async (tx) => {
-      await updateMenuItem(tx, f.lunch, lemonadeItem, { offered: false });
       await updateProduct(tx, f.water, { available: false });
       await deactivateProduct(tx, f.burger);
     });
     const rows = await app((tx) => menuPrices(tx, f.lunch));
-    expect(rows.map(({ name, offered }) => ({ name, offered }))).toEqual([
-      { name: "Lemonade (staff)", offered: false },
-      { name: "Water (staff)", offered: null },
-      { name: "Juice (staff)", offered: null },
+    expect(rows.map(({ name }) => name)).toEqual([
+      "Lemonade (staff)",
+      "Water (staff)",
+      "Juice (staff)",
     ]);
   });
 
@@ -864,19 +814,17 @@ describe("a menu's prices", () => {
       return variants.find((variant) => variant.name === "Small")!.id;
     });
     const lunchItem = await itemOf(f.lunch, f.lemonade);
-    await app((tx) =>
-      setMenuVariants(tx, lunchItem, [{ variantId: f.large, price: "3.25", offered: false }]),
-    );
+    await app((tx) => setMenuVariants(tx, lunchItem, [{ variantId: f.large, price: "3.25" }]));
     const [lunchRow] = await app((tx) => menuPrices(tx, f.lunch));
     const [dinnerRow] = await app((tx) => menuPrices(tx, f.dinner));
     expect(lunchRow!.variants).toEqual([
-      { variantId: f.large, price: "3.25", offered: false },
-      { variantId: small, price: null, offered: null },
+      { variantId: f.large, price: "3.25" },
+      { variantId: small, price: null },
     ]);
     expect(lunchRow!.variants).toEqual(await app((tx) => listMenuVariants(tx, lunchItem)));
     expect(dinnerRow!.variants).toEqual([
-      { variantId: f.large, price: null, offered: null },
-      { variantId: small, price: null, offered: null },
+      { variantId: f.large, price: null },
+      { variantId: small, price: null },
     ]);
   });
 

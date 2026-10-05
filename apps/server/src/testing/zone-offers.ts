@@ -149,9 +149,8 @@ async function department(tx: Transaction, cfg: Cfg, serviceMode: ServiceMode): 
 }
 
 /**
- * Puts every product on the menu's top level at its own price and switched on, and returns each
- * one's menu-item id. A product already there keeps its membership and has its row reset, as a
- * repeat call expects.
+ * Puts every product on the menu's top level at its own price, and returns each one's menu-item
+ * id. A product already there keeps its membership and has its row reset, as a repeat call expects.
  */
 async function placeOnTopLevel(
   tx: Transaction,
@@ -161,7 +160,7 @@ async function placeOnTopLevel(
   if (productIds.length === 0) return new Map();
   await addProducts(tx, await requireMenuRoot(tx, menuId), productIds);
   const ofMenu = and(eq(menuItems.menuId, menuId), inArray(menuItems.productId, productIds));
-  await tx.update(menuItems).set({ grossPrice: null, offered: null }).where(ofMenu);
+  await tx.update(menuItems).set({ grossPrice: null }).where(ofMenu);
   const rows = await tx
     .select({ id: menuItems.id, productId: menuItems.productId })
     .from(menuItems)
