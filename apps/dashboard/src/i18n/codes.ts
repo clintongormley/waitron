@@ -361,8 +361,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ya existe un perfil de dispositivo con ese nombre",
   },
   "device_profile.in_use": {
-    en: "This profile is still assigned to a device — reassign or remove the device first",
-    es: "Este perfil todavía está asignado a un dispositivo. Reasígnalo o elimina el dispositivo primero",
+    en: "This profile is still assigned to a device — give the device another profile first",
+    es: "Este perfil todavía está asignado a un dispositivo. Asigna otro perfil al dispositivo primero",
   },
   "device_profile.invalid": {
     en: "The device profile isn't valid",

@@ -663,9 +663,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * them, ignoring `rowGroup` and the sort column, in either direction; their own children still
    * sort. */
   @property({ attribute: false }) rowKeepsChildOrder: (row: Row) => boolean = () => false;
-  /** When set, each row becomes activatable: a stretched, focusable button covers the row and calls
-   * this on click. Per-row controls (the selection checkbox, the Edit/Delete menu) sit above the
-   * activator, so they are never swallowed. In a tree, `rowActivation` can give a row a toggle instead. */
+  /** When set, each row becomes activatable, except on a flat table a row `rowClickable` refuses: a
+   * stretched, focusable button covers the row and calls this on click. Per-row controls (the
+   * selection checkbox, the Edit/Delete menu) sit above the activator, so they are never swallowed.
+   * In a tree, `rowActivation` can give a row a toggle instead. */
   @property({ attribute: false }) rowClick?: (row: Row) => void;
   @property({ attribute: false }) rowClickLabel: (row: Row) => string = () => "Open row";
   /** On a flat table, a row this returns false for draws no activator and does not open from a

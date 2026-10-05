@@ -5117,9 +5117,17 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   opens with Shows empty, so even a rename asks for a new one; whether to let it keep a switched-off
   one is the owner's call. (6) the Status column still says "Revoked" (`devices.status_revoked`)
   beside a menu that now says Remove. (7) a kitchen screen's Edit dialog hides Made here but still
-  sends the stored made-here stations that were switched on when it opened, so one switched off
-  while it is open refuses the save, at the bottom of the dialog, with "That station no longer
-  exists".
+  sends its stored made-here stations that are switched on in the screen's station list; that list
+  re-reads when kitchen stations change, so one switched off while the dialog is open refuses the
+  save — at the bottom of the dialog, with "That station no longer exists" — only if the save is
+  sent before that re-read lands, or while live updates are down. (8) a profile whose only device
+  has been removed cannot be deleted, and nothing can free it: Remove keeps the device's profile, and
+  deleting the profile is refused `device_profile.in_use` (measured 2026-10-05 through the routes,
+  with a control: an unused profile deletes). Before W105 a direct call to the old reassign route
+  could move a removed device onto another profile, because it did not check `active`; the Edit
+  route refuses a removed device. Owner decision needed: for example, let the profile delete ignore
+  removed devices, or clear a removed device's profile on removal (`device_profile_id` is NOT NULL,
+  so that is a schema change).
   Left OPEN by W104, not acted on: (1) a Pair save that never answers locks both dialogs, because a
   save carries no time limit (`packages/dashboard-kit/src/request.ts` limits GETs only); (2) leaving
   the Devices page with Back while a Pair save is in flight still sends a deny for that request
