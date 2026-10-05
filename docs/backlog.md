@@ -5236,7 +5236,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b DONE (#1248, main ccbe2b41e). W104–W106 and W105b DONE; the open points each left are listed below.**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b DONE (#1248, main ccbe2b41e); W105c DONE (#1251, main 58c65558b). W104–W106, W105b and W105c DONE; the open points each left are listed below.**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
@@ -5322,7 +5322,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   are switched on in the screen's station list; that list re-reads when kitchen stations change, so
   one switched off while the dialog is open refuses the save — at the bottom of the dialog, with
   "That station no longer exists" — only if the save is sent before that re-read lands, or while
-  live updates are down. (8) done by W105c: deleting a profile ignores disabled devices (owner
+  live updates are down. (8) done by W105c (#1251): deleting a profile ignores disabled devices (owner
   decision 2026-10-05). A profile only disabled devices hold is RETIRED, not deleted, because
   `devices.device_profile_id` is NOT NULL, and the rebuild that changing it needs fails once a row
   in a table keying into `devices` with RESTRICT names a device (fiscal records among them;
@@ -5334,7 +5334,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   device on a retired profile; a retired profile's home-layout choices stay in
   `device_profile_home_layouts`; and the configuration transfer has no row filter, so it copies a
   retired profile with its `retired_at` (`packages/db/src/configuration-transfer.ts`; read, not
-  tested). (9) a device holding a printer its unchanged profile no longer lists
+  tested). Also left open, the owner's wording call: the Enable hint "Disabled device. Enabling it
+  restores its settings." (`apps/dashboard/src/i18n/strings.ts`) says more than happens when the
+  device's profile was retired, since Profile then starts empty. (9) a device holding a printer its unchanged profile no longer lists
   opens with that field empty, and Save keeps the old printer without saying so. (10) for a manager
   without `payments.manage` the card reader field is drawn greyed while it loads and then disappears,
   so the layout jumps. Review suggestions #1235 did not take, listed in its description: the edit
