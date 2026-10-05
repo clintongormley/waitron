@@ -39,7 +39,7 @@ export class ProductColorForm extends LitElement {
   /** The product's own colour, or null when it takes its category's. */
   @property({ attribute: false }) color: string | null = null;
   /** What its category gives it: a colour, or null when the category has none. */
-  @property({ attribute: false }) inherited: string | null = null;
+  @property({ attribute: false }) categoryColor: string | null = null;
   /** Refusals keyed `color`, or `_form` for one that concerns no field. */
   @property({ attribute: false }) errors: Record<string, string> = {};
   @state() private chosen: string | null = null;
@@ -96,7 +96,7 @@ export class ProductColorForm extends LitElement {
         <p class="scope" data-test="scope">${t("product_color.scope")}</p>
         ${colorField({
           color: this.chosen,
-          categoryColor: this.inherited,
+          categoryColor: this.categoryColor,
           busy: this.busy,
           error: errors.color ?? "",
           name: "product-color",

@@ -16,7 +16,7 @@ describe.each(["light", "dark"] as const)("product colour (%s)", (theme) => {
           busy: state === "busy",
           name: "Lemonade",
           color: state === "own" || state === "refused" ? "#b12525" : null,
-          inherited: state === "category has none" ? null : "#256bb1",
+          categoryColor: state === "category has none" ? null : "#256bb1",
           errors:
             state === "refused"
               ? { color: t("editor.field_rejected"), _form: codeMessage("server.internal") }

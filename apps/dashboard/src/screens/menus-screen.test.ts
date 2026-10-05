@@ -7072,7 +7072,7 @@ describe("colour swatches on the Structure tab", () => {
     const form = colorForm(el);
     expect(form.name).toBe("Lemonade");
     expect(form.color).toBeNull();
-    expect(form.inherited).toBe("#256bb1");
+    expect(form.categoryColor).toBe("#256bb1");
     expect(form.shadowRoot!.querySelector("wt-modal")!.heading).toBe(
       t("product_color.heading").replace("{name}", "Lemonade"),
     );

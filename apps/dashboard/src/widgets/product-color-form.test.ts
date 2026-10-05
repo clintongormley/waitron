@@ -13,7 +13,7 @@ async function colorForm(props: Partial<ProductColorForm> = {}) {
     open: true,
     name: "Lemonade",
     color: "#b12525",
-    inherited: "#256bb1",
+    categoryColor: "#256bb1",
     ...props,
   });
   return el;
@@ -70,7 +70,7 @@ it("names its chooser product-color and offers its category's colour, with the i
 });
 
 it("says the category has no colour when there is none to take", async () => {
-  const el = await colorForm({ inherited: null });
+  const el = await colorForm({ categoryColor: null });
   expect(swatch(el, "").querySelector(".chip")).toBeNull();
   expect(swatch(el, "").textContent).toContain(t("editor.color_category_none"));
 });

@@ -2288,7 +2288,7 @@ export class MenusScreen extends LitElement {
       .busy=${this.colorBusy}
       .name=${product?.name ?? ""}
       .color=${product?.color ?? null}
-      .inherited=${this.colouring?.categoryColor ?? null}
+      .categoryColor=${this.colouring?.categoryColor ?? null}
       .errors=${this.colorErrors}
       @wt-submit=${(event: CustomEvent<{ color: string | null }>) => {
         event.stopPropagation();
