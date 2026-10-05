@@ -5826,15 +5826,17 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   fields; per-menu modifier authoring; workforce assignments; immutable department attribution and
   reporting; batched readiness and offer queries; a replication smoke test. Same legal seller is the
   working assumption, to confirm before go-live. Hours moved to A254.
-- **Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, not
-  planned.** The first department is named after the venue and hidden until a second exists; the
+- **Departments, service styles and opening hours (A254, owner 2026-10-03) — DRAFT SPEC, partly
+  implemented through A261.** The first department is named after the venue; the
   four-value service style splits into separate settings, and a tab no longer needs a table; hours
   come from venue-wide day types plus a calendar; a per-department switch prints the trading name.
   [Spec](superpowers/specs/2026-10-03-departments-service-styles-hours-design.md); §6 lists what is
   open, including advisor questions Q21, Q14, Q27 and Q22.
-  Its §4 day types and §5 placement are revised by A261.
+  Its §4 day types and §5 placement are revised by A261. A261 step 2 names the sole department on
+  Departments and zones; other screens still await their own one-department survey. Tab billing and
+  the shared calendar remain open.
 - **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — SPEC
-  APPROVED; step 1 implemented, later steps open** ([plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
+  APPROVED; steps 1–2 implemented, later steps open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
   The sidebar's Venue operations group; Venue settings with one tab per group
   (Receipts moves there); Departments and zones as one table edited in place; Prep stations as one
   tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
@@ -5843,9 +5845,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   [Step 1, PR #1166](https://github.com/clintongormley/waitron/pull/1166) gathers Receipts,
   Tables and Kitchen settings into tabs; supervisors can read Tables and Kitchen, while writes
   remain manager-only (owner amendment, 2026-10-04).
-  [Step 2 plan](superpowers/plans/2026-10-04-departments-and-zones.md) is approved with amendments;
-  its build is queued in lane D. The owner chose to keep today's zone-menu and device-default-zone
-  controls temporarily in the new screen while the newer profile and department-menu work follows.
+  [Step 2](superpowers/plans/2026-10-04-departments-and-zones.md) puts departments and zones in one
+  editable tree, resolves quick-sale and receipt choices by department with optional zone overrides,
+  and keeps today's zone-menu and device-default-zone controls temporarily in that screen. Its
+  follow-up A261-2c removes the retired `locations.order_flow` column after a separate rebuild audit.
   [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED;
   profile access and transfers queued in lane D, equipment queued in lane E; not implemented.**

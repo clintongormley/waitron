@@ -333,6 +333,31 @@ describe("venue operations screen", () => {
     expect(modal(el)?.getAttribute("heading")).toBe("Add department");
   });
 
+  it.each(["en", "es"] as const)(
+    "keeps the %s policy tree actions apart on a phone",
+    async (locale) => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      try {
+        await page.viewport(390, 844);
+        setLocale(locale);
+        const el = await mount({
+          load: vi.fn().mockResolvedValue(model),
+        } as unknown as VenueServiceApi);
+        const actions = el.shadowRoot!.querySelector('[data-test="policy-tree-actions"]')!;
+        const department = actions.querySelector<HTMLElement>('[data-test="new-department"]')!;
+        const zone = actions.querySelector<HTMLElement>('[data-test="new-zone"]')!;
+        const first = department.getBoundingClientRect();
+        const second = zone.getBoundingClientRect();
+        expect(
+          Math.max(second.left - first.right, second.top - first.bottom),
+        ).toBeGreaterThanOrEqual(8);
+      } finally {
+        await page.viewport(width, height);
+      }
+    },
+  );
+
   it("creates a new zone under the chosen department from the policy tree", async () => {
     const createZone = vi.fn().mockResolvedValue({ id: "z3" });
     const el = await mount({

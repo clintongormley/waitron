@@ -117,6 +117,12 @@ export class VenueOperationsScreen extends LitElement {
         justify-content: space-between;
         gap: var(--wt-space-3);
       }
+      .toolbar[data-test="policy-tree-actions"] > div {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
+      }
       .form {
         display: grid;
         gap: var(--wt-space-4);
