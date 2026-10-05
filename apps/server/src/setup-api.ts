@@ -174,8 +174,8 @@ export const MAX_RESTORE_UPLOAD_BYTES = 256 * 1024 * 1024;
 export const MAX_CONFIGURATION_UPLOAD_BYTES = 64 * 1024 * 1024;
 
 /**
- * Every AppError code the provision route can THROW inside its error boundary, and its HTTP status.
- * Codes that default to 400 are enumerated anyway so this map is the surface's whole 4xx contract.
+ * The status of AppError codes the provision, fiscal-test and configuration routes throw inside
+ * their error boundaries. A code not listed gets the boundary's default 400.
  */
 const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.request_invalid": 400,
@@ -193,6 +193,14 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   // name; 409, as catalogue-api.ts answers it.
   "category.name_taken": 409,
   "product.name_taken": 409,
+  // A configuration export or a restore copy that cannot be opened (the restore tables spread this).
+  "recovery.passphrase_invalid": 422,
+  "backup.artifact_invalid": 422,
+  "backup.archive_invalid": 422,
+  // An export's image metadata, or its language, the media module refuses; 400, as
+  // packages/media/src/routes.ts answers both.
+  "image.invalid_metadata": 400,
+  "content.language_invalid": 400,
 };
 
 // The tag is a log label for a non-`AppError` fault, never a wire code: the client sees
@@ -248,14 +256,12 @@ async function matchesResetProof(
 
 /**
  * The refusals every restore route (archive, Cloud and bucket) meets from the same validation, so
- * each code answers one status on all three: a copy or key that cannot be opened is 422; an
- * environment or schema conflict, or an old server that may still be selling, is 409.
+ * each code answers one status on all three: a copy or key that cannot be opened is 422 (those
+ * three rows are in `PROVISION_STATUS`, spread here); an environment or schema conflict, or an old
+ * server that may still be selling, is 409.
  */
 const ARCHIVE_RESTORE_STATUS: Record<string, ContentfulStatusCode> = {
   ...PROVISION_STATUS,
-  "recovery.passphrase_invalid": 422,
-  "backup.artifact_invalid": 422,
-  "backup.archive_invalid": 422,
   "restore.environment_mismatch": 409,
   "restore.schema_too_new": 409,
   "provisioning.database_ahead": 409,

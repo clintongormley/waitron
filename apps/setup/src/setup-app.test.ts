@@ -2654,6 +2654,29 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     },
   );
 
+  it.each([
+    ["backup.artifact_invalid", 422],
+    ["backup.archive_invalid", 422],
+    ["recovery.passphrase_invalid", 422],
+    ["image.invalid_metadata", 400],
+    ["content.language_invalid", 400],
+  ] as const)(
+    "gives the could-not-open sentence for an export setup refuses with %s (%i)",
+    async (code, status) => {
+      const el = await mountSetupApp(
+        stubApi({
+          stageConfiguration: vi.fn().mockRejectedValue({ code, params: {}, status }),
+        }),
+      );
+      configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+      await flush(el);
+      expect(await bottomOf(await screenHost(el, "live-source"))).toBe(
+        "The configuration export could not be opened. Check the file and passphrase.",
+      );
+      expect(readDraft(el).configurationImport).toBeUndefined();
+    },
+  );
+
   it("falls back to the could-not-open sentence for a duplicate refusal carrying no name", async () => {
     const el = await mountSetupApp(
       stubApi({

@@ -3423,6 +3423,13 @@ columns a module lists as `references` for a reference the schema gives no forei
 such columns a probe found, run over every import in the transfer tests and an import of the demo
 seed; a reference column added later with neither a foreign key nor a `references` entry keeps the
 old id, and nothing checks for one.
+Since W72b (2026-10-05) both setup routes answer an export that cannot be opened as the restore
+routes answer a copy that cannot be opened: `backup.artifact_invalid`, `backup.archive_invalid` and
+`recovery.passphrase_invalid` get 422, where since `fabdb224d1` (2026-09-10) they fell to the
+boundary's default 400. `image.invalid_metadata` and `content.language_invalid` are now listed at
+the 400 they already got, which is what the media routes give them (`packages/media/src/routes.ts`).
+Setup's live-source screen keys its sentence on the code, not the status, so it still shows the
+could-not-open sentence for each.
 Still open, for the owner: in the dashboard's category editor, at 390 px the category name box cuts
 its duplicate-name refusal off against the pinned Actions column, as it already did for
 `category.invalid` (compared in `~/waitron-campaign/w72-shots/`, local screenshots); the same cause
