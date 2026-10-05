@@ -3675,6 +3675,26 @@ it("marks the inline printer name as required", async () => {
   expect(field.shadowRoot!.querySelector("[data-required]")?.textContent).toBe("*");
 });
 
+it("shows a refused inline name save below the form and leaves Save available", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const api = stubApi({
+    updatePrinter: vi.fn().mockRejectedValueOnce({ code: "connection.failed" }),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=edit-printer-name]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-name"]', "Kitchen receipt");
+  q(el, "[data-test=save-printer-name]")!.click();
+  await vi.waitFor(() =>
+    expect(text(el, '[data-test="printer-name-refusal"]')).toBe(codeMessage("connection.failed")),
+  );
+  expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).error).toBe("");
+  expect(q(el, "[data-test=save-printer-name]")!.hasAttribute("disabled")).toBe(false);
+  q(el, "[data-test=save-printer-name]")!.click();
+  await vi.waitFor(() => expect(api.updatePrinter).toHaveBeenCalledTimes(2));
+});
+
 it("asks before discarding an edited printer name", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {

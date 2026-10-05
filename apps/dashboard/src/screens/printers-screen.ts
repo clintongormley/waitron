@@ -2237,8 +2237,8 @@ export class PrintersScreen extends LitElement {
                   label=${t("printers.name")}
                   required
                   .value=${this.detailName.value}
-                  .invalid=${this.detailName.error !== null}
-                  .error=${this.detailName.error ?? ""}
+                  .invalid=${this.detailName.error === t("form.name_required")}
+                  .error=${this.detailName.error === t("form.name_required") ? this.detailName.error : ""}
                   @wt-change=${(event: CustomEvent<{ value: string }>) => {
                     event.stopPropagation();
                     if (this.detailName?.id === p.id)
@@ -2253,6 +2253,14 @@ export class PrintersScreen extends LitElement {
                 ${
                   this.detailName.error === t("form.name_required")
                     ? html`<p role="alert">${t("form.fix_fields")}</p>`
+                    : nothing
+                }
+                ${
+                  this.detailName.error !== null &&
+                  this.detailName.error !== t("form.name_required")
+                    ? html`<p role="alert" data-test="printer-name-refusal">
+                        ${this.detailName.error}
+                      </p>`
                     : nothing
                 }
                 <wt-form-actions>
