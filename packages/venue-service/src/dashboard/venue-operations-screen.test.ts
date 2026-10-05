@@ -515,7 +515,7 @@ describe("venue operations screen", () => {
     );
   });
 
-  it("shows one department as Every zone with its zone beneath it", async () => {
+  it("shows the sole department's own name with its zone beneath it", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({
         ...model,
@@ -551,7 +551,8 @@ describe("venue operations screen", () => {
     const rows = [...tree.querySelectorAll('tbody [role="row"]')];
     expect(rows).toHaveLength(3);
     expect(rows[0].getAttribute("aria-level")).toBe("1");
-    expect(rows[0].textContent).toContain("Every zone");
+    expect(rows[0].textContent).toContain("Restaurant and bar");
+    expect(rows[0].textContent).not.toContain("Every zone");
     expect(rows[0].textContent).toContain("Casa Delgado");
     expect(rows[1].getAttribute("aria-level")).toBe("2");
     expect(rows[1].textContent).toContain("Dining room");
@@ -700,7 +701,7 @@ describe("venue operations screen", () => {
     expect(zone?.textContent).toContain("Inactive");
   });
 
-  it("treats a sole active department as Every zone and offers no move to an inactive one", async () => {
+  it("names a sole active department and offers no move to an inactive one", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({
         ...model,
@@ -710,7 +711,8 @@ describe("venue operations screen", () => {
     const tree = table(el, "policy-tree").shadowRoot!;
     const rows = [...tree.querySelectorAll('tbody [role="row"]')];
     const active = rows.find((row) => row.textContent?.includes("Dining room"));
-    expect(rows.some((row) => row.textContent?.includes("Every zone"))).toBe(true);
+    expect(rows[0].textContent).toContain("Restaurant and bar");
+    expect(rows[0].textContent).not.toContain("Every zone");
     expect(active).toBeDefined();
     expect(active!.querySelector('[data-test="move-tree-zone-z1"]')).toBeNull();
   });

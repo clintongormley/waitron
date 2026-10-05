@@ -674,10 +674,7 @@ export class VenueOperationsScreen extends LitElement {
                     }
                   </div>`,
               )}`;
-          const displayName =
-            row.department.active && activeDepartmentCount === 1
-              ? t("venue.every_zone")
-              : row.department.name;
+          const displayName = row.department.name;
           if (this.departmentNameEditor !== row.department.id)
             return html`<button
                 type="button"
