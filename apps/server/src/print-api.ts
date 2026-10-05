@@ -55,6 +55,7 @@ import {
   attachPrinterToStation,
   detachPrinterFromStation,
   listStationPrinters,
+  replaceStationPrinters,
 } from "./station-printers.js";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
@@ -1206,6 +1207,24 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       await gated(sessionId, (tx) =>
         detachPrinterFromStation(tx, deps.cfg, { stationId, printerId }),
       );
+      return c.body(null, 204);
+    }),
+  );
+
+  app.put("/management-api/stations/:sid/printers", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const stationId = requireUuidParam(c.req.param("sid"), "StationId");
+      const body = await readJsonBody<{ printerIds?: unknown }>(c);
+      if (
+        !Array.isArray(body.printerIds) ||
+        body.printerIds.some((id) => typeof id !== "string") ||
+        new Set(body.printerIds).size !== body.printerIds.length
+      ) {
+        throw new AppError("management.request_invalid", { field: "printerIds" });
+      }
+      const printerIds = body.printerIds.map((id) => requireUuidParam(id as string, "PrinterId"));
+      await gated(sessionId, (tx) => replaceStationPrinters(tx, deps.cfg, stationId, printerIds));
       return c.body(null, 204);
     }),
   );

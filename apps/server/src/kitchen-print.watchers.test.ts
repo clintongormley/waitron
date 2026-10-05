@@ -29,8 +29,8 @@ import {
   reprintOrderTickets,
 } from "./kitchen-print.js";
 import type { WatcherCopies } from "./kitchen-print.js";
-import { attachPrinterToStation } from "./station-printers.js";
-import { printedCommands, printedLines } from "./testing/decode-ticket.js";
+import { attachPrinterToStation, replaceStationPrinters } from "./station-printers.js";
+import { printedCommands, printedLines, opensDrawer } from "./testing/decode-ticket.js";
 import {
   fireNewOrder,
   setupSplitExtrasVenue,
@@ -704,4 +704,66 @@ describe("watcher paper", () => {
     expect(result.links.filter((link) => link.printJobId === watcherJobs[0]!.id)).toEqual([]);
     expect(result.lineLinks.filter((link) => link.printJobId === watcherJobs[0]!.id)).toEqual([]);
   });
+});
+
+it("fires and reprints through a replaced station printer set with one watcher copy and no drawer pulse", async () => {
+  const { cfg, catalogueId } = await setupVenue();
+  const result = await withTransaction(db, async (tx) => {
+    const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+    const other = await createStation(tx, cfg, { name: "Bar" });
+    const ids: string[] = [];
+    for (const name of ["Old", "New", "Shared", "Watcher"]) {
+      const printer = await createPrinter(
+        tx,
+        { locationId: cfg.locationId },
+        { name, transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+      );
+      await tx.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, printer.id));
+      ids.push(printer.id);
+    }
+    const [old, next, shared, watcherPrinter] = ids as [string, string, string, string];
+    await attachPrinterToStation(tx, { stationId: station.id, printerId: old });
+    await attachPrinterToStation(tx, { stationId: other.id, printerId: shared });
+    const watcher = await createWatcher(tx, cfg, {
+      name: "Pass",
+      everyStation: true,
+      stationIds: [],
+      everyZone: true,
+      zoneIds: [],
+      runsPass: true,
+    });
+    await setPrinterWatcher(tx, cfg, watcherPrinter, watcher.id);
+    const { id: productId } = await createProduct(tx, {
+      catalogueId,
+      categoryId: null,
+      name: "Staff stew",
+      customerName: { "es-ES": "Diner stew" },
+      kitchenName: "Kitchen stew",
+      pricingUnit: "each",
+      unitPrice: "3.50",
+      vatClass: "general",
+    });
+    await routeProductTo(tx, cfg, productId, station.id);
+    await replaceStationPrinters(tx, { locationId: cfg.locationId }, station.id, [next, shared]);
+    const orderId = await fireNewOrder(tx, cfg, [{ productId, quantity: "1" }]);
+    const fired = await tx.select().from(printJobs);
+    const beforeReprint = new Set(fired.map((job) => job.id));
+    await replaceStationPrinters(tx, { locationId: cfg.locationId }, station.id, [shared]);
+    await reprintOrderTickets(tx, cfg, orderId);
+    const reprinted = (await tx.select().from(printJobs)).filter(
+      (job) => !beforeReprint.has(job.id),
+    );
+    return { old, next, shared, watcherPrinter, fired, reprinted };
+  });
+  expect(result.fired.map((job) => job.printerId).sort()).toEqual(
+    [result.next, result.shared, result.watcherPrinter].sort(),
+  );
+  expect(result.reprinted.map((job) => job.printerId).sort()).toEqual(
+    [result.shared, result.watcherPrinter].sort(),
+  );
+  for (const job of [...result.fired, ...result.reprinted]) {
+    expect(job.kind).toBe("document");
+    expect(printedLines(job.payload)).toContain("1.000 x Kitchen stew");
+    expect(opensDrawer(job.payload)).toBe(false);
+  }
 });

@@ -444,3 +444,14 @@ it("writes a complete station order as one active request even from a background
     ["/management-api/stations/order", "PUT", { ids: ["bar", "kitchen"] }],
   ]);
 });
+
+it("saves a station's complete printer set in one non-passive request", async () => {
+  const request = vi.fn(async () => undefined);
+  await new PrepStationsApi(request as DashboardRequest).background.setStationPrinters("bar", [
+    "p2",
+    "p1",
+  ]);
+  expect(request.mock.calls).toEqual([
+    ["/management-api/stations/bar/printers", "PUT", { printerIds: ["p2", "p1"] }],
+  ]);
+});

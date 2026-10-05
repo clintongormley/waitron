@@ -350,3 +350,26 @@ and icon-fixture refinements. Eight EN/ES, light/dark, phone/desktop menu/rename
 sixteen captures were inspected. Unchanged root guards passed 75 tests. Disposable set-validation
 removal accepted an empty incomplete set with 204 instead of 400 while the positive reorder still
 passed. Task 4's routing-only replacement and Tasks 5–8 remain; the full branch is not ready to ship.
+
+
+## 2026-10-05 implementation checkpoint: Tickets selection
+
+Tickets now shows one row per retained station, with Printed on, Shown on screens and Also seen
+by. Active station rows open an in-cell printer multi-select; disabled and watcher-owned printers
+carry a reason and cannot be added. A retained disabled printer can be deselected. The screen links
+to Devices and the Watchers tab separately. Current active kitchen-screen bindings are shown;
+this checkpoint does not change device/profile selection writes.
+
+`PUT /management-api/stations/:sid/printers` requires `printer.manage` and applies the entire
+selection in the route's transaction, using the existing attach/detach validation. Failed additions
+roll back earlier additions and preserve old mappings. An empty set still requires an active
+station. Printer refusal stays beneath the picker; general refusal stays at the page, and either
+permits retry. A completed write closes the editor before its separate refresh. Live mapping
+updates retain an open draft. The picker count and empty search are localized; its refusal wraps
+inside a phone-width cell.
+
+The new fired-ticket/reprint case checks exact destination sets after two selection changes,
+one watcher copy per operation, document jobs and no drawer pulse. Printing rules still retains
+its assignment controls at this checkpoint. Complete their planned handover with equally strict
+moved behavior checks, and complete Routing, Watchers, Settings, defaults and supervisor loading,
+before the full Task 8 finish/land workflow. No existing behavioral assertion changed here.

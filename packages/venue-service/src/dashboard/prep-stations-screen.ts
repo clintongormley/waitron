@@ -8,12 +8,14 @@ import {
   reorder,
   UrlStateController,
   type ReorderModel,
+  type DataTableColumn,
 } from "@waitron/ui";
 import { holdPageCursor, releasePageCursor } from "@waitron/ui/src/reorder-table.js";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import "@waitron/ui/src/components/wt-card.js";
+import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -81,6 +83,30 @@ export class PrepStationsScreen extends LitElement {
       :host {
         display: block;
         min-width: 0;
+      }
+      wt-data-table::part(printer-cell) {
+        display: grid;
+        gap: var(--wt-space-2);
+        max-width: calc(var(--wt-tap-min) * 5);
+        white-space: normal;
+      }
+      wt-data-table::part(cell-actions) {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+      wt-data-table::part(edit-printers) {
+        border: 0;
+        background: transparent;
+        color: var(--wt-color-primary-text);
+        font: inherit;
+        cursor: pointer;
+        min-height: var(--wt-tap-min);
+        padding: 0;
+        text-decoration: underline;
+      }
+      wt-data-table::part(disabled-station) {
+        color: var(--wt-color-text-muted);
       }
       h1 {
         margin: 0;
@@ -192,6 +218,8 @@ export class PrepStationsScreen extends LitElement {
   ];
   @property({ attribute: false }) api!: PrepStationsApi;
   @state() private view?: PrepStationsView;
+  @state() private printerEditor?: { stationId: string; ids: string[]; error: string };
+  @state() private printerBusy = false;
   @state() private editor?: Editor;
   @state() private watcherEditor?: { id?: string };
   @state() private watcherRemoval?: WatcherView;
@@ -1505,6 +1533,189 @@ export class PrepStationsScreen extends LitElement {
       ${this.stationSwitchError[s.id] && !this.stationSwitchError[s.id]!.field ? html`<p class="error" role="alert">${this.stationSwitchError[s.id]!.message}</p>` : nothing}</wt-card
     >`;
   }
+  async #saveStationPrinters() {
+    const editor = this.printerEditor;
+    if (!editor || this.printerBusy) return;
+    this.printerBusy = true;
+    this.printerEditor = { ...editor, error: "" };
+    this.#showError("");
+    try {
+      await this.api.setStationPrinters(editor.stationId, editor.ids);
+    } catch (error) {
+      const code = codeOf(error);
+      if (
+        code === "printer.not_found" ||
+        code === "printer.makes_and_watches" ||
+        code === "management.request_invalid"
+      ) {
+        this.printerEditor = { ...editor, error: t("prep.tickets.printer_refused") };
+      } else {
+        this.#showError(
+          code === "station.not_found" ? t("prep.station_inactive") : t("prep.save_error"),
+        );
+      }
+      this.printerBusy = false;
+      return;
+    }
+    this.printerEditor = undefined;
+    this.printerBusy = false;
+    await this.#load();
+  }
+  #printerCell(station: PrepStation) {
+    const view = this.view!;
+    const selected = view.stationPrinters
+      .filter((row) => row.stationId === station.id)
+      .map((row) => row.printerId);
+    const names =
+      selected.map((id) => view.printers.find((row) => row.id === id)?.name ?? id).join(", ") ||
+      t("prep.none");
+    if (!station.active) return html`<span part="disabled-station">${names}</span>`;
+    const editor = this.printerEditor?.stationId === station.id ? this.printerEditor : undefined;
+    if (!editor)
+      return html`<button
+        type="button"
+        part="edit-printers"
+        data-test=${`edit-printers-${station.id}`}
+        aria-label=${`${station.name}: ${t("prep.tickets.printed_on")}`}
+        ?disabled=${this.printerBusy}
+        @click=${() => {
+          this.printerEditor = { stationId: station.id, ids: selected, error: "" };
+        }}
+      >
+        ${names}
+      </button>`;
+    const options = view.printers.map((printer) => {
+      const watcher = view.watchers.find(
+        (row) => row.printerIds.includes(printer.id) || row.id === printer.watcherId,
+      );
+      const disabled =
+        (printer.active === false || !!watcher || !!printer.watcherId) &&
+        !editor.ids.includes(printer.id);
+      return {
+        value: printer.id,
+        label: printer.name,
+        disabled,
+        description:
+          printer.active === false
+            ? t("prep.health.disabled")
+            : watcher || printer.watcherId
+              ? format("prep.tickets.watcher_printer", {
+                  name: watcher?.name ?? printer.watcherId!,
+                })
+              : undefined,
+      };
+    });
+    return html`<div part="printer-cell">
+      <wt-combobox
+        multiple
+        hide-label
+        name="printerIds"
+        data-test=${`station-printers-${station.id}`}
+        label=${`${station.name}: ${t("prep.tickets.printed_on")}`}
+        .options=${options}
+        .values=${editor.ids}
+        .disabled=${this.printerBusy}
+        .error=${editor.error}
+        data-field-error=${editor.error ? "printerIds" : nothing}
+        .searchPlaceholder=${t("prep.printers")}
+        .noResultsLabel=${t("venue.combobox_no_results")}
+        .countLabel=${(count: number) => format("prep.tickets.printer_count", { count: String(count) })}
+        @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
+          event.stopPropagation();
+          this.printerEditor = { ...editor, ids: event.detail.values, error: "" };
+        }}
+        @keydown=${(event: KeyboardEvent) => {
+          if (event.key === "Escape" && !this.printerBusy) {
+            event.stopPropagation();
+            this.printerEditor = undefined;
+          }
+        }}
+      ></wt-combobox>
+      <div part="cell-actions">
+        <wt-button
+          variant="secondary"
+          data-test=${`cancel-printers-${station.id}`}
+          ?disabled=${this.printerBusy}
+          @click=${() => {
+            this.printerEditor = undefined;
+          }}
+          >${t("venue.cancel")}</wt-button
+        >
+        <wt-button
+          data-test=${`save-printers-${station.id}`}
+          ?disabled=${this.printerBusy}
+          @click=${() => void this.#saveStationPrinters()}
+          >${t("venue.save")}</wt-button
+        >
+      </div>
+    </div>`;
+  }
+  #tickets() {
+    const view = this.view!;
+    const rows = [...view.stations].sort(
+      (a, b) =>
+        Number(b.active) - Number(a.active) ||
+        a.displayOrder - b.displayOrder ||
+        a.name.localeCompare(b.name),
+    );
+    const columns: DataTableColumn<PrepStation>[] = [
+      {
+        key: "name",
+        label: t("prep.name"),
+        cell: (station) =>
+          html`<span part=${station.active ? "station-name" : "disabled-station"}
+            >${station.name}${station.active ? "" : ` (${t("prep.health.disabled")})`}</span
+          >`,
+      },
+      {
+        key: "printers",
+        label: t("prep.tickets.printed_on"),
+        cell: (station) => this.#printerCell(station),
+      },
+      {
+        key: "screens",
+        label: t("prep.tickets.screens"),
+        cell: (station) =>
+          html`<span data-test=${`screens-${station.id}`}>
+            ${
+              view.devices
+                .filter(
+                  (device) =>
+                    device.stationId === station.id &&
+                    device.kind === "kds_station" &&
+                    device.active,
+                )
+                .map((device) => device.label)
+                .join(", ") || t("prep.none")
+            }
+            <a href="/manage/devices">${t("prep.devices")}</a></span
+          >`,
+      },
+      {
+        key: "watchers",
+        label: t("prep.tickets.watchers"),
+        cell: (station) =>
+          html`<span data-test=${`watchers-${station.id}`}>
+            ${
+              watchersOfStation(
+                view.watchers.filter((watcher) => watcher.active),
+                station.id,
+              )
+                .map((watcher) => watcher.name)
+                .join(", ") || t("prep.none")
+            }
+            <a href="/manage/prep-stations/view/watchers">${t("watchers.title")}</a></span
+          >`,
+      },
+    ];
+    return html`<wt-data-table
+      data-test="tickets-table"
+      aria-label=${t("prep.tab.tickets")}
+      .rows=${rows}
+      .columns=${columns}
+      rowKey="id"
+    ></wt-data-table>`;
+  }
   #watchers() {
     const view = this.view!;
     const ordered = [...view.watchers]
@@ -2117,7 +2328,7 @@ export class PrepStationsScreen extends LitElement {
                   }
                   ${off.length ? html`<p>${t("prep.disabled")}: ${off.map((c) => html`${this.#path(c.categoryId)} — ${this.#targetName(c.target)}. ${this.#times(c.target.kind === "station" ? c.target.stationId : "")?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}`)}</p>` : nothing}
                 </div>
-                <div slot="tickets"></div>
+                <div slot="tickets">${this.#tickets()}</div>
                 <div slot="watchers">${this.#watchers()}</div>
                 <div slot="settings"></div>
               </wt-tabs>

@@ -63,7 +63,7 @@ export interface PrepStationsView {
   zones: { id: string; name: string; active?: boolean }[];
   products: { id: string; name: string }[];
   testProducts: { id: string; name: string }[];
-  printers: { id: string; name: string; watcherId?: string | null }[];
+  printers: { id: string; name: string; active?: boolean; watcherId?: string | null }[];
   stationPrinters: { stationId: string; printerId: string }[];
   devices: {
     id: string;
@@ -185,6 +185,9 @@ export class PrepStationsApi {
     input: Partial<StationInput & Pick<PrepStation, "showsRestOfOrder">>,
   ): Promise<void> {
     return this.request(`/management-api/stations/${id}`, "PATCH", input);
+  }
+  setStationPrinters(id: string, printerIds: readonly string[]): Promise<void> {
+    return this.request(`/management-api/stations/${id}/printers`, "PUT", { printerIds });
   }
   reorderStations(ids: readonly string[]): Promise<void> {
     return this.request("/management-api/stations/order", "PUT", { ids });

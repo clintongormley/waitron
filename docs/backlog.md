@@ -6333,9 +6333,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   read recovery waits for the failing read and preserves action refusals. The five subject tabs now
   have stable deep links, Back restoration and creation actions beside the strip; old tester links
   open Routing, whose existing controls remain mounted. Interim station hours sit below the panels.
-  Category wording and Disable/Enable actions apply in both languages. Tickets and Settings are
-  still empty panels awaiting their controls; legacy station settings/output links remain in
-  Routing, and Watchers still uses cards. Stations now offers confirmed Open/Close for today and
+  Category wording and Disable/Enable actions apply in both languages. Tickets now lists printer
+  selections, current kitchen screens and following watchers, with links to Devices and Watchers.
+  Its multi-select saves a complete printer set in one request; a refused set retains its draft and
+  previous mappings. Disabled printers can be removed from retained assignments but not added.
+  Settings is still empty; legacy station settings/output links remain in Routing, and Watchers
+  still uses cards. Stations now offers confirmed Open/Close for today and
   Back to the schedule actions, with retry after a write refusal. Default and unscheduled stations
   say Always open without an action; disabled stations and an unreadable clock offer no hours
   action. Today now shows the next scheduled opening or closing, distinguishing tomorrow and later
@@ -6345,7 +6348,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   ordering saved as one validated active-station set. Rename submits only the name and closes before
   refresh; refusal retains an editable draft. The Prep page explicitly reads retained station
   metadata so disabled health rows can show their state and Enable action; ordinary station lists
-  remain active-only. Routing-only card replacement, Tickets/Watchers/Settings cell editors,
+  remain active-only. Routing-only card replacement, Watchers/Settings cell editors,
   venue-defaults UI, supervisor page-loading permissions and printing handover remain open.
   The generated station-parent rebuild failed the populated upgrade with a foreign-key refusal;
   the ongoing build uses the plan’s storage-redesign option. Approved decisions

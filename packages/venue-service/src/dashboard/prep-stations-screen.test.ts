@@ -3549,3 +3549,317 @@ it.each([
     }
   },
 );
+
+const ticketView: PrepStationsView = {
+  ...view,
+  stations: [...view.stations, upstairs],
+  printers: [
+    { id: "old", name: "Old printer", active: true },
+    { id: "next", name: "Next printer", active: true },
+    { id: "watcher", name: "Pass printer", active: true, watcherId: "pass" },
+    { id: "disabled", name: "Disabled printer", active: false },
+  ],
+  stationPrinters: [{ stationId: "bar", printerId: "old" }],
+  devices: [
+    {
+      id: "current",
+      label: "Bar screen",
+      stationId: "bar",
+      watcherId: null,
+      kind: "kds_station",
+      active: true,
+    },
+    {
+      id: "elsewhere",
+      label: "Other screen",
+      stationId: "upstairs",
+      watcherId: null,
+      kind: "kds_station",
+      active: true,
+    },
+    {
+      id: "off",
+      label: "Disabled screen",
+      stationId: "bar",
+      watcherId: null,
+      kind: "kds_station",
+      active: false,
+    },
+  ],
+  watchers: [
+    {
+      id: "pass",
+      name: "Pass",
+      active: true,
+      displayOrder: 0,
+      everyStation: false,
+      stationIds: ["bar"],
+      everyZone: true,
+      zoneIds: [],
+      runsPass: true,
+      printerIds: ["watcher"],
+    },
+  ],
+};
+async function mountTickets(overrides: Partial<PrepStationsApi> = {}) {
+  history.replaceState(null, "", "/manage/prep-stations/view/tickets");
+  const a = api({
+    load: vi.fn().mockResolvedValue(ticketView),
+    setStationPrinters: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  });
+  const el = await mount(a);
+  await settle(el);
+  const table = el.shadowRoot!.querySelector<HTMLElement>(
+    'wt-data-table[data-test="tickets-table"]',
+  );
+  expect(table, "Tickets lists station outputs").not.toBeNull();
+  await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+  return { el, a, table: table! };
+}
+const ticketQ = (table: HTMLElement, selector: string) =>
+  table.shadowRoot!.querySelector<HTMLElement>(selector);
+
+it("Tickets names each station's printed and current screen outputs with separate relationship links", async () => {
+  const { table } = await mountTickets();
+  expect(table.shadowRoot!.textContent).toContain("Old printer");
+  const bar = ticketQ(table, '[data-test="screens-bar"]')!;
+  expect(bar.textContent).toContain("Bar screen");
+  expect(bar.textContent).not.toContain("Other screen");
+  expect(bar.textContent).not.toContain("Disabled screen");
+  expect(bar.querySelector("a")!.getAttribute("href")).toBe("/manage/devices");
+  const watchers = ticketQ(table, '[data-test="watchers-bar"]')!;
+  expect(watchers.textContent).toContain("Pass");
+  expect(watchers.querySelector("a")!.getAttribute("href")).toBe(
+    "/manage/prep-stations/view/watchers",
+  );
+  expect(ticketQ(table, '[data-test="watchers-upstairs"]')!.textContent).not.toContain("Pass");
+  expect(bar.querySelector("wt-combobox")).toBeNull();
+  expect(watchers.querySelector("wt-combobox")).toBeNull();
+});
+
+it("Tickets opens its printer cell as a multi-select, explains unavailable choices and saves once", async () => {
+  const { el, a, table } = await mountTickets();
+  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
+  await settle(el);
+  const combo = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
+  expect(combo.multiple).toBe(true);
+  expect(combo.values).toEqual(["old"]);
+  expect(combo.options.find((o) => o.value === "watcher")).toMatchObject({
+    disabled: true,
+    description: "Used by watcher Pass",
+  });
+  expect(combo.options.find((o) => o.value === "disabled")).toMatchObject({
+    disabled: true,
+    description: "Disabled",
+  });
+  combo.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { values: ["old", "next"] },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await settle(el);
+  expect(a.setStationPrinters).not.toHaveBeenCalled();
+  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  await vi.waitFor(() =>
+    expect(a.setStationPrinters).toHaveBeenCalledExactlyOnceWith("bar", ["old", "next"]),
+  );
+  await settle(el);
+  expect(ticketQ(table, '[data-test="station-printers-bar"]')).toBeNull();
+});
+
+it("Tickets cancels a pending selection without submitting it", async () => {
+  const { el, a, table } = await mountTickets();
+  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
+  await settle(el);
+  ticketQ(table, '[data-test="station-printers-bar"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { values: ["next"] } }),
+  );
+  await settle(el);
+  ticketQ(table, '[data-test="cancel-printers-bar"]')!.click();
+  await settle(el);
+  expect(a.setStationPrinters).not.toHaveBeenCalled();
+  expect(ticketQ(table, '[data-test="edit-printers-bar"]')!.textContent).toContain("Old printer");
+});
+
+it("Tickets retains a refused set beside its field and allows correction and retry", async () => {
+  const save = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "printer.makes_and_watches" })
+    .mockResolvedValue(undefined);
+  const { el, table } = await mountTickets({ setStationPrinters: save });
+  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
+  await settle(el);
+  ticketQ(table, '[data-test="station-printers-bar"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { values: ["next"] } }),
+  );
+  await settle(el);
+  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  await vi.waitFor(() => expect(ticketQ(table, '[data-field-error="printerIds"]')).not.toBeNull());
+  expect((ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox).values).toEqual([
+    "next",
+  ]);
+  expect(
+    (ticketQ(table, '[data-test="save-printers-bar"]') as HTMLElement & { disabled: boolean })
+      .disabled,
+  ).toBe(false);
+  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+  await settle(el);
+  expect(ticketQ(table, '[data-test="station-printers-bar"]')).toBeNull();
+});
+
+it("Tickets closes after the write succeeds even if its following refresh fails", async () => {
+  const load = vi.fn().mockResolvedValueOnce(ticketView).mockRejectedValue(new Error("offline"));
+  const { el, table } = await mountTickets({ load });
+  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
+  await settle(el);
+  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain("Prep stations could not be loaded."),
+  );
+  expect(ticketQ(table, '[data-test="station-printers-bar"]')).toBeNull();
+  expect(el.shadowRoot!.textContent).not.toContain("The change could not be saved.");
+});
+
+it("Tickets lets a retained disabled printer be removed, then refuses to offer it again", async () => {
+  const retained = {
+    ...ticketView,
+    stationPrinters: [{ stationId: "bar", printerId: "disabled" }],
+  };
+  const { el, a, table } = await mountTickets({ load: vi.fn().mockResolvedValue(retained) });
+  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
+  await settle(el);
+  const combo = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
+  await combo.updateComplete;
+  expect(combo.options.find((o) => o.value === "disabled")!.disabled).toBe(false);
+  combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
+  await combo.updateComplete;
+  const choice = [...combo.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (option) => option.textContent?.includes("Disabled printer"),
+  )!;
+  choice.click();
+  await settle(el);
+  expect(combo.values).toEqual([]);
+  expect(combo.options.find((o) => o.value === "disabled")!.disabled).toBe(true);
+  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  await vi.waitFor(() => expect(a.setStationPrinters).toHaveBeenCalledExactlyOnceWith("bar", []));
+});
+
+it("Tickets keeps a failed selection editable while reporting a general refusal at the page", async () => {
+  const { el, table } = await mountTickets({
+    setStationPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+  });
+  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
+  await settle(el);
+  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain("The change could not be saved."),
+  );
+  expect((ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox).error).toBe("");
+  expect(
+    (ticketQ(table, '[data-test="save-printers-bar"]') as HTMLElement & { disabled: boolean })
+      .disabled,
+  ).toBe(false);
+});
+
+it("Tickets preserves an open printer draft when mappings refresh live", async () => {
+  const liveData = new LiveData();
+  const load = vi
+    .fn()
+    .mockResolvedValueOnce(ticketView)
+    .mockResolvedValue({ ...ticketView, stationPrinters: [] });
+  const { el, a, table } = await mountTickets({ liveData, load });
+  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
+  await settle(el);
+  ticketQ(table, '[data-test="station-printers-bar"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { values: ["old", "next"] } }),
+  );
+  await settle(el);
+  liveData.invalidate([{ type: "station_printers", id: "bar" }]);
+  await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+  await settle(el);
+  const retained = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox | null;
+  expect(retained, "mapping refresh retains the editable selection").not.toBeNull();
+  expect(retained!.values).toEqual(["old", "next"]);
+  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  await vi.waitFor(() =>
+    expect(a.setStationPrinters).toHaveBeenCalledExactlyOnceWith("bar", ["old", "next"]),
+  );
+});
+
+it.each([
+  ["en", "light", 390],
+  ["en", "dark", 390],
+  ["es", "light", 390],
+  ["es", "dark", 390],
+  ["en", "light", 1280],
+  ["en", "dark", 1280],
+  ["es", "light", 1280],
+  ["es", "dark", 1280],
+] as const)(
+  "Tickets picker and refusal are accessible in %s %s at %ipx",
+  async (locale, theme, width) => {
+    const previous = {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      body: document.body.style.background,
+      canvas: document.documentElement.style.background,
+    };
+    try {
+      await page.viewport(width, 900);
+      setLocale(locale);
+      const save = vi.fn().mockRejectedValue({ code: "printer.makes_and_watches" });
+      const { el, table } = await mountTickets({ setStationPrinters: save });
+      const host = el.parentElement!;
+      host.setAttribute("data-theme", theme);
+      host.style.background = "var(--wt-color-bg)";
+      document.body.style.background = getComputedStyle(host).backgroundColor;
+      document.documentElement.style.background = getComputedStyle(host).backgroundColor;
+      await expectNoA11yViolations(host);
+      ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
+      await settle(el);
+      const combo = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
+      await combo.updateComplete;
+      await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
+      await combo.updateComplete;
+      const list = combo.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+      expect(list.matches(":popover-open")).toBe(true);
+      expect(list.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+      await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
+      ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+      await vi.waitFor(() => expect(combo.error).not.toBe(""));
+      expect(combo.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+    } finally {
+      document.body.style.background = previous.body;
+      document.documentElement.style.background = previous.canvas;
+      await page.viewport(previous.width, previous.height);
+    }
+  },
+);
+
+it.each([
+  ["en", "2 printers", "No results"],
+  ["es", "2 impresoras", "Sin resultados"],
+])("Tickets localises multiple choices and an empty search in %s", async (locale, count, empty) => {
+  setLocale(locale!);
+  const { el, table } = await mountTickets();
+  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
+  await settle(el);
+  const combo = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
+  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["old", "next"] } }));
+  await settle(el);
+  await combo.updateComplete;
+  expect(combo.shadowRoot!.querySelector(".trigger")!.textContent).toContain(count);
+  combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
+  await combo.updateComplete;
+  const search = combo.shadowRoot!.querySelector<HTMLInputElement>(".search")!;
+  search.value = "missing printer";
+  search.dispatchEvent(new Event("input", { bubbles: true }));
+  await combo.updateComplete;
+  expect(combo.shadowRoot!.querySelector(".empty")!.textContent).toContain(empty);
+});

@@ -1,6 +1,12 @@
 import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
+  "prep.tickets.printer_count": "{count} printers",
+  "prep.tickets.printed_on": "Printed on",
+  "prep.tickets.screens": "Shown on screens",
+  "prep.tickets.watchers": "Also seen by",
+  "prep.tickets.watcher_printer": "Used by watcher {name}",
+  "prep.tickets.printer_refused": "Choose active printers that are not used by a watcher.",
   "prep.row_actions": "Actions: {name}",
   "prep.reorder_station": "Reorder: {name}",
   "prep.station_reordered": "{name} is now {index} of {total}.",
@@ -358,6 +364,13 @@ const en = {
 } as const;
 
 const es: Record<keyof typeof en, string> = {
+  "prep.tickets.printer_count": "{count} impresoras",
+  "prep.tickets.printed_on": "Se imprime en",
+  "prep.tickets.screens": "Se muestra en pantallas",
+  "prep.tickets.watchers": "También lo ven",
+  "prep.tickets.watcher_printer": "La usa el punto de seguimiento {name}",
+  "prep.tickets.printer_refused":
+    "Elige impresoras habilitadas que no use un punto de seguimiento.",
   "prep.row_actions": "Acciones: {name}",
   "prep.reorder_station": "Cambiar orden: {name}",
   "prep.station_reordered": "{name} está ahora en la posición {index} de {total}.",

@@ -11,6 +11,10 @@ import {
   nowIso,
   printAgents,
   printJobs,
+  printers,
+  stationPrinters,
+  watcherPrinters,
+  watchers,
   tenants,
   withTransaction,
   installChangeFeed,
@@ -138,7 +142,7 @@ function mountApp(tenant: Tenant): Hono {
 
 async function send(
   app: Hono,
-  method: "GET" | "POST" | "PATCH" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   opts: { body?: unknown; cookie?: string; bearer?: string } = {},
 ): Promise<Response> {
@@ -893,5 +897,135 @@ describe("print job resend", () => {
         })
       ).status,
     ).toBe(404);
+  });
+});
+
+describe("station printer selection replacement", () => {
+  async function fixture() {
+    const app = mountApp(tenantA);
+    const agent = await joinAndAccept(app, `Set agent ${randomUUID()}`);
+    const old = await createPrinter(app, agent.agentId, `Old ${randomUUID()}`);
+    const next = await createPrinter(app, agent.agentId, `Next ${randomUUID()}`);
+    const stationId = await seedStation(tenantA, `Set ${randomUUID()}`);
+    await suite.db.insert(stationPrinters).values({ stationId, printerId: old });
+    const path = `/management-api/stations/${stationId}/printers`;
+    const mappings = () =>
+      suite.db.select().from(stationPrinters).where(eq(stationPrinters.stationId, stationId));
+    return { app, old, next, stationId, path, mappings };
+  }
+
+  it("replaces the entire set, shares a printer with another station, repeats and clears", async () => {
+    const f = await fixture();
+    const second = await seedStation(tenantA, `Other ${randomUUID()}`);
+    await suite.db.insert(stationPrinters).values({ stationId: second, printerId: f.next });
+    const save = (printerIds: string[]) =>
+      send(f.app, "PUT", f.path, { cookie: managerCookie, body: { printerIds } });
+    expect((await save([f.next, f.old])).status).toBe(204);
+    expect((await f.mappings()).map((r) => r.printerId).sort()).toEqual([f.old, f.next].sort());
+    expect((await save([f.next])).status).toBe(204);
+    expect((await save([f.next])).status).toBe(204);
+    expect(await f.mappings()).toEqual([{ stationId: f.stationId, printerId: f.next }]);
+    expect((await save([])).status).toBe(204);
+    expect(await f.mappings()).toEqual([]);
+    expect(
+      await suite.db.select().from(stationPrinters).where(eq(stationPrinters.stationId, second)),
+    ).toEqual([{ stationId: second, printerId: f.next }]);
+  });
+
+  it.each(["missing", "disabled", "watcher"])(
+    "rolls back the whole selection for a %s printer",
+    async (kind) => {
+      const f = await fixture();
+      let refused: string = randomUUID();
+      if (kind === "disabled") {
+        refused = await createPrinter(
+          f.app,
+          (await joinAndAccept(f.app, `Disabled agent ${randomUUID()}`)).agentId,
+          `Disabled ${randomUUID()}`,
+        );
+        await suite.db.update(printers).set({ active: false }).where(eq(printers.id, refused));
+      } else if (kind === "watcher") {
+        refused = await createPrinter(
+          f.app,
+          (await joinAndAccept(f.app, `Watcher agent ${randomUUID()}`)).agentId,
+          `Watcher printer ${randomUUID()}`,
+        );
+        const [watcher] = await suite.db
+          .insert(watchers)
+          .values({ locationId: tenantA.locationId, name: `Watcher ${randomUUID()}` })
+          .returning();
+        await suite.db
+          .insert(watcherPrinters)
+          .values({ printerId: refused, watcherId: watcher!.id });
+      }
+      const response = await send(f.app, "PUT", f.path, {
+        cookie: managerCookie,
+        body: { printerIds: [f.next, refused] },
+      });
+      expect(response.status).toBe(kind === "watcher" ? 409 : 404);
+      expect(await response.json()).toMatchObject({
+        error: { code: kind === "watcher" ? "printer.makes_and_watches" : "printer.not_found" },
+      });
+      expect(await f.mappings()).toEqual([{ stationId: f.stationId, printerId: f.old }]);
+    },
+  );
+
+  it.each([null, {}, { printerIds: null }, { printerIds: "wrong" }, { printerIds: [1] }])(
+    "refuses malformed selections %j",
+    async (body) => {
+      const f = await fixture();
+      const response = await send(f.app, "PUT", f.path, { cookie: managerCookie, body });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid" },
+      });
+      expect(await f.mappings()).toEqual([{ stationId: f.stationId, printerId: f.old }]);
+    },
+  );
+
+  it("refuses duplicates and malformed ids without touching mappings", async () => {
+    const f = await fixture();
+    for (const [printerIds, code] of [
+      [[f.next, f.next], "management.request_invalid"],
+      [["bad"], "shared.invalid_id"],
+    ] as const) {
+      const response = await send(f.app, "PUT", f.path, {
+        cookie: managerCookie,
+        body: { printerIds },
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ error: { code } });
+      expect(await f.mappings()).toEqual([{ stationId: f.stationId, printerId: f.old }]);
+    }
+  });
+
+  it("checks active station membership even for an empty selection", async () => {
+    const f = await fixture();
+    await suite.db
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(eq(kitchenStations.id, f.stationId));
+    for (const id of [f.stationId, randomUUID()]) {
+      const response = await send(f.app, "PUT", `/management-api/stations/${id}/printers`, {
+        cookie: managerCookie,
+        body: { printerIds: [] },
+      });
+      expect(response.status).toBe(404);
+      expect(await response.json()).toMatchObject({ error: { code: "station.not_found" } });
+    }
+    expect(await f.mappings()).toEqual([{ stationId: f.stationId, printerId: f.old }]);
+  });
+
+  it("requires a management session and printer.manage for replacement", async () => {
+    const f = await fixture();
+    for (const [cookie, status, code] of [
+      [undefined, 401, "management_session.required"],
+      [staffCookie, 403, "authorization.not_permitted"],
+    ] as const) {
+      const response = await send(f.app, "PUT", f.path, { cookie, body: { printerIds: [f.next] } });
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+      expect(await f.mappings()).toEqual([{ stationId: f.stationId, printerId: f.old }]);
+    }
   });
 });
