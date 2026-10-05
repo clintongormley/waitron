@@ -5345,7 +5345,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b DONE (#1248, main ccbe2b41e); W105c DONE (#1251, main 58c65558b); W105f DONE (#1253, main 44ff56380); W105g DONE (#1254, main 969c96972); W105h DONE (#1258, main efa4ecb1b). W104–W106, W105b, W105c and W105f DONE; the open points each left are listed below.**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b DONE (#1248, main ccbe2b41e); W105c DONE (#1251, main 58c65558b); W105f DONE (#1253, main 44ff56380); W105g DONE (#1254, main 969c96972); W105h DONE (#1258, main efa4ecb1b); W105e DONE (#1266, main 5ce168812). W104–W106, W105b, W105c and W105f DONE; the open points each left are listed below.**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
@@ -5444,7 +5444,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   opens with Shows empty, so even a rename asks for a new one; whether to let it keep a switched-off
   one is the owner's call. (6) done by W105a (#1244): printers and devices both say Disable/Deshabilitar,
   status Disabled, and printers' Add again is now Enable; card readers followed in W110 (#1255): Disable/Deshabilitar,
-  Enable/Habilitar, Disabled/Deshabilitado, and their Add again/Volver a añadir is now Enable/Habilitar. (7) done by W105e (2026-10-05): a
+  Enable/Habilitar, Disabled/Deshabilitado, and their Add again/Volver a añadir is now Enable/Habilitar. (7) done by W105e (#1266, 2026-10-05): a
   kitchen screen's Edit dialog hides Made here and its save leaves `madeHereStationIds` out, and the
   device edit route leaves a device's made-here stations as they are when the field is absent; an
   explicit null or a non-list is still refused `management.request_invalid`
@@ -5470,13 +5470,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `returning.profileRetired` in the device join list (`returningDevicesOf`,
   `apps/server/src/join-requests.ts`). The device join list's live updates now name
   `device_profiles` too (`joinRequests`, `apps/dashboard/src/api/live-queries.ts`, pinned in its
-  test), so a profile deleted while a returning device's request is showing re-reads the list. (9) done by W105e (2026-10-05): while the profile is unchanged, a printer the device
+  test), so a profile deleted while a returning device's request is showing re-reads the list. (9) done by W105e (#1266, 2026-10-05): while the profile is unchanged, a printer the device
   holds that its profile no longer lists is offered and chosen, marked "Name (not on this profile)"
   / "Nombre (no está en este perfil)" (`devices.printer_not_on_profile_mark`; a switched-off one
   also reads "(Disabled)"), and Save keeps it; a changed profile no longer offers it
   (`#printerOptions`, `apps/dashboard/src/screens/devices-screen.ts`). When the held printer is not in the
   dashboard's printer list, nothing extra is
-  offered and Save still keeps the held printer. (10) done by W105e (2026-10-05): the dashboard tells the
+  offered and Save still keeps the held printer. (10) done by W105e (#1266, 2026-10-05): the dashboard tells the
   Devices screen whether the session holds `payments.manage` (`canManageReaders`, from the "who am I"
   read in `apps/dashboard/src/dashboard-app.ts`); without it Edit never draws the card reader field
   nor asks about readers. With it the reader is read as before; a read refused with `authorization.not_permitted` hides the
