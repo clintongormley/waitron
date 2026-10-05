@@ -2639,7 +2639,8 @@ export class DashboardApi {
       watcherId?: string | null;
       receiptPrinterId: string | null;
       paymentSlipPrinterId: string | null;
-      madeHereStationIds: string[];
+      /** Absent leaves the device's stored made-here stations as they are. */
+      madeHereStationIds?: string[];
     },
   ): Promise<void> {
     return this.#request<void>(`/management-api/devices/${id}`, "PATCH", input);

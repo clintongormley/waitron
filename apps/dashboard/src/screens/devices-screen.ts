@@ -951,7 +951,7 @@ export class DevicesScreen extends LitElement {
       ...bindingIds(this.#editBindingShown() ? form.binding : ""),
       receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
       paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
-      madeHereStationIds: this.#madeHereToSend(),
+      ...(this.#editBindingShown() ? {} : { madeHereStationIds: this.#madeHereToSend() }),
     };
     try {
       await this.api.updateDevice(device.id, sent);

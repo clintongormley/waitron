@@ -1250,7 +1250,7 @@ describe("the Edit dialog", () => {
     expect(api.listDevices).toHaveBeenCalledTimes(2);
   });
 
-  it("sends a kitchen screen's station or watcher, and keeps its stored made-here stations", async () => {
+  it("sends a kitchen screen's station or watcher, and no made-here stations, which it does not show", async () => {
     const api = editApi();
     const el = await openEdit(api, "k1");
     await chooseOption(q(el, "[data-test=edit-binding]")!, "watcher:w1");
@@ -1264,8 +1264,27 @@ describe("the Edit dialog", () => {
       watcherId: "w1",
       receiptPrinterId: null,
       paymentSlipPrinterId: null,
-      madeHereStationIds: ["s2"],
     });
+    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("madeHereStationIds");
+  });
+
+  it("saves a kitchen screen whose stored made-here station was switched off after this screen read its stations", async () => {
+    // The server refuses a switched-off made-here station; this screen's list still has it on.
+    const api = editApi({
+      updateDevice: vi
+        .fn()
+        .mockImplementation((_id: string, body: Record<string, unknown>) =>
+          Array.isArray(body.madeHereStationIds) && body.madeHereStationIds.includes("s2")
+            ? Promise.reject({ code: "station.not_found" })
+            : Promise.resolve(undefined),
+        ),
+    });
+    const el = await openEdit(api, "k1");
+    wtChange(el, "[data-test=edit-name]", "Pantalla 2");
+    await flush(el);
+    await save(el);
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(api.updateDevice).toHaveBeenCalledTimes(1);
   });
 
   it("omits a switched-off or unlisted stored station from Made here and from what Save sends", async () => {
