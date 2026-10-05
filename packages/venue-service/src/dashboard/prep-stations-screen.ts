@@ -238,6 +238,7 @@ export class PrepStationsScreen extends LitElement {
   @state() private tab: PrepTab = "stations";
   @state() private health?: StationHealthSnapshot;
   #healthTimer?: ReturnType<typeof setInterval>;
+  #routingTimer?: ReturnType<typeof setInterval>;
   @state() private outputsDown: OutputsDown = { printersDown: [], screensDark: [] };
   #outputsTimer?: ReturnType<typeof setInterval>;
   #testRequest = 0;
@@ -308,13 +309,17 @@ export class PrepStationsScreen extends LitElement {
     super.connectedCallback();
     void this.#load();
     void this.#loadHealth();
-    if (!this.api.liveData) this.#healthTimer = setInterval(() => void this.#loadHealth(), 15_000);
+    if (!this.api.liveData) {
+      this.#healthTimer = setInterval(() => void this.#loadHealth(), 15_000);
+      this.#routingTimer = setInterval(() => void this.#load(), 60_000);
+    }
     void this.#loadOutputs();
     this.#outputsTimer = setInterval(() => void this.#loadOutputs(), 60_000);
   }
   override disconnectedCallback() {
     if (this.#outputsTimer) clearInterval(this.#outputsTimer);
     if (this.#healthTimer) clearInterval(this.#healthTimer);
+    if (this.#routingTimer) clearInterval(this.#routingTimer);
     super.disconnectedCallback();
   }
   async #loadHealth() {
@@ -1032,6 +1037,19 @@ export class PrepStationsScreen extends LitElement {
     if (row.status.why === "opened_by_hand") return format("prep.opened_by_hand", end);
     if (row.status.why === "closed_by_hand")
       return format("prep.closed_by_hand", { ...end, destination });
+    if (row.nextTransition) {
+      const next = row.nextTransition;
+      const day =
+        next.daysAhead === 0
+          ? ""
+          : next.daysAhead === 1
+            ? ` ${t("prep.tomorrow")}`
+            : ` ${format("prep.on_weekday", { day: t(`venue.day.${next.weekday}` as "venue.day.0") })}`;
+      return format(row.status.open ? "prep.open_until" : "prep.scheduled_opens", {
+        time: next.timeOfDay,
+        day,
+      });
+    }
     if (row.status.open) return t("prep.open_now");
     return format("prep.closed_hours", { destination });
   }

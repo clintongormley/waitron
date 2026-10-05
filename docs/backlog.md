@@ -3675,6 +3675,12 @@ one run and 29 in another on main f92dc84e6, and none on the W72h branch after i
 Pinned by the "crossing the phone width into rows its layout makes taller" case in
 `packages/ui/src/components/wt-data-table.test.ts`, which failed with the error before the change.
 
+On 2026-10-05 A261-3 also observed this message while running
+`pnpm --filter @waitron/dashboard exec vitest run src/widgets/folder-made-at.test.ts
+src/widgets/catalogue-browser.test.ts`: both the transition candidate and the previous
+`c41ed54910fece4add9f1475bf18034992545e99` commit in a frozen-installed disposable checkout
+reported 164 passing tests and logged the message. Its cause on that path has not been established.
+
 **Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
 owner 2026-10-04; since 2026-10-05 a tree, W82a, see the last paragraph).** The bulk Move
 dialog's Destination list showed categories in the order the server lists them, by creation time and then id (`listCategories`,
@@ -6332,8 +6338,11 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Routing, and Watchers still uses cards. Stations now offers confirmed Open/Close for today and
   Back to the schedule actions, with retry after a write refusal. Default and unscheduled stations
   say Always open without an action; disabled stations and an unreadable clock offer no hours
-  action. Today still needs schedule-derived next-opening/closing wording. Station row menus/reorder,
-  Tickets/Watchers/Settings cell editors, venue-defaults UI and printing handover remain open.
+  action. Today now shows the next scheduled opening or closing, distinguishing tomorrow and later
+  weekdays; overlapping or adjoining intervals keep the station open until the actual closure.
+  Its passive minute refresh changes the displayed state without a database event. Station row
+  menus/reorder, Tickets/Watchers/Settings cell editors, venue-defaults UI and printing handover
+  remain open.
   The generated station-parent rebuild failed the populated upgrade with a foreign-key refusal;
   the ongoing build uses the plan’s storage-redesign option. Approved decisions
   cover what live counts include, ready-but-unserved work, interim station hours, inactive display

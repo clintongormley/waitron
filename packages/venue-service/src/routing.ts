@@ -119,6 +119,53 @@ export function stationStatus(
   return inside ? { open: true, why: "in_hours" } : { open: false, why: "out_of_hours" };
 }
 
+export interface StationTransition extends RoutingMoment {
+  readonly daysAhead: number;
+}
+
+export function nextStationTransition(
+  rules: RoutingRules,
+  stationId: string,
+  moment: RoutingMoment | null,
+): StationTransition | null {
+  if (moment === null) return null;
+  const status = stationStatus(rules, stationId, moment);
+  if (status.why !== "in_hours" && status.why !== "out_of_hours") return null;
+  const dayMinutes = 1440;
+  const weekMinutes = 7 * dayMinutes;
+  const minute = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
+  const now = moment.weekday * dayMinutes + minute(moment.timeOfDay);
+  const boundaries = new Set<number>();
+  for (const interval of rules.timing.get(stationId)!.hours) {
+    const opening = minute(interval.opensAt);
+    const closing = minute(interval.closesAt);
+    boundaries.add(interval.weekday * dayMinutes + opening);
+    boundaries.add(
+      ((interval.weekday + (opening >= closing ? 1 : 0)) * dayMinutes + closing) % weekMinutes,
+    );
+  }
+  const upcoming = [...boundaries]
+    .map((boundary) => ({
+      boundary,
+      offset: (boundary - now + weekMinutes) % weekMinutes || weekMinutes,
+    }))
+    .sort((a, b) => a.offset - b.offset);
+  for (const { boundary, offset } of upcoming) {
+    const time = boundary % dayMinutes;
+    const candidate = {
+      weekday: Math.floor(boundary / dayMinutes),
+      timeOfDay: `${String(Math.floor(time / 60)).padStart(2, "0")}:${String(time % 60).padStart(2, "0")}`,
+    };
+    if (stationStatus(rules, stationId, candidate).open !== status.open) {
+      return {
+        ...candidate,
+        daysAhead: Math.floor((minute(moment.timeOfDay) + offset) / dayMinutes),
+      };
+    }
+  }
+  return null;
+}
+
 function walkFallbacks(
   rules: RoutingRules,
   start: string | null,

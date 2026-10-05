@@ -81,6 +81,7 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
                         fallbackStationId: null,
                         today: null,
                         closedSendsTo: "bar",
+                        nextTransition: null,
                       },
                     ],
                   }
@@ -233,6 +234,7 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
               fallbackStationId: null,
               today: null,
               closedSendsTo: "kitchen",
+              nextTransition: null,
             },
             {
               stationId: "bar",
@@ -258,6 +260,7 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
               today:
                 state === "opened-by-hand" ? "open" : state === "closed-by-hand" ? "closed" : null,
               closedSendsTo: state === "no-replacement" ? null : "kitchen",
+              nextTransition: null,
             },
           ],
         },

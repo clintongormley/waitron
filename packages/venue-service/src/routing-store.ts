@@ -15,6 +15,7 @@ import {
   closedSendsTo,
   folderAncestors,
   stationStatus,
+  nextStationTransition,
   unreachableExceptions,
   type RouteTarget,
   type RoutingRules,
@@ -838,6 +839,7 @@ export async function routingModel(
     stationTimes: stations.map(({ id }) => ({
       stationId: id,
       status: stationStatus(rules, id, moment),
+      nextTransition: nextStationTransition(rules, id, moment),
       hours: [...(rules.timing.get(id)?.hours ?? [])],
       fallbackStationId: rules.timing.get(id)?.fallbackId ?? null,
       today: rules.timing.get(id)?.today ?? null,

@@ -295,3 +295,29 @@ was changed. Types, focused ESLint/Prettier and `git diff --check` exited zero.
 Today still needs schedule-derived next-opening/closing wording; legacy card controls remain until
 the routing-only card replacement. Row menus/reorder, Tasks 5–7 and the whole-branch Task 8 gates
 remain open. This checkpoint is not ready to finish or land.
+
+
+## Task 4 schedule-transition checkpoint — 2026-10-05T19:08:03.980056+02:00
+
+The routing snapshot now carries a nullable next schedule transition with venue weekday,
+HH:MM and civil days ahead. It uses the same current station-status resolver at weekly interval
+boundaries. Actual open/closed changes skip overlapping and adjoining intervals, including
+intervals that cover the whole week. Default, disabled, unscheduled, by-hand and unreadable-clock
+states have no scheduled transition. Current overrides still use the existing business-day expiry.
+
+The Today cell renders Open until / Opens at in EN/ES, with tomorrow or a later weekday where
+needed. A passive minute refresh supplies the new routing snapshot even without a database event;
+removing the screen stops its timer. Live-data sessions retain the existing shared query refresh.
+Existing assertions are retained. Complete StationTimes fixtures gained nextTransition:null in the
+Prep stations browser/axe suites and dashboard folder-made-at/catalogue-browser suites; the Today
+visual fixture additionally includes a next closing. No guard, fiscal or schema file changed in
+this increment. Red-first database and browser cases, subsequent focused suites, types, lint and
+visual/control receipts are recorded in the campaign ledger.
+
+Ruling: a transition on a later civil day names tomorrow or its weekday — the source spec's
+01:00 example crosses midnight, and a closed weekly station may next open several days later.
+This adds context to the specified Open until / Opens at wording without a new schedule rule.
+
+Task 4 remains partial: station row menus/reorder and routing-only card replacement are next.
+Tasks 5–7 still need Tickets/Watchers/Settings cell editors and venue-default UI; Task 8 whole-branch
+review, current-head CI and landing remain. The page is not authorised to ship at this checkpoint.

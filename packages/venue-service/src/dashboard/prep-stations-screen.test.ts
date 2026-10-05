@@ -28,6 +28,7 @@ const view: PrepStationsView = {
     stationTimes: [
       {
         stationId: "bar",
+        nextTransition: null,
         status: { open: true, why: "default" },
         hours: [],
         fallbackStationId: null,
@@ -297,6 +298,7 @@ function withUpstairs(
         ...view.routing.stationTimes,
         {
           stationId: "upstairs",
+          nextTransition: null,
           status,
           hours: [],
           fallbackStationId: "bar",
@@ -3171,6 +3173,7 @@ it.each([
       { open: true, why: "in_hours" },
       {
         hours: [{ weekday: 1, opensAt: "12:00", closesAt: "01:00" }],
+        nextTransition: { weekday: 2, timeOfDay: "01:00", daysAhead: 1 },
       },
     );
     const closed = { ...upstairs, id: "closed", name: "Kitchen", displayOrder: 3 };
@@ -3206,3 +3209,73 @@ it.each([
     await page.viewport(previous.width, previous.height);
   }
 });
+
+it.each([
+  ["en", true, 1, "Open until 01:00 tomorrow"],
+  ["es", true, 1, "Abierta hasta las 01:00 mañana"],
+  ["en", false, 0, "Opens at 12:00"],
+  ["es", false, 0, "Abre a las 12:00"],
+  ["en", false, 3, "Opens at 12:00 on Monday"],
+  ["es", false, 3, "Abre a las 12:00 el Lunes"],
+] as const)(
+  "Today shows the next scheduled transition in %s (open=%s, days=%i)",
+  async (locale, open, daysAhead, expected) => {
+    setLocale(locale);
+    const { el } = await mountToday(
+      withUpstairs(open ? { open: true, why: "in_hours" } : { open: false, why: "out_of_hours" }, {
+        nextTransition: {
+          weekday: daysAhead === 3 ? 1 : open ? 6 : 5,
+          timeOfDay: open ? "01:00" : "12:00",
+          daysAhead,
+        },
+      }),
+    );
+    const cell = healthSummary(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+    expect(cell.textContent).toContain(expected);
+    expect(
+      cell.querySelector(`[data-test="${open ? "close" : "open"}-today-upstairs"]`),
+    ).not.toBeNull();
+  },
+);
+
+it.each([false, true])(
+  "Today changes at a schedule boundary without a database event (live=%s)",
+  async (live) => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      setLocale("en");
+      const before = withUpstairs(
+        { open: false, why: "out_of_hours" },
+        {
+          hours: [{ weekday: 5, opensAt: "12:00", closesAt: "01:00" }],
+          nextTransition: { weekday: 5, timeOfDay: "12:00", daysAhead: 0 },
+        },
+      );
+      const after = withUpstairs(
+        { open: true, why: "in_hours" },
+        {
+          hours: before.routing.stationTimes[1]!.hours,
+          nextTransition: { weekday: 6, timeOfDay: "01:00", daysAhead: 1 },
+        },
+      );
+      const backgroundLoad = vi.fn().mockResolvedValue(after);
+      const { el } = await mountToday(before, {
+        ...(live ? { liveData: new LiveData() } : {}),
+        background: { load: backgroundLoad } as unknown as PrepStationsApi,
+      });
+      expect(healthSummary(el)!.querySelector('[data-test="open-today-upstairs"]')).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settle(el);
+      const cell = healthSummary(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+      expect(cell.textContent).toContain("Open until 01:00 tomorrow");
+      expect(cell.querySelector('[data-test="close-today-upstairs"]')).not.toBeNull();
+      expect(cell.querySelector('[data-test="open-today-upstairs"]')).toBeNull();
+      el.remove();
+      const count = backgroundLoad.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(backgroundLoad).toHaveBeenCalledTimes(count);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
