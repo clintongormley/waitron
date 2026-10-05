@@ -147,7 +147,7 @@ it("marks a category with no claim, or whose claim names a switched-off station 
   expect(await unroutedMarker(el, "folder:d")).toBeNull();
   expect(await unroutedMarker(el, "folder:f")).not.toBeNull();
   expect((await unroutedMarker(el, "folder:f"))?.getAttribute("title")).toBe(
-    "No kitchen routing rule covers this category",
+    "No active station assigned",
   );
   await toggleCategory(el, "d");
   expect(await unroutedMarker(el, "folder:b")).toBeNull();
@@ -172,7 +172,7 @@ it("marks a category with no claim, or whose claim names a switched-off station 
   setLocale("es");
   await el.updateComplete;
   expect((await unroutedMarker(el, "folder:b"))?.getAttribute("title")).toBe(
-    "Ninguna regla de envío a cocina cubre esta categoría",
+    "Ninguna estación activa asignada",
   );
 });
 

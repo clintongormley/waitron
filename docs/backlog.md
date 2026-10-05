@@ -3530,6 +3530,9 @@ now reads the same route as Made at (`coveredByRule`, in
 `apps/dashboard/src/widgets/folder-made-at.ts`), so a category whose claimed station is switched
 off and whose fallback chain reaches a station that is switched on shows that station in Made at
 and no asterisk, while one whose chain reaches none keeps the asterisk and reads No replacement._
+_2026-10-05: the asterisk's tooltip and accessible name now read "No active station assigned"
+("Ninguna estación activa asignada"; W86b, owner's wording), key `folders.no_active_station`. The
+old "No kitchen routing rule covers this category" read as if any matching rule cleared the mark._
 (5) the "some items made elsewhere" note does not look at whether the categories involved hold any
 products, so it can claim items that do not exist yet: a subcategory with no products whose own
 claim routes elsewhere marks its parent (judged from the code, not run), and an empty category

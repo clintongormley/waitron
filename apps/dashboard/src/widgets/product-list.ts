@@ -1051,8 +1051,8 @@ export class ProductList extends LitElement {
                     part="unrouted-folder"
                     data-test="unrouted-folder"
                     role="img"
-                    aria-label=${t("folders.no_routing_rule")}
-                    title=${t("folders.no_routing_rule")}
+                    aria-label=${t("folders.no_active_station")}
+                    title=${t("folders.no_active_station")}
                     >*</span
                   >`
                 : nothing
