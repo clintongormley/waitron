@@ -3426,7 +3426,7 @@ the code, not run). Other screens pass `t("categories.combobox_search")` and
 `t("categories.combobox_no_results")`. This was on `main` before W82 (the dialog's combobox dates
 from 2026-10-01, `5ffa5c633`).
 
-Settled by the owner 2026-10-05 and built in W82a: the Move list is now the product editor's
+Settled by the owner 2026-10-05 and built in W82a (#1229): the Move list is now the product editor's
 category tree (`categoryTree`, `apps/dashboard/src/widgets/classification-fields.ts`), each
 category's children indented under it and each level in label order, so "Menu (old)" follows
 "Menu" and its children; a chosen destination and a search show the full path, joined with " › "
@@ -3434,7 +3434,11 @@ as the product editor does. The search box takes the translated "Search" and "No
 (checked in English and Spanish in `apps/dashboard/src/widgets/catalogue-browser.test.ts`; the
 English text is also `wt-combobox`'s own default, so the Spanish case is the one that proves
 it). Two sibling categories with the same name are left as they are (owner: "leave it"): they still show
-as two identical entries, in the tree and in a search.
+as two identical entries, in the tree and in a search. Left open (asked in W82a's review): the
+Products screen now writes a path two ways — " › " in the Move dialog, " / " in the Products table
+(`apps/dashboard/src/widgets/product-list.ts`) and the Delete dialog's list of categories
+(`#namedPaths`, `apps/dashboard/src/widgets/catalogue-browser.ts`). Needs the owner to say whether
+every Products-screen path should use " › ", as the product editor and the Sales report do.
 
 **Sales: the category report names each category by its full path — DONE (W73, #1212, owner 2026-10-04: "we should
 report on category paths, not just the final name").** The Sales screen's category report showed a
