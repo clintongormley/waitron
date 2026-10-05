@@ -1347,16 +1347,19 @@ it("leaves out a moved category nested below the top level, and everything under
       folder("s", "Starters", "f"),
     ],
   });
-  await selectKeys(el, ["folder:f"]);
+  await toggleCategory(el, "f");
+  await selectKeys(el, ["folder:m"]);
   await press(el, "move");
   expect(el.shadowRoot!.querySelector("wt-combobox")!.options).toEqual([
     { value: "top", label: "All products (top level)" },
+    { value: "f", label: "Food", depth: 0, valueLabel: "Food" },
+    { value: "s", label: "Starters", depth: 1, valueLabel: "Food › Starters" },
   ]);
 });
 it.each([
   ["en-GB", "Search", "No results"],
   ["es", "Buscar", "Sin resultados"],
-])(
+] as const)(
   "searches move destinations by full path, in the session's language (%s)",
   async (locale, placeholder, noResults) => {
     setLocale(locale);
@@ -1374,13 +1377,13 @@ it.each([
     await userEvent.click(combo.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
     const search = combo.shadowRoot!.querySelector<HTMLInputElement>("input.search")!;
     expect(search.placeholder).toBe(placeholder);
-    await userEvent.fill(search, "mains");
+    await userEvent.fill(search, "dinner");
     await combo.updateComplete;
     const rows = () =>
       [...combo.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].map((row) =>
         row.textContent!.trim(),
       );
-    expect(rows()).toEqual(["Dinner › Mains", "Lunch › Mains"]);
+    expect(rows()).toEqual(["Dinner", "Dinner › Mains"]);
     await userEvent.fill(search, "nothing like this");
     await combo.updateComplete;
     expect(rows()).toEqual([]);
