@@ -3163,9 +3163,9 @@ sits over the menu's name through the table's `tree-heading` part. W88 was branc
 (#1199) gave the Products tree's All products row its grip space.
 
 **A menu no longer switches a product or size off on its own — DONE (W90, this PR, 2026-10-05;
-owner 2026-10-04).** Whether a product is on a menu is now decided only by the menu's structure (its own
-sections and the menus it includes) and the product's Active state, and whether it can be sold now
-by Available. A size (variant) is sold wherever its product is placed, while it is Active and
+owner 2026-10-04).** Whether a product is on a menu is now decided only by the structure of an
+active menu (its own sections and the active menus it includes) and the product's Active state, and
+whether it can be sold now by Available. A size (variant) is sold wherever its product is placed, while it is Active and
 Available. The Prices tab lost its "On this menu" column, the Sold / Switched off choices in its
 edit window and the Sell it / Switch it off clash buttons, and a menu can no longer avoid a price
 clash between the menus it includes by switching the item off. The item PATCH refuses a body carrying
