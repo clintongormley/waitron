@@ -78,6 +78,7 @@ const burger: MenuPriceRow = {
   productPrice: "12.00",
   override: null,
   effectivePrice: "12.00",
+  active: true,
   variants: [],
 };
 const lemonade: MenuPriceRow = {
@@ -100,9 +101,10 @@ const lemonade: MenuPriceRow = {
   productPrice: "3.00",
   override: "2.50",
   effectivePrice: "2.50",
+  active: true,
   variants: [
-    { variantId: "v-small", price: null },
-    { variantId: "v-large", price: "3.75" },
+    { variantId: "v-small", price: null, active: true },
+    { variantId: "v-large", price: "3.75", active: true },
   ],
 };
 const lager: MenuPriceRow = {
@@ -115,6 +117,7 @@ const lager: MenuPriceRow = {
   productPrice: "2.00",
   override: null,
   effectivePrice: "2.00",
+  active: true,
   variants: [],
 };
 
@@ -461,14 +464,14 @@ it("counts a product whose only price on this menu is a variant's as overridden,
         ...lemonade,
         override: null,
         variants: [
-          { variantId: "v-small", price: null },
-          { variantId: "v-large", price: "4.25" },
+          { variantId: "v-small", price: null, active: true },
+          { variantId: "v-large", price: "4.25", active: true },
         ],
       },
       {
         ...lager,
         combined: combinedFixture("p-lager", "2.00", [{ variantId: "v-small", price: null }]),
-        variants: [{ variantId: "v-small", price: null }],
+        variants: [{ variantId: "v-small", price: null, active: true }],
       },
       burger,
     ],
@@ -707,8 +710,8 @@ it("compares with the settings the window opened with, so a change read in meanw
       ...lemonade,
       override: "2.60",
       variants: [
-        { variantId: "v-small", price: "1.00" },
-        { variantId: "v-large", price: "3.75" },
+        { variantId: "v-small", price: "1.00", active: true },
+        { variantId: "v-large", price: "3.75", active: true },
       ],
     },
     lager,
@@ -748,6 +751,34 @@ it("asks for the variants alone when only a variant's price changed", async () =
     { variantId: "v-small", price: "1.20" },
     { variantId: "v-large", price: "3.75" },
   ]);
+});
+
+it("neither shows nor sends an Inactive size in the window", async () => {
+  const el = await mount({
+    editing: "mi-lemonade",
+    rows: [
+      burger,
+      {
+        ...lemonade,
+        variants: [
+          { variantId: "v-small", price: null, active: true },
+          { variantId: "v-large", price: "3.75", active: false },
+        ],
+      },
+      lager,
+    ],
+  });
+  expect([...modal(el).querySelectorAll("fieldset legend")].map(text)).toEqual(["Small"]);
+  expect(field(el, "variants.1.price")).toBeNull();
+  await type(el, "variants.0.price", "1.20");
+  const heard = saves(el);
+  await click(el, "offer-save");
+  expect(heard).toHaveBeenCalledExactlyOnceWith({
+    menuItemId: "mi-lemonade",
+    name: "Lemonade",
+    item: null,
+    variants: [{ variantId: "v-small", price: "1.20" }],
+  });
 });
 
 it("'Use product price' empties the menu price, so saving clears it", async () => {
@@ -1052,10 +1083,11 @@ describe("variants", () => {
     productPrice: "10.00",
     override: "13.00",
     effectivePrice: "13.00",
+    active: true,
     variants: [
-      { variantId: "v-glass", price: "7.00" },
-      { variantId: "v-bottle", price: null },
-      { variantId: "v-carafe", price: "15.00" },
+      { variantId: "v-glass", price: "7.00", active: true },
+      { variantId: "v-bottle", price: null, active: true },
+      { variantId: "v-carafe", price: "15.00", active: true },
     ],
   };
   /** Its only menu price is a variant's. */
@@ -1079,9 +1111,10 @@ describe("variants", () => {
     productPrice: "4.00",
     override: null,
     effectivePrice: "4.00",
+    active: true,
     variants: [
-      { variantId: "v-juice-small", price: "3.50" },
-      { variantId: "v-juice-large", price: null },
+      { variantId: "v-juice-small", price: "3.50", active: true },
+      { variantId: "v-juice-large", price: null, active: true },
     ],
   };
   const tea: MenuPriceRow = {
@@ -1101,7 +1134,8 @@ describe("variants", () => {
     productPrice: "2.00",
     override: null,
     effectivePrice: "2.00",
-    variants: [{ variantId: "v-pot", price: "2.40" }],
+    active: true,
+    variants: [{ variantId: "v-pot", price: "2.40", active: true }],
   };
   /** No menu price anywhere. */
   const cider: MenuPriceRow = {
@@ -1124,9 +1158,10 @@ describe("variants", () => {
     productPrice: "4.00",
     override: null,
     effectivePrice: "4.00",
+    active: true,
     variants: [
-      { variantId: "v-pint", price: null },
-      { variantId: "v-half", price: null },
+      { variantId: "v-pint", price: null, active: true },
+      { variantId: "v-half", price: null, active: true },
     ],
   };
   const steak: MenuPriceRow = {
@@ -1327,8 +1362,8 @@ describe("variants", () => {
             { "v-juice-small": "3.00", "v-juice-large": "5.00" },
           ),
           variants: [
-            { variantId: "v-juice-small", price: "5.0" },
-            { variantId: "v-juice-large", price: null },
+            { variantId: "v-juice-small", price: "5.0", active: true },
+            { variantId: "v-juice-large", price: null, active: true },
           ],
         },
       ],
@@ -1620,8 +1655,8 @@ describe("variants", () => {
               { "v-pint": "4.50", "v-half": "4.00" },
             ),
             variants: [
-              { variantId: "v-pint", price: "4.50" },
-              { variantId: "v-half", price: null },
+              { variantId: "v-pint", price: "4.50", active: true },
+              { variantId: "v-half", price: null, active: true },
             ],
           },
         ],
@@ -1633,7 +1668,7 @@ describe("variants", () => {
 
     it("counts the product's menu price as applying to a variant with no price of its own", async () => {
       const el = await mountVariants({
-        rows: [{ ...wine, variants: [{ variantId: "v-bottle", price: null }] }],
+        rows: [{ ...wine, variants: [{ variantId: "v-bottle", price: null, active: true }] }],
       });
       await showCombined(el);
       expect(text(combined(el, "mi-wine").querySelector("s"))).toBe(eur("10.00"));
@@ -2055,8 +2090,8 @@ it.each([
         ...lemonade,
         override: "4.00",
         variants: [
-          { variantId: "v-small", price: null },
-          { variantId: "v-large", price: "14.00" },
+          { variantId: "v-small", price: null, active: true },
+          { variantId: "v-large", price: "14.00", active: true },
         ],
         combined: {
           ...lemonade.combined,

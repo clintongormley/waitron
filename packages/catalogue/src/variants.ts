@@ -11,7 +11,7 @@ import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { priceOrNull } from "./offer-price.js";
 import type { ProductPresentation } from "./product-presentation.js";
-import type { MenuOffer, MenuVariant } from "./menu-types.js";
+import type { MenuOffer, MenuPriceVariant, MenuVariant } from "./menu-types.js";
 export type { MenuVariant } from "./menu-types.js";
 import { INHERITED_KEYS, productWithId } from "./variant-fallback.js";
 import { assertFamilyNamesFree, nameColumns } from "./product-names.js";
@@ -330,6 +330,39 @@ export async function menuVariantsOfItems(
         variantId: row.variantId,
         price: priceOrNull(row.price),
       });
+      grouped.set(row.menuItemId, held);
+    }
+  return grouped;
+}
+
+/** This menu's price for every variant of each menu item's product, Inactive ones too, with each
+ * one's Active state, keyed by menu-item id, in variant order. For the management prices read. */
+export async function menuPriceVariantsOfItems(
+  tx: Transaction,
+  menuItemIds: readonly string[],
+): Promise<Map<string, MenuPriceVariant[]>> {
+  const grouped = new Map<string, MenuPriceVariant[]>();
+  for (const batch of batches(menuItemIds))
+    for (const row of await tx
+      .select({
+        menuItemId: menuItems.id,
+        variantId: products.id,
+        price: menuItemVariantOverrides.price,
+        active: products.active,
+      })
+      .from(menuItems)
+      .innerJoin(products, eq(products.parentId, menuItems.productId))
+      .leftJoin(
+        menuItemVariantOverrides,
+        and(
+          eq(menuItemVariantOverrides.menuItemId, menuItems.id),
+          eq(menuItemVariantOverrides.variantId, products.id),
+        ),
+      )
+      .where(inArray(menuItems.id, batch))
+      .orderBy(menuItems.id, products.variantOrder, products.id)) {
+      const held = grouped.get(row.menuItemId) ?? [];
+      held.push({ variantId: row.variantId, price: priceOrNull(row.price), active: row.active });
       grouped.set(row.menuItemId, held);
     }
   return grouped;

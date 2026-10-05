@@ -282,7 +282,9 @@ export class MenuPricesTable extends LitElement {
     const prices = new Map<Line, LinePrices>();
     for (const item of this.rows) {
       const product: Line = { item, variant: null };
-      const variants: Line[] = item.variants.map((variant) => ({ item, variant }));
+      const variants: Line[] = item.variants
+        .filter((variant) => variant.active)
+        .map((variant) => ({ item, variant }));
       const read = (line: Line) => {
         const setting = this.#priceSetting(line);
         const before = this.#before(setting);
@@ -461,7 +463,9 @@ export class MenuPricesTable extends LitElement {
     this.attempted = false;
     this.draft = {
       grossPrice: row.override ?? "",
-      variants: row.variants.map(({ variantId, price }) => ({ variantId, price: price ?? "" })),
+      variants: row.variants
+        .filter((variant) => variant.active)
+        .map(({ variantId, price }) => ({ variantId, price: price ?? "" })),
     };
   }
 
@@ -727,10 +731,9 @@ export class MenuPricesTable extends LitElement {
       variantId,
       price: blankToNull(price),
     }));
-    // The draft's variants were built from the opened row's, one for one and in its order.
-    const variantsChanged = variants.some(
-      ({ price }, at) => !samePrice(price, row.variants[at]!.price),
-    );
+    // The draft's variants were built from the opened row's Active ones, one for one and in order.
+    const seeded = row.variants.filter((variant) => variant.active);
+    const variantsChanged = variants.some(({ price }, at) => !samePrice(price, seeded[at]!.price));
     this.#emit("wt-offer-save", {
       menuItemId: this.editing!,
       name: row.name,

@@ -4155,6 +4155,7 @@ describe("a menu's prices", () => {
         productPrice: "1.00",
         override: "1.40",
         effectivePrice: "1.40",
+        active: true,
         variants: [],
       },
     ]);

@@ -74,8 +74,12 @@ import type {
   TranslationGapReason,
 } from "@waitron/catalogue/src/content-translation-report-types.js";
 export type { LanguageTranslationGaps, TranslationGap, TranslationGapKind, TranslationGapReason };
-import type { MenuPriceRow, MenuVariant } from "@waitron/catalogue/src/menu-types.js";
-export type { MenuPriceRow, MenuVariant };
+import type {
+  MenuPriceRow,
+  MenuPriceVariant,
+  MenuVariant,
+} from "@waitron/catalogue/src/menu-types.js";
+export type { MenuPriceRow, MenuPriceVariant, MenuVariant };
 import type {
   DocumentMember,
   FrozenOffer,

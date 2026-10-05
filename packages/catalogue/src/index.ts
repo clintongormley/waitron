@@ -43,6 +43,7 @@ export type {
   MenuOffer,
   MenuOfferVariant,
   MenuPriceRow,
+  MenuPriceVariant,
   OfferedExtraItem,
   OfferedExtrasList,
   OfferedModifier,

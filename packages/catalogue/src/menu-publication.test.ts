@@ -1610,6 +1610,72 @@ it("lists direct and indirect parents beside an included menu's own price edit e
   );
 });
 
+describe("the management prices read", () => {
+  it("gives an Active row of the management prices the combined decisions a till's offer has", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lager), {
+        grossPrice: "5.00",
+      });
+      await setProductVariants(
+        tx,
+        f.lemonade,
+        [
+          {
+            id: f.large,
+            name: "Large",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "3.50",
+            available: true,
+          },
+          {
+            name: "Jug",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "9.00",
+            available: true,
+            active: false,
+          },
+        ],
+        "en",
+      );
+    });
+    const prices = await app((tx) => operations.menuPrices(tx, f.dinner));
+    const offers = await app((tx) => operations.listMenuOffers(tx, [f.dinner]));
+    for (const offer of offers) {
+      const row = prices.find(({ productId }) => productId === offer.productId)!;
+      const active = new Set(row.variants.filter((v) => v.active).map((v) => v.variantId));
+      expect({
+        ...row.combined,
+        variants: row.combined.variants.filter((v) => active.has(v.variantId)),
+      }).toEqual(offer.combined);
+    }
+  });
+
+  it("lists an inactive product an included menu prices, with that menu as its source, and its clash without blocking publication", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lager), {
+        grossPrice: "5.00",
+      });
+      // Dinner also places Lager itself, at its own 4.00: a clash with Drinks' 5.00.
+      await addMember(tx, f.dinnerRoot, product(f.lager));
+      await deactivateProduct(tx, f.lager);
+    });
+    const lager = (await app((tx) => operations.menuPrices(tx, f.dinner))).find(
+      ({ productId }) => productId === f.lager,
+    )!;
+    expect(lager.active).toBe(false);
+    expect(lager.combined.price).toMatchObject({ state: "clash" });
+    const preview = await app((tx) => previewMenu(tx, f.dinner));
+    expect(preview.clashes.filter(({ productId }) => productId === f.lager)).toEqual([]);
+    expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)!.clashes).toBe(0);
+  });
+});
+
 describe("review regressions", () => {
   it.each([false, true])(
     "previews own placement with inactive inclusion present=%s",
