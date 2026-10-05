@@ -1476,7 +1476,7 @@ async function finalizeRecovery(
 }
 
 /**
- * Fire an open order's unsent dishes at payment when its service mode (the venue's order flow for
+ * Fire an open order's unsent dishes at payment when its service mode (prepay for
  * an order with none) is prepay, or when it is a counter order (no party) in a mode that sends
  * before payment; a party's bill in such a mode is left alone. A bill moved here from a table has
  * dishes already sent, which are not sent again. A zoned order's dish no station can take is not
@@ -1491,7 +1491,7 @@ export async function fireDishesAtPayment(
   partyId?: string | null,
 ): Promise<DishesNotSent | null> {
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, workingOrderId);
-  if ((serviceContext?.serviceMode ?? cfg.orderFlow) !== "prepay") {
+  if ((serviceContext?.serviceMode ?? "prepay") !== "prepay") {
     if (!paysAfterSending(serviceContext?.serviceMode)) return null;
     const party =
       partyId !== undefined

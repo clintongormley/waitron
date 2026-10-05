@@ -71,7 +71,7 @@ import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { collectOrder, payWorkingOrder } from "./till-sale.js";
+import { collectOrder, fireDishesAtPayment, payWorkingOrder } from "./till-sale.js";
 import { overridePinAttempts } from "./till-api.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
@@ -1251,6 +1251,23 @@ const UNUSED_SESSION_OPERATOR = {
 // (`installAppendOnlyTriggers`, applied per migration set by `useVenueDb`), so a rewrite is refused
 // by the trigger alone.
 describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
+  it("fires an unscoped order at payment without reading the retired venue flow", async () => {
+    const { cfg, cafe, zoneId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+    await suite.db.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
+
+    await withTransaction(suite.db, (tx) =>
+      fireDishesAtPayment(tx, { ...cfg, orderFlow: "invoice_first" }, id),
+    );
+
+    expect(await ticketStateOf(id)).toBe("queued");
+  });
+
   it("does not issue an invoice from the retired venue flow when an order has no service context", async () => {
     const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
