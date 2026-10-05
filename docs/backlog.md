@@ -5994,13 +5994,19 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   implemented. Build waits for step 3. Review choices cover unset versus Closed/all-day hours,
   overnight and clock-change rules, manual override expiry, whole-venue closure and palette,
   single-department display, read permissions and the proposed pre-live schedule reset.
-  [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) is written for
-  owner review; national/regional data, owner-entered town holidays and holiday-aware special-date
-  naming are not implemented. Build waits for Hours approval and landing. Review choices cover
-  confirmed town/territorial scope, retained entries after geography changes, incomplete-year
-  notices, label/naming rules, permissions and three additive venue-service tables. The consolidated
-  2027 BOE list was not located by the plan's dated search; recheck it before the build rather than
-  extrapolating dates or treating a regional publication as nationwide coverage.
+  [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) is approved with
+  the owner's 2026-10-05 13:25 amendments; national/regional data, owner-entered city holidays and
+  holiday-aware special-date naming are not implemented. Build waits for Hours landing, including
+  its Prep stations dependency; those upstream plans were approved at 13:10/13:15 but are not built.
+  Local holidays follow the venue address city directly, with no confirmation or reselection.
+  Geography changes retain but hide old entries with `These local holidays were for <old city>`;
+  matching the address again restores them automatically. Two additive venue-service tables hold
+  geography/area identity and local entries, without a settings/selection pointer. The country
+  holiday capability supplies the allowance (Spain 2 from the plan's BOE receipt; no capability
+  permits no local entries, including import), and the UI reads it from the response. Approved
+  incomplete-year notices, full label/naming rules, permissions and all other behavior remain.
+  The consolidated 2027 BOE list was not located by the plan's dated search; recheck it before the
+  build rather than extrapolating dates or treating a regional publication as nationwide coverage.
   [Step 4 Routing grid plan](superpowers/plans/2026-10-05-routing-grid.md) is written for owner
   review; the grid and row-first cell storage are not implemented. Build waits for this plan’s
   approval and Prep stations landing. Review choices cover uncategorised products (No category
