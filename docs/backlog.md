@@ -5351,7 +5351,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b DONE (#1248, main ccbe2b41e); W105c DONE (#1251, main 58c65558b); W105f DONE (#1253, main 44ff56380); W105g DONE (#1254, main 969c96972); W105h DONE (#1258, main efa4ecb1b); W105e DONE (#1266, main 5ce168812); W106a DONE (#1272, main 700fdb00e). W104–W106, W105b, W105c and W105f DONE; the open points each left are listed below.**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b DONE (#1248, main ccbe2b41e); W105c DONE (#1251, main 58c65558b); W105f DONE (#1253, main 44ff56380); W105g DONE (#1254, main 969c96972); W105h DONE (#1258, main efa4ecb1b); W105e DONE (#1266, main 5ce168812); W106a DONE (#1272, main 700fdb00e); W105i DONE (#1260, main 998695dc5). W104–W106, W105b, W105c and W105f DONE; the open points each left are listed below.**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
@@ -5421,7 +5421,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session on a disabled device (`device.unauthorized`) stays, and Enable still ends the device's
   sessions, as a second line for a device turned off outside the Disable route (with that call
   removed, the join e2e case turning a device off directly fails).
-  **W105i (done):** the same in-transaction check now hands back the device as it stands at that
+  **W105i (done, #1260):** the same in-transaction check now hands back the device as it stands at that
   moment, and the sign-in refuses it `device.forbidden_action` (`action: "sign_in"`) if its profile
   is now a kitchen screen's, so a till moved onto a kitchen-screen profile while the PIN is checked
   opens no session; a move onto another till profile still signs in. The refusal before the PIN
