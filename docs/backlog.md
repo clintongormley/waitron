@@ -2994,8 +2994,9 @@ DONE (`fix/import-status-colour`).** A save and an import now share one rule, `i
 (`packages/db/src/status-color.ts`), which still allows a short named colour such as `amber`. The
 core module's import check (`validateCoreConfiguration`, `packages/db/src/configuration-transfer.ts`)
 refuses a `table_service_statuses` row whose colour fails it with `setup.request_invalid`
-`{ field: "table_service_statuses.color" }`; the bundle is refused whole, nothing written, when
-setup opens the export and again when it is imported. A save's refusal is unchanged
+`{ field: "table_service_statuses.color" }`. The bundle is refused whole when setup opens the
+export, before the staged file is written, and again when it is imported, where provisioning's
+transaction rolls back every venue row. A save's refusal is unchanged
 (`management.request_invalid`). Reproduced first: on `main` a bundle carrying `red;position:fixed`
 imported.
 
