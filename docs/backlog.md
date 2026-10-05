@@ -5088,7 +5088,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE on branch `feat/device-edit-dialog` (#1235); W106 QUEUED (lane C).**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 QUEUED (lane C).**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
@@ -5106,7 +5106,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `join_request.unclaimed`; the claiming login then names the device and picks its profile
   (`apps/server/src/join-api.ts`). A till refused with `device.pairing_closed` now tells the
   operator to ask a manager to open Add a device.
-  **W105 (done on its branch):** one request, `PATCH /management-api/devices/:id`, saves a device's
+  **W105 (done):** one request, `PATCH /management-api/devices/:id`, saves a device's
   name, profile, Shows, printers and made-here stations in one transaction, replacing the reassign
   and made-here routes (`apps/server/src/device-api.ts`). The Devices list is a table with an Edit
   dialog and a two-press Remove in each active row's menu; a removed device's row does not open
@@ -5127,7 +5127,14 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   could move a removed device onto another profile, because it did not check `active`; the Edit
   route refuses a removed device. Owner decision needed: for example, let the profile delete ignore
   removed devices, or clear a removed device's profile on removal (`device_profile_id` is NOT NULL,
-  so that is a schema change).
+  so that is a schema change). (9) a device holding a printer its unchanged profile no longer lists
+  opens with that field empty, and Save keeps the old printer without saying so. (10) for a manager
+  without `payments.manage` the card reader field is drawn greyed while it loads and then disappears,
+  so the layout jumps. Review suggestions #1235 did not take, listed in its description: the edit
+  route checks permission before the device id where revoke checks the id first; its body is the
+  whole device rather than only the fields named; it can write the device row up to three times;
+  `rowClickable` and `rowActivation` could be one option; a save fetches the list twice; Edit and
+  Pair repeat some request-body building; seven unread `devices.*` strings.
   Left OPEN by W104, not acted on: (1) a Pair save that never answers locks both dialogs, because a
   save carries no time limit (`packages/dashboard-kit/src/request.ts` limits GETs only); (2) leaving
   the Devices page with Back while a Pair save is in flight still sends a deny for that request
