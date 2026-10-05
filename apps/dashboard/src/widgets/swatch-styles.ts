@@ -1,4 +1,5 @@
-import { css } from "lit";
+import { css, html, nothing, type TemplateResult } from "lit";
+import { isHexColor } from "@waitron/ui";
 
 /** A host whose tree rows draw colour swatches adds these: the rows render inside wt-data-table's
  * shadow root, so ::part is the only way in. */
@@ -30,3 +31,13 @@ export const swatchPartStyles = css`
     border-radius: var(--wt-radius-sm);
   }
 `;
+
+/** A colour's chip, drawn outlined for none. Checked, because the value lands in a style
+ * attribute: anything but #rrggbb draws as none. */
+export function swatchChip(color: string | null | undefined): TemplateResult {
+  const painted = typeof color === "string" && isHexColor(color);
+  return html`<span
+    part=${painted ? "color-swatch" : "color-swatch empty"}
+    style=${painted ? `background:${color}` : nothing}
+  ></span>`;
+}

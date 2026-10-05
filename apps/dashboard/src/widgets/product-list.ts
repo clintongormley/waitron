@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { baseStyles, isHexColor, type DataTableColumn, type WtDataTable } from "@waitron/ui";
+import { baseStyles, type DataTableColumn, type WtDataTable } from "@waitron/ui";
 import { formatMoney, resolveContentText } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -17,7 +17,7 @@ import {
 } from "../i18n/domain.js";
 import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
-import { swatchPartStyles } from "./swatch-styles.js";
+import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import {
   holdPageCursor,
   pointerElementsAt,
@@ -1117,8 +1117,6 @@ export class ProductList extends LitElement {
         }
         const { folder } = row;
         if (column.key === "name") {
-          // Checked, because the value lands in a style attribute.
-          const painted = folder.color !== null && isHexColor(folder.color);
           const after = html`<span part="count" data-test=${`count-${folder.id}`}
               >${this.#contents(folder.id)}</span
             >${
@@ -1152,11 +1150,10 @@ export class ProductList extends LitElement {
                   this.#send("edit-folder", { folderId: folder.id });
                 }}
               >
-                <span
-                  part=${painted ? "color-swatch" : "color-swatch empty"}
-                  style=${painted ? `background:${folder.color}` : nothing}
-                ></span></button></span
-          ></span>`;
+                ${swatchChip(folder.color)}
+              </button></span
+            ></span
+          >`;
         }
         if (column.key === "actions")
           return html`<wt-row-actions

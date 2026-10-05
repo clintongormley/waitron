@@ -1,13 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import {
-  baseStyles,
-  isHexColor,
-  reorder,
-  type DataTableColumn,
-  type WtDataTable,
-} from "@waitron/ui";
+import { baseStyles, reorder, type DataTableColumn, type WtDataTable } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-icon.js";
@@ -31,7 +25,7 @@ import {
   type DragGhost,
   type DropGap,
 } from "./tree-drag.js";
-import { swatchPartStyles } from "./swatch-styles.js";
+import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
@@ -667,12 +661,7 @@ export class MenuStructureTable extends LitElement {
       send = () => this.#send("wt-product-color", { productId, categoryColor: inherited });
       editable = !row.readOnly && product !== undefined;
     }
-    // Checked, because the value lands in a style attribute.
-    const painted = color !== null && isHexColor(color);
-    const chip = html`<span
-      part=${painted ? "color-swatch" : "color-swatch empty"}
-      style=${painted ? `background:${color}` : nothing}
-    ></span>`;
+    const chip = swatchChip(color);
     if (!editable)
       return html`<span part="swatch-box" data-test=${`color-${key}`} aria-hidden="true"
         >${chip}</span
