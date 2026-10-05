@@ -978,6 +978,18 @@ describe("till-app receipt issuance", () => {
 });
 
 describe("till-app counter menus and service zones", () => {
+  it("uses pay-first controls when zone offers fail despite a retired venue-wide mode", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+      listDefaultZoneOffers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+
+    const c = await toCounter(el);
+
+    expect(c.orderFlow).toBe("prepay");
+    expect(banner(el)!.textContent).toContain(t("service_zone.load_error"));
+  });
+
   const twoMenus = [
     { id: "menu-food", name: "Comida", isDefault: false },
     { id: "menu-drinks", name: "Bebidas", isDefault: true },
@@ -1599,7 +1611,14 @@ describe("till-app logout while a request is waiting for the server", () => {
 
   it("does not read waiting orders when a cash sale's station read outlives sign-out", async () => {
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue({
+        ...zoneOffers(
+          { menus: [defaultMenu], products: [cafe] },
+          "zone-counter",
+          "ticket_then_pay",
+        ),
+        zones: [zone("zone-counter", "ticket_then_pay")],
+      }),
     });
     const c = await toCounter(el);
     let answerStations!: (rows: []) => void;
@@ -1622,7 +1641,14 @@ describe("till-app logout while a request is waiting for the server", () => {
 
   it("does not read waiting orders when a card capture's station read outlives sign-out", async () => {
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue({
+        ...zoneOffers(
+          { menus: [defaultMenu], products: [cafe] },
+          "zone-counter",
+          "ticket_then_pay",
+        ),
+        zones: [zone("zone-counter", "ticket_then_pay")],
+      }),
     });
     const c = await toCounter(el);
     let answerStations!: (rows: []) => void;

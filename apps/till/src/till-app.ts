@@ -1725,7 +1725,7 @@ export class TillApp extends LitElement {
       this.receiptLanguages = till.receiptLanguages ?? [];
       this.onboardingIntent = till.onboardingIntent;
       this.issuer = { venueName: till.venueName, nif: till.nif };
-      this.orderFlow = till.orderFlow;
+      this.orderFlow = "prepay";
       this.receiptPrintMode = till.receiptPrintMode ?? "auto";
       this.bumpMode = till.bumpMode;
       this.fireControl = till.fireControl;

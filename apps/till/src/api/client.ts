@@ -77,8 +77,7 @@ export interface ReadOptions {
 }
 
 /**
- * `GET /api/till` — the public boot info the app reads before login. `orderFlow` is needed before login
- * so the app can choose which pay control to render; `cardProvider`/`tipsEnabled` decide whether the
+ * `GET /api/till` — the public boot info the app reads before login. `cardProvider`/`tipsEnabled` decide whether the
  * integrated-card pay control renders at all and whether it prompts for a tip (`cardProvider: "none"`
  * for a till with no integrated reader). `receipt` is the owner-authored receipt trim, or the built-in
  * default.
