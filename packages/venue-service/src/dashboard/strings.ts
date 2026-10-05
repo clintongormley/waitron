@@ -146,11 +146,9 @@ const en = {
   "prep.disabled_station_label": "Disabled",
   "prep.disabled_hint": "Disabled: its work goes to its fallback",
   "prep.printers": "Printers",
-  "prep.printing_rules": "Printing rules",
   "prep.screens": "Kitchen screens",
   "prep.devices": "Devices",
   "prep.none": "None",
-  "prep.thresholds": "Warm {warm} min · Overdue {overdue} min · Forgotten {forgotten} min",
   "prep.shows_rest_of_order": "Show the rest of the order",
   "prep.shows_rest_of_order_hint":
     "Its tickets and kitchen screen also list the order's dishes at other stations.",
@@ -521,11 +519,9 @@ const es: Record<keyof typeof en, string> = {
   "prep.disabled_station_label": "Deshabilitada",
   "prep.disabled_hint": "Deshabilitada: su trabajo va a su sustituta",
   "prep.printers": "Impresoras",
-  "prep.printing_rules": "Reglas de impresión",
   "prep.screens": "Pantallas de cocina",
   "prep.devices": "Dispositivos",
   "prep.none": "Ninguno",
-  "prep.thresholds": "Aviso {warm} min · Atraso {overdue} min · Olvido {forgotten} min",
   "prep.shows_rest_of_order": "Mostrar el resto del pedido",
   "prep.shows_rest_of_order_hint":
     "Sus comandas y su pantalla de cocina también muestran los platos del pedido en otras estaciones.",

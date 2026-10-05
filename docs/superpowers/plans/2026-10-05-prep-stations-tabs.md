@@ -584,3 +584,24 @@ than an array; all existing behavior assertions remain. The first broader browse
 341 assertions but exited with that fixture's unhandled error; it was not a green run. New visual
 harness waits and screenshot paths were corrected before the final passing run. This is a subtask
 checkpoint: Routing-only cleanup and Task 8 whole-branch review/hook/CI/landing remain open.
+
+## Routing assignment/settings handover checkpoint — 2026-10-05T22:30:17.847328+02:00
+
+Routing station cards no longer repeat printer, screen or watcher relationships, late-flag
+summaries or the rest-of-order switch. Tickets retains the output names and Devices/Watchers
+links; Settings retains the choice, draft/refusal behavior and rendered Yes/No value.
+The card's claims, exception/tester paths and other station controls are still present.
+Task 4 remains partial: retire duplicate Today/default/rename/enable/disable/fallback and
+whole-record edit controls, moving their behavioral checks to the existing tables/cells,
+before Task 8's whole-branch review, hook, current-head CI and authorised landing.
+
+New five browser checks failed on each repeated control/text before removal, then passed.
+The four affected Prep browser files passed 381 cases. Forty-two unchanged root guards and
+venue-service typechecking passed. The eight EN/ES light/dark 390/1280 handover cases check
+axe, page overflow and native Settings rendering; 24 captures were inspected. A new dark
+harness initially failed contrast because it omitted the themed page canvas; matching the
+existing harness fixed that fixture error. No product contrast repair is claimed.
+Moved field-refusal control in an independent frozen-installed candidate failed one case
+while its unrelated refusal passed; changing the saved choice failed both moved refusal
+cases while five Routing controls passed. Restoring both passed all seven selected cases.
+Final formatting/lint and checkpoint details are recorded in the campaign ledger.

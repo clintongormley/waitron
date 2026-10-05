@@ -103,7 +103,7 @@ function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
     ...overrides,
   } as unknown as PrepStationsApi;
 }
-it("shows watcher table relationships and station and tester follow lines", async () => {
+it("shows watcher table relationships and Tickets and tester follow lines", async () => {
   setLocale("en");
   const pass = {
     id: "pass",
@@ -166,8 +166,12 @@ it("shows watcher table relationships and station and tester follow lines", asyn
   expect(q(el, '[data-test="edit-watcher-printers-pass"]')?.textContent).toContain("Expo printer");
   expect(q(el, '[data-test="edit-watcher-follows-runner"]')?.textContent?.trim()).toBe("Bar");
   expect(q(el, '[data-test="edit-watcher-zones-runner"]')?.textContent?.trim()).toBe("Terrace");
-  expect(q(el, '[data-test="station-bar"]')?.textContent).toContain(
-    "Watched by: Pass, Terrace runner",
+  const tickets = el.shadowRoot!.querySelector('[data-test="tickets-table"]')!;
+  await (tickets as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+  const follows = tickets.shadowRoot!.querySelector('[data-test="watchers-bar"]')!;
+  expect(follows.textContent).toContain("Pass, Terrace runner");
+  expect(follows.querySelector("a")?.getAttribute("href")).toBe(
+    "/manage/prep-stations/view/watchers",
   );
   q(el, '[data-test="new-watcher"]');
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="test-product"]')?.dispatchEvent(
@@ -296,6 +300,100 @@ const q = (el: PrepStationsScreen, s: string) =>
     .shadowRoot!.querySelector('[data-test="watchers-table"]')
     ?.shadowRoot?.querySelector<HTMLElement>(s) ??
   null;
+
+it.each([
+  ['wt-switch[name="showsRestOfOrder"]', ""],
+  ['a[href="/manage/printing-rules"]', ""],
+  ['a[href="/manage/devices"]', ""],
+  ["", "Warm 5 min"],
+  ["", "Watched by:"],
+])(
+  "keeps assignment and late-flag settings %s %s out of the Routing cards",
+  async (selector, text) => {
+    setLocale("en");
+    const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }));
+    const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
+    expect(routing.querySelector('[data-test="claim-bar"]')).not.toBeNull();
+    expect(routing.querySelector('[data-test="test-product"]')).not.toBeNull();
+    if (selector) expect(routing.querySelector(selector)).toBeNull();
+    else expect(routing.textContent).not.toContain(text);
+  },
+);
+
+it.each(
+  ([390, 1280] as const).flatMap((width) =>
+    (["en", "es"] as const).flatMap((locale) =>
+      (["light", "dark"] as const).map((theme) => ({ width, locale, theme })),
+    ),
+  ),
+)("Routing handover renders in $locale $theme at $width px", async ({ width, locale, theme }) => {
+  const previous = {
+    width: window.innerWidth,
+    height: window.innerHeight,
+    body: document.body.style.background,
+    canvas: document.documentElement.style.background,
+  };
+  try {
+    await page.viewport(width, 900);
+    expect(window.innerWidth).toBe(width);
+    setLocale(locale);
+    history.replaceState(null, "", "/manage/prep-stations/view/routing");
+    const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }), theme);
+    const host = el.parentElement!;
+    host.style.background = "var(--wt-color-bg)";
+    const canvas = getComputedStyle(host).backgroundColor;
+    document.body.style.background = canvas;
+    document.documentElement.style.background = canvas;
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    expect(tabs.value).toBe("routing");
+    expect(el.shadowRoot!.querySelector('[data-test="station-bar"]')!.textContent).toContain(
+      "Drinks › Cocktails",
+    );
+    await expectNoA11yViolations(el);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    await page.screenshot({
+      path: `look/routing-handover-${locale}-${theme}-${width}-routing.png`,
+    });
+    tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "tickets" } }));
+    await settle(el);
+    const tickets = el.shadowRoot!.querySelector('[data-test="tickets-table"]')!;
+    await (tickets as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+    expect(tickets.shadowRoot!.querySelector('[data-test="screens-bar"]')!.textContent).toContain(
+      "Bar screen",
+    );
+    expect(tickets.shadowRoot!.querySelector('[data-test="watchers-bar"]')!.textContent).toContain(
+      "Pass",
+    );
+    await expectNoA11yViolations(el);
+    await page.screenshot({
+      path: `look/routing-handover-${locale}-${theme}-${width}-tickets.png`,
+    });
+    tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "settings" } }));
+    await settle(el);
+    const settings = el.shadowRoot!.querySelector('[data-test="settings-table"]')!;
+    await (settings as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+    const rest = settings.shadowRoot!.querySelector<HTMLElement>(
+      '[data-test="edit-settings-rest-bar"]',
+    )!;
+    expect(rest.textContent?.trim()).toBe("No");
+    await page.elementLocator(rest).click();
+    await settle(el);
+    const choice = settings.shadowRoot!.querySelector('[data-test="settings-choice"]')!;
+    expect(choice.shadowRoot!.querySelector(".trigger .value")!.textContent?.trim()).toBe("No");
+    await expectNoA11yViolations(el);
+    await page.screenshot({
+      path: `look/routing-handover-${locale}-${theme}-${width}-settings.png`,
+    });
+    settings.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel-settings-cell"]')!.click();
+    await settle(el);
+    expect(settings.shadowRoot!.querySelector('[data-test="settings-choice"]')).toBeNull();
+    history.replaceState(null, "", "/manage");
+  } finally {
+    document.body.style.background = previous.body;
+    document.documentElement.style.background = previous.canvas;
+    await page.viewport(previous.width, previous.height);
+  }
+});
 const upstairs = {
   ...view.stations[0]!,
   id: "upstairs",
@@ -355,21 +453,33 @@ it.each([
   ["management.request_invalid", { field: "showsRestOfOrder" }, true],
   ["station.not_found", {}, false],
 ] as const)(
-  "shows a %s refusal without changing the station switch",
+  "shows a %s refusal in Settings without changing the saved station choice",
   async (code, params, fieldError) => {
     const a = api({ updateStation: vi.fn().mockRejectedValue({ code, params }) });
     const el = await mount(a);
-    const card = q(el, '[data-test="station-bar"]')!;
-    const toggle = card.querySelector<HTMLElement>('wt-switch[name="showsRestOfOrder"]')!;
-    toggle.dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
+    const table = el.shadowRoot!.querySelector('[data-test="settings-table"]')!;
+    await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+    const cell = (selector: string) => table.shadowRoot!.querySelector<HTMLElement>(selector)!;
+    cell('[data-test="edit-settings-rest-bar"]').click();
+    await settle(el);
+    cell('[data-test="settings-choice"]').dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "yes" } }),
+    );
+    await settle(el);
+    cell('[data-test="save-settings-cell"]').click();
     await settle(el);
     expect(a.updateStation).toHaveBeenCalledWith("bar", { showsRestOfOrder: true });
-    expect(card.querySelector('wt-switch[name="showsRestOfOrder"]')!.hasAttribute("checked")).toBe(
-      false,
-    );
-    const error = card.querySelector<HTMLElement>('[role="alert"]')!;
-    expect(error.textContent).toContain("could not be saved");
-    expect(error.hasAttribute("data-field-error")).toBe(fieldError);
+    const choice = cell('[data-test="settings-choice"]') as WtCombobox;
+    expect(!!choice.error).toBe(fieldError);
+    if (fieldError) expect(choice.error).toContain("could not be saved");
+    else expect(cell("wt-form-actions").shadowRoot!.textContent).toContain("could not be saved");
+    expect(cell('[data-test="save-settings-cell"]').hasAttribute("disabled")).toBe(false);
+    cell('[data-test="cancel-settings-cell"]').click();
+    await settle(el);
+    expect(cell('[data-test="edit-settings-rest-bar"]').textContent?.trim()).toBe("No");
+    cell('[data-test="edit-settings-rest-bar"]').click();
+    await settle(el);
+    expect((cell('[data-test="settings-choice"]') as WtCombobox).value).toBe("no");
   },
 );
 
@@ -945,7 +1055,7 @@ it("assigns an unassigned product through its effective route", async () => {
     stationId: "bar",
   });
 });
-it("shows linked printers and kitchen screens read-only", async () => {
+it("shows linked printers and kitchen screens in Tickets", async () => {
   const a = api({
     load: vi.fn().mockResolvedValue({
       ...view,
@@ -957,11 +1067,18 @@ it("shows linked printers and kitchen screens read-only", async () => {
     }),
   });
   const el = await mount(a);
-  const card = q(el, '[data-test="station-bar"]')!;
-  expect(card.textContent).toContain("Bar printer");
-  expect(card.textContent).toContain("Bar display");
-  expect(card.querySelector('a[href="/manage/printing-rules"]')).not.toBeNull();
-  expect(card.querySelector('a[href="/manage/devices"]')).not.toBeNull();
+  const table = el.shadowRoot!.querySelector('[data-test="tickets-table"]')!;
+  await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+  const printers = table.shadowRoot!.querySelector('[data-test="edit-printers-bar"]')!;
+  const screens = table.shadowRoot!.querySelector('[data-test="screens-bar"]')!;
+  expect(printers.textContent).toContain("Bar printer");
+  expect(screens.textContent).toContain("Bar display");
+  expect(screens.querySelector("a")?.getAttribute("href")).toBe("/manage/devices");
+  expect(
+    el
+      .shadowRoot!.querySelector('[slot="routing"]')!
+      .querySelector('a[href="/manage/printing-rules"]'),
+  ).toBeNull();
 });
 it("puts an inactive-station refusal beside the claim choice", async () => {
   const a = api({ preview: vi.fn().mockRejectedValue({ code: "route.station_inactive" }) });

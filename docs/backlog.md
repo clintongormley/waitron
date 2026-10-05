@@ -6376,7 +6376,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Supervisors can now open the live Stations overview and its read-only drilldowns. The page
   loads only station metadata and current status, without printer, device or catalogue management
   reads; configuration tabs and actions are absent. Saved configuration links return to Stations.
-  Routing-only card replacement remains open. Venue settings › Kitchen now reads and
+  Routing cards no longer repeat printer/screen/watcher relationships, late-flag summaries or
+  the rest-of-order switch; those appear in Tickets and Settings. The remaining station-action
+  and fallback controls still need to leave Routing before its card replacement is complete.
+  Venue settings › Kitchen now reads and
   replaces the venue-wide late flags. Its required whole-minute fields validate every invalid
   value and their order, naming a station when the server refuses the effective result. A refusal
   retains a retryable draft; live reads update saved values without replacing it. Supervisors see

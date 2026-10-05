@@ -287,8 +287,6 @@ export class PrepStationsScreen extends LitElement {
   @state() private claimError = "";
   @state() private claimField = "";
   @state() private busy = false;
-  @state() private stationSwitchBusy = new Map<string, boolean>();
-  @state() private stationSwitchError: Record<string, { field: boolean; message: string }> = {};
   @state() private exceptionOrder: string[] = [];
   @state() private exceptionDraft: ExceptionInput = {
     zoneId: null,
@@ -875,30 +873,6 @@ export class PrepStationsScreen extends LitElement {
       else this.#showError(t("prep.save_error"));
     } finally {
       this.busy = false;
-    }
-  }
-  async #saveRestOfOrder(station: PrepStation, checked: boolean) {
-    if (this.stationSwitchBusy.has(station.id)) return;
-    this.stationSwitchBusy = new Map([...this.stationSwitchBusy, [station.id, checked]]);
-    const remaining = { ...this.stationSwitchError };
-    delete remaining[station.id];
-    this.stationSwitchError = remaining;
-    try {
-      await this.api.updateStation(station.id, { showsRestOfOrder: checked });
-      await this.#load();
-    } catch (error) {
-      const field = (error as { params?: { field?: unknown } } | undefined)?.params?.field;
-      this.stationSwitchError = {
-        ...this.stationSwitchError,
-        [station.id]: {
-          field: codeOf(error) === "management.request_invalid" && field === "showsRestOfOrder",
-          message: t("prep.save_error"),
-        },
-      };
-    } finally {
-      const busy = new Map(this.stationSwitchBusy);
-      busy.delete(station.id);
-      this.stationSwitchBusy = busy;
     }
   }
   #exceptionText(exception?: RouteException): string {
@@ -1504,16 +1478,6 @@ export class PrepStationsScreen extends LitElement {
     </div>`;
   }
   #stationCard(s: PrepStation) {
-    const watching = watchersOfStation(this.view?.watchers ?? [], s.id);
-    const printers = this.view?.stationPrinters
-      .filter((p) => p.stationId === s.id)
-      .map((p) => this.view!.printers.find((x) => x.id === p.printerId)?.name)
-      .filter(Boolean)
-      .join(", ");
-    const devices = this.view?.devices
-      .filter((d) => d.stationId === s.id && d.kind === "kds_station" && d.active)
-      .map((d) => d.label)
-      .join(", ");
     return html`<wt-card data-test=${`station-${s.id}`}
       ><h2>
         ${s.name} ${s.isDefault ? html`<span class="muted">${t("prep.default")}</span>` : nothing}
@@ -1553,30 +1517,6 @@ export class PrepStationsScreen extends LitElement {
               >
             `
       }
-      <p>
-        ${t("prep.thresholds").replace("{warm}", String(s.warmAfterMinutes)).replace("{overdue}", String(s.overdueAfterMinutes)).replace("{forgotten}", String(s.forgottenAfterMinutes))}
-      </p>
-      <p>
-        ${t("prep.printers")}: ${printers || t("prep.none")}
-        <a href="/manage/printing-rules">${t("prep.printing_rules")}</a>
-      </p>
-      <p>
-        ${t("prep.screens")}: ${devices || t("prep.none")}
-        <a href="/manage/devices">${t("prep.devices")}</a>
-      </p>
-      ${watching.length ? html`<p>${format("watchers.watched_by", { list: watching.map((watcher) => watcher.name).join(", ") })}</p>` : nothing}
-      <wt-switch
-        name="showsRestOfOrder"
-        label=${t("prep.shows_rest_of_order")}
-        .checked=${live(this.stationSwitchBusy.get(s.id) ?? s.showsRestOfOrder)}
-        .disabled=${this.stationSwitchBusy.has(s.id)}
-        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-          event.stopPropagation();
-          void this.#saveRestOfOrder(s, event.detail.checked);
-        }}
-      ></wt-switch>
-      ${this.stationSwitchError[s.id]?.field ? html`<p class="error" data-field-error="showsRestOfOrder" role="alert">${this.stationSwitchError[s.id]!.message}</p>` : nothing}
-      <p class="muted">${t("prep.shows_rest_of_order_hint")}</p>
       ${this.#chips(s.id)}
       <div class="actions">
         <wt-button
@@ -1599,8 +1539,7 @@ export class PrepStationsScreen extends LitElement {
           >${t("prep.disable")}</wt-button
         >
       </div>
-      ${this.stationSwitchError[s.id] && !this.stationSwitchError[s.id]!.field ? html`<p class="error" role="alert">${this.stationSwitchError[s.id]!.message}</p>` : nothing}</wt-card
-    >`;
+    </wt-card>`;
   }
   async #saveStationPrinters() {
     const editor = this.printerEditor;
