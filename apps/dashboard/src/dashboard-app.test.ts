@@ -1805,7 +1805,8 @@ describe("dashboard-app", () => {
       .fn()
       .mockResolvedValueOnce({ ...meResponse, permissions: ["booking.manage", "payments.manage"] })
       .mockResolvedValue({ ...meResponse, permissions: ["booking.manage"] });
-    // After the re-read the shell's alert and language reads stay unanswered, so neither redraws it.
+    // After the re-read the alert and content-language reads stay unanswered, so neither redraws the
+    // shell; `setLocale` in `#applyMe` still does, so this case passes without `#applyMe`'s own redraw.
     let reread = false;
     const answer = <T>(value: T) =>
       reread ? new Promise<T>(() => undefined) : Promise.resolve(value);
