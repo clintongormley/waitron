@@ -1006,12 +1006,13 @@ export class DevicesScreen extends LitElement {
         key: "profile",
         choosable: "shown",
         label: t("devices.device_profile"),
-        sortValue: (d) => this.#profileName(d.deviceProfileId),
+        sortValue: (d) =>
+          d.profileRetired ? t("devices.profile_deleted") : this.#profileName(d.deviceProfileId),
         cell: (d) =>
           html`<span data-test=${`device-profile-${d.id}`}
             >${
               d.profileRetired
-                ? html`<span part="profile-retired">${t("devices.profile_retired")}</span>`
+                ? html`<span part="profile-retired">${t("devices.profile_deleted")}</span>`
                 : this.#profileName(d.deviceProfileId)
             }</span
           >`,

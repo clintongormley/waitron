@@ -749,6 +749,37 @@ describe("the device table", () => {
     }
   });
 
+  it("sorts a device whose profile is retired by the words its Profile cell shows", async () => {
+    const retired: DeviceRow = {
+      ...devices[1]!,
+      id: "d8",
+      deviceProfileId: "dp-retired",
+      profileRetired: true,
+    };
+    const before = currentLocale();
+    try {
+      for (const locale of ["en", "es-ES"] as const) {
+        setLocale(locale);
+        const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+          api: stubApi({ listDevices: vi.fn().mockResolvedValue([retired, devices[0]!]) }),
+        });
+        await flush(el);
+        const table = devicesTable(el);
+        const profile = table.columns.find((c) => c.key === "profile")!;
+        expect(profile.sortValue!(retired)).toBe(deepText(el, "[data-test=device-profile-d8]"));
+        table.sortKey = "profile";
+        await table.updateComplete;
+        const order = [...table.shadowRoot!.querySelectorAll("tr[data-row-key]")].map((row) =>
+          row.getAttribute("data-row-key"),
+        );
+        expect(order).toEqual(["d1", "d8"]);
+        cleanupWidgets();
+      }
+    } finally {
+      setLocale(before);
+    }
+  });
+
   it("disables only on the confirming second press, then reloads the list", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
