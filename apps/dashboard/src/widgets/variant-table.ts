@@ -93,7 +93,7 @@ export class VariantTable extends LitElement {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: var(--wt-space-1);
+        gap: var(--wt-space-2);
       }
       /* An amount never breaks inside the number. */
       .amount {

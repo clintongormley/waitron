@@ -166,6 +166,25 @@ it("keeps the unit button in the price heading a tap target on both axes", async
   });
 });
 
+it("leaves a --wt-space-2 gap between the price heading's word and its unit button", async () => {
+  await atDesktopWidth(async () => {
+    const el = await mountTable({ unitLabel: "kg" });
+    const button = unitButton(el);
+    const word = [...button.parentElement!.childNodes].find(
+      (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
+    )!;
+    expect(word.textContent!.trim()).toBe(t("product.price"));
+    const range = document.createRange();
+    range.selectNodeContents(word);
+    const wordEnd = range.getBoundingClientRect().right;
+    const buttonStart = button.getBoundingClientRect().left;
+    expect(buttonStart).toBeGreaterThan(wordEnd);
+    const space2 = parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-2"));
+    expect(space2).toBeGreaterThan(0);
+    expect(buttonStart - wordEnd).toBeCloseTo(space2, 0);
+  });
+});
+
 // Each width shows the price exactly once, so neither a sighted person nor a screen reader meets it
 // twice: in its own column on a wide table, under the name on a narrow one.
 it("moves each price under its name on a narrow table, and back to its own column on a wide one", async () => {
