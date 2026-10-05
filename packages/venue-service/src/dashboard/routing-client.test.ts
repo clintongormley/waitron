@@ -411,3 +411,27 @@ it("serializes the scheduled weekday and time together", async () => {
     { passive: false },
   );
 });
+
+it("reads station health passively and preserves summary and drilldown data", async () => {
+  const snapshot = {
+    capturedAt: "2026-10-05T18:00:00.000Z",
+    stations: [
+      {
+        id: "bar",
+        waiting: 1,
+        preparing: null,
+        ready: null,
+        items: [{ name: "CANA", remainingQuantity: "2.000" }],
+      },
+    ],
+    outputsDown: { printersDown: [], screensDark: [] },
+  };
+  const request = vi.fn(async () => snapshot);
+  const api = new PrepStationsApi(request as DashboardRequest);
+  expect(await api.readStationHealth()).toEqual(snapshot);
+  expect(await api.background.readStationHealth()).toEqual(snapshot);
+  expect(request.mock.calls).toEqual([
+    ["/management-api/stations/health", "GET", undefined, { passive: true }],
+    ["/management-api/stations/health", "GET", undefined, { passive: true }],
+  ]);
+});

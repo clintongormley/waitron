@@ -6319,7 +6319,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   API whose writes refuse an invalid effective station order. Station creation and edits now write
   independent nullable overrides. The management list, kitchen queue, pass, floor bands/signals and
   overdue report resolve inherited values, and configuration transfer carries defaults and overrides.
-  Prep stations tabs, station-health reads, live numbers and printing handover remain open.
+  The station-health API now returns dish-row counts, per-band lateness and oldest-first kitchen
+  drilldowns with remaining quantities, using one captured time. Supervisors can read it; staff
+  cannot. The passive dashboard client and health source list are declared. Prep stations tabs,
+  screen subscription/timer wiring, live number cells and printing handover remain open.
   The generated station-parent rebuild failed the populated upgrade with a foreign-key refusal;
   the ongoing build uses the plan’s storage-redesign option. Approved decisions
   cover what live counts include, ready-but-unserved work, interim station hours, inactive display

@@ -7,6 +7,7 @@ import {
   setKitchenTimingDefaults,
   parseStationTimingPatch,
 } from "./kitchen-timing.js";
+import { readStationHealth } from "./station-health.js";
 import { stationPrintersDown, stationScreensDark } from "./station-outputs-down.js";
 import type { Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -1848,6 +1849,17 @@ export function mountManagementApi(
       const cfg = requireVenueCfg(deps);
       const stations = await withVenueAuth(deps, sessionId, (tx) => listStations(tx, cfg));
       return c.json(stations);
+    }),
+  );
+
+  app.get("/management-api/stations/health", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const now = new Date();
+      return c.json(
+        await withVenueReadAuth(deps, sessionId, (tx) => readStationHealth(tx, cfg, now)),
+      );
     }),
   );
 

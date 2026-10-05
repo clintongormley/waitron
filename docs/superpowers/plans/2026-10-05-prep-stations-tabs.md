@@ -195,3 +195,30 @@ working-order-reads manual venue fixtures, plus the shared split-extras venue fi
 provisioned default row. The existing two-station expo fixture writes its same 2/4/6 values into
 override storage with all existing assertions retained. The approved reset remains required; there is no converter or
 original-column fallback. Tasks 3–8 remain before finishing or shipping this branch.
+
+
+## 2026-10-05 implementation checkpoint: station-health read contract
+
+`GET /management-api/stations/health` requires `venue.view` and returns one captured time,
+station summaries and oldest-first dish detail. Counts are ticket dish rows, with remaining line
+quantities in the detail; extras are not another dish. Held, made-here, fully served, abandoned and
+collected work is excluded. Ready-but-unserved work remains in Ready and Late. A station without
+an active device selecting it puts every eligible state in Waiting and returns null for Preparing
+and Ready. A disconnected selected device still supplies those columns, with problems read through
+the existing output readers. Disabled stations retain their work. Effective timing uses defaults
+and overrides, and the detail uses recorded kitchen names and current party/table context.
+
+The new seven-case HTTP/database suite ran with the unchanged management and output suites:
+`pnpm --filter @waitron/server exec vitest run src/station-health.test.ts
+src/management-api.test.ts src/station-outputs-down.test.ts` passed 114 tests. The new route first
+failed five cases with 404; the extras case failed when a child was counted. Disposable candidate
+controls removed read authorization, the held-work filter and the location filter, and replaced
+effective timing with original columns. The selected assertions failed; restored checks passed.
+The location control initially failed with a runtime error, so its test was strengthened to assert
+the wrong-venue query's rows directly before repeating the control. Existing assertions are retained.
+
+The passive `PrepStationsApi.readStationHealth` method and health dependency list have focused
+browser checks. The core descriptor already exposes the timing tables through classification and
+change sources. Tasks 4–8 remain: the health list is not yet subscribed by the screen, and no UI
+timer, tabs, number cells or printing-control handover is implemented by this checkpoint. Keep the
+approved reset declaration and earlier changed-test notes when finishing the whole branch.
