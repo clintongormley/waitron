@@ -3410,7 +3410,7 @@ tests' order checks (W85's name-order group, the status-filter case and the vari
 now check the product's order; listed in the PR.
 
 **Products at phone width: a long name runs under the pinned Actions column, cut with no ellipsis —
-DONE (W85b, #1243; W85c, owner 2026-10-05).** Found 2026-10-05 during W85a's check, and queued
+DONE (W85b, #1243; W85c, #1245, owner 2026-10-05).** Found 2026-10-05 during W85a's check, and queued
 by the owner the same day as two items:
 
 - Fixed in W85b (#1243, 2026-10-05): at 390 px in the demo venue, with Croquetas' variants open,
@@ -3432,7 +3432,7 @@ by the owner the same day as two items:
   more room at phone width (for example narrower leading slots) is asked in the campaign's
   questions file. Wrapping was chosen over an ellipsis because a phone cannot show a cut name's
   full text.
-- Fixed in W85c (2026-10-05): in the product editor's variant table the Unit button sat 4 px
+- Fixed in W85c (#1245, 2026-10-05): in the product editor's variant table the Unit button sat 4 px
   (`--wt-space-1`) after the word Price, which read as no gap. The two now have a `--wt-space-2`
   (8 px) gap between them (`.price-heading`, `apps/dashboard/src/widgets/variant-table.ts`),
   measured in real Chromium at desktop width, on one line, by the heading-gap case in
