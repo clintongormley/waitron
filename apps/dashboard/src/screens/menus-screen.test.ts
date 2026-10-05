@@ -4680,6 +4680,70 @@ it("writes two fields one after the other, the second waiting for the first's an
   expect(writeCalls(client)).toEqual(["updateMenuItem", "setMenuVariantPrice"]);
 });
 
+/** A client whose product writes wait on `holds` in turn and whose price reads carry what they
+ * wrote. */
+function heldPriceWrites(holds: { promise: Promise<void> }[]) {
+  const written = new Map<string, string | null>();
+  return api({
+    updateMenuItem: vi.fn(
+      async (_menu: string, item: string, body: { grossPrice: string | null }) => {
+        await holds.shift()?.promise;
+        written.set(item, body.grossPrice);
+      },
+    ),
+    getMenuPrices: vi.fn(async (id: string) =>
+      id === "menu-lunch"
+        ? lunchPrices().map((row) =>
+            written.has(row.menuItemId) ? { ...row, override: written.get(row.menuItemId)! } : row,
+          )
+        : [],
+    ),
+  });
+}
+
+it("reads the prices again once for saves made one behind another, each field keeping its sent price, marked saving, until that read", async () => {
+  const first = deferred<void>();
+  const second = deferred<void>();
+  const client = heldPriceWrites([first, second]);
+  const el = await mountPrices(client);
+  const reads = client.getMenuPrices.mock.calls.length;
+  await commitPrice(el, "mi-burger", "11.00");
+  await commitPrice(el, "mi-lager", "5.00");
+  first.resolve();
+  await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledTimes(2));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await prices(el).updateComplete;
+  expect(client.getMenuPrices.mock.calls.length).toBe(reads);
+  expect([...prices(el).saving].sort()).toEqual(["mi-burger", "mi-lager"]);
+  expect(priceField(el, "mi-burger").value).toBe("11.00");
+  second.resolve();
+  await vi.waitFor(() => expect(prices(el).saving.size).toBe(0));
+  expect(client.getMenuPrices.mock.calls.length).toBe(reads + 1);
+  await prices(el).updateComplete;
+  expect(priceField(el, "mi-burger").value).toBe("11.00");
+  expect(priceField(el, "mi-lager").value).toBe("5.00");
+});
+
+it("reads the prices again after a refused last save when a save before it was stored", async () => {
+  const first = deferred<void>();
+  const refused = deferred<void>();
+  const client = heldPriceWrites([first, refused]);
+  const el = await mountPrices(client);
+  const reads = client.getMenuPrices.mock.calls.length;
+  await commitPrice(el, "mi-burger", "11.00");
+  await commitPrice(el, "mi-lager", "5.00");
+  first.resolve();
+  await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledTimes(2));
+  refused.reject({ code: "connection.failed" });
+  await vi.waitFor(() => expect(prices(el).saving.size).toBe(0));
+  expect(client.getMenuPrices.mock.calls.length).toBe(reads + 1);
+  expect(prices(el).rows.find((row) => row.menuItemId === "mi-burger")!.override).toBe("11.00");
+  expect(prices(el).outcome).toMatchObject({ kind: "refused", save: { key: "mi-lager" } });
+  await prices(el).updateComplete;
+  expect(priceField(el, "mi-burger").value).toBe("11.00");
+  expect(priceField(el, "mi-lager").value).toBe("5.00");
+});
+
 it("still sends a queued save after the one before it is refused", async () => {
   const client = api({
     updateMenuItem: vi

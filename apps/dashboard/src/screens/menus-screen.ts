@@ -612,6 +612,9 @@ export class MenusScreen extends LitElement {
   readonly #writes = new ListWriteQueue();
   readonly #priceWrites = new ListWriteQueue();
   #priceSavesMade = 0;
+  /** Fields whose save was stored while a later save waited behind it. They stay marked saving
+   * until the re-read after the last save, which carries their prices too. */
+  readonly #pricesUnread = new Set<string>();
   /** Per list, the current batch of moves: those made since the list last had none unanswered,
    * until one is refused. `out` counts the unanswered; `answered` holds the orders answered by
    * moves that were not shown because another write to the list waited behind them. */
@@ -1514,20 +1517,23 @@ export class MenusScreen extends LitElement {
 
   // ── Prices ───────────────────────────────────────────────────────────────────────────────────
 
-  /** Called by a save's own task before it ends, so the queue still counts that save. */
-  #priceSaveDone(key: string): void {
-    if (this.#priceWrites.pending(key) > 1) return;
+  /** Unmarks the field of the save ending, `key`, and the fields a re-read has just carried, each
+   * unless another save of it waits. Called by the save's own task before it ends, so the queue
+   * still counts that save. */
+  #priceSaveDone(key: string, carried: readonly string[] = []): void {
     const saving = new Set(this.savingPrices);
-    saving.delete(key);
-    this.savingPrices = saving;
+    for (const done of [key, ...carried])
+      if (this.#priceWrites.pending(done) <= (done === key ? 1 : 0)) saving.delete(done);
+    if (saving.size !== this.savingPrices.size) this.savingPrices = saving;
   }
 
   /** One field per request, in the order made; each field stays editable meanwhile. A refusal is
    * said in the tab's status line, and under the field when it names the price; once the menu,
-   * the tab or the row has gone, it is named beside the list instead. A success is said only for
-   * the last save made, so its Undo never reaches past a later write; never over a refusal said
-   * since it was made, which would hide that refusal; and not over a failed re-read, which the list
-   * reports as a load failure. */
+   * the tab or the row has gone, it is named beside the list instead. The prices are read again
+   * only after the last save made, and only when it or an earlier one was stored. A success is said
+   * only for the last save made, so its Undo never reaches past a later write; never over a refusal
+   * said since it was made, which would hide that refusal; and not over a failed re-read, which
+   * the list reports as a load failure. */
   #savePrice(save: PriceSave): void {
     const menuId = this.menuId;
     if (menuId === null) return;
@@ -1536,12 +1542,14 @@ export class MenusScreen extends LitElement {
     this.priceOutcome = null;
     this.savingPrices = new Set(this.savingPrices).add(save.key);
     this.#priceWrites.run(save.key, async () => {
+      let stored = true;
       try {
         if (save.variantId === null)
           await this.api.updateMenuItem(menuId, save.menuItemId, { grossPrice: save.price });
         else
           await this.api.setMenuVariantPrice(menuId, save.menuItemId, save.variantId, save.price);
       } catch (error) {
+        stored = false;
         const reason = codeMessage(codeOf(error));
         const shown =
           this.menuId === menuId &&
@@ -1555,20 +1563,27 @@ export class MenusScreen extends LitElement {
           this.memberError = t("menus.change_not_saved")
             .replace("{name}", save.name)
             .replace("{reason}", reason);
-        this.#priceSaveDone(save.key);
-        return;
       }
       // Saves are answered in the order made, so a refusal under this field came from an earlier
       // save, and the field now holds a price that was stored.
-      if (save.key in this.priceRefusals)
+      if (stored && save.key in this.priceRefusals)
         this.priceRefusals = without(this.priceRefusals, [save.key]);
-      if (this.menuId === menuId && this.view === "prices") {
+      if (made !== this.#priceSavesMade) {
+        if (stored) this.#pricesUnread.add(save.key);
+        else this.#priceSaveDone(save.key);
+        return;
+      }
+      const reread =
+        (stored || this.#pricesUnread.size > 0) && this.menuId === menuId && this.view === "prices";
+      if (reread) {
         await this.#watchPrices(menuId);
         const shown = this.menuId === menuId && this.view === "prices" && !this.pricesError;
-        if (shown && made === this.#priceSavesMade && this.priceOutcome === null)
+        if (stored && shown && made === this.#priceSavesMade && this.priceOutcome === null)
           this.priceOutcome = { kind: "saved", save };
       }
-      this.#priceSaveDone(save.key);
+      const carried = [...this.#pricesUnread];
+      this.#pricesUnread.clear();
+      this.#priceSaveDone(save.key, carried);
     });
   }
 
