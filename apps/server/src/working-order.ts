@@ -5794,8 +5794,7 @@ export interface CounterWaitingOrder {
   total: string;
   /** {@link handOverOrder} would accept it now. */
   canHandOver: boolean;
-  /** A placed order's frozen service mode, or `cfg.orderFlow` when it has none frozen; null on a
-   * settled one. */
+  /** A placed order's frozen service mode, or prepay when it has none; null on a settled one. */
   serviceMode: ServiceMode | null;
   /** Only on a placed order whose invoice is issued: its number. */
   invoiceNumber?: string;
@@ -5869,7 +5868,7 @@ export async function listCounterWaiting(
         collectedAt: row.collectedAt,
         total: sale?.amountDue ?? rawCentsToDecimal(row.total),
         canHandOver: eligible,
-        serviceMode: placed ? (modes.get(row.id) ?? cfg.orderFlow) : null,
+        serviceMode: placed ? (modes.get(row.id) ?? "prepay") : null,
         ...(sale === undefined ? {} : { invoiceNumber: numbers.get(sale.saleId)! }),
       });
     }
