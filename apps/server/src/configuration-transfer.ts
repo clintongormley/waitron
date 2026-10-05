@@ -216,6 +216,15 @@ function decodeBytes(value: unknown): unknown {
     : value;
 }
 
+const ROWID = "__export_rowid";
+
+/** The engine matches table and column names ignoring ASCII case only, so `toLowerCase`, which also
+ * folds some other letters into ASCII ones, would match names the engine keeps apart. Declared
+ * table names are lowercase ASCII. */
+function asciiLower(name: string): string {
+  return name.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+}
+
 /** Read the explicitly declared configuration tables (one tenant per database), less the rows a
  * table's `leaveBehindWhenSet` leaves behind and every row whose foreign key names one of them. */
 export async function exportConfigurationTables(
@@ -223,45 +232,61 @@ export async function exportConfigurationTables(
   modules: readonly WaitronModule[],
 ): Promise<{ tables: ConfigurationBundle["tables"]; reconnect: string[] }> {
   const declared = declarations(modules);
-  const kept = new Map<string, Array<Record<string, unknown>>>();
-  const leftBehind = new Map<string, Array<Record<string, unknown>>>();
+  const { tracked, keys } = await reachedForeignKeys(db, declared);
+  if (tracked.size > 0) await refuseWithoutRowid(db, tracked);
+
+  const read = new Map<string, Array<Record<string, unknown>>>();
+  const leftBehind = new Map<string, Set<unknown>>();
   for (const declaration of declared) {
-    const result = await db.execute<Record<string, unknown>>(sql`
-      select * from ${sql.identifier(declaration.name)}
-    `);
+    const isTracked = tracked.has(declaration.name);
+    const column = declaration.leaveBehindWhenSet;
+    if (isTracked) {
+      // `table_info` leaves out generated columns, which `select *` returns and which can be named
+      // `rowid`.
+      const columns = await db.execute<{ name: string }>(sql`
+        select name from pragma_table_xinfo(${declaration.name})
+      `);
+      const names = new Set(columns.rows.map((row) => row.name));
+      // Without this check every row would read the missing column as `undefined`, not null, and
+      // be left behind.
+      if (column !== undefined && !names.has(column)) {
+        throw new AppError("setup.request_invalid", { field: `${declaration.name}.${column}` });
+      }
+      // A column named `rowid`, in any case, hides the engine's own from every query below; the
+      // alias is a key of the row object, so only its exact spelling collides.
+      const shadowed = [...names].find((name) => name === ROWID || asciiLower(name) === "rowid");
+      if (shadowed !== undefined) {
+        throw new AppError("setup.request_invalid", { field: `${declaration.name}.${shadowed}` });
+      }
+    }
+    const result = await db.execute<Record<string, unknown>>(
+      isTracked
+        ? sql`select rowid as ${sql.identifier(ROWID)}, * from ${sql.identifier(declaration.name)}`
+        : sql`select * from ${sql.identifier(declaration.name)}`,
+    );
     if (result.rows.length > MAX_ROWS_PER_TABLE) {
       throw new AppError("setup.request_invalid", { field: `table:${declaration.name}` });
     }
-    const column = declaration.leaveBehindWhenSet;
-    if (column === undefined) {
-      kept.set(declaration.name, result.rows);
-      leftBehind.set(declaration.name, []);
-      continue;
-    }
-    // A column the table lacks would read as unset on every row and leave nothing behind.
-    const columns = await db.execute<{ name: string }>(sql`
-      select name from pragma_table_info(${declaration.name})
-    `);
-    if (!columns.rows.some((row) => row.name === column)) {
-      throw new AppError("setup.request_invalid", { field: `${declaration.name}.${column}` });
-    }
-    kept.set(
-      declaration.name,
-      result.rows.filter((row) => row[column] === null),
-    );
+    read.set(declaration.name, result.rows);
     leftBehind.set(
       declaration.name,
-      result.rows.filter((row) => row[column] !== null),
+      new Set(
+        column === undefined
+          ? []
+          : result.rows.filter((row) => row[column] !== null).map((row) => row[ROWID]),
+      ),
     );
   }
-  await leaveBehindReferences(db, declared, kept, leftBehind);
+  await leaveBehindReferences(db, keys, leftBehind);
 
   const tables: ConfigurationBundle["tables"] = {};
   const reconnect: string[] = [];
   for (const declaration of declared) {
-    const rows = kept.get(declaration.name)!;
+    const gone = leftBehind.get(declaration.name)!;
+    const rows = read.get(declaration.name)!.filter((row) => !gone.has(row[ROWID]));
     tables[declaration.name] = rows.map((row) => {
       const copy = { ...row };
+      if (tracked.has(declaration.name)) delete copy[ROWID];
       for (const field of declaration.omit ?? []) delete copy[field];
       for (const [field, value] of Object.entries(copy)) {
         if (value instanceof Uint8Array) copy[field] = encodeBytes(value);
@@ -273,28 +298,42 @@ export async function exportConfigurationTables(
   return { tables, reconnect };
 }
 
-/**
- * Moves into `leftBehind` every kept row whose foreign key names a left-behind row, repeating until
- * nothing more moves, so the bundle carries no key to a row it does not hold.
- */
-async function leaveBehindReferences(
+interface ForeignKey {
+  table: string;
+  parent: string;
+  from: string[];
+  to: string[];
+}
+
+/** The tables a row left behind can reach through foreign keys between declared tables, from a
+ * table that declares `leaveBehindWhenSet` to its children and theirs, and the keys that lead there,
+ * their parent columns resolved: a key that names none references the parent's primary key, in the
+ * primary key's own column order. */
+async function reachedForeignKeys(
   db: Database | Transaction,
   declared: readonly ConfigurationTransferTable[],
-  kept: Map<string, Array<Record<string, unknown>>>,
-  leftBehind: Map<string, Array<Record<string, unknown>>>,
-): Promise<void> {
-  if ([...leftBehind.values()].every((rows) => rows.length === 0)) return;
-  const keys: Array<{ table: string; parent: string; from: string[]; to: string[] }> = [];
+): Promise<{ tracked: Set<string>; keys: ForeignKey[] }> {
+  const tracked = new Set(
+    declared
+      .filter((declaration) => declaration.leaveBehindWhenSet !== undefined)
+      .map((declaration) => declaration.name),
+  );
+  if (tracked.size === 0) return { tracked, keys: [] };
+  const names = new Set(declared.map((declaration) => declaration.name));
+  const found: Array<{ table: string; parent: string; from: string[]; to: Array<string | null> }> =
+    [];
   for (const declaration of declared) {
-    const result = await db.execute<{ id: number; table: string; from: string; to: string }>(sql`
-      select id, "table", "from", "to" from pragma_foreign_key_list(${declaration.name})
-      order by id, seq
-    `);
-    const byId = new Map<number, { table: string; parent: string; from: string[]; to: string[] }>();
+    const result = await db.execute<{ id: number; table: string; from: string; to: string | null }>(
+      sql`
+        select id, "table", "from", "to" from pragma_foreign_key_list(${declaration.name})
+        order by id, seq
+      `,
+    );
+    const byId = new Map<number, (typeof found)[number]>();
     for (const row of result.rows) {
       const key = byId.get(row.id) ?? {
         table: declaration.name,
-        parent: row.table,
+        parent: asciiLower(row.table),
         from: [],
         to: [],
       };
@@ -302,28 +341,87 @@ async function leaveBehindReferences(
       key.to.push(row.to);
       byId.set(row.id, key);
     }
-    keys.push(...[...byId.values()].filter((key) => leftBehind.has(key.parent)));
+    found.push(...[...byId.values()].filter((key) => names.has(key.parent)));
+  }
+  const reached = new Set<(typeof found)[number]>();
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const key of found) {
+      if (reached.has(key) || !tracked.has(key.parent)) continue;
+      reached.add(key);
+      tracked.add(key.table);
+      grew = true;
+    }
+  }
+  const keys: ForeignKey[] = [];
+  for (const key of reached) {
+    let to = key.to;
+    if (to.some((column) => column === null)) {
+      const primary = await db.execute<{ name: string }>(sql`
+        select name from pragma_table_info(${key.parent}) where pk > 0 order by pk
+      `);
+      to = primary.rows.map((row) => row.name);
+    }
+    if (to.length !== key.from.length) {
+      throw new AppError("setup.request_invalid", { field: `table:${key.table}` });
+    }
+    keys.push({ ...key, to: to as string[] });
+  }
+  return { tracked, keys };
+}
+
+async function refuseWithoutRowid(db: Database | Transaction, tables: Set<string>): Promise<void> {
+  const result = await db.execute<{ name: string }>(sql`
+    select name from pragma_table_list where schema = 'main' and wr = 1
+  `);
+  for (const row of result.rows) {
+    const name = asciiLower(row.name);
+    if (tables.has(name)) throw new AppError("setup.request_invalid", { field: `table:${name}` });
+  }
+}
+
+/**
+ * Adds to `leftBehind` every row whose foreign key names a left-behind row, repeating until nothing
+ * more is added, so no exported row's foreign key names a row left behind. The `references` lists
+ * are not read.
+ *
+ * The engine pairs the rows: `parent = +child` takes the parent column's collation (the left
+ * column wins) and its affinity (the `+` strips the child's), as a foreign key compares, and a null
+ * in either side matches nothing, as a key with a null in it references nothing.
+ */
+async function leaveBehindReferences(
+  db: Database | Transaction,
+  keys: readonly ForeignKey[],
+  leftBehind: Map<string, Set<unknown>>,
+): Promise<void> {
+  if ([...leftBehind.values()].every((rows) => rows.size === 0)) return;
+  const pairs: Array<{ key: ForeignKey; rows: Array<{ child: unknown; parent: unknown }> }> = [];
+  for (const key of keys) {
+    const on = sql.join(
+      key.from.map(
+        (from, index) => sql`p.${sql.identifier(key.to[index]!)} = +c.${sql.identifier(from)}`,
+      ),
+      sql` and `,
+    );
+    const result = await db.execute<{ child: unknown; parent: unknown }>(sql`
+      select c.rowid as child, p.rowid as parent
+      from ${sql.identifier(key.table)} as c join ${sql.identifier(key.parent)} as p on ${on}
+    `);
+    pairs.push({ key, rows: result.rows });
   }
   let moved = true;
   while (moved) {
     moved = false;
-    for (const key of keys) {
-      const gone = new Set(
-        leftBehind
-          .get(key.parent)!
-          .map((row) => JSON.stringify(key.to.map((column) => row[column]))),
-      );
-      const rows = kept.get(key.table)!;
-      const names = (row: Record<string, unknown>): boolean =>
-        gone.has(JSON.stringify(key.from.map((column) => row[column])));
-      const leaving = rows.filter(names);
-      if (leaving.length === 0) continue;
-      kept.set(
-        key.table,
-        rows.filter((row) => !names(row)),
-      );
-      leftBehind.get(key.table)!.push(...leaving);
-      moved = true;
+    for (const { key, rows } of pairs) {
+      const gone = leftBehind.get(key.parent)!;
+      const leaving = leftBehind.get(key.table)!;
+      for (const row of rows) {
+        if (gone.has(row.parent) && !leaving.has(row.child)) {
+          leaving.add(row.child);
+          moved = true;
+        }
+      }
     }
   }
 }

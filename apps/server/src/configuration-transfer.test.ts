@@ -2068,7 +2068,7 @@ it("counts an exported product with no Active flag as Active, as the column stor
   expect(persisted.rows[0]!.count).toBe(0);
 });
 
-it("refuses a leave-behind column the table lacks, or a name that is not a plain column name", async () => {
+it("refuses a leave-behind name the table has no column for", async () => {
   for (const column of ["no_such_column", 'retired_at" or "1']) {
     const module = {
       name: "probe",
@@ -2255,4 +2255,268 @@ it("leaves a retired profile's home layout choices behind with it, while a live 
     const lists = await readProfilePrinterLists(tx, handheld.id);
     expect(lists.receiptPrinterIds).toHaveLength(1);
   });
+});
+
+/** Creates `tables` in order, fills them, checks the fixture breaks no foreign key, exports them
+ * declared in reverse order with the first as the leave-behind table, and drops them again. */
+async function exportScratch(
+  tables: Array<{ name: string; create: string; rows: string }>,
+  leaveBehindWhenSet: string,
+): Promise<Record<string, unknown[]>> {
+  try {
+    for (const table of tables) await suite.db.execute(sql.raw(table.create));
+    for (const table of tables)
+      await suite.db.execute(
+        sql`insert into ${sql.identifier(table.name)} values ${sql.raw(table.rows)}`,
+      );
+    const violations = await suite.db.execute(sql`pragma foreign_key_check`);
+    expect(violations.rows).toEqual([]);
+    const declared = tables.map((table, index) =>
+      index === 0 ? { name: table.name, leaveBehindWhenSet } : { name: table.name },
+    );
+    const module = {
+      name: "probe",
+      configurationTransfer: { kind: "tables", tables: declared.reverse() },
+    } as unknown as WaitronModule;
+    const { tables: exported } = await exportConfigurationTables(suite.db, [module]);
+    return Object.fromEntries(
+      Object.entries(exported).map(([name, rows]) => [name, rows.map((row) => row.id)]),
+    );
+  } finally {
+    for (const table of [...tables].reverse())
+      await suite.db.execute(sql`drop table if exists ${sql.identifier(table.name)}`);
+  }
+}
+
+it("follows a key that names no parent columns to the parent's primary key, composite ones included", async () => {
+  const ids = await exportScratch(
+    [
+      {
+        name: "zz_parents",
+        create:
+          "create table zz_parents (id text, part text, gone_at text, primary key (part, id))",
+        rows: "('p-kept', 'A', null), ('p-gone', 'A', '2026-10-05T12:00:00.000Z')",
+      },
+      {
+        name: "zz_children",
+        create: `create table zz_children (
+          id text primary key, parent_part text, parent_id text,
+          foreign key (parent_part, parent_id) references zz_parents
+        )`,
+        rows: "('c-kept', 'A', 'p-kept'), ('c-gone', 'A', 'p-gone')",
+      },
+      {
+        name: "zz_grandchildren",
+        create:
+          "create table zz_grandchildren (id text primary key, child_id text references zz_children)",
+        rows: "('g-kept', 'c-kept'), ('g-gone', 'c-gone')",
+      },
+    ],
+    "gone_at",
+  );
+  expect(ids).toEqual({
+    zz_grandchildren: ["g-kept"],
+    zz_children: ["c-kept"],
+    zz_parents: ["p-kept"],
+  });
+});
+
+it("matches a key as the engine does, with the parent column's affinity and collation", async () => {
+  const ids = await exportScratch(
+    [
+      {
+        name: "zz_parents",
+        create: `create table zz_parents (
+          id text primary key, num integer unique, name text collate nocase unique,
+          code text unique, gone_at text
+        )`,
+        rows: `('p-kept', 2, 'Kept', '1', null),
+          ('p-gone', 1, 'Gone', '01', '2026-10-05T12:00:00.000Z')`,
+      },
+      {
+        name: "zz_children",
+        create: `create table zz_children (
+          id text primary key,
+          num_ref text references zz_parents(num),
+          name_ref text references zz_parents(name),
+          code_ref integer references zz_parents(code)
+        )`,
+        // '1' is the integer 1 under the parent's affinity, 'gone' is 'Gone' under its collation,
+        // and the integer 1 is the text '1' under the parent's affinity, so not '01'.
+        rows: `('c-num', '1', null, null), ('c-name', null, 'gone', null),
+          ('c-code', null, null, 1)`,
+      },
+    ],
+    "gone_at",
+  );
+  expect(ids).toEqual({ zz_children: ["c-code"], zz_parents: ["p-kept"] });
+});
+
+it("follows a key whose parent table is spelled in another case", async () => {
+  const ids = await exportScratch(
+    [
+      {
+        name: "zz_parents",
+        create: "create table zz_parents (id text primary key, gone_at text)",
+        rows: "('p-kept', null), ('p-gone', '2026-10-05T12:00:00.000Z')",
+      },
+      {
+        name: "zz_children",
+        create:
+          "create table zz_children (id text primary key, parent_id text references ZZ_Parents(id))",
+        rows: "('c-kept', 'p-kept'), ('c-gone', 'p-gone')",
+      },
+    ],
+    "gone_at",
+  );
+  expect(ids).toEqual({ zz_children: ["c-kept"], zz_parents: ["p-kept"] });
+});
+
+it("leaves behind by a generated column", async () => {
+  const ids = await exportScratch(
+    [
+      {
+        name: "zz_parents",
+        create: `create table zz_parents (
+          id text primary key, gone_at text, gone text generated always as (substr(gone_at, 1, 10))
+        )`,
+        rows: "('p-kept', null), ('p-gone', '2026-10-05T12:00:00.000Z')",
+      },
+    ],
+    "gone",
+  );
+  expect(ids).toEqual({ zz_parents: ["p-kept"] });
+});
+
+it("never takes a key with a null in it as naming a left-behind row", async () => {
+  const ids = await exportScratch(
+    [
+      {
+        name: "zz_parents",
+        create: `create table zz_parents (
+          id text primary key, alt text unique, a text, b text, gone_at text, unique (a, b)
+        )`,
+        rows: "('p-gone', null, 'A', null, '2026-10-05T12:00:00.000Z')",
+      },
+      {
+        name: "zz_children",
+        create: `create table zz_children (
+          id text primary key, alt_ref text references zz_parents(alt), a text, b text,
+          foreign key (a, b) references zz_parents(a, b)
+        )`,
+        rows: "('c-alt', null, null, null), ('c-pair', null, 'A', null)",
+      },
+    ],
+    "gone_at",
+  );
+  expect(ids).toEqual({ zz_children: ["c-alt", "c-pair"], zz_parents: [] });
+});
+
+it("pairs only the tables a left-behind row's keys reach, so an unrelated table need not have rowids", async () => {
+  const ids = await exportScratch(
+    [
+      {
+        name: "zz_parents",
+        create: "create table zz_parents (id text primary key, gone_at text)",
+        rows: "('p-kept', null), ('p-gone', '2026-10-05T12:00:00.000Z')",
+      },
+      {
+        name: "zz_children",
+        create:
+          "create table zz_children (id text primary key, parent_id text references zz_parents(id))",
+        rows: "('c-kept', 'p-kept'), ('c-gone', 'p-gone')",
+      },
+      {
+        name: "zz_others",
+        create: "create table zz_others (id text primary key) without rowid",
+        rows: "('o-1')",
+      },
+      {
+        name: "zz_other_children",
+        create:
+          "create table zz_other_children (id text primary key, other_id text references zz_others(id))",
+        rows: "('oc-1', 'o-1')",
+      },
+    ],
+    "gone_at",
+  );
+  expect(ids).toEqual({
+    zz_other_children: ["oc-1"],
+    zz_others: ["o-1"],
+    zz_children: ["c-kept"],
+    zz_parents: ["p-kept"],
+  });
+});
+
+it("refuses a leave-behind export it cannot pair by rowid, or whose key it cannot resolve", async () => {
+  const cases = [
+    {
+      create: [
+        "create table zz_parents (id text primary key, gone_at text) without rowid",
+        "create table zz_children (id text primary key, parent_id text references zz_parents(id))",
+      ],
+      field: "table:zz_parents",
+    },
+    {
+      create: [
+        "create table ZZ_Parents (id text primary key, gone_at text) without rowid",
+        "create table zz_children (id text primary key, parent_id text references zz_parents(id))",
+      ],
+      field: "table:zz_parents",
+    },
+    {
+      create: [
+        "create table zz_parents (id text primary key, gone_at text, __export_rowid integer)",
+        "create table zz_children (id text primary key, parent_id text references zz_parents(id))",
+      ],
+      field: "zz_parents.__export_rowid",
+    },
+    {
+      create: [
+        "create table zz_parents (id text primary key, gone_at text)",
+        "create table zz_children (id text primary key, rowid text, parent_id text references zz_parents(id))",
+      ],
+      field: "zz_children.rowid",
+    },
+    {
+      create: [
+        "create table zz_parents (id text primary key, gone_at text)",
+        "create table zz_children (id text primary key, RowId text, parent_id text references zz_parents(id))",
+      ],
+      field: "zz_children.RowId",
+    },
+    {
+      create: [
+        "create table zz_parents (id text primary key, gone_at text)",
+        "create table zz_children (id text primary key, parent_id text references zz_parents(id), rowid text generated always as (parent_id) virtual)",
+      ],
+      field: "zz_children.rowid",
+    },
+    {
+      create: [
+        "create table zz_parents (id text unique, gone_at text)",
+        "create table zz_children (id text primary key, parent_id text references zz_parents)",
+      ],
+      field: "table:zz_children",
+    },
+  ];
+  for (const { create, field } of cases) {
+    try {
+      for (const statement of create) await suite.db.execute(sql.raw(statement));
+      const module = {
+        name: "probe",
+        configurationTransfer: {
+          kind: "tables",
+          tables: [{ name: "zz_children" }, { name: "zz_parents", leaveBehindWhenSet: "gone_at" }],
+        },
+      } as unknown as WaitronModule;
+      await expect(exportConfigurationTables(suite.db, [module])).rejects.toMatchObject({
+        code: "setup.request_invalid",
+        params: { field },
+      });
+    } finally {
+      for (const name of ["zz_children", "zz_parents"])
+        await suite.db.execute(sql`drop table if exists ${sql.identifier(name)}`);
+    }
+  }
 });
