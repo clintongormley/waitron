@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
   kitchenStations,
+  kitchenTimingDefaults,
   locations,
   printJobs,
   ticketItems,
@@ -78,6 +79,7 @@ const suite = useVenueDb({
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
       .returning({ id: locations.id });
+    await db.insert(kitchenTimingDefaults).values({ locationId: loc!.id });
     // `openTab` writes `working_orders.node_id`, whose FK requires a real row.
     const nodeId = await seedNode(db, brandLocationId(loc!.id));
     const [person] = await db

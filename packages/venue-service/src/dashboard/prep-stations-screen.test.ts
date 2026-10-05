@@ -5413,3 +5413,163 @@ it("moves a configuration panel back to the overview when the screen becomes rea
   expect(q(el, '[data-test="settings-table"]')).toBeNull();
   expect(q(el, '[data-test="new-station"]')).toBeNull();
 });
+
+it.each([
+  [
+    "follows",
+    "management.request_invalid",
+    "stationIds",
+    "Choose at least one station, or every station",
+    "Fix the fields marked above.",
+  ],
+  ["follows", "management.request_invalid", "zoneIds", "", "The change could not be saved."],
+  [
+    "zones",
+    "zone.not_found",
+    "",
+    "Choose at least one service zone, or every service zone",
+    "Fix the fields marked above.",
+  ],
+  [
+    "zones",
+    "management.request_invalid",
+    "zoneIds",
+    "Choose at least one service zone, or every service zone",
+    "Fix the fields marked above.",
+  ],
+  ["zones", "management.request_invalid", "stationIds", "", "The change could not be saved."],
+  ["pass", "watcher.not_found", "", "", "This watcher could not be found."],
+  ["pass", "connection.failed", "", "", "The change could not be saved."],
+])(
+  "Watchers %s classifies %s/%s without losing a retryable draft",
+  async (field, code, errorField, expectedField, expectedSummary) => {
+    const save = vi.fn().mockRejectedValue({ code, params: { field: errorField } });
+    const { el } = await mountWatcherPrinters({ updateWatcher: save });
+    const combo = await openWatcherCell(el, field);
+    chooseWatcherCell(combo, field === "pass" ? ["no"] : ["__every__"]);
+    await settle(el);
+    watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await settle(el);
+    const retained = watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox;
+    expect(retained.values).toEqual(field === "pass" ? ["no"] : ["__every__"]);
+    expect(retained.error).toBe(expectedField);
+    expect(watcherTableQ(el, "wt-form-actions")!.shadowRoot!.textContent).toContain(
+      expectedSummary,
+    );
+    expect(watcherTableQ(el, '[data-test="save-watcher-cell"]')!.hasAttribute("disabled")).toBe(
+      false,
+    );
+  },
+);
+
+it.each([
+  ["management.request_invalid", "name", "This field is required.", "Fix the fields marked above."],
+  ["management.request_invalid", "stationIds", "", "The change could not be saved."],
+  ["watcher.not_found", "", "", "This watcher could not be found."],
+  ["connection.failed", "", "", "The change could not be saved."],
+])(
+  "Watchers Rename classifies %s/%s and retains its submitted name",
+  async (code, field, expectedField, summary) => {
+    const save = vi.fn().mockRejectedValue({ code, params: { field } });
+    const { el } = await mountWatcherPrinters({ updateWatcher: save });
+    watcherTableQ(el, '[data-test="rename-watcher-pass"]')!.click();
+    await settle(el);
+    const input = q(el, '[data-test="watcher-rename-name"]') as WtInput;
+    input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Expo" } }));
+    await settle(el);
+    input
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await settle(el);
+    const retained = q(el, '[data-test="watcher-rename-name"]') as WtInput;
+    expect(retained.value).toBe("Expo");
+    expect(retained.error).toBe(expectedField);
+    expect(
+      q(el, '[data-test="watcher-rename-modal"]')!.querySelector("wt-form-actions")!.shadowRoot!
+        .textContent,
+    ).toContain(summary);
+    expect(q(el, '[data-test="save-watcher-name"]')!.hasAttribute("disabled")).toBe(false);
+  },
+);
+
+it.each(["cancel", "dismiss"])(
+  "Watchers Rename %s discards its draft and reopens the stored name",
+  async (how) => {
+    const save = vi.fn();
+    const { el } = await mountWatcherPrinters({ updateWatcher: save });
+    watcherTableQ(el, '[data-test="rename-watcher-pass"]')!.click();
+    await settle(el);
+    (q(el, '[data-test="watcher-rename-name"]') as WtInput).dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "Unsaved" } }),
+    );
+    await settle(el);
+    const modal = q(el, '[data-test="watcher-rename-modal"]')!;
+    if (how === "cancel") (modal.querySelector('wt-button[slot="cancel"]') as HTMLElement).click();
+    else modal.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    await settle(el);
+    expect(q(el, '[data-test="watcher-rename-modal"]')).toBeNull();
+    expect(save).not.toHaveBeenCalled();
+    watcherTableQ(el, '[data-test="rename-watcher-pass"]')!.click();
+    await settle(el);
+    expect((q(el, '[data-test="watcher-rename-name"]') as WtInput).value).toBe("Pass");
+  },
+);
+
+it.each(["ArrowUp", "Enter", "ArrowLeft"])(
+  "Stations ignores %s when it cannot change the first row's position",
+  async (key) => {
+    const order = vi.fn();
+    const { el } = await mountToday(withUpstairs({ open: true, why: "in_hours" }), {
+      reorderStations: order,
+    });
+    const handle = healthSummary(el)!.querySelector<HTMLButtonElement>('[data-test="drag-bar"]')!;
+    handle.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    await settle(el);
+    expect(order).not.toHaveBeenCalled();
+    expect(
+      [...healthSummary(el)!.querySelectorAll("tbody tr")].map((row) =>
+        row.querySelector("wt-row-actions")!.getAttribute("data-test"),
+      ),
+    ).toEqual(["station-menu-bar", "station-menu-upstairs"]);
+  },
+);
+
+it("Stations pointer drag ignores another pointer and outside rows, and a no-op release writes nothing", async () => {
+  const order = vi.fn();
+  const { el } = await mountToday(withUpstairs({ open: true, why: "in_hours" }), {
+    reorderStations: order,
+  });
+  const handle = healthSummary(el)!.querySelector<HTMLButtonElement>(
+    '[data-test="drag-upstairs"]',
+  )!;
+  const first = healthSummary(el)!
+    .querySelector('[data-test="station-menu-bar"]')!
+    .closest("tr")!
+    .getBoundingClientRect();
+  handle.dispatchEvent(
+    new PointerEvent("pointerdown", { pointerId: 811, button: 2, bubbles: true }),
+  );
+  document.dispatchEvent(
+    new PointerEvent("pointermove", { pointerId: 811, clientY: first.top + first.height / 2 }),
+  );
+  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 811 }));
+  await settle(el);
+  expect(order).not.toHaveBeenCalled();
+  handle.dispatchEvent(new PointerEvent("pointerdown", { pointerId: 812, bubbles: true }));
+  document.dispatchEvent(
+    new PointerEvent("pointermove", { pointerId: 813, clientY: first.top + first.height / 2 }),
+  );
+  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 813 }));
+  document.dispatchEvent(new PointerEvent("pointermove", { pointerId: 812, clientY: -100 }));
+  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 812 }));
+  await settle(el);
+  expect(order).not.toHaveBeenCalled();
+  expect(
+    [...healthSummary(el)!.querySelectorAll("tbody tr")].map((row) =>
+      row.querySelector("wt-row-actions")!.getAttribute("data-test"),
+    ),
+  ).toEqual(["station-menu-bar", "station-menu-upstairs"]);
+  expect(document.body.style.cursor).not.toBe("grabbing");
+});

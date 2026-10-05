@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locations, tableServiceStatuses, withTransaction } from "@waitron/db";
+import {
+  kitchenTimingDefaults,
+  locations,
+  tableServiceStatuses,
+  withTransaction,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -49,6 +54,7 @@ async function setupVenue(): Promise<Seeded> {
       operationDescription: "Venta en establecimiento",
     })
     .returning({ id: locations.id });
+  await db.insert(kitchenTimingDefaults).values({ locationId: location!.id });
   const locationId = location!.id;
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: OriginConfig = {

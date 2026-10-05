@@ -287,9 +287,9 @@ describe("kitchen-station config", () => {
     await db.execute(
       sql`delete from kitchen_timing_defaults where location_id = ${cfg.locationId}`,
     );
-    await expect(asApp(cfg, (tx) => getKitchenTimingDefaults(tx, cfg))).rejects.toThrow(
-      "Venue has no kitchen timing defaults",
-    );
+    await expect(asApp(cfg, (tx) => getKitchenTimingDefaults(tx, cfg))).rejects.toMatchObject({
+      code: "station.timing_missing",
+    });
     await expect(
       asApp(cfg, (tx) =>
         setKitchenTimingDefaults(tx, cfg, {
@@ -298,7 +298,7 @@ describe("kitchen-station config", () => {
           forgottenAfterMinutes: 12,
         }),
       ),
-    ).rejects.toThrow("Venue has no kitchen timing defaults");
+    ).rejects.toMatchObject({ code: "station.timing_missing" });
     expect(
       (
         await db.execute(

@@ -7,6 +7,7 @@ import {
   deviceProfiles,
   floorZones,
   kitchenCourses,
+  kitchenTimingDefaults,
   locations,
   printers,
   printJobs,
@@ -145,6 +146,7 @@ const suite = useVenueDb({
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
       .returning({ id: locations.id });
+    await db.insert(kitchenTimingDefaults).values({ locationId: loc!.id });
     // A default kitchen station so the place route's fire (placeOrder → fireLines) has a fallback.
     const defaultStationId = await seedKitchenStation(db, {
       locationId: brandLocationId(loc!.id),

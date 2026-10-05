@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, locations, withTransaction } from "@waitron/db";
+import { deviceProfiles, kitchenTimingDefaults, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -66,6 +66,7 @@ const suite = useVenueDb({
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
       .returning({ id: locations.id });
+    await db.insert(kitchenTimingDefaults).values({ locationId: loc!.id });
     const locationId = brandLocationId(loc!.id);
     await seedKitchenStation(db, { locationId });
     const nodeId = await seedNode(db, locationId);

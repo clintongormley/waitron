@@ -742,3 +742,78 @@ it.each([
     }
   },
 );
+
+it.each([
+  [
+    "management.request_invalid",
+    "warmAfterMinutes",
+    "Use whole minutes with warm < overdue < forgotten.",
+  ],
+  ["management.request_invalid", "forgottenAfterMinutes", ""],
+  ["connection.failed", "", ""],
+])(
+  "timing cell classifies %s/%s and leaves its refusal retryable",
+  async (code, field, fieldError) => {
+    const save = vi.fn().mockRejectedValue({ code, params: { field } });
+    const el = await mount(
+      api({ load: vi.fn().mockResolvedValue(timingView()), updateStation: save }),
+    );
+    await openTiming(el, "warmAfterMinutes");
+    minutes(el, "4");
+    await settle(el);
+    const input = q(el, "[data-test=settings-minutes]") as WtInput;
+    input
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    await vi.waitFor(() =>
+      expect(save).toHaveBeenCalledExactlyOnceWith("bar", { warmAfterMinutes: 4 }),
+    );
+    await settle(el);
+    const retained = q(el, "[data-test=settings-minutes]") as WtInput;
+    expect(retained.value).toBe("4");
+    expect(retained.error).toBe(fieldError);
+    expect(q(el, "wt-form-actions")!.shadowRoot!.textContent).toContain(
+      fieldError ? "Fix the fields marked above." : "The change could not be saved.",
+    );
+    expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(false);
+  },
+);
+
+it("fallback cell retains a confirmed destination after an unrelated request refusal", async () => {
+  const save = vi
+    .fn()
+    .mockRejectedValue({ code: "management.request_invalid", params: { field: "name" } });
+  const el = await mount(
+    api({ load: vi.fn().mockResolvedValue(fallbackView()), setStationFallback: save }),
+  );
+  await openFallback(el);
+  choose(el, "");
+  await settle(el);
+  q(el, "[data-test=save-settings-cell]")!.click();
+  await settle(el);
+  q(el, "[data-test=save-settings-cell]")!.click();
+  await vi.waitFor(() => expect(save).toHaveBeenCalledExactlyOnceWith("grill", null));
+  await settle(el);
+  expect((q(el, "[data-test=settings-choice]") as WtCombobox).value).toBe("");
+  expect((q(el, "[data-test=settings-choice]") as WtCombobox).error).toBe("");
+  expect(q(el, "wt-form-actions")!.shadowRoot!.textContent).toContain(
+    "The change could not be saved.",
+  );
+  expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(false);
+});
+
+it("choice-cell Enter on the combobox does not save until its explicit Save action", async () => {
+  const save = vi.fn();
+  const el = await mount(api({ updateStation: save }));
+  await openRest(el);
+  choose(el, "yes");
+  await settle(el);
+  q(el, "[data-test=settings-choice]")!.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+  );
+  await settle(el);
+  expect(save).not.toHaveBeenCalled();
+  q(el, "[data-test=save-settings-cell]")!.click();
+  await settle(el);
+  expect(save).toHaveBeenCalledExactlyOnceWith("bar", { showsRestOfOrder: true });
+});
