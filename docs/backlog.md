@@ -3458,7 +3458,7 @@ as the product editor does. The search box takes the translated "Search" and "No
 English text is also `wt-combobox`'s own default, so the Spanish case is the one that proves
 it). Two sibling categories with the same name are left as they are (owner: "leave it"): they still show
 as two identical entries, in the tree and in a search. The path separator W82a's review asked
-about is settled (owner 2026-10-05: every Products-screen path uses " › "; built in W82b): the
+about is settled (owner 2026-10-05: every Products-screen path uses " › "; built in W82b, #1232): the
 Delete dialog's list of categories (`#namedPaths`, `apps/dashboard/src/widgets/catalogue-browser.ts`)
 joins a path with " › ", as the Move dialog does. The Products table shows no path since W84 (#1199)
 removed its Main category column; `apps/dashboard/src/widgets/product-list.ts` still joins one with
