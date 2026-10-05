@@ -461,3 +461,22 @@ New test-first checks and disposable deletion controls are recorded in the campa
 Task 6 still needs the Printing rules watcher-printer handover. Task 4's Routing cleanup, Task 7's
 Settings/defaults and supervisor page-loading contract, and Task 8's whole-branch review, hook,
 current-head CI and landing remain. The full page is not ready to finish or ship.
+
+
+### 2026-10-05: Task 6 Printing rules handover (build remains partial)
+
+Printing rules now links to Prep stations Tickets and Watchers instead of reading or editing kitchen
+printer assignments. Its existing drawer-policy controls remain for step 8. Their saved-choice,
+refusal, in-flight gate and action-versus-read recovery checks retain their behavioral assertions;
+load fixtures now fail/recover the surviving location read. The watcher assignment checks now run
+on Watchers: whole-set choices and transfer, native saved selection, Cancel after refusal, localized
+station conflict guidance, phone geometry and light/dark accessibility. The old conflict-recovery
+check moved to the Watchers editor with partial/final station-release assertions and no resubmission.
+A second selected printer still serving a station keeps the refusal, even after the printer named by
+the server has been released. A general save error survives the same live read.
+
+New handover/conflict checks failed before their implementation. The new 320px geometry check first
+used a synthetic click on an offscreen table cell; the browser's real click scrolls the cell into
+view, and the retained viewport bounds pass. No production geometry change followed that probe.
+Tasks 4 (Routing cleanup), 7 (Settings/defaults/supervisor page loading) and 8 (whole-branch review,
+current-head CI and landing) remain. This checkpoint does not authorize shipping a partial page.

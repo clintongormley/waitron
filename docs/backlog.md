@@ -6337,9 +6337,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   selections, current kitchen screens and following watchers, with links to Devices and Watchers.
   Its multi-select saves a complete printer set in one request; a refused set retains its draft and
   previous mappings. Disabled printers can be removed from retained assignments but not added.
-  Printing rules no longer edits station assignments; its watcher and drawer controls remain until
-  their respective build steps. A watcher-printer conflict clears when the final station mapping is
-  removed in Tickets, and its guidance points there in EN/ES. Tickets localises its empty state.
+  Printing rules now links to Tickets and Watchers instead of editing either printer assignment;
+  its drawer controls remain for step 8. Watchers retains a printer conflict until Tickets releases
+  every station mapping for the selected printers, without clearing an unrelated save error.
+  Tickets localises its empty state.
   Watcher printer selections now have a whole-set API using the existing printer-management
   permission and assignment checks in one transaction. A refused new mapping rolls back earlier
   moves; an already selected disabled printer can be retained or cleared. The Prep client exposes
@@ -6350,9 +6351,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Follows and service-zone cells choose every member or an explicit list; Runs the pass uses its
   own choice editor. Rename and Disable sit in the row menu. Screens includes retained inactive
   bindings and links to Devices. Cell drafts and save refusals survive live reads; Rename writes
-  saved values for every other field, leaving unsaved drafts out of its request. Printing rules'
-  watcher-printer handover remains open, as do Settings and the legacy controls in Routing. Stations now offers confirmed Open/Close for today and
-  Back to the schedule actions, with retry after a write refusal. Default and unscheduled stations
+  saved values for every other field, leaving unsaved drafts out of its request. The watcher-printer
+  handover is implemented; Settings and the legacy controls in Routing remain open. Stations now
+  offers confirmed Open/Close for today and Back to the schedule actions, with retry after a write refusal. Default and unscheduled stations
   say Always open without an action; disabled stations and an unreadable clock offer no hours
   action. Today now shows the next scheduled opening or closing, distinguishing tomorrow and later
   weekdays; overlapping or adjoining intervals keep the station open until the actual closure.

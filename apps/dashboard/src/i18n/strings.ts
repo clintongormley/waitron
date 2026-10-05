@@ -421,6 +421,8 @@ export const en = {
   "nav.printing_rules": "Printing rules",
   "printing_rules.title": "Printing rules",
   "printing_rules.routing_title": "Kitchen ticket routing",
+  "printing_rules.tickets_link": "Assign station printers in Prep stations → Tickets",
+  "printing_rules.watchers_link": "Assign watcher printers in Prep stations → Watchers",
   "printing_rules.setting_unknown": "Current setting is unavailable. Choose an option to save it.",
   "printers.add_agent": "Add a print agent",
   "printers.edit_agent": "Edit print agent",
@@ -2604,6 +2606,10 @@ export const es: Record<StringKey, string> = {
   "nav.printing_rules": "Reglas de impresión",
   "printing_rules.title": "Reglas de impresión",
   "printing_rules.routing_title": "Destino de los tickets de cocina",
+  "printing_rules.tickets_link":
+    "Asigna impresoras de estación en Estaciones de preparación → Comandas",
+  "printing_rules.watchers_link":
+    "Asigna impresoras de puntos de seguimiento en Estaciones de preparación → Puntos de seguimiento",
   "printing_rules.setting_unknown":
     "El ajuste actual no está disponible. Elige una opción para guardarla.",
   "printers.add_agent": "Añadir un agente de impresión",

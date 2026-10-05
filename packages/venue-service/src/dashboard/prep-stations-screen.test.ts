@@ -4016,6 +4016,13 @@ it("Watchers chooses several printers, explains station and disabled conflicts, 
   const combo = await openWatcherPrinters(el);
   expect(combo.multiple).toBe(true);
   expect(combo.name).toBe("printerIds");
+  expect(combo.options.map((row) => [row.value, row.label])).toEqual([
+    ["old", "Old printer"],
+    ["next", "Next printer"],
+    ["watcher", "Pass printer"],
+    ["disabled", "Disabled printer"],
+  ]);
+  expect(combo.values).toEqual(["watcher"]);
   expect(combo.options.find((row) => row.value === "old")).toMatchObject({
     disabled: true,
     description: "Used by station Bar",
@@ -4662,3 +4669,157 @@ it.each([
     }
   },
 );
+
+it("Watchers clears only a resolved printer conflict after Tickets releases every station mapping", async () => {
+  const liveData = new LiveData();
+  const server = structuredClone(ticketView);
+  server.stationPrinters = [
+    { stationId: "bar", printerId: "next" },
+    { stationId: "upstairs", printerId: "next" },
+  ];
+  const load = vi.fn(async () => structuredClone(server));
+  const { el, a } = await mountWatcherPrinters({
+    liveData,
+    load,
+    setWatcherPrinters: vi
+      .fn()
+      .mockRejectedValue({ code: "printer.makes_and_watches", params: { id: "next" } }),
+  });
+  const combo = await openWatcherPrinters(el);
+  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
+  await settle(el);
+  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
+  await settle(el);
+  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toContain(
+    "Choose available printers",
+  );
+  expect(server.watchers[0]!.printerIds).toEqual(["watcher"]);
+  server.stationPrinters.shift();
+  liveData.invalidate([{ type: "station_printers", id: "first" }]);
+  await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+  await settle(el);
+  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toContain(
+    "Choose available printers",
+  );
+  server.stationPrinters.shift();
+  liveData.invalidate([{ type: "station_printers", id: "last" }]);
+  await vi.waitFor(() =>
+    expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toBe(""),
+  );
+  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).values).toEqual(["next"]);
+  expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["next"]);
+  expect(server.watchers[0]!.printerIds).toEqual(["watcher"]);
+});
+
+it("Watchers restores the saved printer set after cancelling a refused attachment", async () => {
+  const { el, a } = await mountWatcherPrinters({
+    setStationPrinters: vi.fn(),
+    setWatcherPrinters: vi
+      .fn()
+      .mockRejectedValue({ code: "printer.makes_and_watches", params: { id: "next" } }),
+  });
+  const combo = await openWatcherPrinters(el);
+  expect(combo.values).toEqual(["watcher"]);
+  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
+  await settle(el);
+  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
+  await settle(el);
+  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toContain(
+    "Choose available printers",
+  );
+  q(el, '[data-test="cancel-watcher-printers-pass"]')!.click();
+  await settle(el);
+  expect(q(el, '[data-test="edit-watcher-printers-pass"]')!.textContent!.trim()).toBe(
+    "Pass printer",
+  );
+  const saved = await openWatcherPrinters(el);
+  expect(saved.values).toEqual(["watcher"]);
+  await saved.updateComplete;
+  saved.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+  await saved.updateComplete;
+  expect(
+    [...saved.shadowRoot!.querySelectorAll('[role="option"][aria-selected="true"]')].map((row) =>
+      row.textContent!.trim(),
+    ),
+  ).toEqual(["Pass printer"]);
+  expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["next"]);
+  expect(a.setStationPrinters).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["en", "Used by station Bar", "Choose available printers that are not used by a station."],
+  ["es", "La usa la estación Bar", "Elige impresoras disponibles que no use una estación."],
+] as const)(
+  "Watchers localises station-printer guidance and refusal (%s)",
+  async (locale, description, refusal) => {
+    const { el } = await mountWatcherPrinters({
+      setWatcherPrinters: vi
+        .fn()
+        .mockRejectedValue({ code: "printer.makes_and_watches", params: { id: "next" } }),
+    });
+    setLocale(locale);
+    el.requestUpdate();
+    await settle(el);
+    const combo = await openWatcherPrinters(el);
+    expect(combo.options.find((row) => row.value === "old")!.description).toBe(description);
+    combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
+    await settle(el);
+    q(el, '[data-test="save-watcher-printers-pass"]')!.click();
+    await vi.waitFor(() =>
+      expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toBe(refusal),
+    );
+  },
+);
+
+it("Watchers keeps its printer picker inside a 320px viewport", async () => {
+  const previous = { width: window.innerWidth, height: window.innerHeight };
+  try {
+    await page.viewport(320, 900);
+    const { el } = await mountWatcherPrinters();
+    el.parentElement!.style.width = "320px";
+    const trigger = q(el, '[data-test="edit-watcher-printers-pass"]')!;
+    await page.elementLocator(trigger).click();
+    await settle(el);
+    const combo = q(el, '[data-test="watcher-printers-pass"]') as WtCombobox;
+    expect(combo.getBoundingClientRect().right).toBeLessThanOrEqual(320);
+    expect(combo.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+  } finally {
+    await page.viewport(previous.width, previous.height);
+  }
+});
+
+it("Watchers keeps a conflict while another selected printer still serves a station", async () => {
+  const liveData = new LiveData();
+  const server = structuredClone(ticketView);
+  server.stationPrinters.push({ stationId: "upstairs", printerId: "next" });
+  const load = vi.fn(async () => structuredClone(server));
+  const { el, a } = await mountWatcherPrinters({
+    liveData,
+    load,
+    setWatcherPrinters: vi
+      .fn()
+      .mockRejectedValue({ code: "printer.makes_and_watches", params: { id: "next" } }),
+  });
+  const combo = await openWatcherPrinters(el);
+  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next", "old"] } }));
+  await settle(el);
+  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
+  await settle(el);
+  server.stationPrinters = [{ stationId: "bar", printerId: "old" }];
+  liveData.invalidate([{ type: "station_printers", id: "next-released" }]);
+  await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+  await settle(el);
+  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toContain(
+    "Choose available printers",
+  );
+  server.stationPrinters = [];
+  liveData.invalidate([{ type: "station_printers", id: "old-released" }]);
+  await vi.waitFor(() =>
+    expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toBe(""),
+  );
+  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).values).toEqual([
+    "next",
+    "old",
+  ]);
+  expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["next", "old"]);
+});

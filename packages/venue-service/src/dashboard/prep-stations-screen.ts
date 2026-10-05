@@ -228,6 +228,7 @@ export class PrepStationsScreen extends LitElement {
     ids: string[];
     fieldError: string;
     error: string;
+    conflictPrinterId?: string;
   };
   @state() private watcherPrinterBusy = false;
   @state() private watcherCellEditor?: {
@@ -431,6 +432,13 @@ export class PrepStationsScreen extends LitElement {
         },
         (value) => {
           this.view = value;
+          const editor = this.watcherPrinterEditor;
+          if (
+            editor?.conflictPrinterId &&
+            !value.stationPrinters.some((row) => editor.ids.includes(row.printerId))
+          ) {
+            this.watcherPrinterEditor = { ...editor, fieldError: "", conflictPrinterId: undefined };
+          }
           this.exceptionOrder = [...value.routing.exceptions]
             .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
             .map((e) => e.id);
@@ -1760,6 +1768,10 @@ export class PrepStationsScreen extends LitElement {
       this.watcherPrinterEditor = {
         ...editor,
         fieldError: fieldRefusal ? t("watchers.printer_refused") : "",
+        conflictPrinterId:
+          code === "printer.makes_and_watches"
+            ? (error as { params?: { id?: string } }).params?.id
+            : undefined,
         error: fieldRefusal
           ? ""
           : t(code === "watcher.not_found" ? "watchers.not_found" : "prep.save_error"),
@@ -1837,6 +1849,7 @@ export class PrepStationsScreen extends LitElement {
           this.watcherPrinterEditor = {
             ...editor,
             ids: event.detail.values,
+            conflictPrinterId: undefined,
             fieldError: "",
             error: "",
           };
