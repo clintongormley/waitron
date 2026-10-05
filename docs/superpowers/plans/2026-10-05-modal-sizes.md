@@ -17,30 +17,44 @@ component test for the size contract. Update `docs/developers/design-system.md` 
 - **Three sizes, one attribute.** `wt-modal` gains a reflected `size` property:
   `"compact" | "standard" | "wide"`, default unset.
   - `compact` — `--wt-modal-compact-width: 28rem` (448px): a confirmation, or one or two short fields.
-  - `standard` — `--wt-modal-standard-width: 40rem` (640px): an ordinary editor. It must hold a form
-    at `--wt-form-max-width` (36rem = 576px) plus the body's inline padding at its largest
-    (`--wt-space-5` each side = 48px), i.e. 624px, with room left for a classic scrollbar.
+  - `standard` — `--wt-modal-standard-width: 42rem` (672px): an ordinary editor. The dialog is
+    `box-sizing: border-box` with a 1px border, so its content is 672 − 2 − 48 (inline padding at its
+    largest, `--wt-space-5` each side) = 622px; that holds a form at `--wt-form-max-width` (36rem =
+    576px) beside a classic scrollbar (~15–17px) — the Product editor's body always scrolls.
   - `wide` — the existing `--wt-modal-max-width: 64rem`, unchanged: tables wider than a form,
     side-by-side layouts, image grids, toolbars that need one line.
-- **How it is wired.** The dialog keeps reading `--wt-modal-max-width`. `wt-modal`'s styles add
-  `:host([size="compact"]) { --wt-modal-max-width: var(--wt-modal-compact-width); }` and the same for
-  `standard`. `wide` and no attribute add NO rule, so they read the inherited `--wt-modal-max-width`
-  exactly as today. Consequences, each a test case: an unset or unknown size renders as wide today; a
-  `--wt-modal-max-width` set on an ANCESTOR still sizes an unsized or `wide` modal (the existing
-  "follows its width, margin and padding tokens" test depends on this and must pass unedited); a
-  value set on the modal element itself (inline style or an outer selector) beats the size, because
-  outer rules win over `:host` rules.
-- **Phone fit is untouched**: the width stays `min(<size>, 100dvw − 2 × --wt-modal-inline-margin)`,
-  so every size fills a phone exactly as today. Height, body scrolling, footer, focus and the
-  message placement are not changed.
-- **Unset stays wide** rather than becoming standard, so this change alters no modal it does not
-  name and no existing assertion; every product modal is given an explicit size in Task 2. The
-  design-system doc tells authors to pick one.
+- **How it is wired: the width is set on the size's own dialog, never passed down.** For each of
+  compact and standard, `wt-modal` adds
+  `:host([size="compact"]) dialog { width: min(var(--wt-modal-compact-width), calc(100dvw - 2 * var(--wt-modal-inline-margin))); }`
+  (and the same for standard). Setting a custom property on the host instead would be inherited by
+  a modal slotted inside it: a probe (plan review, Playwright Chromium 1.63, a stand-in element)
+  showed a wide modal nested in a standard one rendering at the parent's width — the image chooser
+  inside the Product editor would have shrunk. `wide` and unset add no rule and read
+  `--wt-modal-max-width` exactly as today.
+- **Override order** (each a test case): a compact or standard modal reads only its own size token,
+  so `--wt-modal-max-width` set on an ancestor or on the element sizes only an unsized or `wide`
+  modal (the existing "follows its width, margin and padding tokens" test sets it on an ancestor of
+  an unsized modal and must pass unedited); to resize one sized modal, set its size token
+  (`--wt-modal-compact-width`, `--wt-modal-standard-width`) on it. A wide or unsized modal opened
+  inside a compact or standard one keeps 64rem.
+- **Phone fit is untouched**: every size stays `min(<size>, 100dvw − 2 × --wt-modal-inline-margin)`,
+  so every size fills a phone exactly as today. Height, body scrolling, footer, focus and message
+  placement are not changed — so a compact confirmation is a narrow full-height column; screenshot
+  one and list it in the PR as an open point (height is out of scope).
+- **Unset stays wide** rather than becoming standard: those are the values today's tests pin, a
+  too-wide modal still shows everything where a too-narrow one scrolls sideways, and every product
+  modal is given an explicit size in Task 2. The design-system doc tells authors to pick one.
 - **The unit chooser (W66) is a `wt-dialog`, not a `wt-modal`** (`product-editor.ts`
-  `renderUnitChooser()`), sized by `.unit-chooser { inline-size: var(--wt-form-max-width) }`
-  because a dialog is as wide as its content. It stays a dialog (a full-height modal for one
-  combobox would be worse); its content width moves to `--wt-modal-compact-width` so it shares the
-  compact size. Record this in the PR.
+  `renderUnitChooser()`); a full-height modal for one combobox would be worse, so it stays a
+  dialog. It takes the compact size the way `design-system.md` (≈262) documents resizing a dialog:
+  `--wt-dialog-max-width: min(90vw, var(--wt-modal-compact-width))` on the chooser's `wt-dialog`,
+  keeping the content's `inline-size` (form width) and `max-inline-size: 100%` so it fills. Update
+  the comment at `product-editor.ts` ≈272. Its existing tests only check `box.width > 0`
+  (`product-editor.test.ts` ≈498) and axe (`product-editor.a11y.test.ts` ≈324) — no assertion changes.
+- **Order and neighbours.** The spec says W70 comes after W69; the watcher reversed that in lane B's
+  queue (2026-10-05 ~05:40: lane A starts W69 only after W70 lands). Lane C's held PR #1208 (W71g)
+  touches `wt-modal.test.ts`, `wt-dialog.test.ts`, `design-system.md` and `backlog.md`; whichever
+  lands second rebases.
 
 ## Task 1 — tokens, component, contract test, docs for the component
 
@@ -51,15 +65,17 @@ Files: `packages/ui-core/src/tokens/structure.css`, `packages/ui-core/src/tokens
 1. Failing tests first:
    - `structure.test.ts`: add both new tokens to the "defines the structural contract" list (a
      whole-list pin gaining keys, allowed — name it in the PR); a test that compact < standard <
-     wide (`--wt-modal-max-width`) in pixels; a test that standard ≥ `--wt-form-max-width` + 2 ×
-     `--wt-space-5`. Rename the title "the standard modal is 64rem wide, …" to "the wide modal is …"
+     wide (`--wt-modal-max-width`) in pixels; a test that standard − 2 × 1px border − 2 ×
+     `--wt-space-5` − 17px (a classic scrollbar) ≥ `--wt-form-max-width`. Rename the title "the standard modal is 64rem wide, …" to "the wide modal is …"
      (title only, its assertions unchanged — "standard" now names the 40rem size).
    - `wt-modal.test.ts`: at 1280×900, `size="compact"`, `"standard"`, `"wide"` and unset each
      render `min(token, viewport − 2 × margin)` wide with equal side margins (unknown value, e.g.
      `size="huge"`, renders as wide); at 390×844 and 320×568 every size is `viewport − 2 ×
      margin`; the property reflects to the attribute and changing it at runtime re-sizes an open
      modal; an ancestor's `--wt-modal-max-width` sizes an unsized and a `wide` modal but not a
-     `compact` one; an inline `--wt-modal-max-width` on a `compact` modal wins; the body's field
+     `compact` or `standard` one; `--wt-modal-compact-width` set on a compact modal resizes it; a
+     wide and an unsized modal slotted inside an open compact and an open standard modal keep the
+     64rem width (this case fails if the size is passed down as a custom property); the body's field
      cap (`--wt-field-max-width` = form width) holds in every size (a field in a compact modal is
      bounded by the body, not wider).
    - `wt-modal.a11y.test.ts`: axe on an open compact and an open standard modal in both themes
@@ -68,12 +84,17 @@ Files: `packages/ui-core/src/tokens/structure.css`, `packages/ui-core/src/tokens
    `pnpm --filter @waitron/ui-core exec vitest run src/tokens/structure` — watch them fail.
 2. Implement: the two tokens in `structure.css` beside `--wt-modal-max-width` (one comment line for
    what each size is for); `@property({ reflect: true }) size?: "compact" | "standard" | "wide"` and
-   the two `:host([size=…])` rules in `wt-modal.ts`.
-3. Prove by deletion: remove each `:host` rule in turn and see its case fail; restore.
+   the two `:host([size=…]) dialog { width: … }` rules in `wt-modal.ts`.
+3. Prove by deletion: remove each rule in turn and see its case fail; restore. Also rewrite one rule
+   temporarily as a host custom property and see the nested-modal case fail; restore.
 4. `design-system.md`: in the `wt-modal` section (≈ line 874) describe the three sizes, what each is
    for, that unset is wide, that authors pick one by content, and the override order; add the two
-   tokens to the token list (≈ line 207) and to the sizes paragraph (≈ line 258); keep claims to what
-   the tests show.
+   tokens to the token list (≈ line 207) and to the sizes paragraph (≈ 258). Fix the sentences the
+   change makes stale: ≈260–262 ("`wt-modal` is at most `64rem`", "Overriding `--wt-modal-max-width`
+   therefore resizes `wt-modal` alone"), ≈273 ("There is one standard modal size"), ≈1876 (profile
+   "bounded by `--wt-modal-max-width` like any other"). "Standard" now names both the form width
+   (≈268) and a modal size: make the doc tell them apart (call the form width "the form width");
+   leave test titles alone. Keep claims to what the tests show.
 5. `pnpm --filter @waitron/ui exec vitest run src/components/wt-modal src/no-hardcoded-chrome`,
    the ui-core structure test, `pnpm --filter @waitron/ui typecheck`, `pnpm format:check`.
    Commit `-s`.
@@ -90,14 +111,19 @@ where one element serves modes of clearly different sizes). Re-read each before 
 | wide | `printers-screen.ts` discover printers (≈3002: two-column table, 40vw parts); `units-screen.ts` delete unit (≈504: toolbar ≈650px + three-column table); `extra-list-form.ts` (table min-width 696px); `image-upload.ts` (embeds the image library's card grid); `image-library.ts` viewer (≈488: photo beside its uses); `prep-stations-screen.ts` preview table (≈1564); `station-hours-form.ts` (one row of three 145px+ controls and Remove) |
 
 Steps:
-1. Where a consumer's suite already measures its modal, or the product editor's suite can, add a
-   failing check that the modal states its size (e.g. `product-editor` renders `size="standard"`,
-   `extra-list-form` `size="wide"`); at minimum one check per size in a consumer. Then set every
-   attribute. Move `.unit-chooser`'s `inline-size` to `var(--wt-modal-compact-width)` with a check
-   that the chooser's content is that wide (fails first).
-2. Any existing test that pins a consumer modal's width or a layout that the narrower size changes:
-   change it only if the new width is what W70 deliberately asks for, list it under "Changed test
-   checks" in the PR; anything else is a STOP (queue rule 2026-10-05).
+1. Failing checks first that MEASURE, not only read the attribute: the Product editor's dialog is
+   the standard width in pixels at 1280; the image chooser opened from the Product editor is the
+   wide width (fails if a size leaks into a nested modal); the unit chooser dialog is the compact
+   width at 1280; `extra-list-form`'s dialog is wide and `add-content-language`'s compact. Then set
+   every attribute and the unit chooser's `--wt-dialog-max-width`.
+2. Existing checks the narrower sizes change. Known now: `add-content-language.test.ts` ≈201
+   ("holds the field and its error to the standard form width…") expects a body wider than 576px and
+   a ~576px field; a compact body is narrower. Rewrite it to check the field and its error fill the
+   compact body's content width — as strict as before — and list it under "Changed test checks".
+   The other form-width checks map to standard and still fit (`profile-screen.test.ts` ≈483,
+   `reasons-screen.test.ts` ≈655, `venue-operations-screen.test.ts` ≈545, `printers-screen.test.ts`
+   ≈557); confirm by running them. Any other check that breaks: change it only if the new width is
+   what W70 deliberately asks for and list it; anything else is a STOP (queue rule 2026-10-05).
 3. Run the touched consumers' focused suites (`apps/dashboard`, `apps/till`,
    `packages/adjustments`, `packages/media`, `packages/venue-service`).
 4. **Look.** Open a compact (add content language), a standard (Product editor with variants and
