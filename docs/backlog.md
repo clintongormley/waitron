@@ -1176,10 +1176,13 @@ The [design](superpowers/specs/2026-10-05-unsaved-changes-warning-design.md),
 [owner audit](superpowers/plans/2026-10-05-unsaved-changes-audit.md) and
 [implementation plan](superpowers/plans/2026-10-05-unsaved-changes-warning.md) cover editable
 modals and pages across the dashboard, till, setup and contributed screens. Build the shared
-mechanism and modal rollout, then page/navigation coverage; neither rollout is implemented yet.
-Keep automatic saves and forced session exits on their existing paths.
+mechanism and modal rollout, then page/navigation coverage. The shared `ui-core` coordinator is
+implemented on `feat/unsaved-changes-protection`: scoped draft comparisons, submitted-value commits,
+stale-answer invalidation and dirty-only unload handling. Modal owners, the confirmation UI and
+page/navigation protection remain unimplemented. Keep automatic saves and forced session exits
+on their existing paths.
 2026-10-06: Hours (A261 step 5) deleted `station-hours-form`, which the audit lists, and added
-the Hours page's editors, which it does not.
+the Hours page’s editors, which it does not.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
