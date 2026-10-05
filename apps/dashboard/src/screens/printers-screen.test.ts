@@ -305,9 +305,20 @@ async function selectTab(el: PrintersScreen, key: string): Promise<void> {
   await flush(el);
 }
 async function openPrinter(el: PrintersScreen, id = "p1"): Promise<void> {
+  if (location.pathname.endsWith(`/printer/${id}`)) {
+    q(el, "[data-test=edit-printer-details]")!.click();
+    await flush(el);
+    return;
+  }
+  if (q(el, "[data-test=all-printers-link]")) {
+    q(el, "[data-test=all-printers-link]")!.click();
+    await flush(el);
+  }
   await selectTab(el, "printers");
-  if (!q(el, `[data-test="edit-printer-${id}"]`)) await filterPrinters(el, "all");
-  q(el, `[data-test="edit-printer-${id}"]`)!.click();
+  if (!q(el, `[data-test="printer-row-${id}"]`)) await filterPrinters(el, "all");
+  q(el, `[data-test="printer-row-${id}"]`)!.click();
+  await flush(el);
+  q(el, "[data-test=edit-printer-details]")!.click();
   await flush(el);
 }
 async function openDiscovery(el: PrintersScreen): Promise<void> {
@@ -937,7 +948,7 @@ describe("printer configuration tabs", () => {
     );
   });
 
-  it("still returns focus to a row's menu after an edit, once the first printer came from the empty table", async () => {
+  it("opens the added printer's detail editor from its row menu", async () => {
     let rows: Printer[] = [];
     const api = stubApi({
       listPrinters: vi.fn(() => Promise.resolve(rows)),
@@ -963,10 +974,8 @@ describe("printer configuration tabs", () => {
     await userEvent.click(trigger);
     await userEvent.keyboard("{Tab}{Enter}");
     await flush(el);
-    q(el, "[data-test=cancel-edit-printer]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
-    await flush(el);
-    expect(menu.shadowRoot!.activeElement).toBe(trigger);
+    expect(location.pathname).toBe("/manage/printers/view/printers/printer/p9");
+    expect(q(el, '[name="printer-detail-name"]')).not.toBeNull();
   });
 
   it("returns focus to the empty printer table's Add printer after Close", async () => {
@@ -1235,16 +1244,25 @@ describe("printers-screen", () => {
     ]);
     await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
     await flush(el);
+    const status = q(el, "[data-test=printer-section-status]")!;
+    expect(status.textContent).toContain("7");
+    expect(status.textContent).toContain("2026");
+    expect((q(el, "[data-test=printer-name-p1]") as import("@waitron/ui").WtInput).value).toBe(
+      "Unsaved name",
+    );
+    expect(api.listRecentJobs).toHaveBeenCalledTimes(2);
+    expect(api.listPrinterProfiles).toHaveBeenCalledTimes(1);
+    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await flush(el);
+    q(el, "[data-test=all-printers-link]")!.click();
+    await flush(el);
     const row = q(el, "[data-test=printer-row-p1]")!.closest("tr")!;
     expect(
       row.querySelector('[data-column="pending"]')?.textContent?.trim() ?? row.textContent,
     ).toContain("7");
     expect(row.textContent).toContain("2026");
+    await selectTab(el, "queue");
     expect(q(el, "[data-test=job-row-j1]")).toBeNull();
-    expect((q(el, "[data-test=printer-name-p1]") as import("@waitron/ui").WtInput).value).toBe(
-      "Unsaved name",
-    );
-    expect(api.listPrinterProfiles).toHaveBeenCalledTimes(1);
   });
   it("loads agents, printers and jobs on connect and renders a row for each", async () => {
     const api = stubApi();
@@ -3342,7 +3360,6 @@ it.each([
   ["open-add-agent", "new-agent-modal", "cancel-new-agent"],
   ["open-add-printer", "new-printer-modal", "cancel-new-printer"],
   ["edit-agent-a1", "edit-agent-modal", "cancel-edit-agent"],
-  ["edit-printer-p1", "edit-printer-modal", "cancel-edit-printer"],
 ])(
   "closing %s runs the dialog close event and restores keyboard focus",
   async (opener, modalId, closer) => {
@@ -3370,7 +3387,7 @@ it.each([
   },
 );
 
-it("returns keyboard focus to the printer row trigger after editing through its menu", async () => {
+it("opens the printer details name editor from its row Edit action", async () => {
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api: stubApi() });
   await flush(el);
   await selectTab(el, "printers");
@@ -3380,9 +3397,10 @@ it("returns keyboard focus to the printer row trigger after editing through its 
   await userEvent.click(trigger);
   await userEvent.keyboard("{Tab}{Enter}");
   await flush(el);
-  q(el, "[data-test=cancel-edit-printer]")!.click();
-  await flush(el);
-  expect(menu.shadowRoot!.activeElement).toBe(trigger);
+  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  expect(q(el, '[name="printer-detail-name"]')).not.toBeNull();
+  expect(inputFocused(el, '[name="printer-detail-name"]')).toBe(true);
+  expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
 });
 
 it("edits printer activation through a named shared switch", async () => {

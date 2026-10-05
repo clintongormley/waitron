@@ -2003,7 +2003,14 @@ export class PrintersScreen extends LitElement {
     >
       <wt-button
         data-test=${`edit-printer-${p.id}`}
-        @click=${(event: Event) => this.#openPrinter(p, event)}
+        @click=${() => {
+          this.#showPrinterStatus(p.id);
+          this.detailName = { id: p.id, value: p.name, saving: false, error: null };
+          void this.updateComplete.then(() => {
+            if (this.detailName?.id === p.id)
+              this.renderRoot.querySelector<HTMLElement>('[name="printer-detail-name"]')?.focus();
+          });
+        }}
         >${t("action.edit")}</wt-button
       >
       <wt-button
