@@ -29,6 +29,9 @@ declare module "@waitron/shared" {
      */
     "station.not_found": { stationId: string };
     "series.not_found": { seriesId: string };
+    /** A configuration import's core row holds a value a save would refuse; `field` is
+     * `<table>.<column>`. Declared with identical params in `apps/server/src/errors.ts`. */
+    "setup.request_invalid": { field: string };
     /**
      * A node has no `purpose='standard'` invoice series. A corruption/misuse refusal, structured so
      * it reaches a screen translatable rather than a raw empty-result crash.

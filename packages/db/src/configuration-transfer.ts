@@ -1,3 +1,16 @@
+import { AppError } from "@waitron/shared";
+import "./errors.js";
+import { isStatusColor } from "./status-color.js";
+
+/** Refuses (`setup.request_invalid`) a table service status whose colour a save would refuse. */
+export function validateCoreConfiguration(
+  tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
+): void {
+  for (const row of tables.table_service_statuses ?? [])
+    if (!isStatusColor(row.color))
+      throw new AppError("setup.request_invalid", { field: "table_service_statuses.color" });
+}
+
 export const CORE_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
@@ -42,4 +55,5 @@ export const CORE_CONFIGURATION_TRANSFER = {
     { name: "tenant_themes" },
     { name: "tenant_receipts" },
   ],
+  validate: validateCoreConfiguration,
 } as const;

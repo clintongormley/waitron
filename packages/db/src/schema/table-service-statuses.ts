@@ -11,8 +11,7 @@ export const tableServiceStatuses = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     label: label("label").notNull(),
-    // A floor-plan swatch — a hex ("#ef4444") or a short token ("amber"), app-validated on write
-    // (validateStatusColor, apps/server/src/tables.ts). Stored as opaque text; no DB CHECK.
+    // A floor-plan swatch, checked by `isStatusColor` (src/status-color.ts); no DB CHECK.
     color: label("color").notNull(),
     // Author-controlled ordering in the editor + the floor-plan picker.
     displayOrder: count("display_order").notNull().default(0),

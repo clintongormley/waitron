@@ -55,7 +55,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readProfilePrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { recordSale } from "@waitron/core";
 import { categoryDetails } from "@waitron/catalogue";
 import { availability, employments, shiftTemplates } from "@waitron/workforce";
@@ -82,6 +82,7 @@ import {
   type ConfigurationBundle,
 } from "./configuration-transfer.js";
 import { seedSessionDevice } from "./testing/session-device.js";
+import { createStatus } from "./tables.js";
 import { selfEnrolNodeAgent } from "./join-requests.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -715,6 +716,91 @@ describe("configuration transfer database path", () => {
           importConfigurationTables(tx, bundles.products, result, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "products.color" } });
+    const persisted = await targetSuite.db.execute<{ count: number }>(sql`
+      select count(*) as count from tenants where tax_id = ${target.taxId}
+    `);
+    expect(persisted.rows[0]!.count).toBe(0);
+  });
+
+  /** A source venue holding a status painted `amber` and one painted `#ef4444`, created through
+   * the dashboard's own save, and the bundle exported from it. */
+  async function bundleWithStatuses(taxId: string) {
+    const request = venue(taxId);
+    const source = await applyVenue(planVenue(request, ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await withTransaction(suite.db, async (tx) => {
+      const [admin] = await tx
+        .select({ id: persons.id })
+        .from(persons)
+        .where(eq(persons.email, request.admin.email!));
+      const session = await startManagementSession(tx, { personId: admin!.id });
+      for (const [label, color] of [
+        ["Needs cleaning", "amber"],
+        ["Bill requested", "#ef4444"],
+      ] as const) {
+        await createStatus(tx, { managementSessionId: session.token, label, color });
+      }
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-05T12:00:00Z"),
+      versions,
+    );
+    return { transferred, versions };
+  }
+
+  it("carries a table service status's named and hex colours", async () => {
+    const { transferred, versions } = await bundleWithStatuses("B55660011");
+    await applyVenue(planVenue(venue("B55660022"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+    const imported = await targetSuite.db.execute<{ label: string; color: string }>(sql`
+      select label, color from table_service_statuses order by label
+    `);
+    expect(imported.rows).toEqual([
+      { label: "Bill requested", color: "#ef4444" },
+      { label: "Needs cleaning", color: "amber" },
+    ]);
+  });
+
+  it("refuses a bundle whose table service status colour a save would refuse", async () => {
+    const { transferred, versions } = await bundleWithStatuses("B55660033");
+    const statuses = transferred.tables.table_service_statuses!;
+    expect(statuses.filter((row) => row.color === "amber")).toHaveLength(1);
+    const malformed: ConfigurationBundle = {
+      ...transferred,
+      tables: {
+        ...transferred.tables,
+        table_service_statuses: statuses.map((row) =>
+          row.color === "amber" ? { ...row, color: "red;position:fixed" } : row,
+        ),
+      },
+    };
+    const refusal = {
+      code: "setup.request_invalid",
+      params: { field: "table_service_statuses.color" },
+    };
+
+    expect(() => validateConfigurationBundle(malformed, ALL_MODULES, versions)).toThrowError(
+      expect.objectContaining(refusal),
+    );
+    const target = venue("B55660044");
+    await expect(
+      applyVenue(planVenue(target, ALL_MODULES), {
+        db: targetSuite.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx, result) =>
+          importConfigurationTables(tx, malformed, result, ALL_MODULES, versions),
+      }),
+    ).rejects.toMatchObject(refusal);
     const persisted = await targetSuite.db.execute<{ count: number }>(sql`
       select count(*) as count from tenants where tax_id = ${target.taxId}
     `);

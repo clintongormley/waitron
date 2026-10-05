@@ -9,6 +9,7 @@ import {
   diningTables,
   floorTableShape,
   floorZones,
+  isStatusColor,
   isUniqueViolation,
   tableServiceStatuses,
 } from "@waitron/db";
@@ -325,10 +326,8 @@ export interface ServiceStatus {
   createdAt: string;
 }
 
-// Validated here only: the database stores the colour as opaque text.
-const STATUS_COLOR_RE = /^[#A-Za-z0-9_-]{1,32}$/;
 function validateStatusColor(color: string): string {
-  if (typeof color !== "string" || !STATUS_COLOR_RE.test(color)) {
+  if (!isStatusColor(color)) {
     throw new AppError("management.request_invalid", { field: "color" });
   }
   return color;
