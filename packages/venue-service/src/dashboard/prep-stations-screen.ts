@@ -221,6 +221,16 @@ export class PrepStationsScreen extends LitElement {
   ];
   @property({ attribute: false }) api!: PrepStationsApi;
   @state() private view?: PrepStationsView;
+  @state() private settingsEditor?: {
+    stationId: string;
+    field: "rest" | "fallback";
+    value: string;
+    fieldError: string;
+    error: string;
+    confirming: boolean;
+    attempted: boolean;
+  };
+  @state() private settingsBusy = false;
   @state() private printerEditor?: { stationId: string; ids: string[]; error: string };
   @state() private printerBusy = false;
   @state() private watcherPrinterEditor?: {
@@ -2089,6 +2099,200 @@ export class PrepStationsScreen extends LitElement {
       </wt-form-actions>
     </div>`;
   }
+  async #saveSettingsCell() {
+    const editor = this.settingsEditor;
+    if (!editor || this.settingsBusy) return;
+    this.settingsEditor = { ...editor, attempted: true };
+    if (this.#settingsInvalid()) {
+      await this.updateComplete;
+      const table = this.renderRoot.querySelector<LitElement>(
+        "wt-data-table[data-test=settings-table]",
+      );
+      if (table) await table.updateComplete;
+      table?.shadowRoot?.querySelector<HTMLElement>('[data-test="settings-choice"]')?.focus();
+      return;
+    }
+    this.settingsBusy = true;
+    this.settingsEditor = { ...editor, fieldError: "", error: "" };
+    try {
+      if (editor.field === "rest")
+        await this.api.updateStation(editor.stationId, {
+          showsRestOfOrder: editor.value === "yes",
+        });
+      else await this.api.setStationFallback(editor.stationId, editor.value || null);
+    } catch (error) {
+      const code = codeOf(error);
+      const field = (error as { params?: { field?: string } })?.params?.field;
+      const fieldError =
+        editor.field === "rest"
+          ? code === "management.request_invalid" && field === "showsRestOfOrder"
+            ? t("prep.save_error")
+            : ""
+          : code === "station.fallback_loop"
+            ? t("prep.fallback_loop")
+            : code === "route.station_inactive"
+              ? t("prep.station_inactive")
+              : "";
+      this.settingsEditor = {
+        ...editor,
+        fieldError,
+        error: fieldError ? "" : t("prep.save_error"),
+      };
+      this.settingsBusy = false;
+      return;
+    }
+    this.settingsEditor = undefined;
+    this.settingsBusy = false;
+    await this.#load();
+  }
+  #settingsInvalid() {
+    const editor = this.settingsEditor;
+    return editor?.attempted && editor.field === "rest" && !["yes", "no"].includes(editor.value)
+      ? t("prep.choose_yes_no")
+      : "";
+  }
+  #settingsCell(station: PrepStation, field: "rest" | "fallback") {
+    const label = t(field === "rest" ? "prep.shows_rest_of_order" : "prep.when_closed");
+    if (field === "fallback" && station.isDefault)
+      return html`<span data-test=${`settings-fallback-${station.id}`}
+        >${t("prep.never_closes")}</span
+      >`;
+    const value =
+      field === "rest"
+        ? station.showsRestOfOrder
+          ? "yes"
+          : "no"
+        : (this.#times(station.id)?.fallbackStationId ?? "");
+    const text =
+      field === "rest"
+        ? t(station.showsRestOfOrder ? "venue.yes" : "venue.no")
+        : value
+          ? this.#stationName(value)
+          : t("prep.no_replacement_choice");
+    const editor =
+      this.settingsEditor?.stationId === station.id && this.settingsEditor.field === field
+        ? this.settingsEditor
+        : undefined;
+    if (!editor)
+      return html`<wt-button
+        variant="secondary"
+        data-test=${`edit-settings-${field}-${station.id}`}
+        aria-label=${`${station.name}: ${label}`}
+        ?disabled=${this.settingsBusy}
+        @click=${() => {
+          this.settingsEditor = {
+            stationId: station.id,
+            field,
+            value,
+            fieldError: "",
+            error: "",
+            confirming: false,
+            attempted: false,
+          };
+        }}
+        >${text}</wt-button
+      >`;
+    const invalid = this.#settingsInvalid();
+    return html`<div
+      part="watcher-cell"
+      @keydown=${(event: KeyboardEvent) => {
+        if (event.key === "Escape" && !this.settingsBusy) {
+          event.stopPropagation();
+          this.settingsEditor = undefined;
+        }
+        if (
+          event.key === "Enter" &&
+          event.target instanceof HTMLElement &&
+          event.target.tagName !== "WT-COMBOBOX"
+        )
+          submitOnEnter(
+            event,
+            (event.currentTarget as HTMLElement).querySelector("[data-test=save-settings-cell]"),
+          );
+      }}
+    >
+      <wt-combobox
+        data-test="settings-choice"
+        name=${field === "rest" ? "showsRestOfOrder" : "fallbackStationId"}
+        label=${`${station.name}: ${label}`}
+        .options=${
+          field === "rest"
+            ? [
+                { value: "yes", label: t("venue.yes") },
+                { value: "no", label: t("venue.no") },
+              ]
+            : this.#fallbackOptions(station.id)
+        }
+        .value=${editor.value}
+        .error=${invalid || editor.fieldError}
+        .disabled=${this.settingsBusy}
+        .required=${field === "rest"}
+        .searchPlaceholder=${label}
+        .noResultsLabel=${t("venue.combobox_no_results")}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.settingsEditor = {
+            ...editor,
+            value: event.detail.value,
+            fieldError: "",
+            error: "",
+            confirming: false,
+          };
+        }}
+      ></wt-combobox>
+
+      ${editor.confirming ? html`<p data-test="settings-fallback-confirmation">${this.#fallbackConfirmation({ kind: "fallback", stationId: station.id, choice: editor.value, confirming: true })}</p>` : nothing}
+      <wt-form-actions
+        .error=${invalid || editor.fieldError ? t("watchers.fix_fields") : editor.error}
+      >
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="cancel-settings-cell"
+          ?disabled=${this.settingsBusy}
+          @click=${() => {
+            this.settingsEditor = undefined;
+          }}
+          >${t("venue.cancel")}</wt-button
+        >
+        <wt-button
+          data-test="save-settings-cell"
+          ?disabled=${this.settingsBusy || !!invalid}
+          @click=${() => {
+            if (field === "fallback" && !editor.confirming)
+              this.settingsEditor = { ...editor, confirming: true };
+            else void this.#saveSettingsCell();
+          }}
+          >${t("venue.save")}</wt-button
+        >
+      </wt-form-actions>
+    </div>`;
+  }
+  #settings() {
+    const stations = [...this.view!.stations]
+      .filter((station) => station.active)
+      .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
+    const columns: DataTableColumn<PrepStation>[] = [
+      { key: "name", label: t("prep.name"), cell: (station) => station.name },
+      {
+        key: "rest",
+        label: t("prep.shows_rest_of_order"),
+        cell: (station) => this.#settingsCell(station, "rest"),
+      },
+      {
+        key: "fallback",
+        label: t("prep.when_closed"),
+        cell: (station) => this.#settingsCell(station, "fallback"),
+      },
+    ];
+    return html`<wt-data-table
+      data-test="settings-table"
+      label=${t("prep.tab.settings")}
+      .columns=${columns}
+      .rows=${stations}
+      .rowKey=${(station: PrepStation) => station.id}
+    ></wt-data-table>`;
+  }
   #watchers() {
     const view = this.view!;
     const ordered = [...view.watchers]
@@ -2816,7 +3020,7 @@ export class PrepStationsScreen extends LitElement {
                 </div>
                 <div slot="tickets">${this.#tickets()}</div>
                 <div slot="watchers">${this.#watchers()}</div>
-                <div slot="settings"></div>
+                <div slot="settings">${this.#settings()}</div>
               </wt-tabs>
               <section data-test="interim-station-hours">
                 <h2>${t("venue.hours")}</h2>

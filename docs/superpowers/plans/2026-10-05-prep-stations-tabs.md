@@ -508,3 +508,30 @@ change and passed after restoration, alongside its valid-save or Cancel positive
 The campaign ledger retains the literal commands and counts. This is a Task 7 subtask checkpoint;
 station Settings, Routing-only cleanup, supervisor Prep-page loading, whole-branch review and
 current-head CI remain before finishing or landing. The approved reset requirement remains.
+
+
+## 2026-10-05 Settings choice-cell checkpoint
+
+Task 7 now supplies one Settings row per active station and independent choice editors for
+Show the rest of the order and When closed, work goes to. The default reads Never closes and
+has no fallback picker. A fallback change confirms the existing destination sentence inside
+its cell; changing the choice clears that confirmation. The existing station patch and fallback
+routes remain the write seams. Cancel/Escape discards, an in-flight write holds the draft, a
+request refusal remains retryable, and a successful write closes before a separate refresh.
+Local yes/no validation marks and focuses the choice and rechecks after an invalid submission.
+
+`pnpm --filter @waitron/venue-service exec vitest run --project browser
+src/dashboard/prep-stations-screen.test.ts src/dashboard/prep-stations-screen.a11y.test.ts
+src/dashboard/prep-stations-screen.settings.test.ts src/dashboard/routing-client.test.ts`
+ran four files with 359 passing cases. The new cases include eight EN/ES, light/dark, 390/1280px
+accessibility/viewport states; their saved, picker, refusal, confirmation and fallback-refusal
+captures were inspected. In a frozen-installed disposable candidate, deleting validation,
+fallback confirmation, or invalid-field focus separately failed its targeted case while a valid
+save still passed; restoring all three passed the four selected cases. Package types, focused
+lint/format and the unchanged native-field/token/subscription guards passed. Existing checks and
+fixtures were unchanged. The campaign ledger retains commands and logs, including corrections
+to the new test harness's URL, field-message expectation and table lookup type.
+
+This is a Task 7 subtask checkpoint. The three timing cells/inheritance display, supervisor
+Prep-page loading, Task 4 Routing cleanup and Task 8 whole-branch finish/CI/land remain open.
+Do not ship this partial page.
