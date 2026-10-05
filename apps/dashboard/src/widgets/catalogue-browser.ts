@@ -79,9 +79,9 @@ export class CatalogueBrowser extends LitElement {
         flex: 1 1 calc(var(--wt-tap-min) * 7);
         min-width: min(100%, calc(var(--wt-tap-min) * 7));
       }
-      /* Below the width all five controls need on one line, the search takes the line under the
-         buttons; Tab still reaches it before the table's own. The list's width decides, since the
-         sidebar can leave a wide window a narrow list. */
+      /* At 40rem or less the search takes a whole line under the buttons, even where all five
+         would fit on one; Tab still reaches it before Expand all. The list's width decides, since
+         the sidebar can leave a wide window a narrow list. */
       @container (max-width: 40rem) {
         wt-input {
           order: 1;

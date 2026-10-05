@@ -3351,10 +3351,12 @@ buttons _(2026-10-05, W85d: wherever the list is 40rem wide or less, not only in
 icon button and tooltip styles are shared from `@waitron/ui` (`iconButtonStyles`). One existing
 test assertion changed, for the owner to review: the catalogue browser's toolbar-order test pinned
 the old order (search, Filters, Expand all, Select, Customise) and now pins the new one (Filters,
-Select, search, Expand all, Customise). Left open: on a phone _(2026-10-05, W85d: now wherever the list is 40rem wide or less, desktop windows with the sidebar showing included; the reviewers judged it at phone width only)_ the search is drawn under Expand all
+Select, search, Expand all, Customise). Left open: on a phone the search is drawn under Expand all
 and Customise while Tab reaches it before them (two reviewers judged this not a WCAG 1.3.2 or 2.4.3
 failure, by stepping through with the keyboard and reading Chromium's accessibility tree; what a
-screen reader says was not checked); and a desktop window narrow enough to leave the table under
+screen reader says was not checked) _(2026-10-05, W85d: this now happens wherever the list is 40rem
+wide or less, desktop windows with the sidebar showing included; those two reviewers judged it when
+the layout existed only at phone width, #1193)_; and a desktop window narrow enough to leave the table under
 768px gets the full-screen panel — at which window width that happens with the sidebar shown was
 not measured. Also left open by W83's review, none started: (1) the table's Customise columns
 button is icon-only beside these two but has neither their look nor a tooltip; (2) the icon button
@@ -3372,7 +3374,7 @@ then Expand all and Customise. The catalogue browser moved its search under the 
 window up to 30rem (480px) wide, so a narrow list in a wider window — the sidebar showing, for
 example — missed the rule. Measured in real Chromium in a 1280px window: a list 320 to 430px wide
 drew three lines, and 480 to 600px drew the search beside Filters and Select with Expand all and
-Customise on a second line; all five shared one line from 640px, and need about 620px in Spanish.
+Customise on a second line; all five shared one line at 640px.
 The rule is now a container query on the catalogue browser's own width
 (`@container (max-width: 40rem)`, `apps/dashboard/src/widgets/catalogue-browser.ts`): at that width
 or less, Filters, Select, Expand all and Customise share the first line and the search fills the
