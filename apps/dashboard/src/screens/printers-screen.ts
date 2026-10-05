@@ -484,7 +484,18 @@ export class PrintersScreen extends LitElement {
       }
       if (this.#url.read("dashboard") !== "printers") return;
       const printerId = this.#url.read("printer");
-      if (printerId !== this.selectedPrinterId) this.#resetPrinterSections();
+      if (printerId !== this.selectedPrinterId) {
+        const editing = this.editingPrinter;
+        if (editing && editing.id !== printerId) {
+          this.editingPrinter = null;
+          this.#closeTest();
+          if (this.#readdingId === editing.id) {
+            this.#readdingId = undefined;
+            void this.#deactivatePrinter(editing.id);
+          }
+        }
+        this.#resetPrinterSections();
+      }
       this.selectedPrinterId = printerId;
       const view = this.#url.read("view");
       this.view =

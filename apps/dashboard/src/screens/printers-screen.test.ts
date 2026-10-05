@@ -3608,6 +3608,28 @@ it("starts calibration from printer details at the paper settings step", async (
   expect(q(el, "[data-test=printer-name-p1]")).toBeNull();
 });
 
+it("closes calibration for the previous printer when browser navigation selects another", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  q(el, "[data-test=printer-section-calibration]")!
+    .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+    .click();
+  await flush(el);
+  q(el, "[data-test=calibrate-printer-details]")!.click();
+  await flush(el);
+  expect(q(el, "[data-test=edit-printer-modal]")).not.toBeNull();
+
+  history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+
+  expect(text(el, "[data-test=printer-breadcrumb]")).toContain("Nube");
+  expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
+});
+
 it("saves the printer's Active switch from Status and shows the saved value", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   let stored = { ...printers[0]! };
