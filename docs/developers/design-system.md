@@ -928,8 +928,8 @@ passed down: a wide or unsized modal opened inside a compact or standard one is 
 `size` on an open modal resizes it, and the property is reflected to the `size` attribute.
 Guards: the size cases in `packages/ui/src/components/wt-modal.test.ts`, and the order of the sizes
 and the standard modal's room for a form in `packages/ui-core/src/tokens/structure.test.ts`. The
-modal fills the viewport height with 24px top and bottom margins, whatever its size, so a compact
-confirmation is a narrow column the height of the window.
+compact modal fits its content, up to the viewport height less 24px top and bottom margins.
+Standard and wide modals keep that full height even with short content.
 Its side margins (`--wt-modal-inline-margin`) and the inline padding of its body and footer
 (`--wt-modal-inline-padding`) are 24px from 800px wide and shrink on a phone to 4px and 12px, so the
 width goes to the content. They are fluid `clamp()` values rather than a breakpoint because a media

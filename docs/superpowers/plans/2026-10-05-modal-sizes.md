@@ -41,12 +41,16 @@ component test for the size contract. Update `docs/developers/design-system.md` 
   so every size fills a phone exactly as today. Height, body scrolling, footer, focus and message
   placement are not changed — so a compact confirmation is a narrow full-height column; screenshot
   one and list it in the PR as an open point (height is out of scope).
+  _2026-10-05: W70a supersedes compact height only: it fits content up to the viewport cap.
+  See `docs/developers/design-system.md`, the modal contract._
 - **Unset stays wide** rather than becoming standard: those are the values today's tests pin, a
   too-wide modal still shows everything where a too-narrow one scrolls sideways, and every product
   modal is given an explicit size in Task 2. The design-system doc tells authors to pick one.
 - **The unit chooser (W66) is a `wt-dialog`, not a `wt-modal`** (`product-editor.ts`
   `renderUnitChooser()`); a full-height modal for one combobox would be worse, so it stays a
-  dialog. It takes the compact size the way `design-system.md` (≈262) documents resizing a dialog:
+  dialog. _2026-10-05: W70a makes compact modals fit their content too; the height rationale above
+  records the earlier W70 decision._ It takes the compact size the way `design-system.md` (≈262)
+  documents resizing a dialog:
   `--wt-dialog-max-width: min(90vw, var(--wt-modal-compact-width))` on the chooser's `wt-dialog`,
   keeping the content's `inline-size` (form width) and `max-inline-size: 100%` so it fills. Update
   the comment at `product-editor.ts` ≈272. Its existing tests only check `box.width > 0`

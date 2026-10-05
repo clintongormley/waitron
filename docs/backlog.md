@@ -2342,13 +2342,19 @@ modal on the dashboard, the till's modifier picker and the two demo modals now n
 that serves jobs of clearly different sizes picks one per job (the profile's details and
 authenticator setup are standard, its other steps compact). Leaving the size off still gives the wide
 modal, as before. W66's Pricing unit
-chooser stays a small dialog (`wt-dialog`) rather than a full-height modal for one dropdown, held to
-the compact width. Detail: design-system.md, the `wt-modal` entry. Left open: (1) no modal's height
-changed, so a compact confirmation is still as tall as the screen, a narrow column with empty space
-under its text, and the category delete dialog (standard) keeps its empty space too — height was
-out of scope, and whether a short modal should shrink to its content is the owner's call;
-(2) in the wide Extras editor at 1280px wide, the items table scrolls sideways by 4px (978px of
-content in a 974px box), with or without the size attribute.
+chooser stays a small dialog (`wt-dialog`), held to the compact width. Detail: design-system.md,
+the `wt-modal` entry. W70a (owner, 2026-10-05,
+"compact only") makes compact modals fit their content up to the screen's height, with the body
+scrolling beyond it and footer actions held in view. Standard and wide modals retain their full
+height. The category delete dialog is standard and retains its empty space; W74's height finding
+therefore remains open. Left open: in the wide Extras editor at 1280px wide, the items table scrolls
+sideways by 4px (978px of content in a 974px box), with or without the size attribute.
+
+W70a's visual probe copied `catalogue-screen.a11y.test.ts`'s fixture and found that its product
+confirmation stayed closed: the fixture supplies no `listMadeAt`, which `#reloadProducts` awaits
+before loading products. Adding that method to the temporary probe and waiting for the product
+read opens the confirmation. Follow-up: complete that accessibility fixture and assert the native
+dialog is open before its scan. The existing suite was not changed by W70a.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).** The owner: _"the Kitchen name, and
@@ -5598,12 +5604,11 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   others) are held only by the dialog's own 768px limit — whether they should follow the modal's
   form width is the owner's call.
 
-- **Content languages are managed on the page itself (C111, #987) — left open:** the Add language
-  dialog is the one standard modal size (then the only size, 64rem, which W70 calls wide), so it is a tall, mostly empty sheet with one field; whether
-  a one-field form should use something smaller is the owner's call. _2026-10-05 (W70): the dialog
-  is now the compact size, still as tall as the screen._ At 390px the Spanish "Hacer
-  predeterminado" and "Quitar" fit side by side with the dashboard's own padding (16px a side), and
-  stack when the page is padded 24px a side, so on a phone narrower than 390px they can stack.
+- **Content languages are managed on the page itself (C111, #987):** Add language uses the compact
+  width (W70, #1222) and fits its content (W70a), settling the one-field dialog's size and empty
+  space. Left open: at 390px the Spanish "Hacer predeterminado" and "Quitar" fit side by side with
+  the dashboard's own padding (16px a side), and stack when the page is padded 24px a side, so on
+  a phone narrower than 390px they can stack.
 
 - **Hints shown as placeholders (C104, #966; C119, #967):** the owner chose on 2026-10-01 to leave as
   they are the hints cut off in their fields and the fields whose own placeholder shows instead of
