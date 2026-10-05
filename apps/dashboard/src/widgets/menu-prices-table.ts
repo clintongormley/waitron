@@ -315,7 +315,9 @@ export class MenuPricesTable extends LitElement {
   }
 
   async #focusField(key: string): Promise<void> {
-    await this.#table()?.updateComplete;
+    const table = this.#table();
+    await table?.updateComplete;
+    await table?.revealRow(key);
     const field = this.#field(key);
     await field?.updateComplete;
     field?.focus();

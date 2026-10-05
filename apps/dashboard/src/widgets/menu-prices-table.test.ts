@@ -901,12 +901,20 @@ it("moves focus to a size's field when a refusal naming it arrives, from another
   expect(refused.shadowRoot!.activeElement).toBe(refused.shadowRoot!.querySelector("input"));
 });
 
-it("opens nothing and leaves focus for a refusal naming a size its collapsed product hides, which the status line still says", async () => {
+it("opens a collapsed product to show and focus its size's field when a refusal naming that size arrives, which the status line also says", async () => {
   setLocale("en-GB");
   try {
     const el = await mount();
-    const other = override(el, "mi-lager");
-    other.focus();
+    toggleOf(el, "mi-lemonade")!.click();
+    await table(el).updateComplete;
+    await typeIn(el, "mi-lemonade:v-small", "1.90");
+    await press(el, "mi-lemonade:v-small", "Enter");
+    el.saving = new Set(["mi-lemonade:v-small"]);
+    await el.updateComplete;
+    toggleOf(el, "mi-lemonade")!.click();
+    await table(el).updateComplete;
+    expect(row(el, "mi-lemonade:v-small")).toBeNull();
+    override(el, "mi-lager").focus();
     const save = {
       key: "mi-lemonade:v-small",
       menuItemId: "mi-lemonade",
@@ -915,12 +923,16 @@ it("opens nothing and leaves focus for a refusal naming a size its collapsed pro
       price: "1.90",
       previous: null,
     };
+    el.saving = new Set();
     el.refusals = { "mi-lemonade:v-small": "Refused here" };
     el.outcome = { kind: "refused", save, reason: "Refused here" };
     await el.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve));
-    expect(row(el, "mi-lemonade:v-small")).toBeNull();
-    expect(other.matches(":focus-within")).toBe(true);
+    await vi.waitFor(() => expect(row(el, "mi-lemonade:v-small")).not.toBeNull());
+    const refused = override(el, "mi-lemonade:v-small");
+    await vi.waitFor(() =>
+      expect(refused.shadowRoot!.activeElement).toBe(refused.shadowRoot!.querySelector("input")),
+    );
+    expect([refused.value, refused.error]).toEqual(["1.90", "Refused here"]);
     expect(text(el.shadowRoot!.querySelector('[data-test="price-outcome"]'))).toBe(
       "Your change to Lemonade — Small was not saved. Refused here",
     );
