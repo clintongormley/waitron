@@ -844,3 +844,32 @@ test.each([
     }
   },
 );
+
+test("a guarded parent ignores a child's Escape and close while retaining its own draft", async () => {
+  const parent = await openModal(
+    '<wt-input value="parent draft"></wt-input><wt-modal heading="Child">child</wt-modal>',
+  );
+  parent.beforeClose = vi.fn(async () => false);
+  await parent.updateComplete;
+  const child = parent.querySelector("wt-modal")!;
+  child.open = true;
+  await child.updateComplete;
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(dialogOf(child).open).toBe(false));
+  expect(dialogOf(parent).open).toBe(true);
+  expect(parent.querySelector("wt-input")!.value).toBe("parent draft");
+  expect(parent.beforeClose).not.toHaveBeenCalled();
+});
+
+test("a modal inherits the guarded Cancel path and saved-close bypass", async () => {
+  const modal = await openModal('<wt-input value="draft"></wt-input>');
+  modal.beforeClose = vi.fn(async () => false);
+  await modal.updateComplete;
+  expect(await modal.requestClose("cancel")).toBe(false);
+  expect(dialogOf(modal).open).toBe(true);
+  expect(modal.querySelector("wt-input")!.value).toBe("draft");
+  modal.closeAfter("saved");
+  await modal.updateComplete;
+  expect(dialogOf(modal).open).toBe(false);
+  expect(modal.beforeClose).toHaveBeenCalledExactlyOnceWith("cancel");
+});

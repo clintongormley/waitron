@@ -1178,8 +1178,11 @@ The [design](superpowers/specs/2026-10-05-unsaved-changes-warning-design.md),
 modals and pages across the dashboard, till, setup and contributed screens. Build the shared
 mechanism and modal rollout, then page/navigation coverage. The shared `ui-core` coordinator is
 implemented on `feat/unsaved-changes-protection`: scoped draft comparisons, submitted-value commits,
-stale-answer invalidation and dirty-only unload handling. Modal owners, the confirmation UI and
-page/navigation protection remain unimplemented. Keep automatic saves and forced session exits
+stale-answer invalidation and dirty-only unload handling. Shared dialog close interception and the
+Keep editing/Discard changes confirmation are implemented on that branch, with native Escape,
+reopening, delayed close reports, focus, token painting and EN/ES light/dark Chromium checks.
+Application confirmation renderers, modal owners and page/navigation protection remain
+unimplemented. Keep automatic saves and forced session exits
 on their existing paths.
 2026-10-06: Hours (A261 step 5) deleted `station-hours-form`, which the audit lists, and added
 the Hours page’s editors, which it does not.

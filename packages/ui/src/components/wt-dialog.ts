@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { uniqueId } from "../interactive.js";
+import type { LeaveReason } from "@waitron/ui-core/unsaved-changes";
 import {
   type FormErrorEvent,
   formMessage,
@@ -76,6 +77,10 @@ export class WtDialog extends LitElement {
         font-size: var(--wt-font-size-lg);
       }
 
+      .description {
+        margin: 0 0 var(--wt-space-3);
+      }
+
       .footer {
         display: flex;
         justify-content: flex-end;
@@ -92,8 +97,21 @@ export class WtDialog extends LitElement {
     `,
   ];
 
-  @property({ type: Boolean, reflect: true }) open = false;
+  private opened = false;
+  private openingGeneration = 0;
+  private reportedCloseGeneration?: number;
+  @property({ type: Boolean, reflect: true })
+  get open(): boolean {
+    return this.opened;
+  }
+  set open(value: boolean) {
+    if (this.opened === value) return;
+    this.opened = value;
+    this.openingGeneration++;
+    this.pendingClose = undefined;
+  }
   @property() heading = "";
+  @property() description = "";
 
   /** Whether Escape may close this dialog. Off for a surface with nothing behind it — the setup
    * wizard is the whole page, so a dismissed dialog would strand the operator on an empty document.
@@ -105,6 +123,43 @@ export class WtDialog extends LitElement {
    * uncancelable and closed the dialog. A close the caller did not ask for while this is off — a
    * browser without `closedby`, or a `close()` from outside — shows the dialog again. */
   @property({ type: Boolean }) dismissible = true;
+
+  @property({ attribute: false }) beforeClose?: (reason: LeaveReason) => Promise<boolean>;
+  private pendingClose?: object;
+
+  async requestClose(reason: LeaveReason): Promise<boolean> {
+    if (!this.open || !this.dismissible || this.pendingClose || !this.isConnected) return false;
+    const pending = {};
+    this.pendingClose = pending;
+    const generation = this.openingGeneration;
+    const guard = this.beforeClose;
+    try {
+      if (guard && !(await guard(reason))) return false;
+      if (
+        generation !== this.openingGeneration ||
+        !this.open ||
+        !this.dismissible ||
+        !this.isConnected ||
+        guard !== this.beforeClose
+      )
+        return false;
+      this.open = false;
+      await this.updateComplete;
+      return true;
+    } finally {
+      if (this.pendingClose === pending) this.pendingClose = undefined;
+    }
+  }
+
+  closeAfter(reason: "saved" | "security"): void {
+    if (reason === "saved" || reason === "security") this.open = false;
+  }
+
+  override disconnectedCallback(): void {
+    this.openingGeneration++;
+    this.pendingClose = undefined;
+    super.disconnectedCallback();
+  }
 
   /** Where focus goes on close when the browser leaves it on the page body or inside this closed
    * dialog. Unset, or unable to take focus, focus goes to the first element found walking outward
@@ -119,6 +174,7 @@ export class WtDialog extends LitElement {
   @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
 
   private readonly headingId = uniqueId("wt-dialog-heading");
+  private readonly descriptionId = uniqueId("wt-dialog-description");
 
   /** The messages of the `wt-form-actions` rows in the footer, shown at the end of the body instead,
    * so they sit below the fields they are about rather than between the pinned buttons. */
@@ -187,17 +243,19 @@ export class WtDialog extends LitElement {
   }
 
   private onClose(): void {
-    // The browser reports a close a task after it happens, so a dialog shut and reopened in between
-    // still gets the report; honouring it would shut the reopened dialog.
+    // Native reports arrive later; a reopened dialog owns its new opening, and a closed opening
+    // reports once even if an earlier opening's native event also reaches this handler.
     if (this.dialog.open) return;
-    if (this.open && !this.dismissible) {
+    if (this.open && (!this.dismissible || this.beforeClose)) {
       this.dialog.showModal();
       return;
     }
+    if (this.reportedCloseGeneration === this.openingGeneration) return;
     // Before `wt-close`, so a listener that hands focus back itself acts after this and wins.
     this.refocus();
     this.returnTarget = null;
     this.open = false;
+    this.reportedCloseGeneration = this.openingGeneration;
     this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
   }
 
@@ -224,7 +282,18 @@ export class WtDialog extends LitElement {
   }
 
   private onCancel(event: Event): void {
-    if (!this.dismissible) event.preventDefault();
+    if (!this.dismissible || this.beforeClose) event.preventDefault();
+    if (this.dismissible && this.beforeClose) void this.requestClose("escape");
+  }
+
+  private onKeydown(event: KeyboardEvent): void {
+    if (!this.beforeClose || event.key !== "Escape" || event.defaultPrevented || event.isComposing)
+      return;
+    if (event.composedPath().find((node) => node instanceof HTMLDialogElement) !== this.dialog)
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    void this.requestClose("escape");
   }
 
   private updateHasFooter(): void {
@@ -261,9 +330,11 @@ export class WtDialog extends LitElement {
       <dialog
         @close=${this.onClose}
         @cancel=${this.onCancel}
-        closedby=${this.dismissible ? "closerequest" : "none"}
+        @keydown=${this.onKeydown}
+        closedby=${this.dismissible && !this.beforeClose ? "closerequest" : "none"}
         role="dialog"
         aria-labelledby=${this.heading ? this.headingId : nothing}
+        aria-describedby=${this.description ? this.descriptionId : nothing}
         aria-label=${!this.heading && this.ariaLabel ? this.ariaLabel : nothing}
       >
         <!-- role="dialog" restates what a native <dialog> already implies once opened modally,
@@ -276,6 +347,11 @@ export class WtDialog extends LitElement {
              flagged. Removing this attribute would silently blind wt-dialog.a11y.test.ts. -->
         <div class="body">
           ${this.heading ? html`<h2 id=${this.headingId}>${this.heading}</h2>` : nothing}
+          ${
+            this.description
+              ? html`<p class="description" id=${this.descriptionId}>${this.description}</p>`
+              : nothing
+          }
           <slot @wt-form-error=${this.onBodyMessage}></slot>
           ${formMessage(this.footerMessage)}
         </div>

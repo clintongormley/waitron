@@ -663,3 +663,19 @@ sale descriptions contain receipt-language keys, so that filter can hide every r
 receipt and content languages differ. Snapshot displays may fall back to a stored nonblank value;
 they never rewrite the record. Regression: `packages/shared/src/content-languages.test.ts`,
 “keeps a receipt-only name visible when the content default is absent”.
+
+## Unsaved changes: shared close interception, owner-provided draft comparisons
+
+W69's shared dialog API and confirmation are implemented on its feature branch. Application
+renderers and modal/page owners remain in progress; the [backlog](../backlog.md) records that
+boundary. Use `beforeClose` with a scoped ui-core coordinator request and `requestClose(reason)`
+for voluntary dismissal. Commit the exact submitted snapshot after a successful write, before
+refreshing. Use `closeAfter("saved" | "security")` for success or forced teardown; forced exits
+also invalidate the coordinator's pending decision and clear sensitive owner values.
+
+The dialog tests exercise real Escape, repeated requests, reopening, disconnect/reconnect and
+late native close reports. Closing and reopening twice before queued reports were delivered
+produced two `wt-close` events in the new consecutive-opening test before the report-generation
+check. The confirmation tests cover Keep/Discard, silent abort, keyboard focus, tokens and axe in
+both themes; the integration suite exercises a retained edited field at phone and desktop widths
+with EN/ES copy. Those shared-component checks do not establish protection in an unwired app form.

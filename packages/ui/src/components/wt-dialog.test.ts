@@ -753,3 +753,245 @@ test("leaves focus where a wt-close listener puts it", async () => {
   await openAndClose(el, target, "Escape", () => target.remove());
   expect(deepActiveElement()).toBe(other);
 });
+
+test("keeps the edited native dialog open through repeated Escape while a close decision is pending", async () => {
+  const el = (await mount(
+    '<wt-dialog heading="Edit"><wt-input value="draft"></wt-input></wt-dialog>',
+  )) as WtDialog;
+  let answer!: (allow: boolean) => void;
+  const decide = vi.fn(() => new Promise<boolean>((resolve) => (answer = resolve)));
+  el.beforeClose = decide;
+  el.open = true;
+  await el.updateComplete;
+  const dialog = el.shadowRoot!.querySelector("dialog")!;
+  const closes = vi.fn();
+  el.addEventListener("wt-close", closes);
+
+  await pressEscape();
+  expect(dialog.open).toBe(true);
+  expect(decide).toHaveBeenCalledExactlyOnceWith("escape");
+  await pressEscape();
+  expect(dialog.open).toBe(true);
+  expect(decide).toHaveBeenCalledOnce();
+  answer(false);
+  await closeReportsDelivered();
+  expect(dialog.open).toBe(true);
+  expect(el.querySelector("wt-input")!.value).toBe("draft");
+  expect(closes).not.toHaveBeenCalled();
+});
+
+test("a late close approval cannot close a reopened editor or release its newer pending request", async () => {
+  const el = (await mount('<wt-dialog heading="Edit">draft</wt-dialog>')) as WtDialog;
+  const answers: ((allow: boolean) => void)[] = [];
+  el.beforeClose = vi.fn(() => new Promise<boolean>((resolve) => answers.push(resolve)));
+  el.open = true;
+  await el.updateComplete;
+  const first = el.requestClose("cancel");
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+  const second = el.requestClose("cancel");
+  expect(answers).toHaveLength(2);
+  answers[0]!(true);
+  expect(await first).toBe(false);
+  expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  expect(await el.requestClose("cancel")).toBe(false);
+  expect(answers).toHaveLength(2);
+  answers[1]!(false);
+  expect(await second).toBe(false);
+});
+
+test.each(["saved", "security"] as const)(
+  "%s closes immediately and invalidates an outstanding dismissal decision",
+  async (reason) => {
+    const el = (await mount('<wt-dialog heading="Edit">draft</wt-dialog>')) as WtDialog;
+    let answer!: (allow: boolean) => void;
+    el.beforeClose = vi.fn(() => new Promise<boolean>((resolve) => (answer = resolve)));
+    el.open = true;
+    await el.updateComplete;
+    const request = el.requestClose("cancel");
+    el.closeAfter(reason);
+    await el.updateComplete;
+    await closeReportsDelivered();
+    expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(false);
+    el.open = true;
+    await el.updateComplete;
+    answer(true);
+    expect(await request).toBe(false);
+    expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  },
+);
+
+test("keeps a guarded owner open when its native dialog is closed while asking", async () => {
+  const el = (await mount('<wt-dialog heading="Edit">draft</wt-dialog>')) as WtDialog;
+  let answer!: (allow: boolean) => void;
+  el.beforeClose = vi.fn(() => new Promise<boolean>((resolve) => (answer = resolve)));
+  el.open = true;
+  await el.updateComplete;
+  const request = el.requestClose("cancel");
+  const dialog = el.shadowRoot!.querySelector("dialog")!;
+  const closes = vi.fn();
+  el.addEventListener("wt-close", closes);
+  dialog.close();
+  await closeReportsDelivered();
+  expect(dialog.open).toBe(true);
+  expect(closes).not.toHaveBeenCalled();
+  answer(false);
+  expect(await request).toBe(false);
+});
+
+test("a close approval from before disconnect cannot dismiss a reconnected editor", async () => {
+  const el = (await mount('<wt-dialog heading="Edit">draft</wt-dialog>')) as WtDialog;
+  let answer!: (allow: boolean) => void;
+  el.beforeClose = () => new Promise<boolean>((resolve) => (answer = resolve));
+  el.open = true;
+  await el.updateComplete;
+  const request = el.requestClose("cancel");
+  el.remove();
+  host.append(el);
+  await el.updateComplete;
+  answer(true);
+  expect(await request).toBe(false);
+  expect(el.open).toBe(true);
+});
+
+test("an approved request closes once after a harmless owner rerender and returns focus to its opener", async () => {
+  const el = (await mount('<wt-dialog heading="Edit">draft</wt-dialog>')) as WtDialog;
+  const opener = document.createElement("button");
+  host.append(opener);
+  opener.focus();
+  el.opener = opener;
+  let answer!: (allow: boolean) => void;
+  el.beforeClose = vi.fn(() => new Promise<boolean>((resolve) => (answer = resolve)));
+  el.open = true;
+  await el.updateComplete;
+  const closes = vi.fn();
+  el.addEventListener("wt-close", closes);
+  const request = el.requestClose("backdrop");
+  el.heading = "Edited name";
+  await el.updateComplete;
+  expect(await el.requestClose("cancel")).toBe(false);
+  answer(true);
+  expect(await request).toBe(true);
+  await closeReportsDelivered();
+  expect(closes).toHaveBeenCalledOnce();
+  expect(deepActiveElement()).toBe(opener);
+  expect(el.beforeClose).toHaveBeenCalledExactlyOnceWith("backdrop");
+  expect(await el.requestClose("cancel")).toBe(false);
+});
+
+test("a refused close returns focus to the original field after the question closes", async () => {
+  const el = (await mount(
+    '<wt-dialog heading="Edit"><wt-input value="draft"></wt-input></wt-dialog>',
+  )) as WtDialog;
+  el.open = true;
+  await el.updateComplete;
+  const input = el.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+  input.focus();
+  el.beforeClose = async () => {
+    const question = document.createElement("dialog");
+    const keep = document.createElement("button");
+    question.append(keep);
+    host.append(question);
+    question.showModal();
+    keep.focus();
+    const closed = new Promise<void>((resolve) =>
+      question.addEventListener("close", () => resolve(), { once: true }),
+    );
+    question.close();
+    await closed;
+    question.remove();
+    return false;
+  };
+  expect(await el.requestClose("cancel")).toBe(false);
+  expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  expect(deepActiveElement()).toBe(input);
+});
+
+test("refuses a pending approval if the owner becomes busy or replaces its guard", async () => {
+  const el = (await mount('<wt-dialog heading="Edit">draft</wt-dialog>')) as WtDialog;
+  el.open = true;
+  await el.updateComplete;
+  for (const change of [
+    () => (el.dismissible = false),
+    () => (el.beforeClose = async () => true),
+  ]) {
+    el.dismissible = true;
+    let answer!: (allow: boolean) => void;
+    el.beforeClose = () => new Promise<boolean>((resolve) => (answer = resolve));
+    const request = el.requestClose("cancel");
+    change();
+    answer(true);
+    expect(await request).toBe(false);
+    expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  }
+});
+
+test("a busy guarded dialog never asks and success can still close it", async () => {
+  const el = (await mount('<wt-dialog heading="Edit">draft</wt-dialog>')) as WtDialog;
+  el.open = true;
+  el.dismissible = false;
+  el.beforeClose = vi.fn(async () => true);
+  await el.updateComplete;
+  await pressEscape();
+  expect(await el.requestClose("cancel")).toBe(false);
+  expect(el.beforeClose).not.toHaveBeenCalled();
+  expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  el.closeAfter("saved");
+  await el.updateComplete;
+  await closeReportsDelivered();
+  expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(false);
+});
+
+test("a rejected decision preserves the editor and releases its request gate", async () => {
+  const el = (await mount('<wt-dialog heading="Edit">draft</wt-dialog>')) as WtDialog;
+  el.open = true;
+  await el.updateComplete;
+  const failure = new Error("renderer failed");
+  el.beforeClose = async () => {
+    throw failure;
+  };
+  await expect(el.requestClose("cancel")).rejects.toBe(failure);
+  expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  el.beforeClose = async () => true;
+  expect(await el.requestClose("cancel")).toBe(true);
+  await closeReportsDelivered();
+  expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(false);
+});
+
+test("associates an optional description inside the native dialog's shadow root", async () => {
+  const el = (await mount(
+    '<wt-dialog heading="Leave" description="Your changes are unsaved."></wt-dialog>',
+  )) as WtDialog;
+  el.open = true;
+  await el.updateComplete;
+  const dialog = el.shadowRoot!.querySelector("dialog")!;
+  const id = dialog.getAttribute("aria-describedby");
+  expect(id).toBeTruthy();
+  expect(el.shadowRoot!.getElementById(id!)?.textContent?.trim()).toBe("Your changes are unsaved.");
+});
+
+test("a user-dismissal reason cannot use the successful-write or security bypass", async () => {
+  const el = (await mount('<wt-dialog heading="Edit">draft</wt-dialog>')) as WtDialog;
+  el.open = true;
+  await el.updateComplete;
+  el.closeAfter("cancel" as "saved");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+});
+
+test("delayed native reports from two consecutive openings report only the current close", async () => {
+  const el = (await mount('<wt-dialog heading="Edit">draft</wt-dialog>')) as WtDialog;
+  el.open = true;
+  await el.updateComplete;
+  const closes = vi.fn();
+  el.addEventListener("wt-close", closes);
+  expect(await el.requestClose("cancel")).toBe(true);
+  el.open = true;
+  await el.updateComplete;
+  expect(await el.requestClose("cancel")).toBe(true);
+  await closeReportsDelivered();
+  expect(el.shadowRoot!.querySelector("dialog")!.open).toBe(false);
+  expect(closes).toHaveBeenCalledOnce();
+});

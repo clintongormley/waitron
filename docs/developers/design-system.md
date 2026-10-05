@@ -1456,6 +1456,35 @@ password manager reads, in two files, and the print agent's setup page, each hel
 lines it draws a field on, so a field swapped for another, a hidden input made visible, or a field
 added on a line that already has one passes.
 
+#### Protect an edited dialog before closing it
+
+When a dialog holds staged edits, give its owner a draft scope from
+`@waitron/ui-core/unsaved-changes`. Compare the values your form would submit with its detached
+starting snapshot. Call `changed()` after edits and reverts, and `commit(submitted)` as soon as
+that write succeeds, before refreshing. Saving a child form commits its child scope; the
+parent's server write still has its own baseline.
+
+Bind the dialog's `beforeClose` property to a scoped coordinator request and return whether its
+outcome is `"proceeded"`. Route Cancel, close controls and an existing backdrop action through
+`requestClose(reason)`. Native Escape uses the same gate. The dialog stays open while asking,
+and a later answer cannot close a different opening. `closeAfter("saved")` and
+`closeAfter("security")` bypass a pending question for a successful write or forced teardown.
+An owner's `open` binding still controls rendering; it is not a user-dismissal path.
+
+Render one `wt-unsaved-changes` per application, supplying `heading`, `message`, `keepLabel`
+and `discardLabel` from that application's translations. The compact confirmation focuses Keep
+editing, offers a danger-styled Discard changes action and emits `wt-unsaved-choice` with
+`detail: { decision: "keep" | "discard" }`. Escape chooses Keep. Closing its `open` property
+for an aborted request emits no choice. Its message is the inner dialog's accessible description.
+Keep the original editor mounted until the coordinator approves leaving, so Keep restores focus
+and preserves the draft. Read-only and automatically saved forms need no draft scope.
+
+W69 is being rolled out in stages. These shared APIs are available on its implementation branch;
+application renderer and owner integration remain tracked in the W69 backlog entry. Page
+navigation is a separate part of that rollout. The coordinator's dirty-only unload registration
+requests the browser's own warning; the [design](../superpowers/specs/2026-10-05-unsaved-changes-warning-design.md)
+records its activation and platform limits.
+
 #### A value saved from its own table row
 
 A few lists edit a value in its own row, saving each change as it is made, with no `wt-modal`
