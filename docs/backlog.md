@@ -2871,9 +2871,10 @@ measured drift in an alert and till banner, and treats unusable or ambiguous tim
 The banner describes the last comparison; it does not promise current clock accuracy. Readiness
 refusals show the saved AEAT code and message, and acceptance explains the measured limit of name
 checking in W41s-1's protocol receipt. Cash-sale tests cover both warning and unavailable reads.
-**Next action:** finish W41s-10c's branch review and current-head CI, then leave it for owner review.
-Lane A's receipt overlap is explicitly waived by the campaign queue. A231 remains parked with its
-owner and physical-paper gates, and its CI checkpoint still needs a hosted runner.
+**Next action:** complete current-head CI after the W111 rebase, then leave W41s-10c for owner
+review. Its Claude run-it review is complete; retain that review across the rebase. Lane A's
+receipt overlap is explicitly waived by the campaign queue. A231 remains parked with its owner
+and physical-paper gates; its earlier-head CI passed, and W111 requires a separate rebase.
 Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still needs
 old-chain evidence and its adviser answer. Independent queue items may proceed under the plan. The following paragraph records the 2026-10-03 state;
 its old next action and allocation assumptions are superseded by this update.
