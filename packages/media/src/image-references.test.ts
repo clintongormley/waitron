@@ -252,7 +252,7 @@ describe("an image a live menu version names", () => {
       const product = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: null,
-        name: "Bread",
+        name: "Toast",
         pricingUnit: "each",
         unitPrice: "2.00",
         vatClass: "general",

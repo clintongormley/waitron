@@ -3668,13 +3668,17 @@ describe("PUT + DELETE /api/tables/:id/placement — the on-till authorize(venue
 
 // HTTP serialization and deterministic pricing need no concurrency or privilege assertion here.
 // Each fixture owns a fresh product and offer so other catalogue expectations remain independent.
+// The suite shares one database and an Active product's staff name is unique, so each fixture's
+// products carry its own number.
+let modifierFixtures = 0;
 async function modifierOfferFixture() {
+  const fixture = ++modifierFixtures;
   const data = await withTransaction(suite.db, async (tx) => {
     const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
     const product = await createProduct(tx, {
       catalogueId: aguaProduct.catalogueId,
       categoryId: null,
-      name: "Prueba de modificadores",
+      name: `Prueba de modificadores ${fixture}`,
       pricingUnit: "each",
       unitPrice: "8.00",
       vatClass: "general",
@@ -3688,7 +3692,7 @@ async function modifierOfferFixture() {
     const cheese = await createProduct(tx, {
       catalogueId: aguaProduct.catalogueId,
       categoryId: null,
-      name: "Queso staff",
+      name: `Queso staff ${fixture}`,
       customerName: { [defaultLanguage]: "Queso customer" },
       kitchenName: "Queso kitchen",
       pricingUnit: "each",
@@ -3787,7 +3791,7 @@ async function modifierOfferFixture() {
   const parkedExtras = [
     {
       productId: data.cheese.id,
-      name: "Queso staff",
+      name: `Queso staff ${fixture}`,
       descriptions: { "es-ES": "Queso customer" },
       kitchenName: "Queso kitchen",
       price: "0.35",

@@ -84,7 +84,7 @@ async function fixture(): Promise<Fixture> {
   const { menuId, categoryId, managerSessionId, staffSessionId, supervisorSessionId } =
     await db.transaction(async (tx) => {
       const menu = await createCatalogue(tx, { name: "Drinks" });
-      const category = await createCategory(tx, { name: "Cocktails" });
+      const category = await createCategory(tx, { name: `Cocktails ${scopedLocationId}` });
       const [manager] = await tx
         .insert(persons)
         .values({
