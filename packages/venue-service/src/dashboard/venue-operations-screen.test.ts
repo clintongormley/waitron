@@ -646,6 +646,33 @@ describe("venue operations screen", () => {
     expect(rows.some((row) => row.textContent?.includes("Dining room"))).toBe(false);
   });
 
+  it("retains an inactive department in the policy tree", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        departments: [{ ...model.departments[0], active: false }, model.departments[1]],
+      }),
+    } as unknown as VenueServiceApi);
+    const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
+    const department = rows.find((row) => row.textContent?.includes("Restaurant and bar"));
+    expect(department?.textContent).toContain("Inactive");
+  });
+
+  it("treats a sole active department as Every zone and offers no move to an inactive one", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        departments: [model.departments[0], { ...model.departments[1], active: false }],
+      }),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const rows = [...tree.querySelectorAll('tbody [role="row"]')];
+    const active = rows.find((row) => row.textContent?.includes("Dining room"));
+    expect(rows.some((row) => row.textContent?.includes("Every zone"))).toBe(true);
+    expect(active).toBeDefined();
+    expect(active!.querySelector('[data-test="move-tree-zone-z1"]')).toBeNull();
+  });
+
   it("confirms removal of a zone from its policy-tree row", async () => {
     const deactivateZone = vi.fn().mockResolvedValue(undefined);
     const el = await mount({

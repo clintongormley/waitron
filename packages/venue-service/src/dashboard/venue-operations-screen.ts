@@ -560,11 +560,12 @@ export class VenueOperationsScreen extends LitElement {
 
   #policyTree() {
     const model = this.model!;
-    const departments = model.departments.filter((department) => department.active);
+    const departments = model.departments;
+    const activeDepartmentCount = departments.filter((department) => department.active).length;
     const rows: PolicyRow[] = departments.flatMap((department) => [
       { kind: "department" as const, department },
       ...model.zones
-        .filter((zone) => zone.departmentId === department.id)
+        .filter((zone) => department.active && zone.departmentId === department.id)
         .flatMap((zone) => {
           const floorZone = model.floorZones.find((row) => row.id === zone.id);
           return floorZone && floorZone.active !== false
@@ -667,21 +668,23 @@ export class VenueOperationsScreen extends LitElement {
                   </div>`,
               )}`;
           const displayName =
-            departments.length === 1 ? t("venue.every_zone") : row.department.name;
+            row.department.active && activeDepartmentCount === 1
+              ? t("venue.every_zone")
+              : row.department.name;
           if (this.departmentNameEditor !== row.department.id)
             return html`<button
-              type="button"
-              part="edit-department-name"
-              data-test="edit-department-name"
-              aria-label=${`${row.department.name}: ${t("venue.name")}`}
-              @click=${() => {
-                this.departmentNameDraft = row.department.name;
-                this.departmentNameError = "";
-                this.departmentNameEditor = row.department.id;
-              }}
-            >
-              ${displayName}
-            </button>`;
+                type="button"
+                part="edit-department-name"
+                data-test="edit-department-name"
+                aria-label=${`${row.department.name}: ${t("venue.name")}`}
+                @click=${() => {
+                  this.departmentNameDraft = row.department.name;
+                  this.departmentNameError = "";
+                  this.departmentNameEditor = row.department.id;
+                }}
+              >
+                ${displayName}</button
+              >${row.department.active ? nothing : html` ${t("venue.inactive")}`}`;
           return html`<wt-input
               name="departmentName"
               label=${t("venue.name")}
@@ -1106,7 +1109,7 @@ export class VenueOperationsScreen extends LitElement {
                     this.zoneNameEditor = row.zone.id;
                   },
                 },
-                ...(row.departmentId === null || departments.length > 1
+                ...(row.departmentId === null || activeDepartmentCount > 1
                   ? [
                       {
                         key: `${row.departmentId === null ? "configure" : "move"}-tree-zone-${row.zone.id}`,
