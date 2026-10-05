@@ -40,6 +40,7 @@ export class CatalogueBrowser extends LitElement {
       :host {
         display: block;
         min-width: 0;
+        container-type: inline-size;
       }
       :host([sticky-header]) {
         display: flex;
@@ -78,11 +79,13 @@ export class CatalogueBrowser extends LitElement {
         flex: 1 1 calc(var(--wt-tap-min) * 7);
         min-width: min(100%, calc(var(--wt-tap-min) * 7));
       }
-      /* On a phone the search cannot share a line with the leading buttons, so it takes the line
-         under them and the table's own buttons join them; Tab still reaches it before those. */
-      @media (max-width: 30rem) {
+      /* At 40rem or less the search takes a whole line under the buttons, even where all five
+         would fit on one; Tab still reaches it before Expand all. The list's width decides, since
+         the sidebar can leave a wide window a narrow list. */
+      @container (max-width: 40rem) {
         wt-input {
           order: 1;
+          flex-basis: 100%;
         }
       }
     `,

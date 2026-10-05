@@ -2554,6 +2554,77 @@ it("at phone width puts Filters, Select, Expand all and Customise on the first t
   }
 });
 
+it.each([
+  [320, "en-GB"],
+  [430, "en-GB"],
+  [620, "en-GB"],
+  [640, "en-GB"],
+  [430, "es-ES"],
+  [600, "es-ES"],
+  [640, "es-ES"],
+])(
+  "in a wide window, a list %ipx wide puts the four buttons on one line and the search under them (%s)",
+  async (listWidth, locale) => {
+    const { page } = await import("vitest/browser");
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(1280, 720);
+    setLocale(locale);
+    try {
+      const el = await mountBrowser();
+      el.style.width = `${listWidth}px`;
+      const table = await tableOf(el);
+      const line = [
+        table.shadowRoot!.querySelector(".filters-trigger")!,
+        el.shadowRoot!.querySelector('[data-test="select"]')!,
+        table.shadowRoot!.querySelector(".expand-all")!,
+        table.shadowRoot!.querySelector(".columns-trigger")!,
+      ].map((element) => element.getBoundingClientRect());
+      for (let index = 1; index < line.length; index++) {
+        expect(line[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(line[index - 1]!.right);
+        expect(line[index]!.top, `item ${index}`).toBeLessThan(line[0]!.bottom);
+      }
+      const search = el
+        .shadowRoot!.querySelector('[name="catalogue-search"]')!
+        .getBoundingClientRect();
+      expect(search.top).toBeGreaterThanOrEqual(Math.max(...line.map((box) => box.bottom)));
+      const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
+      expect(toolbar.bottom).toBeCloseTo(search.bottom, 0);
+      expect(search.width).toBeCloseTo(toolbar.width, 0);
+    } finally {
+      await page.viewport(width, height);
+      setLocale("en-GB");
+    }
+  },
+);
+
+it("keeps Filters, Select, search, Expand all and Customise on one line in a Spanish list 660px wide", async () => {
+  const { page } = await import("vitest/browser");
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 720);
+  setLocale("es-ES");
+  try {
+    const el = await mountBrowser();
+    el.style.width = "660px";
+    const table = await tableOf(el);
+    const boxes = [
+      table.shadowRoot!.querySelector(".filters-trigger")!,
+      el.shadowRoot!.querySelector('[data-test="select"]')!,
+      el.shadowRoot!.querySelector('[name="catalogue-search"]')!,
+      table.shadowRoot!.querySelector(".expand-all")!,
+      table.shadowRoot!.querySelector(".columns-trigger")!,
+    ].map((element) => element.getBoundingClientRect());
+    for (let index = 1; index < boxes.length; index++) {
+      expect(boxes[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(boxes[index - 1]!.right);
+      expect(boxes[index]!.top, `item ${index}`).toBeLessThan(boxes[0]!.bottom);
+    }
+  } finally {
+    await page.viewport(width, height);
+    setLocale("en-GB");
+  }
+});
+
 it("at phone width fits Select mode's controls and the table's own on two toolbar lines", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,

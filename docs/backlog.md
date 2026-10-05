@@ -3347,14 +3347,16 @@ beside the rows at their left; it stays in view while the rows scroll, a press o
 open, and closing it gives the rows their width back. Narrower, it opens full screen. Pressing
 Select again leaves Select mode as Cancel does; the count, Move to…, Delete and Cancel stay at the
 toolbar's end and wrap one by one on a phone. On a phone the search takes its own line under the
-buttons. `wt-data-table` gained an opt-in `leadingFilters` for this, set only by Products, and the
+buttons _(2026-10-05, W85d: wherever the list is 40rem wide or less, not only in a narrow window)_. `wt-data-table` gained an opt-in `leadingFilters` for this, set only by Products, and the
 icon button and tooltip styles are shared from `@waitron/ui` (`iconButtonStyles`). One existing
 test assertion changed, for the owner to review: the catalogue browser's toolbar-order test pinned
 the old order (search, Filters, Expand all, Select, Customise) and now pins the new one (Filters,
 Select, search, Expand all, Customise). Left open: on a phone the search is drawn under Expand all
 and Customise while Tab reaches it before them (two reviewers judged this not a WCAG 1.3.2 or 2.4.3
 failure, by stepping through with the keyboard and reading Chromium's accessibility tree; what a
-screen reader says was not checked); and a desktop window narrow enough to leave the table under
+screen reader says was not checked) _(2026-10-05, W85d: this now happens wherever the list is 40rem
+wide or less, desktop windows with the sidebar showing included; those two reviewers judged it when
+the layout existed only at phone width, #1193)_; and a desktop window narrow enough to leave the table under
 768px gets the full-screen panel — at which window width that happens with the sidebar shown was
 not measured. Also left open by W83's review, none started: (1) the table's Customise columns
 button is icon-only beside these two but has neither their look nor a tooltip; (2) the icon button
@@ -3363,7 +3365,30 @@ component — Select is a native `<button>` because `wt-button` does not pass `a
 (3) the 768px side-panel threshold is tied by hand to token sizes (768 − 7×44 − 12 = 448, just
 above the table's 440px narrow-tree width); (4) the catalogue browser's phone layout switches on
 the window's width (`@media (max-width: 30rem)`), where the menus and modifiers screens use
-`@container (max-width: 30rem)`.
+`@container (max-width: 30rem)` _(2026-10-05: fixed in W85d, below — it now switches on
+the list's own width, at 40rem)_.
+
+**Products at phone width: the toolbar takes two lines, not three — DONE (W85d, owner
+2026-10-05).** The owner saw three toolbar lines on Products: Filters and Select, then the search,
+then Expand all and Customise. The catalogue browser moved its search under the buttons only in a
+window up to 30rem (480px) wide, so a narrow list in a wider window — the sidebar showing, for
+example — missed the rule. Measured in real Chromium in a 1280px window: a list 320 to 430px wide
+drew three lines, and 480 to 600px drew the search beside Filters and Select with Expand all and
+Customise on a second line; all five shared one line at 640px.
+The rule is now a container query on the catalogue browser's own width
+(`@container (max-width: 40rem)`, `apps/dashboard/src/widgets/catalogue-browser.ts`): at that width
+or less, Filters, Select, Expand all and Customise share the first line and the search fills the
+line under them; wider, all five stay on one line as before. Products is the only table with these
+controls (the menu structure table has Expand all and no search; the units, modifiers, content
+languages and menu prices tables use the table's own search and have no Expand all or Select), so
+no other screen changed. The search is given the whole line (`flex-basis: 100%`) as well as moved
+after the buttons: with `order` alone, English lists 620 and 640px wide and a Spanish list 640px
+wide drew all five on one line with the search last. Pinned by the "in a wide window" cases (English lists 320, 430, 620 and
+640px wide; Spanish lists 430, 600 and 640px wide) and the "Spanish list 660px wide" case in
+`apps/dashboard/src/widgets/catalogue-browser.test.ts`; the 390px phone case and the 1280px
+one-line case are unchanged. Looked at on the demo stack at 390, 800, 900 and 1280px, light and
+dark, English and Spanish (local screenshots in `~/waitron-campaign/w85d-shots/`). Not covered:
+Select mode's extra controls at the middle widths.
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
 2026-10-04).** The All products row, category rows, a category being added and product rows of the
