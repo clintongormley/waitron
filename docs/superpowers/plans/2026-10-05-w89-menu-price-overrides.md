@@ -2028,6 +2028,8 @@ existing check.
 | 6 | `…menus-screen.test.ts` (new, `:4430` at Task 6's commit) | — | two saves of one field, 11.00 then 11.50: no "saved" outcome while the second is out; then the 11.50 one with `previous: "11.00"`; its Undo writes `{ grossPrice: "11.00" }` | Added check (controller ruling on Undo's target; the status line speaks only for the last save made) |
 | 6 | `…menu-prices-table.test.ts` (new, `:1240` at Task 6's commit) | — | commit 11.00, kept saving, commit 11.50: the second save's `previous` is "11.00" | Added check (controller ruling on Undo's target) |
 | 6 | `…menu-prices-table.test.ts` (new, `:1255`, `:1270` at Task 6's commit) | — | a "saved" outcome does not hold a field's draft as refused; a refused draft goes back to stored once the status line says another save was saved | Added check (`#unrefuse` and `#settle` with the new outcome kind; both passed before the feature) |
+| 6 | `…menus-screen.test.ts` (new, `:4471` at Task 6's fix round 1) | — | Burger's 11.00 refused (`connection.failed`) while a later save is queued — Lager's 5.00, or Burger's own 11.50 — that later save's success leaves the refusal in the status line, with no Undo; Lager's case also keeps Burger's 11.00 in its field | Added check (fix round 1: a later success hid an earlier refusal) |
+| 6 | `…menu-prices-table.a11y.test.ts` (Task 6's case, `:150`) | the status line is not empty | it reads the saved sentence, "Guardado el precio propio de Burger: 11,00 €." | Changed check (fix round 1, minor) |
 
 ---
 

@@ -4468,6 +4468,37 @@ it("says only the last save made, and its Undo writes back the price the save be
   expect(priceField(el, "mi-burger").value).toBe("11.00");
 });
 
+it.each([
+  { second: "another field's", key: "mi-lager", price: "5.00" },
+  { second: "the same field's", key: "mi-burger", price: "11.50" },
+])(
+  "keeps an earlier save's refusal in the status line when $second later save succeeds, offering no Undo",
+  async ({ key, price }) => {
+    const refused = deferred<void>();
+    const holds = [refused];
+    const client = api({
+      updateMenuItem: vi.fn(async () => {
+        await holds.shift()?.promise;
+      }),
+    });
+    const el = await mountPrices(client);
+    await commitPrice(el, "mi-burger", "11.00");
+    await commitPrice(el, key, price);
+    refused.reject({ code: "connection.failed" });
+    await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(prices(el).saving.size).toBe(0));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(prices(el).outcome).toEqual({
+      kind: "refused",
+      save: burgerSave,
+      reason: codeMessage("connection.failed"),
+    });
+    await prices(el).updateComplete;
+    expect(priceUndo(el)).toBeNull();
+    if (key !== "mi-burger") expect(priceField(el, "mi-burger").value).toBe("11.00");
+  },
+);
+
 it("clears a refusal from the status line, and from under its field, once that field is sent again", async () => {
   const again = deferred<void>();
   const client = api({

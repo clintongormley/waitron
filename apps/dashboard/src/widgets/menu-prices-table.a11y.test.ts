@@ -161,7 +161,9 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
         },
       },
     });
-    expect(el.shadowRoot!.querySelector('[data-test="price-outcome"]')!.textContent).not.toBe("");
+    expect(el.shadowRoot!.querySelector('[data-test="price-outcome"]')!.textContent).toBe(
+      t("menu_prices.saved").replace("{name}", "Burger").replace("{price}", "11,00\u00a0€"),
+    );
     expect(el.shadowRoot!.querySelector('[data-test="price-undo"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
