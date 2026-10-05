@@ -379,8 +379,15 @@ describe("guided printer calibration", () => {
   async function openCalibration(api: DashboardApi, id = "p1"): Promise<PrintersScreen> {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await openPrinter(el, id);
-    q(el, "[data-test=calibrate-printer]")!.click();
+    await selectTab(el, "printers");
+    if (!q(el, `[data-test="printer-row-${id}"]`)) await filterPrinters(el, "all");
+    q(el, `[data-test="printer-row-${id}"]`)!.click();
+    await flush(el);
+    q(el, "[data-test=printer-section-calibration]")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    await flush(el);
+    q(el, "[data-test=calibrate-printer-details]")!.click();
     await flush(el);
     return el;
   }
