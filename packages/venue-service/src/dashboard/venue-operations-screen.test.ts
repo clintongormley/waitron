@@ -1243,6 +1243,189 @@ describe("venue operations screen", () => {
     await vi.waitFor(() => expect(buttons()[1].textContent).toContain("On request"));
   });
 
+  describe.each([
+    {
+      field: "paidWhen",
+      button: "edit-paid",
+      stored: "prepay",
+      changed: "ticket_then_pay",
+      label: "Pay before preparation",
+    },
+    {
+      field: "collectionNumber",
+      button: "edit-collection",
+      stored: "none",
+      changed: "numbered",
+      label: "None",
+    },
+    {
+      field: "receiptPrintMode",
+      button: "edit-receipt",
+      stored: "auto",
+      changed: "never",
+      label: "Always",
+    },
+  ] as const)("$field inline recovery", ({ field, button, stored, changed, label }) => {
+    const policies = {
+      departments: [
+        {
+          departmentId: "d1",
+          paidWhen: "prepay" as const,
+          collectionNumber: "none" as const,
+          receiptPrintMode: "auto" as const,
+          printTradingName: true,
+        },
+      ],
+      zones: [
+        {
+          zoneId: "z1",
+          paidWhen: null,
+          collectionNumber: null,
+          receiptPrintMode: null,
+          effective: {
+            paidWhen: "prepay" as const,
+            collectionNumber: "none" as const,
+            receiptPrintMode: "auto" as const,
+            printTradingName: true,
+          },
+        },
+      ],
+    };
+
+    it.each(["department", "zone"] as const)(
+      "returns a refused %s edit to the saved choice without another write",
+      async (kind) => {
+        const departmentSave = vi.fn().mockRejectedValue(new Error("offline"));
+        const zoneSave = vi.fn().mockRejectedValue(new Error("offline"));
+        const el = await mount({
+          load: vi.fn().mockResolvedValue({
+            ...model,
+            departments: [model.departments[0]],
+            salePolicies: policies,
+          }),
+          setDepartmentSalePolicyField: departmentSave,
+          setZoneSalePolicyOverride: zoneSave,
+        } as unknown as VenueServiceApi);
+        const tree = () => table(el, "policy-tree").shadowRoot!;
+        const buttons = () => [
+          ...tree().querySelectorAll<HTMLButtonElement>(`[data-test="${button}"]`),
+        ];
+        const index = kind === "department" ? 0 : 1;
+        buttons()[index].click();
+        await settle(el);
+        const control = () =>
+          tree().querySelector<HTMLElement & { value: string }>(`wt-combobox[name="${field}"]`)!;
+        await chooseOption(control(), changed);
+        const save = kind === "department" ? departmentSave : zoneSave;
+        await vi.waitFor(() =>
+          expect(save).toHaveBeenCalledWith(kind === "department" ? "d1" : "z1", field, changed),
+        );
+        await vi.waitFor(() => expect(pageAlert(el)).toContain("could not be saved"));
+        expect(control().value).toBe(changed);
+        await chooseOption(control(), kind === "department" ? stored : "");
+        await vi.waitFor(() => expect(buttons()).toHaveLength(2));
+        expect(buttons()[index].textContent).toContain(label);
+        expect(tree().querySelector(`wt-combobox[name="${field}"]`)).toBeNull();
+        expect(save).toHaveBeenCalledTimes(1);
+        expect(kind === "department" ? zoneSave : departmentSave).not.toHaveBeenCalled();
+        expect(pageAlert(el)).toBe("");
+      },
+    );
+
+    it("shows an explicit zone override after saving", async () => {
+      let saved = false;
+      const save = vi.fn(async () => {
+        saved = true;
+      });
+      const el = await mount({
+        load: vi.fn(async () => ({
+          ...model,
+          departments: [model.departments[0]],
+          salePolicies: {
+            ...policies,
+            zones: [
+              {
+                ...policies.zones[0],
+                [field]: saved ? changed : null,
+                effective: { ...policies.zones[0].effective, [field]: saved ? changed : stored },
+              },
+            ],
+          },
+        })),
+        setZoneSalePolicyOverride: save,
+      } as unknown as VenueServiceApi);
+      const tree = () => table(el, "policy-tree").shadowRoot!;
+      const buttons = () => [
+        ...tree().querySelectorAll<HTMLButtonElement>(`[data-test="${button}"]`),
+      ];
+      buttons()[1].click();
+      await settle(el);
+      await chooseOption(
+        tree().querySelector<HTMLElement>(`wt-combobox[name="${field}"]`)!,
+        changed,
+      );
+      await vi.waitFor(() => expect(save).toHaveBeenCalledWith("z1", field, changed));
+      await vi.waitFor(() => expect(buttons()).toHaveLength(2));
+      await vi.waitFor(() =>
+        expect(buttons()[1].getAttribute("part")).not.toContain("inherited-value"),
+      );
+      buttons()[1].click();
+      await settle(el);
+      expect(
+        tree().querySelector<HTMLElement & { value: string }>(`wt-combobox[name="${field}"]`)!
+          .value,
+      ).toBe(changed);
+    });
+  });
+
+  it.each([
+    {
+      name: "zoneName",
+      edit: "edit-zone-name",
+      save: "save-zone-name",
+      cancel: "cancel-zone-name",
+      old: "Dining room",
+    },
+    {
+      name: "departmentName",
+      edit: "edit-department-name",
+      save: "save-department-name",
+      cancel: "cancel-department-name",
+      old: "Restaurant and bar",
+    },
+    {
+      name: "tradingName",
+      edit: "edit-trading-name",
+      save: "save-trading-name",
+      cancel: "cancel-trading-name",
+      old: "Casa Delgado",
+    },
+  ])(
+    "refuses a blank $name and restores its displayed name on Cancel",
+    async ({ name, edit, save, cancel, old }) => {
+      const updateDepartment = vi.fn();
+      const updateZone = vi.fn();
+      const el = await mount({
+        load: vi.fn().mockResolvedValue(model),
+        updateDepartment,
+        updateZone,
+      } as unknown as VenueServiceApi);
+      await action(el, edit);
+      const control = find(el, `wt-input[name="${name}"]`)!;
+      control.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "   " }, bubbles: true, composed: true }),
+      );
+      await settle(el);
+      await action(el, save);
+      expect(control.getAttribute("error")).toContain("required");
+      expect(updateDepartment).not.toHaveBeenCalled();
+      expect(updateZone).not.toHaveBeenCalled();
+      await action(el, cancel);
+      expect(find(el, `wt-input[name="${name}"]`)).toBeNull();
+      expect(find(el, `[data-test="${edit}"]`)!.textContent).toContain(old);
+    },
+  );
+
   it("switches receipt trading names on a department without offering the switch on a zone", async () => {
     let printTradingName = false;
     const save = vi.fn(async (departmentId: string, field: string, value: boolean) => {

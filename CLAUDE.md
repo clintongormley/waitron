@@ -630,6 +630,11 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   to it; a `const` it accepts can be changed after it is declared; a function injected beside it
   through `??` runs unseen; and a path that migrates without `applyMigrations` (`runMigrations`
   called directly) is invisible to it.
+- **A new append-only table travels in both its module's exported migration descriptor and
+  `packages/migrations/migrations.manifest.json`.** Guards:
+  `scripts/append-only-migration-sets.test.ts` and `packages/composition/src/index.test.ts`.
+  Cost: A261-2 passed its direct-descriptor tests while the hook and then CI caught the two missing
+  lists. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **A streamed `venue.db` holds two tables no migration created, and its folder a directory no
   store opened.** Litestream adds `_litestream_seq` and `_litestream_lock` to the database it
   streams, a restore of the stream carries both, and it keeps `.venue.db-litestream/` beside the

@@ -61,6 +61,7 @@ import {
   configureZone,
   createDepartment,
   deactivateDepartment,
+  departmentRemovalImpact,
   deactivateServiceZone,
   allowMenuInZone,
   findOrderServiceContext,
@@ -1419,6 +1420,82 @@ it("keeps the receipt's department heading after the department is renamed and i
     tradingName: "Bar La Buena",
     printTradingName: true,
   });
+});
+
+it("records an empty receipt heading for a sale without a service zone", async () => {
+  const venue = await seedSellingVenue();
+  const saleId = await scoped(async (tx) => {
+    const [series] = await tx
+      .insert(invoiceSeries)
+      .values({ nodeId: venue.nodeId, code: `H${randomUUID().slice(0, 6)}` })
+      .returning({ id: invoiceSeries.id });
+    const [sale] = await tx
+      .insert(sales)
+      .values({
+        source: "readiness_test",
+        seriesId: series!.id,
+        nodeId: venue.nodeId,
+        invoiceNumber: 1,
+        issuedAt: new Date().toISOString(),
+        issuedOffsetMinutes: 0,
+        total: 0,
+        vatBreakdown: [],
+        locale: "en-GB",
+        invoiceLocales: ["en-GB"],
+        fiscalBackend: "none",
+        fiscalState: "not_applicable",
+      })
+      .returning({ id: sales.id });
+    await recordSaleReceiptHeader(tx, venue.cfg, sale!.id, null);
+    return sale!.id;
+  });
+  await expect(scoped((tx) => readSaleReceiptHeader(tx, saleId))).resolves.toEqual({
+    departmentId: null,
+    tradingName: "",
+    printTradingName: false,
+  });
+  await expect(scoped((tx) => readSaleReceiptHeader(tx, randomUUID()))).resolves.toBeNull();
+});
+
+it("uses an explicitly selected zone instead of the venue fallback", async () => {
+  const venue = await seedSellingVenue();
+  await expect(
+    scoped((tx) => resolveNewOrderZone(tx, venue.cfg, { zoneId: venue.barZone })),
+  ).resolves.toMatchObject({
+    zoneId: venue.barZone,
+    departmentId: venue.barId,
+    departmentName: "Bar",
+    serviceMode: "prepay",
+  });
+});
+
+it("refuses an unknown sale-policy zone with the domain error", async () => {
+  const venue = await seedSellingVenue();
+  const zoneId = randomUUID();
+  await expect(scoped((tx) => resolveSalePolicy(tx, venue.cfg, zoneId))).rejects.toMatchObject({
+    code: "service_zone.not_found",
+    params: { zoneId },
+  });
+});
+
+it("reports no zones for an empty department and no tables for an empty zone", async () => {
+  const venue = await seedSellingVenue();
+  const empty = await scoped((tx) =>
+    createDepartment(tx, venue.cfg, { name: "Empty", defaultServiceMode: "prepay" }),
+  );
+  await expect(scoped((tx) => departmentRemovalImpact(tx, venue.cfg, empty.id))).resolves.toEqual({
+    zones: [],
+  });
+  await expect(
+    scoped((tx) => departmentRemovalImpact(tx, venue.cfg, venue.barId)),
+  ).resolves.toEqual({ zones: [{ id: venue.barZone, name: "Bar", activeTableCount: 0 }] });
+  const missing = randomUUID();
+  await expect(
+    scoped((tx) => departmentRemovalImpact(tx, venue.cfg, missing)),
+  ).rejects.toMatchObject({ code: "department.not_found", params: { departmentId: missing } });
+  await expect(scoped((tx) => deactivateServiceZone(tx, venue.cfg, missing))).rejects.toMatchObject(
+    { code: "service_zone.not_found", params: { zoneId: missing } },
+  );
 });
 
 describe("retired and moved zones", () => {

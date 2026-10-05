@@ -449,6 +449,68 @@ describe("venue service management routes", () => {
     });
   });
 
+  it("persists department and zone collection settings and the department receipt-heading switch", async () => {
+    const fx = await fixture();
+    const department = await withTransaction(db, async (tx) => {
+      const row = await createDepartment(
+        tx,
+        { locationId: fx.locationId },
+        { name: "Restaurant", defaultServiceMode: "prepay" },
+      );
+      await configureZone(
+        tx,
+        { locationId: fx.locationId },
+        { zoneId: fx.zoneId, departmentId: row.id },
+      );
+      return row;
+    });
+    const departmentPath = `/management-api/venue-service/departments/${department.id}/sale-policy`;
+    const zonePath = `/management-api/venue-service/zones/${fx.zoneId}/sale-policy`;
+    for (const [path, value] of [
+      [`${departmentPath}/collectionNumber`, "numbered"],
+      [`${zonePath}/collectionNumber`, "none"],
+      [`${departmentPath}/printTradingName`, false],
+    ] as const) {
+      expect((await send(fx.app, "PATCH", path, fx.managerCookie, { value })).status).toBe(204);
+    }
+    const read = async () =>
+      (await (
+        await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+      ).json()) as { salePolicies: { departments: unknown[]; zones: unknown[] } };
+    expect((await read()).salePolicies).toMatchObject({
+      departments: [
+        { departmentId: department.id, collectionNumber: "numbered", printTradingName: false },
+      ],
+      zones: [
+        {
+          zoneId: fx.zoneId,
+          collectionNumber: "none",
+          effective: { collectionNumber: "none", printTradingName: false },
+        },
+      ],
+    });
+    expect(
+      (
+        await send(fx.app, "PATCH", `${zonePath}/collectionNumber`, fx.managerCookie, {
+          value: null,
+        })
+      ).status,
+    ).toBe(204);
+    expect((await read()).salePolicies.zones[0]).toMatchObject({
+      collectionNumber: null,
+      effective: { collectionNumber: "numbered" },
+    });
+    for (const field of ["collectionNumber", "printTradingName"] as const) {
+      const response = await send(fx.app, "PATCH", `${departmentPath}/${field}`, fx.managerCookie, {
+        value: "bad",
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+  });
+
   it("refuses invalid policy values, unauthorized writes and another venue's department", async () => {
     const fx = await fixture();
     const other = await fixture();

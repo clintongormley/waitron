@@ -1736,3 +1736,18 @@ describes: `wipeVenueDatabases` (`apps/server/src/db-wipe.ts`) and `restoreDatab
 it starts Litestream on a new generation (`packages/stream/src/supervisor.ts`). What Litestream itself
 does with a stale directory beside a replaced `venue.db` was not measured. Nothing finds a new piece
 of code that lists tables or empties the folder and forgets either.
+
+
+### Append-only declarations have two migration inputs
+
+On 2026-10-05, A261-2 added `sale_receipt_headers` with `appendOnly()` but initially omitted it from
+both the venue-service exported descriptor and the JSON manifest. The normal push hook refused
+`scripts/append-only-migration-sets.test.ts`; after the descriptor fix, CI refused the descriptor/manifest
+equality in `packages/composition/src/index.test.ts`. Add the table to both inputs: the descriptor derives
+its list with `appendOnlyTablesIn(VENUE_SERVICE_CLASSIFICATION)`, and the manifest carries the same name.
+
+After those fixes, `pnpm exec vitest run scripts/append-only-migration-sets.test.ts` passed 15 tests,
+`pnpm --filter @waitron/composition exec vitest run src/index.test.ts` passed 20, and
+`pnpm exec vitest run scripts/append-only-triggers.test.ts` passed 48. These runs exercised the
+exported-list comparison, the manifest comparison and the declared tables' update/delete refusals;
+they did not test every migration caller.
