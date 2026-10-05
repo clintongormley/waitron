@@ -152,15 +152,11 @@ function headers(el: MenuPricesTable): string[] {
   );
 }
 
-/** A cell's text as it is seen: without the tree's toggle glyph or the text only a screen reader
- * reads. */
+/** A cell's text as it is seen: without the tree's toggle glyph or a help tooltip's text. */
 function visibleText(node: Element | undefined): string {
   if (node === undefined) return "";
   const clone = node.cloneNode(true) as Element;
-  for (const hidden of clone.querySelectorAll(
-    '.tree-toggle, [part~="visually-hidden"], wt-help-tooltip',
-  ))
-    hidden.remove();
+  for (const hidden of clone.querySelectorAll(".tree-toggle, wt-help-tooltip")) hidden.remove();
   return text(clone);
 }
 

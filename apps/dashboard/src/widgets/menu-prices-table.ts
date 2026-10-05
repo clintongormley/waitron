@@ -78,18 +78,12 @@ type Span = { low: string; high: string };
 
 const oneAmount = ({ low, high }: Span): boolean => stringToCents(low) === stringToCents(high);
 
-const spanText = (span: Span): string =>
+const spanText = (span: Span, format: (amount: string) => string = priceText): string =>
   oneAmount(span)
-    ? priceText(span.low)
+    ? format(span.low)
     : t("menu_prices.range")
-        .replace("{low}", priceText(span.low))
-        .replace("{high}", priceText(span.high));
-
-/** The amounts as typed into a price field, which draws no sign. */
-const spanAmounts = (span: Span): string =>
-  oneAmount(span)
-    ? span.low
-    : t("menu_prices.range").replace("{low}", span.low).replace("{high}", span.high);
+        .replace("{low}", format(span.low))
+        .replace("{high}", format(span.high));
 
 /**
  * One menu's price overrides: a row per product the menu reaches, Active or not, with its sizes
@@ -163,17 +157,6 @@ export class MenuPricesTable extends LitElement {
       wt-data-table::part(note),
       wt-data-table::part(muted) {
         color: var(--wt-color-text-muted);
-      }
-      wt-data-table::part(visually-hidden) {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
       }
       wt-data-table::part(note) {
         display: block;
@@ -481,7 +464,8 @@ export class MenuPricesTable extends LitElement {
       placeholder = t("menu_prices.clash_placeholder");
       hint = t("menu_prices.override_help_clash");
     } else {
-      placeholder = spanAmounts(inherited);
+      // As typed into a price field, which draws no sign.
+      placeholder = spanText(inherited, (amount) => amount);
       hint = oneAmount(inherited)
         ? t("menu_prices.override_help").replace("{price}", priceText(inherited.low))
         : t("menu_prices.override_help_range").replace("{range}", spanText(inherited));
@@ -660,7 +644,7 @@ export class MenuPricesTable extends LitElement {
     return html`<wt-row-actions
       part="resolve"
       align="end"
-      label=${`${t("menu_prices.resolve")} ${line.item.name}${line.variant ? ` — ${this.#variantName(line.variant.variantId)}` : ""}`}
+      label=${`${t("menu_prices.resolve")} ${this.#lineName(line)}`}
     >
       ${price.candidates.map((candidate) =>
         "value" in candidate
