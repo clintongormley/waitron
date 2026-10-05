@@ -93,6 +93,7 @@ const devices: DeviceRow[] = [
     kind: "kds_station",
     stationId: "s1",
     watcherId: null,
+    binding: { name: "Cocina", active: true },
     label: "Pantalla Cocina",
     active: true,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
@@ -111,6 +112,7 @@ const devices: DeviceRow[] = [
     kind: "kds_station",
     stationId: null,
     watcherId: null,
+    binding: null,
     label: "Pase revocado",
     active: false,
     lastSeenAt: null,
@@ -321,7 +323,13 @@ describe("devices-screen", () => {
   });
 
   it("names a watcher-bound kitchen screen distinctly from a station screen", async () => {
-    const pass = { ...devices[0]!, id: "pass", stationId: null, watcherId: "w1" };
+    const pass = {
+      ...devices[0]!,
+      id: "pass",
+      stationId: null,
+      watcherId: "w1",
+      binding: { name: "Pass", active: true },
+    };
     const api = stubApi({ listDevices: vi.fn().mockResolvedValue([pass]) });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
@@ -329,7 +337,13 @@ describe("devices-screen", () => {
   });
 
   it("identifies a kitchen screen whose watcher has been removed", async () => {
-    const removed = { ...devices[0]!, id: "removed", stationId: null, watcherId: "w1" };
+    const removed = {
+      ...devices[0]!,
+      id: "removed",
+      stationId: null,
+      watcherId: "w1",
+      binding: { name: "Pass", active: false },
+    };
     const api = stubApi({
       listDevices: vi.fn().mockResolvedValue([removed]),
       listWatchers: vi.fn().mockResolvedValue([]),
@@ -376,7 +390,12 @@ describe("devices-screen", () => {
   it("falls back to the neutral placeholder for a device bound to a station not in the active list", async () => {
     // A device bound to a since-retired station: listStations (active only) does not carry it, so the
     // name cannot be resolved — the row shows the same neutral placeholder as an unbound device.
-    const orphan: DeviceRow = { ...devices[0], id: "d3", stationId: "gone" };
+    const orphan: DeviceRow = {
+      ...devices[0],
+      id: "d3",
+      stationId: "gone",
+      binding: { name: "Old", active: false },
+    };
     const api = stubApi({ listDevices: vi.fn().mockResolvedValue([orphan]) });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
@@ -471,6 +490,7 @@ describe("the device table", () => {
     id: "t1",
     kind: "till",
     stationId: null,
+    binding: null,
     label: "Caja 1",
     deviceProfileId: "dp1",
   };
@@ -930,6 +950,7 @@ describe("the Edit dialog", () => {
     id: "t1",
     kind: "till",
     stationId: null,
+    binding: null,
     label: "Caja 1",
     deviceProfileId: "pa",
     // Switched off since the device chose it; it may keep it.
@@ -1074,7 +1095,13 @@ describe("the Edit dialog", () => {
   });
 
   it("pre-fills what a kitchen screen shows, required, and draws no Made here", async () => {
-    const watching = { ...kitchen, id: "k2", stationId: null, watcherId: "w1" };
+    const watching = {
+      ...kitchen,
+      id: "k2",
+      stationId: null,
+      watcherId: "w1",
+      binding: { name: "Pass", active: true },
+    };
     const api = editApi({ listDevices: vi.fn().mockResolvedValue([kitchen, watching]) });
     const el = await openEdit(api, "k1");
     const binding = field(el, "edit-binding");
@@ -1094,38 +1121,157 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-binding").value).toBe("watcher:w1");
   });
 
-  it("a kitchen screen whose station was switched off opens with Shows empty, and asks for one", async () => {
-    const stale = { ...kitchen, stationId: "s-off" };
-    const off: Station = { ...stations[0]!, id: "s-off", name: "Old", active: false };
+  const offStation: Station = { ...stations[0]!, id: "s-off", name: "Old", active: false };
+  const offWatcher: Watcher = { ...watchers[0]!, id: "w-off", name: "Old pass", active: false };
+  /** A kitchen screen on a station since switched off, as the server lists it. */
+  const onOffStation: DeviceRow = {
+    ...kitchen,
+    stationId: "s-off",
+    binding: { name: "Old", active: false },
+  };
+  /** A kitchen screen on a watcher since removed, as the server lists it. */
+  const onOffWatcher: DeviceRow = {
+    ...kitchen,
+    stationId: null,
+    watcherId: "w-off",
+    binding: { name: "Old pass", active: false },
+  };
+
+  it("a kitchen screen whose station was switched off keeps it in Shows, marked, and saves it unchanged", async () => {
+    const other = { ...kitchen, id: "k2" };
     const api = editApi({
-      listDevices: vi.fn().mockResolvedValue([stale]),
-      listStations: vi.fn().mockResolvedValue([...stations, off]),
+      listDevices: vi.fn().mockResolvedValue([onOffStation, other]),
+      listStations: vi.fn().mockResolvedValue([...stations, offStation]),
     });
     const el = await openEdit(api, "k1");
-    expect(field(el, "edit-binding").value).toBe("");
-    expect(field(el, "edit-binding").options.map((o) => o.value)).not.toContain("station:s-off");
+    expect(field(el, "edit-binding").value).toBe("station:s-off");
+    expect(field(el, "edit-binding").options).toEqual([
+      { value: "station:s1", label: "Cocina", group: t("devices.stations_group") },
+      { value: "station:s2", label: "Barra", group: t("devices.stations_group") },
+      { value: "station:s-off", label: "Old (Deshabilitada)", group: t("devices.stations_group") },
+      { value: "watcher:w1", label: "Pass", group: t("devices.watchers_group") },
+    ]);
     await save(el);
-    expect(api.updateDevice).not.toHaveBeenCalled();
-    expect(field(el, "edit-binding").error).toBe(codeMessage("device.station_required"));
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(api.updateDevice).toHaveBeenCalledExactlyOnceWith("k1", {
+      name: "Pantalla Cocina",
+      profileId: "pk",
+      stationId: "s-off",
+      watcherId: null,
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
+      madeHereStationIds: ["s2"],
+    });
+
+    // Another screen cannot newly choose it.
+    dq(el.shadowRoot!, "[data-test=edit-device-k2]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-binding]")).not.toBeNull());
+    await flush(el);
+    expect(field(el, "edit-binding").value).toBe("station:s1");
+    expect(field(el, "edit-binding").options.map((o) => o.value)).not.toContain("station:s-off");
   });
 
-  it("a kitchen screen whose watcher was switched off or deleted opens with Shows empty", async () => {
-    const off: Watcher = { ...watchers[0]!, id: "w-off", name: "Old pass", active: false };
-    const switchedOff = { ...kitchen, stationId: null, watcherId: "w-off" };
-    const deleted = { ...kitchen, id: "k2", stationId: null, watcherId: "w-gone" };
+  it("a kitchen screen whose watcher was removed keeps it in Shows, marked; one whose watcher is gone opens with Shows empty", async () => {
+    const deleted = { ...kitchen, id: "k2", stationId: null, watcherId: "w-gone", binding: null };
     const api = editApi({
-      listDevices: vi.fn().mockResolvedValue([switchedOff, deleted]),
-      listWatchers: vi.fn().mockResolvedValue([...watchers, off]),
+      listDevices: vi.fn().mockResolvedValue([onOffWatcher, deleted]),
+      listWatchers: vi.fn().mockResolvedValue([...watchers, offWatcher]),
     });
     const el = await openEdit(api, "k1");
-    expect(field(el, "edit-binding").value).toBe("");
-
-    q(el, "[data-test=edit-cancel]")!.click();
+    expect(field(el, "edit-binding").value).toBe("watcher:w-off");
+    expect(field(el, "edit-binding").options).toEqual([
+      { value: "station:s1", label: "Cocina", group: t("devices.stations_group") },
+      { value: "station:s2", label: "Barra", group: t("devices.stations_group") },
+      { value: "watcher:w1", label: "Pass", group: t("devices.watchers_group") },
+      { value: "watcher:w-off", label: "Old pass (Eliminado)", group: t("devices.watchers_group") },
+    ]);
+    await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(api.updateDevice).toHaveBeenCalledExactlyOnceWith(
+      "k1",
+      expect.objectContaining({ stationId: null, watcherId: "w-off" }),
+    );
+
     dq(el.shadowRoot!, "[data-test=edit-device-k2]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=edit-binding]")).not.toBeNull());
     await flush(el);
     expect(field(el, "edit-binding").value).toBe("");
+    expect(field(el, "edit-binding").options.map((o) => o.value)).not.toContain("watcher:w-off");
+    await save(el);
+    expect(api.updateDevice).toHaveBeenCalledTimes(1);
+    expect(field(el, "edit-binding").error).toBe(codeMessage("device.station_required"));
+  });
+
+  it("renaming a kitchen screen whose station was switched off keeps what it shows", async () => {
+    const api = editApi({
+      listDevices: vi.fn().mockResolvedValue([onOffStation]),
+      listStations: vi.fn().mockResolvedValue([...stations, offStation]),
+    });
+    const el = await openEdit(api, "k1");
+    wtChange(el, "[data-test=edit-name]", "Pantalla Horno");
+    await flush(el);
+    await save(el);
+    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+    expect(api.updateDevice).toHaveBeenCalledWith(
+      "k1",
+      expect.objectContaining({ name: "Pantalla Horno", stationId: "s-off", watcherId: null }),
+    );
+  });
+
+  it("picking another station for a screen on a switched-off one sends the new one, and still offers the old", async () => {
+    const api = editApi({
+      listDevices: vi.fn().mockResolvedValue([onOffStation]),
+      listStations: vi.fn().mockResolvedValue([...stations, offStation]),
+    });
+    const el = await openEdit(api, "k1");
+    await chooseOption(q(el, "[data-test=edit-binding]")!, "station:s2");
+    await flush(el);
+    expect(field(el, "edit-binding").options.map((o) => o.value)).toContain("station:s-off");
+    await save(el);
+    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+    expect(api.updateDevice).toHaveBeenCalledWith(
+      "k1",
+      expect.objectContaining({ stationId: "s2", watcherId: null }),
+    );
+  });
+
+  it("marks a held station as disabled and a held watcher as removed, in English and Spanish", async () => {
+    const before = currentLocale();
+    try {
+      for (const [locale, station, watcher] of [
+        ["en", "Old (Disabled)", "Old pass (Removed)"],
+        ["es-ES", "Old (Deshabilitada)", "Old pass (Eliminado)"],
+      ] as const) {
+        setLocale(locale);
+        const api = editApi({
+          listDevices: vi
+            .fn()
+            .mockResolvedValue([onOffStation, { ...onOffWatcher, id: "k2", label: "Pase" }]),
+          listStations: vi.fn().mockResolvedValue([...stations, offStation]),
+          listWatchers: vi.fn().mockResolvedValue([...watchers, offWatcher]),
+        });
+        const el = await openEdit(api, "k1");
+        const shown = () =>
+          q(el, "[data-test=edit-binding]")!
+            .shadowRoot!.querySelector("button.trigger .value")!
+            .textContent!.trim();
+        const labelOf = (value: string) =>
+          field(el, "edit-binding").options.find((o) => o.value === value)?.label;
+        expect(labelOf("station:s-off")).toBe(station);
+        expect(shown()).toBe(station);
+
+        q(el, "[data-test=edit-cancel]")!.click();
+        await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+        dq(el.shadowRoot!, "[data-test=edit-device-k2]")!.click();
+        await vi.waitFor(() => expect(q(el, "[data-test=edit-binding]")).not.toBeNull());
+        await flush(el);
+        expect(labelOf("watcher:w-off")).toBe(watcher);
+        expect(shown()).toBe(watcher);
+        cleanupWidgets();
+      }
+    } finally {
+      setLocale(before);
+    }
   });
 
   it("shows None as the chosen printer of a device that has none", async () => {

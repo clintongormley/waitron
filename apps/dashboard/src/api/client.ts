@@ -537,6 +537,8 @@ export interface DeviceRow {
   kind: string;
   stationId: string | null;
   watcherId: string | null;
+  /** The stored station's or watcher's name, and whether it is switched on; null when it holds neither. */
+  binding: { name: string; active: boolean } | null;
   label: string;
   active: boolean;
   lastSeenAt: string | null;
