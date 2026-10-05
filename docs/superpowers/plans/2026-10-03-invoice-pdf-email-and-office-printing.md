@@ -187,7 +187,7 @@
 - In the add-printer dialog, an office printer the agent marked as printable shows "Add as invoice printer"; one with no usable format stays greyed with the reason; a receipt printer's row is unchanged.
 - Adding stores the page printer with its chosen format and its reported format list. It never appears in the receipt-printer, kitchen-routing or drawer choices.
 - The Printers tab lists it marked "Invoice printer (A4)", with rename, disable and "Print test page"; each needs `printer.manage`.
-- A disabled invoice printer found again is offered "Add again" and reactivates the same row, as a receipt printer does (CLAUDE.md §3).
+- A disabled invoice printer found again is offered "Add again" (2026-10-05: printers now say Enable there, since W105a) and reactivates the same row, as a receipt printer does (CLAUDE.md §3).
 - The receipt-printer and kitchen routes refuse a page printer's id.
 - An A4 delivery naming a receipt printer's id is refused.
 - The Printing rules screen sets or clears the location's invoice printer.

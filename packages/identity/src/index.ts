@@ -6,7 +6,7 @@ export type { SecretCheck } from "./secret-check.js";
 // Exported for the writers OUTSIDE this package that create a person, which must fold the same way.
 export { foldForUniqueness } from "./fold.js";
 export type { Authorization, AuthzInput, Override } from "./authorize.js";
-export { endSession, loginWithPin } from "./login.js";
+export { endDeviceSessions, endSession, loginWithPin } from "./login.js";
 export type { Session } from "./login.js";
 export {
   IDLE_TIMEOUT_MS,

@@ -411,11 +411,35 @@ screens do with events such as `fire-course` and `mark-collected`.
 
 ## A retained hardware registration must remain re-addable after deactivation
 
-Discovery matches disabled records as well as active ones; the dashboard offers disabled matches as
-Enable and reactivates their existing id, preserving history and routing. Only active matches
+Discovery matches disabled records as well as active ones; the dashboard offers disabled matches
+(printers as Enable, card readers as Add again) and reactivates their existing id, preserving
+history and routing. Only active matches
 disappear from the add list. Cost: deleting a USB printer left it in the registered table and hid it
 from discovery, blocking re-add. The table now defaults to Active with Disabled/All filters. Built in
 #321.
+
+Devices follow the same rule, though nothing discovers them. A disabled device's browser keeps its
+`waitron_device` cookie, and a knock whose cookie token verifies against a disabled row
+(`provenDisabledDevice`, `apps/server/src/join-requests.ts`) takes that device's id: the pending list
+marks it `returning`, with the row's name, profile and binding, and accepting it enables the same
+row. Outside dev mode it still needs an open Add a device dialog and the number check; in dev mode
+(`config.devMode`) the knock skips both and the device is enabled at once, under the venue's
+default till profile and the name the browser sent rather than its own (`apps/server/src/device-api.ts`).
+The knock gives the disabled
+row the new request's token, so the old cookie stops working and the same browser can knock as
+itself again after a deny or a lapse; enabling ends any shift session left open on the device. A
+knock whose proof another knock or Pair overtook is refused `device.join_stale` with no new cookie,
+so the browser keeps the one it has. Cancel and the number check name the ask by its `createdAt` as
+well as its id, and a replacing knock always gets a later `createdAt`, so a dialog still showing the
+replaced ask can neither discard, refuse nor claim the new one; it is answered
+`join_request.not_found`, unless a number check's pairing hold has lapsed, which is answered
+`device.pairing_hold_lapsed` first, a refusal that names no ask. One case is not covered: if a knock's response is lost after
+the server committed it, the browser still holds the old token, which no longer matches, and its
+next knock joins as a new device. The cost is a new device row; the old one stays disabled.
+Guards: the "a disabled device comes back as the same device" cases in
+`apps/server/src/join-e2e.test.ts`, "a dialog still showing the ask a second knock replaced" in the
+same file, and "a returning disabled device" in
+`apps/server/src/join-requests.test.ts`. Built in W105b.
 
 ## Native centring starts inside the configured paper width
 

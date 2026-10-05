@@ -380,6 +380,56 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     },
   );
 
+  it.each([390, 1280])(
+    "renders a disabled device asking again, and its filled-in settings, accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const returning: JoinRequestRow = {
+        id: "d7",
+        kind: "device",
+        label: "Tablet",
+        createdAt: "2026-09-08T10:04:00.000Z",
+        pairingBy: null,
+        returning: { name: "Pase", profileId: "dp3", stationId: "s1", watcherId: null },
+      };
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        { api: stubApi({ joinRequests: vi.fn().mockResolvedValue([...pending, returning]) }) },
+        theme,
+      );
+      await flush(el);
+      await openAdd(el);
+      await vi.waitFor(() =>
+        expect(deep(el.shadowRoot!, "[data-test=returning-hint-d7]")).not.toBeNull(),
+      );
+      await flush(el);
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      const addDialog = el
+        .shadowRoot!.querySelector("[data-test=add-device-modal]")!
+        .shadowRoot!.querySelector("dialog")!;
+      expect(addDialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      const addBody = addDialog.querySelector<HTMLElement>(".body")!;
+      expect(addBody.scrollWidth).toBeLessThanOrEqual(addBody.clientWidth);
+      await expectNoA11yViolations(host);
+      deep(el.shadowRoot!, "[data-test=pair-d7]")!.click();
+      await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-choice]")).not.toBeNull());
+      el.shadowRoot!.querySelector<HTMLElement>('[data-choice="47"]')!.click();
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=pair-binding]")).not.toBeNull(),
+      );
+      await flush(el);
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      const pairDialog = el
+        .shadowRoot!.querySelector("[data-test=pair-modal]")!
+        .shadowRoot!.querySelector("dialog")!;
+      expect(pairDialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      const pairBody = pairDialog.querySelector<HTMLElement>(".body")!;
+      expect(pairBody.scrollWidth).toBeLessThanOrEqual(pairBody.clientWidth);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
+
   it("renders the Add a device dialog with nothing waiting accessibly", async () => {
     const { el, host } = await mountWidget<DevicesScreen>(
       "dashboard-devices-screen",
@@ -541,7 +591,11 @@ describe("devices-screen a11y — the numeric match", () => {
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("[data-test=pair-name]")).not.toBeNull(),
     );
-    expect(api.checkDeviceJoinNumber).toHaveBeenCalledWith("r1", { choice: "47", holdId: "h1" });
+    expect(api.checkDeviceJoinNumber).toHaveBeenCalledWith("r1", {
+      choice: "47",
+      holdId: "h1",
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
 
     await chooseOption(el.shadowRoot!.querySelector("[data-test=pair-profile]")!, "dp1");
     await el.updateComplete;

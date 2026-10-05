@@ -9,7 +9,6 @@ import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import {
   chooseDevicePrinter,
-  firstUsablePrinters,
   kindOfFormFactor,
   listDeviceProfiles,
   printerChoices,
@@ -18,13 +17,20 @@ import {
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
-import { readDeviceCookie, requireDevice, setDeviceCookie, sightingDue } from "./device-session.js";
-import { mapDeviceNameTaken, requireDeviceName, resolveDeviceBinding } from "./device.js";
+import {
+  parseDeviceCookie,
+  readDeviceCookie,
+  requireDevice,
+  setDeviceCookie,
+  sightingDue,
+} from "./device-session.js";
+import { requireDeviceName, resolveDeviceBinding, updateDeviceSettings } from "./device.js";
 import { requestCfg } from "./request-config.js";
 import {
   acceptDeviceJoinRequest,
   createJoinRequest,
   discardLapsedDeviceRequests,
+  provenDisabledDevice,
   readJoinStatus,
 } from "./join-requests.js";
 import type { PairingMode } from "./pairing-mode.js";
@@ -83,11 +89,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.unauthorized": 401,
   "session.required": 401,
   "device.forbidden_station": 403,
-  // The knock's own three refusals. `pairing_closed` is a 403 rather than a 401: the door is shut, not
+  // The knock's own refusals. `pairing_closed` is a 403 rather than a 401: the door is shut, not
   // the caller unknown, and the device's next step is a person, not a credential.
   "device.pairing_closed": 403,
   "device.join_full": 429,
   "device.join_rate_limited": 429,
+  "device.join_stale": 409,
   // A wrong number denies the request (the row is already gone), so this is a plain request fault.
   "device.join_mismatch": 400,
   "join_request.not_found": 404,
@@ -147,6 +154,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       }
       const body = await readJsonBody<{ name?: unknown }>(c);
       const name = requireString(body.name, "name");
+      // A disabled device's browser still holds its cookie; proven, the knock comes back as that
+      // device. Checked before the transaction, so scrypt does not hold the write lock.
+      const returning = await provenDisabledDevice(deps.db, parseDeviceCookie(readDeviceCookie(c)));
       let dropped: string[] = [];
       const made = await withTransaction(deps.db, async (tx) => {
         // The window can shut, and open again, while the body arrives; a knock admitted in an
@@ -157,7 +167,15 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         }
         // Before the cap is counted, so requests a shut window stranded do not hold places in it.
         dropped = await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
-        const request = await createJoinRequest(tx, deps.cfg, { kind: "device", label: name });
+        const request = await createJoinRequest(tx, deps.cfg, {
+          kind: "device",
+          label: name,
+          returning,
+        });
+        // A number check on the request this one replaced must not approve this one. Dropped inside
+        // the transaction: a rollback brings that request back unclaimed, which only asks for the
+        // check again.
+        if (returning !== null) deps.pairingMode.dropClaim(request.joinId);
         if (auto) {
           // Accept in the SAME transaction, so a later throw (no till profile, or a taken device
           // name) rolls the just-minted request back rather than leaving a pending row nobody can
@@ -175,9 +193,10 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       });
       for (const id of dropped) deps.pairingMode.dropClaim(id);
       // The cookie's SELECTOR is the join request's id, which accept carries onto the devices row — so
-      // this cookie is set once and never re-issued. Until then it names no device, so `requireDevice`
-      // finds nothing and every other device route answers `device.unauthorized`: the token is inert by
-      // construction rather than by a flag. The token itself leaves the process only here.
+      // no approval re-issues it; only a later knock does, and a disabled device's browser gets a new
+      // one at each. Until approval it names no active device, so `requireDevice` finds nothing and
+      // every other device route answers `device.unauthorized`: the token is inert by construction
+      // rather than by a flag. The token itself leaves the process only here.
       setDeviceCookie(c, `${made.joinId}.${made.token}`, deps.secureCookies, deps.tenantDomain);
       return c.json({ joinId: made.joinId, verificationNumber: made.verificationNumber }, 200);
     }),
@@ -188,19 +207,18 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
   // and never-existed together: the joiner's recovery is to knock again in every case.
   app.get("/api/device/join/status", (c) =>
     run(c, log, async () => {
-      const raw = readDeviceCookie(c);
-      if (raw === null) throw new AppError("device.unauthorized", {});
-      // A cookie that is not `<selector>.<token>` names nothing — refused HERE rather than passed to the
+      // A cookie that is not `<uuid>.<token>` names nothing — refused HERE rather than passed to the
       // verb, so a malformed value never reaches a query. `device.unauthorized` carries no params, so
       // this confirms nothing to an unauthenticated caller.
-      const dot = raw.indexOf(".");
-      if (dot <= 0 || dot === raw.length - 1) throw new AppError("device.unauthorized", {});
-      const joinId = raw.slice(0, dot);
-      const token = raw.slice(dot + 1);
-      // The selector goes into a by-id comparison that refuses nothing and would match nothing, so
-      // this screen is what turns a non-uuid into a clean refusal.
-      if (!isUuid(joinId)) throw new AppError("device.unauthorized", {});
-      const status = await readJoinStatus(deps.db, deps.cfg, joinId, token, deps.pairingMode);
+      const parsed = parseDeviceCookie(readDeviceCookie(c));
+      if (parsed === null) throw new AppError("device.unauthorized", {});
+      const status = await readJoinStatus(
+        deps.db,
+        deps.cfg,
+        parsed.id,
+        parsed.token,
+        deps.pairingMode,
+      );
       return c.json({ status }, 200);
     }),
   );
@@ -511,27 +529,16 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           stationId,
           watcherId,
         });
-        const held =
-          profileId === device.deviceProfileId
-            ? {
-                receiptPrinterId: device.receiptPrinterId,
-                paymentSlipPrinterId: device.paymentSlipPrinterId,
-              }
-            : await firstUsablePrinters(tx, profileId, device.locationId);
-        try {
-          await tx
-            .update(devices)
-            .set({
-              label,
-              deviceProfileId: profileId,
-              stationId: binding.stationId,
-              watcherId: binding.watcherId,
-              ...held,
-            })
-            .where(ownDeviceById(id));
-        } catch (error) {
-          throw mapDeviceNameTaken(error);
-        }
+        const held = await updateDeviceSettings(
+          tx,
+          { id, ...device },
+          {
+            label,
+            profileId,
+            stationId: binding.stationId,
+            watcherId: binding.watcherId,
+          },
+        );
         // Only a printer that differs from the one held is checked: `chooseDevicePrinter` takes
         // switched-on printers only, and a device may still hold a listed one since switched off.
         const current: Record<PrinterRole, string | null> = {

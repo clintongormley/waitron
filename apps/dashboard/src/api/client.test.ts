@@ -2089,17 +2089,35 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
     });
   });
 
-  it("checkDeviceJoinNumber POSTs the tapped number and the hold, and resolves undefined on a 204", async () => {
+  it("denyJoinRequest sends the ask's createdAt when given one", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     await expect(
-      api.checkDeviceJoinNumber("j1", { choice: "47", holdId: "h1" }),
+      api.denyJoinRequest("j1", { createdAt: "2026-09-08T10:02:00.000Z" }),
+    ).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/join-requests/j1/deny", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ createdAt: "2026-09-08T10:02:00.000Z" }),
+    });
+  });
+
+  it("checkDeviceJoinNumber POSTs the tapped number, the hold and the ask, and resolves undefined on a 204", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(
+      api.checkDeviceJoinNumber("j1", {
+        choice: "47",
+        holdId: "h1",
+        createdAt: "2026-09-08T10:02:00.000Z",
+      }),
     ).resolves.toBeUndefined();
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/device-join-requests/j1/check", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ choice: "47", holdId: "h1" }),
+      body: JSON.stringify({ choice: "47", holdId: "h1", createdAt: "2026-09-08T10:02:00.000Z" }),
     });
   });
 
@@ -2109,7 +2127,11 @@ describe("DashboardApi — devices, pairing mode and join requests", () => {
       .mockResolvedValue(jsonResponse({ error: { code: "device.join_mismatch" } }, false, 400));
     const api = new DashboardApi("", fetchImpl);
     await expect(
-      api.checkDeviceJoinNumber("j1", { choice: "12", holdId: "h1" }),
+      api.checkDeviceJoinNumber("j1", {
+        choice: "12",
+        holdId: "h1",
+        createdAt: "2026-09-08T10:02:00.000Z",
+      }),
     ).rejects.toMatchObject({ code: "device.join_mismatch" });
   });
 

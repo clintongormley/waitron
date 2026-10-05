@@ -998,6 +998,25 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-binding").error).toBe(codeMessage("device.station_required"));
   });
 
+  it("a kitchen screen whose watcher was switched off or deleted opens with Shows empty", async () => {
+    const off: Watcher = { ...watchers[0]!, id: "w-off", name: "Old pass", active: false };
+    const switchedOff = { ...kitchen, stationId: null, watcherId: "w-off" };
+    const deleted = { ...kitchen, id: "k2", stationId: null, watcherId: "w-gone" };
+    const api = editApi({
+      listDevices: vi.fn().mockResolvedValue([switchedOff, deleted]),
+      listWatchers: vi.fn().mockResolvedValue([...watchers, off]),
+    });
+    const el = await openEdit(api, "k1");
+    expect(field(el, "edit-binding").value).toBe("");
+
+    q(el, "[data-test=edit-cancel]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    dq(el.shadowRoot!, "[data-test=edit-device-k2]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-binding]")).not.toBeNull());
+    await flush(el);
+    expect(field(el, "edit-binding").value).toBe("");
+  });
+
   it("shows None as the chosen printer of a device that has none", async () => {
     const el = await openEdit(editApi(), "k1");
     const shown = (id: string) =>
@@ -1938,6 +1957,7 @@ describe("add a device", () => {
     expect(api.checkDeviceJoinNumber).toHaveBeenCalledExactlyOnceWith("r1", {
       choice: REAL_NUMBER,
       holdId: "h1",
+      createdAt: "2026-09-08T10:02:00.000Z",
     });
     expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Barra 1");
     expect(q(el, "[data-choice]")).toBeNull();
@@ -2372,6 +2392,24 @@ describe("add a device", () => {
     expect(pairFieldsDisabled(el)).toEqual(enabled);
   });
 
+  it("the number check and Cancel name the ask the dialog was opened on, by its createdAt", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+    await toSettings(el);
+
+    q(el, "[data-test=pair-cancel]")!.click();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    expect(api.checkDeviceJoinNumber).toHaveBeenCalledExactlyOnceWith("r1", {
+      choice: REAL_NUMBER,
+      holdId: "h1",
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
+  });
+
   it("Cancel discards the request at the number step", async () => {
     const api = stubApi();
     const el = await openAdd(api);
@@ -2380,7 +2418,9 @@ describe("add a device", () => {
     q(el, "[data-test=pair-cancel]")!.click();
 
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
-    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
     expect(q(el, "[data-test=add-device-modal]")).not.toBeNull();
     expect(api.releasePairingHold).not.toHaveBeenCalled();
   });
@@ -2395,7 +2435,9 @@ describe("add a device", () => {
     q(el, "[data-test=pair-cancel]")!.click();
 
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
-    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
     await flush(el);
     expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
   });
@@ -2437,7 +2479,9 @@ describe("add a device", () => {
     q(el, "[data-test=pair-cancel]")!.click();
 
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
-    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
     await flush(el);
     expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
   });
@@ -2456,7 +2500,9 @@ describe("add a device", () => {
 
     q(el, "[data-test=add-device-close]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).toBeNull());
-    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
     q(el, "[data-test=open-add-device]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).not.toBeNull());
     rejectDeny({ code: "connection.failed" });
@@ -2509,7 +2555,9 @@ describe("add a device", () => {
     q(el, "[data-test=pair-modal]")!.shadowRoot!.querySelector("dialog")!.close();
 
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
-    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
     expect(q(el, "[data-test=add-device-modal]")).not.toBeNull();
   });
 
@@ -2520,7 +2568,9 @@ describe("add a device", () => {
 
     el.remove();
 
-    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
+      createdAt: "2026-09-08T10:02:00.000Z",
+    });
     expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1");
   });
 
@@ -2617,5 +2667,296 @@ describe("add a device", () => {
     expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe(
       codeMessage("connection.failed"),
     );
+  });
+
+  describe("a disabled device that asks again", () => {
+    /** The disabled kitchen screen d2 knocking under a new label, beside an ordinary request. */
+    const returning: JoinRequestRow = {
+      id: "d2",
+      kind: "device",
+      label: "Tablet",
+      createdAt: "2026-09-08T10:04:00.000Z",
+      pairingBy: null,
+      returning: { name: "Pase revocado", profileId: "dp3", stationId: "s1", watcherId: null },
+    };
+    const waiting = (row: JoinRequestRow = returning) =>
+      stubApi({ joinRequests: vi.fn().mockResolvedValue([pending[0]!, row]) });
+
+    async function toEnableSettings(el: DevicesScreen): Promise<void> {
+      await openPair(el, "d2");
+      await vi.waitFor(() => expect(q(el, `[data-choice="${REAL_NUMBER}"]`)).not.toBeNull());
+      q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=pair-name]")).not.toBeNull());
+      await flush(el);
+    }
+
+    it("is offered as Enable under its old name, with a hint, in English and Spanish", async () => {
+      const before = currentLocale();
+      try {
+        for (const [locale, enable, pair, hint, enabled] of [
+          [
+            "en",
+            "Enable",
+            "Pair",
+            "Disabled device. Enabling it restores its settings.",
+            "Enabled Pase revocado",
+          ],
+          [
+            "es-ES",
+            "Habilitar",
+            "Emparejar",
+            "Dispositivo deshabilitado. Al habilitarlo se restauran sus ajustes.",
+            "Pase revocado habilitado",
+          ],
+        ] as const) {
+          setLocale(locale);
+          const api = waiting();
+          const el = await openAdd(api);
+
+          expect(d(el, "[data-test=waiting-row-d2]")?.textContent?.trim()).toBe("Pase revocado");
+          expect(d(el, "[data-test=returning-hint-d2]")?.textContent?.trim()).toBe(hint);
+          expect(d(el, "[data-test=pair-d2]")?.textContent?.trim()).toBe(enable);
+          expect(d(el, "[data-test=pair-d2]")?.getAttribute("aria-label")).toBe(
+            `${enable} Pase revocado`,
+          );
+          expect(d(el, "[data-test=waiting-row-r1]")?.textContent?.trim()).toBe("Barra 1");
+          expect(d(el, "[data-test=returning-hint-r1]")).toBeNull();
+          expect(d(el, "[data-test=pair-r1]")?.textContent?.trim()).toBe(pair);
+
+          await toEnableSettings(el);
+          expect(q(el, "[data-test=pair-modal]")!.getAttribute("heading")).toBe(
+            `${enable} Pase revocado`,
+          );
+          expect(text(el, "[data-test=pair-submit]")).toBe(enable);
+          vi.mocked(api.acceptDeviceJoinRequest).mockResolvedValue({
+            deviceId: "d2",
+            name: "Pase revocado",
+            formFactor: "kds",
+          });
+          q(el, "[data-test=pair-submit]")!.click();
+          await vi.waitFor(() => expect(text(el, "[data-test=added-device]")).toBe(enabled));
+          cleanupWidgets();
+        }
+      } finally {
+        setLocale(before);
+      }
+    });
+
+    it("checks the number, opens filled in from the device, and Enable sends it to the device's own id", async () => {
+      const api = waiting();
+      const el = await openAdd(api);
+      await openPair(el, "d2");
+
+      await vi.waitFor(() => expect(q(el, `[data-choice="${REAL_NUMBER}"]`)).not.toBeNull());
+      expect(q(el, "[data-test=pair-name]")).toBeNull();
+      q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=pair-name]")).not.toBeNull());
+      await flush(el);
+
+      expect(api.checkDeviceJoinNumber).toHaveBeenCalledExactlyOnceWith("d2", {
+        choice: REAL_NUMBER,
+        holdId: "h1",
+        createdAt: "2026-09-08T10:04:00.000Z",
+      });
+      expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Pase revocado");
+      expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
+      expect((q(el, "[data-test=pair-binding]") as Field).value).toBe("station:s1");
+      vi.mocked(api.acceptDeviceJoinRequest).mockResolvedValue({
+        deviceId: "d2",
+        name: "Pase revocado",
+        formFactor: "kds",
+      });
+      q(el, "[data-test=pair-submit]")!.click();
+
+      await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+      expect(api.acceptDeviceJoinRequest).toHaveBeenCalledExactlyOnceWith("d2", {
+        name: "Pase revocado",
+        profileId: "dp3",
+        stationId: "s1",
+      });
+      expect(text(el, "[data-test=added-device]")).toBe(
+        t("devices.enabled").replace("{name}", "Pase revocado"),
+      );
+      expect(api.denyJoinRequest).not.toHaveBeenCalled();
+    });
+
+    it("fills in a kitchen screen's watcher", async () => {
+      const api = waiting({
+        ...returning,
+        returning: { name: "Pase revocado", profileId: "dp3", stationId: null, watcherId: "w1" },
+      });
+      const el = await openAdd(api);
+      await toEnableSettings(el);
+
+      expect((q(el, "[data-test=pair-binding]") as Field).value).toBe("watcher:w1");
+      q(el, "[data-test=pair-submit]")!.click();
+      await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
+      expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("d2", {
+        name: "Pase revocado",
+        profileId: "dp3",
+        watcherId: "w1",
+      });
+    });
+
+    it("whose profile is gone opens with the profile empty, and Enable waits until one is chosen", async () => {
+      const api = waiting({
+        ...returning,
+        returning: { name: "Caja vieja", profileId: "deleted", stationId: null, watcherId: null },
+      });
+      const el = await openAdd(api);
+      await toEnableSettings(el);
+
+      expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Caja vieja");
+      expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("");
+      q(el, "[data-test=pair-submit]")!.click();
+      await flush(el);
+      expect((q(el, "[data-test=pair-profile]") as Field).error).toBe(
+        t("devices.join_pick_profile"),
+      );
+      expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(true);
+      expect(api.acceptDeviceJoinRequest).not.toHaveBeenCalled();
+
+      await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+      await el.updateComplete;
+      expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(false);
+      q(el, "[data-test=pair-submit]")!.click();
+      await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
+      expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("d2", {
+        name: "Caja vieja",
+        profileId: "dp1",
+      });
+    });
+
+    it("whose station was switched off opens with Shows empty", async () => {
+      const api = waiting();
+      vi.mocked(api.listStations).mockResolvedValue([
+        { ...stations[0]!, active: false },
+        stations[1]!,
+      ]);
+      const el = await openAdd(api);
+      await toEnableSettings(el);
+
+      expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
+      expect((q(el, "[data-test=pair-binding]") as Field).value).toBe("");
+    });
+
+    it("whose watcher was switched off opens with Shows empty", async () => {
+      const api = waiting({
+        ...returning,
+        returning: { name: "Pase revocado", profileId: "dp3", stationId: null, watcherId: "w1" },
+      });
+      vi.mocked(api.listWatchers).mockResolvedValue([{ ...watchers[0]!, active: false }]);
+      const el = await openAdd(api);
+      await toEnableSettings(el);
+
+      expect((q(el, "[data-test=pair-binding]") as Field).value).toBe("");
+    });
+
+    describe("while its Enable dialog is open", () => {
+      const live = () => Object.assign(waiting(), { liveData: new LiveData() });
+      const asks = (...rows: JoinRequestRow[]) => [pending[0]!, ...rows];
+
+      it.each(["number", "settings"] as const)(
+        "a new ask from the device closes the dialog at the %s step without discarding the new ask",
+        async (step) => {
+          const api = live();
+          const el = await openAdd(api);
+          if (step === "number") {
+            await openPair(el, "d2");
+            await vi.waitFor(() => expect(q(el, "[data-choice]")).not.toBeNull());
+          } else await toEnableSettings(el);
+
+          vi.mocked(api.joinRequests).mockResolvedValue(
+            asks({ ...returning, createdAt: "2026-09-08T10:06:00.000Z" }),
+          );
+          api.liveData.refresh();
+
+          await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+          await flush(el);
+          expect(api.denyJoinRequest).not.toHaveBeenCalled();
+          expect(text(el, "[data-test=asked-again]")).toBe(
+            t("devices.asked_again").replace("{name}", "Pase revocado"),
+          );
+          expect(q(el, "[data-test=asked-again]")!.getAttribute("role")).toBe("status");
+          expect(d(el, "[data-test=pair-d2]")?.textContent?.trim()).toBe(t("devices.enable"));
+        },
+      );
+
+      it("an unchanged ask keeps the dialog open, and Cancel still discards it", async () => {
+        const api = live();
+        const el = await openAdd(api);
+        await toEnableSettings(el);
+
+        vi.mocked(api.joinRequests).mockResolvedValue(asks({ ...returning }));
+        api.liveData.refresh();
+        await vi.waitFor(() => expect(api.joinRequests).toHaveBeenCalledTimes(2));
+        await flush(el);
+        expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
+        expect(q(el, "[data-test=asked-again]")).toBeNull();
+
+        q(el, "[data-test=pair-cancel]")!.click();
+        await vi.waitFor(() =>
+          expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("d2", {
+            createdAt: "2026-09-08T10:04:00.000Z",
+          }),
+        );
+      });
+
+      it("an ask that left the list keeps the dialog open, and Cancel says nothing", async () => {
+        const api = live();
+        vi.mocked(api.denyJoinRequest).mockRejectedValue({ code: "join_request.not_found" });
+        const el = await openAdd(api);
+        await toEnableSettings(el);
+
+        vi.mocked(api.joinRequests).mockResolvedValue(asks());
+        api.liveData.refresh();
+        await vi.waitFor(() => expect(d(el, "[data-test=pair-d2]")).toBeNull());
+        await flush(el);
+        expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
+
+        q(el, "[data-test=pair-cancel]")!.click();
+        await vi.waitFor(() =>
+          expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("d2", {
+            createdAt: "2026-09-08T10:04:00.000Z",
+          }),
+        );
+        await flush(el);
+        expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
+        expect(q(el, "[data-test=asked-again]")).toBeNull();
+      });
+
+      it("says the device asked again in English and Spanish", async () => {
+        const before = currentLocale();
+        try {
+          for (const [locale, said] of [
+            ["en", "Pase revocado asked again with new numbers."],
+            ["es-ES", "Pase revocado ha vuelto a solicitar el alta con números nuevos."],
+          ] as const) {
+            setLocale(locale);
+            const api = live();
+            const el = await openAdd(api);
+            await openPair(el, "d2");
+            vi.mocked(api.joinRequests).mockResolvedValue(
+              asks({ ...returning, createdAt: "2026-09-08T10:06:00.000Z" }),
+            );
+            api.liveData.refresh();
+            await vi.waitFor(() => expect(text(el, "[data-test=asked-again]")).toBe(said));
+            cleanupWidgets();
+          }
+        } finally {
+          setLocale(before);
+        }
+      });
+    });
+
+    it("already claimed by this login opens straight at its filled-in settings", async () => {
+      const api = waiting({ ...returning, pairingBy: { name: "Me", mine: true } });
+      const el = await openAdd(api);
+      await openPair(el, "d2");
+
+      expect(api.joinChallenge).not.toHaveBeenCalled();
+      expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Pase revocado");
+      expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
+    });
   });
 });

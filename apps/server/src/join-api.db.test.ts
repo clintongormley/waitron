@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, devices, printAgents, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, joinRequests, printAgents, withTransaction } from "@waitron/db";
 import {
   hashSessionToken,
   persons,
@@ -76,7 +76,7 @@ async function errorOf(res: Response): Promise<ErrorBody["error"]> {
 async function knock(
   venue: Venue,
   input: { kind: JoinRequestKind; label: string; numbers?: () => number },
-): Promise<{ joinId: string; verificationNumber: string; token: string }> {
+): Promise<{ joinId: string; verificationNumber: string; token: string; createdAt: string }> {
   return withTransaction(suite.db, (tx) => createJoinRequest(tx, venue.cfg, input));
 }
 
@@ -106,6 +106,19 @@ function openApp(cfg: TillConfig): { app: Hono; mode: PairingMode; holdId: strin
   return { app: mountApp(cfg, mode), mode, holdId };
 }
 
+const shownAsks = new Map<string, string>();
+
+/** The ask a dashboard would name for `id`, by its createdAt: the stored one, else the last one
+ *  stored, else one no request ever had. */
+async function currentAsk(id: string): Promise<{ createdAt: string }> {
+  const [row] = await suite.db
+    .select({ createdAt: joinRequests.createdAt })
+    .from(joinRequests)
+    .where(eq(joinRequests.id, id));
+  if (row !== undefined) shownAsks.set(id, row.createdAt);
+  return { createdAt: shownAsks.get(id) ?? "2000-01-01T00:00:00.000Z" };
+}
+
 /** Match the request's own number, so the manager's login holds the claim an accept needs. */
 async function claimFor(
   app: Hono,
@@ -115,7 +128,7 @@ async function claimFor(
 ): Promise<void> {
   const res = await send(app, "POST", `/management-api/device-join-requests/${made.joinId}/check`, {
     cookie: venue.managerCookie,
-    body: { choice: made.verificationNumber, holdId },
+    body: { choice: made.verificationNumber, holdId, ...(await currentAsk(made.joinId)) },
   });
   expect(res.status).toBe(204);
 }
@@ -404,6 +417,7 @@ describe("GET /management-api/join-requests", () => {
         label: "Bar till",
         createdAt: expect.any(String),
         pairingBy: null,
+        returning: null,
       },
     ]);
   });
@@ -514,14 +528,40 @@ describe("POST /management-api/join-requests/:id/deny", () => {
     const made = await knock(venue, { kind: "device", label: "Bar till" });
     const first = await send(app, "POST", `/management-api/join-requests/${made.joinId}/deny`, {
       cookie: venue.managerCookie,
+      body: { createdAt: made.createdAt },
     });
     expect(first.status).toBe(204);
     expect(await pendingCount()).toBe(0);
     const second = await send(app, "POST", `/management-api/join-requests/${made.joinId}/deny`, {
       cookie: venue.managerCookie,
+      body: { createdAt: made.createdAt },
     });
     expect(second.status).toBe(404);
     expect((await errorOf(second)).code).toBe("join_request.not_found");
+  });
+
+  it("a device's deny must name the ask; a print agent's needs no body", async () => {
+    const venue = await setupVenue(suite.db);
+    const { app } = openApp(venue.cfg);
+    const made = await knock(venue, { kind: "device", label: "Bar till" });
+    const agent = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    const unnamed = await send(app, "POST", `/management-api/join-requests/${made.joinId}/deny`, {
+      cookie: venue.managerCookie,
+    });
+    expect(unnamed.status).toBe(400);
+    expect(await errorOf(unnamed)).toEqual({
+      code: "management.request_invalid",
+      params: { field: "createdAt" },
+    });
+    expect(await pendingCount()).toBe(2);
+    const agentDenied = await send(
+      app,
+      "POST",
+      `/management-api/join-requests/${agent.joinId}/deny`,
+      { cookie: venue.managerCookie },
+    );
+    expect(agentDenied.status).toBe(204);
+    expect(await pendingCount()).toBe(1);
   });
 
   it("denies a print_agent request under printer.manage", async () => {
@@ -666,7 +706,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const wrong = "07";
     const res = await send(app, "POST", path, {
       cookie: venue.managerCookie,
-      body: { choice: wrong, holdId },
+      body: { choice: wrong, holdId, createdAt: made.createdAt },
     });
     expect(res.status).toBe(400);
     expect((await errorOf(res)).code).toBe("device.join_mismatch");
@@ -675,7 +715,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     // alone cannot tell a committed deny from a rolled-back one.
     const retry = await send(app, "POST", path, {
       cookie: venue.managerCookie,
-      body: { choice: made.verificationNumber, holdId },
+      body: { choice: made.verificationNumber, holdId, createdAt: made.createdAt },
     });
     expect(retry.status).toBe(404);
     expect((await errorOf(retry)).code).toBe("join_request.not_found");
@@ -1032,12 +1072,19 @@ describe("device pairing: check, claim, approve", () => {
     return `${MANAGEMENT_COOKIE}=${session.token}`;
   }
 
-  const check = (app: Hono, cookie: string, id: string, body: unknown) =>
-    send(app, "POST", `/management-api/device-join-requests/${id}/check`, { cookie, body });
+  /** Names the ask stored under `id` unless `body` names one itself. */
+  const check = async (app: Hono, cookie: string, id: string, body: object) =>
+    send(app, "POST", `/management-api/device-join-requests/${id}/check`, {
+      cookie,
+      body: { ...(await currentAsk(id)), ...body },
+    });
   const accept = (app: Hono, cookie: string, id: string, body: unknown) =>
     send(app, "POST", `/management-api/device-join-requests/${id}/accept`, { cookie, body });
-  const deny = (app: Hono, cookie: string, id: string) =>
-    send(app, "POST", `/management-api/join-requests/${id}/deny`, { cookie });
+  const deny = async (app: Hono, cookie: string, id: string) =>
+    send(app, "POST", `/management-api/join-requests/${id}/deny`, {
+      cookie,
+      body: await currentAsk(id),
+    });
   const listDevices = async (app: Hono, cookie: string) => {
     const res = await send(app, "GET", "/management-api/join-requests?kind=device", { cookie });
     expect(res.status).toBe(200);
@@ -1064,6 +1111,7 @@ describe("device pairing: check, claim, approve", () => {
         label: "Bar till",
         createdAt: expect.any(String),
         pairingBy: { name: "The Manager", mine: true },
+        returning: null,
       },
     ]);
     expect(await listDevices(app, await secondManagerCookie())).toEqual([
@@ -1073,6 +1121,7 @@ describe("device pairing: check, claim, approve", () => {
         label: "Bar till",
         createdAt: expect.any(String),
         pairingBy: { name: "The Manager", mine: false },
+        returning: null,
       },
     ]);
   });
@@ -1358,6 +1407,21 @@ describe("device pairing: check, claim, approve", () => {
     expect(await pendingCount()).toBe(1);
   });
 
+  it("check after the only hold lapsed is answered as a lapsed hold, and the ask is kept", async () => {
+    const venue = await setupVenue(suite.db);
+    let offset = 0;
+    const { app, holdId } = await pairingApp(
+      venue,
+      createPairingMode({ now: () => Date.now() + offset }),
+    );
+    const made = await knock(venue, { kind: "device", label: "Bar till", numbers: () => 42 });
+    offset += PAIRING_HOLD_MS;
+    const res = await check(app, venue.managerCookie, made.joinId, { choice: "42", holdId });
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({ code: "device.pairing_hold_lapsed", params: {} });
+    expect(await pendingCount()).toBe(1);
+  });
+
   it("screens the check's body", async () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = await pairingApp(venue);
@@ -1365,6 +1429,7 @@ describe("device pairing: check, claim, approve", () => {
     for (const [body, field] of [
       [{ holdId }, "choice"],
       [{ choice: "42" }, "holdId"],
+      [{ choice: "42", holdId, createdAt: undefined }, "createdAt"],
     ] as const) {
       const res = await check(app, venue.managerCookie, made.joinId, body);
       expect(res.status).toBe(400);

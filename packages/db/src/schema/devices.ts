@@ -8,7 +8,7 @@ import { locations } from "./tenants.js";
 import { watchers } from "./watchers.js";
 
 /**
- * An always-on trusted device: a screen that joins once and then authenticates with an httpOnly
+ * An always-on trusted device: a screen that joins and then authenticates with an httpOnly
  * cookie, with no per-person login. Its profile's form factor decides whether it binds a kitchen
  * station or watcher (kds) or neither (every other form factor), enforced by the
  * `device_binding_rule_insert` / `_update` triggers rather than by per-column NOT NULLs.

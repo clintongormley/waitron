@@ -5211,7 +5211,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c). All three DONE; the open points each left are listed below.**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b in review (branch fix/enable-disabled-device). W104–W106 DONE; the open points each left are listed below.**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
@@ -5235,6 +5235,37 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   dialog and a two-press Disable in each active row's menu; a disabled device's row does not open
   (`rowClickable`, new on `wt-data-table`). The card reader is read when the dialog opens and saved
   second, through its own route; without `payments.manage` the field is not shown.
+  **W105b (in review):** a disabled device can come back as itself. If its browser asks to join while an Add a
+  device dialog is open, the server checks the browser's old device cookie and marks the request
+  "returning" with the device's own id, name, profile and station or watcher
+  (`apps/server/src/join-requests.ts`). The dialog lists it under its old name with "Disabled
+  device. Enabling it restores its settings." and an Enable (Habilitar) button in place of Pair;
+  after the usual number check the step is titled "Enable <name>" and starts filled in
+  (`apps/dashboard/src/screens/devices-screen.ts`). A station or watcher that is gone or switched
+  off starts empty, to choose again; so does a profile missing from the dashboard's list of
+  profiles. Profiles have no switched-off state, and deleting one a disabled device holds is refused
+  `device_profile.in_use`, so today that should arise only if the dashboard could not read the
+  list; W105c may make it ordinary. If the device asks again while its Enable dialog is open, the
+  new ask replaces the old one under the same id; the dialog closes without sending a discard,
+  which the server would answer as naming an ask already gone, and says the device asked again
+  with new numbers. Cancel and the number check name the ask by its
+  `createdAt` as well as its id, and an ask that has been replaced is answered
+  `join_request.not_found`, unless a number check's pairing hold has lapsed, which is answered
+  `device.pairing_hold_lapsed` first. Enable turns the same device row back on; it keeps
+  its made-here stations, card reader and history, and its printers if its profile is unchanged.
+  The disabled row in the Devices table gets no Enable action: the device has to ask again to
+  prove itself, so a row button could only open Add a device.
+  Open points: (1) the slow hash check runs only when the cookie names a disabled device, so the
+  response time hints that an id is a disabled device; asks are rate-limited and, outside dev mode,
+  accepted only while Add a device is open. (2) Someone holding a copy of a disabled device's
+  current cookie can ask first and so replace that cookie; outside dev mode they still cannot get in
+  without a manager tapping the number. (3) If an ask's response is lost after the server saved it,
+  the browser's next ask joins as a new device and the old row stays disabled. (4) A long name in
+  the waiting list overflows a phone's width. (5) An ask that replaces a waiting one always gets a
+  later `createdAt`, but an ask made when no ask is waiting under its id, whatever ended the
+  previous one (accepting it included, once the device is later disabled), is not forced later.
+  It must first prove the token the previous ask issued, a scrypt check, so sharing a millisecond is
+  unlikely, but nothing in the code rules it out.
   **W106 (done, #1240):** `devices` gains three empty-by-default columns: the battery level,
   whether it is charging and when that was reported (core `0099`). A paired device sends both to
   `PUT /api/device/battery`, which refuses a level outside 0 to 100 and stores at most one report a
@@ -5268,7 +5299,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   one switched off while the dialog is open refuses the save — at the bottom of the dialog, with
   "That station no longer exists" — only if the save is sent before that re-read lands, or while
   live updates are down. (8) a profile whose only device has been disabled cannot be deleted, and
-  nothing can free it: Disable keeps the device's profile, and deleting the profile is refused
+  the dashboard alone cannot free it (since W105b the device itself can come back and be enabled
+  under another profile; the delete problem is W105c's): Disable keeps the device's profile, and
+  deleting the profile is refused
   `device_profile.in_use` (measured 2026-10-05 through the routes,
   with a control: an unused profile deletes). Before W105 a direct call to the old reassign route
   could move a disabled device onto another profile, because it did not check `active`; the Edit
@@ -8148,7 +8181,7 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   renamed on the way (only their text). W105a (#1244, 2026-10-05) already moved printers, print agents
   and devices to **Disable / Deshabilitar**, status **Disabled** (Deshabilitada for a printer,
   Deshabilitado for an agent or a device), and printers and print agents to **Enable / Habilitar**
-  (devices get Enable in a later campaign item, W105b); it renamed their keys as an exception its own spec asked for,
+  (devices got Enable in W105b, when a disabled device asks to join again); it renamed their keys as an exception its own spec asked for,
   because the old keys no longer said what they show; card
   readers and staff still say Desactivar. Left open by W105a: a printer's Active status reads the
   masculine "Activo" beside "Deshabilitada", because `printers.status_active` is shared with print

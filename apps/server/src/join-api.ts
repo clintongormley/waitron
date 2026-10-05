@@ -29,8 +29,9 @@ import {
   checkDeviceJoinNumber,
   denyJoinRequest,
   discardLapsedDeviceRequests,
-  joinRequestKind,
+  findJoinRequest,
   listPendingJoinRequests,
+  returningDevicesOf,
   type JoinRequestKind,
 } from "./join-requests.js";
 import type { PairingMode } from "./pairing-mode.js";
@@ -139,18 +140,18 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
   const gatedByRowKind = async <T>(
     sessionId: string,
     id: string,
-    fn: (tx: Transaction) => Promise<T>,
+    fn: (tx: Transaction, row: { kind: JoinRequestKind; createdAt: string }) => Promise<T>,
   ): Promise<T> => {
     let dropped: string[] = [];
     const result = await withTransaction(deps.db, async (tx) => {
       dropped = await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
-      const kind = isUuid(id) ? await joinRequestKind(tx, deps.cfg, id) : undefined;
+      const row = isUuid(id) ? await findJoinRequest(tx, deps.cfg, id) : undefined;
       await authorizeManager(tx, {
         managementSessionId: sessionId,
-        permission: kind === undefined ? MISSING_ROW_PERMISSION : PERMISSION_FOR[kind],
+        permission: row === undefined ? MISSING_ROW_PERMISSION : PERMISSION_FOR[row.kind],
       });
-      if (kind === undefined) throw new AppError("join_request.not_found", {});
-      return fn(tx);
+      if (row === undefined) throw new AppError("join_request.not_found", {});
+      return fn(tx, row);
     });
     for (const id of dropped) deps.pairingMode.dropClaim(id);
     return result;
@@ -217,10 +218,13 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const kind = requireKind(c.req.query("kind"));
-      const rows = await gated(sessionId, PERMISSION_FOR[kind], (tx) =>
-        listPendingJoinRequests(tx, deps.cfg, kind),
-      );
-      if (kind === "print_agent") return c.json(rows);
+      const { rows, returning } = await gated(sessionId, PERMISSION_FOR[kind], async (tx) => {
+        const rows = await listPendingJoinRequests(tx, deps.cfg, kind);
+        if (kind === "print_agent") return { rows, returning: null };
+        const ids = rows.map((row) => row.id);
+        return { rows, returning: await returningDevicesOf(tx, ids) };
+      });
+      if (returning === null) return c.json(rows);
       const sessionKey = hashSessionToken(sessionId);
       return c.json(
         rows.map((row) => {
@@ -231,6 +235,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
               claim === undefined
                 ? null
                 : { name: claim.personName, mine: claim.sessionKey === sessionKey },
+            returning: returning.get(row.id) ?? null,
           };
         }),
       );
@@ -247,12 +252,19 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
   );
 
   // ── Refuse a request (permission from the ROW's kind) ───────────────────────────────────────────
+  // A device's deny names the ask by its `createdAt` too, because a returning device's next ask
+  // takes the same id. A print agent's ask always has an id of its own, so its deny names none.
   app.post("/management-api/join-requests/:id/deny", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
       const sessionKey = hashSessionToken(sessionId);
-      await gatedByRowKind(sessionId, id, (tx) => {
+      // Parsed out here and screened inside the gate, for the accept route's reasons.
+      const body = await readJsonBody<{ createdAt?: unknown }>(c);
+      await gatedByRowKind(sessionId, id, (tx, row) => {
+        // Before the claim, so an ask already replaced is answered as one already gone.
+        if (row.kind === "device" && requireString(body.createdAt, "createdAt") !== row.createdAt)
+          throw new AppError("join_request.not_found", {});
         const claim = deps.pairingMode.claimOf(id);
         if (claim !== undefined && claim.sessionKey !== sessionKey)
           throw new AppError("join_request.claimed", {});
@@ -270,17 +282,26 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       const sessionKey = hashSessionToken(sessionId);
       const id = c.req.param("id");
       // Parsed out here and screened inside the gate, for the accept route's reasons.
-      const body = await readJsonBody<{ choice?: unknown; holdId?: unknown }>(c);
+      const body = await readJsonBody<{ choice?: unknown; holdId?: unknown; createdAt?: unknown }>(
+        c,
+      );
       const result = await gated(sessionId, "device.manage", async (tx, personId) => {
         // Any string, not a two-digit screen: a value that is not the row's number must delete it.
         const choice = requireString(body.choice, "choice");
         const holdId = requireString(body.holdId, "holdId");
+        const createdAt = requireString(body.createdAt, "createdAt");
         if (!isUuid(id)) throw new AppError("join_request.not_found", {});
+        // First, because the gate has just discarded every device ask if no hold is left; a hold
+        // names no ask, so this refusal says nothing about the one under the id.
+        if (!deps.pairingMode.hasHold(holdId)) throw new AppError("device.pairing_hold_lapsed", {});
+        // Before the claim, so a replaced ask is answered as one already gone, as deny's is.
+        const ask = await findJoinRequest(tx, deps.cfg, id);
+        if (ask?.kind !== "device" || ask.createdAt !== createdAt)
+          throw new AppError("join_request.not_found", {});
         const claim = deps.pairingMode.claimOf(id);
         if (claim !== undefined && claim.sessionKey !== sessionKey)
           throw new AppError("join_request.claimed", {});
-        if (!deps.pairingMode.hasHold(holdId)) throw new AppError("device.pairing_hold_lapsed", {});
-        const checked = await checkDeviceJoinNumber(tx, deps.cfg, id, choice);
+        const checked = await checkDeviceJoinNumber(tx, deps.cfg, { id, createdAt }, choice);
         if (checked.ok) {
           const [person] = await tx
             .select({ name: persons.displayName })
@@ -324,8 +345,11 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         const watcherId = optionalBodyUuid(body.watcherId, "watcherId");
         if (!isUuid(id)) throw new AppError("join_request.not_found", {});
         // Before the claim, so a print agent's ask answers 404, as on the check route.
-        if ((await joinRequestKind(tx, deps.cfg, id)) === "print_agent")
+        if ((await findJoinRequest(tx, deps.cfg, id))?.kind === "print_agent")
           throw new AppError("join_request.not_found", {});
+        // The claim names no ask, yet stands only for the one it was checked on: a check must name
+        // the current ask, and a returning device's next ask drops the claim in its own
+        // transaction (`device-api.ts`).
         if (deps.pairingMode.claimOf(id)?.sessionKey !== hashSessionToken(sessionId))
           throw new AppError("join_request.unclaimed", {});
         return acceptDeviceJoinRequest(tx, deps.cfg, id, {

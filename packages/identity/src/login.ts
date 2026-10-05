@@ -52,6 +52,15 @@ export async function loginWithPin(
   };
 }
 
+/** End every shift session still open on a device, so none opened before it was disabled works
+ * again once it is enabled. */
+export async function endDeviceSessions(tx: Transaction, deviceId: string): Promise<void> {
+  await tx
+    .update(sessions)
+    .set({ endedAt: nowIso() })
+    .where(and(eq(sessions.deviceId, deviceId), isNull(sessions.endedAt)));
+}
+
 /** True if this call closed the session; false if it was already ended, or the token names no
  * session — a row id or a stored hash names none. */
 export async function endSession(tx: Transaction, token: string): Promise<boolean> {

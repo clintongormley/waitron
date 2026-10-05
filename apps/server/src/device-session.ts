@@ -75,6 +75,16 @@ export function readDeviceCookie(c: Context): string | null {
   return getCookie(c, DEVICE_COOKIE) ?? null;
 }
 
+/** A device cookie's `${id}.${token}` split apart, or `null` when it is not that shape or the id is
+ * not a uuid. */
+export function parseDeviceCookie(raw: string | null): { id: string; token: string } | null {
+  if (raw === null) return null;
+  const dot = raw.indexOf(".");
+  if (dot <= 0 || dot === raw.length - 1) return null;
+  const id = raw.slice(0, dot);
+  return isUuid(id) ? { id, token: raw.slice(dot + 1) } : null;
+}
+
 /** The identity a `requireDevice` call resolves the cookie to. The reader default lives in
  * `device_card_readers`, not on this row. */
 export interface DeviceBinding {
@@ -189,13 +199,9 @@ export async function tryReadDevice(
     }
   }
 
-  const raw = readDeviceCookie(c);
-  if (raw === null) return null;
-  const dot = raw.indexOf(".");
-  if (dot <= 0 || dot === raw.length - 1) return null;
-  const deviceId = raw.slice(0, dot);
-  const token = raw.slice(dot + 1);
-  if (!isUuid(deviceId)) return null;
+  const parsed = parseDeviceCookie(readDeviceCookie(c));
+  if (parsed === null) return null;
+  const { id: deviceId, token } = parsed;
 
   const readRow = async (on: Database | Transaction = deps.db) => {
     const [found] = await on

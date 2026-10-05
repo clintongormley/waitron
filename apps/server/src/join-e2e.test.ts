@@ -3,10 +3,26 @@
  * sharing ONE `PairingMode` holder, as `boot.ts` wires them: the window one surface opens is the
  * window the other honours.
  */
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
-import { deviceProfiles } from "@waitron/db";
+import { eq, sql } from "drizzle-orm";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  deviceMadeHereStations,
+  deviceProfiles,
+  devices,
+  joinRequests,
+  withTransaction,
+} from "@waitron/db";
+import {
+  hashPin,
+  hashSessionToken,
+  loginWithPin,
+  persons,
+  startManagementSession,
+} from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { cardReaders, deviceCardReaders } from "@waitron/payments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mountDeviceApi } from "./device-api.js";
@@ -16,6 +32,24 @@ import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
+
+/** Runs after an ask has proved a disabled device and before its transaction opens: where a race
+ * with another ask, or with Pair, lands. A no-op unless a case sets it. */
+const between = vi.hoisted(() => ({ proofAndTransaction: async (): Promise<void> => {} }));
+vi.mock("./join-requests.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./join-requests.js")>();
+  return {
+    ...real,
+    provenDisabledDevice: async (...args: Parameters<typeof real.provenDisabledDevice>) => {
+      const proof = await real.provenDisabledDevice(...args);
+      await between.proofAndTransaction();
+      return proof;
+    },
+  };
+});
+afterEach(() => {
+  between.proofAndTransaction = async () => {};
+});
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -37,7 +71,7 @@ function mountBoth(cfg: TillConfig, pairingMode: PairingMode = createPairingMode
 
 async function send(
   app: Hono,
-  method: "GET" | "POST" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   path: string,
   opts: { body?: unknown; cookie?: string } = {},
 ): Promise<Response> {
@@ -84,6 +118,17 @@ async function knock(
     verificationNumber: body.verificationNumber,
     jar: deviceCookieFrom(res),
   };
+}
+
+/** The ask the dashboard is showing under `id`, named as its actions name it: the createdAt the
+ *  pending list gives it. */
+async function shownAsk(app: Hono, venue: Venue, id: string): Promise<string> {
+  const res = await send(app, "GET", "/management-api/join-requests?kind=device", {
+    cookie: venue.managerCookie,
+  });
+  expect(res.status).toBe(200);
+  const rows = (await res.json()) as { id: string; createdAt: string }[];
+  return rows.find((row) => row.id === id)!.createdAt;
 }
 
 let profileCounter = 0;
@@ -133,6 +178,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
         label: "Bar till",
         createdAt: expect.any(String),
         pairingBy: null,
+        returning: null,
       },
     ]);
 
@@ -155,7 +201,10 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
       app,
       "POST",
       `/management-api/device-join-requests/${joinId}/check`,
-      { cookie: venue.managerCookie, body: { choice: verificationNumber, holdId } },
+      {
+        cookie: venue.managerCookie,
+        body: { choice: verificationNumber, holdId, createdAt: await shownAsk(app, venue, joinId) },
+      },
     );
     expect(checkRes.status).toBe(204);
     const acceptRes = await send(
@@ -203,7 +252,10 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
       app,
       "POST",
       `/management-api/device-join-requests/${joinId}/check`,
-      { cookie: venue.managerCookie, body: { choice: wrong, holdId } },
+      {
+        cookie: venue.managerCookie,
+        body: { choice: wrong, holdId, createdAt: await shownAsk(app, venue, joinId) },
+      },
     );
     expect(checkRes.status).toBe(400);
     expect((await errorOf(checkRes)).code).toBe("device.join_mismatch");
@@ -221,7 +273,14 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
       app,
       "POST",
       `/management-api/device-join-requests/${again.joinId}/check`,
-      { cookie: venue.managerCookie, body: { choice: again.verificationNumber, holdId } },
+      {
+        cookie: venue.managerCookie,
+        body: {
+          choice: again.verificationNumber,
+          holdId,
+          createdAt: await shownAsk(app, venue, again.joinId),
+        },
+      },
     );
     expect(checkAgain.status).toBe(204);
     const acceptAgain = await send(
@@ -279,7 +338,14 @@ describe("a claim whose hold lapsed is forgotten only once its request's deletio
       app,
       "POST",
       `/management-api/device-join-requests/${device.joinId}/check`,
-      { cookie: venue.managerCookie, body: { choice: device.verificationNumber, holdId: holdA } },
+      {
+        cookie: venue.managerCookie,
+        body: {
+          choice: device.verificationNumber,
+          holdId: holdA,
+          createdAt: await shownAsk(app, venue, device.joinId),
+        },
+      },
     );
     expect(checked.status).toBe(204);
     offset += 2 * 60_000;
@@ -318,5 +384,536 @@ describe("a claim whose hold lapsed is forgotten only once its request's deletio
     expect(other.joinId).not.toBe(device.joinId);
     expect(await pendingCount()).toBe(1);
     expect(mode.orphanedClaims()).toEqual([]);
+  });
+});
+
+describe("a disabled device comes back as the same device", () => {
+  async function knockWith(app: Hono, name: string, cookie?: string): Promise<Response> {
+    return send(app, "POST", "/api/device/join", {
+      body: { name },
+      ...(cookie === undefined ? {} : { cookie }),
+    });
+  }
+
+  /** Check the number, then accept: the Pair step of the Add a device dialog. */
+  async function pair(
+    app: Hono,
+    venue: Venue,
+    holdId: string,
+    joined: { joinId: string; verificationNumber: string },
+    body: { name: string; profileId: string },
+  ): Promise<Response> {
+    const checked = await send(
+      app,
+      "POST",
+      `/management-api/device-join-requests/${joined.joinId}/check`,
+      {
+        cookie: venue.managerCookie,
+        body: {
+          choice: joined.verificationNumber,
+          holdId,
+          createdAt: await shownAsk(app, venue, joined.joinId),
+        },
+      },
+    );
+    expect(checked.status).toBe(204);
+    return send(app, "POST", `/management-api/device-join-requests/${joined.joinId}/accept`, {
+      cookie: venue.managerCookie,
+      body,
+    });
+  }
+
+  async function addDevice(
+    app: Hono,
+    venue: Venue,
+    holdId: string,
+    name: string,
+    profileId: string,
+  ): Promise<{ deviceId: string; jar: string }> {
+    const joined = await knock(app, name);
+    const accepted = await pair(app, venue, holdId, joined, { name, profileId });
+    expect(accepted.status).toBe(200);
+    return { deviceId: joined.joinId, jar: joined.jar };
+  }
+
+  async function disable(app: Hono, venue: Venue, deviceId: string): Promise<void> {
+    const res = await send(app, "POST", `/management-api/devices/${deviceId}/revoke`, {
+      cookie: venue.managerCookie,
+    });
+    expect(res.status).toBe(204);
+  }
+
+  async function deviceRow(id: string) {
+    const [row] = await suite.db.select().from(devices).where(eq(devices.id, id));
+    return row!;
+  }
+
+  async function deviceCount(): Promise<number> {
+    const { rows } = await suite.db.execute<{ n: number }>(sql`select count(*) as n from devices`);
+    return rows[0]!.n;
+  }
+
+  async function listJoinRequests(app: Hono, venue: Venue): Promise<unknown[]> {
+    const res = await send(app, "GET", "/management-api/join-requests?kind=device", {
+      cookie: venue.managerCookie,
+    });
+    expect(res.status).toBe(200);
+    return (await res.json()) as unknown[];
+  }
+
+  async function joined(res: Response) {
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { joinId: string; verificationNumber: string };
+    return { ...body, jar: deviceCookieFrom(res) };
+  }
+
+  /** A till added and then disabled through the real routes, with the window left open. */
+  async function disabledTill() {
+    const venue = await setupVenue(suite.db);
+    const mode = createPairingMode();
+    const app = mountBoth(venue.cfg, mode);
+    const profileId = await seedProfile("till");
+    const holdId = await openWindow(app, venue);
+    const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
+    await disable(app, venue, deviceId);
+    return { venue, mode, app, profileId, holdId, deviceId, jar };
+  }
+
+  it("knocks as itself, is listed as returning, and Pair enables the same row with its settings", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountBoth(venue.cfg);
+    const profileId = await seedProfile("till");
+    const holdId = await openWindow(app, venue);
+    const { deviceId, jar: oldJar } = await addDevice(app, venue, holdId, "Bar till", profileId);
+    await suite.db
+      .insert(deviceMadeHereStations)
+      .values({ deviceId, stationId: venue.defaultStationId });
+    const [reader] = await suite.db
+      .insert(cardReaders)
+      .values({ provider: "fake", providerRef: "reader-1", name: "Lector 1" })
+      .returning({ id: cardReaders.id });
+    await suite.db.insert(deviceCardReaders).values({ deviceId, readerId: reader!.id });
+    // Read once while active, so the old token is in the verified-token memory when it is refused.
+    expect((await send(app, "GET", "/api/device/me", { cookie: oldJar })).status).toBe(200);
+    await disable(app, venue, deviceId);
+    const before = await deviceCount();
+
+    const back = await joined(await knockWith(app, "Tablet", oldJar));
+    expect(back.joinId).toBe(deviceId);
+    expect(back.jar).toMatch(new RegExp(`^waitron_device=${deviceId}\\.`));
+    expect(back.jar).not.toBe(oldJar);
+    expect(await listJoinRequests(app, venue)).toEqual([
+      {
+        id: deviceId,
+        kind: "device",
+        label: "Tablet",
+        createdAt: expect.any(String),
+        pairingBy: null,
+        returning: { name: "Bar till", profileId, stationId: null, watcherId: null },
+      },
+    ]);
+    const pending = await send(app, "GET", "/api/device/join/status", { cookie: back.jar });
+    expect(await pending.json()).toEqual({ status: "pending" });
+
+    const accepted = await pair(app, venue, holdId, back, { name: "Bar till", profileId });
+    expect(accepted.status).toBe(200);
+    expect(await accepted.json()).toEqual({ deviceId, name: "Bar till", formFactor: "till" });
+    expect(await deviceCount()).toBe(before);
+    expect(await pendingCount()).toBe(0);
+    expect((await deviceRow(deviceId)).active).toBe(true);
+    expect(
+      await suite.db
+        .select({ stationId: deviceMadeHereStations.stationId })
+        .from(deviceMadeHereStations)
+        .where(eq(deviceMadeHereStations.deviceId, deviceId)),
+    ).toEqual([{ stationId: venue.defaultStationId }]);
+    expect(
+      await suite.db
+        .select({ readerId: deviceCardReaders.readerId })
+        .from(deviceCardReaders)
+        .where(eq(deviceCardReaders.deviceId, deviceId)),
+    ).toEqual([{ readerId: reader!.id }]);
+
+    const approved = await send(app, "GET", "/api/device/join/status", { cookie: back.jar });
+    expect(await approved.json()).toEqual({ status: "approved" });
+    // The old cookie first, while the verified-token memory still holds the old token.
+    const old = await send(app, "GET", "/api/device/me", { cookie: oldJar });
+    expect(old.status).toBe(401);
+    const me = await send(app, "GET", "/api/device/me", { cookie: back.jar });
+    expect(me.status).toBe(200);
+    expect(await me.json()).toMatchObject({ deviceId, name: "Bar till" });
+  });
+
+  it("ends the shift sessions the device had open when it was disabled", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountBoth(venue.cfg);
+    const profileId = await seedProfile("till");
+    const holdId = await openWindow(app, venue);
+    const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
+    const [person] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Camarera", pinHash: hashPin("4321"), role: "staff" })
+      .returning({ id: persons.id });
+    const session = await withTransaction(suite.db, (tx) =>
+      loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),
+    );
+    const sessionCookie = `waitron_till_session=${session.token}`;
+    const live = await send(app, "PUT", "/api/device/printers", {
+      cookie: sessionCookie,
+      body: {},
+    });
+    expect(live.status).toBe(200);
+    await disable(app, venue, deviceId);
+
+    const back = await joined(await knockWith(app, "Bar till", jar));
+    expect((await pair(app, venue, holdId, back, { name: "Bar till", profileId })).status).toBe(
+      200,
+    );
+
+    const after = await send(app, "PUT", "/api/device/printers", {
+      cookie: sessionCookie,
+      body: {},
+    });
+    expect(after.status).toBe(401);
+    expect((await errorOf(after)).code).toBe("session.required");
+  });
+
+  it("a browser with no device cookie still joins as a new device", async () => {
+    const { venue, app, deviceId } = await disabledTill();
+    const fresh = await joined(await knockWith(app, "Tablet"));
+    expect(fresh.joinId).not.toBe(deviceId);
+    expect(await listJoinRequests(app, venue)).toMatchObject([
+      { id: fresh.joinId, returning: null },
+    ]);
+  });
+
+  it("a cookie naming a disabled device with the wrong token joins as a new device", async () => {
+    const { venue, app, deviceId } = await disabledTill();
+    const stored = await deviceRow(deviceId);
+    const forged = await joined(
+      await knockWith(app, "Tablet", `waitron_device=${deviceId}.not-the-token`),
+    );
+    expect(forged.joinId).not.toBe(deviceId);
+    expect(await listJoinRequests(app, venue)).toMatchObject([
+      { id: forged.joinId, returning: null },
+    ]);
+    expect(await deviceRow(deviceId)).toEqual(stored);
+  });
+
+  it("a cookie naming an active device joins as a new device and leaves that device working", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountBoth(venue.cfg);
+    const profileId = await seedProfile("till");
+    const holdId = await openWindow(app, venue);
+    const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
+    const stored = await deviceRow(deviceId);
+
+    const other = await joined(await knockWith(app, "Tablet", jar));
+    expect(other.joinId).not.toBe(deviceId);
+    expect(await listJoinRequests(app, venue)).toMatchObject([
+      { id: other.joinId, returning: null },
+    ]);
+    expect(await deviceRow(deviceId)).toEqual(stored);
+    expect((await send(app, "GET", "/api/device/me", { cookie: jar })).status).toBe(200);
+  });
+
+  it("with no Add a device dialog open, a disabled device's knock is refused and changes nothing", async () => {
+    const { venue, app, holdId, deviceId, jar } = await disabledTill();
+    const released = await send(app, "DELETE", `/management-api/pairing-mode/holds/${holdId}`, {
+      cookie: venue.managerCookie,
+    });
+    expect(released.status).toBe(204);
+    const stored = await deviceRow(deviceId);
+
+    const res = await knockWith(app, "Bar till", jar);
+    expect(res.status).toBe(403);
+    expect((await errorOf(res)).code).toBe("device.pairing_closed");
+    expect(res.headers.get("set-cookie")).toBeNull();
+    expect(await pendingCount()).toBe(0);
+    expect(await deviceRow(deviceId)).toEqual(stored);
+  });
+
+  it("deny leaves the device disabled with its settings, and the same browser can knock as itself again", async () => {
+    const { venue, app, profileId, deviceId, jar } = await disabledTill();
+    const before = await deviceCount();
+    const back = await joined(await knockWith(app, "Bar till", jar));
+    const denied = await send(app, "POST", `/management-api/join-requests/${deviceId}/deny`, {
+      cookie: venue.managerCookie,
+      body: { createdAt: await shownAsk(app, venue, deviceId) },
+    });
+    expect(denied.status).toBe(204);
+
+    expect(await deviceCount()).toBe(before);
+    expect(await deviceRow(deviceId)).toMatchObject({
+      active: false,
+      label: "Bar till",
+      deviceProfileId: profileId,
+      stationId: null,
+      watcherId: null,
+    });
+    const status = await send(app, "GET", "/api/device/join/status", { cookie: back.jar });
+    expect(await status.json()).toEqual({ status: "not_approved" });
+    expect((await send(app, "GET", "/api/device/me", { cookie: back.jar })).status).toBe(401);
+
+    const again = await joined(await knockWith(app, "Bar till", back.jar));
+    expect(again.joinId).toBe(deviceId);
+  });
+
+  it("a second knock replaces the device's pending request and forgets the number check made on it", async () => {
+    const { venue, app, profileId, holdId, deviceId, jar } = await disabledTill();
+    const first = await joined(await knockWith(app, "Bar till", jar));
+    const checked = await send(
+      app,
+      "POST",
+      `/management-api/device-join-requests/${deviceId}/check`,
+      {
+        cookie: venue.managerCookie,
+        body: {
+          choice: first.verificationNumber,
+          holdId,
+          createdAt: await shownAsk(app, venue, deviceId),
+        },
+      },
+    );
+    expect(checked.status).toBe(204);
+
+    const second = await joined(await knockWith(app, "Bar till", first.jar));
+    expect(second.joinId).toBe(deviceId);
+    expect(await pendingCount()).toBe(1);
+    const unchecked = await send(
+      app,
+      "POST",
+      `/management-api/device-join-requests/${deviceId}/accept`,
+      { cookie: venue.managerCookie, body: { name: "Bar till", profileId } },
+    );
+    expect(unchecked.status).toBe(409);
+    expect((await errorOf(unchecked)).code).toBe("join_request.unclaimed");
+
+    const stale = await send(app, "GET", "/api/device/join/status", { cookie: first.jar });
+    expect(await stale.json()).toEqual({ status: "not_approved" });
+    expect((await pair(app, venue, holdId, second, { name: "Bar till", profileId })).status).toBe(
+      200,
+    );
+    expect((await send(app, "GET", "/api/device/me", { cookie: second.jar })).status).toBe(200);
+  });
+
+  describe("a dialog still showing the ask a second knock replaced", () => {
+    /** The device knocks, the dashboard lists that ask, and the device knocks again before the
+     *  dashboard hears of it. */
+    async function replacedAsk() {
+      const till = await disabledTill();
+      const first = await joined(await knockWith(till.app, "Bar till", till.jar));
+      const shown = await shownAsk(till.app, till.venue, till.deviceId);
+      const second = await joined(await knockWith(till.app, "Bar till", first.jar));
+      expect(second.joinId).toBe(till.deviceId);
+      return { ...till, first, second, shown };
+    }
+
+    async function statusOf(app: Hono, jar: string) {
+      return (await send(app, "GET", "/api/device/join/status", { cookie: jar })).json();
+    }
+
+    it("Cancel is answered as for a request already gone, and the new ask stays pending", async () => {
+      const { venue, app, deviceId, second, shown } = await replacedAsk();
+      expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
+
+      const denied = await send(app, "POST", `/management-api/join-requests/${deviceId}/deny`, {
+        cookie: venue.managerCookie,
+        body: { createdAt: shown },
+      });
+      expect(denied.status).toBe(404);
+      expect((await errorOf(denied)).code).toBe("join_request.not_found");
+      expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
+      expect(await pendingCount()).toBe(1);
+    });
+
+    it("a number check with a number other than the new ask's is refused, and deletes and claims nothing", async () => {
+      const { venue, mode, app, holdId, deviceId, first, second, shown } = await replacedAsk();
+      const other = first.verificationNumber === "00" ? "01" : "00";
+      await suite.db
+        .update(joinRequests)
+        .set({ verificationNumber: other })
+        .where(eq(joinRequests.id, deviceId));
+
+      const checked = await send(
+        app,
+        "POST",
+        `/management-api/device-join-requests/${deviceId}/check`,
+        {
+          cookie: venue.managerCookie,
+          body: { choice: first.verificationNumber, holdId, createdAt: shown },
+        },
+      );
+      expect(checked.status).toBe(404);
+      expect((await errorOf(checked)).code).toBe("join_request.not_found");
+      expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
+      expect(mode.claimOf(deviceId)).toBeUndefined();
+    });
+
+    it("a number check with the same number as the new ask's is refused, so Pair cannot approve the new ask", async () => {
+      const { venue, mode, app, profileId, holdId, deviceId, first, second, shown } =
+        await replacedAsk();
+      await suite.db
+        .update(joinRequests)
+        .set({ verificationNumber: first.verificationNumber })
+        .where(eq(joinRequests.id, deviceId));
+
+      const checked = await send(
+        app,
+        "POST",
+        `/management-api/device-join-requests/${deviceId}/check`,
+        {
+          cookie: venue.managerCookie,
+          body: { choice: first.verificationNumber, holdId, createdAt: shown },
+        },
+      );
+      expect(checked.status).toBe(404);
+      expect((await errorOf(checked)).code).toBe("join_request.not_found");
+      expect(mode.claimOf(deviceId)).toBeUndefined();
+      const accepted = await send(
+        app,
+        "POST",
+        `/management-api/device-join-requests/${deviceId}/accept`,
+        { cookie: venue.managerCookie, body: { name: "Bar till", profileId } },
+      );
+      expect(accepted.status).toBe(409);
+      expect((await errorOf(accepted)).code).toBe("join_request.unclaimed");
+      expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
+      expect((await send(app, "GET", "/api/device/me", { cookie: second.jar })).status).toBe(401);
+    });
+
+    it("a number check is answered as for a request already gone even when another login has claimed the new ask", async () => {
+      const { venue, mode, app, holdId, deviceId, second, shown } = await replacedAsk();
+      const [mgr] = await suite.db
+        .select({ id: persons.id })
+        .from(persons)
+        .where(eq(persons.displayName, "The Manager"));
+      const session = await withTransaction(suite.db, (tx) =>
+        startManagementSession(tx, { personId: mgr!.id }),
+      );
+      const other = { ...venue, managerCookie: `${MANAGEMENT_COOKIE}=${session.token}` };
+      const otherHold = await openWindow(app, other);
+      const claimed = await send(
+        app,
+        "POST",
+        `/management-api/device-join-requests/${deviceId}/check`,
+        {
+          cookie: other.managerCookie,
+          body: {
+            choice: second.verificationNumber,
+            holdId: otherHold,
+            createdAt: await shownAsk(app, other, deviceId),
+          },
+        },
+      );
+      expect(claimed.status).toBe(204);
+
+      const checked = await send(
+        app,
+        "POST",
+        `/management-api/device-join-requests/${deviceId}/check`,
+        {
+          cookie: venue.managerCookie,
+          body: { choice: second.verificationNumber, holdId, createdAt: shown },
+        },
+      );
+      expect(checked.status).toBe(404);
+      expect((await errorOf(checked)).code).toBe("join_request.not_found");
+      expect(mode.claimOf(deviceId)?.sessionKey).toBe(hashSessionToken(session.token));
+      expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
+    });
+
+    it("a number check of a replaced ask with a hold that has lapsed is answered as a lapsed hold, and the new ask is kept", async () => {
+      const { venue, mode, app, deviceId, second, shown } = await replacedAsk();
+      const checked = await send(
+        app,
+        "POST",
+        `/management-api/device-join-requests/${deviceId}/check`,
+        {
+          cookie: venue.managerCookie,
+          body: { choice: second.verificationNumber, holdId: randomUUID(), createdAt: shown },
+        },
+      );
+      expect(checked.status).toBe(409);
+      expect((await errorOf(checked)).code).toBe("device.pairing_hold_lapsed");
+      expect(mode.claimOf(deviceId)).toBeUndefined();
+      expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
+    });
+
+    it("the new ask is listed under a createdAt after the replaced one's, even in the same millisecond", async () => {
+      const { venue, app, deviceId, jar } = await disabledTill();
+      // Frozen at the present, so the window the case opened is still open.
+      const frozen = Date.now();
+      vi.useFakeTimers({ toFake: ["Date"], now: frozen });
+      try {
+        const first = await joined(await knockWith(app, "Bar till", jar));
+        const shown = await shownAsk(app, venue, deviceId);
+        await joined(await knockWith(app, "Bar till", first.jar));
+        expect(shown).toBe(new Date(frozen).toISOString());
+        expect(await shownAsk(app, venue, deviceId)).toBe(new Date(frozen + 1).toISOString());
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it("an ask whose proof another ask overtook is refused with no cookie, and the browser keeps the winner's", async () => {
+    const { venue, app, deviceId, jar } = await disabledTill();
+    let winner: Awaited<ReturnType<typeof joined>> | undefined;
+    between.proofAndTransaction = async () => {
+      between.proofAndTransaction = async () => {};
+      winner = await joined(await knockWith(app, "Bar till", jar));
+    };
+
+    const overtaken = await knockWith(app, "Bar till", jar);
+    expect(overtaken.status).toBe(409);
+    expect((await errorOf(overtaken)).code).toBe("device.join_stale");
+    expect(overtaken.headers.get("set-cookie")).toBeNull();
+    expect(winner!.joinId).toBe(deviceId);
+    expect(await pendingCount()).toBe(1);
+    expect(await listJoinRequests(app, venue)).toMatchObject([{ id: deviceId, returning: {} }]);
+
+    const again = await joined(await knockWith(app, "Bar till", winner!.jar));
+    expect(again.joinId).toBe(deviceId);
+  });
+
+  it("an ask that Pair overtook is refused with no cookie, and the browser's cookie is the enabled device's", async () => {
+    const { venue, app, profileId, holdId, deviceId, jar } = await disabledTill();
+    const first = await joined(await knockWith(app, "Bar till", jar));
+    between.proofAndTransaction = async () => {
+      between.proofAndTransaction = async () => {};
+      const accepted = await pair(app, venue, holdId, first, { name: "Bar till", profileId });
+      expect(accepted.status).toBe(200);
+    };
+
+    const overtaken = await knockWith(app, "Bar till", first.jar);
+    expect(overtaken.status).toBe(409);
+    expect((await errorOf(overtaken)).code).toBe("device.join_stale");
+    expect(overtaken.headers.get("set-cookie")).toBeNull();
+    expect(await pendingCount()).toBe(0);
+    const me = await send(app, "GET", "/api/device/me", { cookie: first.jar });
+    expect(me.status).toBe(200);
+    expect(await me.json()).toMatchObject({ deviceId });
+  });
+
+  it("enabling under a name an active device has taken since is refused, and the request survives", async () => {
+    const { venue, app, profileId, holdId, deviceId, jar } = await disabledTill();
+    await addDevice(app, venue, holdId, "Bar till", profileId);
+    const back = await joined(await knockWith(app, "Bar till", jar));
+
+    const taken = await pair(app, venue, holdId, back, { name: "Bar till", profileId });
+    expect(taken.status).toBe(409);
+    expect((await errorOf(taken)).code).toBe("device.name_taken");
+    expect(await pendingCount()).toBe(1);
+    expect((await deviceRow(deviceId)).active).toBe(false);
+
+    const renamed = await send(
+      app,
+      "POST",
+      `/management-api/device-join-requests/${deviceId}/accept`,
+      { cookie: venue.managerCookie, body: { name: "Bar till 2", profileId } },
+    );
+    expect(renamed.status).toBe(200);
+    expect(await deviceRow(deviceId)).toMatchObject({ active: true, label: "Bar till 2" });
   });
 });

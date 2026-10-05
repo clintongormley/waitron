@@ -4,7 +4,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { endSession, loginWithPin } from "./login.js";
+import { endDeviceSessions, endSession, loginWithPin } from "./login.js";
 import { codeOf, refusalOf, seedPerson, seedSessionDevice } from "../test/fixtures.js";
 import { hashSessionToken } from "./session-token.js";
 import { verifyPin } from "./verify-pin.js";
@@ -198,6 +198,33 @@ describe("endSession", () => {
 
     const second = await run((tx) => endSession(tx, session.token));
     expect(second).toBe(false);
+  });
+});
+
+describe("endDeviceSessions", () => {
+  it("ends the device's open sessions and leaves an ended one and another device's alone", async () => {
+    const deviceId = await seedSessionDevice(suite.db);
+    const otherDevice = await seedSessionDevice(suite.db);
+    const personId = await seedPerson(suite.db);
+    const open = await run((tx) => loginWithPin(tx, { deviceId, personId, pin: "1234" }));
+    const ended = await run((tx) => loginWithPin(tx, { deviceId, personId, pin: "1234" }));
+    await run((tx) => endSession(tx, ended.token));
+    const endedAt = async (id: string) =>
+      (
+        await suite.db.execute<{ ended_at: string | null }>(
+          sql`select ended_at from sessions where id = ${id}`,
+        )
+      ).rows[0]!.ended_at;
+    const endedBefore = await endedAt(ended.id);
+    const elsewhere = await run((tx) =>
+      loginWithPin(tx, { deviceId: otherDevice, personId, pin: "1234" }),
+    );
+
+    await run((tx) => endDeviceSessions(tx, deviceId));
+
+    expect(await endedAt(open.id)).toEqual(expect.any(String));
+    expect(await endedAt(ended.id)).toBe(endedBefore);
+    expect(await endedAt(elsewhere.id)).toBeNull();
   });
 });
 

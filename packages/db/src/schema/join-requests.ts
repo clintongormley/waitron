@@ -19,10 +19,13 @@ export const joinRequestKind = enumType(["device", "print_agent"]);
 
 /**
  * A pending ask-to-join: someone knocked while pairing mode was open, and an admin has not yet approved
- * it. NEVER a `devices` or `print_agents` row — for devices that is forced (the
- * station-XOR-register constraint trigger cannot accept a request whose binding is unchosen), and for
- * agents it is chosen, so both real tables hold only approved rows and `active`/revoke keep one
- * meaning. Accept inserts the real row and deletes the request in one transaction.
+ * it. A request is never itself stored as a `devices` or `print_agents` row — for devices that is
+ * forced (the station-XOR-register constraint trigger cannot accept a request whose binding is
+ * unchosen), and for agents it is chosen, so both real tables hold only rows an admin approved and
+ * `active`/revoke keep one meaning. One write does reach `devices` before approval: a knock from a
+ * disabled device's browser gives that row the request's token hash, and the row stays disabled
+ * (`createJoinRequest`). Accept inserts the real row, or for a disabled device coming back enables
+ * it, and deletes the request in one transaction.
  *
  * `local`: keyed by the node that received it (`node_id`), for the reason on that column.
  */
@@ -41,9 +44,9 @@ export const joinRequests = table(
     // a `local` table holds no key into a venue table (guard:
     // `scripts/two-file-foreign-keys.test.ts`). Unlike the identity tables, that id is
     // configuration rather than a row this request read, and nothing checks it exists when the row
-    // is written; a misconfigured venue is refused later, when accept copies it into the accepted
-    // row — `devices` for a device, `print_agents` for an agent — both of which do hold a key to
-    // `locations`.
+    // is written; a misconfigured venue is refused later, when accept copies it into a new row —
+    // `devices` for a device, `print_agents` for an agent — both of which do hold a key to
+    // `locations`. Accepting a disabled device coming back does not read it: that row keeps its own.
     locationId: id("location_id").notNull(),
     kind: joinRequestKind("kind").notNull(),
     // The name the joiner asked for. An agent accept copies it to `print_agents.name`; a device accept
@@ -61,6 +64,9 @@ export const joinRequests = table(
     // management session could derive the answer and never risk a mismatch, which is the check the
     // whole design rests on (design §1.2 rule 2).
     decoyNumbers: labelList("decoy_numbers").notNull(),
+    // With `id`, names one ask: a returning device's next ask takes the same id, and is written a
+    // later time than the ask it replaces (`createJoinRequest`), so a manager's deny or number check
+    // that names an ask since replaced touches nothing.
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [check("join_requests_kind_ck", enumCheck(t.kind))],
