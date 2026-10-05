@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   diningTables,
@@ -148,7 +148,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     simplifiedInvoiceLimit: null,
     orderFlow,
   });
-  suite.db.run(sql`update locations set order_flow = ${orderFlow} where id = ${cfg.locationId}`);
 
   const products = await withTransaction(suite.db, async (tx) => {
     const menu = await createCatalogue(tx, { name: "Carta" });

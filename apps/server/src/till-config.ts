@@ -4,7 +4,7 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError, locationId, nodeId, seriesId } from "@waitron/shared";
 import type { Decimal, DeviceOrigin, LocationId, NodeId, Origin, SeriesId } from "@waitron/shared";
-import { nodes, orderFlow, withTransaction } from "@waitron/db";
+import { nodes, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { isUnset } from "./env-value.js";
 
@@ -12,7 +12,7 @@ import { isUnset } from "./env-value.js";
  * A pay-timing mode. It decides which issuance primitive fires and when, so a wrong
  * dispatch files the wrong kind of unrepairable fiscal record.
  */
-export type OrderFlow = (typeof orderFlow.enumValues)[number];
+export type OrderFlow = "prepay" | "invoice_first" | "ticket_then_pay";
 
 /** The venue's identity on this node, resolved once at boot from the environment provisioning
  * stamped. */

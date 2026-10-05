@@ -312,7 +312,6 @@ beforeAll(async () => {
   await sharedDb.insert(locations).values({
     id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
     name: "Barra",
-    orderFlow: "invoice_first",
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });

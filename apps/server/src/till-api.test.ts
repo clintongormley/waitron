@@ -1742,6 +1742,41 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     }
   });
 
+  it.each(["prepay", "ticket_then_pay"] as const)(
+    "offers %s policy even when the zone retains the retired invoice-first setting",
+    async (paidWhen) => {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+      const token = await openSession(suite.db);
+      const headers = { cookie: `${SESSION_COOKIE}=${token}` };
+      await suite.db.execute(sql`
+        update zone_service_policies set service_mode = 'invoice_first'
+        where zone_id = ${counterZoneId}`);
+      await suite.db.execute(sql`
+        update department_sale_policies set paid_when = ${paidWhen}
+        where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+      try {
+        for (const path of [
+          "/api/default-service-zone/offers",
+          `/api/service-zones/${counterZoneId}/offers`,
+        ]) {
+          const response = await app.request(path, { headers });
+          expect(response.status).toBe(200);
+          expect(await response.json()).toMatchObject({
+            context: { zoneId: counterZoneId, serviceMode: paidWhen },
+          });
+        }
+      } finally {
+        await suite.db.execute(sql`
+          update zone_service_policies set service_mode = 'prepay'
+          where zone_id = ${counterZoneId}`);
+        await suite.db.execute(sql`
+          update department_sale_policies set paid_when = 'prepay'
+          where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+      }
+    },
+  );
+
   it("offers different pay timing for two zones in the same department", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));

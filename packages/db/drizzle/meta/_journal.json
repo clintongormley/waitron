@@ -736,6 +736,27 @@
       "when": 1791269653580,
       "tag": "0104_bill_invoice_choice_transition",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "6",
+      "when": 1791273700263,
+      "tag": "0105_locations_drop_reader_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "6",
+      "when": 1791273701140,
+      "tag": "0106_retire_location_order_flow",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "6",
+      "when": 1791273701919,
+      "tag": "0107_locations_restore_reader_triggers",
+      "breakpoints": true
     }
   ]
 }

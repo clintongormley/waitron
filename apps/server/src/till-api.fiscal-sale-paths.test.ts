@@ -1575,10 +1575,6 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
 describe("place → station queue → per-line advance → collect (KDS-1 ticket model, over HTTP)", () => {
   it("Mode T: place files no fiscal doc; the prep queue tracks it; collect files the sale at collect", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    // Flip to `ticket_then_pay` (Mode T) in both the DB column and the in-memory cfg.
-    await suite.db.execute(
-      sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
-    );
     const modeCfg: TillConfig = { ...cfg, orderFlow: "ticket_then_pay" };
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
 
@@ -2250,9 +2246,6 @@ describe("handheld sales and device capability gates", () => {
 
   it("a handheld places a Mode-I order for an operator holding only the payment permission, filing one deferred invoice under itself, as a till does", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    await suite.db.execute(
-      sql`update locations set order_flow = 'invoice_first' where id = ${cfg.locationId}`,
-    );
     await suite.db.execute(sql`
       update departments set default_service_mode = 'invoice_first'
       where location_id = ${cfg.locationId}`);
@@ -2303,9 +2296,6 @@ describe("handheld sales and device capability gates", () => {
 
   it("a handheld collects a placed Mode-T order in cash for an operator holding only the payment permission, settling it and filing one record under itself, as a till does", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    await suite.db.execute(
-      sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
-    );
     const modeCfg: TillConfig = { ...cfg, orderFlow: "ticket_then_pay" };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
@@ -2401,9 +2391,6 @@ describe("handheld sales and device capability gates", () => {
 
     it("refuses a cash collect from a device whose profile lacks take-cash, leaving the order placed", async () => {
       const { cfg, available, operatorId } = await setupVenue();
-      await suite.db.execute(
-        sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
-      );
       const modeCfg: TillConfig = { ...cfg, orderFlow: "ticket_then_pay" };
       const each = available.find((p) => p.pricingUnit === "each")!;
       const app = new Hono();
@@ -2850,9 +2837,6 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
   it("fires the order to its station queue and answers 200 with an empty body", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     // A ticket_then_pay venue settles a walk-up sale without firing it, which leaves prep to do.
-    await suite.db.execute(
-      sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
-    );
     await suite.db.execute(sql`
       update departments set default_service_mode = 'ticket_then_pay'
       where location_id = ${cfg.locationId}`);
@@ -2905,9 +2889,6 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
   });
   it("fires a paid order whose product has since sold out: a settled order's lines cannot be removed", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    await suite.db.execute(
-      sql`update locations set order_flow = 'ticket_then_pay' where id = ${cfg.locationId}`,
-    );
     await suite.db.execute(sql`
       update departments set default_service_mode = 'ticket_then_pay'
       where location_id = ${cfg.locationId}`);
@@ -3023,9 +3004,6 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
 
   async function venueWithTill(orderFlow: OrderFlow = "prepay") {
     const venue = await setupVenue();
-    await suite.db.execute(
-      sql`update locations set order_flow = ${orderFlow} where id = ${venue.cfg.locationId}`,
-    );
     const cfg: TillConfig = { ...venue.cfg, orderFlow };
     const { available, operatorId } = venue;
     const each = available.find((p) => p.pricingUnit === "each")!;

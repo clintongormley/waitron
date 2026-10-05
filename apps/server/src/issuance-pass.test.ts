@@ -149,7 +149,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
     simplifiedInvoiceLimit: null,
     orderFlow,
   });
-  suite.db.run(sql`update locations set order_flow = ${orderFlow} where id = ${cfg.locationId}`);
 
   const seeded = await withTransaction(suite.db, async (tx) => {
     const menu = await createCatalogue(tx, { name: "Carta" });

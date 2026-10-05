@@ -258,9 +258,6 @@ async function offerAtCounter(
 
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   const venue = await setupVenue();
-  await suite.db.execute(
-    sql`update locations set order_flow = ${mode} where id = ${venue.cfg.locationId}`,
-  );
   return offerAtCounter({ ...venue.cfg, orderFlow: mode }, venue.available);
 }
 

@@ -1502,6 +1502,36 @@ it("records an empty receipt heading for a sale without a service zone", async (
   await expect(scoped((tx) => readSaleReceiptHeader(tx, randomUUID()))).resolves.toBeNull();
 });
 
+it.each(["prepay", "ticket_then_pay"] as const)(
+  "snapshots %s policy for new and moved quick sales despite the retired invoice-first setting",
+  async (paidWhen) => {
+    const venue = await seedSellingVenue();
+    await scoped(async (tx) => {
+      await configureZone(tx, venue.cfg, {
+        zoneId: venue.barZone,
+        departmentId: venue.barId,
+        serviceMode: "invoice_first",
+      });
+      await setZoneSalePolicyOverride(tx, venue.cfg, venue.barZone, "paidWhen", paidWhen);
+      const fresh = await openOrder(tx, venue, 1);
+      await recordOrderServiceContext(tx, venue.cfg, fresh, venue.barZone);
+      expect(await getOrderServiceContext(tx, venue.cfg, fresh)).toEqual({
+        zoneId: venue.barZone,
+        departmentId: venue.barId,
+        serviceMode: paidWhen,
+      });
+      const moved = await openOrder(tx, venue, 2);
+      await recordOrderServiceContext(tx, venue.cfg, moved, venue.diningZone);
+      await retargetOrderServiceContext(tx, venue.cfg, moved, venue.barZone);
+      expect(await getOrderServiceContext(tx, venue.cfg, moved)).toEqual({
+        zoneId: venue.barZone,
+        departmentId: venue.barId,
+        serviceMode: paidWhen,
+      });
+    });
+  },
+);
+
 it("uses an explicitly selected zone instead of the venue fallback", async () => {
   const venue = await seedSellingVenue();
   await expect(

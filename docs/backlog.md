@@ -6690,7 +6690,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   follow-up A261-2c removes the retired `locations.order_flow` column after a separate rebuild audit.
   Owner decision, 2026-10-05: retire the legacy `invoice_first` collection-ticket path
   in A261-2c alongside the column, with a venue reset accepted. That implementation has not
-  landed; the item is parked pending the populated-upgrade test's reset decision.
+  landed; the owner approved the exact populated-upgrade reset fixture on 2026-10-06;
+  remaining dispatch retirement and validation are in progress.
   The Numbered collection choice applies to `prepay` and `ticket_then_pay` quick sales.
   A261-2f explains the quick-sale-only scope in English and Spanish on the department and
   zone Order number cells and editors. Filled choices use the shared help button; table-tab

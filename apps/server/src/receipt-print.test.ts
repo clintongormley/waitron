@@ -1135,12 +1135,6 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     async (mode) => {
       const base = await setupVenue("invoice_first");
       // Placement issues the invoice before any payment; collection retains its separate drawer action.
-      await withTransaction(suite.db, async (tx) => {
-        await tx
-          .update(locations)
-          .set({ orderFlow: "invoice_first" })
-          .where(eq(locations.id, base.cfg.locationId));
-      });
       const { cfg } = base;
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { mode, printerId });
@@ -1308,9 +1302,6 @@ describe("every device whose profile allows the drawer opens its receipt printer
         orderFlow,
         NO_DRAWER_CAPABILITY,
       );
-      await withTransaction(suite.db, async (tx) => {
-        await tx.update(locations).set({ orderFlow }).where(eq(locations.id, cfg.locationId));
-      });
 
       const collectOn = async (till: DeviceRequestConfig): Promise<void> => {
         const id = randomUUID();

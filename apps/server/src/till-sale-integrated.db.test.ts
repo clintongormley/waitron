@@ -214,10 +214,8 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
   };
 }
 
-/** Set the location's `order_flow` AND the in-memory cfg to `mode`, so both agree. */
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   const venue = await setupVenue(mode);
-  suite.db.run(sql`update locations set order_flow = ${mode} where id = ${venue.cfg.locationId}`);
   return { ...venue, cfg: { ...venue.cfg, orderFlow: mode } };
 }
 
