@@ -3413,7 +3413,7 @@ now check the product's order; listed in the PR.
 the long name FIXED (W85b); the Unit button gap OPEN (W85c).** Found 2026-10-05 during W85a's
 check, and queued by the owner the same day as two items:
 
-- Fixed in W85b (2026-10-05): at 390 px in the demo venue, with Croquetas' variants open,
+- Fixed in W85b (#1243, 2026-10-05): at 390 px in the demo venue, with Croquetas' variants open,
   "Ración 10" showed as "Ración 1(" and the product's "4 variantes" as "4 variante", cut off by the
   pinned Actions column (`~/waitron-campaign/w85a-shots/shot-dark-390.png`, a local screenshot).
   The table is as wide as its widest row, so a long name widened the Name column and its end sat
@@ -3427,7 +3427,11 @@ check, and queued by the owner the same day as two items:
   390 px, 430-to-390 px and 1280 px cases in `apps/dashboard/src/widgets/product-list.test.ts`; the
   redraws tested are a branch opened (also with the table scrolled sideways), a search and
   selection turned on. Not covered: while a category is being renamed, its count and
-  asterisk follow the name box and are not capped.
+  asterisk follow the name box and are not capped. Open point for the owner: at 390 px in the demo
+  venue a name gets about 46 px, so most words break part-way ("Croqu" / "etas"); giving names
+  more room at phone width (for example narrower leading slots) is asked in the campaign's
+  questions file. Wrapping was chosen over an ellipsis because a phone cannot show a cut name's
+  full text.
 - Still open, W85c: in the product editor's variant table the Unit button sits against the Price
   heading with no gap. Seen in the same check, not traced.
 
