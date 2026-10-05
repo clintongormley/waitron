@@ -121,9 +121,19 @@ value. The retired `active` and `offered` fields are refused with `management.re
 (400, `field: "active"` or `field: "offered"`), whatever their value. An item no longer reached by
 this menu answers `menu_item.not_found` (404). Publish again to change what the till sells.
 
-`GET /management-api/catalogues/:id/prices` gives one row per active product reached by the
-working structure, including sold-out products. An inactive menu gives no rows. Each row is
-`{ menuItemId, productId, name, categoryId, placements, productPrice, override, effectivePrice, combined, variants }`.
+`PATCH /management-api/catalogues/:id/items/:itemId/variants/:variantId` sets or clears this
+menu's price for one size of the item's product, Active or Inactive, and leaves every other size's
+price as it is. The body is `{ price }`, a price or null; it returns 204. A missing `price`, or one
+that is neither a string nor null, answers `management.request_invalid` (400, `field: "price"`),
+and any other key in the body answers the same code naming that key. A malformed price answers
+`product.variant_invalid` (400, `field: "price"`); a size that is not one of the product's,
+`product.variant_not_found` (400); an item of another menu, or one this menu no longer reaches,
+`menu_item.not_found` (404).
+
+`GET /management-api/catalogues/:id/prices` gives one row per product reached by the working
+structure, Active or Inactive, including sold-out products. An inactive menu gives no rows. Each row is
+`{ menuItemId, productId, name, categoryId, placements, productPrice, override, effectivePrice, combined, active, variants }`,
+with `active` the product's own Active state.
 `productPrice` is the product's own price; `override` is this menu's saved price, which may be
 null. `combined` explains the resulting price, including each variant's. Each setting is either
 decided, with its `value`, `source` and `otherwise`, or a clash with its `candidates`. A source
@@ -137,9 +147,10 @@ size-level price decisions first, then the combined product price when there are
 source records whether it was decided at the size or product level. For example, if Drinks sets beer
 to €3.00 and Casa Delgado includes only Drinks' beer, Casa charges €3.00. If Casa also places that
 beer in its own Specials at the product's €2.80, the two values clash. Setting Casa's own beer
-price to €3.00 resolves it. `variants` keeps the menu's size prices as `{ variantId, price }`,
-one per Active size, with `price` null where this menu sets none; `combined.variants` explains
-their result.
+price to €3.00 resolves it. `variants` keeps the menu's size prices as
+`{ variantId, price, active }`, one per size, Inactive ones included, with `price` null where this
+menu sets none and `active` the size's own Active state; `combined.variants` explains each one's
+result.
 
 `GET /management-api/catalogues/:id/status` gives `{ state: "unpublished", clashes }`, or
 `{ state, clashes, version, publishedAt, hash }`, with `state` current or changed relative to the

@@ -366,12 +366,12 @@ the 2026-09-30 folders design; what remains:
   under the menu's heading, above the tabs, so on a phone the tree sits between it and the list it
   names; if someone else exactly undoes a move while it is saving, the move's answer is shown over
   their change until the menu is next read; and no accessibility test covers that message.
-- **The Prices tab (#670, #680).** The owner decided 2026-09-26 that removing a product's last
-  placement needs no warning before it clears the menu price and variant settings. Open: the
-  main-category filter offers every category, not only those on the menu; the product editor's help
-  lines and the price window's `menu_prices.variants_help` are paragraphs beside their inputs, not
-  linked to them (a `hint` shows only as the placeholder since C104, so moving them there would
-  hide them whenever the field holds a value); a variant row is announced by its name alone; and,
+- **The Price overrides tab (named Prices until W89; #670, #680).** The owner decided 2026-09-26
+  that removing a product's last placement needs no warning before it clears the menu price and
+  variant settings. Open: the main-category filter offers every category, not only those on the
+  menu; the product editor's help lines are paragraphs beside their inputs, not linked to them (a
+  `hint` shows only as the placeholder since C104, so moving them there would hide them whenever
+  the field holds a value); a variant row is announced by its name alone; and,
   from reading only, a Columns panel wider than a very narrow screen would not shrink to fit, and is
   not re-placed on resize.
 - **Publishing (#677).** After a publish the editor's heading shows the browser's clock until the
@@ -902,7 +902,7 @@ keeps just the sentence. The till and setup draw no `wt-data-table`, so
 nothing changed there. The empty case still shows the toolbar when the table has one, as before.
 Left open: the Payments screen's readers table gets no button, because "Add reader" sits beside
 each connected provider (none, one or several), so there is no single Add to put there, and the
-list is pre-filtered by status; and the menu prices table on a menu's Prices tab gets none either,
+list is pre-filtered by status; and the menu prices table on a menu's Price overrides tab gets none either,
 because its rows come from "Add products" on the Structure tab, shown for whichever menu or
 section is open (since W88, 2026-10-05, Add products is in the ⋮ of the menu's own row and of each
 section it owns). Found while building it, and fixed in the same change: on the
@@ -3215,6 +3215,32 @@ W90 must be exported again after upgrading: one exported just before W90 is refu
 one short (seen 2026-10-05 in a throwaway test, not kept); an older one is refused at the first
 module, in the order they are checked, whose count differs.
 
+**A menu's prices are one editable Price overrides field per row — DONE (W89, this PR,
+2026-10-05; owner 2026-10-04).** The menu editor's Prices tab is now "Price overrides" ("Precios
+propios"); its address keeps `view/prices`. Each product and each size has one price field in its
+row: blank, it shows the price it inherits as its placeholder — one amount, the range across a
+product's Active sizes, or "Set a price" beside a red Clash when its sources disagree (a product
+whose only clash is in one of its sizes shows "—" and says that a size's sources disagree and that
+size's price should be set); with an override, it shows that price. Enter or leaving the field
+saves it, Escape puts the stored price back, and emptying it gives the inheritance back. A refusal
+about the price also goes under its field and takes focus there; a status line that stays in view
+says what each save did — refused, or saved, with Undo. The window behind the product name, and the
+Before this menu, Menu price, Effective price, Price on this menu and From columns, are gone. Main
+category starts shown and keeps its filter; the table keeps its column choices under a new key
+(`waitron.menus.price-overrides`), so a choice saved for the old columns is not read (as W87 did
+for the Menus list). A Status column says Active or Inactive and links to the product's page; the
+tab now lists Inactive products and sizes (the management prices read includes them, each with
+`active`), while a menu's offers, and what it publishes, still leave them out. A new route,
+`PATCH /management-api/catalogues/:id/items/:itemId/variants/:variantId`, sets one size's price
+alone ([product-categories.md](developers/product-categories.md)); the dashboard no longer calls
+the whole-list `PUT …/variants`, which stays on the server. The pattern is written down in
+[design-system.md](developers/design-system.md), Forms → "A value saved from its own table row".
+No migration. The test checks this change rewrote or deleted are in the PR's "Changed test checks"
+and in the plan (`docs/superpowers/plans/2026-10-05-w89-menu-price-overrides.md`). Not checked:
+the tab on the running dev stack — the product page opening from a Status link, a real save and
+the re-read after it, and Undo against the real server (the look in Chromium used mounted widgets
+only).
+
 **A Products drag does not notice when a refresh removes what it is dragging or where it is going —
 DONE (W88a, #1228, 2026-10-05).** Found by W88's pre-merge review. The Products tree
 (`apps/dashboard/src/widgets/product-list.ts`) now checks a drag against the rows the list holds
@@ -3263,7 +3289,7 @@ menu's own editor is a link, which has no greyed-out state, so it stays live.
 **A menu's Preview tab is wider than a phone for a one-word menu name — OPEN (found by W88).** At
 390 px, with a menu named as one word longer than the screen, the page scrolls sideways on the
 Preview tab: the page measured 658 px wide on 2026-10-05 (a throwaway test with the heading suite's
-fixtures), while the Structure and Prices tabs measured 390 px. The editor's heading holds the word;
+fixtures), while the Structure and Prices (since W89, Price overrides) tabs measured 390 px. The editor's heading holds the word;
 the overflow is inside `dashboard-menu-preview` (`apps/dashboard/src/widgets/menu-preview.ts`).
 
 **Filtered table headings stay put — DONE (W64, owner 2026-10-04).** The conditional funnel button
@@ -4494,8 +4520,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     (`packages/venue-service/src/dashboard/venue-operations-screen.ts`), whose handler has no such
     check and which does not set `dismissible`. The rest were tried only with a hand-built
     `KeyboardEvent` (`sections-screen`, `modifiers-screen`, `add-to-menus`, `extra-list-form`,
-    `option-list-form`, `option-label-form`, `variant-form` and `menu-prices-table`, under
-    `apps/dashboard/src`) or not at all (`#guardEscape` in
+    `option-list-form`, `option-label-form` and `variant-form`, under `apps/dashboard/src`; the
+    menu prices window that was also on this list went in W89) or not at all (`#guardEscape` in
     `apps/dashboard/src/screens/menus-screen.ts`). **Next action:** repeat the reasons-screen case
     recording which element has focus just before the Escape; then press a real Escape during a
     save on each form tried only with a hand-built event or not at all, and move the ones that close
@@ -5442,12 +5468,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `packages/venue-service/src/dashboard/venue-operations-screen.ts`), not the refusal's own
   sentence (the setup half was done by C62, #895);
   (2) controls with no place for an error keep their refusal in the bottom message — `wt-switch`
-  (`active` on the ingredient, extras, options and menu-price forms; `available` on the product
+  (`active` on the ingredient, extras and options forms; `available` on the product
   editor), the allergen and dietary-origin pickers on the ingredient form, and the purchase form's
   VAT regime select;
   (3) refusals naming two fields or a row the refusal does not number stay at the bottom:
   `purchase.duplicate` (supplier tax id and invoice number), a purchase line's rate, base, tax or
-  type, a variant price on the menu price window, `hours.N` on venue operations,
+  type, `hours.N` on venue operations,
   `provisioning.duplicate_series_code` and `territory_country_mismatch` on the setup venue screen;
   (4) on the backup screen (its retention boxes done by C63, #860): a refusal naming
   `destinationDir` or `schedule` still shows in the page banner rather than under the folder field
