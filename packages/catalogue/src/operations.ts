@@ -1157,8 +1157,7 @@ async function patchProduct(
         throw new AppError("product.invalid", { field: "color" });
       });
   };
-  // A category refusal outranks a malformed colour; with no category in the patch, the colour is
-  // refused before the product is looked for.
+  // The refusal order is pinned by the "a product's own colour" cases in operations.test.ts.
   if (categoryId === undefined) assertColor();
   if (categoryId !== undefined || color !== undefined) {
     const [product] = await tx
@@ -1168,7 +1167,7 @@ async function patchProduct(
     if (!product) throw new AppError("product.not_found", { productId: id });
   }
   if (categoryId != null) await readCategory(tx, categoryId);
-  assertColor();
+  if (categoryId !== undefined) assertColor();
   if (allergens != null) validateAllergens(allergens);
   if (dietOverride !== undefined) validateDietOverride(dietOverride);
   const directDietary =
