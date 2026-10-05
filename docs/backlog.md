@@ -8553,8 +8553,25 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   switch-off; a kitchen course's **Remove** is the same kind of action: it sets `active: false` and
   keeps the row, and no screen lists it or brings it back (`deactivateCourse`; `listCourses` returns
   active courses only, `apps/server/src/kitchen.ts`). Both keep
-  "Remove" until the owner decides which they are. (d) Departments, zones, floor tables and adjustment reasons can be disabled
-  but no screen offers Enable for them. (e) a test gap, reported by W110's review and not
+  "Remove" until the owner decides which they are. (d) Zones and adjustment reasons now offer Enable (W110d, branch
+  `fix/enable-zones-and-reasons`): a disabled zone's row in the venue screen's policy tree, and a
+  disabled reason's row menu on the reasons screen (through a new
+  `POST /management-api/adjustments/reasons/:reasonId/reactivate`). Departments and floor tables
+  still cannot be enabled: a department needs an `active` field on
+  `PATCH /management-api/venue-service/departments/:departmentId`
+  (`packages/venue-service/src/routes.ts`), and floor tables need a list that includes disabled
+  tables plus `active` on `PATCH /management-api/tables/:id` (`apps/server/src/management-api.ts`,
+  `apps/dashboard/src/api/client.ts`). Both wait for lane D's A261-3 (#1269) to land, because it
+  changes those files. Found along the way, each left as it is: enabling a zone leaves its tables
+  disabled, and its routing exceptions, watcher zones and till starting zones gone, because
+  disabling deleted or switched those off and Enable does not restore them;
+  `PATCH /management-api/zones/:id` sets `active: true` on a zone whose department is disabled,
+  with no refusal (read in `updateZone`, `apps/server/src/tables.ts`, not run), though the screen
+  does not offer Enable there; a department's row in the policy tree still offers Disable when the
+  department is already disabled (zones had the same fault and W110d fixed it); and creating a
+  department with a name another department has answers 500 `server.internal`, because there is
+  no `department.name_taken` code (run on W110d's branch: a second
+  `POST /management-api/venue-service/departments` with the same name). (e) a test gap, reported by W110's review and not
   re-checked: `#fallbackReason` (`packages/venue-service/src/dashboard/prep-stations-screen.ts`)
   turns the server's `switched_off` reason into `prep.test_disabled` for both of its callers, and
   the review found no test for the caller that explains an extra falling back to another station.
