@@ -334,22 +334,34 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
     host.append(el);
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
+    const settingsTable = el.shadowRoot!.querySelector('[data-test="settings-table"]')!;
+    const settingsQ = (selector: string) =>
+      settingsTable.shadowRoot!.querySelector<HTMLElement>(selector)!;
+    const fallbackState = state.includes("fallback");
+    if (fallbackState) {
+      el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+        new CustomEvent("wt-tab-change", { detail: { value: "settings" } }),
+      );
+      await el.updateComplete;
+      await (settingsTable as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+      settingsQ('[data-test="edit-settings-fallback-bar"]').click();
+      await el.updateComplete;
+      if (state === "fallback-confirmation") {
+        settingsQ('[data-test="save-settings-cell"]').click();
+        await el.updateComplete;
+        expect(settingsQ('[data-test="settings-fallback-confirmation"]')).not.toBeNull();
+      }
+    }
     const action = state.includes("hours")
       ? "edit-hours"
-      : state.includes("fallback")
-        ? "change-fallback"
-        : state === "close-confirmation" || state === "refused-close"
-          ? "close-today"
-          : state === "switch-off" || state === "refused-switch-off"
-            ? "switch-off"
-            : null;
+      : state === "close-confirmation" || state === "refused-close"
+        ? "close-today"
+        : state === "switch-off" || state === "refused-switch-off"
+          ? "switch-off"
+          : null;
     if (action) {
       el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${action}-bar"]`)!.click();
       await el.updateComplete;
-      if (state === "fallback-confirmation") {
-        el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-station-action"]')!.click();
-        await el.updateComplete;
-      }
       if (state === "invalid-hours" || state === "refused-hours") {
         const form = el.shadowRoot!.querySelector("station-hours-form")!;
         await (form as unknown as { updateComplete: Promise<boolean> }).updateComplete;
@@ -359,23 +371,35 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
     }
     if (state.startsWith("refused-")) {
       if (state === "refused-fallback") {
-        el.shadowRoot!.querySelector('[data-test="station-fallback"]')!.dispatchEvent(
+        settingsQ('[data-test="settings-choice"]').dispatchEvent(
           new CustomEvent("wt-change", { detail: { value: "" } }),
         );
         await el.updateComplete;
-      }
-      if (state !== "refused-hours") {
+        settingsQ('[data-test="save-settings-cell"]').click();
+        await el.updateComplete;
+        settingsQ('[data-test="save-settings-cell"]').click();
+      } else if (state !== "refused-hours") {
         el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-station-action"]')!.click();
         await el.updateComplete;
-        if (state === "refused-fallback" || state === "refused-switch-off")
+        if (state === "refused-switch-off")
           el.shadowRoot!.querySelector<HTMLElement>(
             '[data-test="confirm-station-action"]',
           )!.click();
       }
       await new Promise((r) => setTimeout(r, 0));
       await el.updateComplete;
-      const form = el.shadowRoot!.querySelector("station-hours-form");
-      expect((form?.shadowRoot ?? el.shadowRoot)!.querySelector('[role="alert"]')).not.toBeNull();
+      if (state === "refused-fallback") {
+        const choice = settingsQ('[data-test="settings-choice"]') as HTMLElement & {
+          error: string;
+          value: string;
+        };
+        expect(choice.error).toContain("loop");
+        expect(choice.value).toBe("");
+        expect(settingsQ('[data-test="save-settings-cell"]').hasAttribute("disabled")).toBe(false);
+      } else {
+        const form = el.shadowRoot!.querySelector("station-hours-form");
+        expect((form?.shadowRoot ?? el.shadowRoot)!.querySelector('[role="alert"]')).not.toBeNull();
+      }
     }
     await expectNoA11yViolations(host);
   });

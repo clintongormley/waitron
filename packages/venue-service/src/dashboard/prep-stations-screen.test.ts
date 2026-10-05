@@ -320,6 +320,107 @@ it.each([
   },
 );
 
+it.each(["[name^=fallback-]", "[data-test^=change-fallback-]"])(
+  "keeps fallback editing %s out of Routing while preserving category assignments",
+  async (selector) => {
+    const next = withUpstairs({ open: false, why: "out_of_hours" });
+    next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
+    next.routing.stations.push({ id: "retired", name: "Retired", active: false });
+    const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
+    const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
+    expect(routing.querySelector('[data-test="claim-upstairs"]')).not.toBeNull();
+    expect(routing.querySelector('[data-test="test-product"]')).not.toBeNull();
+    expect(routing.querySelector(selector)).toBeNull();
+  },
+);
+
+function settingsQ(el: PrepStationsScreen, selector: string) {
+  return el
+    .shadowRoot!.querySelector('[data-test="settings-table"]')!
+    .shadowRoot!.querySelector<HTMLElement>(selector);
+}
+async function openSettingsFallback(el: PrepStationsScreen, stationId = "upstairs") {
+  el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+    new CustomEvent("wt-tab-change", { detail: { value: "settings" } }),
+  );
+  await settle(el);
+  settingsQ(el, `[data-test="edit-settings-fallback-${stationId}"]`)!.click();
+  await settle(el);
+  return settingsQ(el, '[data-test="settings-choice"]') as WtCombobox;
+}
+it("Settings retains disabled station fallback editing without enabling the station", async () => {
+  setLocale("en");
+  const next = withUpstairs({ open: false, why: "switched_off" });
+  next.stations[1]!.active = false;
+  next.stations[1]!.displayOrder = 0;
+  next.routing.stations[1]!.active = false;
+  const a = api({
+    load: vi.fn().mockResolvedValue(next),
+    setStationFallback: vi.fn(),
+    activateStation: vi.fn(),
+  });
+  const el = await mount(a);
+  const edit = settingsQ(el, '[data-test="edit-settings-fallback-upstairs"]');
+  expect(edit).not.toBeNull();
+  const rows = el
+    .shadowRoot!.querySelector('[data-test="settings-table"]')!
+    .shadowRoot!.querySelectorAll("tbody tr");
+  expect(rows[0]!.textContent).toContain("Bar");
+  expect(rows[0]!.textContent).not.toContain("Upstairs");
+  expect(rows[1]!.textContent).toContain("Upstairs bar (Disabled)");
+  const combo = await openSettingsFallback(el);
+  expect(combo.value).toBe("bar");
+  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "" } }));
+  await settle(el);
+  settingsQ(el, '[data-test="save-settings-cell"]')!.click();
+  await settle(el);
+  expect(a.setStationFallback).not.toHaveBeenCalled();
+  settingsQ(el, '[data-test="save-settings-cell"]')!.click();
+  await settle(el);
+  expect(a.setStationFallback).toHaveBeenCalledExactlyOnceWith("upstairs", null);
+  expect(a.activateStation).not.toHaveBeenCalled();
+  expect(a.updateStation).not.toHaveBeenCalled();
+});
+
+it("Settings confirms a retained disabled fallback without rewriting its unchanged mapping", async () => {
+  setLocale("en");
+  const next = withUpstairs(
+    { open: false, why: "out_of_hours" },
+    { fallbackStationId: "old", closedSendsTo: null },
+  );
+  next.routing.stations.push({ id: "old", name: "Old bar", active: false });
+  const a = api({
+    load: vi.fn().mockResolvedValue(next),
+    setStationFallback: vi.fn().mockRejectedValue({ code: "route.station_inactive" }),
+  });
+  const el = await mount(a);
+  const combo = await openSettingsFallback(el);
+  expect(combo.value).toBe("old");
+  settingsQ(el, '[data-test="save-settings-cell"]')!.click();
+  await settle(el);
+  expect(settingsQ(el, '[data-test="settings-fallback-confirmation"]')!.textContent).toContain(
+    "Old bar",
+  );
+  expect(a.setStationFallback).not.toHaveBeenCalled();
+  settingsQ(el, '[data-test="save-settings-cell"]')!.click();
+  await settle(el);
+  expect(a.setStationFallback).not.toHaveBeenCalled();
+  expect(settingsQ(el, '[data-test="settings-choice"]')).toBeNull();
+  expect(settingsQ(el, '[data-test="edit-settings-fallback-upstairs"]')!.textContent).toContain(
+    "Old bar",
+  );
+});
+
+it("Settings fallback retains the localized search prompt and empty-choice placeholder", async () => {
+  setLocale("es");
+  const el = await mount(
+    api({ load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })) }),
+  );
+  const combo = await openSettingsFallback(el);
+  expect(combo.searchPlaceholder).toBe("Buscar estaciones");
+  expect(combo.placeholder).toBe("Sin sustituta (el TPV pregunta)");
+});
+
 it.each(
   ([390, 1280] as const).flatMap((width) =>
     (["en", "es"] as const).flatMap((locale) =>
@@ -338,7 +439,17 @@ it.each(
     expect(window.innerWidth).toBe(width);
     setLocale(locale);
     history.replaceState(null, "", "/manage/prep-stations/view/routing");
-    const el = await mount(api({ load: vi.fn().mockResolvedValue(ticketView) }), theme);
+    const timed = withUpstairs({ open: false, why: "out_of_hours" });
+    const visualView = {
+      ...ticketView,
+      stations: [...timed.stations, { ...upstairs, id: "retired", name: "Retired", active: false }],
+      routing: {
+        ...ticketView.routing,
+        stations: [...timed.routing.stations, { id: "retired", name: "Retired", active: false }],
+        stationTimes: timed.routing.stationTimes,
+      },
+    };
+    const el = await mount(api({ load: vi.fn().mockResolvedValue(visualView) }), theme);
     const host = el.parentElement!;
     host.style.background = "var(--wt-color-bg)";
     const canvas = getComputedStyle(host).backgroundColor;
@@ -353,7 +464,17 @@ it.each(
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     await page.screenshot({
       path: `look/routing-handover-${locale}-${theme}-${width}-routing.png`,
+      element: el,
     });
+    el.shadowRoot!.querySelector('[data-test="station-upstairs"]')!.scrollIntoView();
+    await page.screenshot({
+      path: `look/routing-fallback-${locale}-${theme}-${width}-station.png`,
+    });
+    el.shadowRoot!.querySelector('[data-test="inactive-retired"]')!.scrollIntoView();
+    await page.screenshot({
+      path: `look/routing-fallback-${locale}-${theme}-${width}-inactive.png`,
+    });
+    tabs.scrollIntoView();
     tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "tickets" } }));
     await settle(el);
     const tickets = el.shadowRoot!.querySelector('[data-test="tickets-table"]')!;
@@ -455,6 +576,7 @@ it.each([
 ] as const)(
   "shows a %s refusal in Settings without changing the saved station choice",
   async (code, params, fieldError) => {
+    setLocale("en");
     const a = api({ updateStation: vi.fn().mockRejectedValue({ code, params }) });
     const el = await mount(a);
     const table = el.shadowRoot!.querySelector('[data-test="settings-table"]')!;
@@ -2089,15 +2211,13 @@ it("retains a disabled fallback in its editor but clears it for Disable", async 
     }),
   });
   const el = await mount(a);
-  q(el, '[data-test="change-fallback-upstairs"]')!.click();
-  await settle(el);
-  const combo = q(el, '[data-test="station-fallback"]') as HTMLElement & {
+  const combo = (await openSettingsFallback(el)) as HTMLElement & {
     value: string;
     options: { value: string; label: string }[];
   };
   expect(combo.options).toContainEqual({ value: "old", label: "Old bar (disabled)" });
   expect(combo.value).toBe("old");
-  q(el, '[data-test="station-action-modal"]')!.dispatchEvent(new CustomEvent("wt-close"));
+  settingsQ(el, '[data-test="cancel-settings-cell"]')!.click();
   await settle(el);
   q(el, '[data-test="switch-off-upstairs"]')!.click();
   await settle(el);
@@ -2195,6 +2315,7 @@ it.each([
 ] as const)(
   "confirms fallback with source open=%s target open=%s choice=%s",
   async (sourceOpen, targetOpen, choice, destination, expected) => {
+    setLocale("en");
     const next = withUpstairs(
       sourceOpen ? { open: true, why: "in_hours" } : { open: false, why: "out_of_hours" },
       { fallbackStationId: null },
@@ -2206,9 +2327,7 @@ it.each([
     };
     const a = api({ load: vi.fn().mockResolvedValue(next), setStationFallback: vi.fn() });
     const el = await mount(a);
-    q(el, '[data-test="change-fallback-upstairs"]')!.click();
-    await settle(el);
-    const combo = q(el, '[data-test="station-fallback"]') as HTMLElement & {
+    const combo = (await openSettingsFallback(el)) as HTMLElement & {
       options: { value: string; label: string }[];
       placeholder: string;
     };
@@ -2219,15 +2338,17 @@ it.each([
     ]);
     combo.dispatchEvent(new CustomEvent("wt-change", { detail: { value: choice } }));
     await settle(el);
-    q(el, '[data-test="confirm-station-action"]')!.click();
+    settingsQ(el, '[data-test="save-settings-cell"]')!.click();
     await settle(el);
-    expect(q(el, '[data-test="fallback-confirmation"]')!.textContent).toContain(expected);
-    if (sourceOpen)
-      expect(q(el, '[data-test="fallback-confirmation"]')!.textContent).not.toContain(
-        "That starts now.",
-      );
     expect(a.setStationFallback).not.toHaveBeenCalled();
-    q(el, '[data-test="confirm-station-action"]')!.click();
+    expect(settingsQ(el, '[data-test="settings-fallback-confirmation"]')!.textContent).toContain(
+      expected,
+    );
+    if (sourceOpen)
+      expect(
+        settingsQ(el, '[data-test="settings-fallback-confirmation"]')!.textContent,
+      ).not.toContain("That starts now.");
+    settingsQ(el, '[data-test="save-settings-cell"]')!.click();
     await settle(el);
     if (choice) expect(a.setStationFallback).toHaveBeenCalledWith("upstairs", choice);
   },
@@ -2238,15 +2359,12 @@ it("saves no replacement as null", async () => {
     setStationFallback: vi.fn(),
   });
   const el = await mount(a);
-  q(el, '[data-test="change-fallback-upstairs"]')!.click();
+  const combo = await openSettingsFallback(el);
+  combo!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "" } }));
   await settle(el);
-  q(el, '[data-test="station-fallback"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "" } }),
-  );
+  settingsQ(el, '[data-test="save-settings-cell"]')!.click();
   await settle(el);
-  q(el, '[data-test="confirm-station-action"]')!.click();
-  await settle(el);
-  q(el, '[data-test="confirm-station-action"]')!.click();
+  settingsQ(el, '[data-test="save-settings-cell"]')!.click();
   await settle(el);
   expect(a.setStationFallback).toHaveBeenCalledWith("upstairs", null);
 });
@@ -2262,20 +2380,15 @@ it.each(["station.fallback_loop", "route.station_inactive"])(
       setStationFallback: vi.fn().mockRejectedValue({ code }),
     });
     const el = await mount(a);
-    q(el, '[data-test="change-fallback-upstairs"]')!.click();
+    const combo = await openSettingsFallback(el);
+    combo!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bar" } }));
     await settle(el);
-    q(el, '[data-test="station-fallback"]')!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "bar" } }),
-    );
+    settingsQ(el, '[data-test="save-settings-cell"]')!.click();
     await settle(el);
-    q(el, '[data-test="confirm-station-action"]')!.click();
+    settingsQ(el, '[data-test="save-settings-cell"]')!.click();
     await settle(el);
-    q(el, '[data-test="confirm-station-action"]')!.click();
-    await settle(el);
-    expect(q(el, '[data-field-error="fallback"]')?.textContent).toContain(
-      code === "station.fallback_loop"
-        ? "loop"
-        : "This station is disabled. Choose an active station.",
+    expect((settingsQ(el, '[data-test="settings-choice"]') as WtCombobox).error).toContain(
+      code === "station.fallback_loop" ? "loop" : "This station is disabled. Choose an active station.",
     );
   },
 );
@@ -2473,13 +2586,13 @@ it("refreshes output warnings every minute and clears the timer when removed", a
   }
 });
 
-it("offers the fallback directly on the active station card and confirms a changed selection", async () => {
+it("offers the fallback in Settings and confirms a changed selection", async () => {
   const a = api({
     load: vi.fn().mockResolvedValue(withUpstairs({ open: false, why: "out_of_hours" })),
     setStationFallback: vi.fn(),
   });
   const el = await mount(a);
-  const combo = q(el, '[data-test="fallback-upstairs"]') as HTMLElement & {
+  const combo = (await openSettingsFallback(el)) as HTMLElement & {
     value: string;
     options: { value: string; label: string }[];
   };
@@ -2488,11 +2601,13 @@ it("offers the fallback directly on the active station card and confirms a chang
   expect(combo.options[0]).toEqual({ value: "", label: "No replacement (the till asks)" });
   combo.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "" } }));
   await settle(el);
-  expect(q(el, '[data-test="fallback-confirmation"]')!.textContent).toContain(
+  settingsQ(el, '[data-test="save-settings-cell"]')!.click();
+  await settle(el);
+  expect(settingsQ(el, '[data-test="settings-fallback-confirmation"]')!.textContent).toContain(
     "While Upstairs bar is closed, the till will ask where to send its dishes.",
   );
   expect(a.setStationFallback).not.toHaveBeenCalled();
-  q(el, '[data-test="confirm-station-action"]')!.click();
+  settingsQ(el, '[data-test="save-settings-cell"]')!.click();
   await settle(el);
   expect(a.setStationFallback).toHaveBeenCalledWith("upstairs", null);
 });
@@ -2524,9 +2639,7 @@ it("refreshes the saved fallback when the following disable fails", async () => 
   await settle(el);
   q(el, '[data-test="confirm-station-action"]')!.click();
   await settle(el);
-  expect((q(el, '[data-test="fallback-upstairs"]') as HTMLElement & { value: string }).value).toBe(
-    "bar",
-  );
+  expect((await openSettingsFallback(el)).value).toBe("bar");
   expect(q(el, '[data-test="station-upstairs"]')!.textContent).toContain("Its work goes to Bar.");
   expect(
     q(el, '[data-test="station-action-modal"]')!.querySelector('[role="alert"]')!.textContent,
@@ -2538,7 +2651,7 @@ it("localizes the fallback search field in Spanish", async () => {
   const el = await mount(
     api({ load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })) }),
   );
-  const combo = q(el, '[data-test="fallback-upstairs"]')!;
+  const combo = await openSettingsFallback(el);
   combo.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
   await settle(el);
   expect(combo.shadowRoot!.querySelector<HTMLInputElement>("input")!.placeholder).toBe(

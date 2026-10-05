@@ -605,3 +605,26 @@ Moved field-refusal control in an independent frozen-installed candidate failed 
 while its unrelated refusal passed; changing the saved choice failed both moved refusal
 cases while five Routing controls passed. Restoring both passed all seven selected cases.
 Final formatting/lint and checkpoint details are recorded in the campaign ledger.
+
+## 2026-10-05 implementation checkpoint: Routing fallback handover
+
+Routing no longer offers either the active card's fallback picker/change button or the disabled
+card's change button. Settings keeps the fallback selection and destination confirmation in its
+cell, including a retained disabled destination, no replacement as null and retryable loop/inactive
+refusals. Its picker retains the localized station-search prompt and empty-choice placeholder.
+Disable still has its separate replacement confirmation; this checkpoint does not retire it.
+
+Existing fallback destination, null, refusal, search and accessibility checks now exercise Settings.
+The first new absence/search checks failed before implementation. Station Today/default/rename,
+Disable/Enable and whole-record edit handover remain before Task 4 is complete. Task 8 whole-branch
+review, rebase, normal hook, current-head CI and authorised landing remain after that work.
+
+The handover retains disabled stations at the bottom of Settings with a localized Disabled label.
+Their old standalone Routing editor could change a fallback without enabling the station, so
+filtering them out of Settings would remove an existing action. A new UI check failed on the
+missing cell, then passed with the exact null write and no Enable or station-update call.
+
+The old standalone editor skipped an unchanged fallback write. Settings now keeps that behavior,
+including an already stored disabled destination: it still confirms the destination, then closes
+without resubmitting the mapping. A new browser check first observed the unwanted request and
+then passed; changed destinations continue through the existing write/refusal cases.

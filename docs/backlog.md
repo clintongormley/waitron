@@ -6332,7 +6332,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Default/Disabled labels and separate printer/screen problems. Health refreshes retain open drafts;
   read recovery waits for the failing read and preserves action refusals. The five subject tabs now
   have stable deep links, Back restoration and creation actions beside the strip; old tester links
-  open Routing, whose existing controls remain mounted. Interim station hours sit below the panels.
+  open Routing, where category claims, exceptions and the tester remain mounted. Interim station
+  hours sit below the panels.
   Category wording and Disable/Enable actions apply in both languages. Tickets now lists printer
   selections, current kitchen screens and following watchers, with links to Devices and Watchers.
   Its multi-select saves a complete printer set in one request; a refused set retains its draft and
@@ -6377,8 +6378,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   loads only station metadata and current status, without printer, device or catalogue management
   reads; configuration tabs and actions are absent. Saved configuration links return to Stations.
   Routing cards no longer repeat printer/screen/watcher relationships, late-flag summaries or
-  the rest-of-order switch; those appear in Tickets and Settings. The remaining station-action
-  and fallback controls still need to leave Routing before its card replacement is complete.
+  the rest-of-order switch; those appear in Tickets and Settings. The standalone fallback editor
+  now lives
+  in the Settings cell, retaining destination confirmation, disabled choices, empty-to-null
+  saves and field refusals. Disabled stations remain editable at the bottom of Settings, labelled
+  Disabled; changing their fallback does not enable them. Confirming an unchanged fallback sends
+  no write, including a retained disabled destination. The remaining station-action and whole-record
+  edit controls still need to leave Routing before its card replacement is complete.
   Venue settings › Kitchen now reads and
   replaces the venue-wide late flags. Its required whole-minute fields validate every invalid
   value and their order, naming a station when the server refuses the effective result. A refusal

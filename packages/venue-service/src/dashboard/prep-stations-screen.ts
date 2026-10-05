@@ -1499,22 +1499,6 @@ export class PrepStationsScreen extends LitElement {
                 >
                 ${this.#times(s.id)?.today ? html`<wt-button variant="secondary" data-test=${`schedule-${s.id}`} @click=${() => this.#openStationAction({ kind: "today", stationId: s.id, state: null })}>${t("prep.back_to_schedule")}</wt-button>` : nothing}
               </div>
-              <wt-combobox
-                data-test=${`fallback-${s.id}`}
-                name=${`fallback-${s.id}`}
-                label=${t("prep.when_closed")}
-                placeholder=${t("prep.no_replacement_choice")}
-                .searchPlaceholder=${t("prep.search_stations")}
-                .options=${this.#fallbackOptions(s.id)}
-                .value=${live(this.#times(s.id)?.fallbackStationId ?? "")}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#openStationAction({ kind: "fallback", stationId: s.id, choice: event.detail.value, confirming: true })}
-              ></wt-combobox>
-              <wt-button
-                variant="secondary"
-                data-test=${`change-fallback-${s.id}`}
-                @click=${() => this.#openFallback(s.id, "fallback")}
-                >${t("prep.change_fallback")}</wt-button
-              >
             `
       }
       ${this.#chips(s.id)}
@@ -2087,9 +2071,11 @@ export class PrepStationsScreen extends LitElement {
         await this.api.updateStation(editor.stationId, {
           showsRestOfOrder: editor.value === "yes",
         });
-      else if (editor.field === "fallback")
-        await this.api.setStationFallback(editor.stationId, editor.value || null);
-      else
+      else if (editor.field === "fallback") {
+        const choice = editor.value || null;
+        if (choice !== this.#times(editor.stationId)?.fallbackStationId)
+          await this.api.setStationFallback(editor.stationId, choice);
+      } else
         await this.api.updateStation(editor.stationId, {
           [editor.field]: editor.value.trim() === "" ? null : Number(editor.value),
         });
@@ -2222,7 +2208,8 @@ export class PrepStationsScreen extends LitElement {
         .error=${invalid || editor.fieldError}
         .disabled=${this.settingsBusy}
         .required=${field === "rest"}
-        .searchPlaceholder=${label}
+        .placeholder=${field === "fallback" ? t("prep.no_replacement_choice") : ""}
+        .searchPlaceholder=${field === "fallback" ? t("prep.search_stations") : label}
         .noResultsLabel=${t("venue.combobox_no_results")}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
@@ -2341,11 +2328,21 @@ export class PrepStationsScreen extends LitElement {
     </div>`;
   }
   #settings() {
-    const stations = [...this.view!.stations]
-      .filter((station) => station.active)
-      .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
+    const stations = [...this.view!.stations].sort(
+      (a, b) =>
+        Number(b.active) - Number(a.active) ||
+        a.displayOrder - b.displayOrder ||
+        a.name.localeCompare(b.name),
+    );
     const columns: DataTableColumn<PrepStation>[] = [
-      { key: "name", label: t("prep.name"), cell: (station) => station.name },
+      {
+        key: "name",
+        label: t("prep.name"),
+        cell: (station) =>
+          html`<span part=${station.active ? "station-name" : "inherited"}
+            >${station.name}${station.active ? "" : ` (${t("prep.health.disabled")})`}</span
+          >`,
+      },
       ...TIMING_FIELDS.map((field) => ({
         key: field,
         label: t(TIMING_LABELS[field]),
@@ -3086,11 +3083,6 @@ export class PrepStationsScreen extends LitElement {
                                         ${this.#warnings(station.id)}
                                         <div class="actions">
                                           <wt-button
-                                            variant="secondary"
-                                            data-test=${`change-fallback-${station.id}`}
-                                            @click=${() => this.#openFallback(station.id, "fallback")}
-                                            >${t("prep.change_fallback")}</wt-button
-                                          ><wt-button
                                             data-test=${`switch-on-${station.id}`}
                                             @click=${() => this.#openStationAction({ kind: "switch_on", stationId: station.id })}
                                             >${t("prep.enable")}</wt-button

@@ -432,9 +432,13 @@ it.each([
     const previous = { width: window.innerWidth, height: window.innerHeight };
     try {
       await page.viewport(width, 900);
+      const saved = fallbackView();
+      saved.routing.stationTimes.find(
+        (station) => station.stationId === "grill",
+      )!.fallbackStationId = null;
       const el = await mount(
         api({
-          load: vi.fn().mockResolvedValue(fallbackView()),
+          load: vi.fn().mockResolvedValue(saved),
           updateStation: vi.fn().mockRejectedValue({
             code: "management.request_invalid",
             params: { field: "showsRestOfOrder" },
@@ -484,6 +488,9 @@ it.each([
       await settle(el);
       await page.elementLocator(q(el, "[data-test=edit-settings-fallback-grill]")!).click();
       await settle(el);
+      expect((q(el, "[data-test=settings-choice]") as WtCombobox).value).toBe("");
+      choose(el, "bar");
+      await settle(el);
       await page.elementLocator(q(el, "[data-test=save-settings-cell]")!).click();
       await settle(el);
       expect(q(el, "[data-test=settings-fallback-confirmation]")?.textContent).toContain("Bar");
@@ -496,6 +503,7 @@ it.each([
       expect((q(el, "[data-test=settings-choice]") as WtCombobox).error).toContain(
         locale === "en" ? "loop" : "bucle",
       );
+      expect(el.api.setStationFallback).toHaveBeenCalledExactlyOnceWith("grill", "bar");
       const save = q(el, "[data-test=save-settings-cell]")!.getBoundingClientRect();
       expect(save.left).toBeGreaterThanOrEqual(0);
       expect(save.right).toBeLessThanOrEqual(width);
