@@ -114,7 +114,7 @@ export async function routeToDemoPrinter(
   const profiles = await tx
     .select({ id: deviceProfiles.id })
     .from(deviceProfiles)
-    .where(isNull(deviceProfiles.deletedAt));
+    .where(isNull(deviceProfiles.retiredAt));
   for (const profile of profiles) {
     const lists = await readProfilePrinterLists(tx, profile.id);
     if (

@@ -9,7 +9,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 async function profileOf(deviceId: string) {
   const [row] = await suite.db
-    .select({ id: deviceProfiles.id, deletedAt: deviceProfiles.deletedAt })
+    .select({ id: deviceProfiles.id, retiredAt: deviceProfiles.retiredAt })
     .from(devices)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
     .where(eq(devices.id, deviceId));
@@ -29,7 +29,7 @@ describe("scriptSessionDevice", () => {
         name: "Script till",
         formFactor: "till",
         capabilities: [],
-        deletedAt: new Date().toISOString(),
+        retiredAt: new Date().toISOString(),
       })
       .returning({ id: deviceProfiles.id });
     const run = () =>
@@ -37,7 +37,7 @@ describe("scriptSessionDevice", () => {
 
     const first = await profileOf(await run());
     expect(first.id).not.toBe(retired!.id);
-    expect(first.deletedAt).toBeNull();
+    expect(first.retiredAt).toBeNull();
     // With a retired and a live profile both named so, the next run finds the live one.
     expect((await profileOf(await run())).id).toBe(first.id);
   });

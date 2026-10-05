@@ -276,7 +276,7 @@ const EXPECTED_UNIQUE_INDEXES = [
   "departments_location_name_key",
   "departments_one_default_per_location_key",
   "device_profile_printers_profile_role_printer_key",
-  "device_profiles_tenant_name_key",
+  "device_profiles_live_name_key",
   "devices_location_label_active_key",
   "dining_tables_location_label_key",
   "extra_list_items_list_product_uq",

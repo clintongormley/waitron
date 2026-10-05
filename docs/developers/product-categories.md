@@ -229,8 +229,9 @@ removed and offer to reset it (the plan's decision D14). `menu.layout_not_found`
 layout of another menu or an id that is no home layout; `layoutId` must be present, and anything
 but a well-formed id or null is `management.request_invalid` (400). A malformed profile id answers
 `device_profile.not_found` and a malformed menu id `catalogue.not_found`, both 404. Deleting a
-device profile deletes its choices, and a venue's configuration export carries them, remapped on
-import to the new menu and layout ids.
+device profile no device holds deletes its choices; a profile retired because only disabled devices
+hold it keeps them. A venue's configuration export carries the choices, remapped on import to the
+new menu and layout ids.
 
 A till reads the structure and the layouts from each menu's live version, not from the working
 state: both offers routes give each menu its `structure`, `homeLayouts` and `defaultHomeLayoutId`,

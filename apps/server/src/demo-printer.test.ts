@@ -183,7 +183,7 @@ describe("the Demo printer", () => {
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, revokedId));
     await suite.db
       .update(deviceProfiles)
-      .set({ deletedAt: new Date().toISOString() })
+      .set({ retiredAt: new Date().toISOString() })
       .where(eq(deviceProfiles.id, retiredId));
 
     const demo = await configureDemoPrinter(suite.db, locationId, true);

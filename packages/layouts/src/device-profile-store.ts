@@ -79,7 +79,7 @@ function toRow(row: StoredProfile, lists: ProfilePrinterLists): DeviceProfileRow
   };
 }
 
-const live = isNull(deviceProfiles.deletedAt);
+const live = isNull(deviceProfiles.retiredAt);
 
 const PROFILE_NAME: ConstraintTarget = { table: "device_profiles", columns: ["name"] };
 
@@ -92,15 +92,17 @@ const PROFILE_NAME: ConstraintTarget = { table: "device_profiles", columns: ["na
  * SQLite names no key in a foreign-key refusal, only its direction: 787 for a written value naming
  * no parent, 1811 for a delete a RESTRICT key refused. So the two foreign-key branches cannot tell
  * which key refused. That is sound only while each writer's `try` wraps ONE statement on
- * `device_profiles`, `canvas_id` is the only key out of it and `devices.device_profile_id` the only
- * key into it that can refuse — the schema half is pinned by `has ONE key out of device_profiles
- * and ONE key into it that can refuse` (device-profile-store.db.test.ts), which migrates core and
- * identity only. `device_profile_printers.device_profile_id` and the catalogue's
+ * `device_profiles`, `canvas_id` is the only key out of it, and every key into it that can refuse a
+ * delete is RESTRICT (a no-action key's refusal is 787, and would read as `bad_canvas_ref`) —
+ * pinned by `has ONE key out of device_profiles and ONE key into it that can refuse`
+ * (device-profile-store.db.test.ts), which migrates core and identity only. `deleteDeviceProfile` deletes only a profile no device row names,
+ * so a RESTRICT refusal there comes from some other key into the table and is still
+ * `device_profile.in_use` (`translates a refusal by a key the device check does not read`, same
+ * file). `device_profile_printers.device_profile_id` and the catalogue's
  * `device_profile_home_layouts.device_profile_id` also key into it and cascade, so neither refuses
  * a delete (the profile-deleted case in `apps/server/src/management-api.device-profiles.test.ts`).
  * `setProfilePrinterLists` runs after the `try`, so its refusals are never translated here. Widen a
- * `try` to a second statement and its foreign-key and RESTRICT refusals would be translated as this
- * table's, with nothing to catch it.
+ * `try` to a second statement and its foreign-key refusals would be translated as this table's.
  *
  * Exported for device-profile-store.test.ts, not from the package barrel.
  */
@@ -293,7 +295,7 @@ export async function deleteDeviceProfile(
     const now = nowIso();
     await tx
       .update(deviceProfiles)
-      .set({ deletedAt: now, updatedAt: now, canvasId: null })
+      .set({ retiredAt: now, updatedAt: now, canvasId: null })
       .where(eq(deviceProfiles.id, input.id));
     await tx
       .delete(deviceProfilePrinters)

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "426dbbb2-0239-4aeb-ac87-e392dd3ec23b",
+  "id": "3120884b-59cb-4cd0-a93c-8abc10d5fa78",
   "prevId": "25f1f4cf-2d7a-4c04-8915-b09192cfc4a9",
   "tables": {
     "locations": {
@@ -5330,8 +5330,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "deleted_at": {
-          "name": "deleted_at",
+        "retired_at": {
+          "name": "retired_at",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -5339,13 +5339,13 @@
         }
       },
       "indexes": {
-        "device_profiles_tenant_name_key": {
-          "name": "device_profiles_tenant_name_key",
+        "device_profiles_live_name_key": {
+          "name": "device_profiles_live_name_key",
           "columns": [
             "name"
           ],
           "isUnique": true,
-          "where": "\"device_profiles\".\"deleted_at\" is null"
+          "where": "\"device_profiles\".\"retired_at\" is null"
         }
       },
       "foreignKeys": {

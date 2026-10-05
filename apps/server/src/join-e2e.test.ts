@@ -483,6 +483,40 @@ describe("a disabled device comes back as the same device", () => {
     return { venue, mode, app, profileId, holdId, deviceId, jar };
   }
 
+  /** The device-profile routes, on an app of their own: they live in the management API. */
+  function mountProfiles(venue: Venue): Hono {
+    const app = new Hono();
+    mountManagementApi(
+      app,
+      {
+        db: suite.db,
+        cfg: venue.cfg,
+        secureCookies: false,
+        rpId: "localhost",
+        origin: "http://localhost",
+        credentialKeyRing: TOTP_KEY_RING,
+      },
+      noopLog,
+    );
+    return app;
+  }
+
+  async function deleteProfile(venue: Venue, profileId: string): Promise<Response> {
+    return send(mountProfiles(venue), "DELETE", `/management-api/device-profiles/${profileId}`, {
+      cookie: venue.managerCookie,
+    });
+  }
+
+  async function listedProfileIds(venue: Venue): Promise<string[]> {
+    const res = await send(mountProfiles(venue), "GET", "/management-api/device-profiles", {
+      cookie: venue.managerCookie,
+    });
+    expect(res.status).toBe(200);
+    return ((await res.json()) as { deviceProfiles: { id: string }[] }).deviceProfiles.map(
+      (profile) => profile.id,
+    );
+  }
+
   it("knocks as itself, is listed as returning, and Pair enables the same row with its settings", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountBoth(venue.cfg);
@@ -899,40 +933,6 @@ describe("a disabled device comes back as the same device", () => {
     expect(me.status).toBe(200);
     expect(await me.json()).toMatchObject({ deviceId });
   });
-
-  /** The device-profile routes, on an app of their own: they live in the management API. */
-  function mountProfiles(venue: Venue): Hono {
-    const app = new Hono();
-    mountManagementApi(
-      app,
-      {
-        db: suite.db,
-        cfg: venue.cfg,
-        secureCookies: false,
-        rpId: "localhost",
-        origin: "http://localhost",
-        credentialKeyRing: TOTP_KEY_RING,
-      },
-      noopLog,
-    );
-    return app;
-  }
-
-  async function deleteProfile(venue: Venue, profileId: string): Promise<Response> {
-    return send(mountProfiles(venue), "DELETE", `/management-api/device-profiles/${profileId}`, {
-      cookie: venue.managerCookie,
-    });
-  }
-
-  async function listedProfileIds(venue: Venue): Promise<string[]> {
-    const res = await send(mountProfiles(venue), "GET", "/management-api/device-profiles", {
-      cookie: venue.managerCookie,
-    });
-    expect(res.status).toBe(200);
-    return ((await res.json()) as { deviceProfiles: { id: string }[] }).deviceProfiles.map(
-      (profile) => profile.id,
-    );
-  }
 
   it("a profile whose only device was disabled deletes, and leaves the profile list", async () => {
     const { venue, profileId, deviceId } = await disabledTill();

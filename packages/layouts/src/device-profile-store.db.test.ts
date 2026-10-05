@@ -776,7 +776,10 @@ describe("device-profile store against a real migrated database", () => {
   });
 });
 
-/** The schema half of what `translateWriteError`'s foreign-key branches rest on (see its doc). */
+/**
+ * The keys out of and into device_profiles among core and identity's tables, which
+ * `translateWriteError`'s doc relies on.
+ */
 describe("what can refuse a write to device_profiles", () => {
   // Migrates core and identity only: a key from another module's set is not seen.
   it("has ONE key out of device_profiles and ONE key into it that can refuse", async () => {

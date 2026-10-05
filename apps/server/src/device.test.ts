@@ -126,8 +126,8 @@ async function setupVenue(): Promise<SeededVenue> {
   return { cfg, stationId: st.id };
 }
 
-/** `name` is unique (`device_profiles_tenant_name_key`), so a test seeding two profiles passes two
- * distinct names. */
+/** `name` is unique among profiles that are not retired (`device_profiles_live_name_key`), so a
+ * test seeding two profiles passes two distinct names. */
 async function seedProfile(formFactor: FormFactor, name: string): Promise<string> {
   const [row] = await suite.db
     .insert(deviceProfiles)

@@ -14,7 +14,7 @@ export async function scriptSessionDevice(
   const [existing] = await tx
     .select({ id: deviceProfiles.id })
     .from(deviceProfiles)
-    .where(and(eq(deviceProfiles.name, label), isNull(deviceProfiles.deletedAt)));
+    .where(and(eq(deviceProfiles.name, label), isNull(deviceProfiles.retiredAt)));
   const profileId =
     existing?.id ??
     (
