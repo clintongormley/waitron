@@ -284,6 +284,18 @@ describe("venue operations screen", () => {
     expect(modal(el)?.getAttribute("heading")).toBe("Add department");
   });
 
+  it("offers one Add department action above the policy tree", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const actions = el.shadowRoot!.querySelectorAll<HTMLElement>('[data-test="new-department"]');
+    expect(actions).toHaveLength(1);
+    expect(actions[0]!.closest('[data-test="policy-tree-actions"]')).not.toBeNull();
+    actions[0]!.click();
+    await settle(el);
+    expect(modal(el)?.getAttribute("heading")).toBe("Add department");
+  });
+
   it("creates a new zone under the chosen department from the policy tree", async () => {
     const createZone = vi.fn().mockResolvedValue({ id: "z3" });
     const el = await mount({
@@ -1141,13 +1153,18 @@ describe("venue operations screen", () => {
     expect(printTradingName).toBe(false);
   });
 
-  it("keeps Hours and zone-menu Add outside the tabs", async () => {
+  it("keeps the tree, Hours and zone-menu Add outside the tabs", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
     const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
     await selectTab(el, "departments");
-    expect(tabs.querySelector('[slot="actions"] [data-test="new-department"]')).not.toBeNull();
+    expect(tabs.querySelector('[slot="actions"] [data-test="new-department"]')).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector(
+        '[data-test="policy-tree-actions"] [data-test="new-department"]',
+      ),
+    ).not.toBeNull();
     expect(find(el, '[data-test="new-department"]')!.checkVisibility()).toBe(true);
     expect(tabs.querySelector('[slot="actions"] [data-test="new-hours"]')).toBeNull();
     expect(
@@ -2865,7 +2882,7 @@ describe("where focus goes when an editor opened from an Add button closes", () 
         ? `[data-test="hours-actions"] [data-test="${add}"]`
         : add.startsWith("new-assignment-")
           ? `[data-test="zone-menu-actions"] [data-test="${add}"]`
-          : `wt-tabs > [slot="actions"] [data-test="${add}"]`,
+          : `[data-test="policy-tree-actions"] [data-test="${add}"]`,
     );
     expect(button, add).not.toBeNull();
     return button!;

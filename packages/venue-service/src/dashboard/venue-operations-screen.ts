@@ -247,7 +247,7 @@ export class VenueOperationsScreen extends LitElement {
                 ? '[data-test="hours-actions"] [data-test="new-hours"]'
                 : opener.dataset.test?.startsWith("new-assignment-")
                   ? `[data-test="zone-menu-actions"] [data-test="${opener.dataset.test}"]`
-                  : `wt-tabs > [slot="actions"] [data-test="${opener.dataset.test}"]`,
+                  : `[data-test="policy-tree-actions"] [data-test="${opener.dataset.test}"]`,
             )
           : null;
       (opener?.isConnected ? opener : (twin ?? this.renderRoot.querySelector("wt-tabs")))?.focus();
@@ -487,11 +487,6 @@ export class VenueOperationsScreen extends LitElement {
       disabled: !this.model!.zones.some((row) => row.id === zoneId),
       run: () => this.#open({ kind: "assignment", zoneId }),
     };
-  }
-  #tabActions() {
-    return html`<div slot="actions">
-      ${this.view === "departments" ? this.#tabAction(this.#addDepartment()) : nothing}
-    </div>`;
   }
   #confirm(name: string, action: () => Promise<unknown>): void {
     this.#open({ kind: "delete", name, action });
@@ -1756,7 +1751,6 @@ export class VenueOperationsScreen extends LitElement {
                 ]}
                 @wt-tab-change=${this.#selectView}
               >
-                ${this.#tabActions()}
                 <div slot="departments">${this.#departments()}</div>
                 <div slot="zones">${this.#zones()}</div>
               </wt-tabs>
