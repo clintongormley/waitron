@@ -26,7 +26,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import { acceptsCatalogueDrop, type CategoryNameDraft, type ProductList } from "./product-list.js";
 import { coveredByRule, folderMadeAt, type FolderMadeAt } from "./folder-made-at.js";
-import { categoryTree } from "./classification-fields.js";
+import { categoryTree, PATH_SEPARATOR } from "./classification-fields.js";
 
 @customElement("dashboard-catalogue-browser")
 export class CatalogueBrowser extends LitElement {
@@ -371,7 +371,7 @@ export class CatalogueBrowser extends LitElement {
     const walk = (parentId: string | null): void => {
       for (const category of children.get(parentId) ?? []) {
         if (pathOf.has(category.id)) continue;
-        const path = categoryPath(category, this.categories);
+        const path = categoryPath(category, this.categories, PATH_SEPARATOR);
         pathOf.set(category.id, path);
         (sharing.get(path) ?? sharing.set(path, []).get(path)!).push(category.id);
         walk(category.id);

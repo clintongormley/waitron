@@ -1547,8 +1547,8 @@ it("shows the new counts instead of deleting when only the category's own routin
   expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
 });
 it.each([
-  ["en-GB", ["Mains (2 of 3)", "Drinks / Beer"]],
-  ["es", ["Mains (2 de 3)", "Drinks / Beer"]],
+  ["en-GB", ["Mains (2 of 3)", "Drinks › Beer"]],
+  ["es", ["Mains (2 de 3)", "Drinks › Beer"]],
 ] as const)(
   "names each category it would delete by its path, numbering one whose path others share (%s)",
   async (locale, names) => {
@@ -1598,7 +1598,7 @@ it("numbers categories sharing a path in the order the list draws them, each und
   await press(el, "delete");
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   expect(el.shadowRoot!.querySelector('[data-test="deleting"] li')!.textContent!.trim()).toBe(
-    "Food / Mains (2 of 2)",
+    "Food › Mains (2 of 2)",
   );
 });
 it("shows a shared category name literally beside its number, even when it reads like a placeholder", async () => {
