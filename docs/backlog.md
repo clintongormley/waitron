@@ -5234,7 +5234,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   held only by `wt-data-table`'s own tests.
   Left OPEN by W105, not acted on: (5) a kitchen screen whose station or watcher was switched off
   opens with Shows empty, so even a rename asks for a new one; whether to let it keep a switched-off
-  one is the owner's call. (6) done by W105a: printers and devices both say Disable/Deshabilitar,
+  one is the owner's call. (6) done by W105a (#1244): printers and devices both say Disable/Deshabilitar,
   status Disabled, and printers' Add again is now Enable; card readers, out of its scope, still say
   Disable/Desactivar, Enable/Activar, Disabled/Desactivado and Add again/Volver a añadir. (7) a
   kitchen screen's Edit dialog hides Made here but still sends its stored made-here stations that
@@ -8110,7 +8110,7 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   record is switched off rather than deleted — deciding first whether a disabled printer or a disabled
   login is really the same state as an inactive product — then change the English and Spanish
   strings together and record the rule in `docs/developers/design-system.md`. String keys are not
-  renamed on the way (only their text). W105a (2026-10-05) already moved printers, print agents
+  renamed on the way (only their text). W105a (#1244, 2026-10-05) already moved printers, print agents
   and devices to **Disable / Deshabilitar**, status **Disabled** (Deshabilitada for a printer,
   Deshabilitado for an agent or a device), and printers and print agents to **Enable / Habilitar**
   (devices get Enable in a later campaign item, W105b); it renamed their keys as an exception its own spec asked for,
