@@ -330,7 +330,7 @@ export const en = {
   "receipts.email": "Email",
   "receipts.email_hint": "e.g. hello@yourvenue.com",
   "receipts.invalid_phone":
-    "Enter a phone number with at least 6 digits, using only digits, spaces and + ( ) . - /",
+    "Enter a phone number of 6 to 15 digits, using only digits, spaces and + ( ) . -",
   "receipts.invalid_email": "Enter an email address such as name@example.com.",
   "receipts.invalid_logo": "Choose an image from the library.",
   "receipts.logo_not_found": "This image is no longer in the library. Choose another.",
@@ -2511,7 +2511,7 @@ export const es: Record<StringKey, string> = {
   "receipts.email": "Correo electrónico",
   "receipts.email_hint": "p. ej., hola@tulocal.es",
   "receipts.invalid_phone":
-    "Escribe un teléfono de al menos 6 cifras, usando solo cifras, espacios y + ( ) . - /",
+    "Escribe un teléfono de 6 a 15 cifras, usando solo cifras, espacios y + ( ) . -",
   "receipts.invalid_email": "Escribe un correo electrónico como nombre@ejemplo.com.",
   "receipts.invalid_logo": "Elige una imagen de la biblioteca.",
   "receipts.logo_not_found": "Esta imagen ya no está en la biblioteca. Elige otra.",

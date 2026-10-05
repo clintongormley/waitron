@@ -1,7 +1,7 @@
 import { DraftRows, QueryController } from "@waitron/dashboard-kit";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { resolveContentText, type ContentLanguages } from "@waitron/shared";
+import { isValidTelephone, resolveContentText, type ContentLanguages } from "@waitron/shared";
 import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -43,6 +43,19 @@ const MARK_NAMES: readonly ReceiptMarkName[] = [
 ];
 
 type Trim = Record<TextField, string> & { printAddress: boolean; logo: string | null };
+
+const MAX_LENGTH = { phone: 30, email: 254 } as const;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Why a save would refuse this trimmed phone or email; "" when it would not, blank included. */
+function contactProblem(field: "phone" | "email", value: string): string {
+  if (value === "") return "";
+  if (value.length > MAX_LENGTH[field]) {
+    return t("receipts.trim_too_long").replace("{max}", String(MAX_LENGTH[field]));
+  }
+  if (field === "phone") return isValidTelephone(value) ? "" : t("receipts.invalid_phone");
+  return EMAIL.test(value) ? "" : t("receipts.invalid_email");
+}
 
 /** The field a `receipt.invalid` names, if it is one this page shows. */
 function refusedField(error: unknown): TrimField | undefined {
@@ -484,11 +497,6 @@ export class ReceiptsScreen extends LitElement {
     this.#previewTimer = setTimeout(() => void this.#sendPreview(), RECEIPT_PREVIEW_QUIET_MS);
   }
 
-  /**
-   * One request at a time; text typed meanwhile is sent once, as it stands, when it returns. Text
-   * already asked for at the same width is not asked for again. A preview only another session's save asked for goes
-   * through the passive client, so it does not count as this person's activity.
-   */
   async #sendPreview(): Promise<void> {
     if (this.#previewInFlight) {
       this.#previewAgain = true;
@@ -497,6 +505,9 @@ export class ReceiptsScreen extends LitElement {
     const client = this.#previewActive ? this.api : (this.api.background ?? this.api);
     this.#previewActive = false;
     const config = this.#trim();
+    for (const field of ["phone", "email"] as const) {
+      if (contactProblem(field, config[field] ?? "") !== "") delete config[field];
+    }
     const width = this.chosenWidth;
     const language = this.#changedLanguage();
     const requested = JSON.stringify([config, width, language, this.previewDepartmentId]);
@@ -504,28 +515,14 @@ export class ReceiptsScreen extends LitElement {
     this.#previewRequested = requested;
     this.#previewInFlight = true;
     const departmentId = this.previewDepartmentId;
-    const draw = (drawn: ReceiptConfig) =>
-      departmentId !== null
-        ? client.previewReceipt(drawn, width ?? undefined, language ?? undefined, departmentId)
-        : language !== null
-          ? client.previewReceipt(drawn, width ?? undefined, language)
-          : width === null
-            ? client.previewReceipt(drawn)
-            : client.previewReceipt(drawn, width);
-    let drawn = config;
     try {
-      for (;;) {
-        try {
-          this.preview = await draw(drawn);
-          break;
-        } catch (error) {
-          // A phone or email the server would refuse is drawn without, as no receipt prints it.
-          const field = refusedField(error);
-          if ((field !== "phone" && field !== "email") || drawn[field] === undefined) throw error;
-          drawn = { ...drawn };
-          delete drawn[field];
-        }
-      }
+      this.preview = await (departmentId !== null
+        ? client.previewReceipt(config, width ?? undefined, language ?? undefined, departmentId)
+        : language !== null
+          ? client.previewReceipt(config, width ?? undefined, language)
+          : width === null
+            ? client.previewReceipt(config)
+            : client.previewReceipt(config, width));
       this.previewFailed = false;
     } catch {
       this.previewFailed = true;
@@ -632,6 +629,21 @@ export class ReceiptsScreen extends LitElement {
     return this.description.trim() === "" ? t("location_settings.required") : "";
   }
 
+  #failsOwnChecks(): boolean {
+    return (
+      this.#validate() !== "" ||
+      contactProblem("phone", this.phone.trim()) !== "" ||
+      contactProblem("email", this.email.trim()) !== ""
+    );
+  }
+
+  #contactError(field: "phone" | "email"): string {
+    return (
+      (this.attempted ? contactProblem(field, this[field].trim()) : "") ||
+      (this.trimRefusals[field] ?? "")
+    );
+  }
+
   #descriptionError(): string {
     return (this.attempted ? this.#validate() : "") || this.refusal;
   }
@@ -664,7 +676,7 @@ export class ReceiptsScreen extends LitElement {
     this.refusal = "";
     this.languageRefusal = "";
     this.languageError = null;
-    if (this.#validate() !== "") {
+    if (this.#failsOwnChecks()) {
       await this.updateComplete;
       await focusFirstInvalid(this.#form());
       return;
@@ -738,6 +750,7 @@ export class ReceiptsScreen extends LitElement {
         label=${t("receipts.logo")}
         .image=${this.logo}
         .invalid=${error !== undefined}
+        .disabled=${this.saving}
         @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
           event.stopPropagation();
           this.#changeLogo(event.detail.image);
@@ -787,7 +800,7 @@ export class ReceiptsScreen extends LitElement {
       label=${t(`receipts.${field}`)}
       hint=${t(`receipts.${field}_hint`)}
       .value=${this[field]}
-      error=${this.trimRefusals[field] ?? ""}
+      error=${this.#contactError(field)}
       ?disabled=${this.saving}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
@@ -867,7 +880,9 @@ export class ReceiptsScreen extends LitElement {
     const marked =
       descriptionError !== "" ||
       this.languageRefusal !== "" ||
-      Object.keys(this.trimRefusals).length > 0;
+      Object.keys(this.trimRefusals).length > 0 ||
+      this.#contactError("phone") !== "" ||
+      this.#contactError("email") !== "";
     const bottom = [
       this.languageError ?? "",
       this.errorKey === null
@@ -939,7 +954,7 @@ export class ReceiptsScreen extends LitElement {
           data-test="save"
           variant="primary"
           ?loading=${this.saving}
-          ?disabled=${this.saving || (this.attempted && this.#validate() !== "")}
+          ?disabled=${this.saving || (this.attempted && this.#failsOwnChecks())}
           @click=${() => void this.#save()}
           >${t("action.save")}</wt-button
         ></wt-form-actions

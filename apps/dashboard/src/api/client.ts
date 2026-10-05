@@ -394,7 +394,7 @@ export interface ReceiptConfig {
   logo?: string;
 }
 
-/** The parts of a receipt's top block a preview marks. */
+/** The parts of a receipt a preview marks. */
 export type ReceiptMarkName =
   "headerSubtitle" | "footerMessage" | "phone" | "email" | "address" | "logo";
 

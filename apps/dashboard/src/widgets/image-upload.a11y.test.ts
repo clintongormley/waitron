@@ -50,6 +50,22 @@ describe.each(["light", "dark"] as const)("image-upload a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  it.each([
+    ["in full", {}],
+    ["as a thumbnail", { thumbnail: true }],
+  ] as const)("renders accessibly while disabled %s", async (_, props) => {
+    const { el, host } = await mountWidget<ImageUpload>(
+      "dashboard-image-upload",
+      { api: stubApi(), image: "abc.png", disabled: true, ...props },
+      theme,
+    );
+    // Without this the scan could pass on a control that drew nothing disabled.
+    expect(el.shadowRoot!.querySelector("[data-test=choose-image]")!.hasAttribute("disabled")).toBe(
+      true,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("renders accessibly with the inherited photo", async () => {
     const { el, host } = await mountWidget<ImageUpload>(
       "dashboard-image-upload",

@@ -255,24 +255,42 @@ describe("saving the top block", () => {
   });
 
   it("previews the rest of the receipt while the phone is not yet a number it would print", async () => {
-    const api = stubApi(
-      {},
-      {
-        previewReceipt: vi.fn(async (config: ReceiptConfig) => {
-          if (config.phone === "91") {
-            throw { code: "receipt.invalid", params: { reason: "invalid_phone", field: "phone" } };
-          }
-          return fakePreview(config);
-        }),
-      },
-    );
+    const api = stubApi();
     const { el } = await mount(api);
     edit(el, "phone", "91");
     edit(el, "email", "hola@deli.es");
     await vi.waitFor(() => expect(paperLines(el)).toContain("hola@deli.es"));
     expect(previewCalls(api).at(-1)).toEqual({ email: "hola@deli.es" });
+    expect(previewCalls(api).filter((config) => "phone" in config)).toEqual([]);
     expect(q(el, "[data-test=preview-error]")).toBeNull();
     expect(q<WtInput>(el, "wt-input[name=phone]")!.error).toBe("");
+  });
+
+  it("asks for one preview per pause while the phone and email are half typed, leaving both out", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    const before = previewCalls(api).length;
+    edit(el, "phone", "91");
+    edit(el, "email", "hola@");
+    edit(el, "headerSubtitle", "Desde 1990");
+    await new Promise((resolve) => setTimeout(resolve, RECEIPT_PREVIEW_QUIET_MS + 100));
+    await flush(el);
+    expect(previewCalls(api).slice(before)).toEqual([{ headerSubtitle: "Desde 1990" }]);
+    expect(q(el, "[data-test=preview-error]")).toBeNull();
+    expect(q<WtInput>(el, "wt-input[name=phone]")!.error).toBe("");
+    expect(q<WtInput>(el, "wt-input[name=email]")!.error).toBe("");
+  });
+
+  it("previews without a phone over 30 characters or an email over 254, as a save would refuse them", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    const before = previewCalls(api).length;
+    edit(el, "phone", `123${" ".repeat(25)}456`);
+    edit(el, "email", `a@b.${"c".repeat(251)}`);
+    edit(el, "headerSubtitle", "Desde 1990");
+    await new Promise((resolve) => setTimeout(resolve, RECEIPT_PREVIEW_QUIET_MS + 100));
+    await flush(el);
+    expect(previewCalls(api).slice(before)).toEqual([{ headerSubtitle: "Desde 1990" }]);
   });
 
   it("outlines the line a focused field adds to the preview", async () => {
@@ -316,13 +334,135 @@ describe("the top block's keyboard and focus", () => {
   });
 });
 
+describe("the phone and email checks before a save", () => {
+  const saveButton = (el: ReceiptsScreen) =>
+    q<HTMLElement & { disabled: boolean }>(el, "[data-test=save]")!;
+
+  it("says nothing about a half-typed phone until Save is pressed", async () => {
+    const { el } = await mount();
+    edit(el, "phone", "91");
+    await flush(el);
+    expect(q<WtInput>(el, "wt-input[name=phone]")!.error).toBe("");
+    expect(saveButton(el).disabled).toBe(false);
+  });
+
+  it("refuses the save in the browser, under each field, until both are fixed", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    edit(el, "phone", "91");
+    edit(el, "email", "hola@deli");
+    await save(el);
+    expect(api.putReceipt).not.toHaveBeenCalled();
+    expect(api.putLocationSettings).not.toHaveBeenCalled();
+    const phone = q<WtInput>(el, "wt-input[name=phone]")!;
+    const email = q<WtInput>(el, "wt-input[name=email]")!;
+    expect(phone.error).toBe(t("receipts.invalid_phone"));
+    expect(email.error).toBe(t("receipts.invalid_email"));
+    expect(bottom(el)).toBe(t("form.fix_fields"));
+    expect(saveButton(el).disabled).toBe(true);
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(phone));
+    edit(el, "phone", "912 345 678");
+    await flush(el);
+    expect(phone.error).toBe("");
+    expect(saveButton(el).disabled).toBe(true);
+    edit(el, "email", "");
+    await flush(el);
+    expect(email.error).toBe("");
+    expect(bottom(el)).toBe("");
+    expect(saveButton(el).disabled).toBe(false);
+    await save(el);
+    expect(lastPut(api)).toEqual({ phone: "912 345 678" });
+  });
+
+  it("holds the phone to 30 characters and the email to 254 after trimming", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    edit(el, "phone", `123${" ".repeat(25)}456`);
+    edit(el, "email", `a@b.${"c".repeat(251)}`);
+    await save(el);
+    expect(api.putReceipt).not.toHaveBeenCalled();
+    const tooLong = (max: number) => t("receipts.trim_too_long").replace("{max}", String(max));
+    expect(q<WtInput>(el, "wt-input[name=phone]")!.error).toBe(tooLong(30));
+    expect(q<WtInput>(el, "wt-input[name=email]")!.error).toBe(tooLong(254));
+    edit(el, "phone", ` 123${" ".repeat(24)}456 `);
+    edit(el, "email", ` a@b.${"c".repeat(250)} `);
+    await flush(el);
+    expect(saveButton(el).disabled).toBe(false);
+    await save(el);
+    expect(lastPut(api)).toEqual({
+      phone: `123${" ".repeat(24)}456`,
+      email: `a@b.${"c".repeat(250)}`,
+    });
+  });
+
+  it.each([
+    ["en-GB", "Enter a phone number of 6 to 15 digits, using only digits, spaces and + ( ) . -"],
+    ["es-ES", "Escribe un teléfono de 6 a 15 cifras, usando solo cifras, espacios y + ( ) . -"],
+  ] as const)("words the phone's check in %s as the check is", (locale, sentence) => {
+    setLocale(locale);
+    expect(t("receipts.invalid_phone")).toBe(sentence);
+  });
+});
+
+describe("the top block while a save is in flight", () => {
+  function delayedSave(api: DashboardApi): () => void {
+    let finish!: () => void;
+    vi.mocked(api.putReceipt).mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    return () => finish();
+  }
+  const inner = (el: ReceiptsScreen, test: string) =>
+    logoControl(el)
+      .shadowRoot!.querySelector(`[data-test=${test}]`)!
+      .shadowRoot!.querySelector("button")!;
+
+  it("keeps the logo it is saving, so Saved is true of what is shown", async () => {
+    const api = stubApi({ logo: LOGO });
+    const finish = delayedSave(api);
+    const { el } = await mount(api);
+    q(el, "[data-test=save]")!.click();
+    await flush(el);
+    expect(inner(el, "remove-image").disabled).toBe(true);
+    expect(inner(el, "choose-image").disabled).toBe(true);
+    logoControl(el).shadowRoot!.querySelector<HTMLElement>("[data-test=remove-image]")!.click();
+    logoControl(el).shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!.click();
+    await flush(el);
+    expect(logoControl(el).image).toBe(LOGO);
+    expect(logoControl(el).shadowRoot!.querySelector("media-image-picker")).toBeNull();
+    finish();
+    await flush(el);
+    expect(lastPut(api)).toEqual({ logo: LOGO });
+    expect(q(el, "p[role=status]")!.textContent!.trim()).toBe(t("receipts.saved"));
+    expect(logoControl(el).image).toBe(LOGO);
+    expect(inner(el, "remove-image").disabled).toBe(false);
+  });
+
+  it("closes a logo picker left open when a save starts", async () => {
+    const api = stubApi({ logo: LOGO });
+    const finish = delayedSave(api);
+    const { el } = await mount(api);
+    logoControl(el).shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!.click();
+    await flush(el);
+    expect(logoControl(el).shadowRoot!.querySelector("media-image-picker")).not.toBeNull();
+    q(el, "[data-test=save]")!.click();
+    await flush(el);
+    expect(logoControl(el).shadowRoot!.querySelector("media-image-picker")).toBeNull();
+    finish();
+    await flush(el);
+    expect(logoControl(el).image).toBe(LOGO);
+  });
+});
+
 describe("a refused save of the top block", () => {
   it.each([
-    ["phone", "invalid_phone", "receipts.invalid_phone"],
-    ["email", "invalid_email", "receipts.invalid_email"],
+    ["phone", "invalid_phone", "receipts.invalid_phone", "912 345 678", "933 333 333"],
+    ["email", "invalid_email", "receipts.invalid_email", "hola@deli.es", "otro@deli.es"],
   ] as const)(
     "puts the %s refusal under its field and the form's sentence at the bottom, with Save still working",
-    async (field, reason, key) => {
+    async (field, reason, key, refused, changed) => {
       const api = stubApi(
         {},
         {
@@ -332,14 +472,14 @@ describe("a refused save of the top block", () => {
         },
       );
       const { el } = await mount(api);
-      edit(el, field, "x");
+      edit(el, field, refused);
       await save(el);
       const input = q<WtInput>(el, `wt-input[name=${field}]`)!;
       expect(input.error).toBe(t(key));
       expect(bottom(el)).toBe(t("form.fix_fields"));
       expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=save]")!.disabled).toBe(false);
       await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(input));
-      edit(el, field, "y");
+      edit(el, field, changed);
       await el.updateComplete;
       expect(input.error).toBe("");
       expect(bottom(el)).toBe("");

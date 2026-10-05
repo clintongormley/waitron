@@ -211,6 +211,68 @@ describe("image-upload", () => {
   });
 });
 
+describe("image-upload while disabled", () => {
+  const inner = (el: ImageUpload, test: string) =>
+    el.shadowRoot!.querySelector(`[data-test=${test}]`)!.shadowRoot!.querySelector("button")!;
+
+  it("disables Choose image and Remove, and a click on either changes nothing", async () => {
+    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+      api: stubApi(),
+      image: "own.png",
+      disabled: true,
+    });
+    const changed = vi.fn();
+    el.addEventListener("image-changed", changed);
+    expect(inner(el, "choose-image").disabled).toBe(true);
+    expect(inner(el, "remove-image").disabled).toBe(true);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=remove-image]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!.click();
+    await el.updateComplete;
+    expect(changed).not.toHaveBeenCalled();
+    expect(el.image).toBe("own.png");
+    expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+  });
+
+  it("disables the thumbnail's photo button, which then opens nothing", async () => {
+    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+      api: stubApi(),
+      thumbnail: true,
+      image: "own.png",
+      disabled: true,
+    });
+    const photo = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      "button[data-test=choose-image]",
+    )!;
+    expect(photo.disabled).toBe(true);
+    expect(getComputedStyle(photo).cursor).toBe("not-allowed");
+    photo.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+  });
+
+  it("closes a library left open, saying so, and takes nothing chosen there", async () => {
+    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+      api: stubApi(),
+      image: "own.png",
+    });
+    const states = vi.fn();
+    const changed = vi.fn();
+    el.addEventListener("image-picker-state", (event) => states((event as CustomEvent).detail));
+    el.addEventListener("image-changed", changed);
+    const picker = await open(el);
+    el.disabled = true;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+    expect(states.mock.calls.map(([detail]) => detail)).toEqual([{ open: true }, { open: false }]);
+    select(picker);
+    expect(changed).not.toHaveBeenCalled();
+    expect(el.image).toBe("own.png");
+    el.disabled = false;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("media-image-picker")).toBeNull();
+  });
+});
+
 describe("image-upload as a thumbnail", () => {
   async function thumbnail(props: Partial<ImageUpload> = {}) {
     return mountWidget<ImageUpload>("dashboard-image-upload", {
