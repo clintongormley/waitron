@@ -500,6 +500,49 @@ describe("extra list CRUD", () => {
     expect(read.items[0]!.portion).toBe("1.000");
   });
 
+  it("refuses a held item whose product became Each, sent with its saved portion, and saves nothing", async () => {
+    const productId = await kgProduct();
+    const list = await run((tx) =>
+      createExtraList(tx, { name: "Cheese", items: [{ productId, portion: "0.050" }] }, "en"),
+    );
+    await run((tx) => updateProduct(tx, productId, { unitId: null }));
+
+    const error = await refusal((tx) =>
+      updateExtraList(
+        tx,
+        list.id,
+        { name: "Cheeses", items: [{ id: list.items[0]!.id, productId, portion: "0.050" }] },
+        "en",
+      ),
+    );
+    expect(error).toMatchObject({
+      code: "extras.invalid",
+      params: { field: "items.0.portion" },
+    });
+    const read = await run((tx) => getExtraList(tx, list.id));
+    expect(read.name).toBe("Cheese");
+    expect(read.items[0]!.portion).toBe("0.050");
+  });
+
+  it("stores one for a held item whose product became Each, sent with a portion of one", async () => {
+    const productId = await kgProduct();
+    const list = await run((tx) =>
+      createExtraList(tx, { name: "Cheese", items: [{ productId, portion: "0.050" }] }, "en"),
+    );
+    await run((tx) => updateProduct(tx, productId, { unitId: null }));
+
+    await run((tx) =>
+      updateExtraList(
+        tx,
+        list.id,
+        { name: "Cheese", items: [{ id: list.items[0]!.id, productId, portion: "1.000" }] },
+        "en",
+      ),
+    );
+    const read = await run((tx) => getExtraList(tx, list.id));
+    expect(read.items[0]!.portion).toBe("1.000");
+  });
+
   it("keeps a held Each item at one when it is sent again without a portion", async () => {
     const list = await run((tx) =>
       createExtraList(tx, { name: "Sides", items: [{ productId: breads.rye }] }, "en"),
