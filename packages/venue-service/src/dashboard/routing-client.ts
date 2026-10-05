@@ -177,6 +177,9 @@ export class PrepStationsApi {
   updateWatcher(id: string, input: WatcherInput): Promise<void> {
     return this.request(`/management-api/watchers/${id}`, "PUT", input);
   }
+  setWatcherPrinters(id: string, printerIds: readonly string[]): Promise<void> {
+    return this.request(`/management-api/watchers/${id}/printers`, "PUT", { printerIds });
+  }
   removeWatcher(id: string): Promise<void> {
     return this.request(`/management-api/watchers/${id}`, "DELETE");
   }

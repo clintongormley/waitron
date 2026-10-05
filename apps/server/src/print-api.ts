@@ -72,7 +72,7 @@ import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
 import { formatPrinterTestPage } from "./printer-test-page.js";
 import { resolveSessionLocale } from "./session-locale.js";
-import { setPrinterWatcher } from "./watchers.js";
+import { replaceWatcherPrinters, setPrinterWatcher } from "./watchers.js";
 import { DEMO_PRINTER_KEY } from "./demo-printer.js";
 
 export interface PrintApiDeps {
@@ -937,6 +937,24 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         }
         await updatePrinter(tx, deps.cfg, id, patch);
       });
+      return c.body(null, 204);
+    }),
+  );
+
+  app.put("/management-api/watchers/:id/printers", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const watcherId = requireUuidParam(c.req.param("id"), "WatcherId");
+      const body = await readJsonBody<{ printerIds?: unknown }>(c);
+      if (
+        !Array.isArray(body.printerIds) ||
+        body.printerIds.some((id) => typeof id !== "string") ||
+        new Set(body.printerIds).size !== body.printerIds.length
+      ) {
+        throw new AppError("management.request_invalid", { field: "printerIds" });
+      }
+      const printerIds = body.printerIds.map((id) => requireUuidParam(id as string, "PrinterId"));
+      await gated(sessionId, (tx) => replaceWatcherPrinters(tx, deps.cfg, watcherId, printerIds));
       return c.body(null, 204);
     }),
   );

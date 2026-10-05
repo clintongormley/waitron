@@ -266,3 +266,27 @@ export async function setPrinterWatcher(
     set: { watcherId },
   });
 }
+
+export async function replaceWatcherPrinters(
+  tx: Transaction,
+  cfg: TillConfig,
+  watcherId: string,
+  printerIds: readonly string[],
+): Promise<void> {
+  const watcher = await readWatcher(tx, cfg, watcherId);
+  if (!watcher?.active) throw new AppError("watcher.not_found", { watcherId });
+  for (const printerId of printerIds) {
+    if (!watcher.printerIds.includes(printerId)) {
+      await setPrinterWatcher(tx, cfg, printerId, watcherId);
+    }
+  }
+  for (const printerId of watcher.printerIds) {
+    if (!printerIds.includes(printerId)) {
+      await tx
+        .delete(watcherPrinters)
+        .where(
+          and(eq(watcherPrinters.printerId, printerId), eq(watcherPrinters.watcherId, watcherId)),
+        );
+    }
+  }
+}

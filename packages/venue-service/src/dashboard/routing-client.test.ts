@@ -455,3 +455,14 @@ it("saves a station's complete printer set in one non-passive request", async ()
     ["/management-api/stations/bar/printers", "PUT", { printerIds: ["p2", "p1"] }],
   ]);
 });
+
+it("submits a whole watcher printer set as an active write even from a background client", async () => {
+  const request = vi.fn(async () => undefined);
+  const api = new PrepStationsApi(request as DashboardRequest).background;
+  await api.setWatcherPrinters("pass", ["front", "back"]);
+  await api.setWatcherPrinters("pass", []);
+  expect(request.mock.calls).toEqual([
+    ["/management-api/watchers/pass/printers", "PUT", { printerIds: ["front", "back"] }],
+    ["/management-api/watchers/pass/printers", "PUT", { printerIds: [] }],
+  ]);
+});

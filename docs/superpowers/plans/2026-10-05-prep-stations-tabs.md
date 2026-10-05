@@ -404,3 +404,29 @@ passed both. The disposable checkout was removed after byte-comparing its restor
 Task 5's handover is implemented. Task 4 still needs its routing-only replacement; Watchers,
 Settings, venue defaults UI, supervisor page-loading and the full Task 8 review/push/CI/land gates
 remain. This checkpoint does not make the branch ready to ship.
+
+
+## Task 6 watcher printer-selection checkpoint — 2026-10-05
+
+Task 6 is partial. The server now accepts a whole watcher printer selection at
+`PUT /management-api/watchers/:id/printers`, with `printer.manage` authorization and
+one transaction. New assignments reuse `setPrinterWatcher`; the target watcher must be active
+and belong to the location even when clearing the selection. Existing disabled printer assignments
+can remain or be removed without offering that printer for a new assignment. The Prep client
+exposes the write, including from its background instance without making it passive.
+
+Thirteen new real-HTTP cases failed with 404 before the route existed; the client case failed
+because the method was absent. The three focused server suites passed 63 tests and the client
+suite passed 22. No existing assertion changed. Two initially guessed error names in the new
+cases were corrected against `request-screens.ts` and identity's `authorize.ts`; those corrections
+are not product fixes. In a frozen-installed disposable candidate, moving the save outside its
+transaction failed the three rollback cases while successful replacement passed; restoration
+passed all four. Removing only the active-target check initially survived because the printer
+verb also rejects a disabled watcher. The new case now also attempts an empty selection: that
+mutation failed with 204 instead of 404, with successful replacement still passing; restoration
+passed both cases. The candidate's changed files matched the source and the candidate was removed.
+
+The Watchers table and its cell editors, read-only screen relationships, disable action and
+Printing rules watcher handover remain open. Settings, Routing cleanup, supervisor loading and
+Task 8's whole-branch review/push/CI/land gates also remain. This checkpoint adds no screen and
+makes no visual or branch-readiness claim. Campaign-local evidence is kept in the A261-3 ledger.
