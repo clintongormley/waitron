@@ -323,9 +323,10 @@ and `writeProductVariants` (`packages/catalogue/src/variants.ts`) stores it blan
 A variant follows its parent onto every menu the parent is on; it never gets a `menu_items` row of
 its own (`addProductToMenu` refuses one with `menu_item.variant_not_allowed`, and a section refuses
 one as a member with `menu_section.membership_invalid`). A menu stores something
-for a variant only to override its price or switch it off there: a `menu_item_variant_overrides`
-row exists only while it does one of those, keyed by the parent's menu row and the variant
-(`setMenuVariants`, `packages/catalogue/src/variants.ts`).
+for a variant only to override its price there: a `menu_item_variant_overrides` row, keyed by the
+parent's menu row and the variant, holds that menu's price, and saving the price blank deletes the
+row (`setMenuVariants`, `packages/catalogue/src/variants.ts`). The table's
+`menu_item_variant_overrides_overrides_ck` refuses a row with no price.
 
 ### Active and Available
 
@@ -333,22 +334,30 @@ A variant has the same two states as a product (_One save, one transaction_ belo
 Removing a variant makes it Inactive and keeps its row; a saved variant left out of a product save
 is made Inactive too (`setProductVariants`). A variant Inactive when its menu was published is on
 none of that menu's offers, and one made Inactive since is served marked unavailable
-(`applyLiveFields`, `packages/catalogue/src/menu-document.ts`). An Active one
-is listed under its parent's offer with whether that menu offers it, read when the menu is published
-(`readOfferVariants` in `listMenuOffers`, `packages/catalogue/src/operations.ts`).
+(`applyLiveFields`, `packages/catalogue/src/menu-document.ts`).
+
+A product is on an active menu when that menu's working structure places it — in the menu's own
+sections, or inside an active menu it includes — and the product is Active; it is sellable when it
+is also Available. A variant is listed under its parent's offer while it is Active, and is sellable
+while it is Available (`readOfferVariants` in `listMenuOffers`,
+`packages/catalogue/src/operations.ts`). A menu has no on/off setting of its own for a product or a
+variant. To take a product off a menu, change the structure so that nothing in it places the
+product; one that comes through an included menu goes when that menu's structure stops placing it or
+the menu is no longer included.
+
 The offers a till sells from are each menu's published version, which leaves out a product that was
 Inactive when it was published (`listMenuOffers`, `packages/catalogue/src/operations.ts`). A product
 that is Unavailable, or has become Inactive since, is served in its place marked unavailable
-(`applyLiveFields`, `packages/catalogue/src/menu-document.ts`). As served, whether a menu has
-switched a variant off is read from the published version, so a switch-off made since reaches the
-tills only when the menu is published again. Whether each product and variant is Active and
-Available, including products picked as extras, is read from the current rows (`applyLiveFields`).
+(`applyLiveFields`, `packages/catalogue/src/menu-document.ts`). A change to a menu's structure
+reaches the tills only when the menu is published again. Whether each product and variant is
+Active and Available, including products picked as extras, is read from the current rows
+(`applyLiveFields`).
 
 ### On the till
 
-Each product placed in a menu's published structure, and offered by it, gets a button in the till's
-menu browser (`apps/till/src/widgets/menu-browser.ts`): where the structure places it, in the search
-results, and wherever the device's home layout places it. The exception is a product whose
+Each product placed in a menu's published structure gets a button in the till's menu browser
+(`apps/till/src/widgets/menu-browser.ts`): where the structure places it, in the search results,
+and wherever the device's home layout places it. The exception is a product whose
 standalone ordering the menu published as Not sold separately (`LiveOffer.ordering`): it has no
 button anywhere, and a section left with nothing else goes too (`indexMenu`), though a dish's
 extras list still offers it. Staff only gets a button like Public, because there is no guest
@@ -562,5 +571,5 @@ change to the note, options or extras of a line the kitchen already has is refus
 and paying bills such a line only once it has been sent; unsent, it is refused `product.unavailable`
 (`priceStoredOrderForIssuance`).
 `listMenuOffers` keeps an Unavailable product's offer, as it does an Available one. A variant is
-listed only under its parent's offer, only while Active, and as available only while Available and
-offered on that menu.
+listed only under its parent's offer, only while Active, and as available only while Available; a
+menu cannot hide one (_Active and Available_, under _Variants_).

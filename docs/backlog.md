@@ -519,12 +519,12 @@ warning belongs to the operator who was signed in.
 **A section with nothing to order in it disappears from the till, and the tiles after it move.** The
 menu browser leaves a section out, from the structure and as a shortcut, when no product beneath it
 is among the offers it is given (`indexMenu`, `apps/till/src/widgets/menu-browser.ts`): when every
-product in it is switched off on the menu, while a diet filter is on and every product in it fails
-the filter (`apps/till/src/widgets/card-grid.ts`), and when every product in it is published as not
-sold separately. A section whose products are all sold out keeps its place, and its tile is not
-greyed; the products inside it are. Spec §5 wants buttons in predictable positions during service.
-**Next action:** the owner decides whether either kind of empty section should keep its place, for
-example greyed.
+product in it was Inactive when the menu was published, while a diet filter is on and every product
+in it fails the filter (`apps/till/src/widgets/card-grid.ts`), and when every product in it is
+published as not sold separately. A section whose products are all sold out keeps its place, and its
+tile is not greyed; the products inside it are. Spec §5 wants buttons in predictable positions
+during service. **Next action:** the owner decides whether either kind of empty section should keep
+its place, for example greyed.
 
 **A joined tab of no party can have kitchen slips naming a table its ticket did not print.**
 Correction and MOVED slips name such a tab's lowest-id table (`orderTableLabels`,
@@ -2525,10 +2525,12 @@ plans to retire the editor.
   till, and refuse only a quantity increase. The till now keeps such a line marked "Not offered
   now"; a line with no stored snapshot whose product the till no longer offers is still dropped with
   `held.product_gone`, and the first edit of the order removes such an extra.
-- **Raising a held line's quantity does not check the line's variant, or whether its menu, or the
-  menu's own switch for the product (`menu_items.active`), has been switched off** — only its
-  parent product and extras. **Next action:** on a quantity raise, check the line's own product for
-  Active and Available, its menu, and the menu's switch for the product.
+- **Raising a held line's quantity checks the line's variant and its menu — DONE (#696).** Found
+  stale on 2026-10-05 by W90: since #696 a raise is priced again with the line's menu item and
+  variant (`applyLineEdits`, `apps/server/src/working-order.ts`), and a throwaway test (not kept)
+  saw a raise refused `product.variant_unavailable` once the variant was sold out, and
+  `service_zone.offer_not_allowed` once its menu was made inactive. Since W90 a menu has no switch
+  of its own to check.
 - **A menu offer created with no price field at all is refused** (`management.request_invalid`);
   only an explicit `null` means "blank, charge the product's own price" — **decided 2026-09-23 by
   the owner:** _"we don't want to confuse 0.00 with `""`"_.
@@ -3158,6 +3160,29 @@ of the same width, and a folder icon in a photo-wide frame or the product's phot
 frame of the same size when it has none. Names at one level start at one place, and the Name heading
 sits over the menu's name through the table's `tree-heading` part. W88 was branched before W84
 (#1199) gave the Products tree's All products row its grip space.
+
+**A menu has no on/off switch of its own any more — DONE (W90, this PR, 2026-10-05; owner
+2026-10-04).** Whether a product is on a menu is now decided only by the menu's structure (its own
+sections and the menus it includes) and the product's Active state, and whether it can be sold now
+by Available. A size (variant) is sold wherever its product is placed, while it is Active and
+Available. The Prices tab lost its "On this menu" column, the Sold / Switched off choices in its
+edit window and the Sell it / Switch it off clash buttons, and a menu can no longer avoid a price
+clash between the menus it includes by switching the item off. The item PATCH and the size-prices
+PUT refuse a body carrying `offered` (`management.request_invalid`). Catalogue migration
+`0024_drop_menu_offered.sql` removes `menu_items.offered` and rebuilds
+`menu_item_variant_overrides` without its `offered` column, so a row there always holds a price.
+The rule is in [products.md](developers/products.md), _Active and Available_ under _Variants_. The
+test checks this change rewrote or deleted are listed in the PR and in the plan's _Changed test
+checks_ table (`docs/superpowers/plans/2026-10-05-w90-remove-menu-offered-switch.md`).
+**Upgrading:** a venue whose database holds a size row with an on/off choice and no menu price
+cannot migrate: migrating it fails on
+`CHECK constraint failed: menu_item_variant_overrides_overrides_ck`. Reset a dev venue with
+`wa-wt reset demo <name>`; reset any other venue, or clear those choices before upgrading. After
+upgrading, publish every menu again: a version published before still carries the old keys, so
+each menu reads as changed, and a size switched off in it is no longer held back (both read, not
+run). A configuration bundle exported before W90 must be exported again after upgrading: the old
+one is refused `setup.request_invalid` with `field: "module:catalogue"`, because its catalogue
+migration count is one short (seen 2026-10-05 in a throwaway test, not kept).
 
 **A Products drag does not notice when a refresh removes what it is dragging or where it is going —
 OPEN (found 2026-10-05 by W88's pre-merge review).** W88's review found the Menus tree's drag broke
@@ -7779,8 +7804,7 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   lists say **Active / Inactive** (`product.inactive_badge`, `venue.inactive`, `extras.inactive`,
   `options.inactive`); printers, card readers and staff say **Disabled** with a **Disable** action
   (`printers.status_inactive`, `printers.status_revoked`, `payments.reader_disabled`,
-  `person.mark_inactive`); a menu entry on the menu prices table says **Switched off**
-  (`menu_prices.switched_off`); and a generic `action.deactivate` ("Deactivate") exists beside
+  `person.mark_inactive`); and a generic `action.deactivate` ("Deactivate") exists beside
   `action.disable`. Products settle on **Active / Inactive**, kept separate from **Available** (sold
   out for now). **Next action:** pick the one pair, and the one action verb, for every screen whose
   record is switched off rather than deleted — deciding first whether a revoked printer or a disabled
