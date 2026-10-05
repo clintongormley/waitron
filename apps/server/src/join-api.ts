@@ -287,8 +287,12 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         }
         return checked;
       });
-      // Thrown after the transaction, so the deletion of a mismatched request commits.
-      if (!result.ok) throw new AppError("device.join_mismatch", {});
+      // After the transaction, so the deletion of a mismatched request commits before its claim (if
+      // this login held one) is forgotten and the refusal is thrown.
+      if (!result.ok) {
+        deps.pairingMode.dropClaim(id);
+        throw new AppError("device.join_mismatch", {});
+      }
       return c.body(null, 204);
     }),
   );
@@ -343,7 +347,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         if (!isUuid(id)) throw new AppError("join_request.not_found", {});
         return acceptPrintAgentJoinRequest(tx, deps.cfg, id, { choice });
       });
-      // Thrown AFTER the transaction, for the device accept route's reason.
+      // Thrown AFTER the transaction, so the consuming delete commits and a wrong tap cannot be retried.
       if (!result.ok) throw new AppError("device.join_mismatch", {});
       return c.body(null, 204);
     }),

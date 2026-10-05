@@ -1064,6 +1064,20 @@ describe("device pairing: check, claim, approve", () => {
     expect((await errorOf(retry)).code).toBe("join_request.not_found");
   });
 
+  it("a wrong number from the claiming login deletes the request and forgets the claim", async () => {
+    const venue = await setupVenue(suite.db);
+    const { mode, app, holdId } = await pairingApp(venue);
+    const made = await knock(venue, { kind: "device", label: "Bar till", numbers: () => 42 });
+    expect(
+      (await check(app, venue.managerCookie, made.joinId, { choice: "42", holdId })).status,
+    ).toBe(204);
+    const wrong = await check(app, venue.managerCookie, made.joinId, { choice: "43", holdId });
+    expect(wrong.status).toBe(400);
+    expect((await errorOf(wrong)).code).toBe("device.join_mismatch");
+    expect(await pendingCount()).toBe(0);
+    expect(mode.claimOf(made.joinId)).toBeUndefined();
+  });
+
   it("refuses a request another login has claimed", async () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("till");

@@ -264,3 +264,60 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     });
   });
 });
+
+describe("a claim whose hold lapsed is forgotten only once its request's deletion commits", () => {
+  /** Claim a knocked device's request under hold A, then let A lapse while hold B keeps the window
+   *  open. B is taken on the holder, not through a route, so no route discards before the step under
+   *  test. */
+  async function lapsedClaim() {
+    const venue = await setupVenue(suite.db);
+    let offset = 0;
+    const mode = createPairingMode({ now: () => Date.now() + offset });
+    const app = mountBoth(venue.cfg, mode);
+    const holdA = await openWindow(app, venue);
+    const device = await knock(app, "Bar till");
+    const checked = await send(
+      app,
+      "POST",
+      `/management-api/device-join-requests/${device.joinId}/check`,
+      { cookie: venue.managerCookie, body: { choice: device.verificationNumber, holdId: holdA } },
+    );
+    expect(checked.status).toBe(204);
+    offset += 2 * 60_000;
+    mode.open();
+    offset += 90_000;
+    expect(mode.orphanedClaims()).toEqual([device.joinId]);
+    return { venue, mode, app, device };
+  }
+
+  it("a refused request rolls the discard back and keeps the claim for the next discard", async () => {
+    const { venue, mode, app, device } = await lapsedClaim();
+    const refused = await send(app, "GET", "/management-api/join-requests?kind=device", {
+      cookie: venue.staffCookie,
+    });
+    expect(refused.status).toBe(403);
+    // The staff request's transaction rolled back, row and all, so the claim must still be there.
+    expect(await pendingCount()).toBe(1);
+    expect(mode.orphanedClaims()).toEqual([device.joinId]);
+
+    const status = await send(app, "GET", "/api/device/join/status", { cookie: device.jar });
+    expect(await status.json()).toEqual({ status: "not_approved" });
+    expect(await pendingCount()).toBe(0);
+    expect(mode.orphanedClaims()).toEqual([]);
+  });
+
+  it("the device's status read forgets the claim it discarded", async () => {
+    const { mode, app, device } = await lapsedClaim();
+    const status = await send(app, "GET", "/api/device/join/status", { cookie: device.jar });
+    expect(await status.json()).toEqual({ status: "not_approved" });
+    expect(mode.orphanedClaims()).toEqual([]);
+  });
+
+  it("another device's knock forgets the claim it discarded", async () => {
+    const { mode, app, device } = await lapsedClaim();
+    const other = await knock(app, "Barra 2");
+    expect(other.joinId).not.toBe(device.joinId);
+    expect(await pendingCount()).toBe(1);
+    expect(mode.orphanedClaims()).toEqual([]);
+  });
+});

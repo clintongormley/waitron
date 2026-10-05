@@ -766,8 +766,10 @@ declare module "@waitron/shared" {
      */
     "join_request.claimed": Record<string, never>;
     /**
-     * An approval of a device request this login has not matched the number of, or whose match ended
-     * with the hold it was made under. The manager taps the number again. NO params.
+     * The device approval route found no live claim of this login's on that id: this login never
+     * matched the number, another login did, the id names no pending device request, or the match
+     * ended with the hold it was made under — which ends the request too, so the device must ask
+     * again. NO params.
      */
     "join_request.unclaimed": Record<string, never>;
     /**
