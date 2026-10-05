@@ -26,7 +26,9 @@ export const deviceFormFactorEnum = enumType(["till", "phone-portrait", "tablet-
  * `canvas_id` NULL means the form-factor default canvas.
  *
  * `deleted_at` set means RETIRED: deleted while only disabled devices held it, which the
- * `devices.device_profile_id` key would refuse. No active device holds a retired profile.
+ * `devices.device_profile_id` key would refuse. The database does not stop an active device
+ * holding one: retiring refuses an active holder, and `getDeviceProfile`, through which device joins
+ * and edits resolve a profile, hides retired ones.
  *
  * `capabilities` is plain JSON (a CapabilityFlag[]) with no @waitron/layouts type: that package
  * depends on @waitron/db, so importing its type here would be circular. The store validates on write.

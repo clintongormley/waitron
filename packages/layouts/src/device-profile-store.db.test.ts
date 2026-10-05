@@ -322,7 +322,7 @@ describe("device-profile store against a real migrated database", () => {
     expect(await rowCount()).toBe(0);
   });
 
-  it("translates a delete of a device-referenced profile to device_profile.in_use (409), profile survives", async () => {
+  it("refuses a delete of a profile an active device holds with device_profile.in_use (409), profile survives", async () => {
     await seedTenant(suite.db);
     const session = await seedSession("manager");
     const created = await inTx((tx) =>
