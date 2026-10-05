@@ -741,8 +741,7 @@ export class ReceiptsScreen extends LitElement {
         ></wt-input>
         <p class="reason">
           ${t("receipts.trading_name_location")}
-          <a href="/manage/venue-operations/view/departments">${t("receipts.departments_zones")}</a
-          >.
+          <a href="/manage/venue-operations">${t("receipts.departments_zones")}</a>.
         </p>
         ${this.#renderFooter()}
       </section>

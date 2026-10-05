@@ -110,7 +110,7 @@ afterEach(cleanupWidgets);
 describe("the Receipts page's fields", () => {
   it("points staff to Departments and zones to edit the trading name", async () => {
     const { el } = await mount();
-    const link = q<HTMLAnchorElement>(el, 'a[href="/manage/venue-operations/view/departments"]');
+    const link = q<HTMLAnchorElement>(el, 'a[href="/manage/venue-operations"]');
     expect(link).not.toBeNull();
     expect(link!.textContent).toMatch(/^(Departments and zones|Departamentos y zonas)$/);
   });
