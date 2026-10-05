@@ -3314,7 +3314,7 @@ Left open:
   during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
   its final head.
 - A sold-out painted till tile keeps the usual 50% disabled fade, so its labels read at about 2.2:1
-  to 3.5:1 contrast (measured by the second-to-last review, Codex). Disabled controls are outside
+  to 3.5:1 contrast (measured by the first of the final Codex reviews). Disabled controls are outside
   the contrast rule; a stronger sold-out style for painted tiles is the owner's call.
 - The category colour chooser (`category-color-form.ts`) and the product colour dialog
   (`product-color-form.ts`) share most of their code; a review suggested one component. Kept as two
