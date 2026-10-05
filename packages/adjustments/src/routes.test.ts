@@ -389,6 +389,27 @@ describe("adjustment reason management routes", () => {
       expect(malformed.status).toBe(400);
       expect(await malformed.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
     });
+
+    it("enables one of two same-named reasons enabled together, and refuses the other with 409", async () => {
+      const fx = await fixture();
+      const manager = fx.cookie.manager;
+      const pair = [await deactivated(fx), await deactivated(fx)];
+
+      const responses = await Promise.all(
+        pair.map((reason) => send(fx.app, "POST", `${REASONS}/${reason.id}/reactivate`, manager)),
+      );
+      expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+      const enabled = responses.findIndex((response) => response.status === 200);
+      expect(await responses[enabled]!.json()).toMatchObject({
+        id: pair[enabled]!.id,
+        active: true,
+      });
+      expect(await responses[1 - enabled]!.json()).toEqual({
+        error: { code: "adjustment_reason.name_taken", params: { name: "Complaint" } },
+      });
+      expect(await activeOf(fx, pair[enabled]!.id)).toBe(true);
+      expect(await activeOf(fx, pair[1 - enabled]!.id)).toBe(false);
+    });
   });
 
   it("refuses a reorder body that is not a list of ids", async () => {
