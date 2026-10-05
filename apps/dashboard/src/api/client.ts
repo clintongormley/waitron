@@ -320,6 +320,8 @@ export interface FolderSummary {
   activeProducts: number;
   routes: number;
 }
+/** The counts a person was shown for one selected category before confirming its deletion. */
+export type ShownFolderCounts = Pick<FolderSummary, "id" | "folders" | "activeProducts" | "routes">;
 export interface Unit {
   id: string;
   name: Record<string, string>;
@@ -1925,8 +1927,16 @@ export class DashboardApi {
     return this.#request("/management-api/folders/move", "POST", { ...selection, to });
   }
 
-  deleteCatalogueItems(selection: CatalogueSelection, contents: FolderContents): Promise<void> {
-    return this.#request("/management-api/folders/delete", "POST", { ...selection, contents });
+  deleteCatalogueItems(
+    selection: CatalogueSelection,
+    contents: FolderContents,
+    shown: ShownFolderCounts[],
+  ): Promise<void> {
+    return this.#request("/management-api/folders/delete", "POST", {
+      ...selection,
+      contents,
+      shown,
+    });
   }
 
   summariseFolders(categoryIds: string[]): Promise<FolderSummary[]> {

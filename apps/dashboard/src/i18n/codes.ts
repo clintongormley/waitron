@@ -71,6 +71,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Another category in the same place already has this name.",
     es: "Otra categoría en el mismo lugar ya tiene este nombre.",
   },
+  "category.contents_changed": {
+    en: "What these categories hold has changed, so nothing was deleted. Check the new counts and try again.",
+    es: "Lo que contienen estas categorías ha cambiado, así que no se ha eliminado nada. Revisa las nuevas cifras y vuelve a intentarlo.",
+  },
   "menu_section.not_found": {
     en: "This section, or the item in it, no longer exists. Refresh the list.",
     es: "Esta sección, o el elemento que contiene, ya no existe. Actualiza la lista.",
