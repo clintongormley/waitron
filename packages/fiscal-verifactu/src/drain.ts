@@ -793,7 +793,8 @@ async function raiseIncident(
 
 /**
  * A targeted consulta compares the stored fingerprint and installation identity before a duplicate
- * can confirm our record. An absent record, fingerprint or identity leaves the answer unresolved.
+ * can confirm our record. An absent record or fingerprint leaves the answer unresolved; when the
+ * fingerprint matches, missing installation identity also leaves it unresolved.
  *
  * `Ejercicio`/`Periodo` come from `fecha_expedicion_factura`: our records never carry a separate
  * `FechaOperacion`, so the operation month is the expedition month.
@@ -823,11 +824,11 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | n
     );
     const huella = stored?.DatosRegistroFacturacion.Huella;
     if (huella !== undefined) {
+      if (huella !== row.huella) return false;
       const sistema = stored?.DatosRegistroFacturacion.SistemaInformatico;
       if (typeof sistema !== "object" || sistema === null) return null;
       const original = fromRegistroRow(row).SistemaInformatico;
       return (
-        huella === row.huella &&
         "NIF" in sistema &&
         sistema.NIF === original.NIF &&
         "IdSistemaInformatico" in sistema &&

@@ -51,6 +51,51 @@ describe("drain chain ordering", () => {
     expect(aeat.stored()[0]?.huella).toBe("D".repeat(64));
   });
 
+  it("halts a mismatching fingerprint even when the lookup omits software identity", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const raw = await suite.db.execute<Record<string, unknown>>(sql`
+      select * from registros_facturacion where id = ${seeded.registroIds[0]}
+    `);
+    const ours = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const real = aeat.client();
+    await real.submit({ ObligadoEmision: { NombreRazon: seeded.legalName, NIF: seeded.nif } }, [
+      { RegistroAlta: { ...ours, Huella: "D".repeat(64) } },
+    ]);
+    const incompleteLookup: VerifactuClient = {
+      submit: (...args) => real.submit(...args),
+      consultar: async (...args) => {
+        const response = await real.consultar(...args);
+        return {
+          ...response,
+          registros: response.registros.map((record) => ({
+            ...record,
+            DatosRegistroFacturacion: {
+              ...record.DatosRegistroFacturacion,
+              SistemaInformatico: undefined,
+            },
+          })),
+        };
+      },
+    };
+
+    const result = await drain(
+      {
+        db: suite.db,
+        resolveClient: staticResolver(incompleteLookup),
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+        environment: "production",
+      },
+      NOW,
+    );
+
+    expect(result.recordsHalted).toBe(1);
+    const state = await suite.db.execute<{ estado: string }>(sql`
+      select estado from envios where registro_id = ${seeded.registroIds[0]}
+    `);
+    expect(state.rows[0]?.estado).toBe("detenido");
+  });
+
   it("does not claim a matching fingerprint filed under another installation", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const raw = await suite.db.execute<Record<string, unknown>>(sql`
