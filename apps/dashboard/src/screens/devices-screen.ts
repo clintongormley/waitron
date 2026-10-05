@@ -1,5 +1,6 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { toDataURL } from "qrcode";
@@ -48,36 +49,55 @@ import type {
 type PairField = "name" | "profile" | "binding";
 type EditField = PairField | "receipt" | "slip" | "reader";
 type IdentityErrors = Record<PairField, string>;
+type FieldRefusal = { field: EditField; code: string } | null;
 
-/** Refusals of a pairing that are about one settings field (CLAUDE.md §3: by what the error carries). */
-const PAIR_FIELD_BY_CODE: Record<string, PairField> = {
+/** Refusals of a Pair or Edit save about one field, by code alone; others read their params first. */
+const FIELD_BY_CODE: Record<string, EditField> = {
   "device.name_taken": "name",
   "device.station_required": "binding",
-  "station.not_found": "binding",
   "watcher.not_found": "binding",
   "device_profile.not_found": "profile",
 };
 
-const PAIR_FIELD_BY_PARAM: Record<string, PairField> = {
+const FIELD_BY_PARAM: Record<string, EditField> = {
   name: "name",
   profileId: "profile",
   stationId: "binding",
   watcherId: "binding",
-};
-
-/** Refusals of an edit that are about one field, by code alone; others read their params first. */
-const EDIT_FIELD_BY_CODE: Record<string, EditField> = {
-  "device.name_taken": "name",
-  "device.station_required": "binding",
-  "watcher.not_found": "binding",
-  "device_profile.not_found": "profile",
-};
-
-const EDIT_FIELD_BY_PARAM: Record<string, EditField> = {
-  ...PAIR_FIELD_BY_PARAM,
   receiptPrinterId: "receipt",
   paymentSlipPrinterId: "slip",
 };
+
+/** The field a refusal is about, when the form shows it (CLAUDE.md §3: by what the error carries). */
+function refusedField(error: unknown, binding: string, bindingShown: boolean): EditField | null {
+  const code = codeOf(error);
+  const params = (error as { params?: Record<string, unknown> } | null)?.params ?? {};
+  let field: EditField | undefined;
+  if (code === "management.request_invalid" || code === "device.binding_invalid")
+    field = typeof params.field === "string" ? FIELD_BY_PARAM[params.field] : undefined;
+  // A made-here station refused the same way names no field the form marks.
+  else if (code === "station.not_found")
+    field = binding === `station:${String(params.stationId)}` ? "binding" : undefined;
+  else field = FIELD_BY_CODE[code];
+  if (field === undefined) return null;
+  return field !== "binding" || bindingShown ? field : null;
+}
+
+/** A refusal's sentence goes under its field unless the form's own check already marks it. */
+function withRefusal<F extends EditField>(
+  errors: Record<F, string>,
+  refused: FieldRefusal,
+): Record<F, string> {
+  const byField: Partial<Record<EditField, string>> = errors;
+  if (refused !== null && byField[refused.field] === "")
+    byField[refused.field] = codeMessage(refused.code);
+  return errors;
+}
+
+/** Changing a field clears a refusal about it. */
+function clearedRefusal(refused: FieldRefusal, ...fields: EditField[]): FieldRefusal {
+  return refused !== null && fields.includes(refused.field) ? null : refused;
+}
 
 interface EditForm {
   name: string;
@@ -88,6 +108,14 @@ interface EditForm {
   receiptPrinterId: string;
   paymentSlipPrinterId: string;
   madeHere: string[];
+}
+
+/** A Shows choice as the ids a request carries. */
+function bindingIds(binding: string): { stationId: string | null; watcherId: string | null } {
+  return {
+    stationId: binding.startsWith("station:") ? binding.slice("station:".length) : null,
+    watcherId: binding.startsWith("watcher:") ? binding.slice("watcher:".length) : null,
+  };
 }
 
 /**
@@ -148,9 +176,6 @@ export class DevicesScreen extends LitElement {
       .edit-fields {
         display: grid;
         gap: var(--wt-space-3);
-      }
-      .empty {
-        color: var(--wt-color-text-muted);
       }
       .made-here {
         max-width: var(--wt-form-max-width);
@@ -240,7 +265,7 @@ export class DevicesScreen extends LitElement {
   @state() private chosenProfileId = "";
   @state() private chosenBinding = "";
   @state() private formAttempted = false;
-  @state() private fieldRefusal: { field: PairField; code: string } | null = null;
+  @state() private fieldRefusal: FieldRefusal = null;
   /** Set once the server has approved or deleted the request, so closing Pair has nothing to discard. */
   #pairSettled = false;
   #pairEpoch = 0;
@@ -259,7 +284,7 @@ export class DevicesScreen extends LitElement {
     madeHere: [],
   };
   @state() private editAttempted = false;
-  @state() private editRefusal: { field: EditField; code: string } | null = null;
+  @state() private editRefusal: FieldRefusal = null;
   @state() private editError: string | null = null;
   @state() private editSaving = false;
   /** "hidden" when the person may not manage card readers. */
@@ -488,28 +513,8 @@ export class DevicesScreen extends LitElement {
     });
   }
 
-  #pairErrors(): Record<PairField, string> {
-    const errors = this.#ownErrors();
-    const refused = this.fieldRefusal;
-    if (refused !== null && errors[refused.field] === "")
-      errors[refused.field] = codeMessage(refused.code);
-    return errors;
-  }
-
-  /** The field a refusal is about, when the form shows that field. */
-  #refusedField(error: unknown): PairField | null {
-    const code = codeOf(error);
-    const param = (error as { params?: { field?: unknown } } | null)?.params?.field;
-    const field =
-      code === "management.request_invalid" && typeof param === "string"
-        ? PAIR_FIELD_BY_PARAM[param]
-        : PAIR_FIELD_BY_CODE[code];
-    if (field === undefined) return null;
-    return field !== "binding" || this.#bindingShown() ? field : null;
-  }
-
-  #clearRefusal(field: PairField): void {
-    if (this.fieldRefusal?.field === field) this.fieldRefusal = null;
+  #pairErrors(): IdentityErrors {
+    return withRefusal(this.#ownErrors(), this.fieldRefusal);
   }
 
   async #submitPair(): Promise<void> {
@@ -524,7 +529,7 @@ export class DevicesScreen extends LitElement {
       });
       return;
     }
-    const binding = this.#bindingShown() ? this.chosenBinding : "";
+    const { stationId, watcherId } = bindingIds(this.#bindingShown() ? this.chosenBinding : "");
     const epoch = this.#pairEpoch;
     this.submitting = true;
     this.pairError = null;
@@ -534,13 +539,13 @@ export class DevicesScreen extends LitElement {
       result = await this.api.acceptDeviceJoinRequest(request.id, {
         name: this.pairName.trim(),
         profileId: this.chosenProfileId,
-        ...(binding.startsWith("station:") ? { stationId: binding.slice("station:".length) } : {}),
-        ...(binding.startsWith("watcher:") ? { watcherId: binding.slice("watcher:".length) } : {}),
+        ...(stationId === null ? {} : { stationId }),
+        ...(watcherId === null ? {} : { watcherId }),
       });
     } catch (error) {
       if (epoch !== this.#pairEpoch) return;
       this.submitting = false;
-      const field = this.#refusedField(error);
+      const field = refusedField(error, this.chosenBinding, this.#bindingShown());
       if (field === null) this.pairError = codeOf(error);
       else this.fieldRefusal = { field, code: codeOf(error) };
       return;
@@ -705,42 +710,15 @@ export class DevicesScreen extends LitElement {
   }
 
   #editErrors(): Record<EditField, string> {
-    const errors: Record<EditField, string> = {
-      ...this.#editOwnErrors(),
-      receipt: "",
-      slip: "",
-      reader: "",
-    };
-    const refused = this.editRefusal;
-    if (refused !== null && errors[refused.field] === "")
-      errors[refused.field] = codeMessage(refused.code);
-    return errors;
-  }
-
-  /** The field a refusal of the edit is about, when the dialog shows that field. */
-  #editRefusedField(error: unknown): EditField | null {
-    const code = codeOf(error);
-    const params = (error as { params?: Record<string, unknown> } | null)?.params ?? {};
-    let field: EditField | undefined;
-    if (code === "management.request_invalid" || code === "device.binding_invalid")
-      field = typeof params.field === "string" ? EDIT_FIELD_BY_PARAM[params.field] : undefined;
-    // A made-here station refused the same way names no field the dialog marks.
-    else if (code === "station.not_found")
-      field =
-        this.editForm.binding === `station:${String(params.stationId)}` ? "binding" : undefined;
-    else field = EDIT_FIELD_BY_CODE[code];
-    if (field === undefined) return null;
-    return field !== "binding" || this.#editBindingShown() ? field : null;
-  }
-
-  #clearEditRefusal(...fields: EditField[]): void {
-    if (this.editRefusal !== null && fields.includes(this.editRefusal.field))
-      this.editRefusal = null;
+    return withRefusal(
+      { ...this.#editOwnErrors(), receipt: "", slip: "", reader: "" },
+      this.editRefusal,
+    );
   }
 
   #setEdit(patch: Partial<EditForm>, ...fields: EditField[]): void {
     this.editForm = { ...this.editForm, ...patch };
-    this.#clearEditRefusal(...fields);
+    this.editRefusal = clearedRefusal(this.editRefusal, ...fields);
   }
 
   #onEditProfile(profileId: string): void {
@@ -796,36 +774,24 @@ export class DevicesScreen extends LitElement {
       return;
     }
     const form = this.editForm;
-    const binding = this.#editBindingShown() ? form.binding : "";
     const epoch = this.#editEpoch;
     this.editSaving = true;
     this.editError = null;
     this.editRefusal = null;
-    const stationId = binding.startsWith("station:") ? binding.slice("station:".length) : null;
-    const watcherId = binding.startsWith("watcher:") ? binding.slice("watcher:".length) : null;
-    const saved = {
-      label: form.name.trim(),
-      deviceProfileId: form.profileId,
-      stationId,
-      watcherId,
+    const sent = {
+      name: form.name.trim(),
+      profileId: form.profileId,
+      ...bindingIds(this.#editBindingShown() ? form.binding : ""),
       receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
       paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
       madeHereStationIds: this.#madeHereToSend(),
     };
     try {
-      await this.api.updateDevice(device.id, {
-        name: saved.label,
-        profileId: saved.deviceProfileId,
-        ...(stationId === null ? {} : { stationId }),
-        ...(watcherId === null ? {} : { watcherId }),
-        receiptPrinterId: saved.receiptPrinterId,
-        paymentSlipPrinterId: saved.paymentSlipPrinterId,
-        madeHereStationIds: saved.madeHereStationIds,
-      });
+      await this.api.updateDevice(device.id, sent);
     } catch (error) {
       if (epoch !== this.#editEpoch) return;
       this.editSaving = false;
-      const field = this.#editRefusedField(error);
+      const field = refusedField(error, form.binding, this.#editBindingShown());
       if (field === null) this.editError = codeOf(error);
       else this.editRefusal = { field, code: codeOf(error) };
       return;
@@ -833,7 +799,8 @@ export class DevicesScreen extends LitElement {
     this.#reloadDevices().catch((error: unknown) => this.#showReadError(error));
     if (epoch !== this.#editEpoch) return;
     // The reader save below can fail and keep the dialog open, which then edits what was just saved.
-    this.editing = { ...device, ...saved };
+    const { name: label, profileId: deviceProfileId, ...rest } = sent;
+    this.editing = { ...device, ...rest, label, deviceProfileId };
     const readerId = this.chosenReaderId === "" ? null : this.chosenReaderId;
     if (this.readerState === "ready" && readerId !== this.#storedReaderId) {
       // Saved separately: the reader belongs to the payments module and its own permission (spec §5).
@@ -858,7 +825,7 @@ export class DevicesScreen extends LitElement {
     const armed = this.armedRemoveId === device.id;
     return html`<dashboard-row-actions .label=${`${t("devices.actions")}: ${device.label}`}>
       <wt-button data-test=${`edit-device-${device.id}`} @click=${() => this.#openEdit(device)}
-        >${t("devices.edit")}</wt-button
+        >${t("action.edit")}</wt-button
       >
       <wt-button
         variant="danger"
@@ -895,7 +862,7 @@ export class DevicesScreen extends LitElement {
       {
         key: "shows",
         choosable: "shown",
-        label: t("devices.column_shows"),
+        label: t("devices.shows"),
         cell: (d) =>
           html`<span data-test=${`device-station-${d.id}`}
             >${d.kind === "kds_station" ? this.#bindingName(d) : ""}</span
@@ -954,11 +921,14 @@ export class DevicesScreen extends LitElement {
       .rowClick=${(d: DeviceRow) => this.#openEdit(d)}
       .rowClickable=${(d: DeviceRow) => d.active}
       .rowClickLabel=${(d: DeviceRow) => t("devices.edit_title").replace("{name}", d.label)}
-    ></wt-data-table>`;
+      .emptyMessage=${t("devices.no_devices")}
+      >${this.devices.length === 0 ? this.#renderAddButton("empty-action") : nothing}</wt-data-table
+    >`;
   }
 
-  #renderAddButton(): TemplateResult {
+  #renderAddButton(slot?: "empty-action"): TemplateResult {
     return html`<wt-button
+      slot=${ifDefined(slot)}
       variant="primary"
       data-test="open-add-device"
       @click=${() => void this.#openAddDevice()}
@@ -1087,6 +1057,7 @@ export class DevicesScreen extends LitElement {
     values: { name: string; profileId: string; binding: string },
     errors: IdentityErrors,
     on: { name(value: string): void; profile(value: string): void; binding(value: string): void },
+    disabled = false,
   ): TemplateResult {
     return html`<wt-input
         data-test=${`${prefix}-name`}
@@ -1094,6 +1065,7 @@ export class DevicesScreen extends LitElement {
         required
         label=${t("devices.name")}
         .value=${live(values.name)}
+        ?disabled=${disabled}
         .error=${errors.name}
         .invalid=${errors.name !== ""}
         @keydown=${(e: KeyboardEvent) =>
@@ -1119,6 +1091,7 @@ export class DevicesScreen extends LitElement {
         noResultsLabel=${t("categories.combobox_no_results")}
         .options=${this.deviceProfiles.map((p) => ({ value: p.id, label: p.name }))}
         .value=${values.profileId}
+        ?disabled=${disabled}
         .error=${errors.profile}
         .invalid=${errors.profile !== ""}
         @wt-change=${(e: CustomEvent<{ value: string }>) => on.profile(e.detail.value)}
@@ -1136,6 +1109,7 @@ export class DevicesScreen extends LitElement {
               noResultsLabel=${t("categories.combobox_no_results")}
               .options=${this.#bindingOptions()}
               .value=${values.binding}
+              ?disabled=${disabled}
               .error=${errors.binding}
               .invalid=${errors.binding !== ""}
               @wt-change=${(e: CustomEvent<{ value: string }>) => on.binding(e.detail.value)}
@@ -1172,19 +1146,19 @@ export class DevicesScreen extends LitElement {
         {
           name: (value) => {
             this.pairName = value;
-            this.#clearRefusal("name");
+            this.fieldRefusal = clearedRefusal(this.fieldRefusal, "name");
           },
           profile: (value) => {
             this.chosenProfileId = value;
             this.chosenBinding = "";
-            this.#clearRefusal("profile");
-            this.#clearRefusal("binding");
+            this.fieldRefusal = clearedRefusal(this.fieldRefusal, "profile", "binding");
           },
           binding: (value) => {
             this.chosenBinding = value;
-            this.#clearRefusal("binding");
+            this.fieldRefusal = clearedRefusal(this.fieldRefusal, "binding");
           },
         },
+        this.submitting,
       )}
     </div>`;
   }
@@ -1253,20 +1227,28 @@ export class DevicesScreen extends LitElement {
       @wt-close=${() => this.#endEdit()}
     >
       <div class="edit-fields">
-        ${this.#renderIdentityFields("edit", form, errors, {
-          name: (value) => this.#setEdit({ name: value }, "name"),
-          profile: (value) => this.#onEditProfile(value),
-          binding: (value) => this.#setEdit({ binding: value }, "binding"),
-        })}
+        ${this.#renderIdentityFields(
+          "edit",
+          form,
+          errors,
+          {
+            name: (value) => this.#setEdit({ name: value }, "name"),
+            profile: (value) => this.#onEditProfile(value),
+            binding: (value) => this.#setEdit({ binding: value }, "binding"),
+          },
+          this.editSaving,
+        )}
         <wt-combobox
           data-test="edit-receipt-printer"
           name="receiptPrinterId"
+          show-empty-option
           label=${t("devices.receipt_printer_now")}
           search="auto"
           searchPlaceholder=${t("categories.combobox_search")}
           noResultsLabel=${t("categories.combobox_no_results")}
           .options=${this.#printerOptions(profile?.receiptPrinterIds ?? [], device.receiptPrinterId)}
           .value=${form.receiptPrinterId}
+          ?disabled=${this.editSaving}
           .error=${errors.receipt}
           .invalid=${errors.receipt !== ""}
           @wt-change=${(e: CustomEvent<{ value: string }>) =>
@@ -1275,6 +1257,7 @@ export class DevicesScreen extends LitElement {
         <wt-combobox
           data-test="edit-slip-printer"
           name="paymentSlipPrinterId"
+          show-empty-option
           label=${t("devices.slip_printer_now")}
           search="auto"
           searchPlaceholder=${t("categories.combobox_search")}
@@ -1284,6 +1267,7 @@ export class DevicesScreen extends LitElement {
             device.paymentSlipPrinterId,
           )}
           .value=${form.paymentSlipPrinterId}
+          ?disabled=${this.editSaving}
           .error=${errors.slip}
           .invalid=${errors.slip !== ""}
           @wt-change=${(e: CustomEvent<{ value: string }>) =>
@@ -1334,6 +1318,7 @@ export class DevicesScreen extends LitElement {
                 name="madeHereStationIds"
                 value=${station.id}
                 .checked=${live(this.editForm.madeHere.includes(station.id))}
+                ?disabled=${this.editSaving}
                 @change=${(e: Event) =>
                   this.#onMadeHereChange(station.id, (e.target as HTMLInputElement).checked)}
               />
@@ -1352,7 +1337,7 @@ export class DevicesScreen extends LitElement {
       placeholder=${t("devices.default_reader_none")}
       searchPlaceholder=${t("categories.combobox_search")}
       noResultsLabel=${t("categories.combobox_no_results")}
-      ?disabled=${this.readerState !== "ready"}
+      ?disabled=${this.readerState !== "ready" || this.editSaving}
       .options=${[
         { value: "", label: t("devices.default_reader_none") },
         ...this.readers.map((r) => ({ value: r.id, label: this.#readerLabel(r) })),
@@ -1362,7 +1347,7 @@ export class DevicesScreen extends LitElement {
       .invalid=${error !== ""}
       @wt-change=${(e: CustomEvent<{ value: string }>) => {
         this.chosenReaderId = e.detail.value;
-        this.#clearEditRefusal("reader");
+        this.editRefusal = clearedRefusal(this.editRefusal, "reader");
       }}
     ></wt-combobox>`;
   }
@@ -1374,14 +1359,7 @@ export class DevicesScreen extends LitElement {
         ${this.#renderAddButton()}
       </div>
 
-      <section data-test="devices-panel">
-        ${
-          this.devices.length === 0
-            ? html`<p class="empty" data-test="no-devices">${t("devices.no_devices")}</p>
-                ${this.#renderAddButton()}`
-            : this.#renderDevicesTable()
-        }
-      </section>
+      <section data-test="devices-panel">${this.#renderDevicesTable()}</section>
 
       ${
         this.errorKey

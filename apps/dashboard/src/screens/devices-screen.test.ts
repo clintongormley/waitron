@@ -366,12 +366,18 @@ describe("devices-screen", () => {
     expect(deepText(el, "[data-test=device-station-d3]")).toBe(t("devices.no_station", "es-ES"));
   });
 
-  it("shows the empty placeholder when there are no devices", async () => {
+  it("says there are no devices yet in the devices table itself", async () => {
     const api = stubApi({ listDevices: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
 
-    expect(text(el, "[data-test=no-devices]")).toBe(t("devices.no_devices", "es-ES"));
+    const table = devicesTable(el);
+    await table.updateComplete;
+    expect(table.rows).toEqual([]);
+    expect(table.emptyMessage).toBe(t("devices.no_devices", "es-ES"));
+    expect(table.shadowRoot!.querySelector(".empty .message")!.textContent!.trim()).toBe(
+      t("devices.no_devices", "es-ES"),
+    );
   });
 
   // #load's guard: a rejected initial load must become the error banner, never an unhandled rejection.
@@ -463,7 +469,7 @@ describe("the device table", () => {
     expect(table.columns.map((c) => [c.key, c.label])).toEqual([
       ["name", t("devices.name")],
       ["profile", t("devices.device_profile")],
-      ["shows", t("devices.column_shows")],
+      ["shows", t("devices.shows")],
       ["status", t("devices.column_status")],
       ["lastSeen", t("devices.column_last_seen")],
       ["actions", t("devices.actions")],
@@ -520,7 +526,7 @@ describe("the device table", () => {
     const items = [...menu.querySelectorAll("wt-button")];
     expect(items.map((b) => b.getAttribute("data-test"))).toEqual(["edit-device-d1", "remove-d1"]);
     expect(items.map((b) => b.textContent?.trim())).toEqual([
-      t("devices.edit"),
+      t("action.edit"),
       t("devices.remove"),
     ]);
     // Remove's first press only arms it, so the menu stays open for the second.
@@ -817,6 +823,17 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-binding").error).toBe(codeMessage("device.station_required"));
   });
 
+  it("shows None as the chosen printer of a device that has none", async () => {
+    const el = await openEdit(editApi(), "k1");
+    const shown = (id: string) =>
+      q(el, `[data-test=${id}]`)!.shadowRoot!.querySelector("button.trigger .value")!;
+    for (const id of ["edit-receipt-printer", "edit-slip-printer"]) {
+      expect(field(el, id).value).toBe("");
+      expect(shown(id).textContent!.trim()).toBe(t("devices.no_printer"));
+      expect(shown(id).classList.contains("placeholder")).toBe(false);
+    }
+  });
+
   it("changing the profile resets both printers to the new profile's first switched-on printer, or none", async () => {
     const el = await openEdit(editApi());
     await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
@@ -845,6 +862,8 @@ describe("the Edit dialog", () => {
     expect(api.updateDevice).toHaveBeenCalledExactlyOnceWith("t1", {
       name: "Caja 2",
       profileId: "pa",
+      stationId: null,
+      watcherId: null,
       receiptPrinterId: "pr1",
       paymentSlipPrinterId: null,
       madeHereStationIds: ["s1", "s2"],
@@ -864,6 +883,7 @@ describe("the Edit dialog", () => {
     expect(api.updateDevice).toHaveBeenCalledWith("k1", {
       name: "Pantalla Cocina",
       profileId: "pk",
+      stationId: null,
       watcherId: "w1",
       receiptPrinterId: null,
       paymentSlipPrinterId: null,
@@ -1245,6 +1265,99 @@ describe("the Edit dialog", () => {
       await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     });
 
+    /** Whether each control of the dialog that takes a value is disabled, read from its native control. */
+    function editControlsDisabled(el: DevicesScreen): Record<string, boolean> {
+      const native = (id: string): boolean | undefined =>
+        q(el, `[data-test=${id}]`)?.shadowRoot!.querySelector<HTMLInputElement | HTMLButtonElement>(
+          "input.field-control, button.trigger",
+        )!.disabled;
+      const shown: Record<string, boolean | undefined> = {
+        name: native("edit-name"),
+        profile: native("edit-profile"),
+        binding: native("edit-binding"),
+        receipt: native("edit-receipt-printer"),
+        slip: native("edit-slip-printer"),
+        reader: native("edit-reader"),
+      };
+      for (const box of q(el, "[data-test=edit-made-here]")?.querySelectorAll<HTMLInputElement>(
+        "input",
+      ) ?? [])
+        shown[`madeHere:${box.value}`] = box.disabled;
+      return Object.fromEntries(
+        Object.entries(shown).filter((entry): entry is [string, boolean] => entry[1] !== undefined),
+      );
+    }
+
+    const all = (controls: Record<string, boolean>, disabled: boolean) =>
+      Object.fromEntries(Object.keys(controls).map((key) => [key, disabled]));
+
+    it.each([
+      {
+        device: "t1",
+        shown: ["name", "profile", "receipt", "slip", "reader", "madeHere:s1", "madeHere:s2"],
+      },
+      { device: "k1", shown: ["name", "profile", "binding", "receipt", "slip", "reader"] },
+    ])(
+      "takes no new value in any field of $device while its save is unanswered",
+      async ({ device, shown }) => {
+        const pending = deferred<undefined>();
+        const api = editApi({ updateDevice: vi.fn().mockReturnValue(pending.promise) });
+        const el = await openEdit(api, device);
+        const before = editControlsDisabled(el);
+        expect(Object.keys(before)).toEqual(expect.arrayContaining(shown));
+        expect(before).toEqual(all(before, false));
+
+        await save(el);
+        expect(api.updateDevice).toHaveBeenCalledTimes(1);
+        expect(editControlsDisabled(el)).toEqual(all(before, true));
+
+        pending.resolve(undefined);
+        await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+      },
+    );
+
+    it("takes no other reader, nor any other value, while the reader's save is unanswered", async () => {
+      const pending = deferred<undefined>();
+      const api = editApi({ setDeviceReader: vi.fn().mockReturnValue(pending.promise) });
+      const el = await openEdit(api);
+      await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+      await save(el);
+      await vi.waitFor(() => expect(api.setDeviceReader).toHaveBeenCalledTimes(1));
+      await flush(el);
+      const during = editControlsDisabled(el);
+      expect(during.reader).toBe(true);
+      expect(during).toEqual(all(during, true));
+
+      pending.resolve(undefined);
+      await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+      expect(api.setDeviceReader).toHaveBeenCalledExactlyOnceWith("t1", "r1");
+    });
+
+    it.each([
+      {
+        name: "the device's save is refused",
+        overrides: () => ({
+          updateDevice: vi.fn().mockRejectedValue({ code: "device.name_taken" }),
+        }),
+      },
+      {
+        name: "the reader's save fails",
+        overrides: () => ({
+          setDeviceReader: vi.fn().mockRejectedValue({ code: "reader.not_found" }),
+        }),
+      },
+    ])("every field takes a value again once $name", async ({ overrides }) => {
+      const api = editApi(overrides());
+      const el = await openEdit(api);
+      await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+      await save(el);
+      await vi.waitFor(async () => expect(await bottom(el)).toBe(t("form.fix_fields")));
+      expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
+      const after = editControlsDisabled(el);
+      expect(Object.keys(after)).toHaveLength(7);
+      expect(after).toEqual(all(after, false));
+    });
+
     it("neither Escape nor Cancel closes the dialog while a save is unanswered", async () => {
       const pending = deferred<undefined>();
       const api = editApi({ updateDevice: vi.fn().mockReturnValue(pending.promise) });
@@ -1399,7 +1512,7 @@ describe("add a device", () => {
     expect(width("pair-modal")).toBeCloseTo(672, 0);
   });
 
-  it("offers Add a device in the heading and on the empty list", async () => {
+  it("offers Add a device in the heading and under the empty table's sentence", async () => {
     const api = stubApi({ listDevices: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
@@ -1410,10 +1523,60 @@ describe("add a device", () => {
       t("devices.add"),
       t("devices.add"),
     ]);
+    const table = devicesTable(el);
+    await table.updateComplete;
+    const slotted = table.querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    expect(slotted.getAttribute("data-test")).toBe("open-add-device");
+    expect(slotted.assignedSlot).not.toBeNull();
     // The page no longer holds the window itself: nothing is taken until the dialog opens.
     expect(q(el, "[data-test=pairing-mode]")).toBeNull();
     expect(q(el, "[data-test=join-panel]")).toBeNull();
     expect(api.takePairingHold).not.toHaveBeenCalled();
+
+    slotted.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).not.toBeNull());
+    await vi.waitFor(() => expect(api.takePairingHold).toHaveBeenCalledTimes(1));
+  });
+
+  it("draws no Add a device in the table once there is a device", async () => {
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    expect(devicesTable(el).querySelector("[slot=empty-action]")).toBeNull();
+    expect(el.shadowRoot!.querySelectorAll("[data-test=open-add-device]")).toHaveLength(1);
+  });
+
+  it("returns focus to the heading's Add a device after the first device is paired from the empty table", async () => {
+    let rows: DeviceRow[] = [];
+    const api = stubApi({
+      listDevices: vi.fn(() => Promise.resolve(rows)),
+      acceptDeviceJoinRequest: vi.fn(() => {
+        rows = [{ ...devices[0]!, id: "d9", label: "Barra 2" }];
+        return Promise.resolve({ deviceId: "d9", name: "Barra 2", formFactor: "till" as const });
+      }),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api,
+      qrFor: fakeQr(),
+    });
+    await flush(el);
+    const slotted = devicesTable(el).querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
+    slotted.focus();
+    slotted.click();
+    await vi.waitFor(() => expect(api.takePairingHold).toHaveBeenCalled());
+    await flush(el);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    await el.updateComplete;
+    q(el, "[data-test=pair-submit]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    await vi.waitFor(() => expect(slotted.isConnected).toBe(false));
+
+    q(el, "[data-test=add-device-close]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).toBeNull());
+    await flush(el);
+    expect(el.shadowRoot!.activeElement).toBe(q(el, ".heading [data-test=open-add-device]"));
   });
 
   it("Add a device takes a hold and shows the QR code and address", async () => {
@@ -1837,7 +2000,9 @@ describe("add a device", () => {
 
   it("a refusal naming the station goes under Shows", async () => {
     const api = stubApi({
-      acceptDeviceJoinRequest: vi.fn().mockRejectedValue({ code: "station.not_found" }),
+      acceptDeviceJoinRequest: vi
+        .fn()
+        .mockRejectedValue({ code: "station.not_found", params: { stationId: "s1" } }),
     });
     const el = await openAdd(api);
     await toSettings(el);
@@ -1927,6 +2092,72 @@ describe("add a device", () => {
       t("devices.added").replace("{name}", "Barra 1"),
     );
     expect(api.denyJoinRequest).not.toHaveBeenCalled();
+  });
+
+  /** Whether each settings field of the Pair dialog is disabled, read from its native control. */
+  function pairFieldsDisabled(el: DevicesScreen): Record<string, boolean> {
+    const native = (id: string): boolean =>
+      q(el, `[data-test=${id}]`)!.shadowRoot!.querySelector<HTMLInputElement | HTMLButtonElement>(
+        "input.field-control, button.trigger",
+      )!.disabled;
+    return {
+      name: native("pair-name"),
+      profile: native("pair-profile"),
+      binding: native("pair-binding"),
+    };
+  }
+
+  async function toFilledSettings(el: DevicesScreen): Promise<void> {
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
+    await el.updateComplete;
+    await chooseOption(q(el, "[data-test=pair-binding]")!, "station:s1");
+    await flush(el);
+  }
+
+  const enabled = { name: false, profile: false, binding: false };
+
+  it("takes no new value in any settings field while Pair is unanswered", async () => {
+    let answer!: (value: { deviceId: string; name: string; formFactor: string }) => void;
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi.fn().mockReturnValue(new Promise((r) => (answer = r))),
+    });
+    const el = await openAdd(api);
+    await toFilledSettings(el);
+    expect(pairFieldsDisabled(el)).toEqual(enabled);
+
+    q(el, "[data-test=pair-submit]")!.click();
+    await flush(el);
+    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1);
+    expect(pairFieldsDisabled(el)).toEqual({ name: true, profile: true, binding: true });
+
+    answer({ deviceId: "d9", name: "Barra 1", formFactor: "kds" });
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+  });
+
+  it.each([
+    {
+      name: "a refusal naming a field",
+      refusal: { code: "device.name_taken" },
+      bottom: t("form.fix_fields"),
+    },
+    {
+      name: "a refusal naming no field",
+      refusal: { code: "join_request.not_found" },
+      bottom: codeMessage("join_request.not_found"),
+    },
+  ])("every settings field takes a value again after $name", async ({ refusal, bottom }) => {
+    const api = stubApi({ acceptDeviceJoinRequest: vi.fn().mockRejectedValue(refusal) });
+    const el = await openAdd(api);
+    await toFilledSettings(el);
+
+    q(el, "[data-test=pair-submit]")!.click();
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(bottom),
+    );
+    await flush(el);
+    expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
+    expect(pairFieldsDisabled(el)).toEqual(enabled);
   });
 
   it("Cancel discards the request at the number step", async () => {
