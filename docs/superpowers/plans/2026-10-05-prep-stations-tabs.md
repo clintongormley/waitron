@@ -128,3 +128,20 @@ watcher mappings, and a device's made-here mapping; it compares every original c
 non-internal schema objects and foreign-key inventory with a live change feed and append-only triggers installed.
 The cross-module upgrade guard still supplies its separate row-count check. Default provisioning,
 write validation, effective timing readers and the screen tasks remain to be built.
+
+## 2026-10-05 implementation checkpoint: venue defaults
+
+New venues provision a `kitchen_timing_defaults` row in the same transaction as their location.
+A retry preserves edited defaults. `GET /management-api/kitchen-timing-defaults` requires
+`venue.view`; `PUT` requires `venue.configure` and replaces all three defaults. The write validates
+positive whole-minute values, their order, and each station's resulting values before updating the
+row, including disabled stations. A refusal carries the affected station's id, name and field.
+Station override writes and the effective timing readers are still outstanding; this increment
+does not change their existing reads.
+
+For the completed build, use the approved pre-live reset option: reprovision the default row and
+replace original numeric station settings through the new override contract. Add no converter or
+legacy-column fallback. Keep the original columns physically present to avoid the rejected parent
+rebuild, but retire their runtime reads together in Task 2. State the reset in the PR's first line.
+The original populated-upgrade test remains an inventory/preservation receipt for the additive
+schema, not a receipt that original timing settings survive the new runtime contract.

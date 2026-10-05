@@ -2,6 +2,7 @@
 import "./errors.js";
 // The registry of `printer.not_found`, which `requireListedPrinters` throws.
 import "@waitron/printing";
+import { getKitchenTimingDefaults, setKitchenTimingDefaults } from "./kitchen-timing.js";
 import { stationPrintersDown, stationScreensDark } from "./station-outputs-down.js";
 import type { Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -280,6 +281,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "placement.invalid": 400,
   "station.not_found": 404,
   "station.name_taken": 409,
+  "station.thresholds_invalid": 400,
   "watcher.not_found": 404,
   "watcher.name_taken": 409,
   "course.not_found": 404,
@@ -1787,6 +1789,26 @@ export function mountManagementApi(
       const id = requireTableId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
       await withVenueAuth(deps, sessionId, (tx) => clearPlacement(tx, cfg, id));
+      return c.body(null, 204);
+    }),
+  );
+
+  app.get("/management-api/kitchen-timing-defaults", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      return c.json(
+        await withVenueReadAuth(deps, sessionId, (tx) => getKitchenTimingDefaults(tx, cfg)),
+      );
+    }),
+  );
+
+  app.put("/management-api/kitchen-timing-defaults", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const body = await readRawJsonBody(c);
+      await withVenueAuth(deps, sessionId, (tx) => setKitchenTimingDefaults(tx, cfg, body));
       return c.body(null, 204);
     }),
   );

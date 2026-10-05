@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   kitchenCourses,
   kitchenStations,
+  kitchenStationTiming,
   parties,
   partyTables,
   withTransaction,
@@ -2097,4 +2098,103 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
       expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
     }
   });
+});
+
+describe("venue late-flag defaults", () => {
+  const initial = { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 };
+  const changed = { warmAfterMinutes: 3, overdueAfterMinutes: 8, forgottenAfterMinutes: 12 };
+  const read = async () => {
+    const response = await req("/kitchen-timing-defaults", { method: "GET" }, supervisorCookie);
+    expect(response.status).toBe(200);
+    return response.json();
+  };
+  const write = (body: unknown, cookie = managerCookie) =>
+    req("/kitchen-timing-defaults", { method: "PUT", body: JSON.stringify(body) }, cookie);
+  const reset = () =>
+    suite.db.execute(sql`update kitchen_timing_defaults
+    set warm_after_minutes = 5, overdue_after_minutes = 10, forgotten_after_minutes = 15
+    where location_id = ${venue.locationId}`);
+
+  it("reads provisioned defaults, saves replacements and grants supervisors read access only", async () => {
+    expect(await read()).toEqual(initial);
+    for (const cookie of [staffCookie, supervisorCookie]) {
+      expect((await write(changed, cookie)).status).toBe(403);
+      expect(await read()).toEqual(initial);
+    }
+    expect((await write(changed, "")).status).toBe(401);
+    try {
+      expect((await write(changed)).status).toBe(204);
+      expect(await read()).toEqual(changed);
+    } finally {
+      await reset();
+    }
+  });
+
+  it.each([
+    ["body", null],
+    ["body", []],
+    ["warmAfterMinutes", { ...changed, warmAfterMinutes: null }],
+    ["warmAfterMinutes", { ...changed, warmAfterMinutes: "3" }],
+    ["warmAfterMinutes", { ...changed, warmAfterMinutes: [3] }],
+    ["warmAfterMinutes", { ...changed, warmAfterMinutes: 0 }],
+    ["warmAfterMinutes", { ...changed, warmAfterMinutes: 1.5 }],
+    ["warmAfterMinutes", { ...changed, warmAfterMinutes: 2147483648 }],
+    ["warmAfterMinutes", { overdueAfterMinutes: 8, forgottenAfterMinutes: 12 }],
+    ["overdueAfterMinutes", { ...changed, overdueAfterMinutes: 3 }],
+    ["forgottenAfterMinutes", { ...changed, forgottenAfterMinutes: 8 }],
+  ])("refuses invalid %s without changing defaults (%j)", async (field, body) => {
+    const response = await write(body);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field } },
+    });
+    expect(await read()).toEqual(initial);
+  });
+
+  it.each([true, false])(
+    "refuses defaults that invert a station override, including active=%s",
+    async (active) => {
+      const name = unique("Partial override");
+      const [station] = await suite.db
+        .insert(kitchenStations)
+        .values({
+          locationId: venue.locationId,
+          name,
+          active,
+        })
+        .returning({ id: kitchenStations.id });
+      await suite.db.insert(kitchenStationTiming).values({
+        stationId: station!.id,
+        overdueAfterMinutes: 7,
+      });
+      try {
+        const response = await write({ ...initial, warmAfterMinutes: 7 });
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({
+          error: {
+            code: "station.thresholds_invalid",
+            params: { field: "overdueAfterMinutes", stationId: station!.id, name },
+          },
+        });
+        expect(await read()).toEqual(initial);
+        expect((await write(changed)).status).toBe(204);
+        expect(await read()).toEqual(changed);
+        const [timing] = await suite.db
+          .select()
+          .from(kitchenStationTiming)
+          .where(eq(kitchenStationTiming.stationId, station!.id));
+        expect(timing).toEqual({
+          stationId: station!.id,
+          warmAfterMinutes: null,
+          overdueAfterMinutes: 7,
+          forgottenAfterMinutes: null,
+        });
+      } finally {
+        await suite.db
+          .delete(kitchenStationTiming)
+          .where(eq(kitchenStationTiming.stationId, station!.id));
+        await reset();
+      }
+    },
+  );
 });

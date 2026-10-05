@@ -6315,7 +6315,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Eight build steps, each its own queue item.
   [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) was approved on 2026-10-05;
   its build is in progress. The schema foundation adds venue defaults and separate nullable station
-  timing storage; provisioning, timing consumers, Prep stations tabs and live numbers remain open.
+  timing storage. Provisioning now creates 5/10/15 defaults, with a supervisor-readable defaults
+  API whose writes refuse an invalid effective station order. Station override writes, timing
+  consumers, Prep stations tabs and live numbers remain open.
   The generated station-parent rebuild failed the populated upgrade with a foreign-key refusal;
   the ongoing build uses the plan’s storage-redesign option. Approved decisions
   cover what live counts include, ready-but-unserved work, interim station hours, inactive display
