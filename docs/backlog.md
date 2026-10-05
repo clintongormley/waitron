@@ -6051,6 +6051,15 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   No schema migration or reset is proposed; changes needing another fiscal/geographic context or
   history removal use a separately approved setup/reset instead. Build waits for plan approval,
   with step 2 already landed; later Hours/holidays/menu builds retain their own compatibility tests.
+  [Step 8 Printing rules and drawer policy retirement plan](superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
+  has completed spec-only review with corrections and awaits owner approval; its build remains open.
+  It removes the redundant
+  page and legacy location receipt/drawer settings, makes manual drawer authorization unconditional,
+  and preserves device/profile/printer gates, automatic drawer jobs and receipt/replay safeguards.
+  Build waits for plan approval and step 3 landing; A238 and step 2 are landed. Recommendations cover
+  old bookmarks, incompatible export refusal and explicit reset approval if the populated locations
+  upgrade cannot preserve cross-set rows and triggers. Existing guards remain unchanged; useful
+  screen checks move to surviving surfaces before retirement, with any deletion lacking an equally strict replacement requiring approval.
   [Step 1, PR #1166](https://github.com/clintongormley/waitron/pull/1166) gathers Receipts,
   Tables and Kitchen settings into tabs; supervisors can read Tables and Kitchen, while writes
   remain manager-only (owner amendment, 2026-10-04).
