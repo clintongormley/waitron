@@ -25,9 +25,12 @@ import {
   createProduct,
   deleteUnit,
   listAvailableProducts,
+  listMembers,
   menuItems,
   menuPublications,
   readContentLanguages,
+  removeMember,
+  requireMenuRoot,
   setMenuVariants,
   setProductVariants,
   updateExtraList,
@@ -128,7 +131,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   zoneId: string;
   waterOfferId: string;
   waterProductId: string;
-  variantIds?: { double: string; unavailable: string };
+  variantIds?: { double: string; fuera: string };
   /** Every product offered at its own price in the counter zone, from a menu of the helper's own. */
   offers: ZoneOffers;
 }> {
@@ -197,7 +200,7 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       productId: water.id,
       grossPrice: "2.25",
     });
-    let variantIds: { double: string; unavailable: string } | undefined;
+    let variantIds: { double: string; fuera: string } | undefined;
     if (options.variants) {
       const variants = await setProductVariants(
         tx,
@@ -226,10 +229,10 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
         LOCALE,
       );
       await setMenuVariants(tx, offer.id, [
-        { variantId: variants[0]!.id, price: "4.10", offered: true },
-        { variantId: variants[1]!.id, price: "4.80", offered: false },
+        { variantId: variants[0]!.id, price: "4.10" },
+        { variantId: variants[1]!.id, price: "4.80" },
       ]);
-      variantIds = { double: variants[0]!.id, unavailable: variants[1]!.id };
+      variantIds = { double: variants[0]!.id, fuera: variants[1]!.id };
     }
     await tx.execute(sql`
       insert into zone_menus (zone_id, menu_id)
@@ -296,8 +299,12 @@ function decodeNames<T extends StoredNames>(
 }
 
 describe("recordTillSale", () => {
-  it("requires an offered variant and freezes its menu price and presentation facts", async () => {
+  it("requires an Available variant and freezes its menu price and presentation facts", async () => {
     const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
+    await suite.db
+      .update(products)
+      .set({ available: false })
+      .where(eq(products.id, variantIds!.fuera));
     const deps = { db: suite.db, backend, clock };
     await expect(
       recordTillSale(deps, cfg, {
@@ -309,7 +316,7 @@ describe("recordTillSale", () => {
     await expect(
       recordTillSale(deps, cfg, {
         zoneId,
-        lines: [{ menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" }],
+        lines: [{ menuItemId: waterOfferId, variantId: variantIds!.fuera, quantity: "1" }],
         tender: { method: "cash", amount: "4.80" },
       }),
     ).rejects.toMatchObject({ code: "product.variant_unavailable" });
@@ -370,7 +377,7 @@ describe("recordTillSale", () => {
     });
     const result = await recordTillSale({ db: suite.db, backend, clock }, cfg, {
       zoneId,
-      lines: [{ menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" }],
+      lines: [{ menuItemId: waterOfferId, variantId: variantIds!.fuera, quantity: "1" }],
       tender: { method: "cash", amount: "3.80" },
     });
     expect(result.total).toBe("3.80");
@@ -435,8 +442,8 @@ describe("recordTillSale", () => {
     const workingOrderId = randomUUID();
     await withTransaction(suite.db, async (tx) => {
       await setMenuVariants(tx, waterOfferId, [
-        { variantId: variantIds!.double, price: "4.10", offered: true },
-        { variantId: variantIds!.unavailable, price: "4.80", offered: true },
+        { variantId: variantIds!.double, price: "4.10" },
+        { variantId: variantIds!.fuera, price: "4.80" },
       ]);
       await republishMenus(tx);
       await createOpenOrder(
@@ -445,7 +452,7 @@ describe("recordTillSale", () => {
         workingOrderId,
         [
           { menuItemId: waterOfferId, variantId: variantIds!.double, quantity: "1" },
-          { menuItemId: waterOfferId, variantId: variantIds!.unavailable, quantity: "1" },
+          { menuItemId: waterOfferId, variantId: variantIds!.fuera, quantity: "1" },
         ],
         null,
         { zoneId },
@@ -469,7 +476,7 @@ describe("recordTillSale", () => {
             available: true,
           },
           {
-            id: variantIds!.unavailable,
+            id: variantIds!.fuera,
             name: "Fuera nuevo",
             customerName: null,
             kitchenName: null,
@@ -481,8 +488,8 @@ describe("recordTillSale", () => {
         LOCALE,
       );
       await setMenuVariants(tx, waterOfferId, [
-        { variantId: variantIds!.double, price: "31.00", offered: true },
-        { variantId: variantIds!.unavailable, price: "41.00", offered: true },
+        { variantId: variantIds!.double, price: "31.00" },
+        { variantId: variantIds!.fuera, price: "41.00" },
       ]);
     });
 
@@ -2165,10 +2172,17 @@ describe("ordering extras and options — parent + child lines", () => {
     );
     // Taken off: a dish answering an options list, one carrying an extra, and one with neither.
     await withTransaction(suite.db, async (tx) => {
-      await tx
-        .update(menuItems)
-        .set({ offered: false })
+      const taken = await tx
+        .select({ menuId: menuItems.menuId, productId: menuItems.productId })
+        .from(menuItems)
         .where(inArray(menuItems.id, [menuOffer, burgerOffer, baconOffer]));
+      for (const { menuId, productId } of taken) {
+        const rootId = await requireMenuRoot(tx, menuId);
+        const [member] = (await listMembers(tx, rootId)).filter(
+          ({ ref }) => ref.kind === "product" && ref.productId === productId,
+        );
+        await removeMember(tx, rootId, member!.id);
+      }
       await republishMenus(tx);
     });
     const dishes = await suite.db

@@ -123,7 +123,7 @@ export async function buildMenuDocuments(
   const offers = await listMenuOffers(
     tx,
     details.map((row) => row.menuId),
-    { includeEveryModifierItem: true, includeSwitchedOff: true, graph: loaded },
+    { includeEveryModifierItem: true, graph: loaded },
   );
   const dishFacts = await readDishFacts(tx, [...new Set(offers.map((offer) => offer.productId))]);
   const extraImages = await readEffectiveImages(tx, [
@@ -165,12 +165,10 @@ export async function buildMenuDocuments(
   for (const row of details) order(row.menuId);
   for (const row of ordered) {
     const onMenu = new Map(
-      (offersByMenu.get(row.menuId) ?? [])
-        .filter((offer) => offer.combined.offered.state === "clash" || offer.combined.offered.value)
-        .map((offer) => [
-          offer.productId,
-          freezeOffer(offer, dishFacts.get(offer.productId)!, extraImages),
-        ]),
+      (offersByMenu.get(row.menuId) ?? []).map((offer) => [
+        offer.productId,
+        freezeOffer(offer, dishFacts.get(offer.productId)!, extraImages),
+      ]),
     );
     const reachedSections = new Set<string>();
     const listOf = (sectionId: string, path: readonly string[]): DocumentMember[] =>
@@ -245,23 +243,7 @@ export async function buildMenuDocuments(
         defaultHomeLayoutId: row.defaultHomeLayoutId,
       },
     } satisfies Omit<BuiltMenu, "workingHash">;
-    // Ancestors track an included menu's settings even when its switched-off offers are omitted.
-    const ownDecisions = (offersByMenu.get(row.menuId) ?? []).map((offer) => ({
-      productId: offer.productId,
-      price: offer.grossPrice,
-      offered: offer.offered,
-      variants: offer.variants.map((variant) => ({
-        variantId: variant.id,
-        price: variant.menuPrice,
-        offered: variant.ownOffered,
-      })),
-    }));
-    menus.set(row.menuId, {
-      ...built,
-      workingHash: createHash("sha256")
-        .update(canonicalJson({ document: built.document, ownDecisions }))
-        .digest("hex"),
-    });
+    menus.set(row.menuId, { ...built, workingHash: menuDocumentHash(built.document) });
   }
   if (menuIds !== undefined)
     for (const id of menus.keys()) if (!menuIds.includes(id)) menus.delete(id);
@@ -535,7 +517,7 @@ export async function applyLiveFields(
                 : [
                     {
                       ...variant,
-                      available: sellable(row) && variant.offered,
+                      available: sellable(row),
                       courseId: row.courseId,
                       category: row.category,
                     },
@@ -769,9 +751,6 @@ function productFields(
         included.set(source.menuId, { id: source.menuId, name: source.menuName });
       else fallback.add("variants");
     };
-    if (was.ownOffered !== variant.ownOffered) menu.add("variants");
-    else if (was.offered !== variant.offered)
-      fromSetting(setting?.offered.state === "decided" ? setting.offered.source : undefined, menu);
     if (was.menuPrice !== variant.menuPrice) menu.add("variants");
     else if (was.unitPrice !== variant.unitPrice) {
       const priceSource = setting?.price.state === "decided" ? setting.price.source : undefined;

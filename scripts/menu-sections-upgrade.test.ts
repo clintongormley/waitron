@@ -118,7 +118,6 @@ async function stage(control = false) {
       productId: soup.id,
       variantId: variant!.id,
       price: 275,
-      offered: true,
     });
     store.venue.run(
       "insert into section_members(id,section_id,position,child_section_id) values ('library-placement','root',0,'library'),('tile','home',0,'root')",
@@ -191,9 +190,9 @@ it("keeps menu details and a home tile across the rebuild, removes the library, 
         name: `sections_media_image_fk_${suffix}`,
       })),
     );
-    expect(
-      store.venue.all("select menu_item_id,price,offered from menu_item_variant_overrides"),
-    ).toEqual([{ menu_item_id: "soup-offer", price: 275, offered: 1 }]);
+    expect(store.venue.all("select menu_item_id,price from menu_item_variant_overrides")).toEqual([
+      { menu_item_id: "soup-offer", price: 275 },
+    ]);
     expect(store.venue.all("pragma foreign_key_check")).toEqual([]);
     expect(store.venue.all("select name from sqlite_master where name like '__keep_%'")).toEqual(
       [],

@@ -221,7 +221,7 @@ function lunchPrices(): MenuPriceRow[] {
   return [
     {
       menuItemId: "mi-burger",
-      combined: combinedFixture("p-burger", "12.00", true, [], null, "12.00", {}),
+      combined: combinedFixture("p-burger", "12.00", [], null, "12.00", {}),
       productId: "p-burger",
       name: "Burger",
       categoryId: "c-mains",
@@ -229,7 +229,6 @@ function lunchPrices(): MenuPriceRow[] {
       productPrice: "12.00",
       override: null,
       effectivePrice: "12.00",
-      offered: true,
       variants: [],
     },
     {
@@ -237,10 +236,9 @@ function lunchPrices(): MenuPriceRow[] {
       combined: combinedFixture(
         "p-lemonade",
         "2.50",
-        true,
         [
-          { variantId: "v-small", price: null, offered: true },
-          { variantId: "v-large", price: "3.75", offered: false },
+          { variantId: "v-small", price: null },
+          { variantId: "v-large", price: "3.75" },
         ],
         "2.50",
         "3.00",
@@ -253,15 +251,14 @@ function lunchPrices(): MenuPriceRow[] {
       productPrice: "3.00",
       override: "2.50",
       effectivePrice: "2.50",
-      offered: true,
       variants: [
-        { variantId: "v-small", price: null, offered: true },
-        { variantId: "v-large", price: "3.75", offered: false },
+        { variantId: "v-small", price: null },
+        { variantId: "v-large", price: "3.75" },
       ],
     },
     {
       menuItemId: "mi-lager",
-      combined: combinedFixture("p-lager", "2.00", true, [], null, "2.00", {}),
+      combined: combinedFixture("p-lager", "2.00", [], null, "2.00", {}),
       productId: "p-lager",
       name: "Lager",
       categoryId: "c-beer",
@@ -269,7 +266,6 @@ function lunchPrices(): MenuPriceRow[] {
       productPrice: "2.00",
       override: null,
       effectivePrice: "2.00",
-      offered: true,
       variants: [],
     },
   ];
@@ -4367,7 +4363,7 @@ it("names the product and says the change was not saved when a variants-only ref
   expect(client.updateMenuItem).not.toHaveBeenCalled();
 });
 
-type MenuVariantAnswer = { variantId: string; price: string | null; offered: boolean }[];
+type MenuVariantAnswer = { variantId: string; price: string | null }[];
 
 it("opens no product's window while a save is out, even after Back and Forward closed the saving one", async () => {
   const pending = deferred<void>();
@@ -6506,22 +6502,6 @@ it.each(["light", "dark"] as const)(
   },
 );
 
-it("sends only an offered reset and leaves the replacement variant set untouched", async () => {
-  const client = api();
-  const el = await mountPrices(client);
-  await openOffer(el, "mi-lemonade");
-  const select = pricesModal(el).querySelector('wt-combobox[name="offered"]');
-  expect(select).not.toBeNull();
-  await chooseOption(select!, "");
-  await prices(el).updateComplete;
-  await inOffer(el, "offer-save");
-  await vi.waitFor(() =>
-    expect(client.updateMenuItem).toHaveBeenCalledExactlyOnceWith("menu-lunch", "mi-lemonade", {
-      offered: null,
-    }),
-  );
-  expect(client.setMenuVariants).not.toHaveBeenCalled();
-});
 it("shows the current clash count from the menus status read", async () => {
   const client = api({
     getMenuStatuses: vi.fn().mockResolvedValue({

@@ -40,19 +40,11 @@ export function combineOffer(input: CombineInput): CombinedOffer {
     ...included.map((i) => includedCandidate(i, read(i.offer))),
   ];
   const moneyEqual = (a: Decimal, b: Decimal) => compareDecimal(a, b) === 0;
-  const boolEqual = (a: boolean, b: boolean) => a === b;
   const otherwisePrice = resolve(
     candidates(catalogue.price, (o) => o.price),
     moneyEqual,
   );
   const price = own(input.own.price, otherwisePrice);
-  const offered = own(
-    input.own.offered,
-    resolve(
-      candidates(true, (o) => o.offered),
-      boolEqual,
-    ),
-  );
   const parent = (
     setting: Setting<Decimal>,
     otherwise: Setting<Decimal> | null,
@@ -80,16 +72,6 @@ export function combineOffer(input: CombineInput): CombinedOffer {
     const variantPrice = own(override?.price ?? null, fallback);
     return {
       variantId: variant.variantId,
-      offered: own(
-        override?.offered ?? null,
-        resolve(
-          candidates(
-            true,
-            (o) => o.variants.find((v) => v.variantId === variant.variantId)!.offered,
-          ),
-          boolEqual,
-        ),
-      ),
       price: {
         ...variantPrice,
         level:
@@ -99,26 +81,20 @@ export function combineOffer(input: CombineInput): CombinedOffer {
       },
     };
   });
-  return { productId: input.productId, offered, price, variants };
+  return { productId: input.productId, price, variants };
 }
 export function clashesOf(offer: CombinedOffer): MenuClash[] {
   const found: MenuClash[] = [];
-  const add = (
-    variantId: string | null,
-    field: "price" | "offered",
-    setting: Setting<Decimal> | Setting<boolean>,
-  ) => {
+  const add = (variantId: string | null, setting: Setting<Decimal>) => {
     if (setting.state === "clash")
-      found.push({ productId: offer.productId, variantId, field, candidates: setting.candidates });
+      found.push({
+        productId: offer.productId,
+        variantId,
+        field: "price",
+        candidates: setting.candidates,
+      });
   };
-  add(null, "offered", offer.offered);
-  for (const variant of offer.variants) add(variant.variantId, "offered", variant.offered);
-  if (offer.offered.state === "decided" && offer.offered.value) {
-    if (offer.variants.length === 0) add(null, "price", offer.price);
-    else
-      for (const variant of offer.variants)
-        if (variant.offered.state === "decided" && variant.offered.value)
-          add(variant.variantId, "price", variant.price);
-  }
+  if (offer.variants.length === 0) add(null, offer.price);
+  else for (const variant of offer.variants) add(variant.variantId, variant.price);
   return found;
 }

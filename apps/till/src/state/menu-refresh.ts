@@ -65,7 +65,7 @@ export function withUnavailable(
     available: !products.has(offer.productId),
     variants: offer.variants.map((variant) => ({
       ...variant,
-      available: variant.offered && !products.has(variant.id),
+      available: !products.has(variant.id),
     })),
     offeredModifiers: offer.offeredModifiers.map((entry) => {
       if (entry.kind === "extras")
@@ -101,7 +101,7 @@ export function lineBlock(
   let variant: TillMenuOffer["variants"][number] | undefined;
   if (line.product.variantId !== undefined) {
     variant = offer.variants.find((candidate) => candidate.id === line.product.variantId);
-    if (variant === undefined || !variant.offered) return { reason: "variant_removed", name };
+    if (variant === undefined) return { reason: "variant_removed", name };
     if (!variant.available) return { reason: "unavailable", name };
   }
   const { precision } = productUnit(variant ?? offer);

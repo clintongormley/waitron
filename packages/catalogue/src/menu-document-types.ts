@@ -75,7 +75,7 @@ export interface DocumentLayout {
 
 export interface MenuDocument {
   format: 2;
-  /** Direct active inclusions' working hashes, including their settings for switched-off products. */
+  /** Direct active inclusions' working hashes. */
   includedMenuHashes?: Record<string, string>;
   menuId: string;
   menuName: string;

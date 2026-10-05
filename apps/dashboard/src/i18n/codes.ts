@@ -116,8 +116,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Solo los productos y secciones que están en esta carta pueden ser accesos directos en su página de inicio.",
   },
   "menu.clashes_unresolved": {
-    en: "Resolve the price and on/off clashes before publishing this menu.",
-    es: "Resuelve los conflictos de precio y disponibilidad antes de publicar esta carta.",
+    en: "Resolve the price clashes before publishing this menu.",
+    es: "Resuelve los conflictos de precio antes de publicar esta carta.",
   },
   "menu.changed_since_preview": {
     en: "This menu changed after the preview was shown, so it was not published. Check the new preview and publish again.",

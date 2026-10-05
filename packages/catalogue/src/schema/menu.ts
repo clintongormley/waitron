@@ -3,7 +3,6 @@ import { check, foreignKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core"
 import {
   catalogues,
   count,
-  flag,
   id,
   label,
   labelList,
@@ -67,8 +66,8 @@ export const menuDetails = table(
 );
 
 /**
- * A menu's settings for one product: its price and its own switch. A blank `gross_price` means the
- * product's own price (`resolveOfferPrice`, `offer-price.ts`).
+ * A menu's setting for one product: its price. A blank `gross_price` means the product's own price
+ * (`resolveOfferPrice`, `offer-price.ts`).
  */
 export const menuItems = table(
   "menu_items",
@@ -77,7 +76,6 @@ export const menuItems = table(
     menuId: id("menu_id").notNull(),
     productId: id("product_id").notNull(),
     grossPrice: money("gross_price"),
-    offered: flag("offered"),
   },
   (t) => [
     // The target of menu_item_variant_overrides_offer_fk: an override names the offer's product.

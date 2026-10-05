@@ -110,22 +110,20 @@ direct including menus as `{ id, name }`. Write the menu's top level through the
 `rootSectionId`. An unknown menu answers `catalogue.not_found` (404).
 
 `PATCH /management-api/catalogues/:id/items/:itemId` returns 204. Set `grossPrice` to a price or
-null, and `offered` to true, false or null. Null clears this menu's decision so the combined menu
-can supply it; omitting a field keeps its saved value. The retired `active` field is refused with
-`management.request_invalid` (400, `field: "active"`), as is a non-boolean, non-null `offered`
-(`field: "offered"`). An item no longer reached by this menu answers `menu_item.not_found` (404).
-Publish again to change what the till sells.
+null. Null clears this menu's price so the combined menu can supply it; omitting it keeps the saved
+value. The retired `active` and `offered` fields are refused with `management.request_invalid`
+(400, `field: "active"` or `field: "offered"`), whatever their value. An item no longer reached by
+this menu answers `menu_item.not_found` (404). Publish again to change what the till sells.
 
 `GET /management-api/catalogues/:id/prices` gives one row per active product reached by the
-working structure, including sold-out products and products switched off for this menu. An inactive
-menu gives no rows. Each row is
-`{ menuItemId, productId, name, categoryId, placements, productPrice, override, effectivePrice, combined, offered, variants }`.
-`productPrice` is the product's own price; `override` and `offered` are this menu's saved decisions,
-which may be null. `combined` explains the resulting price and on/off setting, including each
-variant. Each setting is either decided, with its `value`, `source` and `otherwise`, or a clash
-with its `candidates`. A source identifies this menu's decision, the product, a parent, or an
-included menu and that menu's source. The scalar `effectivePrice` does not explain a clash: read
-`combined.price` before showing a price as decided.
+working structure, including sold-out products. An inactive menu gives no rows. Each row is
+`{ menuItemId, productId, name, categoryId, placements, productPrice, override, effectivePrice, combined, variants }`.
+`productPrice` is the product's own price; `override` is this menu's saved price, which may be
+null. `combined` explains the resulting price, including each variant's. Each setting is either
+decided, with its `value`, `source` and `otherwise`, or a clash with its `candidates`. A source
+identifies this menu's decision, the product, a parent, or an included menu and that menu's source.
+The scalar `effectivePrice` does not explain a clash: read `combined.price` before showing a price
+as decided.
 
 A menu's own decision wins. Otherwise its own placements and its active included menus contribute
 values; equal values agree, differing values or an unresolved included value clash. Sizes use
@@ -133,8 +131,9 @@ size-level price decisions first, then the combined product price when there are
 source records whether it was decided at the size or product level. For example, if Drinks sets beer
 to €3.00 and Casa Delgado includes only Drinks' beer, Casa charges €3.00. If Casa also places that
 beer in its own Specials at the product's €2.80, the two values clash. Setting Casa's own beer
-price to €3.00 resolves it. `variants` keeps the menu's size settings as
-`{ variantId, price, offered }`; `combined.variants` explains their result.
+price to €3.00 resolves it. `variants` keeps the menu's size prices as `{ variantId, price }`,
+one per Active size, with `price` null where this menu sets none; `combined.variants` explains
+their result.
 
 `GET /management-api/catalogues/:id/status` gives `{ state: "unpublished", clashes }`, or
 `{ state, clashes, version, publishedAt, hash }`, with `state` current or changed relative to the
@@ -191,12 +190,12 @@ Malformed ids answer `shared.invalid_id` (400) and malformed bodies `management.
 (400). `menu.layout_not_found` (404, `layoutId`, and `menuId` when checking ownership) refuses an
 absent layout or one belonging to another menu. `menu.default_layout_required` (409, `layoutId`)
 refuses deletion of the default. `menu.shortcut_unreachable` (409, `layoutId`, `ref`) refuses a
-target outside the working structure, including the menu's own root. Switched-off or inactive
-products are structurally accepted, but publish as empty tiles. `menu_section.wrong_role` (409,
-`sectionId`, `role`) refuses a layout as a target. `menu_section.not_found` names a missing section
-or member; a product target must be a stored top-level product or it answers
-`menu_section.membership_invalid` (400). A repeated target answers `menu_section.member_duplicate`
-(409), and invalid names and positions answer `menu_section.invalid` (400, `field`).
+target outside the working structure, including the menu's own root. Inactive products are
+structurally accepted, but publish as empty tiles. `menu_section.wrong_role` (409, `sectionId`,
+`role`) refuses a layout as a target. `menu_section.not_found` names a missing section or member; a
+product target must be a stored top-level product or it answers `menu_section.membership_invalid`
+(400). A repeated target answers `menu_section.member_duplicate` (409), and invalid names and
+positions answer `menu_section.invalid` (400, `field`).
 
 A device profile chooses one layout per menu; with no choice it shows the menu's default. The two
 routes are in `apps/server/src/management-api.ts`, behind the `layout.configure` permission like

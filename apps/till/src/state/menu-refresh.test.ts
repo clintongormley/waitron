@@ -19,7 +19,6 @@ function offer(overrides: Partial<TillMenuOffer> & Pick<TillMenuOffer, "id" | "p
     menuId: "lunch",
     grossPrice: null,
     unitPrice: "3.00",
-    offered: true,
     available: true,
     image: null,
     description: null,
@@ -112,8 +111,6 @@ function variant(id: string, unitPrice: string, overrides: Partial<LiveVariant> 
     image: null,
     unitPrice,
     menuPrice: null,
-    offered: true,
-    ownOffered: null,
     available: true,
     unit,
     pricingUnit: "each",
@@ -254,12 +251,17 @@ describe("withUnavailable", () => {
     });
   });
 
-  it("keeps a variant this menu does not offer unavailable, whatever the set says", () => {
+  it("marks a variant loaded unavailable available when the set does not list it", () => {
     const [served] = withUnavailable(
-      [offer({ ...wine, variants: [variant("bottle", "18.00", { offered: false })] })],
+      [
+        offer({
+          ...wine,
+          variants: [variant("bottle", "18.00", { available: false })],
+        }),
+      ],
       NOTHING,
     );
-    expect(served!.variants[0]!.available).toBe(false);
+    expect(served!.variants[0]!.available).toBe(true);
   });
 });
 
@@ -306,7 +308,7 @@ describe("lineBlock", () => {
     expect(lineBlock(line, { ...burger, ordering: "public" })).toBeUndefined();
   });
 
-  it("names the variant when the menu stopped offering it or it cannot be sold", () => {
+  it("names the variant when the offer no longer has it or it cannot be sold", () => {
     const bottle = menuOfferToTillProduct(wine, "v1");
     const line: OrderLine = {
       product: { ...bottle, variantId: "bottle", variantName: "Botella" },
@@ -317,11 +319,30 @@ describe("lineBlock", () => {
       name: "Botella",
     });
     expect(
-      lineBlock(line, { ...wine, variants: [variant("bottle", "18.00", { offered: false })] }),
-    ).toEqual({ reason: "variant_removed", name: "Botella" });
-    expect(
       lineBlock(line, { ...wine, variants: [variant("bottle", "18.00", { available: false })] }),
     ).toEqual({ reason: "unavailable", name: "Botella" });
+  });
+
+  it("blocks a variant only by the unavailable set and the offer's variants", () => {
+    const bottle = menuOfferToTillProduct(wine, "v1");
+    const line: OrderLine = {
+      product: { ...bottle, variantId: "bottle", variantName: "Botella" },
+      quantity: "1",
+    };
+    const loaded = offer({
+      ...wine,
+      variants: [variant("glass", "4.00"), variant("bottle", "18.00")],
+    });
+
+    const [served] = withUnavailable([loaded], NOTHING);
+    expect(lineBlock(line, served)).toBeUndefined();
+    const [soldOut] = withUnavailable([loaded], { ...NOTHING, products: ["bottle"] });
+    expect(lineBlock(line, soldOut)).toEqual({ reason: "unavailable", name: "Botella" });
+    const [withoutBottle] = withUnavailable(
+      [{ ...loaded, variants: [variant("glass", "4.00")] }],
+      NOTHING,
+    );
+    expect(lineBlock(line, withoutBottle)).toEqual({ reason: "variant_removed", name: "Botella" });
   });
 
   it("names the extra when its list no longer offers it, or it cannot be sold", () => {

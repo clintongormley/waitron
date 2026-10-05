@@ -21,15 +21,15 @@ const lemonade = {
   id: "p-lemonade",
   name: "Lemonade",
   variants: [
-    { id: "v-small", name: "Small", unitPrice: null, offered: true },
-    { id: "v-large", name: "Large", unitPrice: "3.40", offered: true },
+    { id: "v-small", name: "Small", unitPrice: null },
+    { id: "v-large", name: "Large", unitPrice: "3.40" },
   ],
 } as unknown as Product;
 
 const rows: MenuPriceRow[] = [
   {
     menuItemId: "mi-burger",
-    combined: combinedFixture("p-burger", "12.00", false, [], null, "12.00", {}),
+    combined: combinedFixture("p-burger", "12.00", [], null, "12.00", {}),
     productId: "p-burger",
     name: "Burger",
     categoryId: null,
@@ -37,7 +37,6 @@ const rows: MenuPriceRow[] = [
     productPrice: "12.00",
     override: null,
     effectivePrice: "12.00",
-    offered: false,
     variants: [],
   },
   {
@@ -45,10 +44,9 @@ const rows: MenuPriceRow[] = [
     combined: combinedFixture(
       "p-lemonade",
       "2.50",
-      true,
       [
-        { variantId: "v-small", price: null, offered: true },
-        { variantId: "v-large", price: "3.75", offered: false },
+        { variantId: "v-small", price: null },
+        { variantId: "v-large", price: "3.75" },
       ],
       "2.50",
       "3.00",
@@ -61,10 +59,9 @@ const rows: MenuPriceRow[] = [
     productPrice: "3.00",
     override: "2.50",
     effectivePrice: "2.50",
-    offered: true,
     variants: [
-      { variantId: "v-small", price: null, offered: true },
-      { variantId: "v-large", price: "3.75", offered: false },
+      { variantId: "v-small", price: null },
+      { variantId: "v-large", price: "3.75" },
     ],
   },
 ];
@@ -98,11 +95,11 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     root.querySelector<HTMLInputElement>('input[data-column="price-on-menu"]')!.click();
     await table.updateComplete;
     expect(root.querySelector('tr[data-row-key="mi-lemonade:v-large"]')).not.toBeNull();
-    // A struck price, a muted one with its hidden words, and a muted "Not offered", all drawn.
+    // A struck price, a muted one with its hidden words, and a muted "no own price", all drawn.
     expect(root.querySelector("s")).not.toBeNull();
     expect(root.querySelector('[part~="visually-hidden"]')).not.toBeNull();
     expect(
-      root.querySelector('tr[data-row-key="mi-lemonade:v-large"] [part~="muted"]'),
+      root.querySelector('tr[data-row-key="mi-lemonade:v-small"] [part~="muted"]'),
     ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
@@ -164,31 +161,6 @@ describe.each(["light", "dark"] as const)("price source and clash states (%s)", 
       tip.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
       await tip.updateComplete;
       expect(tip.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-      await expectNoA11yViolations(host);
-      setLocale("es-ES");
-    },
-  );
-  it.each(["en-GB", "es-ES"])(
-    "accessible three-state editor with disagreeing offered sources (%s)",
-    async (locale) => {
-      setLocale(locale);
-      const product = rows[1]!;
-      const offered = {
-        state: "clash",
-        candidates: [
-          { place: { kind: "own_sections" }, value: true, source: { kind: "product" } },
-          {
-            place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
-            value: false,
-            source: { kind: "own" },
-          },
-        ],
-      } as MenuPriceRow["combined"]["offered"];
-      const { el, host } = await mount(theme, {
-        editing: product.menuItemId,
-        rows: [{ ...product, combined: { ...product.combined, offered } }],
-      });
-      expect(el.shadowRoot!.querySelector('wt-combobox[name="offered"]')).not.toBeNull();
       await expectNoA11yViolations(host);
       setLocale("es-ES");
     },

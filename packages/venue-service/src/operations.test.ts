@@ -1911,13 +1911,13 @@ describe("each served menu's structure and home layouts", () => {
     });
   });
 
-  it("leaves out of the structure an offer the menu switched off, keeping its section in place (D5)", async () => {
+  it("leaves out of the structure an offer whose product is Inactive, keeping its section in place (D5)", async () => {
     const venue = await seedDinnerLayouts();
     await scoped(async (tx) => {
       const colaOffer = (await listZoneOffers(tx, venue.cfg, venue.diningZone)).offers.find(
         (offer) => offer.productId === venue.cola,
       )!.id;
-      await updateMenuItem(tx, venue.dinner, colaOffer, { offered: false });
+      await updateProduct(tx, venue.cola, { active: false });
       await publish(tx, venue.dinner);
       const served = await listZoneOffers(tx, venue.cfg, venue.diningZone);
       expect(served.offers.map((offer) => offer.id)).not.toContain(colaOffer);

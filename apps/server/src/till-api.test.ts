@@ -43,8 +43,10 @@ import {
   createProduct,
   readContentLanguages,
   updateOptionList,
-  updateMenuItem,
   writeProductModifiers,
+  addMember,
+  listMembers,
+  removeMember,
 } from "@waitron/catalogue";
 import {
   AppError,
@@ -1724,7 +1726,7 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     });
   });
 
-  it("leaves out a product switched off on its menu, and lists it again once switched back on", async () => {
+  it("leaves out a product taken off its menu's structure, and lists it again once put back", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const token = await openSession(suite.db);
@@ -1735,19 +1737,42 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       expect(res.status).toBe(200);
       return ((await res.json()) as { offers: { id: string }[] }).offers.map((offer) => offer.id);
     };
-    // The same write `PATCH /management-api/catalogues/:id/items/:itemId` makes, then a publish:
-    // the switch is the menu's, so a till sees it once published.
-    const switchTo = (active: boolean) =>
-      withTransaction(suite.db, async (tx) => {
-        await updateMenuItem(tx, aguaProduct.catalogueId, aguaOfferId, { offered: active });
-        await publishWorkingMenu(tx, aguaProduct.catalogueId);
-      });
+    const menuId = aguaProduct.catalogueId;
+    const [held] = (
+      await suite.db.execute<{
+        sectionId: string;
+        position: number;
+        grossPrice: number | null;
+      }>(sql`
+        select m.section_id as "sectionId", m.position, i.gross_price as "grossPrice"
+        from section_members m join menu_details d on d.root_section_id = m.section_id
+          join menu_items i on i.menu_id = d.menu_id and i.product_id = m.product_id
+        where d.menu_id = ${menuId} and m.product_id = ${aguaProduct.id}`)
+    ).rows;
 
     try {
-      await switchTo(false);
+      await withTransaction(suite.db, async (tx) => {
+        const [member] = (await listMembers(tx, held!.sectionId)).filter(
+          ({ ref }) => ref.kind === "product" && ref.productId === aguaProduct.id,
+        );
+        await removeMember(tx, held!.sectionId, member!.id);
+        await publishWorkingMenu(tx, menuId);
+      });
       expect(await offerIds()).not.toContain(aguaOfferId);
     } finally {
-      await switchTo(true);
+      // Taking it off reset the menu's price for it; the suite's other cases read that price.
+      await withTransaction(suite.db, async (tx) => {
+        await addMember(
+          tx,
+          held!.sectionId,
+          { kind: "product", productId: aguaProduct.id },
+          held!.position,
+        );
+        await tx.execute(
+          sql`update menu_items set gross_price = ${held!.grossPrice} where id = ${aguaOfferId}`,
+        );
+        await publishWorkingMenu(tx, menuId);
+      });
     }
     expect(await offerIds()).toContain(aguaOfferId);
   });

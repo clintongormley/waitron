@@ -13,11 +13,9 @@ export type Setting<T> =
   | { state: "clash"; candidates: Candidate<T>[] };
 export interface CombinedOffer {
   productId: string;
-  offered: Setting<boolean>;
   price: Setting<Decimal>;
   variants: {
     variantId: string;
-    offered: Setting<boolean>;
     price: Setting<Decimal> & { level: "size" | "product" };
   }[];
 }
@@ -26,8 +24,7 @@ export interface CombineInput {
   catalogue: { price: Decimal; variants: { variantId: string; price: Decimal | null }[] };
   own: {
     price: Decimal | null;
-    offered: boolean | null;
-    variants: { variantId: string; price: Decimal | null; offered: boolean | null }[];
+    variants: { variantId: string; price: Decimal | null }[];
   };
   placedInOwnSections: boolean;
   included: { menuId: string; menuName: string; offer: CombinedOffer }[];
@@ -35,6 +32,6 @@ export interface CombineInput {
 export interface MenuClash {
   productId: string;
   variantId: string | null;
-  field: "price" | "offered";
-  candidates: Candidate<Decimal | boolean>[];
+  field: "price";
+  candidates: Candidate<Decimal>[];
 }

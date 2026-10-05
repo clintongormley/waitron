@@ -21,7 +21,7 @@ import * as menuDocument from "./menu-document.js";
 import * as operations from "./operations.js";
 import * as sectionGraph from "./section-graph.js";
 import { requireMenuRoot } from "./menu-structure.js";
-import { menuDocumentHash } from "./menu-document.js";
+import { applyLiveFields, menuDocumentHash } from "./menu-document.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import {
   assertLiveVersions,
@@ -43,7 +43,7 @@ import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { extraListItems } from "./schema/extras.js";
 import { createUnit, updateUnit } from "./units.js";
 import { addMember, moveMember, removeMember, updateSection, deleteSection } from "./sections.js";
-import { setProductVariants, setMenuVariants } from "./variants.js";
+import { listProductVariants, setProductVariants, setMenuVariants } from "./variants.js";
 import { menuDetails } from "./schema/menu.js";
 import { menuPublications, menuVersionImages, menuVersions } from "./schema/publication.js";
 import { sectionMembers, sections } from "./schema/sections.js";
@@ -674,6 +674,33 @@ describe("menuStatus", () => {
       expect(await states(f)).toEqual({ lunch: "current", dinner: "changed" });
     });
 
+    it("flags Lunch alone when it sets Soup's own price to the 5.00 it already charged", async () => {
+      const f = await published();
+      const soupOffer = await app((tx) => offerOf(tx, f.lunch, f.soup));
+      const charged = async () =>
+        (await app((tx) => menuDocument.buildMenuDocument(tx, f.lunch))).document.offers[soupOffer]!
+          .unitPrice;
+      expect(await charged()).toBe("5.00");
+      await app((tx) => updateMenuItem(tx, f.lunch, soupOffer, { grossPrice: "5.00" }));
+      expect(await charged()).toBe("5.00");
+      expect(await states(f)).toEqual({ lunch: "changed", dinner: "current" });
+    });
+
+    it("flags Lunch alone when it sets Large's price to the 3.50 it already charged", async () => {
+      const f = await published();
+      const lemonadeOffer = await app((tx) => offerOf(tx, f.lunch, f.lemonade));
+      const charged = async () =>
+        (await app((tx) => menuDocument.buildMenuDocument(tx, f.lunch))).document.offers[
+          lemonadeOffer
+        ]!.variants.find((variant) => variant.id === f.large)!.unitPrice;
+      expect(await charged()).toBe("3.50");
+      await app((tx) =>
+        setMenuVariants(tx, lemonadeOffer, [{ variantId: f.large, price: "3.50" }], f.lunch),
+      );
+      expect(await charged()).toBe("3.50");
+      expect(await states(f)).toEqual({ lunch: "changed", dinner: "current" });
+    });
+
     it("flags both for Lemonade's allergens, each naming the shared product", async () => {
       const f = await published();
       await app((tx) =>
@@ -1299,12 +1326,13 @@ describe("previewMenu", () => {
     ]);
   });
 
-  it("names a product the menu switched off as this menu's, and a deleted one as the product's", async () => {
+  it("names a product taken off the menu as this menu's, and a deleted one as the product's", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
     await publish(f.dinner);
+    const soupMember = await memberOf(f.lunchRoot, f.soup);
     await app(async (tx) => {
-      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.soup), { offered: false });
+      await removeMember(tx, f.lunchRoot, soupMember);
       await updateProduct(tx, f.lager, { active: false });
     });
     expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
@@ -1339,57 +1367,87 @@ describe("previewMenu", () => {
   });
 });
 
+describe("a published menu serves each variant as sellable as it is itself", () => {
+  const serve = (menuId: string) =>
+    app(async (tx) => {
+      const live = await readLiveDocuments(tx, [menuId]);
+      return (await applyLiveFields(tx, [live.get(menuId)!.document])).get(menuId)!;
+    });
+  const setLargeAvailable = (f: MenusFixture, available: boolean) =>
+    app(async (tx) =>
+      setProductVariants(
+        tx,
+        f.lemonade,
+        (await listProductVariants(tx, f.lemonade)).map((variant) =>
+          variant.id === f.large ? { ...variant, available } : variant,
+        ),
+        "en",
+      ),
+    );
+
+  it("lists an Unavailable variant as not sellable, and sells it once Available without a republish", async () => {
+    const f = await menusFixture(fx.db);
+    await setLargeAvailable(f, false);
+    await publish(f.lunch);
+    const large = async () =>
+      (await serve(f.lunch))
+        .find((offer) => offer.productId === f.lemonade)!
+        .variants.find((variant) => variant.id === f.large)!;
+    expect(await large()).toMatchObject({ id: f.large, available: false });
+    expect(await large()).not.toHaveProperty("offered");
+    expect(await large()).not.toHaveProperty("ownOffered");
+    await setLargeAvailable(f, true);
+    expect(await large()).toMatchObject({ id: f.large, available: true });
+    expect(await versionRows()).toHaveLength(1);
+  });
+
+  it("previews a menu including another with its price clashes and nothing else", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      // Dinner places Lemonade itself and reaches it through Drinks, which prices Large apart.
+      await addMember(tx, f.dinnerRoot, product(f.lemonade));
+      await setMenuVariants(
+        tx,
+        await offerOf(tx, f.drinksMenu, f.lemonade),
+        [{ variantId: f.large, price: "4.20" }],
+        f.drinksMenu,
+      );
+    });
+    const preview = await app((tx) => previewMenu(tx, f.dinner));
+    expect(
+      preview.clashes.map(({ productId, variantId, field }) => ({ productId, variantId, field })),
+    ).toEqual([{ productId: f.lemonade, variantId: f.large, field: "price" }]);
+  });
+});
+
 describe("combined menu publication", () => {
-  it.each([
-    { offered: true, variantOffered: true, refused: true },
-    { offered: true, variantOffered: false, refused: false },
-    { offered: false, variantOffered: true, refused: false },
-    { offered: false, variantOffered: false, refused: false },
-  ])(
-    "gates a variant price clash when product offered=$offered and variant offered=$variantOffered",
-    async ({ offered, variantOffered, refused }) => {
-      const f = await menusFixture(fx.db);
-      await publish(f.dinner);
-      await app(async (tx) => {
-        await addMember(tx, f.dinnerRoot, product(f.lemonade));
-        await updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.lemonade), {
-          offered,
-        });
-        await setMenuVariants(
-          tx,
-          await offerOf(tx, f.dinner, f.lemonade),
-          [{ variantId: f.large, price: null, offered: variantOffered }],
-          f.dinner,
-        );
-        await setMenuVariants(
-          tx,
-          await offerOf(tx, f.drinksMenu, f.lemonade),
-          [{ variantId: f.large, price: "4.20" }],
-          f.drinksMenu,
-        );
-      });
-      const preview = await app((tx) => previewMenu(tx, f.dinner));
-      expect(
-        preview.clashes.map(({ productId, variantId, field }) => ({ productId, variantId, field })),
-      ).toEqual(refused ? [{ productId: f.lemonade, variantId: f.large, field: "price" }] : []);
-      const before = await versionRows();
-      const publications = await fx.db.select().from(menuPublications);
-      const images = await fx.db.select().from(menuVersionImages);
-      if (refused) {
-        await expect(publish(f.dinner)).rejects.toMatchObject({
-          code: "menu.clashes_unresolved",
-          params: { menuId: f.dinner, count: 1 },
-        });
-        expect(await versionRows()).toEqual(before);
-        expect(await fx.db.select().from(menuPublications)).toEqual(publications);
-        expect(await fx.db.select().from(menuVersionImages)).toEqual(images);
-      } else {
-        const published = await publish(f.dinner);
-        expect(published.number).toBe(2);
-        expect((await versionRows()).length).toBe(before.length + 1);
-      }
-    },
-  );
+  it("refuses to publish a variant price clash, writing nothing", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.dinner);
+    await app(async (tx) => {
+      await addMember(tx, f.dinnerRoot, product(f.lemonade));
+      await setMenuVariants(
+        tx,
+        await offerOf(tx, f.drinksMenu, f.lemonade),
+        [{ variantId: f.large, price: "4.20" }],
+        f.drinksMenu,
+      );
+    });
+    const preview = await app((tx) => previewMenu(tx, f.dinner));
+    expect(
+      preview.clashes.map(({ productId, variantId, field }) => ({ productId, variantId, field })),
+    ).toEqual([{ productId: f.lemonade, variantId: f.large, field: "price" }]);
+    const before = await versionRows();
+    const publications = await fx.db.select().from(menuPublications);
+    const images = await fx.db.select().from(menuVersionImages);
+    await expect(publish(f.dinner)).rejects.toMatchObject({
+      code: "menu.clashes_unresolved",
+      params: { menuId: f.dinner, count: 1 },
+    });
+    expect(await versionRows()).toEqual(before);
+    expect(await fx.db.select().from(menuPublications)).toEqual(publications);
+    expect(await fx.db.select().from(menuVersionImages)).toEqual(images);
+  });
   it("inherits included prices, refuses clashes without writing, and attributes the included edit", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.dinner);
@@ -1420,14 +1478,11 @@ describe("combined menu publication", () => {
       }),
     );
   });
-  it("marks direct and indirect parents changed when own price and off decisions mask an included edit", async () => {
+  it("marks direct and indirect parents changed when an own price masks an included edit", async () => {
     const f = await menusFixture(fx.db);
     const outer = await app(async (tx) => {
       await updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.lager), {
         grossPrice: "9.00",
-      });
-      await updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.lemonade), {
-        offered: false,
       });
       const menu = await createCatalogue(tx, { name: "Outer" });
       const root = await requireMenuRoot(tx, menu.id);
@@ -1440,29 +1495,12 @@ describe("combined menu publication", () => {
       await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lager), {
         grossPrice: "5.00",
       });
-      await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
-        offered: false,
-      });
     });
     const status = await app((tx) => menuStatus(tx, [f.dinner, outer]));
     expect([...status.values()].map((s) => s.state)).toEqual(["changed", "changed"]);
   });
-  it("keeps inherited off products in management prices and omits inactive inclusion offers", async () => {
+  it("omits an inactive inclusion's offers from management prices", async () => {
     const f = await menusFixture(fx.db);
-    await app(async (tx) => {
-      await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lager), {
-        offered: false,
-      });
-    });
-    const prices = await app((tx) => operations.menuPrices(tx, f.dinner));
-    expect(prices.find((p) => p.productId === f.lager)).toMatchObject({
-      combined: { offered: { state: "decided", value: false } },
-    });
-    expect(
-      (await app((tx) => operations.listMenuOffers(tx, [f.dinner]))).some(
-        (p) => p.productId === f.lager,
-      ),
-    ).toBe(false);
     await app((tx) => operations.deactivateCatalogue(tx, f.drinksMenu));
     expect(
       (await app((tx) => operations.menuPrices(tx, f.dinner))).map((p) => p.productId),
@@ -1470,28 +1508,6 @@ describe("combined menu publication", () => {
   });
 });
 
-it("tracks masked on/off edits alone and stays current after parent republish", async () => {
-  const f = await menusFixture(fx.db);
-  await app(async (tx) => {
-    await updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.lager), { offered: true });
-  });
-  await publish(f.dinner);
-  await app(async (tx) => {
-    await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lager), {
-      offered: false,
-    });
-  });
-  expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)!.state).toBe("changed");
-  await publish(f.drinksMenu);
-  expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)!.state).toBe("changed");
-  await publish(f.dinner);
-  expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)!.state).toBe("current");
-  expect(
-    (await app((tx) => previewMenu(tx, f.dinner))).document.offers[
-      await app((tx) => offerOf(tx, f.dinner, f.lager))
-    ],
-  ).toMatchObject({ unitPrice: "4.00" });
-});
 it("filters inactive top-level and transitive menus before combining", async () => {
   const f = await menusFixture(fx.db);
   const outer = await app(async (tx) => {
@@ -1515,7 +1531,7 @@ it("attributes included size decisions to the directly included menu", async () 
     setMenuVariants(
       tx,
       await offerOf(tx, f.drinksMenu, f.lemonade),
-      [{ variantId: f.large, price: "4.20", offered: false }],
+      [{ variantId: f.large, price: "4.20" }],
       f.drinksMenu,
     ),
   );
@@ -1531,15 +1547,11 @@ it("attributes included size decisions to the directly included menu", async () 
   );
 });
 
-it("marks parents changed for a price edited while the included product is off", async () => {
+it("marks parents changed for an included price edit its own price masks", async () => {
   const f = await menusFixture(fx.db);
   await app(async (tx) => {
-    await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lager), {
-      offered: false,
-    });
     await updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.lager), {
       grossPrice: "9.00",
-      offered: true,
     });
   });
   await publish(f.dinner);
@@ -1556,12 +1568,11 @@ it("marks parents changed for a price edited while the included product is off",
   await publish(f.dinner);
   expect((await app((tx) => previewMenu(tx, f.dinner))).status.state).toBe("current");
 });
-it("attributes an inherited off switch to its included menu", async () => {
+it("attributes a product an included menu takes out of its structure to that menu", async () => {
   const f = await menusFixture(fx.db);
   await publish(f.dinner);
-  await app(async (tx) =>
-    updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lager), { offered: false }),
-  );
+  const lagerMember = await memberOf(f.beer, f.lager);
+  await app((tx) => removeMember(tx, f.beer, lagerMember));
   expect((await app((tx) => previewMenu(tx, f.dinner))).changes).toContainEqual(
     expect.objectContaining({
       kind: "product_removed",
@@ -1669,7 +1680,7 @@ describe("review regressions", () => {
         await setMenuVariants(
           tx,
           await offerOf(tx, f.drinksMenu, f.lemonade),
-          [{ variantId: f.large, price: "4.20", offered: false }],
+          [{ variantId: f.large, price: "4.20" }],
           f.drinksMenu,
         );
         if (otherSource === "own")

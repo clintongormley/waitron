@@ -201,7 +201,7 @@ function api(state: State): DashboardApi {
     getMenuPrices: vi.fn().mockResolvedValue([
       {
         menuItemId: "mi-lager",
-        combined: combinedFixture("p-lager", "1.80", true, [], "1.80", "2.00"),
+        combined: combinedFixture("p-lager", "1.80", [], "1.80", "2.00"),
         productId: "p-lager",
         name: "Lager",
         categoryId: null,
@@ -209,7 +209,6 @@ function api(state: State): DashboardApi {
         productPrice: "2.00",
         override: "1.80",
         effectivePrice: "1.80",
-        offered: true,
         variants: [],
       },
     ]),

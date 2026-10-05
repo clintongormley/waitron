@@ -147,7 +147,6 @@ describe("buildMenuDocument", () => {
       kitchenName: "LRG",
       image: "large.jpg",
       unitPrice: "3.50",
-      offered: true,
     });
   });
 
@@ -208,10 +207,10 @@ describe("buildMenuDocument", () => {
     }
   });
 
-  it("omits a product the menu switches off, and one that is deleted", async () => {
+  it("omits a product taken out of the menu's structure, and one that is deleted", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) => {
-      await updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.soup), { offered: false });
+      await removeMember(tx, f.lunchRoot, await memberOf(f.lunchRoot, { productId: f.soup }));
       await updateProduct(tx, f.lager, { active: false });
     });
     const document = await build(f.lunch);
@@ -395,10 +394,10 @@ describe("menuDocumentHash", () => {
       (tx, f) => updateProduct(tx, f.large, { dietOverride: { vegan: "no" } }),
     ],
     [
-      "whether the variant is offered",
+      "the variant's menu price",
       async (tx, f) =>
         setMenuVariants(tx, await offerOf(tx, f.dinner, f.lemonade), [
-          { variantId: f.large, price: null, offered: false },
+          { variantId: f.large, price: "4.20" },
         ]),
     ],
     ["the extra's name", (tx, f) => updateProduct(tx, f.extraLemon, { name: "Lemon wedge" })],
@@ -1154,7 +1153,7 @@ describe("diffMenuDocuments", () => {
         dietOverride: { vegan: "yes" },
       });
       await setMenuVariants(tx, await offerOf(tx, f.dinner, f.lemonade), [
-        { variantId: f.large, price: "4.00", offered: true },
+        { variantId: f.large, price: "4.00" },
       ]);
     });
     expect(diffMenuDocuments(live, await build(f.dinner))).toEqual([

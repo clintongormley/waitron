@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
@@ -158,7 +158,7 @@ export async function reachableMenuItem(
 /**
  * Brings each menu's `menu_items` rows in line with what its structure reaches: a row for every
  * product reached, active or not, and every other row of the menu reset to "starts fresh" — no menu
- * price, switched on, and no variant or extras overrides. Rows are reset rather than deleted
+ * price and no variant or extras overrides. Rows are reset rather than deleted
  * because `working_line_contexts.menu_item_id` keeps keys into the table with no delete rule.
  *
  * With `before`, the graph a structure write read before writing, only the products that write put
@@ -203,13 +203,8 @@ export async function syncMenuOffers(
         .where(inArray(menuItemVariantOverrides.menuItemId, batch));
       await tx
         .update(menuItems)
-        .set({ grossPrice: null, offered: null })
-        .where(
-          and(
-            inArray(menuItems.id, batch),
-            or(isNotNull(menuItems.grossPrice), isNotNull(menuItems.offered)),
-          ),
-        );
+        .set({ grossPrice: null })
+        .where(and(inArray(menuItems.id, batch), isNotNull(menuItems.grossPrice)));
     }
   }
 }

@@ -28,12 +28,7 @@ import {
 import { membersOf } from "./section-members.js";
 import { readSection } from "./sections.js";
 import { menuStatus, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
-import {
-  deactivateCatalogue,
-  deactivateProduct,
-  listMenuOffers,
-  updateMenuItem,
-} from "./operations.js";
+import { deactivateCatalogue, deactivateProduct, listMenuOffers } from "./operations.js";
 import { addMember, createSectionIn, deleteSection, removeMember } from "./sections.js";
 import { deviceProfileHomeLayouts } from "./schema/home-layouts.js";
 import { menuDetails, menuItems } from "./schema/menu.js";
@@ -425,14 +420,10 @@ describe("home tiles", () => {
     expect(await tileRefs(home)).toEqual([]);
   });
 
-  it("accepts a product the menu has switched off, and publishing keeps an empty slot with a warning", async () => {
+  it("accepts an Inactive product the menu places, and publishing keeps an empty slot with a warning", async () => {
     const f = await menusFixture(fx.db);
     const home = await defaultLayout(f.lunch);
-    const [offer] = await fx.db
-      .select({ id: menuItems.id })
-      .from(menuItems)
-      .where(and(eq(menuItems.menuId, f.lunch), eq(menuItems.productId, f.soup)));
-    await app((tx) => updateMenuItem(tx, f.lunch, offer!.id, { offered: false }));
+    await app((tx) => deactivateProduct(tx, f.soup));
     const tile = await app((tx) => addShortcut(tx, home, product(f.soup)));
     expect(tile.ref).toEqual(product(f.soup));
     const [layout] = await app((tx) => listHomeLayouts(tx, f.lunch));

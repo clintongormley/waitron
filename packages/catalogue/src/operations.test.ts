@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { menuItems } from "./schema/menu.js";
 import { readMenuStructure } from "./menu-structure.js";
-import { setMenuVariants, setProductVariants } from "./variants.js";
+import { listProductVariants, setMenuVariants, setProductVariants } from "./variants.js";
+import { applyLiveFields } from "./menu-document.js";
+import { previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
+import { menusFixture } from "../test/menus-fixture.js";
 import { products, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { priceBasket } from "./pricing.js";
@@ -126,12 +129,9 @@ describe("catalogue operations", () => {
 
       await updateMenuItem(tx, downstairs.id, eleven.id, { grossPrice: "12.50" });
       expect((await listMenuOffers(tx, [downstairs.id]))[0]!.grossPrice).toBe("12.50");
-      await updateMenuItem(tx, downstairs.id, eleven.id, { offered: false });
-      await expect(listMenuOffers(tx, [downstairs.id])).resolves.toEqual([]);
-      // Switched back on, on the same row.
-      await updateMenuItem(tx, downstairs.id, eleven.id, { offered: true, grossPrice: "13.00" });
-      const [restored] = await listMenuOffers(tx, [downstairs.id]);
-      expect(restored).toMatchObject({ id: eleven.id, offered: true, grossPrice: "13.00" });
+      await updateMenuItem(tx, downstairs.id, eleven.id, { grossPrice: "13.00" });
+      const [repriced] = await listMenuOffers(tx, [downstairs.id]);
+      expect(repriced).toMatchObject({ id: eleven.id, grossPrice: "13.00", unitPrice: "13.00" });
       await expect(
         updateMenuItem(tx, downstairs.id, crypto.randomUUID(), { grossPrice: "8.00" }),
       ).rejects.toMatchObject({ code: "menu_item.not_found" });
@@ -1612,11 +1612,10 @@ describe("menu offers nest a product's variants", () => {
 
   const offers = () => run((tx) => listMenuOffers(tx, [f.menuId]));
   const nested = async () =>
-    (await offers())[0]!.variants.map(({ name, unitPrice, menuPrice, offered, available }) => ({
+    (await offers())[0]!.variants.map(({ name, unitPrice, menuPrice, available }) => ({
       name,
       unitPrice,
       menuPrice,
-      offered,
       available,
     }));
 
@@ -1666,7 +1665,7 @@ describe("menu offers nest a product's variants", () => {
     ]);
   });
 
-  it("creates an offer with a blank price, and switches an offer back on with a blank price", async () => {
+  it("creates an offer with a blank price, and a blank-price offer follows its product's price", async () => {
     const created = await run(async (tx) => {
       const product = await createProduct(tx, {
         catalogueId: f.menuId,
@@ -1682,14 +1681,22 @@ describe("menu offers nest a product's variants", () => {
         grossPrice: null,
       });
     });
-    expect(created).toMatchObject({ grossPrice: null, offered: null });
-    await run((tx) => updateMenuItem(tx, f.menuId, f.offerId, { offered: false }));
-    await run((tx) => updateMenuItem(tx, f.menuId, f.offerId, { offered: true, grossPrice: null }));
-    const restored = (await offers()).find((offer) => offer.id === f.offerId);
-    expect(restored).toMatchObject({ id: f.offerId, offered: true, grossPrice: null });
+    expect(created).toEqual({
+      id: created.id,
+      menuId: f.menuId,
+      productId: created.productId,
+      grossPrice: null,
+    });
+    await run((tx) => updateMenuItem(tx, f.menuId, f.offerId, { grossPrice: null }));
     expect((await offers()).find((offer) => offer.id === f.offerId)).toMatchObject({
+      id: f.offerId,
       grossPrice: null,
       unitPrice: "4.00",
+    });
+    await run((tx) => updateProduct(tx, f.parentId, { unitPrice: "4.40" }));
+    expect((await offers()).find((offer) => offer.id === f.offerId)).toMatchObject({
+      grossPrice: null,
+      unitPrice: "4.40",
     });
   });
 
@@ -1699,8 +1706,8 @@ describe("menu offers nest a product's variants", () => {
     );
     await run((tx) => updateMenuItem(tx, f.menuId, f.offerId, { grossPrice: null }));
     expect(await nested()).toEqual([
-      { name: "Wine 125", unitPrice: "4.00", menuPrice: null, offered: true, available: true },
-      { name: "Wine 175", unitPrice: "5.50", menuPrice: null, offered: true, available: true },
+      { name: "Wine 125", unitPrice: "4.00", menuPrice: null, available: true },
+      { name: "Wine 175", unitPrice: "5.50", menuPrice: null, available: true },
     ]);
   });
 
@@ -1708,15 +1715,9 @@ describe("menu offers nest a product's variants", () => {
     await run((tx) =>
       setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
     );
-    expect(
-      (await offers())[0]!.variants.map(({ offered, ownOffered }) => ({ offered, ownOffered })),
-    ).toEqual([
-      { offered: true, ownOffered: null },
-      { offered: true, ownOffered: null },
-    ]);
     expect(await nested()).toEqual([
-      { name: "Wine 125", unitPrice: "4.50", menuPrice: null, offered: true, available: true },
-      { name: "Wine 175", unitPrice: "5.50", menuPrice: null, offered: true, available: true },
+      { name: "Wine 125", unitPrice: "4.50", menuPrice: null, available: true },
+      { name: "Wine 175", unitPrice: "5.50", menuPrice: null, available: true },
     ]);
     // Variants are only ever nested: the menu lists the parent alone.
     expect((await offers()).map((offer) => offer.productId)).toEqual([f.parentId]);
@@ -1738,38 +1739,23 @@ describe("menu offers nest a product's variants", () => {
     expect((await offers()).map((offer) => offer.productId)).toEqual([f.parentId]);
   });
 
-  it("charges a price set for the variant on this menu, and switches it off there", async () => {
+  it("charges a price set for the variant on this menu, and its own price once that is cleared", async () => {
     const [, w175] = await run((tx) =>
       setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
     );
-    await run((tx) =>
-      setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: "6.00", offered: true }]),
-    );
+    await run((tx) => setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: "6.00" }]));
     expect((await nested())[1]).toEqual({
       name: "Wine 175",
       unitPrice: "6.00",
       menuPrice: "6.00",
-      offered: true,
       available: true,
     });
 
-    await run((tx) =>
-      setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: null, offered: false }]),
-    );
+    await run((tx) => setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: null }]));
     expect((await nested())[1]).toEqual({
       name: "Wine 175",
       unitPrice: "5.50",
       menuPrice: null,
-      offered: false,
-      available: false,
-    });
-
-    await run((tx) =>
-      setMenuVariants(tx, f.offerId, [{ variantId: w175!.id, price: null, offered: true }]),
-    );
-    expect((await nested())[1]).toMatchObject({
-      unitPrice: "5.50",
-      offered: true,
       available: true,
     });
   });
@@ -1786,8 +1772,8 @@ describe("menu offers nest a product's variants", () => {
     // Wine 250 is left out of this save, so it becomes Inactive.
     await run((tx) => setProductVariants(tx, f.parentId, [w125!, w175!], "en"));
     expect(await nested()).toEqual([
-      { name: "Wine 125", unitPrice: "4.50", menuPrice: null, offered: true, available: true },
-      { name: "Wine 175", unitPrice: "5.50", menuPrice: null, offered: true, available: false },
+      { name: "Wine 125", unitPrice: "4.50", menuPrice: null, available: true },
+      { name: "Wine 175", unitPrice: "5.50", menuPrice: null, available: false },
     ]);
   });
 
@@ -1797,15 +1783,14 @@ describe("menu offers nest a product's variants", () => {
     expect(await offers()).toEqual([]);
   });
 
-  it("still lists a parent none of whose variants is offered here, every variant unavailable", async () => {
-    const [w125, w175] = await run((tx) =>
-      setProductVariants(tx, f.parentId, [wine("Wine 125", null), wine("Wine 175", "5.50")], "en"),
-    );
+  it("still lists a parent none of whose variants is Available, every variant unavailable", async () => {
     await run((tx) =>
-      setMenuVariants(tx, f.offerId, [
-        { variantId: w125!.id, price: null, offered: false },
-        { variantId: w175!.id, price: null, offered: false },
-      ]),
+      setProductVariants(
+        tx,
+        f.parentId,
+        [wine("Wine 125", null, false), wine("Wine 175", "5.50", false)],
+        "en",
+      ),
     );
     expect(await offers()).toHaveLength(1);
     expect((await nested()).map(({ available }) => available)).toEqual([false, false]);
@@ -1997,5 +1982,99 @@ describe("a variant's published allergens and diet", () => {
       run((tx) => applyDietDerivation(tx, variantId, { origins: [], pending: false })),
     ).rejects.toMatchObject({ code: "product.not_found", params: { productId: variantId } });
     expect(await published(variantId)).toMatchObject({ allergens: null, diet: null });
+  });
+});
+
+describe("what a menu offers: its structure, Active and Available decide", () => {
+  const run = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(fx.db, fn);
+  const listed = async (menuId: string) =>
+    (await run((tx) => listMenuOffers(tx, [menuId]))).map((offer) => offer.productId);
+  const variantsOf = async (menuId: string, productId: string) =>
+    (await run((tx) => listMenuOffers(tx, [menuId])))
+      .find((offer) => offer.productId === productId)!
+      .variants.map(({ name, available }) => [name, available]);
+
+  it("offers what its own sections place, and what only an included menu places, as its own", async () => {
+    // Lunch places Soup itself and reaches Lemonade and Lager only through the Drinks menu.
+    const f = await menusFixture(fx.db);
+    const offers = await run((tx) => listMenuOffers(tx, [f.lunch]));
+    expect(offers.map((offer) => [offer.menuId, offer.productId])).toEqual([
+      [f.lunch, f.lemonade],
+      [f.lunch, f.lager],
+      [f.lunch, f.soup],
+    ]);
+    for (const offer of offers) {
+      expect(offer).not.toHaveProperty("offered");
+      for (const variant of offer.variants) {
+        expect(variant).not.toHaveProperty("offered");
+        expect(variant).not.toHaveProperty("ownOffered");
+      }
+    }
+  });
+
+  it("leaves an Inactive product out, through an included menu too", async () => {
+    const f = await menusFixture(fx.db);
+    await run(async (tx) => {
+      await updateProduct(tx, f.soup, { active: false });
+      await updateProduct(tx, f.lager, { active: false });
+    });
+    expect(await listed(f.lunch)).toEqual([f.lemonade]);
+    expect(await listed(f.drinksMenu)).toEqual([f.lemonade]);
+  });
+
+  it("offers an Unavailable product, which a published menu then serves as not sellable", async () => {
+    const f = await menusFixture(fx.db);
+    await run((tx) => updateProduct(tx, f.soup, { available: false }));
+    expect(await listed(f.lunch)).toContain(f.soup);
+    const { hash } = await run((tx) => previewMenu(tx, f.lunch));
+    await run((tx) => publishMenu(tx, f.lunch, hash, "person-1"));
+    const served = await run(async (tx) => {
+      const live = await readLiveDocuments(tx, [f.lunch]);
+      return (await applyLiveFields(tx, [live.get(f.lunch)!.document])).get(f.lunch)!;
+    });
+    expect(served.map((offer) => [offer.productId, offer.available])).toEqual([
+      [f.lemonade, true],
+      [f.lager, true],
+      [f.soup, false],
+    ]);
+  });
+
+  it("lists each Active variant as available as it is itself, and leaves an Inactive one out", async () => {
+    const f = await menusFixture(fx.db);
+    await run(async (tx) => {
+      const [large, small] = await setProductVariants(
+        tx,
+        f.lemonade,
+        [
+          ...(await listProductVariants(tx, f.lemonade)),
+          {
+            name: "Small",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "2.50",
+            available: false,
+          },
+          {
+            name: "Jug",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "9.00",
+            available: true,
+          },
+        ],
+        "en",
+      );
+      // Jug is left out of this save, so it becomes Inactive.
+      await setProductVariants(tx, f.lemonade, [large!, small!], "en");
+    });
+    const expected = [
+      ["Large", true],
+      ["Small", false],
+    ];
+    // Drinks places Lemonade itself; Lunch reaches it only by including Drinks.
+    expect(await variantsOf(f.drinksMenu, f.lemonade)).toEqual(expected);
+    expect(await variantsOf(f.lunch, f.lemonade)).toEqual(expected);
   });
 });

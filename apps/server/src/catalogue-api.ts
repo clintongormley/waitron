@@ -81,7 +81,7 @@ import {
   updateProduct,
   listMenuVariants,
   setMenuVariants,
-  type MenuVariantWrite,
+  type MenuVariant,
   readProductEditor,
   saveProductEditor,
   productWithId,
@@ -340,7 +340,7 @@ function refuseNegativePrice(value: string, field: string): void {
   if (parsed.startsWith("-")) throw new AppError("management.request_invalid", { field });
 }
 
-function parseMenuVariants(value: unknown): MenuVariantWrite[] {
+function parseMenuVariants(value: unknown): MenuVariant[] {
   if (!Array.isArray(value)) {
     throw new AppError("management.request_invalid", { field: "variants" });
   }
@@ -349,14 +349,13 @@ function parseMenuVariants(value: unknown): MenuVariantWrite[] {
       !isPlainObject(entry) ||
       typeof entry.variantId !== "string" ||
       (entry.price !== null && typeof entry.price !== "string") ||
-      (entry.offered !== undefined && entry.offered !== null && typeof entry.offered !== "boolean")
+      Object.hasOwn(entry, "offered")
     ) {
       throw new AppError("management.request_invalid", { field: `variants.${index}` });
     }
     return {
       variantId: requireUuidParam(entry.variantId, "ProductVariantId"),
       price: entry.price,
-      ...(entry.offered === undefined ? {} : { offered: entry.offered }),
     };
   });
 }
@@ -986,22 +985,16 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         }
         refuseNegativePrice(body.grossPrice, "grossPrice");
       }
-      if (Object.hasOwn(body, "active")) {
-        throw new AppError("management.request_invalid", { field: "active" });
-      }
-      if (
-        body.offered !== undefined &&
-        body.offered !== null &&
-        typeof body.offered !== "boolean"
-      ) {
-        throw new AppError("management.request_invalid", { field: "offered" });
+      for (const retired of ["active", "offered"]) {
+        if (Object.hasOwn(body, retired)) {
+          throw new AppError("management.request_invalid", { field: retired });
+        }
       }
       await gated(sessionId, (tx) =>
         updateMenuItem(tx, menuId, menuItemId, {
           ...(body.grossPrice === undefined
             ? {}
             : { grossPrice: body.grossPrice as string | null }),
-          ...(body.offered === undefined ? {} : { offered: body.offered as boolean | null }),
         }),
       );
       return c.body(null, 204);

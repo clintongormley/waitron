@@ -366,6 +366,13 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "core/0090_devices_lose_till": {
     refused: ["DROP TABLE `tills`", "FOREIGN KEY constraint failed"],
   },
+  // Rebuilds `menu_item_variant_overrides` with a price required; a copied row's price is null.
+  "catalogue/0024_drop_menu_offered": {
+    refused: [
+      "INSERT INTO `__new_menu_item_variant_overrides`",
+      "CHECK constraint failed: menu_item_variant_overrides_overrides_ck",
+    ],
+  },
 };
 
 /** What a step's failure lacks against its RESETS entry, or `undefined` when it matches. */

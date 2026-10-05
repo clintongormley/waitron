@@ -780,7 +780,7 @@ describe("DashboardApi routes", () => {
       active: true,
       variants: [],
     };
-    const variants = [{ variantId: "v1", price: "3.50", offered: false }];
+    const variants = [{ variantId: "v1", price: "3.50" }];
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse([row]))
@@ -789,14 +789,12 @@ describe("DashboardApi routes", () => {
     const api = new DashboardApi("", fetchImpl);
 
     await expect(api.getMenuPrices("c1")).resolves.toEqual([row]);
-    await expect(
-      api.updateMenuItem("c1", "mi1", { grossPrice: null, offered: false }),
-    ).resolves.toBeUndefined();
+    await expect(api.updateMenuItem("c1", "mi1", { grossPrice: null })).resolves.toBeUndefined();
     await expect(api.setMenuVariants("c1", "mi1", variants)).resolves.toEqual(variants);
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/management-api/catalogues/c1/prices", "GET", undefined],
-      ["/management-api/catalogues/c1/items/mi1", "PATCH", { grossPrice: null, offered: false }],
+      ["/management-api/catalogues/c1/items/mi1", "PATCH", { grossPrice: null }],
       ["/management-api/catalogues/c1/items/mi1/variants", "PUT", { variants }],
     ]);
   });

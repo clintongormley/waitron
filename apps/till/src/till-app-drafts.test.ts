@@ -46,7 +46,6 @@ function offer(id: string, name: string, courseId: string | null = null): TillMe
     productId: `product-${id}`,
     grossPrice: null,
     unitPrice: "5.00",
-    offered: true,
     available: true,
     image: null,
     description: null,

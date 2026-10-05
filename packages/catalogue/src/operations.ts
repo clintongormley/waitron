@@ -3,7 +3,7 @@ import { includedMenus, placesOf } from "./menu-inclusion.js";
 import { isDeepStrictEqual } from "node:util";
 import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductModifiers } from "./product-modifiers.js";
-import { and, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
 import { AppError, centsToDecimal, stringToCents, type Decimal } from "@waitron/shared";
 import { catalogues, categories, locationCatalogues, locations, now, products } from "@waitron/db";
 import { readCategory, setMainReportingCategory } from "./categories.js";
@@ -310,7 +310,6 @@ const MENU_ITEM_COLUMNS = {
   menuId: menuItems.menuId,
   productId: menuItems.productId,
   grossPrice: menuItems.grossPrice,
-  offered: menuItems.offered,
 };
 
 /**
@@ -346,12 +345,12 @@ export async function addProductToMenu(
   return { ...written!, grossPrice: priceOrNull(written!.grossPrice) };
 }
 
-/** Sets the menu's price for a product it reaches, or its own switch for it. */
+/** Sets the menu's price for a product it reaches. */
 export async function updateMenuItem(
   tx: Transaction,
   menuId: string,
   menuItemId: string,
-  patch: { grossPrice?: string | null; offered?: boolean | null },
+  patch: { grossPrice?: string | null },
 ): Promise<void> {
   if ((await reachableMenuItem(tx, menuItemId, menuId)) === undefined)
     throw new AppError("menu_item.not_found", { menuId, menuItemId });
@@ -361,17 +360,14 @@ export async function updateMenuItem(
 async function writeMenuItemSettings(
   tx: Transaction,
   menuItemId: string,
-  patch: { grossPrice?: string | null; offered?: boolean | null },
+  patch: { grossPrice?: string | null },
 ): Promise<void> {
-  const { grossPrice, offered } = patch;
-  const values = {
-    ...(offered === undefined ? {} : { offered }),
-    ...(grossPrice === undefined
-      ? {}
-      : { grossPrice: grossPrice === null ? null : stringToCents(grossPrice) }),
-  };
-  if (Object.keys(values).length > 0)
-    await tx.update(menuItems).set(values).where(eq(menuItems.id, menuItemId));
+  const { grossPrice } = patch;
+  if (grossPrice !== undefined)
+    await tx
+      .update(menuItems)
+      .set({ grossPrice: grossPrice === null ? null : stringToCents(grossPrice) })
+      .where(eq(menuItems.id, menuItemId));
 }
 
 /**
@@ -441,10 +437,9 @@ function offerLineValues(row: OfferLineRow) {
 
 /**
  * The Active offers on the given menus: the products each menu's structure reaches, menus by name
- * and each in its structure's order (`reachableProducts`), Unavailable (sold-out) ones included. A
- * product switched off on the menu (`menu_items.offered`) is left out. Only a top-level product is
- * an offer; each Active variant of it is nested under its offer, an Unavailable one listed as
- * unavailable.
+ * and each in its structure's order (`reachableProducts`), Unavailable (sold-out) ones included.
+ * Only a top-level product is an offer; each Active variant of it is nested under its offer, an
+ * Unavailable one listed as unavailable.
  */
 export async function listMenuOffers(
   tx: Transaction,
@@ -457,7 +452,6 @@ export async function listMenuOffers(
 }
 
 interface OfferOptions {
-  includeSwitchedOff?: boolean;
   /** Every option label, and every extras item whose product is Active and has no Active variant,
    * whatever its availability: what a published document holds. */
   includeEveryModifierItem?: boolean;
@@ -471,7 +465,6 @@ async function offerRowsOn(
   tx: Transaction,
   roots: ReadonlyMap<string, string>,
   graph: SectionGraph,
-  options: OfferOptions,
 ) {
   // Keyed in the order `reachableProducts` gives, so a key's position is its rank on the menu.
   const placed = new Map(
@@ -504,7 +497,6 @@ async function offerRowsOn(
           grossPrice: menuItems.grossPrice,
           productPrice: products.unitPrice,
           categoryId: products.categoryId,
-          offered: menuItems.offered,
           menuName: catalogues.name,
           name: products.name,
           customerName: products.customerName,
@@ -523,9 +515,6 @@ async function offerRowsOn(
           and(
             inArray(menuItems.menuId, menuIds),
             inArray(menuItems.productId, batch),
-            options.includeSwitchedOff === true
-              ? undefined
-              : or(isNull(menuItems.offered), eq(menuItems.offered, true)),
             eq(catalogues.active, true),
             isTopLevelProduct,
             eq(products.active, true),
@@ -581,10 +570,7 @@ async function offersOn(
     }
   };
   for (const id of roots.keys()) include(id);
-  const { rows: offered, placementsOf } = await offerRowsOn(tx, allRoots, graph, {
-    ...options,
-    includeSwitchedOff: true,
-  });
+  const { rows: offered, placementsOf } = await offerRowsOn(tx, allRoots, graph);
   if (offered.length === 0) return [];
   const offeredByItem = await readOfferedModifiers(
     tx,
@@ -603,7 +589,6 @@ async function offersOn(
       productId: row.productId,
       grossPrice: override,
       unitPrice,
-      offered: row.offered,
       menuName: row.menuName,
       placements: placementsOf(row),
       name: row.name,
@@ -643,11 +628,9 @@ async function offersOn(
         },
         own: {
           price: offer.grossPrice as Decimal | null,
-          offered: offer.offered,
           variants: offer.variants.map((v) => ({
             variantId: v.id,
             price: v.menuPrice as Decimal | null,
-            offered: v.ownOffered,
           })),
         },
         placedInOwnSections: places.own,
@@ -667,11 +650,8 @@ async function offersOn(
             : centsToDecimal(row.productPrice!),
         variants: offer.variants.map(({ cataloguePrice, ...variant }) => {
           const decision = combined.variants.find((v) => v.variantId === variant.id)!;
-          const offered = decision.offered.state === "clash" || decision.offered.value;
           return {
             ...variant,
-            offered,
-            available: variant.available && offered,
             unitPrice:
               decision.price.state === "decided"
                 ? decision.price.value
@@ -688,31 +668,20 @@ async function offersOn(
     const right = graph.menu(b)?.name ?? "";
     return left < right ? -1 : left > right ? 1 : a < b ? -1 : a > b ? 1 : 0;
   }))
-    for (const offer of combine(id).values())
-      if (
-        options.includeSwitchedOff ||
-        offer.combined.offered.state === "clash" ||
-        offer.combined.offered.value
-      )
-        result.push(offer);
+    result.push(...combine(id).values());
   return result;
 }
 
 /**
  * Every Active product the menu reaches, once each in `listMenuOffers`' order, with its own price
- * and its combined decisions. Products switched off on this menu, and sold-out ones, are listed:
- * the dashboard is where both are switched back.
+ * and its combined decisions. Sold-out ones are listed.
  */
 export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuPriceRow[]> {
   const rootSectionId = await requireMenuRoot(tx, menuId);
   const graph = await loadSectionGraph(tx);
-  const combinedOffers = await offersOn(tx, new Map([[menuId, rootSectionId]]), graph, {
-    includeSwitchedOff: true,
-  });
+  const combinedOffers = await offersOn(tx, new Map([[menuId, rootSectionId]]), graph, {});
   const combinedByProduct = new Map(combinedOffers.map((offer) => [offer.productId, offer]));
-  const { rows } = await offerRowsOn(tx, new Map([[menuId, rootSectionId]]), graph, {
-    includeSwitchedOff: true,
-  });
+  const { rows } = await offerRowsOn(tx, new Map([[menuId, rootSectionId]]), graph);
   if (rows.length === 0) return [];
   const variantsByItem = await menuVariantsOfItems(
     tx,
@@ -733,7 +702,6 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
         override,
         effectivePrice: combinedOffer.unitPrice,
         combined: combinedOffer.combined,
-        offered: row.offered,
         variants: variantsByItem.get(row.id) ?? [],
       };
     });
@@ -756,7 +724,6 @@ async function readOfferVariants(
       parentMenuPrice: menuItems.grossPrice,
       parentPrice: parentProducts.unitPrice,
       menuPrice: menuItemVariantOverrides.price,
-      offered: menuItemVariantOverrides.offered,
       available: products.available,
       ...offerLineColumns,
     })
@@ -777,7 +744,6 @@ async function readOfferVariants(
     .orderBy(menuItems.id, products.variantOrder, products.id);
   const grouped = new Map<string, (MenuOfferVariant & { cataloguePrice: Decimal | null })[]>();
   for (const row of rows) {
-    const offered = row.offered ?? true;
     const held = grouped.get(row.menuItemId) ?? [];
     held.push({
       id: row.id,
@@ -794,8 +760,6 @@ async function readOfferVariants(
       }),
       cataloguePrice: priceOrNull(row.ownPrice) as Decimal | null,
       menuPrice: priceOrNull(row.menuPrice),
-      offered,
-      ownOffered: row.offered,
       available: row.available,
       ...offerLineValues(row),
     });
