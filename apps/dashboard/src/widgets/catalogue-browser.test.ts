@@ -122,7 +122,7 @@ async function nameBox(el: CatalogueBrowser) {
   )!;
 }
 
-it("marks only categories whose own or inherited claim reaches no station, and clears the mark when claimed", async () => {
+it("marks a category with no claim, or whose claim names a switched-off station with no fallback, and clears the mark once claimed", async () => {
   setLocale("en-GB");
   const routing = {
     stationTimes: [],
@@ -215,9 +215,9 @@ async function madeAtText(el: CatalogueBrowser, key: string) {
 }
 /** The red asterisk on a category's row, or null when the row has none. */
 async function unroutedMarker(el: CatalogueBrowser, key: string) {
-  return (await tableOf(el)).shadowRoot!.querySelector(
-    `tr[data-row-key="${key}"] [data-test="unrouted-folder"]`,
-  );
+  const row = (await tableOf(el)).shadowRoot!.querySelector(`tr[data-row-key="${key}"]`);
+  expect(row).not.toBeNull();
+  return row!.querySelector('[data-test="unrouted-folder"]');
 }
 const routingWith = (overrides: Partial<RoutingModel> = {}): RoutingModel => ({
   stationTimes: [],
