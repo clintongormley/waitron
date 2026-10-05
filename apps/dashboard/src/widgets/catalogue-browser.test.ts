@@ -1555,13 +1555,14 @@ it("reads the contents again at Delete and, when they changed, shows the new cou
 it.each([
   ["folders", { folders: 2 }, false],
   ["activeProducts", { activeProducts: 1 }, false],
-  ["routes", { routes: 0, ownRoutes: 0 }, false],
+  ["routes", { routes: 3 }, false],
+  ["ownRoutes", { ownRoutes: 2 }, false],
   ["products", { products: 3 }, true],
 ] as const)(
   "at Delete, a change in %s alone is checked against what the dialog showed",
   async (_field, change, deletes) => {
     const el = await mountBrowser();
-    const shown = { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 };
+    const shown = { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 2, ownRoutes: 1 };
     vi.mocked(el.api.summariseFolders)
       .mockResolvedValueOnce([shown])
       .mockResolvedValue([{ ...shown, ...change }]);

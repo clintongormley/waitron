@@ -118,14 +118,20 @@ it("moving a category's contents up removes only its own routing rules, which it
       })
     ).status,
   ).toBe(204);
-  const left = async (table: "station_claims" | "route_exceptions") =>
+  expect(
     (
       await suite.db.execute<{ category_id: string }>(
-        sql`select category_id from ${sql.raw(table)} where category_id in (${parent}, ${child})`,
+        sql`select category_id from station_claims where category_id in (${parent}, ${child})`,
       )
-    ).rows.map((row) => row.category_id);
-  expect(await left("station_claims")).toEqual([child]);
-  expect(await left("route_exceptions")).toEqual([child]);
+    ).rows.map((row) => row.category_id),
+  ).toEqual([child]);
+  expect(
+    (
+      await suite.db.execute<{ category_id: string }>(
+        sql`select category_id from route_exceptions where category_id in (${parent}, ${child})`,
+      )
+    ).rows.map((row) => row.category_id),
+  ).toEqual([child]);
 });
 
 it("refuses a category delete with 409 when a routing rule was added since the counts were shown", async () => {
@@ -147,6 +153,43 @@ it("refuses a category delete with 409 when a routing rule was added since the c
   });
   expect(
     (await suite.db.execute(sql`select id from station_claims where category_id = ${drinks}`)).rows,
+  ).toHaveLength(1);
+});
+
+it("refuses a category delete with 409 when a routing rule was added to one of its subcategories since the counts were shown", async () => {
+  const v = await setupVenue();
+  const app = mountApp();
+  const drinks = await createCategory(app, v.managerCookie, "Drinks");
+  const beer = await createCategory(app, v.managerCookie, "Beer");
+  expect(
+    (
+      await send(app, "PATCH", `/management-api/categories/${beer}`, v.managerCookie, {
+        parentId: drinks,
+      })
+    ).status,
+  ).toBe(200);
+  await suite.db
+    .insert(stationClaims)
+    .values({ locationId: v.locationId, categoryId: beer, noPreparation: true });
+  const response = await send(app, "POST", "/management-api/folders/delete", v.managerCookie, {
+    productIds: [],
+    categoryIds: [drinks],
+    contents: "delete",
+    shown: [{ id: drinks, folders: 1, activeProducts: 0, routes: 0, ownRoutes: 0 }],
+  });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({
+    error: { code: "category.contents_changed", params: { categoryId: drinks } },
+  });
+  expect(
+    (
+      await suite.db.execute<{ id: string }>(
+        sql`select id from categories where id in (${drinks}, ${beer}) order by name`,
+      )
+    ).rows.map((row) => row.id),
+  ).toEqual([beer, drinks]);
+  expect(
+    (await suite.db.execute(sql`select id from station_claims where category_id = ${beer}`)).rows,
   ).toHaveLength(1);
 });
 
