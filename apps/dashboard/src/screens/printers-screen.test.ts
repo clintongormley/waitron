@@ -3012,47 +3012,41 @@ describe("printers-screen", () => {
   });
 });
 
-it.each([
-  {
-    method: "updatePrinter",
-    field: "[data-test=printer-name-p1]",
-    button: "[data-test=save-printer-p1]",
-    result: null,
-  },
-])(
-  "Enter guards pending $method and allows retry after rejection",
-  async ({ method, field, button, result }) => {
-    let reject!: (reason: unknown) => void;
-    const pending = new Promise((_, fail) => {
-      reject = fail;
-    });
-    const request = vi.fn().mockReturnValueOnce(pending).mockResolvedValue(result);
-    const api = stubApi({ [method]: request });
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-    await openPrinter(el);
+it("Enter guards a pending inline printer name save and allows retry after rejection", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  let reject!: (reason: unknown) => void;
+  const pending = new Promise((_, fail) => {
+    reject = fail;
+  });
+  const request = vi.fn().mockReturnValueOnce(pending).mockResolvedValue(null);
+  const api = stubApi({ updatePrinter: request });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=edit-printer-name]")!.click();
+  await flush(el);
 
-    const control = (q(el, field) as import("@waitron/ui").WtInput)!;
-    await control.updateComplete;
-    const input = control.shadowRoot!.querySelector("input")!;
-    input.value = "Updated";
-    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-    await el.updateComplete;
-    input.focus();
-    await userEvent.keyboard("{Enter}");
-    await userEvent.keyboard("{Enter}");
-    q(el, button)!.click();
-    expect(request).toHaveBeenCalledTimes(1);
-    expect(q(el, button)!.shadowRoot!.querySelector("button")!.disabled).toBe(true);
-    reject({ code: "management.request_invalid" });
-    await flush(el);
-    input.focus();
-    await userEvent.keyboard("{Enter}");
-    await flush(el);
-    expect(request).toHaveBeenCalledTimes(2);
-    expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
-  },
-);
+  const control = (q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput)!;
+  await control.updateComplete;
+  const input = control.shadowRoot!.querySelector("input")!;
+  input.value = "Updated";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  input.focus();
+  await userEvent.keyboard("{Enter}");
+  await userEvent.keyboard("{Enter}");
+  q(el, "[data-test=save-printer-name]")!.click();
+  expect(request).toHaveBeenCalledTimes(1);
+  expect(
+    q(el, "[data-test=save-printer-name]")!.shadowRoot!.querySelector("button")!.disabled,
+  ).toBe(true);
+  reject({ code: "management.request_invalid" });
+  await flush(el);
+  input.focus();
+  await userEvent.keyboard("{Enter}");
+  await flush(el);
+  expect(request).toHaveBeenCalledTimes(2);
+  expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
+});
 
 describe("printer settings table layout", () => {
   it("shows agents, printers and recent jobs in three named tables", async () => {
@@ -3177,21 +3171,38 @@ it("keeps a successfully added printer registered when refreshing discovery fail
   }
 });
 
-it("cancel discards a printer edit and reopening restores saved values", async () => {
+it("cancel discards printer name and connection edits and reopening restores saved values", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   const api = stubApi();
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
-  await openPrinter(el);
-  typeField(el, "[data-test=printer-name-p1]", "Unsaved");
-  typeField(el, "[data-test=printer-host-p1]", "10.0.0.100");
-  q(el, "[data-test=cancel-edit-printer]")!.click();
+  q(el, "[data-test=edit-printer-name]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-name"]', "Unsaved");
+  q(el, "[data-test=cancel-printer-name]")!.click();
+  await flush(el);
+  q(el, "[data-test=cancel-printer-name]")!.click();
+  await flush(el);
+  q(el, "[data-test=printer-section-connection]")!
+    .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+    .click();
+  await flush(el);
+  q(el, "[data-test=edit-printer-connection]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-host"]', "10.0.0.100");
+  q(el, "[data-test=cancel-printer-connection]")!.click();
+  await flush(el);
+  q(el, "[data-test=cancel-printer-connection]")!.click();
   await flush(el);
   expect(api.updatePrinter).not.toHaveBeenCalled();
-  await openPrinter(el);
-  expect((q(el, "[data-test=printer-name-p1]") as import("@waitron/ui").WtInput).value).toBe(
+  q(el, "[data-test=edit-printer-name]")!.click();
+  await flush(el);
+  expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).value).toBe(
     "Cocina",
   );
-  expect((q(el, "[data-test=printer-host-p1]") as import("@waitron/ui").WtInput).value).toBe(
+  q(el, "[data-test=edit-printer-connection]")!.click();
+  await flush(el);
+  expect((q(el, '[name="printer-detail-host"]') as import("@waitron/ui").WtInput).value).toBe(
     "10.0.0.9",
   );
 });
