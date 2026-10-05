@@ -1736,13 +1736,16 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     expect(topBlock(payload!)).toEqual(["Deli Recibos SL", `NIF: ${taxId}`]);
   });
 
-  it("files and prints the sale without a logo when the stored picture is not one the paper can print", async () => {
+  it.each([
+    // Three bytes for a 16 × 2 picture, which needs four: the printer command would refuse it.
+    ["three bytes for a picture that needs four", "////"],
+    ["ten million characters of data", "A".repeat(10_000_000)],
+  ])("files and prints the sale without a logo when the stored picture has %s", async (_, data) => {
     const { cfg, each, zoneId } = await setupVenue();
     await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
-    // Three bytes for a 16 × 2 picture, which needs four: the printer command would refuse it.
     await storeReceipt({
       logo: LOGO,
-      logoRasters: { "58mm": logoRaster, "80mm": { ...logoRaster, data: "////" } },
+      logoRasters: { "58mm": logoRaster, "80mm": { ...logoRaster, data } },
     });
 
     const result = await sellOne(cfg, each, zoneId);
@@ -1751,6 +1754,34 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     const [payload] = await receiptPayloads(cfg);
     expect(pictures(payload!)).toHaveLength(1);
     expect(topBlock(payload!)).toContain("Calle Mayor 1");
+  });
+
+  // A configuration import copies the stored trim without checking it.
+  it.each([
+    ["a number for the slogan", { headerSubtitle: 5 }],
+    ["a number for the phone", { phone: 5 }],
+    ["an object for the email", { email: {} }],
+    ["a list for the footer", { footerMessage: [] }],
+    ["a word for the address switch, which prints the address", { printAddress: "no" }],
+  ])("files and prints the sale without a trim field stored as %s", async (_, trim) => {
+    const { cfg, each, zoneId } = await setupVenue();
+    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
+    await storeReceipt(trim);
+
+    const result = await sellOne(cfg, each, zoneId);
+    expect(result.total).toBe("1.50");
+    expect(await registroCount(cfg)).toBe(1);
+    const [payload] = await receiptPayloads(cfg);
+    const taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
+    expect(topBlock(payload!)).toEqual([
+      "Deli Recibos SL",
+      "Calle Mayor 1",
+      "28013 Madrid",
+      `NIF: ${taxId}`,
+    ]);
+    // The footer prints after the tender line.
+    const lines = printedLines(payload!).map((line) => line.trim());
+    expect(lines.slice(lines.indexOf("Tarjeta") + 1).filter(Boolean)).toEqual([]);
   });
 
   it("reprints with the trim saved since, as it does the slogan", async () => {

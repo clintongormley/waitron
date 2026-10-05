@@ -1,4 +1,18 @@
 type Sharp = typeof import("sharp").default;
+
+/** The most pixels a library image may declare. */
+export const MAX_INPUT_PIXELS = 100_000_000;
+
+/**
+ * How a library image is decoded: refused when the decoder warns or it declares more than
+ * {@link MAX_INPUT_PIXELS}, and turned upright by its EXIF orientation.
+ */
+export const DECODE_OPTIONS = {
+  failOn: "warning",
+  limitInputPixels: MAX_INPUT_PIXELS,
+  autoOrient: true,
+} as const;
+
 let loading: Promise<Sharp> | undefined;
 
 /**

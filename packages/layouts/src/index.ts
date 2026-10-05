@@ -65,7 +65,13 @@ export type {
   ChooseDevicePrinterResult,
 } from "./device-printers.js";
 export { getTenantTheme, putTenantTheme } from "./theme-store.js";
-export { encodeLogoRaster, getReceipt, getReceiptLogo, putReceipt } from "./receipt-store.js";
+export {
+  encodeLogoRaster,
+  getPrintedReceipt,
+  getReceipt,
+  getStoredLogoRasters,
+  putReceipt,
+} from "./receipt-store.js";
 
 // Keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from the public
 // barrel (the rule is in packages/shared/src/errors.ts).

@@ -2,12 +2,8 @@ import { createHash } from "node:crypto";
 import { crc32 } from "node:zlib";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import {
-  DEFAULT_MAX_UPLOAD_BYTES,
-  MAX_INPUT_PIXELS,
-  prepareImage,
-  STORED_LONG_EDGE,
-} from "./prepare.js";
+import { MAX_INPUT_PIXELS } from "./load-sharp.js";
+import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage, STORED_LONG_EDGE } from "./prepare.js";
 import { sampleImage } from "./testing/sample-image.js";
 
 /** A photo-like JPEG: noise compresses about as badly as a real dish photographed close up. */

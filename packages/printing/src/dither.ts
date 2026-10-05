@@ -10,9 +10,12 @@ export interface MonoRaster {
 
 const THRESHOLD = 128;
 
-function assertSize(name: string, value: number): void {
-  if (!Number.isInteger(value) || value < 1) {
-    throw new RangeError(`${name} must be an integer >= 1, got ${value}`);
+/** `size` is keyed by the caller's own input names, which the error repeats. */
+export function assertPictureSize(method: string, size: Record<string, number>): void {
+  for (const [name, value] of Object.entries(size)) {
+    if (!Number.isInteger(value) || value < 1) {
+      throw new RangeError(`${method} ${name} must be an integer >= 1, got ${value}`);
+    }
   }
 }
 
@@ -27,8 +30,7 @@ export function ditherToRaster(input: {
   pixels: Uint8Array;
 }): MonoRaster {
   const { width, height, pixels } = input;
-  assertSize("width", width);
-  assertSize("height", height);
+  assertPictureSize("ditherToRaster", { width, height });
   if (pixels.length !== width * height) {
     throw new RangeError(
       `expected ${width * height} greyscale pixels for ${width} × ${height}, got ${pixels.length}`,

@@ -1,6 +1,6 @@
 import { validateImageBytes } from "@waitron/catalogue";
 import { AppError } from "@waitron/shared";
-import { loadSharp } from "./load-sharp.js";
+import { DECODE_OPTIONS, loadSharp, MAX_INPUT_PIXELS } from "./load-sharp.js";
 import { imageFilename } from "./stored-filename.js";
 import "./errors.js";
 
@@ -11,8 +11,6 @@ import "./errors.js";
 export const STORED_LONG_EDGE = 1600;
 /** sharp's WebP quality, on its 1–100 scale. */
 export const STORED_WEBP_QUALITY = 80;
-/** The most pixels an upload may declare. Checked from the header, before anything is decoded. */
-export const MAX_INPUT_PIXELS = 100_000_000;
 /** The largest upload, in bytes: the route's fallback and the server's `MAX_UPLOAD_BYTES`. */
 export const DEFAULT_MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
@@ -55,11 +53,7 @@ export async function prepareImage(
     throw new AppError("image.too_many_pixels", { maxPixels: MAX_INPUT_PIXELS });
   let output: Buffer;
   try {
-    output = await sharp(bytes, {
-      failOn: "warning",
-      limitInputPixels: MAX_INPUT_PIXELS,
-      autoOrient: true,
-    })
+    output = await sharp(bytes, DECODE_OPTIONS)
       .resize(STORED_LONG_EDGE, STORED_LONG_EDGE, { fit: "inside", withoutEnlargement: true })
       .webp({ quality: STORED_WEBP_QUALITY })
       .toBuffer();

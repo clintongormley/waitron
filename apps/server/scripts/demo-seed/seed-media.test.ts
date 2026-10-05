@@ -14,7 +14,7 @@ import { seedCatalogues } from "./seed-catalogue.js";
 import { DEFAULT_MAX_UPLOAD_BYTES, prepareImage, readImageBytes } from "@waitron/media";
 import { seedMedia } from "./seed-media.js";
 // The regex the public `GET /media/:filename` route accepts.
-import { MEDIA_FILENAME } from "@waitron/media";
+import { MEDIA_FILENAME } from "@waitron/shared";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
 import { createDemoVenueProvisioner } from "./testing/provision-venue.js";

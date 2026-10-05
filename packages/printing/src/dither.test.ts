@@ -80,4 +80,13 @@ describe("ditherToRaster", () => {
       RangeError,
     );
   });
+
+  it("names the input it was given when it refuses a size", () => {
+    expect(() => ditherToRaster({ width: 0, height: 1, pixels: flat(0, 1, 0) })).toThrow(
+      "ditherToRaster width must be an integer >= 1, got 0",
+    );
+    expect(() => ditherToRaster({ width: 1, height: 0, pixels: flat(1, 0, 0) })).toThrow(
+      "ditherToRaster height must be an integer >= 1, got 0",
+    );
+  });
 });

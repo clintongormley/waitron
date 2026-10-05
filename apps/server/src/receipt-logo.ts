@@ -16,10 +16,13 @@ async function drawLogo(bytes: Uint8Array, paperWidth: PaperWidth): Promise<Mono
   );
 }
 
-/** The logo as each paper prints it, ready for `putReceipt`. Outside any transaction. */
+/**
+ * The logo as each paper prints it, ready for `putReceipt`. Outside any transaction. The 80 mm
+ * picture serves 58 mm too when it already fits there: the height bound then decides both sizes.
+ */
 export async function drawLogoRasters(bytes: Uint8Array): Promise<ReceiptLogoRasters> {
-  const narrow = await drawLogo(bytes, "58mm");
   const wide = await drawLogo(bytes, "80mm");
+  const narrow = wide.widthDots <= safeWidthDots("58mm") ? wide : await drawLogo(bytes, "58mm");
   return { "58mm": encodeLogoRaster(narrow), "80mm": encodeLogoRaster(wide) };
 }
 
@@ -53,6 +56,12 @@ export function createLogoCache(limit = 8): LogoCache {
   };
 }
 
+/** A library image as a preview reads it. */
+export interface PreviewImage {
+  exists(): Promise<boolean>;
+  bytes(): Promise<Uint8Array | null>;
+}
+
 /**
  * The logo a preview draws: `null` when the image is gone or will not decode, since a preview shows
  * the rest of the receipt anyway. Outside any transaction.
@@ -61,11 +70,11 @@ export async function drawPreviewLogo(
   cache: LogoCache,
   filename: string,
   paperWidth: PaperWidth,
-  readBytes: () => Promise<Uint8Array | null>,
+  image: PreviewImage,
 ): Promise<MonoRaster | null> {
   const cached = cache.get(filename, paperWidth);
-  if (cached !== undefined) return cached;
-  const bytes = await readBytes();
+  if (cached !== undefined) return (await image.exists()) ? cached : null;
+  const bytes = await image.bytes();
   if (bytes === null) return null;
   let raster: MonoRaster;
   try {

@@ -64,7 +64,7 @@ describe("validateReceiptConfig", () => {
 
   it("accepts a phone, an email, the address switch and a library logo", () => {
     const input = {
-      phone: "+34 (91) 123-45.67/8",
+      phone: "+34 (91) 123-45.67",
       email: "hola@bar-pepe.es",
       printAddress: false,
       logo: LOGO,
@@ -84,8 +84,11 @@ describe("validateReceiptConfig", () => {
   });
 
   it.each([
-    ["one character too long", "1".repeat(31)],
+    ["one character too long", `912 345 678${" ".repeat(20)}`],
     ["fewer than six digits", "(91) 2-34"],
+    ["more than fifteen digits", "1234567890123456"],
+    ["a plus sign that does not lead", "912+345678"],
+    ["a slash", "91/234 5678"],
     ["no digit at all", "+ ( ) - ."],
     ["a letter", "912 345 67a"],
     ["a character outside the allowed punctuation", "912#345678"],
@@ -105,6 +108,8 @@ describe("validateReceiptConfig", () => {
     ["no at sign", "hola.bar-pepe.es"],
     ["no dot in the domain", "hola@localhost"],
     ["a space", "hola @bar.es"],
+    ["a leading space", " hola@bar.es"],
+    ["a trailing newline", "hola@bar.es\n"],
     ["two at signs", "a@b@c.es"],
     ["nothing before the at sign", "@bar.es"],
     ["nothing after the last dot", "hola@bar."],

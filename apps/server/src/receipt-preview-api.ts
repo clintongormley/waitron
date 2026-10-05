@@ -12,13 +12,8 @@ import {
 import { readReceiptLanguage } from "@waitron/catalogue";
 import { departments, departmentSalePolicies } from "@waitron/venue-service";
 import { authorizeManager } from "@waitron/identity";
-import {
-  getReceipt,
-  getReceiptLogo,
-  validateReceiptConfig,
-  type ReceiptConfig,
-} from "@waitron/layouts";
-import { readImageBytes } from "@waitron/media";
+import { getPrintedReceipt, validateReceiptConfig, type ReceiptConfig } from "@waitron/layouts";
+import { imageExists, readImageBytes } from "@waitron/media";
 import { textGrid, type EscSetting, type MonoRaster, type PaperWidth } from "@waitron/printing";
 import {
   createErrorBoundary,
@@ -217,10 +212,11 @@ export function mountReceiptPreviewApi(
           .where(and(eq(devices.locationId, deps.cfg.locationId), eq(devices.active, true)))
           .orderBy(asc(devices.label), asc(devices.id));
         const printer = chooseSetting(settings, asked);
-        const saved =
-          receipt.logo !== undefined && (await getReceipt(tx)).logo === receipt.logo
-            ? await getReceiptLogo(tx, printer.paperWidth)
-            : null;
+        let saved: MonoRaster | null = null;
+        if (receipt.logo !== undefined) {
+          const stored = await getPrintedReceipt(tx, printer.paperWidth);
+          if (stored.receipt.logo === receipt.logo) saved = stored.logo;
+        }
         return {
           issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
           settings,
@@ -240,12 +236,10 @@ export function mountReceiptPreviewApi(
         logoName === undefined
           ? null
           : (savedLogo ??
-            (await drawPreviewLogo(
-              logoCache,
-              logoName,
-              printer.paperWidth,
-              async () => (await readImageBytes(deps.db, logoName))?.bytes ?? null,
-            )));
+            (await drawPreviewLogo(logoCache, logoName, printer.paperWidth, {
+              exists: () => imageExists(deps.db, logoName),
+              bytes: async () => (await readImageBytes(deps.db, logoName))?.bytes ?? null,
+            })));
       const widthDots = textGrid(printer.paperWidth, printer.resolution).widthDots;
       const draw = (
         trim: ReceiptConfig,

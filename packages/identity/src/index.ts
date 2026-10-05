@@ -62,6 +62,7 @@ export { managementSessions } from "./schema/management-sessions.js";
 export { managementAccountActions } from "./schema/management-account-actions.js";
 export { webauthnCredentials, webauthnChallenges } from "./schema/webauthn.js";
 export { MIN_PIN_LENGTH, assertPinLength } from "./verify-pin.js";
+export { isValidEmail } from "./email.js";
 export {
   clearPersonPin,
   deactivatePerson,

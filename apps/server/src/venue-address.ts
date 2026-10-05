@@ -26,18 +26,32 @@ export function addressLines(address: LocationAddress): string[] {
   ].filter(Boolean);
 }
 
-/** The location's address lines, or none when the receipt's `printAddress` is `false`. */
+/** The address lines a receipt prints: none when its `printAddress` is `false` or there is no location. */
+export function receiptAddressLines(
+  receipt: Pick<ReceiptConfig, "printAddress">,
+  address: LocationAddress | undefined,
+): string[] {
+  return receipt.printAddress === false || address === undefined ? [] : addressLines(address);
+}
+
 export async function readReceiptAddress(
   tx: Transaction,
   locationId: string,
   receipt: Pick<ReceiptConfig, "printAddress">,
 ): Promise<string[]> {
-  if (receipt.printAddress === false) return [];
-  return readLocationAddress(tx, locationId);
+  return receiptAddressLines(receipt, await readAddress(tx, locationId));
 }
 
 /** The location's address lines whatever the receipt's switch says; none for an unknown location. */
 export async function readLocationAddress(tx: Transaction, locationId: string): Promise<string[]> {
+  const row = await readAddress(tx, locationId);
+  return row === undefined ? [] : addressLines(row);
+}
+
+async function readAddress(
+  tx: Transaction,
+  locationId: string,
+): Promise<LocationAddress | undefined> {
   const [row] = await tx
     .select({
       addressLine1: locations.addressLine1,
@@ -48,5 +62,5 @@ export async function readLocationAddress(tx: Transaction, locationId: string): 
     })
     .from(locations)
     .where(eq(locations.id, locationId));
-  return row === undefined ? [] : addressLines(row);
+  return row;
 }

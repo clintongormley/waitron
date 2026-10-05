@@ -7,35 +7,43 @@ import {
   type MonoRaster,
   type PaperWidth,
 } from "@waitron/printing";
+import { sql } from "drizzle-orm";
 import { DEFAULT_RECEIPT } from "./defaults.js";
 import type { ReceiptConfig, ReceiptLogoRasters, StoredLogoRaster } from "./types.js";
-import { validateReceiptConfig } from "./validate.js";
+import { isPlainObject, RECEIPT_STRING_FIELDS, validateReceiptConfig } from "./validate.js";
 
 const PAPER_WIDTHS: readonly PaperWidth[] = ["58mm", "80mm"];
 const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
-type StoredReceipt = ReceiptConfig & { logoRasters?: unknown };
+/** The row without its pictures, which are most of its size, so reading the trim parses none. */
+const TRIM = sql<string>`json_remove(${tenantReceipts.receipt}, '$.logoRasters')`;
 
-/**
- * The `as` cast restores a type the JSON column does not carry: this package depends on
- * `@waitron/db`, so the column cannot name one of its types without a dependency cycle. Nothing
- * here re-validates the row, and a configuration import copies it unchecked.
- */
-async function readStored(tx: Transaction): Promise<StoredReceipt | undefined> {
-  const [row] = await tx.select({ receipt: tenantReceipts.receipt }).from(tenantReceipts);
-  return row?.receipt as StoredReceipt | undefined;
+/** One stored picture as JSON text, `null` when absent. */
+function storedPicture(path: string) {
+  return sql<string | null>`${tenantReceipts.receipt} -> ${path}`;
 }
 
-export async function getReceipt(tx: Transaction): Promise<ReceiptConfig> {
-  const stored = await readStored(tx);
-  if (stored === undefined) return DEFAULT_RECEIPT;
-  const receipt: StoredReceipt = { ...stored };
-  delete receipt.logoRasters;
+/**
+ * A configuration import copies the row unchecked, and a sale prints this trim inside its own
+ * transaction, so a field of the wrong type is dropped rather than printed or thrown on; a
+ * `printAddress` that is not a boolean is absent, which prints the address. A row that is not an
+ * object reads as no trim at all.
+ */
+function parseTrim(trim: string): ReceiptConfig {
+  const value: unknown = JSON.parse(trim);
+  if (!isPlainObject(value)) return DEFAULT_RECEIPT;
+  const receipt: ReceiptConfig = {};
+  for (const field of RECEIPT_STRING_FIELDS) {
+    const text = value[field];
+    if (typeof text === "string") receipt[field] = text;
+  }
+  if (typeof value.printAddress === "boolean") receipt.printAddress = value.printAddress;
   return receipt;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+export async function getReceipt(tx: Transaction): Promise<ReceiptConfig> {
+  const [row] = await tx.select({ trim: TRIM }).from(tenantReceipts);
+  return row === undefined ? DEFAULT_RECEIPT : parseTrim(row.trim);
 }
 
 function isDots(value: unknown, max: number): value is number {
@@ -44,19 +52,34 @@ function isDots(value: unknown, max: number): value is number {
 
 /** `null` for anything that is not a raster this paper can print. */
 function decodeLogoRaster(value: unknown, paperWidth: PaperWidth): MonoRaster | null {
-  if (!isRecord(value)) return null;
+  if (!isPlainObject(value)) return null;
   const { widthDots, heightDots, data } = value;
   if (
     !isDots(widthDots, safeWidthDots(paperWidth)) ||
     !isDots(heightDots, LOGO_MAX_HEIGHT_DOTS) ||
-    typeof data !== "string" ||
-    !BASE64.test(data)
+    typeof data !== "string"
   ) {
     return null;
   }
+  const size = Math.ceil(widthDots / 8) * heightDots;
+  // Bounded before the pattern runs: on ten million characters it overflowed the stack.
+  if (data.length !== Math.ceil(size / 3) * 4 || !BASE64.test(data)) return null;
   const bits = new Uint8Array(Buffer.from(data, "base64"));
-  if (bits.length !== Math.ceil(widthDots / 8) * heightDots) return null;
+  if (bits.length !== size) return null;
   return { widthDots, heightDots, bits };
+}
+
+/**
+ * The stored picture as a raster, or `null`. It runs inside a sale's transaction, where a throw
+ * would roll the sale back, so nothing about the stored text may throw past it.
+ */
+function readLogoRaster(json: string | null, paperWidth: PaperWidth): MonoRaster | null {
+  if (json === null) return null;
+  try {
+    return decodeLogoRaster(JSON.parse(json), paperWidth);
+  } catch {
+    return null;
+  }
 }
 
 export function encodeLogoRaster(raster: MonoRaster): StoredLogoRaster {
@@ -68,22 +91,46 @@ export function encodeLogoRaster(raster: MonoRaster): StoredLogoRaster {
 }
 
 /**
- * The logo to print on `paperWidth`, or `null`. It runs inside a sale's transaction, where a throw
- * would roll the sale back, so a stored raster of any wrong shape yields `null` instead.
+ * The trim and the logo `paperWidth` prints, from one read that parses that paper's picture alone.
+ * The logo is `null` for a stored picture of any wrong shape; a failed read still throws.
  */
-export async function getReceiptLogo(
+export async function getPrintedReceipt(
   tx: Transaction,
   paperWidth: PaperWidth,
-): Promise<MonoRaster | null> {
-  const stored = await readStored(tx);
-  if (typeof stored?.logo !== "string" || !isRecord(stored.logoRasters)) return null;
-  return decodeLogoRaster(stored.logoRasters[paperWidth], paperWidth);
+): Promise<{ receipt: ReceiptConfig; logo: MonoRaster | null }> {
+  const [row] = await tx
+    .select({ trim: TRIM, picture: storedPicture(`$.logoRasters."${paperWidth}"`) })
+    .from(tenantReceipts);
+  if (row === undefined) return { receipt: DEFAULT_RECEIPT, logo: null };
+  const receipt = parseTrim(row.trim);
+  const logo = receipt.logo === undefined ? null : readLogoRaster(row.picture, paperWidth);
+  return { receipt, logo };
 }
 
 /**
- * `logoRasters` are required unless the row already holds printable ones for the same logo, which
- * are then kept, so the row never names a logo it holds no printable raster for.
+ * The pictures stored for `logo`, when the row names that logo and every paper's picture is one it
+ * can print; otherwise `null`, and the caller draws them again.
  */
+export async function getStoredLogoRasters(
+  tx: Transaction,
+  logo: string,
+): Promise<ReceiptLogoRasters | null> {
+  const [row] = await tx
+    .select({
+      logo: sql<unknown>`${tenantReceipts.receipt} ->> '$.logo'`,
+      pictures: storedPicture("$.logoRasters"),
+    })
+    .from(tenantReceipts);
+  if (row?.logo !== logo || row.pictures === null) return null;
+  try {
+    const pictures: unknown = JSON.parse(row.pictures);
+    return printable(pictures) ? pictures : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `logoRasters` are required with a logo, so the row never names a logo it cannot print. */
 export async function putReceipt(
   tx: Transaction,
   input: { managementSessionId: string; receipt: unknown; logoRasters?: ReceiptLogoRasters },
@@ -93,9 +140,12 @@ export async function putReceipt(
     permission: "layout.configure",
   });
   const config = validateReceiptConfig(input.receipt);
-  let receipt: StoredReceipt = config;
+  let receipt: ReceiptConfig & { logoRasters?: ReceiptLogoRasters } = config;
   if (config.logo !== undefined) {
-    receipt = { ...config, logoRasters: await rastersFor(tx, config.logo, input.logoRasters) };
+    if (!printable(input.logoRasters)) {
+      throw new Error(`no printable logo raster was given for ${config.logo}`);
+    }
+    receipt = { ...config, logoRasters: input.logoRasters };
   }
   await tx
     .insert(tenantReceipts)
@@ -108,23 +158,7 @@ export async function putReceipt(
 
 function printable(rasters: unknown): rasters is ReceiptLogoRasters {
   return (
-    isRecord(rasters) &&
+    isPlainObject(rasters) &&
     PAPER_WIDTHS.every((paperWidth) => decodeLogoRaster(rasters[paperWidth], paperWidth) !== null)
   );
-}
-
-async function rastersFor(
-  tx: Transaction,
-  logo: string,
-  given: ReceiptLogoRasters | undefined,
-): Promise<ReceiptLogoRasters> {
-  if (given !== undefined) {
-    if (!printable(given)) throw new Error("a given logo raster is not one its paper can print");
-    return given;
-  }
-  const stored = await readStored(tx);
-  if (stored?.logo !== logo || !printable(stored.logoRasters)) {
-    throw new Error(`no logo raster was given for ${logo}, and none printable is stored for it`);
-  }
-  return stored.logoRasters;
 }

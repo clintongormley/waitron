@@ -1,5 +1,5 @@
 import { AppError } from "@waitron/shared";
-import { loadSharp } from "./load-sharp.js";
+import { DECODE_OPTIONS, loadSharp } from "./load-sharp.js";
 import "./errors.js";
 
 /** An 8-bit greyscale picture, one byte per pixel row by row, 0 black and 255 white. */
@@ -21,7 +21,7 @@ export async function decodeLogoGreyscale(
 ): Promise<GreyscaleImage> {
   const sharp = await loadSharp();
   try {
-    const { data, info } = await sharp(bytes)
+    const { data, info } = await sharp(bytes, DECODE_OPTIONS)
       .flatten({ background: "#ffffff" })
       .resize(maxWidth, maxHeight, { fit: "inside" })
       .toColourspace("b-w")

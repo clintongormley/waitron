@@ -19,10 +19,10 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
   jobOrigin,
+  MEDIA_FILENAME,
 } from "@waitron/shared";
 import type { OriginConfig } from "../../src/till-config.js";
 import { getHeldOrder, parkOrder } from "../../src/working-order.js";
-import { MEDIA_FILENAME } from "@waitron/media";
 import { readImageBytes } from "@waitron/media";
 import { seedDemoRestaurant } from "./seed.js";
 

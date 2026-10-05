@@ -58,8 +58,8 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   deleteDeviceProfile,
+  getPrintedReceipt,
   getReceipt,
-  getReceiptLogo,
   readProfilePrinterLists,
   setProfilePrinterLists,
 } from "@waitron/layouts";
@@ -1332,8 +1332,8 @@ it("transfers the receipt's logo with its image and pictures, and the imported r
   const printed = async (db: typeof suite.db) =>
     withTransaction(db, async (tx) => ({
       receipt: await getReceipt(tx),
-      narrow: await getReceiptLogo(tx, "58mm"),
-      wide: await getReceiptLogo(tx, "80mm"),
+      narrow: (await getPrintedReceipt(tx, "58mm")).logo,
+      wide: (await getPrintedReceipt(tx, "80mm")).logo,
       image: (await readImageBytes(tx, logo)) !== null,
     }));
   const imported = await printed(targetSuite.db);

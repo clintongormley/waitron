@@ -6,9 +6,15 @@ import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/i
 import type { PersonRoleValue } from "@waitron/identity";
 import { isAppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_RECEIPT } from "./defaults.js";
-import { encodeLogoRaster, getReceipt, getReceiptLogo, putReceipt } from "./receipt-store.js";
+import {
+  encodeLogoRaster,
+  getPrintedReceipt,
+  getReceipt,
+  getStoredLogoRasters,
+  putReceipt,
+} from "./receipt-store.js";
 import type { ReceiptConfig, ReceiptLogoRasters, StoredLogoRaster } from "./types.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
@@ -120,6 +126,11 @@ async function storedJson(): Promise<Record<string, unknown> | undefined> {
   return row?.receipt as Record<string, unknown> | undefined;
 }
 
+/** The logo a sale would print on `paperWidth`. */
+function getReceiptLogo(tx: Transaction, paperWidth: "58mm" | "80mm") {
+  return getPrintedReceipt(tx, paperWidth).then((printed) => printed.logo);
+}
+
 /** Writes the row as an import would: whatever JSON it carries, unchecked. */
 async function storeRaw(receipt: unknown): Promise<void> {
   await suite.db.insert(tenantReceipts).values({ receipt });
@@ -183,7 +194,7 @@ describe("the receipt logo", () => {
     expect(await storedJson()).toEqual({ logo: LOGO, logoRasters: RASTERS });
   });
 
-  it("keeps the stored rasters when the logo is unchanged and none are given", async () => {
+  it("refuses an UNCHANGED logo with no rasters, keeping the stored row", async () => {
     await seedTenant(suite.db);
     const session = await seedSession("manager");
     await inTx((tx) =>
@@ -193,27 +204,16 @@ describe("the receipt logo", () => {
         logoRasters: RASTERS,
       }),
     );
-    await inTx((tx) =>
-      putReceipt(tx, {
-        managementSessionId: session,
-        receipt: { logo: LOGO, footerMessage: "Gracias" },
-      }),
-    );
-    expect(await storedJson()).toEqual({
-      logo: LOGO,
-      footerMessage: "Gracias",
-      logoRasters: RASTERS,
-    });
-  });
-
-  it("refuses an unchanged logo with no rasters when the stored ones are not printable", async () => {
-    await seedTenant(suite.db);
-    const session = await seedSession("manager");
-    await storeRaw({ logo: LOGO, logoRasters: { ...RASTERS, "80mm": stored(505, 1) } });
     const error = await captureError(() =>
-      inTx((tx) => putReceipt(tx, { managementSessionId: session, receipt: { logo: LOGO } })),
+      inTx((tx) =>
+        putReceipt(tx, {
+          managementSessionId: session,
+          receipt: { logo: LOGO, footerMessage: "Gracias" },
+        }),
+      ),
     );
     expect(String(error)).toMatch(/raster/);
+    expect(await storedJson()).toEqual({ logo: LOGO, logoRasters: RASTERS });
   });
 
   it("replaces the rasters when new ones are given", async () => {
@@ -267,6 +267,7 @@ describe("the receipt logo", () => {
       { "58mm": { ...stored(16, 2), data: Buffer.alloc(3).toString("base64") } },
     ],
     ["a missing paper", { "58mm": undefined }],
+    ["data ten million characters long", { "58mm": { ...stored(8, 1), data: "A".repeat(1e7) } }],
   ])("refuses given rasters with %s, writing nothing", async (_, broken) => {
     await seedTenant(suite.db);
     const session = await seedSession("manager");
@@ -309,6 +310,10 @@ describe("the receipt logo", () => {
       { "58mm": { ...stored(16, 2), data: Buffer.alloc(5).toString("base64") } },
     ],
     ["data that is not base64", { "58mm": { ...stored(8, 1), data: "!!!!" } }],
+    [
+      "data ten million characters long",
+      { "58mm": { ...stored(8, 1), data: "A".repeat(10_000_000) } },
+    ],
   ])(
     "returns no logo, rather than throwing, for a stored raster with %s",
     async (_, logoRasters) => {
@@ -317,6 +322,121 @@ describe("the receipt logo", () => {
       expect(await inTx((tx) => getReceiptLogo(tx, "58mm"))).toBeNull();
     },
   );
+
+  it("returns the trim beside the logo, from the same row", async () => {
+    await seedTenant(suite.db);
+    await storeRaw({ footerMessage: "Hola", logo: LOGO, logoRasters: RASTERS });
+    const printed = await inTx((tx) => getPrintedReceipt(tx, "80mm"));
+    expect(printed.receipt).toEqual({ footerMessage: "Hola", logo: LOGO });
+    expect(printed.logo?.widthDots).toBe(504);
+  });
+
+  it.each([
+    ["null", "null"],
+    ["an array", `[{"logo":"${LOGO}"}]`],
+    ["text", '"Hola"'],
+  ])("reads a row an import stored as %s as the default trim with no logo", async (_, row) => {
+    await seedTenant(suite.db);
+    await suite.db.execute(
+      sql`insert into tenant_receipts (receipt, updated_at) values (${row}, ${new Date().toISOString()})`,
+    );
+    expect(await inTx((tx) => getReceipt(tx))).toEqual(DEFAULT_RECEIPT);
+    expect(await inTx((tx) => getPrintedReceipt(tx, "58mm"))).toEqual({
+      receipt: DEFAULT_RECEIPT,
+      logo: null,
+    });
+  });
+
+  it("drops each trim field an import stored with the wrong type, keeping the rest", async () => {
+    await seedTenant(suite.db);
+    await storeRaw({
+      headerSubtitle: 5,
+      footerMessage: [],
+      phone: 910000000,
+      email: {},
+      printAddress: "no",
+      logo: 7,
+      logoRasters: RASTERS,
+      unknown: "dropped too",
+    });
+    expect(await inTx((tx) => getReceipt(tx))).toEqual({});
+    expect(await inTx((tx) => getPrintedReceipt(tx, "80mm"))).toEqual({ receipt: {}, logo: null });
+
+    await suite.db.update(tenantReceipts).set({
+      receipt: { headerSubtitle: "Desde 1990", email: "hola@deli.test", printAddress: false },
+    });
+    expect(await inTx((tx) => getReceipt(tx))).toEqual({
+      headerSubtitle: "Desde 1990",
+      email: "hola@deli.test",
+      printAddress: false,
+    });
+  });
+
+  it("gives no logo, rather than throwing, when reading the stored picture throws", async () => {
+    await seedTenant(suite.db);
+    await storeRaw({ logo: LOGO, logoRasters: RASTERS });
+    const parse = JSON.parse;
+    const spy = vi.spyOn(JSON, "parse").mockImplementation((text: string) => {
+      if (text.includes("widthDots")) throw new RangeError("Maximum call stack size exceeded");
+      return parse(text) as unknown;
+    });
+    try {
+      expect(await inTx((tx) => getPrintedReceipt(tx, "58mm"))).toEqual({
+        receipt: { logo: LOGO },
+        logo: null,
+      });
+      expect(await inTx((tx) => getStoredLogoRasters(tx, LOGO))).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("parses no picture to read the trim, and only the printed paper's to print", async () => {
+    await seedTenant(suite.db);
+    await storeRaw({ logo: LOGO, logoRasters: RASTERS });
+    const parse = vi.spyOn(JSON, "parse");
+    try {
+      await inTx((tx) => getReceipt(tx));
+      expect(parse.mock.calls.some(([text]) => String(text).includes("widthDots"))).toBe(false);
+      parse.mockClear();
+      expect((await inTx((tx) => getPrintedReceipt(tx, "80mm"))).logo).not.toBeNull();
+      const parsed = parse.mock.calls.map(([text]) => String(text));
+      expect(parsed.some((text) => text.includes(RASTERS["80mm"].data))).toBe(true);
+      expect(parsed.some((text) => text.includes(RASTERS["58mm"].data))).toBe(false);
+    } finally {
+      parse.mockRestore();
+    }
+  });
+
+  it("returns the stored pictures for the logo the row names", async () => {
+    await seedTenant(suite.db);
+    await storeRaw({ logo: LOGO, logoRasters: RASTERS });
+    expect(await inTx((tx) => getStoredLogoRasters(tx, LOGO))).toEqual(RASTERS);
+  });
+
+  it.each<[string, unknown]>([
+    ["no receipt row", undefined],
+    ["a row naming another logo", { logo: OTHER_LOGO, logoRasters: RASTERS }],
+    ["a row naming no logo", { logoRasters: RASTERS }],
+    ["no pictures", { logo: LOGO }],
+    ["pictures that are not an object", { logo: LOGO, logoRasters: "abc" }],
+    ["a paper missing", { logo: LOGO, logoRasters: { "58mm": RASTERS["58mm"] } }],
+    [
+      "a paper's picture too wide for it",
+      { logo: LOGO, logoRasters: { ...RASTERS, "80mm": stored(505, 1) } },
+    ],
+    [
+      "a picture ten million characters long",
+      {
+        logo: LOGO,
+        logoRasters: { ...RASTERS, "58mm": { ...stored(8, 1), data: "A".repeat(10_000_000) } },
+      },
+    ],
+  ])("returns no stored pictures for %s", async (_, row) => {
+    await seedTenant(suite.db);
+    if (row !== undefined) await storeRaw(row);
+    expect(await inTx((tx) => getStoredLogoRasters(tx, LOGO))).toBeNull();
+  });
 
   it("encodes a 1-bit raster as the store keeps it", () => {
     const bits = Uint8Array.of(0x80, 0x01);

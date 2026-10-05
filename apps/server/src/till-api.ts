@@ -187,7 +187,7 @@ import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { resolveInstalledReceiptLanguageRules } from "@waitron/country-packs";
 import { geographyOf } from "./venue-locale.js";
-import { readReceiptAddress } from "./venue-address.js";
+import { receiptAddressLines } from "./venue-address.js";
 import { resolveLoginLocale } from "./login-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
@@ -1073,6 +1073,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             bumpMode: locations.bumpMode,
             fireControl: locations.fireControl,
             receiptPrintMode: locations.receiptPrintMode,
+            addressLine1: locations.addressLine1,
+            addressLine2: locations.addressLine2,
+            postalCode: locations.postalCode,
+            city: locations.city,
             province: locations.province,
           })
           .from(locations)
@@ -1083,7 +1087,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           displayOrder: course.displayOrder,
         }));
         const receipt = await getReceipt(tx);
-        const venueAddress = await readReceiptAddress(tx, deps.cfg.locationId, receipt);
+        const venueAddress = receiptAddressLines(receipt, loc);
         let canvas: CanvasDef;
         let capabilities: CapabilityFlag[] = [];
         let inactivityTimeoutSeconds: number | null = null;

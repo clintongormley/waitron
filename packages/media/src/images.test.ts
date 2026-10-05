@@ -14,6 +14,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import {
   uploadImage,
+  imageExists,
   readImageBytes,
   updateImage,
   deleteImage,
@@ -510,6 +511,20 @@ describe("input boundaries", () => {
         .returning({ id: mediaImages.id });
       await tx.insert(mediaImageData).values({ imageId: row!.id, bytes });
       expect(await readImageBytes(tx, filename)).toEqual({ bytes, contentType });
+    });
+  });
+
+  it("says whether the library holds a filename, and stops once the image is deleted", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const { image } = await uploadImage(
+        tx,
+        { image: photo, names: { en: "Bread" } },
+        { fallbackLanguage: "en" },
+      );
+      expect(await imageExists(tx, image.filename)).toBe(true);
+      expect(await imageExists(tx, `${"0".repeat(64)}.webp`)).toBe(false);
+      await deleteImage(tx, image.id);
+      expect(await imageExists(tx, image.filename)).toBe(false);
     });
   });
 

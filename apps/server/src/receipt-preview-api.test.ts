@@ -738,6 +738,23 @@ describe("the receipt preview's top block", () => {
     expect(sizes(await rendered({ logo }))).toEqual([]);
   });
 
+  it("draws no logo once the unsaved logo's image is deleted, though it was drawn before", async () => {
+    const logo = await libraryImage(44);
+    const mounted = app();
+    const draw = async () => {
+      const response = await mounted.request(
+        `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify({ logo }))}`,
+        { headers: { cookie: venue.managerCookie } },
+      );
+      expect(response.status).toBe(200);
+      return (await response.json()) as ReceiptPreviewResponse;
+    };
+    expect(sizes(await draw())).toEqual([[504, 137]]);
+    await suite.db.delete(mediaImages).where(eq(mediaImages.filename, logo));
+    const after = await draw();
+    expect([sizes(after), after.marks.logo]).toEqual([[], null]);
+  });
+
   it("draws no logo, and refuses nothing, when the image is gone or will not decode", async () => {
     const gone = await rendered({ logo: `${"c".repeat(64)}.png` });
     expect([sizes(gone), gone.marks.logo]).toEqual([[], null]);

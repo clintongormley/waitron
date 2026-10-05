@@ -238,6 +238,14 @@ export async function uploadImage(
   return { created: true, image: await readImage(tx, row!.id) };
 }
 
+export async function imageExists(tx: Transaction, filename: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: mediaImages.id })
+    .from(mediaImages)
+    .where(eq(mediaImages.filename, filename));
+  return row !== undefined;
+}
+
 export async function readImageBytes(
   tx: Transaction,
   filename: string,

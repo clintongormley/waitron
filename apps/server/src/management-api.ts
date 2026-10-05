@@ -9,7 +9,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isAppError } from "@waitron/shared";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import { ownPasswordChanges } from "./own-password-ahead.js";
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import {
   fireControlMode,
   printers,
@@ -60,12 +60,11 @@ import {
   createDeviceProfile,
   deleteCanvas,
   deleteDeviceProfile,
-  encodeLogoRaster,
   getReceipt,
-  getReceiptLogo,
   getCanvas,
   getDeviceProfile,
   getDeviceProfileWithPrinters,
+  getStoredLogoRasters,
   getTenantTheme,
   listCanvases,
   listDeviceProfiles,
@@ -77,7 +76,7 @@ import {
   validateReceiptConfig,
   type ProfilePrinterLists,
 } from "@waitron/layouts";
-import { mediaImages, readImageBytes } from "@waitron/media";
+import { imageExists, readImageBytes } from "@waitron/media";
 import {
   clearPlacement,
   createStatus,
@@ -1141,8 +1140,8 @@ export function mountManagementApi(
       }
       const { receipt } = body;
       let logo: string | undefined;
-      // The kept pictures are handed back rather than left for `putReceipt` to find, so a save that
-      // changes the logo in between cannot leave this one without them.
+      // The kept pictures are handed to `putReceipt` from this read, so a save that changes the
+      // logo in between cannot leave this one without them.
       const kept = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
@@ -1150,13 +1149,8 @@ export function mountManagementApi(
         });
         logo = validateReceiptConfig(receipt).logo;
         if (logo === undefined) return undefined;
-        if ((await getReceipt(tx)).logo === logo) {
-          const narrow = await getReceiptLogo(tx, "58mm");
-          const wide = await getReceiptLogo(tx, "80mm");
-          if (narrow !== null && wide !== null) {
-            return { "58mm": encodeLogoRaster(narrow), "80mm": encodeLogoRaster(wide) };
-          }
-        }
+        const stored = await getStoredLogoRasters(tx, logo);
+        if (stored !== null) return stored;
         const image = await readImageBytes(tx, logo);
         if (image === null) throw logoNotFound();
         return image.bytes;
@@ -1164,13 +1158,7 @@ export function mountManagementApi(
       // Outside any transaction: sharp decodes the image.
       const logoRasters = kept instanceof Uint8Array ? await drawLogoRasters(kept) : kept;
       await withTransaction(deps.db, async (tx) => {
-        if (logo !== undefined) {
-          const [image] = await tx
-            .select({ id: mediaImages.id })
-            .from(mediaImages)
-            .where(eq(mediaImages.filename, logo));
-          if (image === undefined) throw logoNotFound();
-        }
+        if (logo !== undefined && !(await imageExists(tx, logo))) throw logoNotFound();
         await putReceipt(tx, {
           managementSessionId: sessionId,
           receipt,

@@ -13,7 +13,7 @@ import { count, json, nowIso, table, tsString } from "./columns.js";
  *
  * `receipt` is PLAIN JSON, deliberately carrying no `@waitron/layouts` `ReceiptConfig` type:
  * `@waitron/layouts` depends on `@waitron/db`, so importing its types here would be a circular
- * dependency. The service validates the shape on write (`validateReceiptConfig`).
+ * dependency.
  */
 export const tenantReceipts = table(
   "tenant_receipts",

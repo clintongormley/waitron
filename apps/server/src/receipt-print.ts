@@ -7,7 +7,7 @@ import { deviceProfiles, devices, drawerOpens, printers, readTenant, sales } fro
 import type { Transaction } from "@waitron/db";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { EscSetting, PrintConfig } from "@waitron/printing";
-import { getReceipt, getReceiptLogo } from "@waitron/layouts";
+import { getPrintedReceipt } from "@waitron/layouts";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import type { Origin } from "@waitron/shared";
 import { formatReceipt } from "./receipt-ticket.js";
@@ -102,9 +102,8 @@ async function buildReceiptBytes(
     return undefined;
   }
   /* v8 ignore stop */
-  const receipt = await getReceipt(tx);
+  const { receipt, logo } = await getPrintedReceipt(tx, printer.paperWidth);
   const venueAddress = await readReceiptAddress(tx, cfg.locationId, receipt);
-  const logo = await getReceiptLogo(tx, printer.paperWidth);
   const receiptHeader = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
   return formatReceipt({
     result: ticket,

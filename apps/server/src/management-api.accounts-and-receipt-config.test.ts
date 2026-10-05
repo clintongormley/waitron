@@ -16,7 +16,7 @@ import { tenantReceipts, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { encryptTotpSecret, hashPassword, hashPin, persons } from "@waitron/identity";
-import { DEFAULT_RECEIPT, getReceiptLogo } from "@waitron/layouts";
+import { DEFAULT_RECEIPT, getPrintedReceipt } from "@waitron/layouts";
 import { mediaImages, uploadImage } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -1370,8 +1370,8 @@ describe("Management API — receipt routes (Task 7)", () => {
       venueAddress: VENUE_ADDRESS,
     });
     const printable = await withTransaction(suite.db, async (tx) => [
-      await getReceiptLogo(tx, "58mm"),
-      await getReceiptLogo(tx, "80mm"),
+      (await getPrintedReceipt(tx, "58mm")).logo,
+      (await getPrintedReceipt(tx, "80mm")).logo,
     ]);
     // 40 × 12 fitted inside 360 × 160 and 504 × 160.
     expect(printable.map((r) => [r?.widthDots, r?.heightDots])).toEqual([
