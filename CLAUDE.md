@@ -632,7 +632,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   called directly) is invisible to it.
 - **A new append-only table travels in both its module's exported migration descriptor and
   `packages/migrations/migrations.manifest.json`.** Guards:
-  `scripts/append-only-migration-sets.test.ts` and `packages/composition/src/index.test.ts`.
+  `scripts/append-only-migration-sets.test.ts` and `packages/composition/src/composition.test.ts`.
   Cost: A261-2 passed its direct-descriptor tests while the hook and then CI caught the two missing
   lists. Receipt: [conventions-data.md](docs/developers/conventions-data.md).
 - **A streamed `venue.db` holds two tables no migration created, and its folder a directory no
