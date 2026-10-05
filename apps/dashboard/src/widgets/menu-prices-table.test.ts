@@ -2225,6 +2225,44 @@ it("turns a clashing product's Clash into its size's once a price is typed for t
   expect(override(el, "mi-lemonade").placeholder).toBe("—");
 });
 
+it("shows a size following its clashing product the price typed for the product, and the clash again once that field is emptied", async () => {
+  setLocale("en-GB");
+  try {
+    const source = {
+      ...lemonade,
+      override: null,
+      combined: {
+        ...lemonade.combined,
+        price: clashPrice,
+        variants: lemonade.combined.variants.map((v, at) =>
+          at === 0 ? { ...v, price: { ...clashPrice, level: "product" } } : v,
+        ),
+      },
+    } as MenuPriceRow;
+    const el = await mount({ rows: [source] });
+    toggleOf(el, "mi-lemonade")!.click();
+    await table(el).updateComplete;
+    const size = "mi-lemonade:v-small";
+    const tip = () =>
+      cell(el, "override", size).querySelector("wt-help-tooltip")!.textContent!.trim();
+    expect(override(el, size).placeholder).toBe("Set a price");
+    expect(clashMarker(el, size)).toBe("Clash");
+    await typeIn(el, "mi-lemonade", "2.80");
+    await table(el).updateComplete;
+    expect(override(el, size).placeholder).toBe("2.80");
+    expect(hintOf(override(el, size))).toBe("Leave it empty to use the inherited price, €2.80.");
+    expect(clashMarker(el, size)).toBe("");
+    expect(tip()).toMatch(/^Follows Lemonade's price on this menu\. This menu sets €2\.80\./);
+    await typeIn(el, "mi-lemonade", "");
+    await table(el).updateComplete;
+    expect(override(el, size).placeholder).toBe("Set a price");
+    expect(clashMarker(el, size)).toBe("Clash");
+    expect(row(el, size)!.querySelector("[part~=resolve]")).not.toBeNull();
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
 /** Runs `body` with the test frame at a desktop width, where the whole table fits the window. */
 async function atDesktopWidth(body: () => Promise<void>): Promise<void> {
   const width = window.innerWidth,

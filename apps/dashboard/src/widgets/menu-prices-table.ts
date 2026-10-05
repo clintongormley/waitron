@@ -449,11 +449,13 @@ export class MenuPricesTable extends LitElement {
   }
 
   /** "size" for a product row whose own price is decided but an Active size's is not; "own" for a
-   * row whose own price, or what it inherits, is undecided and whose field holds no price. */
+   * row whose own price, or what it inherits, is undecided and whose field holds no price. A size
+   * is judged by what it inherits alone, which follows a price typed for its product. */
   #clash(line: Line): "size" | "own" | null {
     if (line.variant === null && this.#withParent(line).sizeClash) return "size";
     if (this.#holds(line, this.drafts.get(keyOf(line)))) return null;
-    return this.#priceSetting(line).state === "clash" || this.#inherited(line).state === "clash"
+    return (line.variant === null && this.#priceSetting(line).state === "clash") ||
+      this.#inherited(line).state === "clash"
       ? "own"
       : null;
   }
