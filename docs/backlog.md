@@ -5341,7 +5341,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Left OPEN by W105, not acted on: (5) a kitchen screen whose station or watcher was switched off
   opens with Shows empty, so even a rename asks for a new one; whether to let it keep a switched-off
   one is the owner's call. (6) done by W105a (#1244): printers and devices both say Disable/Deshabilitar,
-  status Disabled, and printers' Add again is now Enable; card readers followed in W110: Disable/Deshabilitar,
+  status Disabled, and printers' Add again is now Enable; card readers followed in W110 (#1255): Disable/Deshabilitar,
   Enable/Habilitar, Disabled/Deshabilitado, and their Add again/Volver a añadir is now Enable/Habilitar. (7) a
   kitchen screen's Edit dialog hides Made here but still sends its stored made-here stations that
   are switched on in the screen's station list; that list re-reads when kitchen stations change, so
@@ -8225,8 +8225,8 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
 
 **Dashboard, till and setup:**
 
-- **One word for "switched off, kept for the record" across the dashboard — done by W110 (PR
-  pending), four points left open.** The owner's rule (2026-10-05): a record switched off but kept
+- **One word for "switched off, kept for the record" across the dashboard — done by W110
+  (#1255), five points left open.** The owner's rule (2026-10-05): a record switched off but kept
   says **Disable / Deshabilitar**, comes back with **Enable / Habilitar**, and reads **Active** or
   **Disabled** (Deshabilitado or Deshabilitada, agreeing with the noun); **Delete / Eliminar** only
   for a real delete. W110 moved products, variants, options and extras lists, departments, zones,
@@ -8245,7 +8245,10 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   disabled product's own row offers Disable again rather than Enable (a disabled variant's row does
   offer Enable); Enable for a product is only in its editor (`apps/dashboard/src/widgets/product-list.ts`,
   the actions column). (d) Departments, zones, floor tables and adjustment reasons can be disabled
-  but no screen offers Enable for them.
+  but no screen offers Enable for them. (e) a test gap, reported by W110's review and not
+  re-checked: `#fallbackReason` (`packages/venue-service/src/dashboard/prep-stations-screen.ts`)
+  turns the server's `switched_off` reason into `prep.test_disabled` for both of its callers, and
+  the review found no test for the caller that explains an extra falling back to another station.
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile`; the Spanish
   form-factor label differs between two pickers ("TPV" vs "Caja registradora") — an owner copy call.
 - An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional
