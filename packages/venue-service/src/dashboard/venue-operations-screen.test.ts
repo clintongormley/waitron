@@ -811,6 +811,24 @@ describe("venue operations screen", () => {
       expect(row.querySelector('[data-test="enable-tree-zone-z1"]')).not.toBeNull();
     });
 
+    it("offers Enable on a disabled zone that belongs to no department", async () => {
+      const updateZone = vi.fn().mockResolvedValue(undefined);
+      const el = await mount({
+        load: vi.fn().mockResolvedValue({
+          ...model,
+          floorZones: [model.floorZones[0]!, { ...model.floorZones[1]!, active: false }],
+        }),
+        updateZone,
+      } as unknown as VenueServiceApi);
+      const row = [
+        ...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]'),
+      ].find((candidate) => candidate.textContent?.includes("Deli counter"))!;
+      expect(row.getAttribute("aria-level")).toBe("1");
+      expect(row.querySelector('[data-test="remove-tree-zone-z2"]')).toBeNull();
+      await action(el, "enable-tree-zone-z2");
+      expect(updateZone).toHaveBeenCalledExactlyOnceWith("z2", { active: true });
+    });
+
     it("offers neither Enable nor Disable on a disabled zone of a disabled department", async () => {
       const el = await mount({
         load: vi.fn().mockResolvedValue({

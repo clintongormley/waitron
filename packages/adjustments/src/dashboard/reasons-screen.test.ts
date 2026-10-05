@@ -1434,6 +1434,21 @@ describe("enabling", () => {
     },
   );
 
+  it("sends one Enable for a second press made while the first is still on its way", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await disabledOnly(el);
+    const enable = find(el, '[data-test="enable-o"]')!;
+    enable
+      .closest("wt-row-actions")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    enable.click();
+    enable.click();
+    await settle(el);
+    expect(api.reactivateReason).toHaveBeenCalledExactlyOnceWith("o");
+  });
+
   it("clears the refusal once a later Enable succeeds", async () => {
     const api = fakeApi({
       reactivateReason: vi
