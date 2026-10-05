@@ -1492,6 +1492,7 @@ export class TillApp extends LitElement {
   @state() private capabilities: CapabilityFlag[] = [];
   /** The non-fiscal receipt trim; `{}` when the server omits it. */
   @state() private receipt: ReceiptConfig = {};
+  @state() private venueAddress: string[] = [];
   /** The non-fatal error to show over the counter, or `undefined` for none. */
   @state() private errorKey?: CounterError;
   /** What a complete submission of a draft did, said once the till is back on the floor. */
@@ -1742,6 +1743,7 @@ export class TillApp extends LitElement {
       this.activeReaders = till.activeReaders ?? [];
       this.defaultReaderId = till.defaultReaderId;
       this.receipt = till.receipt ?? {};
+      this.venueAddress = till.venueAddress ?? [];
       this.canvas = till.canvas;
       this.capabilities = till.capabilities;
       this.#inactivityTimeoutSeconds = till.inactivityTimeoutSeconds ?? null;
@@ -7337,6 +7339,7 @@ export class TillApp extends LitElement {
           .issuer=${this.issuer}
           .invoiceLocale=${this.invoiceLocale}
           .receipt=${this.receipt}
+          .venueAddress=${this.venueAddress}
           .originalReceiptAvailable=${this.originalReceiptAvailable}
           .canPrintReceipt=${
             this.deviceId === undefined || this.capabilities.includes("print-receipt")

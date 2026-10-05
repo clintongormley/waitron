@@ -10,6 +10,12 @@
 export interface ReceiptConfig {
   headerSubtitle?: string;
   footerMessage?: string;
+  phone?: string;
+  email?: string;
+  /** Absent prints the location's address; `false` prints none. */
+  printAddress?: boolean;
+  /** A media library filename. */
+  logo?: string;
 }
 
 export type FormFactor = "till" | "phone-portrait" | "tablet-landscape" | "kds";

@@ -127,6 +127,25 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations with the logo, slogan, address, phone and email in the top block", async () => {
+    const { host } = await mountWidget<TillTicketView>(
+      "till-ticket-view",
+      {
+        result,
+        issuer,
+        receipt: {
+          headerSubtitle: "El mejor jamón",
+          phone: "+34 912 345 678",
+          email: "hola@deli.es",
+          logo: `${"d".repeat(64)}.png`,
+        },
+        venueAddress: ["Calle Mayor 1", "28013 Madrid"],
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations on a practice receipt filed in Catalan", async () => {
     const { host } = await mountWidget<TillTicketView>(
       "till-ticket-view",

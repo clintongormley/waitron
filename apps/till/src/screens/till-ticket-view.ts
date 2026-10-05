@@ -253,6 +253,14 @@ export class TillTicketView extends LitElement {
         text-align: center;
       }
 
+      .logo {
+        display: block;
+        max-width: 100%;
+        max-height: calc(var(--wt-tap-min) * 2);
+        margin: 0 auto var(--wt-space-2);
+        object-fit: contain;
+      }
+
       .venue {
         margin: 0;
         font-size: var(--wt-font-size-lg);
@@ -266,6 +274,7 @@ export class TillTicketView extends LitElement {
 
       /* Non-fiscal receipt trim (design §8), rendered AROUND the immutable core — never inside it. */
       .header-subtitle,
+      .contact,
       .footer-message {
         margin: var(--wt-space-1) 0 0;
         text-align: center;
@@ -398,6 +407,8 @@ export class TillTicketView extends LitElement {
    * `ReceiptConfig` field can suppress or reorder a mandated element.
    */
   @property({ attribute: false }) receipt?: ReceiptConfig;
+  /** The location's address as the receipt prints it; none prints no address. */
+  @property({ attribute: false }) venueAddress: readonly string[] = [];
   /** True only while the issuance-time original action remains available on this completion screen. */
   @property({ type: Boolean }) originalReceiptAvailable = false;
   /** Whether this caller may request receipt and payment-slip print jobs. */
@@ -460,6 +471,15 @@ export class TillTicketView extends LitElement {
         }
         <header class="issuer">
           ${
+            this.receipt?.logo
+              ? html`<img
+                  class="logo"
+                  src=${`/media/${encodeURIComponent(this.receipt.logo)}`}
+                  alt=""
+                />`
+              : nothing
+          }
+          ${
             r.receiptHeader?.printTradingName &&
             r.receiptHeader.tradingName.trim() &&
             r.receiptHeader.tradingName.trim() !== issuer.venueName.trim()
@@ -472,6 +492,13 @@ export class TillTicketView extends LitElement {
               ? html`<p class="header-subtitle">${this.receipt.headerSubtitle}</p>`
               : nothing
           }
+          ${this.venueAddress.map((line) => html`<p class="contact">${line}</p>`)}
+          ${
+            this.receipt?.phone
+              ? html`<p class="contact">${labels.phone} ${this.receipt.phone}</p>`
+              : nothing
+          }
+          ${this.receipt?.email ? html`<p class="contact">${this.receipt.email}</p>` : nothing}
           <p class="nif">${labels.nif}: ${issuer.nif}</p>
         </header>
 

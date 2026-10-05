@@ -667,6 +667,71 @@ describe("till-ticket-view", () => {
     expect(t).not.toContain("Coffee");
   });
 
+  describe("the top block mirrors the paper (W111)", () => {
+    const LOGO = `${"d".repeat(64)}.png`;
+    const full: ReceiptConfig = {
+      headerSubtitle: "El mejor jamón",
+      phone: "+34 912 345 678",
+      email: "hola@deli.es",
+      logo: LOGO,
+    };
+    const mountTop = (receipt: ReceiptConfig, venueAddress: string[], locale = "es-ES") =>
+      mountWidget<TillTicketView>("till-ticket-view", {
+        result: {
+          ...result,
+          locale,
+          receiptHeader: { tradingName: "La Tienda", printTradingName: true },
+        },
+        issuer,
+        invoiceLocale: locale,
+        receipt,
+        venueAddress,
+      });
+    const headerLines = (el: TillTicketView) =>
+      [...el.shadowRoot!.querySelector(".issuer")!.children].map((child) =>
+        child instanceof HTMLImageElement
+          ? `img ${child.getAttribute("src")}`
+          : norm(child.textContent!.trim()),
+      );
+
+    it("draws the logo, names, slogan, address, phone and email above the NIF, in the paper's order", async () => {
+      const { el } = await mountTop(full, ["Calle Mayor 1", "28013 Madrid"]);
+      expect(headerLines(el)).toEqual([
+        `img /media/${LOGO}`,
+        "La Tienda",
+        "Deli Delicioso SL",
+        "El mejor jamón",
+        "Calle Mayor 1",
+        "28013 Madrid",
+        "Tel. +34 912 345 678",
+        "hola@deli.es",
+        "NIF: B12345678",
+      ]);
+      const logo = el.shadowRoot!.querySelector<HTMLImageElement>(".issuer img")!;
+      expect(logo.alt).toBe("");
+      expect(getComputedStyle(el.shadowRoot!.querySelector(".issuer")!).textAlign).toBe("center");
+    });
+
+    it("draws none of the new lines when the receipt sets none and no address prints", async () => {
+      const { el } = await mountTop({}, []);
+      expect(headerLines(el)).toEqual(["La Tienda", "Deli Delicioso SL", "NIF: B12345678"]);
+    });
+
+    it("keeps the logo no wider than the ticket and no taller than its own bound", async () => {
+      const { el } = await mountTop({ logo: LOGO }, []);
+      const logo = el.shadowRoot!.querySelector<HTMLImageElement>(".issuer img")!;
+      const style = getComputedStyle(logo);
+      expect(style.maxWidth).toBe("100%");
+      expect(style.maxHeight).not.toBe("none");
+      expect(style.objectFit).toBe("contain");
+    });
+
+    it("prints the phone's label in the receipt's language", async () => {
+      const { el } = await mountTop({ phone: "943 000 000" }, [], "eu-ES");
+      expect(headerLines(el)).toContain("Tel. 943 000 000");
+    });
+  });
+
   describe("receipt trim (design §8)", () => {
     const following = (a: Element, b: Element) =>
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
