@@ -216,21 +216,51 @@ function decodeBytes(value: unknown): unknown {
     : value;
 }
 
-/** Read every row of the explicitly declared configuration tables (one tenant per database). */
+/** Read the explicitly declared configuration tables (one tenant per database), less the rows a
+ * table's `leaveBehindWhenSet` leaves behind and every row whose foreign key names one of them. */
 export async function exportConfigurationTables(
   db: Database | Transaction,
   modules: readonly WaitronModule[],
 ): Promise<{ tables: ConfigurationBundle["tables"]; reconnect: string[] }> {
-  const tables: ConfigurationBundle["tables"] = {};
-  const reconnect: string[] = [];
-  for (const declaration of declarations(modules)) {
+  const declared = declarations(modules);
+  const kept = new Map<string, Array<Record<string, unknown>>>();
+  const leftBehind = new Map<string, Array<Record<string, unknown>>>();
+  for (const declaration of declared) {
     const result = await db.execute<Record<string, unknown>>(sql`
       select * from ${sql.identifier(declaration.name)}
     `);
     if (result.rows.length > MAX_ROWS_PER_TABLE) {
       throw new AppError("setup.request_invalid", { field: `table:${declaration.name}` });
     }
-    tables[declaration.name] = result.rows.map((row) => {
+    const column = declaration.leaveBehindWhenSet;
+    if (column === undefined) {
+      kept.set(declaration.name, result.rows);
+      leftBehind.set(declaration.name, []);
+      continue;
+    }
+    // A column the table lacks would read as unset on every row and leave nothing behind.
+    const columns = await db.execute<{ name: string }>(sql`
+      select name from pragma_table_info(${declaration.name})
+    `);
+    if (!columns.rows.some((row) => row.name === column)) {
+      throw new AppError("setup.request_invalid", { field: `${declaration.name}.${column}` });
+    }
+    kept.set(
+      declaration.name,
+      result.rows.filter((row) => row[column] === null),
+    );
+    leftBehind.set(
+      declaration.name,
+      result.rows.filter((row) => row[column] !== null),
+    );
+  }
+  await leaveBehindReferences(db, declared, kept, leftBehind);
+
+  const tables: ConfigurationBundle["tables"] = {};
+  const reconnect: string[] = [];
+  for (const declaration of declared) {
+    const rows = kept.get(declaration.name)!;
+    tables[declaration.name] = rows.map((row) => {
       const copy = { ...row };
       for (const field of declaration.omit ?? []) delete copy[field];
       for (const [field, value] of Object.entries(copy)) {
@@ -238,9 +268,64 @@ export async function exportConfigurationTables(
       }
       return copy;
     });
-    if (declaration.reconnect && result.rows.length > 0) reconnect.push(declaration.name);
+    if (declaration.reconnect && rows.length > 0) reconnect.push(declaration.name);
   }
   return { tables, reconnect };
+}
+
+/**
+ * Moves into `leftBehind` every kept row whose foreign key names a left-behind row, repeating until
+ * nothing more moves, so the bundle carries no key to a row it does not hold.
+ */
+async function leaveBehindReferences(
+  db: Database | Transaction,
+  declared: readonly ConfigurationTransferTable[],
+  kept: Map<string, Array<Record<string, unknown>>>,
+  leftBehind: Map<string, Array<Record<string, unknown>>>,
+): Promise<void> {
+  if ([...leftBehind.values()].every((rows) => rows.length === 0)) return;
+  const keys: Array<{ table: string; parent: string; from: string[]; to: string[] }> = [];
+  for (const declaration of declared) {
+    const result = await db.execute<{ id: number; table: string; from: string; to: string }>(sql`
+      select id, "table", "from", "to" from pragma_foreign_key_list(${declaration.name})
+      order by id, seq
+    `);
+    const byId = new Map<number, { table: string; parent: string; from: string[]; to: string[] }>();
+    for (const row of result.rows) {
+      const key = byId.get(row.id) ?? {
+        table: declaration.name,
+        parent: row.table,
+        from: [],
+        to: [],
+      };
+      key.from.push(row.from);
+      key.to.push(row.to);
+      byId.set(row.id, key);
+    }
+    keys.push(...[...byId.values()].filter((key) => leftBehind.has(key.parent)));
+  }
+  let moved = true;
+  while (moved) {
+    moved = false;
+    for (const key of keys) {
+      const gone = new Set(
+        leftBehind
+          .get(key.parent)!
+          .map((row) => JSON.stringify(key.to.map((column) => row[column]))),
+      );
+      const rows = kept.get(key.table)!;
+      const names = (row: Record<string, unknown>): boolean =>
+        gone.has(JSON.stringify(key.from.map((column) => row[column])));
+      const leaving = rows.filter(names);
+      if (leaving.length === 0) continue;
+      kept.set(
+        key.table,
+        rows.filter((row) => !names(row)),
+      );
+      leftBehind.get(key.table)!.push(...leaving);
+      moved = true;
+    }
+  }
 }
 
 export function encodeConfigurationBundle(bundle: ConfigurationBundle, passphrase: string): Buffer {

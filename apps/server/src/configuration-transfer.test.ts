@@ -33,10 +33,12 @@ import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import {
   catalogues,
   categories,
   deviceProfiles,
+  devices,
   diningTables,
   floorZones,
   kitchenStations,
@@ -53,7 +55,11 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { readProfilePrinterLists, setProfilePrinterLists } from "@waitron/layouts";
+import {
+  deleteDeviceProfile,
+  readProfilePrinterLists,
+  setProfilePrinterLists,
+} from "@waitron/layouts";
 import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { recordSale } from "@waitron/core";
@@ -75,6 +81,7 @@ import { schemaVersionsByModule } from "./backup-manifest.js";
 import { systemClock } from "./till-backend.js";
 import {
   buildConfigurationBundle,
+  exportConfigurationTables,
   decodeConfigurationBundle,
   encodeConfigurationBundle,
   importConfigurationTables,
@@ -2059,4 +2066,193 @@ it("counts an exported product with no Active flag as Active, as the column stor
     select count(*) as count from tenants where tax_id = ${target.taxId}
   `);
   expect(persisted.rows[0]!.count).toBe(0);
+});
+
+it("refuses a leave-behind column the table lacks, or a name that is not a plain column name", async () => {
+  for (const column of ["no_such_column", 'retired_at" or "1']) {
+    const module = {
+      name: "probe",
+      configurationTransfer: {
+        kind: "tables",
+        tables: [{ name: "device_profiles", leaveBehindWhenSet: column }],
+      },
+    } as unknown as WaitronModule;
+    await expect(exportConfigurationTables(suite.db, [module])).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: `device_profiles.${column}` },
+    });
+  }
+});
+
+it("leaves behind every row a chain of keys leads to a left-behind row, matching a key on all its columns, in any declared order", async () => {
+  await suite.db.execute(sql`create table zz_parents (id text primary key, gone_at text)`);
+  await suite.db.execute(sql`
+    create table zz_children (
+      id text primary key, code text, parent_id text references zz_parents(id),
+      unique (code, parent_id)
+    )
+  `);
+  await suite.db.execute(sql`
+    create table zz_grandchildren (
+      id text primary key, child_code text, child_parent_id text,
+      foreign key (child_code, child_parent_id) references zz_children(code, parent_id)
+    )
+  `);
+  try {
+    await suite.db.execute(sql`
+      insert into zz_parents values ('p-kept', null), ('p-gone', '2026-10-05T12:00:00.000Z')
+    `);
+    await suite.db.execute(sql`
+      insert into zz_children values
+        ('c-kept', 'A', 'p-kept'), ('c-gone', 'A', 'p-gone'), ('c-none', 'B', null)
+    `);
+    await suite.db.execute(sql`
+      insert into zz_grandchildren values
+        ('g-kept', 'A', 'p-kept'), ('g-gone', 'A', 'p-gone'), ('g-none', null, null)
+    `);
+    const module = {
+      name: "probe",
+      configurationTransfer: {
+        kind: "tables",
+        // Grandchildren first, so a single pass over the keys would not reach them.
+        tables: [
+          { name: "zz_grandchildren" },
+          { name: "zz_children" },
+          { name: "zz_parents", leaveBehindWhenSet: "gone_at" },
+        ],
+      },
+    } as unknown as WaitronModule;
+    const { tables } = await exportConfigurationTables(suite.db, [module]);
+    const ids = (name: string) => tables[name]!.map((row) => row.id);
+    expect(ids("zz_parents")).toEqual(["p-kept"]);
+    expect(ids("zz_children")).toEqual(["c-kept", "c-none"]);
+    expect(ids("zz_grandchildren")).toEqual(["g-kept", "g-none"]);
+  } finally {
+    for (const name of ["zz_grandchildren", "zz_children", "zz_parents"])
+      await suite.db.execute(sql`drop table ${sql.identifier(name)}`);
+  }
+});
+
+/** Hold `profileId` by a disabled device only, then delete it through the real path, which retires
+ * the row rather than removing it. */
+async function retireProfile(locationId: string, profileId: string): Promise<void> {
+  await seedDevice(suite.db, { locationId, profileId });
+  await suite.db
+    .update(devices)
+    .set({ active: false })
+    .where(eq(devices.deviceProfileId, profileId));
+  await withTransaction(suite.db, async (tx) => {
+    const [admin] = await tx
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.role, "admin"));
+    const session = await startManagementSession(tx, { personId: admin!.id });
+    await deleteDeviceProfile(tx, { managementSessionId: session.token, id: profileId });
+  });
+  const [row] = await suite.db
+    .select({ retiredAt: deviceProfiles.retiredAt })
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.id, profileId));
+  expect(row?.retiredAt).not.toBeNull();
+}
+
+it("leaves behind a retired profile that no row uses, and the bundle still imports", async () => {
+  const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const [retired] = await suite.db
+    .insert(deviceProfiles)
+    .values({ name: "Old till", formFactor: "till" })
+    .returning({ id: deviceProfiles.id });
+  await retireProfile(source.locationId, retired!.id);
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-05T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.device_profiles!.map((row) => row.name)).not.toContain("Old till");
+  await applyVenue(planVenue(venue("B86420975"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const names = await targetSuite.db.select({ name: deviceProfiles.name }).from(deviceProfiles);
+  expect(names.map((row) => row.name)).not.toContain("Old till");
+});
+
+it("leaves a retired profile's home layout choices behind with it, while a live profile's rows travel", async () => {
+  const source = await applyVenue(planVenue(venue("B13579246"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const original = await withTransaction(suite.db, async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Layout menu" });
+    const counter = await createHomeLayout(tx, menu.id, "Counter");
+    const [printer] = await tx
+      .insert(printers)
+      .values({
+        locationId: source.locationId,
+        name: "Bar printer",
+        transport: "network_tcp",
+        host: "10.0.2.1",
+      })
+      .returning({ id: printers.id });
+    const [live, retired] = await tx
+      .insert(deviceProfiles)
+      .values([
+        { name: "Handheld", formFactor: "phone-portrait" },
+        { name: "Old till", formFactor: "till" },
+      ])
+      .returning({ id: deviceProfiles.id });
+    for (const profile of [live!, retired!]) {
+      await setDeviceHomeLayout(tx, profile.id, menu.id, counter.id);
+      await setProfilePrinterLists(tx, profile.id, {
+        receiptPrinterIds: [printer!.id],
+        paymentSlipPrinterIds: [],
+      });
+    }
+    return { menu: menu.id, counter: counter.id, live: live!.id, retired: retired!.id };
+  });
+  await retireProfile(source.locationId, original.retired);
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-05T12:00:00Z"),
+    versions,
+  );
+  const exportedProfiles = transferred.tables.device_profiles!.map((row) => row.id);
+  expect(exportedProfiles).toContain(original.live);
+  expect(exportedProfiles).not.toContain(original.retired);
+  expect(transferred.tables.device_profile_home_layouts).toEqual([
+    { device_profile_id: original.live, menu_id: original.menu, layout_id: original.counter },
+  ]);
+  expect(transferred.tables.device_profile_printers!.map((row) => row.device_profile_id)).toEqual([
+    original.live,
+  ]);
+  await applyVenue(planVenue(venue("B97531246"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  await withTransaction(targetSuite.db, async (tx) => {
+    const profiles = await tx
+      .select({ id: deviceProfiles.id, name: deviceProfiles.name })
+      .from(deviceProfiles);
+    expect(profiles.map((row) => row.name)).not.toContain("Old till");
+    const handheld = profiles.find((row) => row.name === "Handheld")!;
+    const menus = await deviceHomeLayouts(tx, handheld.id);
+    const menu = menus.find((entry) => entry.menuName === "Layout menu")!;
+    const counter = menu.layouts.find((layout) => layout.name === "Counter")!;
+    expect(menu).toMatchObject({ selectedLayoutId: counter.id, selectedRemoved: false });
+    const lists = await readProfilePrinterLists(tx, handheld.id);
+    expect(lists.receiptPrinterIds).toHaveLength(1);
+  });
 });
