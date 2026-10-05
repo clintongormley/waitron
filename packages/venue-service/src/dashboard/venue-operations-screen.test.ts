@@ -542,7 +542,7 @@ describe("venue operations screen", () => {
     expect(api.createDepartment).not.toHaveBeenCalled();
   });
 
-  it("holds the department editor's fields and their errors to the standard form width on a wide window", async () => {
+  it("holds the department editor's fields and their errors to the form width on a wide window", async () => {
     const width = window.innerWidth,
       height = window.innerHeight;
     await page.viewport(1280, 800);

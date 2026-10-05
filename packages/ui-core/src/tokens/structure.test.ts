@@ -121,7 +121,7 @@ test("a modal's form is 36rem wide, and a field outside a modal has no cap", () 
 
 test("a modal's form is narrower than the modal, and wider than a phone", () => {
   // Wider than a 390px phone, so a phone's modal gives its fields its whole width as before; narrower
-  // than the standard modal, or capping a field in one would change nothing.
+  // than the wide modal, or capping a field in one would change nothing.
   const el = mount();
   const probe = document.createElement("div");
   probe.style.position = "fixed";
@@ -158,7 +158,8 @@ test("the modal sizes run compact, then standard, then wide", () => {
 
 test("a standard modal holds a form at the form width beside a classic scrollbar", () => {
   // The dialog is border-box with a 1px border each side and --wt-space-5 of inline padding at its
-  // widest; 17px is the widest classic scrollbar, and a long editor's body always scrolls.
+  // widest; 17px is the allowance for a classic (always-shown) scrollbar, and a long editor's body
+  // always scrolls.
   const el = mount();
   const content =
     lengthPx(el, "var(--wt-modal-standard-width)") -

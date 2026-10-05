@@ -554,7 +554,7 @@ describe("guided printer calibration", () => {
     expect(q(el, "[data-test=print-character-tables-p1]")).toBeNull();
   });
 
-  it("keeps the width step's rows, and the button beside the ruler's answer, within the standard form width on a wide window", async () => {
+  it("keeps the width step's rows, and the button beside the ruler's answer, within the form width on a wide window", async () => {
     const width = window.innerWidth,
       height = window.innerHeight;
     await page.viewport(1280, 800);

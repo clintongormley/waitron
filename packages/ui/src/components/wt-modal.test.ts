@@ -286,7 +286,7 @@ function contentWidth(modal: WtModal): number {
   return body.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
 }
 
-test("holds every form field and the form's message to the standard form width on a wide window", async () => {
+test("holds every form field and the form's message to the form width on a wide window", async () => {
   await page.viewport(1280, 900);
   const { modal, fields } = await openForm();
   const form = px("var(--wt-form-max-width)");
@@ -350,8 +350,8 @@ test("holds every field at the form width in a standard modal beside a classic s
   await page.viewport(1280, 900);
   const modal = await openModal(FIELDS, 'size="standard"');
   const fields = await fieldsIn(modal);
-  // This headless Chromium hides scrollbars, so the room the widest classic one (17px) takes from the
-  // body is stood in as extra end padding.
+  // This headless Chromium hides scrollbars, so the room a classic one takes from the body (a 17px
+  // allowance) is stood in as extra end padding.
   const scrollbar = new CSSStyleSheet();
   scrollbar.replaceSync(
     ".body { padding-inline-end: calc(var(--wt-modal-inline-padding) + 17px); }",

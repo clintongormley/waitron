@@ -683,7 +683,8 @@ its longer side, turned upright, stripped of its metadata and stored as WebP at 
   discovered printers keeps its details column capped (`min(28vw, 24dvh)`), so the details wrap
   while half the row stands empty; and the till's option picker, 1024px wide on a 1280px screen,
   puts each price far from its name (which adds to the "prices are not a column" item in the till
-  layout pass, under A4).
+  layout pass, under A4). _2026-10-05 (W70): the picker is now the standard size, 672px wide at
+  1280._
 - **`--wt-cell-name-max-width` is used in three different directions, and is named for one.** Some
   consumers CAP a name cell with it, others use it as a `min-width` FLOOR, and one uses it as a FLEX
   BASIS on a combobox. **Next action (design decision):** a second token for the floor, or one
@@ -1622,7 +1623,8 @@ Still open from W74:
   list. The wording predates #1220; changing it needs new English and Spanish text.
 - **The delete dialog stretches to nearly the full screen height**, with empty space below its
   text, at 1280 and 390 wide (seen on the demo stack while checking #1220; not caused by it, and
-  not traced further). W70's modal sizes may cover it.
+  not traced further). _2026-10-05 (W70): the dialog is now the standard size, still nearly as tall
+  as the screen; see W70's open point (1)._
 
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE.** The
 owner, on two screenshots of the same three options, the Name column starting far to the right
@@ -2290,11 +2292,12 @@ beside its uses). On a phone every size fills the screen less its side margins, 
 modal on the dashboard, the till's modifier picker and the two demo modals now name a size; a modal
 that serves jobs of clearly different sizes picks one per job (the profile's details and
 authenticator setup are standard, its other steps compact). Leaving the size off still gives the wide
-modal, so a modal nobody sized shows everything rather than scrolling sideways. W66's Pricing unit
+modal, as before. W66's Pricing unit
 chooser stays a small dialog (`wt-dialog`) rather than a full-height modal for one dropdown, held to
-the compact width. Detail: design-system.md, the `wt-modal` entry. Left open: (1) a compact modal is
-still as tall as the screen, so a confirmation is a narrow column with empty space under its text —
-height was out of scope, and whether a short modal should shrink to its content is the owner's call;
+the compact width. Detail: design-system.md, the `wt-modal` entry. Left open: (1) no modal's height
+changed, so a compact confirmation is still as tall as the screen, a narrow column with empty space
+under its text, and the category delete dialog (standard) keeps its empty space too — height was
+out of scope, and whether a short modal should shrink to its content is the owner's call;
 (2) in the wide Extras editor at 1280px wide, the items table scrolls sideways by 4px (978px of
 content in a 974px box), with or without the size attribute.
 
@@ -4677,7 +4680,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     (`apps/till/src/widgets/modifier-picker.ts`) — a checkbox row and a stepper row misalign both the
     price edges and the name edges, at 1024 and at 390. Since A64 widened the standard modal, on a
     screen wider than 1072px the picker is 1024px wide and each price sits at the far end of the
-    row from its name: take 1280 into the pass too.
+    row from its name: take 1280 into the pass too. _2026-10-05 (W70): the picker is now the
+    standard size, 672px wide (A64's "standard modal" was the 64rem size W70 calls wide)._
   - **The picker's fieldset legend wraps at phone width and its second line crosses the fieldset's own
     top border**, so the required marker (appended as a plain space) can break onto a line of its own
     sitting on the border rule.
@@ -5103,7 +5107,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   form width is the owner's call.
 
 - **Content languages are managed on the page itself (C111, #987) — left open:** the Add language
-  dialog is the one standard modal size, so it is a tall, mostly empty sheet with one field; whether
+  dialog is the one standard modal size (then the only size, 64rem, which W70 calls wide), so it is a tall, mostly empty sheet with one field; whether
   a one-field form should use something smaller is the owner's call. _2026-10-05 (W70): the dialog
   is now the compact size, still as tall as the screen._ At 390px the Spanish "Hacer
   predeterminado" and "Quitar" fit side by side with the dashboard's own padding (16px a side), and

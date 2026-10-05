@@ -262,16 +262,17 @@ through a token. `wt-modal` has three sizes, each a token: compact, `--wt-modal-
 `--wt-modal-max-width` (`64rem`, 1024px), which is also the width of a modal given no size (see
 the `wt-modal` entry below). `wt-dialog` and `wt-help-tooltip` read their own token and are at most
 `48rem` (768px). Some add and edit forms are built in `wt-dialog` rather than `wt-modal` (the
-ingredient form is one), so they are held to 768px too. Only `wt-modal` reads the three modal
-tokens, so overriding one resizes no dialog; to resize a dialog, set `--wt-dialog-max-width` (the
-till's device chooser and the product editor's Pricing unit chooser do).
+ingredient form is one), so they are held to 768px too. Besides `wt-modal`, only the product
+editor's Pricing unit chooser reads one of the three size tokens: it sets its `--wt-dialog-max-width` from
+`--wt-modal-compact-width`. To resize any other dialog, set `--wt-dialog-max-width` (the till's
+device chooser does).
 
 `--wt-form-max-width` (`36rem`, 576px at the default text size) is the form width: the one width
 of a form inside a `wt-modal` (owner, 2026-09-30, C105). A field there grows no wider than it,
 however wide the modal is, and in a modal whose body is narrower (a compact one, or any size on a
 phone) it takes the body's whole width instead. The form width is not the standard modal size: a
-standard modal is wider, so its body holds a form at the form width beside a classic scrollbar up
-to 17px wide. `wt-modal` sets `--wt-field-max-width` to it on its body, and every shared field reads
+standard modal is wider, so its body holds a form at the form width beside a classic scrollbar
+(17px allowed for it). `wt-modal` sets `--wt-field-max-width` to it on its body, and every shared field reads
 `--wt-field-max-width` as its `max-width` — `wt-input`, `wt-textarea`, `wt-combobox`, `wt-price-input`,
 `wt-number-stepper`, `wt-switch`, and the line that shows a form's message
 (`formMessageStyles`, so both the message a dialog shows at the end of its body and the one a
@@ -302,7 +303,6 @@ cases in `packages/ui/src/components/wt-modal.test.ts` (`wt-input`, `wt-textarea
 message bounded by the narrower of the form width and the body in every modal size at 1280px; wide
 content and the footer row at full width; each field at the body's width at 390px; each field at its container's width outside a modal); the calibration case in
 `apps/dashboard/src/screens/printers-screen.test.ts`; and one 1280px case each in
-`apps/dashboard/src/widgets/add-content-language.test.ts`,
 `apps/dashboard/src/widgets/member-list-editor.test.ts` (the editor placed in a `wt-modal`),
 `packages/adjustments/src/dashboard/reasons-screen.test.ts` and
 `packages/venue-service/src/dashboard/venue-operations-screen.test.ts` (these two measure the
@@ -885,7 +885,7 @@ above). Give it a `size` chosen by its content:
 
 - `size="compact"` (`--wt-modal-compact-width`, 448px): a confirmation, or one or two short fields.
 - `size="standard"` (`--wt-modal-standard-width`, 672px): an ordinary editor. Its body holds a form
-  at the form width beside a classic scrollbar up to 17px wide.
+  at the form width beside a classic scrollbar (17px allowed for it).
 - `size="wide"` (`--wt-modal-max-width`, 1024px): a table wider than a form, a side-by-side layout,
   an image grid, or a toolbar that needs one line.
 
@@ -920,7 +920,7 @@ another element keeps its message in the footer. One placed in the body shows it
 its buttons:
 
 ```html
-<wt-modal heading="Add printer">
+<wt-modal heading="Add printer" size="compact">
   <wt-input name="printer-name" label="Printer name"></wt-input>
   <wt-form-actions slot="footer">
     <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
