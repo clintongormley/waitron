@@ -5849,6 +5849,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   editable tree, resolves quick-sale and receipt choices by department with optional zone overrides,
   and keeps today's zone-menu and device-default-zone controls temporarily in that screen. Its
   follow-up A261-2c removes the retired `locations.order_flow` column after a separate rebuild audit.
+  Review follow-ups: the Numbered collection choice applies to the new `prepay` and
+  `ticket_then_pay` quick-sale paths; decide whether to extend it to retained legacy
+  `invoice_first` zones before changing their behavior. `createServiceZone` currently translates
+  every unique-constraint refusal to `zone.name_taken`; consider identifying the name constraint
+  explicitly if its constraints or id source change. Old configuration-bundle import was not
+  verified in this review and remains outside the pre-live compatibility policy.
   [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED;
   profile access and transfers queued in lane D, equipment queued in lane E; not implemented.**
