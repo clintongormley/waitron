@@ -3583,6 +3583,43 @@ it("starts calibration from printer details at the paper settings step", async (
   expect(q(el, "[data-test=printer-name-p1]")).toBeNull();
 });
 
+it("saves the printer's Active switch from Status and shows the saved value", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  let stored = { ...printers[0]! };
+  const api = stubApi({
+    listPrinters: vi.fn().mockImplementation(async () => [stored]),
+    updatePrinter: vi.fn().mockImplementation(async (_id, patch) => {
+      stored = { ...stored, ...patch };
+    }),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  toggleSwitch(el, '[name="printer-detail-active"]', false);
+  await vi.waitFor(() => expect(api.updatePrinter).toHaveBeenCalledWith("p1", { active: false }));
+  await flush(el);
+  expect(text(el, "[data-test=printer-section-status]")).toContain(t("printers.status_inactive"));
+});
+
+it("keeps the Active switch retryable and explains a refused save in Status", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const api = stubApi({
+    updatePrinter: vi.fn().mockRejectedValueOnce({ code: "connection.failed" }),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  toggleSwitch(el, '[name="printer-detail-active"]', false);
+  await vi.waitFor(() =>
+    expect(text(el, "[data-test=printer-detail-active-error]")).toBe(
+      codeMessage("connection.failed"),
+    ),
+  );
+  expect((q(el, '[name="printer-detail-active"]') as import("@waitron/ui").WtSwitch).checked).toBe(
+    true,
+  );
+  toggleSwitch(el, '[name="printer-detail-active"]', false);
+  await vi.waitFor(() => expect(api.updatePrinter).toHaveBeenCalledTimes(2));
+});
+
 it("shows the saved drawer independently of the profiles offering it, and the delivering agent without discovery", async () => {
   const api = stubApi({
     listPrinters: vi.fn().mockResolvedValue([

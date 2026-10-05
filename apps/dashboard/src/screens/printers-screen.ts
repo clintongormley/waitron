@@ -494,6 +494,8 @@ export class PrintersScreen extends LitElement {
   @state() private discoveredNames: Record<string, string> = {};
   @state() private calibrationStep = 0;
   @state() private statusOpen = true;
+  @state() private detailActiveSaving = false;
+  @state() private detailActiveError: string | null = null;
   @state() private connectionOpen = false;
   @state() private calibrationOpen = false;
   @state() private testingDrawer = false;
@@ -2023,6 +2025,28 @@ export class PrintersScreen extends LitElement {
     this.statusOpen = true;
     this.connectionOpen = false;
     this.calibrationOpen = false;
+    this.detailActiveError = null;
+  }
+
+  async #setDetailActive(printer: Printer, active: boolean): Promise<void> {
+    if (this.detailActiveSaving || active === printer.active) return;
+    this.detailActiveSaving = true;
+    this.detailActiveError = null;
+    try {
+      await this.api.updatePrinter(printer.id, { active });
+    } catch (error) {
+      this.detailActiveError = codeOf(error);
+      if (this.selectedPrinterId === printer.id) {
+        const toggle = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+          '[name="printer-detail-active"]',
+        );
+        if (toggle) toggle.checked = printer.active;
+      }
+      return;
+    } finally {
+      this.detailActiveSaving = false;
+    }
+    await this.#load();
   }
 
   #renderPrinterStatus(): TemplateResult {
@@ -2090,7 +2114,24 @@ export class PrintersScreen extends LitElement {
             ${field(t("printers.last_print"), this.#timestamp(p.lastPrintAt))}
             ${field(t("printers.last_seen_by"), p.transport === "cloud_poll" ? "—" : (seen?.agentName ?? t("printers.agent_unknown")))}
             ${seen ? field(t("printers.last_seen"), this.#timestamp(seen.lastSeenAt)) : nothing}
-          </dl></wt-disclosure
+          </dl>
+          <wt-switch
+            name="printer-detail-active"
+            label=${t("printers.status_active")}
+            .checked=${p.active}
+            ?disabled=${this.detailActiveSaving}
+            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+              event.stopPropagation();
+              void this.#setDetailActive(p, event.detail.checked);
+            }}
+          ></wt-switch>
+          ${
+            this.detailActiveError
+              ? html`<p role="alert" data-test="printer-detail-active-error">
+                  ${codeMessage(this.detailActiveError)}
+                </p>`
+              : nothing
+          }</wt-disclosure
         >
         <wt-disclosure
           data-test="printer-section-connection"
