@@ -1402,22 +1402,38 @@ it("shows folder contents and routes, defaults to moving up, and sends delete ch
     ),
   );
 });
-it("counts under each choice only the routing rules that choice removes", async () => {
-  const el = await mountBrowser();
-  vi.mocked(el.api.summariseFolders).mockResolvedValue([
-    { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 3, ownRoutes: 1 },
-  ]);
-  await selectKeys(el, ["folder:d"]);
-  await press(el, "delete");
-  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
-  expect(el.shadowRoot!.textContent).toContain("1 kitchen routing rule names");
-  el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
-  await el.updateComplete;
-  expect(el.shadowRoot!.textContent).toContain("3 kitchen routing rules name");
-  el.shadowRoot!.querySelector<HTMLInputElement>("input[value=move_up]")!.click();
-  await el.updateComplete;
-  expect(el.shadowRoot!.textContent).toContain("1 kitchen routing rule names");
-});
+it.each([
+  [
+    "en-GB",
+    "1 kitchen routing rule names these categories and will be removed.",
+    "3 kitchen routing rules name these categories or ones inside them and will be removed.",
+  ],
+  [
+    "es",
+    "1 regla de envío a cocina nombra estas categorías y se eliminará.",
+    "3 reglas de envío a cocina nombran estas categorías o las que hay dentro de ellas y se eliminarán.",
+  ],
+] as const)(
+  "counts under each choice only the routing rules that choice removes, and says deleting includes the ones inside (%s)",
+  async (locale, moveUp, deleteToo) => {
+    setLocale(locale);
+    const el = await mountBrowser();
+    vi.mocked(el.api.summariseFolders).mockResolvedValue([
+      { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 3, ownRoutes: 1 },
+    ]);
+    await selectKeys(el, ["folder:d"]);
+    await press(el, "delete");
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    expect(el.shadowRoot!.textContent).toContain(moveUp);
+    el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.textContent).toContain(deleteToo);
+    expect(el.shadowRoot!.textContent).not.toContain(moveUp);
+    el.shadowRoot!.querySelector<HTMLInputElement>("input[value=move_up]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.textContent).toContain(moveUp);
+  },
+);
 it("warns of no routing rules when moving contents up keeps every one, and of the subtree's when deleting it", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.summariseFolders).mockResolvedValue([
@@ -1429,7 +1445,9 @@ it("warns of no routing rules when moving contents up keeps every one, and of th
   expect(el.shadowRoot!.textContent).not.toContain("kitchen routing rule");
   el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
   await el.updateComplete;
-  expect(el.shadowRoot!.textContent).toContain("2 kitchen routing rules name");
+  expect(el.shadowRoot!.textContent).toContain(
+    "2 kitchen routing rules name these categories or ones inside them",
+  );
 });
 it("moving contents up counts the own rules of every selected category, a subcategory selected with its parent included", async () => {
   const el = await mountBrowser();
@@ -1441,10 +1459,14 @@ it("moving contents up counts the own rules of every selected category, a subcat
   await selectKeys(el, ["folder:d", "folder:b"]);
   await press(el, "delete");
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
-  expect(el.shadowRoot!.textContent).toContain("3 kitchen routing rules name");
+  expect(el.shadowRoot!.textContent).toContain(
+    "3 kitchen routing rules name these categories and will be removed.",
+  );
   el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!.click();
   await el.updateComplete;
-  expect(el.shadowRoot!.textContent).toContain("4 kitchen routing rules name");
+  expect(el.shadowRoot!.textContent).toContain(
+    "4 kitchen routing rules name these categories or ones inside them",
+  );
 });
 it("shows the new counts instead of deleting when only the category's own routing rules changed", async () => {
   const el = await mountBrowser();

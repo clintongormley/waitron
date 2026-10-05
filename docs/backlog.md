@@ -1629,6 +1629,10 @@ deleted the right category; the dashboard was at fault. Fixed:
   summed over every selected one; under "Delete it too", of every rule in the deleted subtrees, as
   before. The delete sends `ownRoutes` with the other counts it showed, and the dashboard's second
   read at Delete and the server both treat a change to it like a change to the others.
+- Under "Delete it too" the routing-rules warning says the rules name "these categories or ones
+  inside them" (Spanish: "estas categorías o las que hay dentro de ellas"), since its count
+  includes rules on subcategories the dialog does not list (W74e). Under "Move it up to the parent
+  category" it keeps "name these categories", which is what that count is.
 
 Still open from W74:
 - **An empty category's no-dialog delete does not see an inactive product added meanwhile**
@@ -1643,9 +1647,6 @@ Still open from W74:
   reported the device, while the server lists one entry per agent, so two agents that see the same
   network printer give two rows the same key. The table now draws both; anything that finds a row
   by its key would reach only the first.
-- **Under "Delete it too", the routing-rules warning says the rules "name these categories"**
-  (raised in #1220's review): the count also includes rules on subcategories the dialog does not
-  list. The wording predates #1220; changing it needs new English and Spanish text.
 - **The delete dialog stretches to nearly the full screen height**, with empty space below its
   text, at 1280 and 390 wide (seen on the demo stack while checking #1220; not caused by it, and
   not traced further). _2026-10-05 (W70): the dialog is now the standard size, still nearly as tall

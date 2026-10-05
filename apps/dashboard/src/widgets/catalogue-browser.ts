@@ -434,6 +434,8 @@ export class CatalogueBrowser extends LitElement {
       this.contents === "move_up"
         ? this.summaries.reduce((sum, summary) => sum + summary.ownRoutes, 0)
         : totals.routes;
+    const routesWarning =
+      this.contents === "move_up" ? "folders.routes_warning" : "folders.routes_warning_subtree";
     const heading = this.#plural(
       this.operation === "move"
         ? "folders.move_heading"
@@ -508,7 +510,7 @@ export class CatalogueBrowser extends LitElement {
                             />${t("folders.contents_delete").replace("{categories}", this.#plural("folders.count", totals.folders)).replace("{products}", this.#plural("folders.product_count", totals.products))}</label
                           >
                         </fieldset>
-                        ${routesRemoved ? html`<p>${this.#plural("folders.routes_warning", routesRemoved)}</p>` : nothing}`
+                        ${routesRemoved ? html`<p>${this.#plural(routesWarning, routesRemoved)}</p>` : nothing}`
                     : nothing
                 }
               `
