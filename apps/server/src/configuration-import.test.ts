@@ -44,7 +44,6 @@ const bundle: ConfigurationBundle = {
       province: "Madrid",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
-      orderFlow: "prepay",
       bumpMode: "line",
       fireControl: "waiter",
       receiptPrintMode: "auto",

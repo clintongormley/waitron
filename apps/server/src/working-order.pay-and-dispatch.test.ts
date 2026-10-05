@@ -155,8 +155,6 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    // The venue provisions with the DEFAULT `prepay` mode; a mode-specific test overrides both the
-    // cfg field AND the location's `order_flow` column via `modeVenue` (below).
     orderFlow: "prepay",
   };
 }
@@ -258,13 +256,6 @@ async function offerAtCounter(
   };
 }
 
-/**
- * A fresh venue set to a specific pay-timing `mode`: `setupVenue` provisions with the DEFAULT
- * `prepay` (planVenue has no mode input), then this flips the location's `order_flow` column to
- * `mode`, sets `cfg.orderFlow` to match, and sets the counter zone to `mode` too — a zoned order's
- * pay timing is its zone's (`serviceContext?.serviceMode ?? cfg.orderFlow`, till-sale.ts), so all
- * three agree.
- */
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   const venue = await setupVenue();
   await suite.db.execute(
