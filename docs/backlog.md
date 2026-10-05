@@ -8424,7 +8424,7 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   #1244, and W105b had done printers, print agents and devices), renaming the string keys that no
   longer said what they show; the rule is in `docs/developers/design-system.md`, "Switching off
   versus deleting". (a) is done by W110a: a printer's Active status reads "Activa", agreeing with
-  "Deshabilitada", and print agents read "Activo" from a key of their own
+  "Deshabilitada" as lists and variants already did, and print agents read "Activo" from a key of their own
   (`printers.agent_status_active`). Left open: (b) A kitchen-screen watcher's **Remove** marks the
   watcher inactive and drops its printers, its screens then say it was removed, and nothing lists or
   brings it back (`removeWatcher`, `apps/server/src/watchers.ts`), so it is neither a delete nor a

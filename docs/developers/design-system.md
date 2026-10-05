@@ -2385,9 +2385,9 @@ or **Disabled**; there is no "Enabled" status. **Delete** is only for something 
 which may delete that row (Remove from this list, Remove image, a passkey). "Restore", "Add again", "Deactivate", "Reactivate" and
 "Inactive" are not used for a record that is kept.
 
-In Spanish the action is **Deshabilitar** and **Habilitar**, and the status **Activo** or
-**Deshabilitado** agrees with the noun the screen uses: Deshabilitado for a producto, departamento,
-estado, motivo, usuario, lector, agente or dispositivo; Deshabilitada for a variante, lista, zona,
+In Spanish the action is **Deshabilitar** and **Habilitar**, and the status agrees with the noun the
+screen uses: **Activo** or **Deshabilitado** for a producto, departamento, estado, motivo, usuario,
+lector, agente or dispositivo; **Activa** or **Deshabilitada** for a variante, lista, zona,
 estación, mesa or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
 "Inactivo" are not used for a record that is kept. A setting turned off (backups, a toggle) is not a record and keeps its own
 words.
