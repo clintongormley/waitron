@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { setLocale, tableNoMatches } from "@waitron/dashboard-kit";
+import { LiveData, setLocale, tableNoMatches } from "@waitron/dashboard-kit";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import {
   chooseOption,
@@ -231,7 +231,7 @@ function besideField(el: AdjustmentReasonsScreen, key: string): string {
   return el.shadowRoot!.querySelector(`[data-field-error="${key}"]`)?.textContent?.trim() ?? "";
 }
 
-/** The screen's own alert, outside any form: a list that would not load or an order not saved. */
+/** The screen's own alert, outside any form. */
 function alert(el: AdjustmentReasonsScreen): string {
   return el.shadowRoot!.querySelector('[data-test="page-alert"]')?.textContent?.trim() ?? "";
 }
@@ -1462,6 +1462,58 @@ describe("enabling", () => {
     expect(alert(el)).toBe("Something went wrong, try again");
     await press(el, "enable-o");
     expect(alert(el)).toBe("");
+  });
+
+  it("clears a name-taken refusal once the disabled reason is renamed and saved", async () => {
+    const renamed = { ...retired, name: "Old promotion 2025" };
+    const api = fakeApi({
+      reactivateReason: vi.fn().mockRejectedValue({
+        code: "adjustment_reason.name_taken",
+        params: { name: "Old promotion" },
+      }),
+      updateReason: vi.fn().mockResolvedValue(renamed),
+      listReasons: vi
+        .fn()
+        .mockResolvedValueOnce(reasons)
+        .mockResolvedValue([entryError, complaint, employee, renamed]),
+    });
+    const el = await mount(api);
+    await disabledOnly(el);
+    await press(el, "enable-o");
+    expect(alert(el)).toBe("Another active reason already has this name");
+    await press(el, "edit-o");
+    await type(el, "name", "Old promotion 2025");
+    await press(el, "save-editor");
+    expect(api.updateReason).toHaveBeenCalledWith(
+      "o",
+      expect.objectContaining({ name: "Old promotion 2025" }),
+    );
+    expect(modal(el)).toBeNull();
+    expect(api.listReasons).toHaveBeenCalledTimes(2);
+    expect(rowText(el, "o")).toContain("Old promotion 2025");
+    expect(alert(el)).toBe("");
+  });
+
+  it("keeps an Enable refusal through a refresh live data asks for", async () => {
+    const liveData = new LiveData();
+    const background = { listReasons: vi.fn().mockResolvedValue(reasons) };
+    const api = fakeApi({
+      liveData,
+      background,
+      reactivateReason: vi.fn().mockRejectedValue({
+        code: "adjustment_reason.name_taken",
+        params: { name: "Old promotion" },
+      }),
+    });
+    const el = await mount(api);
+    await disabledOnly(el);
+    await press(el, "enable-o");
+    expect(alert(el)).toBe("Another active reason already has this name");
+    liveData.invalidate([{ type: "adjustment_reasons" }]);
+    await vi.waitFor(() => expect(background.listReasons).toHaveBeenCalledTimes(1));
+    await settle(el);
+    expect(alert(el)).toBe("Another active reason already has this name");
+    liveData.clear();
   });
 });
 

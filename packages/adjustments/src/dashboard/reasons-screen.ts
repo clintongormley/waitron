@@ -348,6 +348,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #open(editor: Editor, opener: HTMLElement): void {
     this.#opener = opener;
     this.editor = editor;
+    this.actionError = undefined;
     this.#restart();
     if (editor.kind === "reason") {
       const reason = editor.reason;
