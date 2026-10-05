@@ -5244,7 +5244,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b DONE (#1248, main ccbe2b41e); W105c DONE (#1251, main 58c65558b); W105f DONE (#1253, main 44ff56380). W104–W106, W105b, W105c and W105f DONE; the open points each left are listed below.**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b DONE (#1248, main ccbe2b41e); W105c DONE (#1251, main 58c65558b); W105f DONE (#1253, main 44ff56380); W105g DONE (#1254, main 969c96972). W104–W106, W105b, W105c and W105f DONE; the open points each left are listed below.**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
@@ -5359,7 +5359,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   device on a retired profile; a retired profile's home-layout choices stay in
   `device_profile_home_layouts`; and the configuration transfer has no row filter, so it copies a
   retired profile with its `retired_at` (`packages/db/src/configuration-transfer.ts`; read, not
-  tested). The Enable hint's wording, done by W105g (owner decision
+  tested). The Enable hint's wording, done by W105g (#1254, owner decision
   2026-10-05): when the returning device's profile was retired, the waiting list's hint reads
   "Disabled device. Its profile was deleted: choose one to enable it." / "Dispositivo deshabilitado.
   Su perfil se eliminó: elige uno para habilitarlo." (`devices.enable_hint_profile_deleted`), and
