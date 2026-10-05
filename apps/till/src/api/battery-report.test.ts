@@ -116,6 +116,33 @@ describe("startBatteryReport", () => {
     expect(unhandled).toBe(0);
   });
 
+  it("swallows a send that throws instead of rejecting, on a change as on the first report", async () => {
+    const send = vi.fn((): Promise<void> => {
+      throw new TypeError("api.reportBattery is not a function");
+    });
+    const battery = fakeBattery(0.4, false);
+    let uncaught = 0;
+    const onError = (event: ErrorEvent): void => {
+      uncaught++;
+      event.preventDefault();
+    };
+    window.addEventListener("error", onError);
+    let unhandled: number;
+    try {
+      unhandled = await unhandledRejectionsDuring(async () => {
+        startBatteryReport(send, () => Promise.resolve(battery));
+        await settle();
+        battery.dispatchEvent(new Event("levelchange"));
+      });
+    } finally {
+      window.removeEventListener("error", onError);
+    }
+
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(uncaught).toBe(0);
+    expect(unhandled).toBe(0);
+  });
+
   it("swallows a failure to read the battery", async () => {
     const send = vi.fn().mockResolvedValue(undefined);
     const unhandled = await unhandledRejectionsDuring(async () => {
