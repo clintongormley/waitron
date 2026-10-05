@@ -3207,6 +3207,32 @@ with `main`. Seen in the same check, also not traced: in the product editor's va
 Unit button sits against the Price heading with no gap. Needs the owner to say whether either
 wants an item.
 
+**Products: the Move dialog lists destination categories by full path in name order — DONE (W82,
+owner 2026-10-04).** The bulk Move dialog's Destination list showed categories in the order the
+server lists them, by creation time and then id (`listCategories`,
+`packages/catalogue/src/categories.ts`).
+It now sorts them by the full path it shows ("Dinner / Mains"), with `byLabel`
+(`apps/dashboard/src/widgets/category-form.ts`, the comparison the tables sort text with), so
+"Menu 2" comes before "Menu 10" and case is ignored. "All products (top level)" stays first, the
+moved categories and everything under them are still left out, and each entry keeps its category
+id. Pinned in `apps/dashboard/src/widgets/catalogue-browser.test.ts`. No existing test assertion
+changed. Left open: two sibling categories with the same name still show as two identical entries.
+W72, queued, refuses new duplicates and changes the demo seed, but renames no stored category, so
+duplicates already in a venue would still look the same. The same file's Delete dialog already tells such paths apart with
+"(2 of 3)" (`#namedPaths` in `apps/dashboard/src/widgets/catalogue-browser.ts`); the Move list does
+not use it. The order is by the whole path text, so a top-level name with a character that sorts
+before "/" lands between "Menu" and "Menu / Zeta": "Menu (old)" did, measured in review with the
+same `localeCompare` options as `byLabel`. The product editor's category picker instead lists
+categories as a tree, each category's children under it (`categoryTree`,
+`apps/dashboard/src/widgets/classification-fields.ts`). The dialog's `wt-combobox` sets neither
+`searchPlaceholder` nor `noResultsLabel`, and `wt-combobox` defaults them to "Search" and "No
+results" (`packages/ui/src/components/wt-combobox.ts`). So in Spanish the search box reads "Search"
+(seen in the review's Spanish-session run), and an empty search would say "No results" (judged from
+the code, not run). Other screens pass `t("categories.combobox_search")` and
+`t("categories.combobox_no_results")`. This was on `main` before W82 (the dialog's combobox dates
+from 2026-10-01, `5ffa5c633`). Needs the owner to say whether the two strings want an item, and
+whether the Move list should follow the tree order instead.
+
 **Products: a category's Made at shows where its dishes are made — DONE (W86, #1203, owner 2026-10-04).**
 In the Products tree each category row's Made at cell now shows the category's baseline route, in
 the product rows' words (a station's name, No preparation, No replacement, Nowhere), linked to the

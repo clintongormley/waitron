@@ -16,7 +16,12 @@ import type {
   Unit,
 } from "../api/client.js";
 import type { ModifierListChoice } from "./product-editor-model.js";
-import { categoryPath, categoryRefusalErrors, categoryWithDescendants } from "./category-form.js";
+import {
+  byLabel,
+  categoryPath,
+  categoryRefusalErrors,
+  categoryWithDescendants,
+} from "./category-form.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -379,7 +384,8 @@ export class CatalogueBrowser extends LitElement {
         .map((category) => ({
           value: category.id,
           label: categoryPath(category, this.categories),
-        })),
+        }))
+        .sort((a, b) => byLabel(a.label, b.label)),
     ];
     const rootSummaries = this.summaries.filter(
       (summary) =>
