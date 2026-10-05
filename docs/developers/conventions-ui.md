@@ -432,7 +432,8 @@ knock whose proof another knock or Pair overtook is refused `device.join_stale` 
 so the browser keeps the one it has. Cancel and the number check name the ask by its `createdAt` as
 well as its id, and a replacing knock always gets a later `createdAt`, so a dialog still showing the
 replaced ask can neither discard, refuse nor claim the new one; it is answered
-`join_request.not_found`. One case is not covered: if a knock's response is lost after
+`join_request.not_found`, unless a number check's pairing hold has lapsed, which is answered
+`device.pairing_hold_lapsed` first, a refusal that names no ask. One case is not covered: if a knock's response is lost after
 the server committed it, the browser still holds the old token, which no longer matches, and its
 next knock joins as a new device. The cost is a new device row; the old one stays disabled.
 Guards: the "a disabled device comes back as the same device" cases in

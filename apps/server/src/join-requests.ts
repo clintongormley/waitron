@@ -425,15 +425,12 @@ export async function readJoinStatus(
  *
  * `ask` names the ask the manager was shown ({@link findJoinRequest}); one another ask has replaced
  * is `join_request.not_found`, and the request now under its id is neither deleted nor matched.
- * `refuse` runs only once the ask is known to be pending, so a replaced ask is answered
- * `join_request.not_found` whatever it would throw.
  */
 export async function checkDeviceJoinNumber(
   tx: Transaction,
   cfg: TillConfig,
   ask: { id: string; createdAt: string },
   choice: string,
-  refuse: () => void = () => {},
 ): Promise<{ ok: boolean }> {
   await sweepLapsed(tx, cfg);
   const where = and(
@@ -447,7 +444,6 @@ export async function checkDeviceJoinNumber(
     .from(joinRequests)
     .where(where);
   if (row === undefined) throw new AppError("join_request.not_found", {});
-  refuse();
   if (choice === row.n) return { ok: true };
   await tx.delete(joinRequests).where(where);
   return { ok: false };

@@ -288,8 +288,8 @@ function dependenciesOf<N extends DashboardQueryName>(
     const current: readonly string[] = CURRENT_CLASSIFICATION_READS;
     return QUERY_DEPENDENCIES.getCategorySales.filter((type) => !current.includes(type));
   }
-  // Only a device's ask reads a `devices` row (a returning device's own), and every battery report
-  // rewrites one (`PUT /api/device/battery`, apps/server/src/device-api.ts).
+  // Only a device's ask reads a `devices` row (a returning device's own), and a stored battery
+  // report rewrites one (`PUT /api/device/battery`, apps/server/src/device-api.ts).
   if (name === "joinRequests" && (args as readonly unknown[])[0] === "print_agent") {
     return QUERY_DEPENDENCIES.joinRequests.filter((type) => type !== "devices");
   }

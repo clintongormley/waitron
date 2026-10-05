@@ -823,7 +823,7 @@ describe("a disabled device comes back as the same device", () => {
       expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
     });
 
-    it("a number check with a hold that has lapsed is answered as for a request already gone", async () => {
+    it("a number check of a replaced ask with a hold that has lapsed is answered as a lapsed hold, and the new ask is kept", async () => {
       const { venue, mode, app, deviceId, second, shown } = await replacedAsk();
       const checked = await send(
         app,
@@ -834,8 +834,8 @@ describe("a disabled device comes back as the same device", () => {
           body: { choice: second.verificationNumber, holdId: randomUUID(), createdAt: shown },
         },
       );
-      expect(checked.status).toBe(404);
-      expect((await errorOf(checked)).code).toBe("join_request.not_found");
+      expect(checked.status).toBe(409);
+      expect((await errorOf(checked)).code).toBe("device.pairing_hold_lapsed");
       expect(mode.claimOf(deviceId)).toBeUndefined();
       expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
     });

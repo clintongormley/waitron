@@ -5228,7 +5228,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   which the server would answer as naming an ask already gone, and says the device asked again
   with new numbers. Cancel and the number check name the ask by its
   `createdAt` as well as its id, and an ask that has been replaced is answered
-  `join_request.not_found`. Enable turns the same device row back on; it keeps
+  `join_request.not_found`, unless a number check's pairing hold has lapsed, which is answered
+  `device.pairing_hold_lapsed` first. Enable turns the same device row back on; it keeps
   its made-here stations, card reader and history, and its printers if its profile is unchanged.
   The disabled row in the Devices table gets no Enable action: the device has to ask again to
   prove itself, so a row button could only open Add a device.
@@ -5239,8 +5240,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   without a manager tapping the number. (3) If an ask's response is lost after the server saved it,
   the browser's next ask joins as a new device and the old row stays disabled. (4) A long name in
   the waiting list overflows a phone's width. (5) An ask that replaces a waiting one always gets a
-  later `createdAt`, but an ask made after the previous one was deleted (denied, a wrong number tapped, lapsed after
-  15 minutes, the Add window shut, or its claim's hold ended) is not forced later than the one before.
+  later `createdAt`, but an ask made when no ask is waiting under its id, whatever ended the
+  previous one (accepting it included, once the device is later disabled), is not forced later.
   It must first prove the token the previous ask issued, a scrypt check, so sharing a millisecond is
   unlikely, but nothing in the code rules it out.
   **W106 (done, #1240):** `devices` gains three empty-by-default columns: the battery level,

@@ -1407,6 +1407,21 @@ describe("device pairing: check, claim, approve", () => {
     expect(await pendingCount()).toBe(1);
   });
 
+  it("check after the only hold lapsed is answered as a lapsed hold, and the ask is kept", async () => {
+    const venue = await setupVenue(suite.db);
+    let offset = 0;
+    const { app, holdId } = await pairingApp(
+      venue,
+      createPairingMode({ now: () => Date.now() + offset }),
+    );
+    const made = await knock(venue, { kind: "device", label: "Bar till", numbers: () => 42 });
+    offset += PAIRING_HOLD_MS;
+    const res = await check(app, venue.managerCookie, made.joinId, { choice: "42", holdId });
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toEqual({ code: "device.pairing_hold_lapsed", params: {} });
+    expect(await pendingCount()).toBe(1);
+  });
+
   it("screens the check's body", async () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = await pairingApp(venue);

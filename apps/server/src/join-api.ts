@@ -291,14 +291,17 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         const holdId = requireString(body.holdId, "holdId");
         const createdAt = requireString(body.createdAt, "createdAt");
         if (!isUuid(id)) throw new AppError("join_request.not_found", {});
-        // After the ask is found, so a replaced ask is answered as one already gone, as Cancel's is.
-        const checked = await checkDeviceJoinNumber(tx, deps.cfg, { id, createdAt }, choice, () => {
-          const claim = deps.pairingMode.claimOf(id);
-          if (claim !== undefined && claim.sessionKey !== sessionKey)
-            throw new AppError("join_request.claimed", {});
-          if (!deps.pairingMode.hasHold(holdId))
-            throw new AppError("device.pairing_hold_lapsed", {});
-        });
+        // First, because the gate has just discarded every device ask if no hold is left; a hold
+        // names no ask, so this refusal says nothing about the one under the id.
+        if (!deps.pairingMode.hasHold(holdId)) throw new AppError("device.pairing_hold_lapsed", {});
+        // Before the claim, so a replaced ask is answered as one already gone, as deny's is.
+        const ask = await findJoinRequest(tx, deps.cfg, id);
+        if (ask?.kind !== "device" || ask.createdAt !== createdAt)
+          throw new AppError("join_request.not_found", {});
+        const claim = deps.pairingMode.claimOf(id);
+        if (claim !== undefined && claim.sessionKey !== sessionKey)
+          throw new AppError("join_request.claimed", {});
+        const checked = await checkDeviceJoinNumber(tx, deps.cfg, { id, createdAt }, choice);
         if (checked.ok) {
           const [person] = await tx
             .select({ name: persons.displayName })
