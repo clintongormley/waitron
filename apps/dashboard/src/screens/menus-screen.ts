@@ -1247,8 +1247,7 @@ export class MenusScreen extends LitElement {
     this.#windowShut = shut;
   }
 
-  /** A window's close is reported a task after the native dialog has handed focus back to the menu
-   * item it was opened from, which by then sits in a closed popover. */
+  /** A window's close is reported after the dialog has put focus back. */
   #windowClosed(): void {
     this.#windowShut = true;
     this.requestUpdate();
