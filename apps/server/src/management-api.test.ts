@@ -3,6 +3,8 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  deviceProfiles,
+  devices,
   kitchenCourses,
   kitchenStations,
   kitchenStationTiming,
@@ -293,6 +295,105 @@ describe("/management-api/watchers", () => {
       expect(res.status).toBe(404);
       expect(await res.json()).toMatchObject({
         error: { code: "watcher.not_found", params: { watcherId: id } },
+      });
+    }
+  });
+
+  async function createWatcher(name: string): Promise<string> {
+    const res = await req(
+      "/watchers",
+      { method: "POST", body: JSON.stringify({ ...body, name }) },
+      managerCookie,
+    );
+    expect(res.status).toBe(201);
+    return ((await res.json()) as { id: string }).id;
+  }
+
+  /** A switched-off kitchen screen still naming the watcher, so the watcher is in use. */
+  async function bindDevice(watcherId: string): Promise<void> {
+    await withTransaction(suite.db, async (tx) => {
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({ name: unique("Watcher screen"), formFactor: "kds" })
+        .returning({ id: deviceProfiles.id });
+      await tx.insert(devices).values({
+        locationId: venue.locationId,
+        watcherId,
+        deviceProfileId: profile!.id,
+        label: unique("Pass screen"),
+        tokenHash: randomUUID(),
+        active: false,
+      });
+    });
+  }
+
+  async function listWatchers(
+    query = "",
+  ): Promise<{ id: string; active: boolean; inUse: boolean }[]> {
+    const res = await req(`/watchers${query}`, { method: "GET" }, managerCookie);
+    expect(res.status).toBe(200);
+    return (await res.json()) as { id: string; active: boolean; inUse: boolean }[];
+  }
+
+  it("deletes an unused watcher, and disables one a device names, which only the disabled list shows", async () => {
+    const unused = await createWatcher(unique("Unused"));
+    const used = await createWatcher(unique("Used"));
+    await bindDevice(used);
+    expect(await listWatchers()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: unused, active: true, inUse: false }),
+        expect.objectContaining({ id: used, active: true, inUse: true }),
+      ]),
+    );
+    for (const id of [unused, used]) {
+      expect((await req(`/watchers/${id}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
+    }
+    const active = (await listWatchers()).map((w) => w.id);
+    expect(active).not.toContain(unused);
+    expect(active).not.toContain(used);
+    const all = await listWatchers("?includeDisabled=true");
+    expect(all.find((w) => w.id === unused)).toBeUndefined();
+    expect(all.find((w) => w.id === used)).toMatchObject({ active: false, inUse: true });
+    expect(all.every((w) => typeof w.inUse === "boolean")).toBe(true);
+    expect((await req(`/watchers/${used}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
+  });
+
+  it("enables a disabled watcher as itself; refuses a taken name, an unknown id and a staff session", async () => {
+    const name = unique("Again");
+    const id = await createWatcher(name);
+    await bindDevice(id);
+    await req(`/watchers/${id}`, { method: "DELETE" }, managerCookie);
+    const taker = await createWatcher(name);
+    const taken = await req(`/watchers/${id}/reactivate`, { method: "POST" }, managerCookie);
+    expect(taken.status).toBe(409);
+    expect(await taken.json()).toMatchObject({
+      error: { code: "watcher.name_taken", params: { name } },
+    });
+    expect((await listWatchers("?includeDisabled=true")).find((w) => w.id === id)).toMatchObject({
+      active: false,
+    });
+    expect((await req(`/watchers/${taker}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
+    expect((await req(`/watchers/${id}/reactivate`, { method: "POST" }, staffCookie)).status).toBe(
+      403,
+    );
+    expect((await req(`/watchers/${id}/reactivate`, { method: "POST" })).status).toBe(401);
+    const enabled = await req(`/watchers/${id}/reactivate`, { method: "POST" }, managerCookie);
+    expect(enabled.status).toBe(204);
+    expect((await listWatchers()).find((w) => w.id === id)).toMatchObject({
+      name,
+      active: true,
+      inUse: true,
+      runsPass: true,
+      displayOrder: 3,
+    });
+    expect(
+      (await req(`/watchers/${id}/reactivate`, { method: "POST" }, managerCookie)).status,
+    ).toBe(204);
+    for (const missing of ["bad", randomUUID()]) {
+      const res = await req(`/watchers/${missing}/reactivate`, { method: "POST" }, managerCookie);
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: { code: "watcher.not_found", params: { watcherId: missing } },
       });
     }
   });
@@ -2107,18 +2208,69 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     expect(row).toEqual({ name, active: true });
   });
 
-  it("DELETE deactivates a course (drops off the active list); unknown/malformed :id → 404", async () => {
+  it("DELETE deletes a course nothing refers to; unknown/malformed :id → 404", async () => {
     const id = await createCourse(unique("Del"));
     expect((await listCourses()).find((c) => c.id === id)).toBeDefined();
     const del = await req(`/courses/${id}`, { method: "DELETE" }, managerCookie);
     expect(del.status).toBe(204);
     expect((await listCourses()).find((c) => c.id === id)).toBeUndefined();
+    expect(await suite.db.select().from(kitchenCourses).where(eq(kitchenCourses.id, id))).toEqual(
+      [],
+    );
 
     const unknown = await req(`/courses/${randomUUID()}`, { method: "DELETE" }, managerCookie);
     expect(unknown.status).toBe(404);
     expect(await unknown.json()).toMatchObject({ error: { code: "course.not_found" } });
     const malformed = await req("/courses/not-a-uuid", { method: "DELETE" }, managerCookie);
     expect(malformed.status).toBe(404);
+  });
+
+  it("DELETE disables a course a product names; only ?includeDisabled=true lists it, and PATCH enables it", async () => {
+    const used = await createCourse(unique("Used"));
+    const unused = await createCourse(unique("Unused"));
+    const productId = await withTransaction(suite.db, async (tx) => {
+      const catalogue = await createCatalogue(tx, { name: unique("Carta") });
+      const category = await createCategory(tx, { name: unique("Cat") });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: category.id,
+        name: unique("Prod"),
+        pricingUnit: "each",
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      return product.id;
+    });
+    const put = await req(
+      `/products/${productId}/course`,
+      { method: "PUT", body: JSON.stringify({ courseId: used }) },
+      managerCookie,
+    );
+    expect(put.status).toBe(204);
+    const listed = (await (await req("/courses", { method: "GET" }, managerCookie)).json()) as {
+      id: string;
+      inUse: boolean;
+    }[];
+    expect(listed.find((c) => c.id === used)).toMatchObject({ active: true, inUse: true });
+    expect(listed.find((c) => c.id === unused)).toMatchObject({ active: true, inUse: false });
+    expect(listed.every((c) => typeof c.inUse === "boolean")).toBe(true);
+
+    expect((await req(`/courses/${used}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
+    expect((await listCourses()).find((c) => c.id === used)).toBeUndefined();
+    const all = (await (
+      await req("/courses?includeDisabled=true", { method: "GET" }, managerCookie)
+    ).json()) as { id: string; active: boolean; inUse: boolean }[];
+    expect(all.find((c) => c.id === used)).toMatchObject({ active: false, inUse: true });
+    expect(all.find((c) => c.id === unused)).toMatchObject({ active: true, inUse: false });
+    expect((await req(`/courses/${used}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
+
+    const enable = await req(
+      `/courses/${used}`,
+      { method: "PATCH", body: JSON.stringify({ active: true }) },
+      managerCookie,
+    );
+    expect(enable.status).toBe(204);
+    expect((await listCourses()).find((c) => c.id === used)).toMatchObject({ active: true });
   });
 
   it("PUT /courses/:id/position moves a course and answers the venue's active courses renumbered", async () => {
@@ -2158,7 +2310,11 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
 
   it("PUT /courses/:id/position on an unknown, retired or malformed :id → 404 course.not_found", async () => {
     const retired = await createCourse(unique("Retired"));
-    await req(`/courses/${retired}`, { method: "DELETE" }, managerCookie);
+    await req(
+      `/courses/${retired}`,
+      { method: "PATCH", body: JSON.stringify({ active: false }) },
+      managerCookie,
+    );
     for (const id of [randomUUID(), retired, "not-a-uuid"]) {
       const res = await req(
         `/courses/${id}/position`,

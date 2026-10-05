@@ -22,11 +22,11 @@ import type { TillConfig } from "./till-config.js";
 import {
   createCourse,
   createStation,
-  deactivateCourse,
   deactivateStation,
   listCourses,
   listStations,
   moveCourse,
+  removeCourse,
   setDefaultStation,
   setProductCourse,
   updateCourse,
@@ -374,7 +374,10 @@ describe("kitchen-course config", () => {
     expect(list.map((c) => c.name)).toEqual(["Alpha", "Entrantes", "Zebra", "Principales"]);
     expect(list[3]).toEqual({ id: a, name: "Principales", displayOrder: 1, active: true });
     await asApp(cfg, (tx) => updateCourse(tx, cfg, a, { name: "Segundos", displayOrder: 9 }));
-    await asApp(cfg, (tx) => deactivateCourse(tx, cfg, a));
+    // A product's default course is a reference, so the removal disables rather than deletes.
+    const productId = await seedProduct();
+    await asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, a));
+    await asApp(cfg, (tx) => removeCourse(tx, cfg, a));
     expect((await asApp(cfg, (tx) => listCourses(tx, cfg))).some((c) => c.id === a)).toBe(false);
     await asApp(cfg, (tx) => updateCourse(tx, cfg, a, { active: true }));
     expect(await asApp(cfg, (tx) => listCourses(tx, cfg))).toContainEqual({
@@ -404,13 +407,13 @@ describe("kitchen-course config", () => {
     ).rejects.toMatchObject({ code: "course.name_taken", params: { name: "Entrantes" } });
   });
 
-  it("updateCourse and deactivateCourse throw course.not_found for an unknown id", async () => {
+  it("updateCourse and removeCourse throw course.not_found for an unknown id", async () => {
     const cfg = await setupVenue();
     const missing = randomUUID();
     await expect(
       asApp(cfg, (tx) => updateCourse(tx, cfg, missing, { name: "X" })),
     ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: missing } });
-    await expect(asApp(cfg, (tx) => deactivateCourse(tx, cfg, missing))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => removeCourse(tx, cfg, missing))).rejects.toMatchObject({
       code: "course.not_found",
       params: { courseId: missing },
     });
@@ -489,7 +492,7 @@ describe("moveCourse", () => {
   it("counts only active courses and leaves an inactive one's stored order alone", async () => {
     const cfg = await setupVenue();
     const [a, b, c, d] = await fourCourses(cfg);
-    await asApp(cfg, (tx) => deactivateCourse(tx, cfg, b!));
+    await asApp(cfg, (tx) => updateCourse(tx, cfg, b!, { active: false }));
     const moved = await asApp(cfg, (tx) => moveCourse(tx, cfg, a!, 1));
     expect(moved.map((x) => x.id)).toEqual([c, a, d]);
     expect(moved.map((x) => x.displayOrder)).toEqual([0, 1, 2]);
@@ -499,7 +502,7 @@ describe("moveCourse", () => {
   it("refuses an inactive course with course.not_found and changes nothing", async () => {
     const cfg = await setupVenue();
     const [a, b, c, d] = await fourCourses(cfg);
-    await asApp(cfg, (tx) => deactivateCourse(tx, cfg, b!));
+    await asApp(cfg, (tx) => updateCourse(tx, cfg, b!, { active: false }));
     await expect(asApp(cfg, (tx) => moveCourse(tx, cfg, b!, 0))).rejects.toMatchObject({
       code: "course.not_found",
       params: { courseId: b },
@@ -556,7 +559,7 @@ describe("product-course config", () => {
       asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, missing)),
     ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: missing } });
     const { id: dead } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Retired" }));
-    await asApp(cfg, (tx) => deactivateCourse(tx, cfg, dead));
+    await asApp(cfg, (tx) => updateCourse(tx, cfg, dead, { active: false }));
     await expect(
       asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, dead)),
     ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: dead } });

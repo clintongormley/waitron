@@ -102,13 +102,14 @@ import {
 } from "./tables.js";
 import {
   createCourse,
+  coursesInUse,
   createStation,
-  deactivateCourse,
   deactivateStation,
   getBumpMode,
   getFireControl,
   listCourses,
   moveCourse,
+  removeCourse,
   reorderStations,
   listStations,
   setBumpMode,
@@ -118,14 +119,17 @@ import {
   updateCourse,
   updateStation,
   type BumpMode,
+  type Course,
   type FireControl,
 } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
 import {
   createWatcher,
   listWatchers,
+  reactivateWatcher,
   removeWatcher,
   updateWatcher,
+  watchersInUse,
   type WatcherInput,
 } from "./watchers.js";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
@@ -362,6 +366,17 @@ function parseWatcherBody(body: unknown): WatcherInput {
     runsPass: value.runsPass as boolean,
     displayOrder: parseDisplayOrder(value.displayOrder),
   };
+}
+
+async function withCoursesInUse(
+  tx: Transaction,
+  courses: Course[],
+): Promise<(Course & { inUse: boolean })[]> {
+  const inUse = await coursesInUse(
+    tx,
+    courses.map((course) => course.id),
+  );
+  return courses.map((course) => ({ ...course, inUse: inUse.has(course.id) }));
 }
 
 function requireCourseId(id: string): string {
@@ -1774,7 +1789,16 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      return c.json(await withVenueAuth(deps, sessionId, (tx) => listWatchers(tx, cfg)));
+      const includeDisabled = c.req.query("includeDisabled") === "true";
+      const watchers = await withVenueAuth(deps, sessionId, async (tx) => {
+        const rows = await listWatchers(tx, cfg, includeDisabled);
+        const inUse = await watchersInUse(
+          tx,
+          rows.map((row) => row.id),
+        );
+        return rows.map((row) => ({ ...row, inUse: inUse.has(row.id) }));
+      });
+      return c.json(watchers);
     }),
   );
 
@@ -1807,6 +1831,16 @@ export function mountManagementApi(
       const cfg = requireVenueCfg(deps);
       const id = requireWatcherId(c.req.param("id"));
       await withVenueAuth(deps, sessionId, (tx) => removeWatcher(tx, cfg, id));
+      return c.body(null, 204);
+    }),
+  );
+
+  app.post("/management-api/watchers/:id/reactivate", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const id = requireWatcherId(c.req.param("id"));
+      await withVenueAuth(deps, sessionId, (tx) => reactivateWatcher(tx, cfg, id));
       return c.body(null, 204);
     }),
   );
@@ -2022,7 +2056,10 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const courses = await withVenueReadAuth(deps, sessionId, (tx) => listCourses(tx, cfg));
+      const includeDisabled = c.req.query("includeDisabled") === "true";
+      const courses = await withVenueReadAuth(deps, sessionId, async (tx) =>
+        withCoursesInUse(tx, await listCourses(tx, cfg, includeDisabled)),
+      );
       return c.json(courses);
     }),
   );
@@ -2069,7 +2106,7 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const id = requireCourseId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      await withVenueAuth(deps, sessionId, (tx) => deactivateCourse(tx, cfg, id));
+      await withVenueAuth(deps, sessionId, (tx) => removeCourse(tx, cfg, id));
       return c.body(null, 204);
     }),
   );
@@ -2087,7 +2124,11 @@ export function mountManagementApi(
       if (typeof to !== "number" || !Number.isInteger(to) || to < 0) {
         throw new AppError("management.request_invalid", { field: "to" });
       }
-      return c.json(await withVenueAuth(deps, sessionId, (tx) => moveCourse(tx, cfg, id, to)));
+      return c.json(
+        await withVenueAuth(deps, sessionId, async (tx) =>
+          withCoursesInUse(tx, await moveCourse(tx, cfg, id, to)),
+        ),
+      );
     }),
   );
 

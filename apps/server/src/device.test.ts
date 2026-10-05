@@ -5,9 +5,9 @@
  * watcher, while a till or handheld binds neither.
  */
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, locations, withTransaction } from "@waitron/db";
+import { deviceProfiles, locations, watchers, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -78,7 +78,14 @@ describe("watcher screen binding", () => {
     await expect(
       enrolDeviceForTest(suite.db, cfg, { name: "Both", profileId, stationId, watcherId }),
     ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "watcherId" } });
+    // A device naming the watcher keeps it, switched off, rather than deleted.
+    await enrolDeviceForTest(suite.db, cfg, { name: "Pass", profileId, watcherId });
     await withTransaction(suite.db, (tx) => removeWatcher(tx, cfg, watcherId));
+    const [kept] = await suite.db
+      .select({ active: watchers.active })
+      .from(watchers)
+      .where(eq(watchers.id, watcherId));
+    expect(kept).toEqual({ active: false });
     await expect(
       enrolDeviceForTest(suite.db, cfg, { name: "Removed", profileId, watcherId }),
     ).rejects.toMatchObject({ code: "watcher.not_found" });
