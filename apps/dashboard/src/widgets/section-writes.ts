@@ -30,6 +30,11 @@ export class ListWriteQueue {
     })();
   }
 
+  /** The writes in `scope` queued or running, the running one included until it has finished. */
+  pending(scope: unknown): number {
+    return this.#pending.get(scope) ?? 0;
+  }
+
   run(scope: unknown, task: () => Promise<void>): void {
     this.#pending.set(scope, (this.#pending.get(scope) ?? 0) + 1);
     // A write that throws must not reject the chain, or every write queued after it is skipped.
@@ -66,7 +71,7 @@ export class ListWriteQueue {
         await refused(error);
         return;
       }
-      await moved(result, this.#pending.get(scope) === 1);
+      await moved(result, this.pending(scope) === 1);
     });
   }
 }

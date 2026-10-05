@@ -612,8 +612,6 @@ export class MenusScreen extends LitElement {
   readonly #writes = new ListWriteQueue();
   readonly #priceWrites = new ListWriteQueue();
   #priceSavesMade = 0;
-  /** Per row key, the price saves queued or out. */
-  readonly #pendingPrices = new Map<string, number>();
   /** Per list, the current batch of moves: those made since the list last had none unanswered,
    * until one is refused. `out` counts the unanswered; `answered` holds the orders answered by
    * moves that were not shown because another write to the list waited behind them. */
@@ -1516,11 +1514,12 @@ export class MenusScreen extends LitElement {
 
   // ── Prices ───────────────────────────────────────────────────────────────────────────────────
 
-  #countPending(key: string, by: 1 | -1): void {
-    const left = (this.#pendingPrices.get(key) ?? 0) + by;
-    if (left === 0) this.#pendingPrices.delete(key);
-    else this.#pendingPrices.set(key, left);
-    this.savingPrices = new Set(this.#pendingPrices.keys());
+  /** Called by a save's own task before it ends, so the queue still counts that save. */
+  #priceSaveDone(key: string): void {
+    if (this.#priceWrites.pending(key) > 1) return;
+    const saving = new Set(this.savingPrices);
+    saving.delete(key);
+    this.savingPrices = saving;
   }
 
   /** One field per request, in the order made; each field stays editable meanwhile. A refusal is
@@ -1535,7 +1534,7 @@ export class MenusScreen extends LitElement {
     const made = ++this.#priceSavesMade;
     this.priceRefusals = without(this.priceRefusals, [save.key]);
     this.priceOutcome = null;
-    this.#countPending(save.key, 1);
+    this.savingPrices = new Set(this.savingPrices).add(save.key);
     this.#priceWrites.run(save.key, async () => {
       try {
         if (save.variantId === null)
@@ -1556,7 +1555,7 @@ export class MenusScreen extends LitElement {
           this.memberError = t("menus.change_not_saved")
             .replace("{name}", save.name)
             .replace("{reason}", reason);
-        this.#countPending(save.key, -1);
+        this.#priceSaveDone(save.key);
         return;
       }
       // Saves are answered in the order made, so a refusal under this field came from an earlier
@@ -1569,7 +1568,7 @@ export class MenusScreen extends LitElement {
         if (shown && made === this.#priceSavesMade && this.priceOutcome === null)
           this.priceOutcome = { kind: "saved", save };
       }
-      this.#countPending(save.key, -1);
+      this.#priceSaveDone(save.key);
     });
   }
 
