@@ -12,12 +12,10 @@ import { t } from "../i18n/t.js";
 class ColorFieldHost extends LitElement {
   static override styles = [baseStyles, colorFieldStyles];
   @property({ attribute: false }) color: string | null = null;
-  @property({ attribute: false }) noneLabel: string | undefined = undefined;
-  @property({ attribute: false }) inherited: string | null | undefined = undefined;
+  @property({ attribute: false }) categoryColor: string | null | undefined = undefined;
   override render() {
     return colorField({
-      ...(this.noneLabel === undefined ? {} : { noneLabel: this.noneLabel }),
-      ...(this.inherited === undefined ? {} : { inherited: this.inherited }),
+      ...(this.categoryColor === undefined ? {} : { categoryColor: this.categoryColor }),
       color: this.color,
       busy: false,
       error: "",
@@ -40,7 +38,7 @@ afterEach(cleanupWidgets);
 const mount = (
   color: string | null,
   theme?: "light" | "dark",
-  extra: Partial<Pick<ColorFieldHost, "noneLabel" | "inherited">> = {},
+  extra: Partial<Pick<ColorFieldHost, "categoryColor">> = {},
 ) => mountWidget<ColorFieldHost>("test-color-field-host", { color, ...extra }, theme);
 
 const noneButton = (el: ColorFieldHost) =>
@@ -185,12 +183,11 @@ it.each(["light", "dark"] as const)(
 );
 
 it("names the no-colour choice by its label and describes it by the colour it then takes, drawn in a chip", async () => {
-  const { el } = await mount(null, undefined, {
-    noneLabel: "Use category colour",
-    inherited: "#25b125",
-  });
+  const { el } = await mount(null, undefined, { categoryColor: "#25b125" });
   const none = noneButton(el);
-  await expect.element(page.elementLocator(none)).toHaveAccessibleName("Use category colour");
+  await expect
+    .element(page.elementLocator(none))
+    .toHaveAccessibleName(t("editor.color_use_category"));
   await expect.element(page.elementLocator(none)).toHaveAccessibleDescription("#25b125");
   const chip = none.querySelector<HTMLElement>(".chip")!;
   expect(chip.getAttribute("aria-hidden")).toBe("true");
@@ -203,12 +200,11 @@ it("says inside the no-colour choice, as its description, that the category has 
   const plain = await mount(null);
   const plainLines = fieldLines(plain.el);
   cleanupWidgets();
-  const { el } = await mount(null, undefined, {
-    noneLabel: "Use category colour",
-    inherited: null,
-  });
+  const { el } = await mount(null, undefined, { categoryColor: null });
   const none = noneButton(el);
-  await expect.element(page.elementLocator(none)).toHaveAccessibleName("Use category colour");
+  await expect
+    .element(page.elementLocator(none))
+    .toHaveAccessibleName(t("editor.color_use_category"));
   await expect
     .element(page.elementLocator(none))
     .toHaveAccessibleDescription(t("editor.color_category_none"));
@@ -225,20 +221,14 @@ it("says inside the no-colour choice, as its description, that the category has 
 });
 
 it("says the category has no colour when the colour it would take is not lowercase #rrggbb", async () => {
-  const { el } = await mount(null, undefined, {
-    noneLabel: "Use category colour",
-    inherited: "#256bb1;position:fixed;inset:0",
-  });
+  const { el } = await mount(null, undefined, { categoryColor: "#256bb1;position:fixed;inset:0" });
   const none = noneButton(el);
   expect(none.querySelector(".chip")).toBeNull();
   expect(none.querySelector(".note")!.textContent!.trim()).toBe(t("editor.color_category_none"));
 });
 
 it("keeps a two-line no-colour choice's text clear of its border", async () => {
-  const { el } = await mount(null, undefined, {
-    noneLabel: "Use category colour",
-    inherited: null,
-  });
+  const { el } = await mount(null, undefined, { categoryColor: null });
   const none = noneButton(el).getBoundingClientRect();
   const label = el.shadowRoot!.querySelector("#test-color-none-label")!.getBoundingClientRect();
   const note = noneButton(el).querySelector(".note")!.getBoundingClientRect();

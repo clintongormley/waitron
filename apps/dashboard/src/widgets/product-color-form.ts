@@ -96,8 +96,7 @@ export class ProductColorForm extends LitElement {
         <p class="scope" data-test="scope">${t("product_color.scope")}</p>
         ${colorField({
           color: this.chosen,
-          noneLabel: t("editor.color_use_category"),
-          inherited: this.inherited,
+          categoryColor: this.inherited,
           busy: this.busy,
           error: errors.color ?? "",
           name: "product-color",

@@ -132,11 +132,10 @@ export const colorFieldStyles = css`
 export interface ColorFieldOptions {
   /** A hex colour, or null for none. */
   color: string | null;
-  /** The no-colour choice's label; absent, it reads "No colour". */
-  noneLabel?: string;
-  /** What the no-colour choice falls back to: a colour, drawn in a chip and read as the choice's
-   * description, or null for none, said as the choice's second line. Absent, it says nothing. */
-  inherited?: string | null;
+  /** Given, the no-colour choice reads "Use category colour" and shows the category's colour in a
+   * chip read as its description, or, for null, says as its second line that there is none. Absent,
+   * it reads "No colour" and says nothing more. */
+  categoryColor?: string | null;
   busy: boolean;
   error: string;
   /** The custom colour input's `name`. */
@@ -151,12 +150,12 @@ export interface ColorFieldOptions {
  * HTML, `input type=color`), so it cannot join the radio group.
  */
 export function colorField(options: ColorFieldOptions): TemplateResult {
-  const { color, busy, error, name, errorId, change, noneLabel } = options;
+  const { color, busy, error, name, errorId, change } = options;
   // Checked, because the chip paints it into a style attribute; anything else reads as no colour.
   const inherited =
-    typeof options.inherited === "string" && !isHexColor(options.inherited)
+    typeof options.categoryColor === "string" && !isHexColor(options.categoryColor)
       ? null
-      : options.inherited;
+      : options.categoryColor;
   const labelId = `${name}-none-label`;
   const fallback =
     inherited === undefined
@@ -171,15 +170,13 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
             ></span>`,
             after: html`<span id=${`${name}-none-value`} hidden>${inherited}</span>`,
           }
-        : noneLabel !== undefined
-          ? {
-              id: `${name}-none-note`,
-              before: nothing,
-              after: html`<span class="note" id=${`${name}-none-note`}
-                >${t("editor.color_category_none")}</span
-              >`,
-            }
-          : null;
+        : {
+            id: `${name}-none-note`,
+            before: nothing,
+            after: html`<span class="note" id=${`${name}-none-note`}
+              >${t("editor.color_category_none")}</span
+            >`,
+          };
   const swatch = (value: string) =>
     html`<button
       type="button"
@@ -213,7 +210,7 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
         }}
       >
         ${fallback?.before ?? nothing}<span id=${labelId}
-          >${noneLabel ?? t("editor.color_none")}</span
+          >${inherited === undefined ? t("editor.color_none") : t("editor.color_use_category")}</span
         >${fallback?.after ?? nothing}
       </button>
       <div class="swatches">
