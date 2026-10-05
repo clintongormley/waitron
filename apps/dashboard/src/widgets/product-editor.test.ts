@@ -2044,6 +2044,22 @@ it("puts the colour chooser after Name on a product of its own, its custom input
     .toHaveAccessibleName(t("editor.color_use_category"));
 });
 
+it("draws the Custom colour input on the same line as its label, after the word", async () => {
+  const el = await mountColoured();
+  const label = el.shadowRoot!.querySelector<HTMLLabelElement>("fieldset.color label.custom")!;
+  const input = label.querySelector("input")!.getBoundingClientRect();
+  const words = document.createRange();
+  words.selectNodeContents(
+    [...label.childNodes].find(
+      (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
+    )!,
+  );
+  const text = words.getBoundingClientRect();
+  expect(input.left).toBeGreaterThanOrEqual(text.right);
+  expect(input.top).toBeLessThan(text.bottom);
+  expect(input.bottom).toBeGreaterThan(text.top);
+});
+
 it("describes Use category colour by the draft category's colour, and follows a category chosen since", async () => {
   const el = await mountColoured();
   const describes = (text: string) =>

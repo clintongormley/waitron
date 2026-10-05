@@ -60,7 +60,7 @@ export const colorFieldStyles = css`
     width: auto;
     height: auto;
     min-height: var(--wt-space-6);
-    padding: 0 var(--wt-space-2);
+    padding: var(--wt-space-1) var(--wt-space-2);
     background: var(--wt-color-surface);
     color: var(--wt-color-text);
     font-size: var(--wt-font-size-sm);
@@ -82,8 +82,10 @@ export const colorFieldStyles = css`
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
   }
+  /* Row named: a host's own label rule may stack its labels' contents. */
   .custom {
     display: inline-flex;
+    flex-direction: row;
     align-items: center;
     gap: var(--wt-space-2);
     font-size: var(--wt-font-size-sm);

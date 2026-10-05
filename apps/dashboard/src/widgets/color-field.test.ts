@@ -224,6 +224,18 @@ it("says inside the no-colour choice, as its description, that the category has 
   expect(fieldLines(el)).toEqual(plainLines);
 });
 
+it("keeps a two-line no-colour choice's text clear of its border", async () => {
+  const { el } = await mount(null, undefined, {
+    noneLabel: "Use category colour",
+    inherited: null,
+  });
+  const none = noneButton(el).getBoundingClientRect();
+  const label = el.shadowRoot!.querySelector("#test-color-none-label")!.getBoundingClientRect();
+  const note = noneButton(el).querySelector(".note")!.getBoundingClientRect();
+  expect(label.top - none.top).toBeGreaterThanOrEqual(3);
+  expect(none.bottom - note.bottom).toBeGreaterThanOrEqual(3);
+});
+
 it("draws today's No colour choice when given neither setting", async () => {
   const { el } = await mount(null);
   const none = noneButton(el);
