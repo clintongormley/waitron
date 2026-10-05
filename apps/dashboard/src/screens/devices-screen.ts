@@ -285,6 +285,8 @@ export class DevicesScreen extends LitElement {
   @state() private qr = "";
   /** The last device this dialog paired, and whether it was enabled rather than added. */
   @state() private added: { name: string; enabled: boolean } | null = null;
+  /** The device whose open Pair dialog its own new ask replaced. */
+  @state() private askedAgain: string | null = null;
   /** The Add dialog's own refusal: a wrong number, a failed discard, or its read of the address. */
   @state() private addError: string | null = null;
   @state() private holdStatus: PairingHoldStatus = "idle";
@@ -374,6 +376,7 @@ export class DevicesScreen extends LitElement {
         }),
         this.#queries.watch("joinRequests", ["device"], (value) => {
           this.pendingJoins = value;
+          this.#closeReplacedPair(value);
         }),
       ]);
     } catch (error) {
@@ -424,6 +427,7 @@ export class DevicesScreen extends LitElement {
     const epoch = ++this.#addEpoch;
     this.addingDevice = true;
     this.added = null;
+    this.askedAgain = null;
     this.addError = null;
     this.qr = "";
     this.deviceAddress = "";
@@ -448,6 +452,7 @@ export class DevicesScreen extends LitElement {
     this.#closePair();
     this.#hold.stop();
     this.added = null;
+    this.askedAgain = null;
     this.addError = null;
   }
 
@@ -484,6 +489,23 @@ export class DevicesScreen extends LitElement {
     });
   }
 
+  /**
+   * A returning device's new ask keeps its id and replaces the request the open dialog was made for,
+   * numbers and claim included, so the dialog closes without the discard that would delete the new
+   * ask. A request that only left the list keeps the dialog open: its next step is refused.
+   */
+  #closeReplacedPair(rows: readonly JoinRequestRow[]): void {
+    const open = this.pairRequest;
+    if (open === null || this.#pairSettled) return;
+    const now = rows.find((row) => row.id === open.id);
+    if (now === undefined || now.createdAt === open.createdAt) return;
+    this.#pairSettled = true;
+    void this.#closeModal("pair-modal").then(() => {
+      this.#closePair();
+      if (this.addingDevice) this.askedAgain = waitingName(now);
+    });
+  }
+
   async #openPair(request: JoinRequestRow): Promise<void> {
     this.#closePair();
     const epoch = ++this.#pairEpoch;
@@ -491,6 +513,7 @@ export class DevicesScreen extends LitElement {
     this.pairRequest = request;
     this.addError = null;
     this.added = null;
+    this.askedAgain = null;
     this.pairError = null;
     this.choices = null;
     if (request.pairingBy?.mine) {
@@ -516,8 +539,7 @@ export class DevicesScreen extends LitElement {
     this.pairStep = "settings";
     this.pairName = back?.name ?? request.label;
     this.chosenProfileId = profileId;
-    this.chosenBinding =
-      back !== null && this.#bindingShownFor(profileId) ? this.#activeBinding(back) : "";
+    this.chosenBinding = back === null ? "" : this.#activeBinding(back);
     this.formAttempted = false;
     this.fieldRefusal = null;
     this.pairError = null;
@@ -1142,6 +1164,13 @@ export class DevicesScreen extends LitElement {
                 "{name}",
                 this.added.name,
               )}
+            </p>`
+      }
+      ${
+        this.askedAgain === null
+          ? nothing
+          : html`<p class="hint" role="status" data-test="asked-again">
+              ${t("devices.asked_again").replace("{name}", this.askedAgain)}
             </p>`
       }
       ${this.#renderWaiting()}

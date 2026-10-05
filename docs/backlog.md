@@ -5218,11 +5218,17 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   "returning" with the device's own id, name, profile and station or watcher
   (`apps/server/src/join-requests.ts`). The dialog lists it under its old name with "Disabled
   device. Enabling it restores its settings." and an Enable (Habilitar) button in place of Pair;
-  after the usual number check the step is titled "Enable <name>" and starts filled in, with a
-  profile, station or watcher that is gone or switched off left empty to choose again
-  (`apps/dashboard/src/screens/devices-screen.ts`). Enable turns the same device row back on; it keeps
-  its made-here stations, card reader and history, and its printers if its profile is unchanged. The disabled row in the Devices table gets no Enable action: the device has to
-  ask again to prove itself, so a row button could only open Add a device.
+  after the usual number check the step is titled "Enable <name>" and starts filled in
+  (`apps/dashboard/src/screens/devices-screen.ts`). A station or watcher that is gone or switched
+  off starts empty, to choose again; so does a profile missing from the dashboard's list of
+  profiles. Profiles have no switched-off state, and deleting one a disabled device holds is refused
+  `device_profile.in_use`, so today that should arise only if the dashboard could not read the
+  list; W105c may make it ordinary. If the device asks again while its Enable dialog is open, the
+  new ask replaces the old one under the same id, so the dialog closes without discarding it and
+  says the device asked again with new numbers. Enable turns the same device row back on; it keeps
+  its made-here stations, card reader and history, and its printers if its profile is unchanged.
+  The disabled row in the Devices table gets no Enable action: the device has to ask again to
+  prove itself, so a row button could only open Add a device.
   **W106 (done, #1240):** `devices` gains three empty-by-default columns: the battery level,
   whether it is charging and when that was reported (core `0099`). A paired device sends both to
   `PUT /api/device/battery`, which refuses a level outside 0 to 100 and stores at most one report a

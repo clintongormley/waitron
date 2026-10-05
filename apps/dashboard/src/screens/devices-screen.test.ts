@@ -998,6 +998,25 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-binding").error).toBe(codeMessage("device.station_required"));
   });
 
+  it("a kitchen screen whose watcher was switched off or deleted opens with Shows empty", async () => {
+    const off: Watcher = { ...watchers[0]!, id: "w-off", name: "Old pass", active: false };
+    const switchedOff = { ...kitchen, stationId: null, watcherId: "w-off" };
+    const deleted = { ...kitchen, id: "k2", stationId: null, watcherId: "w-gone" };
+    const api = editApi({
+      listDevices: vi.fn().mockResolvedValue([switchedOff, deleted]),
+      listWatchers: vi.fn().mockResolvedValue([...watchers, off]),
+    });
+    const el = await openEdit(api, "k1");
+    expect(field(el, "edit-binding").value).toBe("");
+
+    q(el, "[data-test=edit-cancel]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    dq(el.shadowRoot!, "[data-test=edit-device-k2]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-binding]")).not.toBeNull());
+    await flush(el);
+    expect(field(el, "edit-binding").value).toBe("");
+  });
+
   it("shows None as the chosen printer of a device that has none", async () => {
     const el = await openEdit(editApi(), "k1");
     const shown = (id: string) =>
@@ -2787,6 +2806,107 @@ describe("add a device", () => {
 
       expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
       expect((q(el, "[data-test=pair-binding]") as Field).value).toBe("");
+    });
+
+    it("whose watcher was switched off opens with Shows empty", async () => {
+      const api = waiting({
+        ...returning,
+        returning: { name: "Pase revocado", profileId: "dp3", stationId: null, watcherId: "w1" },
+      });
+      vi.mocked(api.listWatchers).mockResolvedValue([{ ...watchers[0]!, active: false }]);
+      const el = await openAdd(api);
+      await toEnableSettings(el);
+
+      expect((q(el, "[data-test=pair-binding]") as Field).value).toBe("");
+    });
+
+    describe("while its Enable dialog is open", () => {
+      const live = () => Object.assign(waiting(), { liveData: new LiveData() });
+      const asks = (...rows: JoinRequestRow[]) => [pending[0]!, ...rows];
+
+      it.each(["number", "settings"] as const)(
+        "a new ask from the device closes the dialog at the %s step without discarding the new ask",
+        async (step) => {
+          const api = live();
+          const el = await openAdd(api);
+          if (step === "number") {
+            await openPair(el, "d2");
+            await vi.waitFor(() => expect(q(el, "[data-choice]")).not.toBeNull());
+          } else await toEnableSettings(el);
+
+          vi.mocked(api.joinRequests).mockResolvedValue(
+            asks({ ...returning, createdAt: "2026-09-08T10:06:00.000Z" }),
+          );
+          api.liveData.refresh();
+
+          await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+          await flush(el);
+          expect(api.denyJoinRequest).not.toHaveBeenCalled();
+          expect(text(el, "[data-test=asked-again]")).toBe(
+            t("devices.asked_again").replace("{name}", "Pase revocado"),
+          );
+          expect(q(el, "[data-test=asked-again]")!.getAttribute("role")).toBe("status");
+          expect(d(el, "[data-test=pair-d2]")?.textContent?.trim()).toBe(t("devices.enable"));
+        },
+      );
+
+      it("an unchanged ask keeps the dialog open, and Cancel still discards it", async () => {
+        const api = live();
+        const el = await openAdd(api);
+        await toEnableSettings(el);
+
+        vi.mocked(api.joinRequests).mockResolvedValue(asks({ ...returning }));
+        api.liveData.refresh();
+        await vi.waitFor(() => expect(api.joinRequests).toHaveBeenCalledTimes(2));
+        await flush(el);
+        expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
+        expect(q(el, "[data-test=asked-again]")).toBeNull();
+
+        q(el, "[data-test=pair-cancel]")!.click();
+        await vi.waitFor(() => expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("d2"));
+      });
+
+      it("an ask that left the list keeps the dialog open, and Cancel says nothing", async () => {
+        const api = live();
+        vi.mocked(api.denyJoinRequest).mockRejectedValue({ code: "join_request.not_found" });
+        const el = await openAdd(api);
+        await toEnableSettings(el);
+
+        vi.mocked(api.joinRequests).mockResolvedValue(asks());
+        api.liveData.refresh();
+        await vi.waitFor(() => expect(d(el, "[data-test=pair-d2]")).toBeNull());
+        await flush(el);
+        expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
+
+        q(el, "[data-test=pair-cancel]")!.click();
+        await vi.waitFor(() => expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("d2"));
+        await flush(el);
+        expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
+        expect(q(el, "[data-test=asked-again]")).toBeNull();
+      });
+
+      it("says the device asked again in English and Spanish", async () => {
+        const before = currentLocale();
+        try {
+          for (const [locale, said] of [
+            ["en", "Pase revocado asked again with new numbers."],
+            ["es-ES", "Pase revocado ha vuelto a solicitar el alta con números nuevos."],
+          ] as const) {
+            setLocale(locale);
+            const api = live();
+            const el = await openAdd(api);
+            await openPair(el, "d2");
+            vi.mocked(api.joinRequests).mockResolvedValue(
+              asks({ ...returning, createdAt: "2026-09-08T10:06:00.000Z" }),
+            );
+            api.liveData.refresh();
+            await vi.waitFor(() => expect(text(el, "[data-test=asked-again]")).toBe(said));
+            cleanupWidgets();
+          }
+        } finally {
+          setLocale(before);
+        }
+      });
     });
 
     it("already claimed by this login opens straight at its filled-in settings", async () => {
