@@ -2022,7 +2022,12 @@ existing check.
 | 5 | `…menu-prices-table.test.ts` (new, `:1200`, `:1221`, `:1242` at fix round 1) | — | a sent price refused under its field, or in the status line alone, goes back to the stored price once nothing says it was refused, and leaving then sends nothing; a price changed since the refusal stays | Added check (fix round 1, Important 1) |
 | 5 | `…menus-screen.test.ts` (new, `:4301` at fix round 1) | — | after a `connection.failed` refusal, Structure then Prices: the field shows the stored price and leaving it writes nothing | Added check (fix round 1, Important 1) |
 | 5 | `…menus-screen.test.ts` (new, `:4320` at fix round 1) | — | with the re-read after a successful write held open, the field keeps the sent text and stays marked saving; released, it shows the stored new value | Added check (fix round 1, Important 2: Review focus 4's screen half) |
-| 6 | `…menus-screen.test.ts:4111`, `:4201` | a save finishing after leaving the menu or tab reads no prices | also sets no "saved" outcome | Added check (M6) |
+| 6 | `…menus-screen.test.ts:4111`, `:4201` (`:4096`, `:4186` at Task 6's commit) | a save finishing after leaving the menu or tab reads no prices | also sets no "saved" outcome (`prices(el).outcome` null) | Added check (M6) |
+| 6 | `…menu-prices-table.test.ts` "says a refusal in the status line, and moves no focus…" (`:1123` at Task 6's commit) | the refused sentence, no field error, focus kept | also draws no Undo | Added check (brief: a refused outcome draws no Undo) |
+| 6 | `…menus-screen.test.ts` (new, `:4414` at Task 6's commit) | — | with the re-read after a write held, leaving for another menu or for Structure sets no "saved" outcome | Added check (M6's inner guard: the two rows above pass with only the outer one) |
+| 6 | `…menus-screen.test.ts` (new, `:4430` at Task 6's commit) | — | two saves of one field, 11.00 then 11.50: no "saved" outcome while the second is out; then the 11.50 one with `previous: "11.00"`; its Undo writes `{ grossPrice: "11.00" }` | Added check (controller ruling on Undo's target; the status line speaks only for the last save made) |
+| 6 | `…menu-prices-table.test.ts` (new, `:1240` at Task 6's commit) | — | commit 11.00, kept saving, commit 11.50: the second save's `previous` is "11.00" | Added check (controller ruling on Undo's target) |
+| 6 | `…menu-prices-table.test.ts` (new, `:1255`, `:1270` at Task 6's commit) | — | a "saved" outcome does not hold a field's draft as refused; a refused draft goes back to stored once the status line says another save was saved | Added check (`#unrefuse` and `#settle` with the new outcome kind; both passed before the feature) |
 
 ---
 
