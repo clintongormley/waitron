@@ -234,7 +234,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
          Edit/Delete menu or the selection checkbox never activates the row. */
       tr.clickable
         td
-        :is(button, a, input, select, label, wt-button, wt-row-actions):not(.row-activate) {
+        :is(button, a, input, select, label, wt-button, wt-row-actions, wt-relative-time):not(
+          .row-activate
+        ) {
         position: relative;
         z-index: 1;
       }

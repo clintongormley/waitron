@@ -22,6 +22,7 @@ import "../src/components/wt-count-badge.js";
 import "../src/components/wt-choice-row.js";
 import "../src/components/wt-toast.js";
 import "../src/components/wt-notice.js";
+import "../src/components/wt-relative-time.js";
 import "../src/components/wt-language-chooser.js";
 
 registerIcons({
@@ -72,6 +73,19 @@ const panel = (theme: "light" | "dark") => `
     <wt-toast open message="2 new alerts" close-label="Close" duration="0"></wt-toast>
     <wt-toast open tone="error" message="The tax agency rejected an invoice record" close-label="Close" duration="0"></wt-toast>
     <p><wt-notice duration="0">Unpaired</wt-notice></p>
+    <p>
+      Updated
+      <wt-relative-time
+        datetime=${new Date(Date.now() - 12 * 60_000).toISOString()}
+        locale="en-GB"
+      ></wt-relative-time>
+      · Closes
+      <wt-relative-time
+        datetime=${new Date(Date.now() + 4 * 60_000 + 30_000).toISOString()}
+        locale="en-GB"
+        future
+      ></wt-relative-time>
+    </p>
     <wt-card raised>
       <span slot="header">Ticket</span>
       <wt-input label="Peso (kg)" value="1.25"></wt-input>

@@ -173,6 +173,7 @@ listed, with no Edit and a row that does not open.
   the database. The level's range is held by the route.
 - **Display.** The Battery column shows "82%" with a charging mark, or "Not reported" for a device
   that has never reported. A report more than 10 minutes old is shown greyed, with "as of {time}".
+  (2026-10-06, W106a: now "updated 11 minutes ago", with the exact time on hover or tap.)
 - No low-battery alert in this work (A272).
 
 ## 7. The device's own screen
