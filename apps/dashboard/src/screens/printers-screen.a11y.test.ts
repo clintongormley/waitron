@@ -2,7 +2,7 @@ import { expect, afterEach, describe, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption as pickOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import "./printers-screen.js";
 import type { PrintersScreen } from "./printers-screen.js";
 import type {
@@ -219,7 +219,15 @@ async function chooseOption(el: PrintersScreen, name: string, value: string): Pr
   await flush(el);
 }
 async function openPrinter(el: PrintersScreen, id = "p1"): Promise<void> {
-  q(el, `[data-test="edit-printer-${id}"]`)!.click();
+  q(el, `[data-test="printer-row-${id}"]`)!.click();
+  await flush(el);
+}
+async function openCalibration(el: PrintersScreen): Promise<void> {
+  q(el, "[data-test=printer-section-calibration]")!
+    .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+    .click();
+  await flush(el);
+  q(el, "[data-test=calibrate-printer-details]")!.click();
   await flush(el);
 }
 async function openDiscovery(el: PrintersScreen): Promise<void> {
@@ -422,7 +430,52 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     );
     await flush(el);
     await openPrinter(el);
+    q(el, "[data-test=edit-printer-name]")!.click();
+    await flush(el);
     await expectNoA11yViolations(host);
+    q(el, "[data-test=printer-section-connection]")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    await flush(el);
+    q(el, "[data-test=edit-printer-connection]")!.click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+  });
+  it.each([
+    ["en", 1280],
+    ["en", 390],
+    ["es-ES", 1280],
+    ["es-ES", 390],
+  ] as const)("keeps printer details readable in %s at %ipx", async (locale, width) => {
+    const before = currentLocale();
+    await page.viewport(width, 900);
+    setLocale(locale);
+    try {
+      const { el, host } = await mountWidget<PrintersScreen>(
+        "dashboard-printers-screen",
+        { api: stubApi() },
+        theme,
+      );
+      await flush(el);
+      await openPrinter(el);
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      expect(q(el, "[data-test=printer-breadcrumb]")).not.toBeNull();
+      expect(q(el, "[data-test=printer-section-status]")).not.toBeNull();
+      expect(q(el, "[data-test=printer-section-connection]")).not.toBeNull();
+      expect(q(el, "[data-test=printer-section-calibration]")).not.toBeNull();
+      expect(
+        q(el, "[data-test=edit-printer-name]")!.getBoundingClientRect().right,
+      ).toBeLessThanOrEqual(
+        q(el, "[data-test=printer-section-status]")!.getBoundingClientRect().right,
+      );
+      await expectNoA11yViolations(host);
+      await page.screenshot({
+        path: `__screenshots__/printer-details-${theme}-${locale}-${width}.png`,
+      });
+    } finally {
+      setLocale(before);
+      await page.viewport(1280, 900);
+    }
   });
   it("renders each calibration step and the drawer result accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
@@ -432,8 +485,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     );
     await flush(el);
     await openPrinter(el);
-    q(el, "[data-test=calibrate-printer]")!.click();
-    await flush(el);
+    await openCalibration(el);
     q(el, "[data-test=print-ruler-p1]")!.click();
     await flush(el);
     await chooseOption(el, "printer-ruler-number", "576");
@@ -484,8 +536,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         q(el, '[data-test="cancel-new-printer"]')!.click();
         await flush(el);
         await openPrinter(el);
-        q(el, "[data-test=calibrate-printer]")!.click();
-        await flush(el);
+        await openCalibration(el);
         const assertInsideDialog = (names: string[]) => {
           const dialog = q(el, '[data-test="edit-printer-modal"]')!
             .shadowRoot!.querySelector("dialog")!
@@ -521,6 +572,8 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
         assertInsideDialog(["printer-cash-drawer"]);
         await expectNoA11yViolations(host);
         q(el, '[data-test="cancel-edit-printer"]')!.click();
+        await flush(el);
+        q(el, '[data-test="all-printers-link"]')!.click();
         await flush(el);
         q(el, '[data-test="open-add-agent"]')!.click();
         await flush(el);

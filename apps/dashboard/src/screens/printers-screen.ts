@@ -123,9 +123,6 @@ const COMMAND_TEXT: Record<BluetoothCommandStatus["kind"], Record<CommandState, 
 const commandKey = (agentId: string, address: string): string =>
   `${agentId}:${address.toUpperCase()}`;
 
-/** The printer editor's checks that have a field of their own; the rest name only the bottom message. */
-const PRINTER_FIELDS: readonly string[] = ["name", "host", "port"];
-
 interface EditablePrinter {
   id: string;
   name: string;
@@ -139,10 +136,6 @@ interface EditablePrinter {
   hasCashDrawer: boolean;
   /** The settings as saved, so a save sends only the ones that changed. */
   saved: {
-    name: string;
-    host: string;
-    port: string;
-    active: boolean;
     paperWidth: PrintPaperWidth;
     resolution: PrintResolution;
     hasCashDrawer: boolean;
@@ -281,6 +274,8 @@ export class PrintersScreen extends LitElement {
         align-items: center;
         gap: var(--wt-space-3);
         margin-block: var(--wt-space-4);
+        width: 100%;
+        max-width: var(--wt-form-max-width);
       }
       .status-grid {
         display: grid;
@@ -525,7 +520,7 @@ export class PrintersScreen extends LitElement {
   @state() private addingPrinter = false;
   @state() private namingPrinter: DiscoveredPrinter | null = null;
   @state() private discoveredNames: Record<string, string> = {};
-  @state() private calibrationStep = 0;
+  @state() private calibrationStep = 1;
   @state() private statusOpen = true;
   @state() private detailActiveSavingIds = new Set<string>();
   @state() private detailActiveError: string | null = null;
@@ -1192,7 +1187,6 @@ export class PrintersScreen extends LitElement {
             },
       );
       if (disabled) this.#readdingId = disabled.id;
-      this.calibrationStep = 1;
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -1452,41 +1446,13 @@ export class PrintersScreen extends LitElement {
     if (this.editingPrinter?.id === id) this.editingPrinter = { ...this.editingPrinter, ...patch };
   }
 
-  #editHandler<K extends "name" | "host" | "port">(
-    id: string,
-    field: K,
-  ): (event: CustomEvent<{ value: string }>) => void {
-    return (event: CustomEvent<{ value: string }>) => {
-      event.stopPropagation();
-      this.#editPrinter(id, { [field]: event.detail.value } as Pick<EditablePrinter, K>);
-    };
-  }
-
-  /** Save only this transport's connection fields; routing policy has its own editor. */
+  /** Calibration only writes settings changed during this wizard. */
   async #savePrinter(id: string): Promise<void> {
     this.errorKey = null;
     const row = this.editingPrinter;
     if (row?.id !== id) return;
     if (!this.#validatePrinter(row)) return;
-    const patch: PrinterPatch = this.calibrationStep
-      ? {}
-      : {
-          name: row.name.trim(),
-          active: row.active,
-        };
-    if (!this.calibrationStep && row.transport === "network_tcp") {
-      patch.host = row.host.trim();
-      patch.port = row.port.trim() === "" ? null : Number(row.port);
-    }
-    if (this.calibrationStep) {
-      if (row.name.trim() !== row.saved.name) patch.name = row.name.trim();
-      if (row.active !== row.saved.active) patch.active = row.active;
-      if (row.transport === "network_tcp") {
-        if (row.host.trim() !== row.saved.host) patch.host = row.host.trim();
-        if (row.port !== row.saved.port)
-          patch.port = row.port.trim() === "" ? null : Number(row.port);
-      }
-    }
+    const patch: PrinterPatch = {};
     if (row.paperWidth !== row.saved.paperWidth) patch.paperWidth = row.paperWidth;
     if (row.resolution !== row.saved.resolution) patch.resolution = row.resolution;
     if (row.hasCashDrawer !== row.saved.hasCashDrawer) patch.hasCashDrawer = row.hasCashDrawer;
@@ -1964,7 +1930,7 @@ export class PrintersScreen extends LitElement {
   #openPrinter(p: Printer, event?: Event): void {
     if (event) this.#rememberEditTrigger(event);
     this.#closeTest();
-    this.calibrationStep = 0;
+    this.calibrationStep = 1;
     this.drawerTestSent = false;
     this.drawerOutcome = "";
     this.formAttempted = false;
@@ -1983,10 +1949,6 @@ export class PrintersScreen extends LitElement {
       resolution: p.resolution,
       hasCashDrawer: p.hasCashDrawer,
       saved: {
-        name: p.name,
-        host: p.host ?? "",
-        port: p.port === null ? "" : String(p.port),
-        active: p.active,
         paperWidth: p.paperWidth,
         resolution: p.resolution,
         hasCashDrawer: p.hasCashDrawer,
@@ -2325,12 +2287,6 @@ export class PrintersScreen extends LitElement {
                 >${t("action.edit")}</wt-button
               >`
         }
-        <wt-button
-          variant="primary"
-          data-test="edit-printer-details"
-          @click=${(event: Event) => this.#openPrinter(p, event)}
-          >${t("action.edit")}</wt-button
-        >
       </div>
       <div class="status-grid">
         <wt-disclosure
@@ -2495,7 +2451,6 @@ export class PrintersScreen extends LitElement {
             data-test="calibrate-printer-details"
             @click=${(event: Event) => {
               this.#openPrinter(p, event);
-              this.calibrationStep = 1;
             }}
             >${t("printers.calibrate")}</wt-button
           ></wt-disclosure
@@ -2882,31 +2837,15 @@ export class PrintersScreen extends LitElement {
     if (!p) return nothing;
     const errors = this.formAttempted ? this.#printerErrors(p) : {};
     const settingDots = textGrid(p.paperWidth, p.resolution).widthDots;
-    const fieldInvalid = PRINTER_FIELDS.some((key) => errors[key] !== undefined);
     const bottom = bottomMessage(
       refusal(this.errorKey),
       refusal(this.testError),
-      ...Object.entries(errors)
-        .filter(([key]) => this.calibrationStep > 0 || !PRINTER_FIELDS.includes(key))
-        .map(([, message]) => message),
-      fieldInvalid && this.calibrationStep === 0 ? t("form.fix_fields") : null,
+      ...Object.values(errors),
     );
-    const field = (key: "name" | "host" | "port", label: string, required = false) =>
-      html`<wt-input
-        name=${`printer-${key}`}
-        label=${label}
-        .value=${p[key]}
-        ?required=${required}
-        type=${key === "port" ? "number" : "text"}
-        data-test=${`printer-${key}-${p.id}`}
-        .invalid=${!!errors[key]}
-        .error=${errors[key] ?? ""}
-        @wt-change=${this.#editHandler(p.id, key)}
-      ></wt-input>`;
     return html`<wt-modal
       size="standard"
       data-test="edit-printer-modal"
-      heading=${this.calibrationStep ? `${t("printers.calibrate")}: ${p.name}` : t("printers.edit_printer")}
+      heading=${`${t("printers.calibrate")}: ${p.name}`}
       .open=${true}
       @wt-close=${() => {
         this.editingPrinter = null;
@@ -2918,50 +2857,14 @@ export class PrintersScreen extends LitElement {
           void this.#deactivatePrinter(p.id);
         }
       }}
-      @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep > 0 && this.calibrationStep < 3 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
+      @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep < 3 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
     >
       <div class="form-fields">
         ${this.#renderRefreshError()}
-        ${this.calibrationStep ? html`<p role="status">${t("printers.calibration_progress").replace("{step}", String(this.calibrationStep))}</p>` : nothing}
+        <p role="status">
+          ${t("printers.calibration_progress").replace("{step}", String(this.calibrationStep))}
+        </p>
         ${this.#renderCalibrationFailure()}
-        ${
-          this.calibrationStep === 0
-            ? html`
-                ${field("name", t("printers.name"), true)}
-                <p>${transportName(p.transport)}</p>
-                ${
-                  p.transport === "network_tcp"
-                    ? html`<div class="field-row">
-                        ${field("host", t("printers.host"), true)}${field("port", t("printers.port"))}
-                      </div>`
-                    : html`<div class="setting-field">
-                        <span
-                          >${t(p.transport === "cloud_poll" ? "printers.poll_id" : "printers.local_key")}</span
-                        >
-                        <span
-                          data-test=${`printer-${p.transport === "cloud_poll" ? "poll-id" : "local-key"}-${p.id}`}
-                        >
-                          ${p.transport === "cloud_poll" ? p.pollId : p.localKey}
-                        </span>
-                      </div>`
-                }
-                <wt-switch
-                  name="printer-active"
-                  label=${t("printers.active")}
-                  data-test=${`printer-active-${p.id}`}
-                  .checked=${p.active}
-                  @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#editPrinter(p.id, { active: e.detail.checked })}
-                ></wt-switch>
-                <wt-button
-                  data-test="calibrate-printer"
-                  @click=${() => {
-                    if (this.#validatePrinter(p)) this.calibrationStep = 1;
-                  }}
-                  >${t("printers.calibrate")}</wt-button
-                >
-              `
-            : nothing
-        }
         <div
           data-test="calibration-step-1"
           class="form-fields"
@@ -3131,7 +3034,6 @@ export class PrintersScreen extends LitElement {
             ? html`<wt-button
                 variant="primary"
                 data-test="calibration-next"
-                ?disabled=${fieldInvalid}
                 @click=${() => {
                   if (this.#validatePrinter(p)) this.calibrationStep++;
                 }}
@@ -3142,7 +3044,6 @@ export class PrintersScreen extends LitElement {
                   variant="primary"
                   data-test=${`save-printer-${p.id}`}
                   ?loading=${this.submitting}
-                  ?disabled=${fieldInvalid}
                   @click=${() => void this.#savePrinter(p.id)}
                   >${t("action.save")}</wt-button
                 >

@@ -3591,6 +3591,9 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 - Print test page in each printer's row menu (C108, #976).
 - The row menu column pinned to the table's edge on a phone: the Printers tab (A145, #935), every
   `wt-data-table` (A155, #950), the adjustment reasons table (A162, #954).
+- Printer details use a breadcrumb and one bounded column of Status, Connection and Calibration.
+  Name, network connection and Active edit there; the calibration wizard opens at paper settings
+  (W96).
 
 **Owed at the box — nothing here has run on real hardware:**
 
