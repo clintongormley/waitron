@@ -1,18 +1,20 @@
 import "./errors.js";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
-import { and, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, lt, sql } from "drizzle-orm";
 import {
   type Database,
   type Transaction,
   devices,
   joinRequests,
+  nowIso,
   printAgents,
   withTransaction,
 } from "@waitron/db";
-import { hashSecret, verifySecretAsync } from "@waitron/identity";
+import { hashSecret, sessions, verifySecretAsync } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { firstUsablePrinters, type FormFactor } from "@waitron/layouts";
-import { insertDevice, resolveDeviceBinding } from "./device.js";
+import { insertDevice, mapDeviceNameTaken, resolveDeviceBinding } from "./device.js";
+import { parseDeviceCookie } from "./device-session.js";
 import type { PairingMode } from "./pairing-mode.js";
 import type { TillConfig } from "./till-config.js";
 
@@ -113,9 +115,29 @@ export async function createJoinRequest(
     /** Injectable for tests, and used only for the REAL number; production uses `randomInt(0, 100)`,
      * as decoys always do. */
     numbers?: () => number;
+    /** A disabled device the knocking browser proved it is ({@link provenDisabledDevice}). */
+    returning?: ReturningDevice | null;
   },
 ): Promise<{ joinId: string; verificationNumber: string; token: string }> {
   await sweepLapsed(tx, cfg);
+
+  // The proof was checked before this transaction; it stands only if the row has not changed since.
+  let returningId: string | undefined;
+  if (input.returning != null) {
+    const [row] = await tx
+      .select({ tokenHash: devices.tokenHash })
+      .from(devices)
+      .where(and(eq(devices.id, input.returning.deviceId), eq(devices.active, false)));
+    if (row?.tokenHash === input.returning.tokenHash) {
+      returningId = input.returning.deviceId;
+      // A device has at most one pending request; a second knock replaces the first.
+      await tx
+        .delete(joinRequests)
+        .where(
+          and(ownedBy(cfg), eq(joinRequests.id, returningId), eq(joinRequests.kind, "device")),
+        );
+    }
+  }
 
   const [{ count }] = await tx
     .select({ count: sql<number>`count(*)` })
@@ -157,19 +179,86 @@ export async function createJoinRequest(
   }
 
   const token = randomBytes(32).toString("base64url");
+  const tokenHash = hashSecret(token);
   const [row] = await tx
     .insert(joinRequests)
     .values({
+      ...(returningId === undefined ? {} : { id: returningId }),
       nodeId: cfg.nodeId,
       locationId: cfg.locationId,
       kind: input.kind,
       label: input.label,
-      tokenHash: hashSecret(token),
+      tokenHash,
       verificationNumber,
       decoyNumbers,
     })
     .returning({ id: joinRequests.id });
+  // The browser's cookie is replaced by one carrying this token, so the disabled row takes its hash:
+  // the old token stops proving anything, and the new one still proves the device if this request is
+  // denied or lapses.
+  if (returningId !== undefined)
+    await tx.update(devices).set({ tokenHash }).where(eq(devices.id, returningId));
   return { joinId: row!.id, verificationNumber, token };
+}
+
+/** A disabled device a knocking browser has proved it is: the row's id and the hash its token
+ * verified against. */
+export interface ReturningDevice {
+  deviceId: string;
+  tokenHash: string;
+}
+
+/**
+ * The disabled device a knock's device cookie proves, or `null` — for no cookie, a malformed one, an
+ * id that names no device or an active one, or a token that does not verify. Every `null` makes the
+ * knock an ordinary new request, answered as one from a browser with no cookie.
+ *
+ * Called with no transaction open, so scrypt never holds the write lock; {@link createJoinRequest}
+ * re-reads the row before relying on the result.
+ */
+export async function provenDisabledDevice(
+  db: Database,
+  cookie: string | null,
+): Promise<ReturningDevice | null> {
+  const parsed = parseDeviceCookie(cookie);
+  if (parsed === null) return null;
+  const [row] = await db
+    .select({ tokenHash: devices.tokenHash })
+    .from(devices)
+    .where(and(eq(devices.id, parsed.id), eq(devices.active, false)));
+  if (row === undefined) return null;
+  if (!(await verifySecretAsync(parsed.token, row.tokenHash))) return null;
+  return { deviceId: parsed.id, tokenHash: row.tokenHash };
+}
+
+/** What the Pair step offers for a returning device: the disabled row's own name and binding. */
+export interface ReturningDetails {
+  name: string;
+  profileId: string;
+  stationId: string | null;
+  watcherId: string | null;
+}
+
+/**
+ * The pending device requests among `ids` that are a disabled device coming back, by id. A request
+ * takes a device's id only after its knock proved the device's token ({@link createJoinRequest}).
+ */
+export async function returningDevicesOf(
+  tx: Transaction,
+  ids: readonly string[],
+): Promise<Map<string, ReturningDetails>> {
+  if (ids.length === 0) return new Map();
+  const rows = await tx
+    .select({
+      id: devices.id,
+      name: devices.label,
+      profileId: devices.deviceProfileId,
+      stationId: devices.stationId,
+      watcherId: devices.watcherId,
+    })
+    .from(devices)
+    .where(and(inArray(devices.id, [...ids]), eq(devices.active, false)));
+  return new Map(rows.map(({ id, ...details }) => [id, details]));
 }
 
 /** The pending list the dashboard renders. The return type deliberately has NO number field: the list
@@ -363,6 +452,9 @@ export async function checkDeviceJoinNumber(
  * The number is not compared here: {@link checkDeviceJoinNumber} compared it earlier, and the
  * accept route refuses a login that holds no live claim from that check. The device is named
  * `input.label`, not the label the request was made with.
+ *
+ * A request holding a disabled device's id (a returning knock, {@link createJoinRequest}) enables
+ * that row, under the request's token, rather than inserting one.
  */
 export async function acceptDeviceJoinRequest(
   tx: Transaction,
@@ -392,6 +484,48 @@ export async function acceptDeviceJoinRequest(
     stationId: input.stationId,
     watcherId: input.watcherId,
   });
+
+  const [disabled] = await tx
+    .select({
+      deviceProfileId: devices.deviceProfileId,
+      receiptPrinterId: devices.receiptPrinterId,
+      paymentSlipPrinterId: devices.paymentSlipPrinterId,
+    })
+    .from(devices)
+    .where(and(eq(devices.id, row.id), eq(devices.active, false)));
+  if (disabled !== undefined) {
+    // A disabled device coming back keeps its row and everything hung on it; an ACTIVE row with
+    // this id is left to the insert below, which refuses it.
+    const printers =
+      input.profileId === disabled.deviceProfileId
+        ? {
+            receiptPrinterId: disabled.receiptPrinterId,
+            paymentSlipPrinterId: disabled.paymentSlipPrinterId,
+          }
+        : await firstUsablePrinters(tx, input.profileId, row.locationId);
+    try {
+      await tx
+        .update(devices)
+        .set({
+          active: true,
+          tokenHash: row.tokenHash,
+          label: input.label,
+          deviceProfileId: input.profileId,
+          stationId: binding.stationId,
+          watcherId: binding.watcherId,
+          ...printers,
+        })
+        .where(eq(devices.id, row.id));
+    } catch (error) {
+      throw mapDeviceNameTaken(error);
+    }
+    // A shift session left open when the device was disabled would otherwise work again.
+    await tx
+      .update(sessions)
+      .set({ endedAt: nowIso() })
+      .where(and(eq(sessions.deviceId, row.id), isNull(sessions.endedAt)));
+    return { deviceId: row.id, name: input.label, formFactor: binding.formFactor };
+  }
 
   const printers = await firstUsablePrinters(tx, input.profileId, row.locationId);
   await insertDevice(tx, {

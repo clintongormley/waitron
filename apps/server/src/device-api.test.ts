@@ -604,6 +604,25 @@ describe("devMode auto-accept", () => {
     expect(rows[0]!.n).toBe(0);
   });
 
+  it("a disabled device's browser comes back as the same device", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountDevApp(venue.cfg, true);
+    const first = await send(app, "POST", "/api/device/join", { body: { name: "Dev till" } });
+    const { joinId } = (await first.json()) as { joinId: string };
+    await suite.db.execute(sql`update devices set active = 0 where id = ${joinId}`);
+
+    const again = await send(app, "POST", "/api/device/join", {
+      body: { name: "Dev till" },
+      cookie: deviceCookieFrom(first),
+    });
+    expect(again.status).toBe(200);
+    expect(((await again.json()) as { joinId: string }).joinId).toBe(joinId);
+    const me = await send(app, "GET", "/api/device/me", { cookie: deviceCookieFrom(again) });
+    expect(await me.json()).toMatchObject({ deviceId: joinId, name: "Dev till" });
+    const { rows } = await suite.db.execute<{ n: number }>(sql`select count(*) as n from devices`);
+    expect(rows[0]!.n).toBe(1);
+  });
+
   it("404s device_profile.not_found when the venue has no default till profile, rolling the request back", async () => {
     const venue = await setupVenue(suite.db);
     // Remove the provisioned default `till` profile (no device references it yet, so the RESTRICT FK is

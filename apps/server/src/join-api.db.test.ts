@@ -404,6 +404,7 @@ describe("GET /management-api/join-requests", () => {
         label: "Bar till",
         createdAt: expect.any(String),
         pairingBy: null,
+        returning: null,
       },
     ]);
   });
@@ -1064,6 +1065,7 @@ describe("device pairing: check, claim, approve", () => {
         label: "Bar till",
         createdAt: expect.any(String),
         pairingBy: { name: "The Manager", mine: true },
+        returning: null,
       },
     ]);
     expect(await listDevices(app, await secondManagerCookie())).toEqual([
@@ -1073,6 +1075,7 @@ describe("device pairing: check, claim, approve", () => {
         label: "Bar till",
         createdAt: expect.any(String),
         pairingBy: { name: "The Manager", mine: false },
+        returning: null,
       },
     ]);
   });

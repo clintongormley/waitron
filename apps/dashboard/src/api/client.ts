@@ -570,6 +570,18 @@ export interface JoinRequestRow {
   createdAt: string;
   /** Device rows only: the manager whose number check claimed the request, if any. */
   pairingBy?: { name: string; mine: boolean } | null;
+  /** Device rows only: set when the knock came from a disabled device's browser, which proved it is
+   * that device. The request's `id` is then the device's own id, and accepting it enables that
+   * device again rather than adding one. */
+  returning?: ReturningDevice | null;
+}
+
+/** What a returning device's disabled row holds, for the Pair step to start from. */
+export interface ReturningDevice {
+  name: string;
+  profileId: string;
+  stationId: string | null;
+  watcherId: string | null;
 }
 
 /** `deviceAddress` is the address the server advertises to the venue's devices, not this tab's. */

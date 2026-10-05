@@ -31,6 +31,7 @@ import {
   discardLapsedDeviceRequests,
   joinRequestKind,
   listPendingJoinRequests,
+  returningDevicesOf,
   type JoinRequestKind,
 } from "./join-requests.js";
 import type { PairingMode } from "./pairing-mode.js";
@@ -217,9 +218,11 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const kind = requireKind(c.req.query("kind"));
-      const rows = await gated(sessionId, PERMISSION_FOR[kind], (tx) =>
-        listPendingJoinRequests(tx, deps.cfg, kind),
-      );
+      const { rows, returning } = await gated(sessionId, PERMISSION_FOR[kind], async (tx) => {
+        const rows = await listPendingJoinRequests(tx, deps.cfg, kind);
+        const ids = kind === "device" ? rows.map((row) => row.id) : [];
+        return { rows, returning: await returningDevicesOf(tx, ids) };
+      });
       if (kind === "print_agent") return c.json(rows);
       const sessionKey = hashSessionToken(sessionId);
       return c.json(
@@ -231,6 +234,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
               claim === undefined
                 ? null
                 : { name: claim.personName, mine: claim.sessionKey === sessionKey },
+            returning: returning.get(row.id) ?? null,
           };
         }),
       );

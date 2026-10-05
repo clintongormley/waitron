@@ -417,6 +417,17 @@ disappear from the add list. Cost: deleting a USB printer left it in the registe
 from discovery, blocking re-add. The table now defaults to Active with Disabled/All filters. Built in
 #321.
 
+Devices follow the same rule, though nothing discovers them. A disabled device's browser keeps its
+`waitron_device` cookie, and a knock whose cookie token verifies against a disabled row
+(`provenDisabledDevice`, `apps/server/src/join-requests.ts`) takes that device's id: the pending list
+marks it `returning`, with the row's name, profile and binding, and accepting it enables the same
+row. It still needs an open Add a device dialog and the number check. The knock gives the disabled
+row the new request's token, so the old cookie stops working and the same browser can knock as
+itself again after a deny or a lapse; enabling ends any shift session left open on the device.
+Guards: the "a disabled device comes back as the same device" cases in
+`apps/server/src/join-e2e.test.ts` and "a returning disabled device" in
+`apps/server/src/join-requests.test.ts`. Built in W105b.
+
 ## Native centring starts inside the configured paper width
 
 Set the ESC/POS left margin to zero and the print area to the width the job's pictures are drawn to

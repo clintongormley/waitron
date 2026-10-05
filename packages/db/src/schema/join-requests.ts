@@ -22,7 +22,8 @@ export const joinRequestKind = enumType(["device", "print_agent"]);
  * it. NEVER a `devices` or `print_agents` row — for devices that is forced (the
  * station-XOR-register constraint trigger cannot accept a request whose binding is unchosen), and for
  * agents it is chosen, so both real tables hold only approved rows and `active`/revoke keep one
- * meaning. Accept inserts the real row and deletes the request in one transaction.
+ * meaning. Accept inserts the real row, or for a disabled device coming back enables it, and deletes
+ * the request in one transaction.
  *
  * `local`: keyed by the node that received it (`node_id`), for the reason on that column.
  */
