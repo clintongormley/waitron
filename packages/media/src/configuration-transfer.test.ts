@@ -108,3 +108,16 @@ it.each([
   const input = { ...wire(tables()), content_languages: rows };
   expect(() => validateMediaConfiguration(input)).toThrow(refused);
 });
+
+it.each(["und", "not a tag"])(
+  "refuses a bundle with images whose default language is %s, as not a language",
+  (defaultLanguage) => {
+    const input = {
+      ...wire(tables()),
+      content_languages: [{ default_language: defaultLanguage, languages: ["en"] }],
+    };
+    expect(() => validateMediaConfiguration(input)).toThrow(
+      expect.objectContaining({ code: "content.language_invalid" }),
+    );
+  },
+);

@@ -1135,6 +1135,28 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     },
   );
 
+  it.each([
+    ["backup.artifact_invalid", 422, { reason: "bad_magic" }],
+    ["backup.archive_invalid", 422, { reason: "data_truncated" }],
+    ["recovery.passphrase_invalid", 422, {}],
+    ["image.invalid_metadata", 400, {}],
+    ["content.language_invalid", 400, {}],
+  ] as const)(
+    "maps a staged configuration's %s, thrown at import, to %i",
+    async (code, status, params) => {
+      const app = new Hono();
+      const provision = vi.fn(async () => {
+        throw new AppError(code, params);
+      });
+      const { deps } = makeDeps({ provision });
+      mountSetup(app, deps, noopLog);
+
+      const res = await postProvision(app, demoBody());
+      expect(res.status).toBe(status);
+      expect(await res.json()).toEqual({ error: { code, params } });
+    },
+  );
+
   it("answers 503 setup.not_ready when NONE of the provision deps are wired", async () => {
     const app = new Hono();
     mountSetup(app, { environment: "preproduction" }, noopLog);
@@ -1482,6 +1504,28 @@ describe("POST /setup-api/configuration", () => {
       expect(await response.json()).toEqual({
         error: { code, params: { field: "name", name: "Agua" } },
       });
+    },
+  );
+
+  it.each([
+    ["backup.artifact_invalid", 422, { reason: "bad_magic" }],
+    ["backup.archive_invalid", 422, { reason: "data_truncated" }],
+    ["recovery.passphrase_invalid", 422, {}],
+    ["image.invalid_metadata", 400, {}],
+    ["content.language_invalid", 400, {}],
+  ] as const)(
+    "answers staging's %s with %i, the status a restore or media route gives it",
+    async (code, status, params) => {
+      const stageConfiguration = vi.fn(async () => {
+        throw new AppError(code, params);
+      });
+      const app = new Hono();
+      mountSetup(app, { environment: "preproduction", stageConfiguration }, noopLog);
+
+      const response = await postConfiguration(app, Uint8Array.from([1, 2, 3]));
+
+      expect(response.status).toBe(status);
+      expect(await response.json()).toEqual({ error: { code, params } });
     },
   );
 
