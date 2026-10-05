@@ -143,14 +143,14 @@ export interface TillInfo {
   simplifiedInvoiceLimit: string | null;
 }
 
-/**
- * One venue-routable server as the boot payload carries it. `evicted` nodes are excluded server-side,
- * so `standing` is the three serving/sell states only.
- */
 export type AuthorityClockStatus =
   | { state: "unknown" | "not-applicable" }
   | { state: "ok" | "warning"; driftSeconds: number; measuredAt: string };
 
+/**
+ * One venue-routable server as the boot payload carries it. `evicted` nodes are excluded server-side,
+ * so `standing` is the three serving/sell states only.
+ */
 export interface TillServer {
   nodeId: string;
   url: string;
