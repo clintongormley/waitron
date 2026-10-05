@@ -2138,7 +2138,7 @@ it("shows no colour chooser on a variant's page, and saves no colour of its own"
 });
 
 it("shows a refused colour under the chooser, puts focus there, and drops it once a colour is chosen", async () => {
-  expect(productEditorField("color", "en")).toBe("color");
+  expect(productEditorField("color", "en")).toBe("product-color");
   const el = await mountColoured();
   el.fieldErrors = { [productEditorField("color", "en")!]: "That colour is refused" };
   await el.updateComplete;

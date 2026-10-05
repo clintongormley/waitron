@@ -193,7 +193,7 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
             : state === "photo-refused"
               ? { image: "The photo is gone." }
               : state === "color-refused"
-                ? { color: "The server rejected this value." }
+                ? { "product-color": "The server rejected this value." }
                 : {},
         ...(state.startsWith("photo")
           ? { api: { imageLibraryRequest: vi.fn().mockResolvedValue({}) } as never }
