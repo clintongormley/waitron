@@ -324,9 +324,27 @@ describe("variantInherited", () => {
     expect(variantInherited(sizeOwnOverParent, "v-small", null)).toEqual(range("3.00"));
   });
 
-  it("past a size's own price over a clash, stays a clash whatever the product's field holds", () => {
-    expect(variantInherited(sizeOwnOverClash, "v-small", "2.80")).toEqual(CLASH);
+  it("past a size's own price over its product's clash, follows the price typed for the product", () => {
+    expect(variantInherited(sizeOwnOverClash, "v-small", "2.80")).toEqual(range("2.80"));
     expect(variantInherited(sizeOwnOverClash, "v-small", undefined)).toEqual(CLASH);
+    expect(variantInherited(sizeOwnOverClash, "v-small", null)).toEqual(CLASH);
+    // What the menu charges once 2.80 is saved for the product and Small's own price cleared.
+    expect(sizeOf(lemonadeOn({ price: "2.80" }, { price: "3.50" }), "v-small")).toMatchObject({
+      state: "decided",
+      value: "2.80",
+      source: { kind: "parent" },
+    });
+  });
+
+  it("past a size's own price over the size's own clash, stays a clash whatever the product's field holds", () => {
+    const drinks = { price: "3.50", variants: { "v-large": "3.90" } };
+    const row = lemonadeOn({ variants: { "v-large": "3.60" } }, drinks);
+    expect(variantInherited(row, "v-large", "2.80")).toEqual(CLASH);
+    expect(variantInherited(row, "v-large", undefined)).toEqual(CLASH);
+    expect(sizeOf(lemonadeOn({ price: "2.80" }, drinks), "v-large")).toMatchObject({
+      state: "clash",
+      level: "size",
+    });
   });
 });
 
@@ -359,6 +377,13 @@ describe("variantInheritedFrom", () => {
     expect(variantInheritedFrom(sizeLevelClash, "v-large", "2.80")).toEqual({
       setting: sizeOf(sizeLevelClash, "v-large"),
       follows: false,
+    });
+  });
+
+  it("gives a size with its own price over its product's clash that clash, following the product", () => {
+    expect(variantInheritedFrom(sizeOwnOverClash, "v-small", undefined)).toEqual({
+      setting: sizeOwnOverClash.combined.price,
+      follows: true,
     });
   });
 

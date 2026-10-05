@@ -1,5 +1,6 @@
 import { stringToCents, type Decimal } from "@waitron/shared";
 import type { MenuPriceRow, Setting } from "../api/client.js";
+import { sameValue } from "./product-editor-model.js";
 
 export type Inherited = { state: "price"; low: string; high: string } | { state: "clash" };
 /** The product's price as its field reads now: undefined while untouched or holding text that is
@@ -47,11 +48,15 @@ export function variantInheritedFrom(
 ): InheritedFrom {
   const setting = sizeSetting(row, variantId);
   const under = withoutOwn(setting);
-  // A size with no override on this menu and no size price from any source carries its product's
-  // setting at level "product", a clash included (`parent` in
-  // packages/catalogue/src/menu-combine.ts).
+  // A size with no size price from any source carries its product's setting, a clash included
+  // (`parent` in packages/catalogue/src/menu-combine.ts). Its own override sets its level to
+  // "size", so under one a clash follows the product only when it is the product's clash; the
+  // read carries nothing finer, and a size clash listing exactly the product's candidates reads
+  // as following it.
   const follows =
-    setting.level === "product" || (under.state === "decided" && under.source.kind === "parent");
+    setting.level === "product" ||
+    (under.state === "decided" && under.source.kind === "parent") ||
+    (under.state === "clash" && sameValue(under, row.combined.price));
   return follows ? { setting: parentSetting(row, parent), follows } : { setting: under, follows };
 }
 
