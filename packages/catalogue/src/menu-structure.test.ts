@@ -707,10 +707,10 @@ describe("a menu's prices", () => {
         name: "Lemonade (staff)",
         categoryId: null,
         placements: [[f.favourites], [f.drinks]],
-        productPrice: "3.00",
         override: null,
         effectivePrice: "3.00",
-        variants: [{ variantId: f.large, price: null }],
+        active: true,
+        variants: [{ variantId: f.large, price: null, active: true }],
       },
       {
         menuItemId: await itemOf(f.lunch, f.water),
@@ -718,9 +718,9 @@ describe("a menu's prices", () => {
         name: "Water (staff)",
         categoryId: null,
         placements: [[]],
-        productPrice: "2.00",
         override: null,
         effectivePrice: "2.00",
+        active: true,
         variants: [],
       },
     ]);
@@ -743,19 +743,39 @@ describe("a menu's prices", () => {
     });
     const rows = await app((tx) => menuPrices(tx, f.lunch));
     expect(
-      rows.map(({ productId, productPrice, override, effectivePrice }) => ({
+      rows.map(({ productId, override, effectivePrice, combined }) => ({
         productId,
-        productPrice,
         override,
         effectivePrice,
+        price: combined.price,
       })),
     ).toEqual([
-      { productId: f.lemonade, productPrice: "3.40", override: "3.00", effectivePrice: "3.00" },
-      { productId: f.water, productPrice: "2.20", override: null, effectivePrice: "2.20" },
+      {
+        productId: f.lemonade,
+        override: "3.00",
+        effectivePrice: "3.00",
+        price: {
+          state: "decided",
+          value: "3.00",
+          source: { kind: "own" },
+          otherwise: {
+            state: "decided",
+            value: "3.40",
+            source: { kind: "product" },
+            otherwise: null,
+          },
+        },
+      },
+      {
+        productId: f.water,
+        override: null,
+        effectivePrice: "2.20",
+        price: { state: "decided", value: "2.20", source: { kind: "product" }, otherwise: null },
+      },
     ]);
   });
 
-  it("lists a sold-out product, and leaves out an inactive one", async () => {
+  it("lists a sold-out and an inactive product, each with its own Active state", async () => {
     const f = await fixture();
     await app(async (tx) => {
       for (const productId of [f.lemonade, f.water, f.burger, f.juice])
@@ -766,16 +786,21 @@ describe("a menu's prices", () => {
       await deactivateProduct(tx, f.burger);
     });
     const rows = await app((tx) => menuPrices(tx, f.lunch));
-    expect(rows.map(({ name }) => name)).toEqual([
-      "Lemonade (staff)",
-      "Water (staff)",
-      "Juice (staff)",
+    expect(rows.map(({ name, active }) => [name, active])).toEqual([
+      ["Lemonade (staff)", true],
+      ["Water (staff)", true],
+      ["Burger (staff)", false],
+      ["Juice (staff)", true],
     ]);
+    // A till's offers still leave the inactive product out.
+    expect(
+      (await app((tx) => listMenuOffers(tx, [f.lunch]))).map(({ productId }) => productId),
+    ).toEqual([f.lemonade, f.water, f.juice]);
   });
 
-  it("carries each Active variant with this menu's settings for it, as the variants read gives them", async () => {
+  it("carries every variant, an Inactive one marked, and the Active ones as the variants read gives them", async () => {
     const f = await fixture();
-    const small = await app(async (tx) => {
+    const { small, jug } = await app(async (tx) => {
       const variants = await setProductVariants(
         tx,
         f.lemonade,
@@ -811,21 +836,45 @@ describe("a menu's prices", () => {
       );
       await addMember(tx, f.lunchRoot, product(f.lemonade));
       await addMember(tx, f.dinnerRoot, product(f.lemonade));
-      return variants.find((variant) => variant.name === "Small")!.id;
+      return {
+        small: variants.find((variant) => variant.name === "Small")!.id,
+        jug: variants.find((variant) => variant.name === "Jug")!.id,
+      };
     });
     const lunchItem = await itemOf(f.lunch, f.lemonade);
     await app((tx) => setMenuVariants(tx, lunchItem, [{ variantId: f.large, price: "3.25" }]));
     const [lunchRow] = await app((tx) => menuPrices(tx, f.lunch));
     const [dinnerRow] = await app((tx) => menuPrices(tx, f.dinner));
     expect(lunchRow!.variants).toEqual([
-      { variantId: f.large, price: "3.25" },
-      { variantId: small, price: null },
+      { variantId: f.large, price: "3.25", active: true },
+      { variantId: small, price: null, active: true },
+      { variantId: jug, price: null, active: false },
     ]);
-    expect(lunchRow!.variants).toEqual(await app((tx) => listMenuVariants(tx, lunchItem)));
+    expect(
+      lunchRow!.variants
+        .filter(({ active }) => active)
+        .map(({ variantId, price }) => ({ variantId, price })),
+    ).toEqual(await app((tx) => listMenuVariants(tx, lunchItem)));
+    expect(lunchRow!.combined.variants.map(({ variantId }) => variantId)).toEqual([
+      f.large,
+      small,
+      jug,
+    ]);
+    // Dinner sets nothing for any size, the Inactive Jug included.
     expect(dinnerRow!.variants).toEqual([
-      { variantId: f.large, price: null },
-      { variantId: small, price: null },
+      { variantId: f.large, price: null, active: true },
+      { variantId: small, price: null, active: true },
+      { variantId: jug, price: null, active: false },
     ]);
+  });
+
+  it("marks an Active variant of an Inactive product by each one's own state", async () => {
+    const f = await fixture();
+    await app((tx) => addMember(tx, f.lunchRoot, product(f.lemonade)));
+    await app((tx) => deactivateProduct(tx, f.lemonade));
+    const [row] = await app((tx) => menuPrices(tx, f.lunch));
+    expect(row).toMatchObject({ productId: f.lemonade, active: false });
+    expect(row!.variants).toEqual([{ variantId: f.large, price: null, active: true }]);
   });
 
   it("names the product's reporting category by id", async () => {

@@ -43,6 +43,7 @@ export type {
   MenuOffer,
   MenuOfferVariant,
   MenuPriceRow,
+  MenuPriceVariant,
   OfferedExtraItem,
   OfferedExtrasList,
   OfferedModifier,
@@ -116,6 +117,7 @@ export {
   listProductVariants,
   parentsWithActiveVariants,
   selectMenuVariant,
+  setMenuVariantPrice,
   setMenuVariants,
   setProductVariants,
 } from "./variants.js";

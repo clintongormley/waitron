@@ -94,6 +94,9 @@
      --wt-font-size-md, with its 12px padding on each side. A sign drawn by `locale` widens the box
      beyond this. */
   --wt-price-field-width: 96px;
+  /* Room for a range placeholder such as "1000.00 – 9999.99"; the "fits the longest range
+     placeholder" cases in apps/dashboard/src/widgets/menu-prices-table.test.ts measure it. */
+  --wt-price-range-field-width: 168px;
 
   --wt-shadow-1: 0 1px 2px rgb(0 0 0 / 0.08);
   --wt-shadow-2: 0 8px 24px rgb(0 0 0 / 0.16);

@@ -56,12 +56,16 @@ describe("seedCatalogues", () => {
     const read = await withTransaction(suite.db, async (tx) => {
       const { menuIds, productsByImage } = await seedCatalogues(tx, { locationId, locale: LOCALE });
       const beerId = productsByImage.get("cana-cerveza.png")!;
+      const { rows } = await tx.execute<{ unit_price: number }>(
+        sql`select unit_price from products where id = ${beerId}`,
+      );
       return {
         price: (await menuPrices(tx, menuIds.restaurant)).find((row) => row.productId === beerId),
+        ownPriceCents: rows[0]?.unit_price,
         drinksId: menuIds.drinks,
       };
     });
-    expect(read.price?.productPrice).toBe("2.80");
+    expect(read.ownPriceCents).toBe(280);
     expect(read.price?.override).toBeNull();
     expect(read.price?.effectivePrice).toBe("3.00");
     expect(read.price?.combined.price).toMatchObject({

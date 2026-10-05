@@ -90,6 +90,11 @@ export interface MenuVariant {
   price: string | null;
 }
 
+/** One size's price setting on one menu, with its own Active state. */
+export interface MenuPriceVariant extends MenuVariant {
+  active: boolean;
+}
+
 /** One product a menu reaches, with what it costs there (`menuPrices`). */
 export interface MenuPriceRow {
   combined: CombinedOffer;
@@ -102,11 +107,13 @@ export interface MenuPriceRow {
   /** Each path of section ids from the menu's root to a list holding the product; `[]` is the top
    * level. */
   placements: string[][];
-  productPrice: string;
   /** The price this menu sets, or null when it sets none. */
   override: string | null;
   effectivePrice: string;
-  variants: MenuVariant[];
+  /** The product's own Active state. A size's is on its `variants` entry. */
+  active: boolean;
+  /** Every size, Inactive ones too, in variant order. */
+  variants: MenuPriceVariant[];
 }
 
 /**

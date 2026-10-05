@@ -80,6 +80,7 @@ import {
   updateMenuItem,
   updateProduct,
   listMenuVariants,
+  setMenuVariantPrice,
   setMenuVariants,
   type MenuVariant,
   readProductEditor,
@@ -309,6 +310,12 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const run = createErrorBoundary(STATUS, "catalogue.failed");
 const runFolder = createErrorBoundary(
   { ...STATUS, "category.parent_cycle": 409 },
+  "catalogue.failed",
+);
+// The single-size route names its size in the path, so an unknown one is a 404; the whole-list
+// PUT names sizes in its body, and an unknown one there stays a 400.
+const runSize = createErrorBoundary(
+  { ...STATUS, "product.variant_not_found": 404 },
   "catalogue.failed",
 );
 
@@ -1020,6 +1027,23 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       return c.json(
         await gated(sessionId, (tx) => setMenuVariants(tx, menuItemId, variants, menuId)),
       );
+    }),
+  );
+
+  app.patch("/management-api/catalogues/:id/items/:itemId/variants/:variantId", (c) =>
+    runSize(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const menuItemId = requireUuidParam(c.req.param("itemId"), "MenuItemId");
+      const variantId = requireUuidParam(c.req.param("variantId"), "ProductVariantId");
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const extra = Object.keys(body).find((key) => key !== "price");
+      if (extra !== undefined) throw new AppError("management.request_invalid", { field: extra });
+      if (!Object.hasOwn(body, "price") || (body.price !== null && typeof body.price !== "string"))
+        throw new AppError("management.request_invalid", { field: "price" });
+      const price = body.price as string | null;
+      await gated(sessionId, (tx) => setMenuVariantPrice(tx, menuItemId, variantId, price, menuId));
+      return c.body(null, 204);
     }),
   );
 

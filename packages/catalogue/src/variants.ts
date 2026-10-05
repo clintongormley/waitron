@@ -11,7 +11,7 @@ import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { priceOrNull } from "./offer-price.js";
 import type { ProductPresentation } from "./product-presentation.js";
-import type { MenuOffer, MenuVariant } from "./menu-types.js";
+import type { MenuOffer, MenuPriceVariant, MenuVariant } from "./menu-types.js";
 export type { MenuVariant } from "./menu-types.js";
 import { INHERITED_KEYS, productWithId } from "./variant-fallback.js";
 import { assertFamilyNamesFree, nameColumns } from "./product-names.js";
@@ -295,24 +295,29 @@ export async function listMenuVariants(
 }
 
 async function menuVariantsOf(tx: Transaction, menuItemId: string): Promise<MenuVariant[]> {
-  return (await menuVariantsOfItems(tx, [menuItemId])).get(menuItemId) ?? [];
+  return ((await menuVariantsOfItems(tx, [menuItemId])).get(menuItemId) ?? []).map(
+    ({ variantId, price }) => ({ variantId, price }),
+  );
 }
 
 /**
- * This menu's settings for the Active variants of each menu item's product, keyed by menu-item id,
- * in variant order, in one query per batch of ids.
+ * This menu's settings for the variants of each menu item's product, with each one's Active state,
+ * keyed by menu-item id, in variant order, in one query per batch of ids. Only Active variants
+ * unless `includeInactive`.
  */
 export async function menuVariantsOfItems(
   tx: Transaction,
   menuItemIds: readonly string[],
-): Promise<Map<string, MenuVariant[]>> {
-  const grouped = new Map<string, MenuVariant[]>();
+  includeInactive = false,
+): Promise<Map<string, MenuPriceVariant[]>> {
+  const grouped = new Map<string, MenuPriceVariant[]>();
   for (const batch of batches(menuItemIds))
     for (const row of await tx
       .select({
         menuItemId: menuItems.id,
         variantId: products.id,
         price: menuItemVariantOverrides.price,
+        active: products.active,
       })
       .from(menuItems)
       .innerJoin(products, eq(products.parentId, menuItems.productId))
@@ -323,13 +328,12 @@ export async function menuVariantsOfItems(
           eq(menuItemVariantOverrides.variantId, products.id),
         ),
       )
-      .where(and(inArray(menuItems.id, batch), eq(products.active, true)))
+      .where(
+        and(inArray(menuItems.id, batch), includeInactive ? undefined : eq(products.active, true)),
+      )
       .orderBy(menuItems.id, products.variantOrder, products.id)) {
       const held = grouped.get(row.menuItemId) ?? [];
-      held.push({
-        variantId: row.variantId,
-        price: priceOrNull(row.price),
-      });
+      held.push({ variantId: row.variantId, price: priceOrNull(row.price), active: row.active });
       grouped.set(row.menuItemId, held);
     }
   return grouped;
@@ -386,6 +390,39 @@ export async function setMenuVariants(
       });
   }
   return menuVariantsOf(tx, menuItemId);
+}
+
+/**
+ * Sets or clears this menu's price for one variant of the offer's product, Active or not, and
+ * leaves every other variant's row as it is.
+ */
+export async function setMenuVariantPrice(
+  tx: Transaction,
+  menuItemId: string,
+  variantId: string,
+  price: string | null,
+  menuId?: string,
+): Promise<void> {
+  const productId = await offerProduct(tx, menuItemId, menuId);
+  if (!(await listProductVariants(tx, productId)).some(({ id }) => id === variantId))
+    throw new AppError("product.variant_not_found", { variantId });
+  const value = validatePrice(price, "price");
+  const row = and(
+    eq(menuItemVariantOverrides.menuItemId, menuItemId),
+    eq(menuItemVariantOverrides.variantId, variantId),
+  );
+  if (value === null) {
+    await tx.delete(menuItemVariantOverrides).where(row);
+    return;
+  }
+  const cents = decimalToCents(value);
+  await tx
+    .insert(menuItemVariantOverrides)
+    .values({ menuItemId, productId, variantId, price: cents })
+    .onConflictDoUpdate({
+      target: [menuItemVariantOverrides.menuItemId, menuItemVariantOverrides.variantId],
+      set: { price: cents },
+    });
 }
 
 /**

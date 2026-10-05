@@ -79,6 +79,7 @@ export type {
   MenuOffer,
   MenuOfferVariant,
   MenuPriceRow,
+  MenuPriceVariant,
   OfferedExtraItem,
   OfferedExtrasList,
   OfferedModifier,
@@ -465,6 +466,7 @@ async function offerRowsOn(
   tx: Transaction,
   roots: ReadonlyMap<string, string>,
   graph: SectionGraph,
+  includeInactive = false,
 ) {
   // Keyed in the order `reachableProducts` gives, so a key's position is its rank on the menu.
   const placed = new Map(
@@ -502,6 +504,7 @@ async function offerRowsOn(
           customerName: products.customerName,
           kitchenName: products.kitchenName,
           ordering: products.ordering,
+          active: products.active,
           ...offerLineColumns,
         })
         .from(menuItems)
@@ -517,7 +520,7 @@ async function offerRowsOn(
             inArray(menuItems.productId, batch),
             eq(catalogues.active, true),
             isTopLevelProduct,
-            eq(products.active, true),
+            includeInactive ? undefined : eq(products.active, true),
           ),
         )),
     );
@@ -552,7 +555,7 @@ function offerPrices(row: { grossPrice: number | null; productPrice: number | nu
     parentMenuPrice: override,
     parentPrice: productPrice,
   });
-  return { override, productPrice, unitPrice };
+  return { override, unitPrice };
 }
 
 async function offersOn(
@@ -560,6 +563,9 @@ async function offersOn(
   roots: ReadonlyMap<string, string>,
   graph: SectionGraph,
   options: OfferOptions,
+  /** Inactive products and variants too: the management prices read alone; a till's offer never
+   * lists one. */
+  includeInactive = false,
 ): Promise<MenuOffer[]> {
   const allRoots = new Map(roots);
   const include = (menuId: string): void => {
@@ -570,7 +576,7 @@ async function offersOn(
     }
   };
   for (const id of roots.keys()) include(id);
-  const { rows: offered, placementsOf } = await offerRowsOn(tx, allRoots, graph);
+  const { rows: offered, placementsOf } = await offerRowsOn(tx, allRoots, graph, includeInactive);
   if (offered.length === 0) return [];
   const offeredByItem = await readOfferedModifiers(
     tx,
@@ -580,6 +586,7 @@ async function offersOn(
   const variantsByItem = await readOfferVariants(
     tx,
     offered.map((row) => row.id),
+    includeInactive,
   );
   const raw = offered.map((row) => {
     const { override, unitPrice } = offerPrices(row);
@@ -673,35 +680,37 @@ async function offersOn(
 }
 
 /**
- * Every Active product the menu reaches, once each in `listMenuOffers`' order, with its own price
- * and its combined decisions. Sold-out ones are listed.
+ * Every product the menu reaches, Active or not, once each in `listMenuOffers`' order, with its own
+ * price and its combined decisions. Sold-out and Inactive ones are listed.
  */
 export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuPriceRow[]> {
   const rootSectionId = await requireMenuRoot(tx, menuId);
   const graph = await loadSectionGraph(tx);
-  const combinedOffers = await offersOn(tx, new Map([[menuId, rootSectionId]]), graph, {});
+  const roots = new Map([[menuId, rootSectionId]]);
+  const combinedOffers = await offersOn(tx, roots, graph, {}, true);
   const combinedByProduct = new Map(combinedOffers.map((offer) => [offer.productId, offer]));
-  const { rows } = await offerRowsOn(tx, new Map([[menuId, rootSectionId]]), graph);
+  const { rows } = await offerRowsOn(tx, roots, graph, true);
   if (rows.length === 0) return [];
   const variantsByItem = await menuVariantsOfItems(
     tx,
     rows.map((row) => row.id),
+    true,
   );
   return rows
     .filter((row) => combinedByProduct.has(row.productId))
     .map((row) => {
       const combinedOffer = combinedByProduct.get(row.productId)!;
-      const { override, productPrice } = offerPrices(row);
+      const { override } = offerPrices(row);
       return {
         menuItemId: row.id,
         productId: row.productId,
         name: row.name,
         categoryId: row.categoryId,
         placements: combinedOffer.placements,
-        productPrice,
         override,
         effectivePrice: combinedOffer.unitPrice,
         combined: combinedOffer.combined,
+        active: row.active,
         variants: variantsByItem.get(row.id) ?? [],
       };
     });
@@ -710,6 +719,7 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
 async function readOfferVariants(
   tx: Transaction,
   menuItemIds: readonly string[],
+  includeInactive = false,
 ): Promise<Map<string, (MenuOfferVariant & { cataloguePrice: Decimal | null })[]>> {
   const rows = await tx
     .select({
@@ -740,7 +750,12 @@ async function readOfferVariants(
         eq(menuItemVariantOverrides.variantId, products.id),
       ),
     )
-    .where(and(inArray(menuItems.id, [...menuItemIds]), eq(products.active, true)))
+    .where(
+      and(
+        inArray(menuItems.id, [...menuItemIds]),
+        includeInactive ? undefined : eq(products.active, true),
+      ),
+    )
     .orderBy(menuItems.id, products.variantOrder, products.id);
   const grouped = new Map<string, (MenuOfferVariant & { cataloguePrice: Decimal | null })[]>();
   for (const row of rows) {

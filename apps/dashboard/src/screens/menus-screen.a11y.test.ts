@@ -206,9 +206,9 @@ function api(state: State): DashboardApi {
         name: "Lager",
         categoryId: null,
         placements: [["s-drinks"]],
-        productPrice: "2.00",
         override: "1.80",
         effectivePrice: "1.80",
+        active: true,
         variants: [],
       },
     ]),
@@ -332,7 +332,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     },
   );
 
-  it("accessible Prices tab", async () => {
+  it("accessible Price overrides tab", async () => {
     const { el, host } = await mount(
       "populated",
       theme,

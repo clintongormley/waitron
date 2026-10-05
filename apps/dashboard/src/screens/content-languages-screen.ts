@@ -28,6 +28,7 @@ import type {
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, t } from "../i18n/t.js";
+import { leftToBrowser } from "../navigation.js";
 import "../widgets/add-content-language.js";
 import { receiptLanguageWarning } from "../widgets/receipt-language.js";
 
@@ -471,8 +472,7 @@ export class ContentLanguagesScreen extends LitElement {
    * browser's own handling, such as opening a new tab. */
   #openGap(event: MouseEvent, gap: TranslationGap): void {
     if (gap.kind !== "product" && gap.kind !== "variant") return;
-    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
-      return;
+    if (leftToBrowser(event)) return;
     event.preventDefault();
     this.dispatchEvent(
       new CustomEvent("wt-edit-product", {

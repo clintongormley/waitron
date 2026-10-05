@@ -207,3 +207,22 @@ it("is idle only once a write queued while it waited has finished too", async ()
   await settle();
   expect(idle).toBe(true);
 });
+
+it("counts each scope's writes queued or running, until each has finished", async () => {
+  const queue = new ListWriteQueue();
+  const first = deferred();
+  const seen: number[] = [];
+  queue.run("list", async () => {
+    seen.push(queue.pending("list"));
+    await first.promise;
+  });
+  queue.run("list", async () => {
+    seen.push(queue.pending("list"));
+  });
+  queue.run("other", async () => undefined);
+  expect([queue.pending("list"), queue.pending("other"), queue.pending("none")]).toEqual([2, 1, 0]);
+  first.resolve();
+  await settle();
+  expect(seen).toEqual([2, 1]);
+  expect([queue.pending("list"), queue.pending("other")]).toEqual([0, 0]);
+});

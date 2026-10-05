@@ -320,7 +320,9 @@ A variant's own price may be blank. On a menu it is charged the most specific pr
 4. else its parent's own price.
 
 A menu may leave any product's price blank (`menu_items.gross_price` is nullable), which means the
-product's own price, and the menu screen shows that price as the empty field's hint. The
+product's own price. A menu's Price overrides tab shows the price a blank field inherits as its
+placeholder: one amount, the range across a product's Active sizes, or a clash
+(`apps/dashboard/src/widgets/menu-price-inheritance.ts`). The
 product-editor save accepts a blank variant price both in the parent's variants list and on the
 variant's own page (`parseProductEditorInput`, `packages/catalogue/src/product-editor-input.ts`),
 and `writeProductVariants` (`packages/catalogue/src/variants.ts`) stores it blank.
@@ -330,7 +332,9 @@ its own (`addProductToMenu` refuses one with `menu_item.variant_not_allowed`, an
 one as a member with `menu_section.membership_invalid`). A menu stores something
 for a variant only to override its price there: a `menu_item_variant_overrides` row, keyed by the
 parent's menu row and the variant, holds that menu's price, and saving the price blank deletes the
-row (`setMenuVariants`, `packages/catalogue/src/variants.ts`). The table's
+row. Saving one size's price on a menu writes that size's row alone, whether the size is Active or
+Inactive (`setMenuVariantPrice`, `packages/catalogue/src/variants.ts`), while `setMenuVariants`
+replaces the row of every Active size at once. The table's
 `menu_item_variant_overrides_overrides_ck` refuses a row with no price.
 
 ### Active and Available
@@ -349,6 +353,12 @@ while it is Available (`readOfferVariants` in `listMenuOffers`,
 variant. To take a product off a menu, change the structure so that nothing in it places the
 product; one that comes through an included menu goes when that menu's structure stops placing it or
 the menu is no longer included.
+
+A menu's Price overrides tab lists every product an active menu's working structure reaches,
+Inactive ones and their sizes too, with a Status column; a size reads Inactive when it or its
+product is. The tab reads `menuPrices`; a menu's offers, and the published document built from
+them (`packages/catalogue/src/menu-document.ts`), still come from `listMenuOffers`, which leaves
+Inactive items out (both in `packages/catalogue/src/operations.ts`).
 
 The offers a till sells from are each menu's published version, which leaves out a product that was
 Inactive when it was published (`listMenuOffers`, `packages/catalogue/src/operations.ts`). A product

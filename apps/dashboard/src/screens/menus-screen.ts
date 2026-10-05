@@ -26,7 +26,7 @@ import type { StructureAddAction } from "../widgets/menu-structure-table.js";
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import "../widgets/home-layout-editor.js";
-import type { OfferSave } from "../widgets/menu-prices-table.js";
+import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
 import "../widgets/section-details-form.js";
 import { textField } from "../widgets/form-fields.js";
@@ -48,7 +48,7 @@ import type {
   SectionMember,
 } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import { dashboardPath } from "../navigation.js";
+import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 
@@ -93,12 +93,6 @@ function previewAddress(menuId: string): string {
   return `/manage/menus/menu/${encodeURIComponent(menuId)}/view/preview`;
 }
 
-/** A held modifier key or another button keeps the browser's own handling of a link, such as
- * opening a new tab. */
-function leftToBrowser(event: MouseEvent): boolean {
-  return event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;
-}
-
 /** The state a publish answered as version `number` left, shown until the next read replaces it.
  * The answer carries no publication time, so a new version shows this browser's clock. */
 function publishedStatus(number: number, hash: string, before: MenuStatus | null): MenuStatus {
@@ -111,6 +105,17 @@ function publishedStatus(number: number, hash: string, before: MenuStatus | null
 
 function refusal(error: unknown): Record<string, string> {
   return { [fieldOf(error)]: codeMessage(codeOf(error)) };
+}
+
+/** Whether a refusal is about the price typed, so it belongs under that field, as
+ * `namesTheName` in `course-list.ts` decides for a course's name. */
+function namesThePrice(error: unknown, save: PriceSave): boolean {
+  const code = codeOf(error);
+  return (
+    (code === "product.variant_invalid" && fieldOf(error) === "price") ||
+    (code === "management.request_invalid" && ["grossPrice", "price"].includes(fieldOf(error))) ||
+    (code === "product.variant_not_found" && save.variantId !== null)
+  );
 }
 
 /** A form's one message at its bottom: every message not under a field `shown` names, then the
@@ -222,8 +227,8 @@ function withOrder(
 /**
  * The menus, and one menu's editor. Its Structure tab shows the menu as one tree, each list edited
  * from its own row, and each change is its own request, sent in order through one queue, because a
- * move leaves focus on the row. Its Prices tab lists each product the menu reaches and edits what
- * the menu charges for it.
+ * move leaves focus on the row. Its Price overrides tab lists every product the menu reaches, Active
+ * or not, and edits the price this menu sets for each product and size.
  */
 @customElement("dashboard-menus-screen")
 export class MenusScreen extends LitElement {
@@ -454,9 +459,10 @@ export class MenusScreen extends LitElement {
   /** Null until the open menu's prices are first read. */
   @state() private prices: MenuPriceRow[] | null = null;
   @state() private pricesError = false;
-  @state() private editingOffer: string | null = null;
-  @state() private savingOffer = false;
-  @state() private offerRefusal: { field: string; message: string } | null = null;
+  /** The prices table's row keys with a save queued or out. */
+  @state() private savingPrices: ReadonlySet<string> = new Set();
+  @state() private priceRefusals: Readonly<Record<string, string>> = {};
+  @state() private priceOutcome: PriceOutcome | null = null;
 
   /** Every menu's publication state, followed while the list is shown; null until read. */
   @state() private statuses: Record<string, MenuStatus> | null = null;
@@ -544,8 +550,8 @@ export class MenusScreen extends LitElement {
       this.pricesError = true;
     },
   );
-  /** The menu whose prices are being watched, so showing the Prices tab while they already are
-   * starts no second read. */
+  /** The menu whose prices are being watched, so showing the Price overrides tab while they already
+   * are starts no second read. */
   #pricesFor: string | null = null;
   readonly #statusQueries = new DashboardQueries(
     this,
@@ -604,6 +610,11 @@ export class MenusScreen extends LitElement {
   #tileProducts: { id: string; name: string }[] = [];
   #tileSections: { id: string; internalName: string }[] = [];
   readonly #writes = new ListWriteQueue();
+  readonly #priceWrites = new ListWriteQueue();
+  #priceSavesMade = 0;
+  /** Fields whose save was stored while a later save waited behind it. They stay marked saving
+   * until the last save made ends, after the re-read that carries their prices when one runs. */
+  readonly #pricesUnread = new Set<string>();
   /** Per list, the current batch of moves: those made since the list last had none unanswered,
    * until one is refused. `out` counts the unanswered; `answered` holds the orders answered by
    * moves that were not shown because another write to the list waited behind them. */
@@ -916,22 +927,20 @@ export class MenusScreen extends LitElement {
     this.pricesError = false;
   }
 
-  /** The prices are watched only while the Prices tab is shown: the structure edits made on the
-   * other tab write tables the prices read depends on. The preview likewise. */
+  /** The prices are watched only while the Price overrides tab is shown: the structure edits made
+   * on the other tab write tables the prices read depends on. The preview likewise. */
   #showView(view: Tab): void {
     this.view = view;
     this.#followStatus();
     if (view !== "preview") this.#releasePreview();
     else if (this.menuId !== null && this.#previewFor !== this.menuId)
       void this.#watchPreview(this.menuId);
-    // The window lives in the Prices panel, which the tabs hide; left open, its modal dialog would
-    // block the page. A save still out reports a refusal beside the list instead (`#saveOffer`).
     if (view !== "home") this.#releaseHome();
     else if (this.menuId !== null && this.#homeFor !== this.menuId)
       void this.#watchHome(this.menuId);
     if (view !== "prices") {
-      this.editingOffer = null;
-      this.offerRefusal = null;
+      this.priceRefusals = {};
+      this.priceOutcome = null;
       this.#releasePrices();
     } else if (this.menuId !== null && this.#pricesFor !== this.menuId)
       void this.#watchPrices(this.menuId);
@@ -963,8 +972,8 @@ export class MenusScreen extends LitElement {
     this.structure = null;
     this.structureError = false;
     this.memberError = null;
-    this.editingOffer = null;
-    this.offerRefusal = null;
+    this.priceRefusals = {};
+    this.priceOutcome = null;
     this.publishResult = null;
     this.#releasePrices();
     this.#releasePreview();
@@ -1508,63 +1517,74 @@ export class MenusScreen extends LitElement {
 
   // ── Prices ───────────────────────────────────────────────────────────────────────────────────
 
-  /** A PATCH for the menu item when its price changed, then a PUT of its variants when
-   * one of them did. A refusal keeps the window open, unless it has been closed meanwhile (by
-   * another menu or tab), when it is named beside the list instead. */
-  async #saveOffer(save: OfferSave): Promise<void> {
+  /** Unmarks the field of the save ending, `key`, and the fields a re-read has just carried, each
+   * unless another save of it waits. Called by the save's own task before it ends, so the queue
+   * still counts that save. */
+  #priceSaveDone(key: string, carried: readonly string[] = []): void {
+    const saving = new Set(this.savingPrices);
+    for (const done of [key, ...carried])
+      if (this.#priceWrites.pending(done) <= (done === key ? 1 : 0)) saving.delete(done);
+    if (saving.size !== this.savingPrices.size) this.savingPrices = saving;
+  }
+
+  /** One field per request, in the order made; each field stays editable meanwhile. A refusal is
+   * said in the tab's status line, and under the field when it names the price; once the menu,
+   * the tab or the row has gone, it is named beside the list instead. The prices are read again
+   * only after the last save made, and only when it or an earlier one was stored. A success is said
+   * only for the last save made, so its Undo never reaches past a later write; never over a refusal
+   * said since it was made, which would hide that refusal; and not over a failed re-read, which
+   * the list reports as a load failure. */
+  #savePrice(save: PriceSave): void {
     const menuId = this.menuId;
-    if (menuId === null || this.savingOffer) return;
-    this.offerRefusal = null;
-    if (save.item === null && save.variants === null) {
-      this.editingOffer = null;
-      return;
-    }
-    this.savingOffer = true;
-    const refused = (field: string, inWindow: string, elsewhere: string): void => {
-      this.savingOffer = false;
-      if (this.menuId === menuId && this.editingOffer === save.menuItemId)
-        this.offerRefusal = { field, message: inWindow };
-      else this.memberError = elsewhere;
-    };
-    /** Nothing of this save was written. */
-    const notSaved = (error: unknown, field: string): void => {
-      const reason = codeMessage(codeOf(error));
-      refused(
-        field,
-        reason,
-        t("menus.change_not_saved").replace("{name}", save.name).replace("{reason}", reason),
-      );
-    };
-    const reread = async (): Promise<void> => {
-      if (this.menuId === menuId && this.view === "prices") await this.#watchPrices(menuId);
-    };
-    if (save.item !== null)
+    if (menuId === null) return;
+    const made = ++this.#priceSavesMade;
+    this.priceRefusals = without(this.priceRefusals, [save.key]);
+    this.priceOutcome = null;
+    this.savingPrices = new Set(this.savingPrices).add(save.key);
+    this.#priceWrites.run(save.key, async () => {
+      let stored = true;
       try {
-        await this.api.updateMenuItem(menuId, save.menuItemId, save.item);
+        if (save.variantId === null)
+          await this.api.updateMenuItem(menuId, save.menuItemId, { grossPrice: save.price });
+        else
+          await this.api.setMenuVariantPrice(menuId, save.menuItemId, save.variantId, save.price);
       } catch (error) {
-        notSaved(error, fieldOf(error));
+        stored = false;
+        const reason = codeMessage(codeOf(error));
+        const shown =
+          this.menuId === menuId &&
+          this.view === "prices" &&
+          (this.prices ?? []).some(({ menuItemId }) => menuItemId === save.menuItemId);
+        if (shown) {
+          if (namesThePrice(error, save))
+            this.priceRefusals = { ...this.priceRefusals, [save.key]: reason };
+          this.priceOutcome = { kind: "refused", save, reason };
+        } else
+          this.memberError = t("menus.change_not_saved")
+            .replace("{name}", save.name)
+            .replace("{reason}", reason);
+      }
+      // Saves are answered in the order made, so a refusal under this field came from an earlier
+      // save, and the field now holds a price that was stored.
+      if (stored && save.key in this.priceRefusals)
+        this.priceRefusals = without(this.priceRefusals, [save.key]);
+      if (made !== this.#priceSavesMade) {
+        if (stored) this.#pricesUnread.add(save.key);
+        else this.#priceSaveDone(save.key);
         return;
       }
-    if (save.variants !== null)
-      try {
-        await this.api.setMenuVariants(menuId, save.menuItemId, save.variants);
-      } catch (error) {
-        if (save.item === null) {
-          notSaved(error, "_form");
-          return;
-        }
-        const partly = t("menu_prices.variants_not_saved")
-          .replace("{name}", save.name)
-          .replace("{reason}", codeMessage(codeOf(error)));
-        refused("_form", partly, partly);
-        // The menu price was saved, so the list behind the window is read again.
-        await reread();
-        return;
+      const reread =
+        (stored || this.#pricesUnread.size > 0) && this.menuId === menuId && this.view === "prices";
+      if (reread) {
+        await this.#watchPrices(menuId);
+        const shown = this.menuId === menuId && this.view === "prices" && !this.pricesError;
+        if (stored && shown && made === this.#priceSavesMade && this.priceOutcome === null)
+          this.priceOutcome = { kind: "saved", save };
       }
-    this.savingOffer = false;
-    if (this.menuId !== menuId) return;
-    this.editingOffer = null;
-    await reread();
+      const carried = [...this.#pricesUnread];
+      this.#pricesUnread.clear();
+      this.#priceSaveDone(save.key, carried);
+    });
   }
 
   // ── Rendering ────────────────────────────────────────────────────────────────────────────────
@@ -1992,24 +2012,12 @@ export class MenusScreen extends LitElement {
         .categories=${this.categories}
         .products=${this.products}
         menuName=${this.#menuName()}
-        .editing=${this.editingOffer}
-        .busy=${this.savingOffer}
-        .refusal=${this.offerRefusal}
-        @wt-offer-edit=${(event: CustomEvent<{ menuItemId: string }>) => {
+        .saving=${this.savingPrices}
+        .refusals=${this.priceRefusals}
+        .outcome=${this.priceOutcome}
+        @wt-price-save=${(event: CustomEvent<PriceSave>) => {
           event.stopPropagation();
-          // One window at a time while a save is out, so its outcome lands in the window it came
-          // from, or beside the list once that window has closed.
-          if (this.savingOffer) return;
-          this.offerRefusal = null;
-          this.editingOffer = event.detail.menuItemId;
-        }}
-        @wt-offer-save=${(event: CustomEvent<OfferSave>) => {
-          event.stopPropagation();
-          void this.#saveOffer(event.detail);
-        }}
-        @wt-offer-cancel=${(event: Event) => {
-          event.stopPropagation();
-          this.editingOffer = null;
+          this.#savePrice(event.detail);
         }}
       ></dashboard-menu-prices-table>
       ${
