@@ -5,7 +5,8 @@ export const CORE_CONFIGURATION_TRANSFER = {
     { name: "kitchen_stations", locationColumns: ["location_id"] },
     { name: "kitchen_courses", locationColumns: ["location_id"] },
     { name: "categories" },
-    { name: "products" },
+    // The catalogue module's `afterImport` sets `name_key` from the name.
+    { name: "products", omit: ["name_key"] },
     { name: "location_catalogues", locationColumns: ["location_id"] },
     { name: "ingredients" },
     { name: "recipe_lines" },

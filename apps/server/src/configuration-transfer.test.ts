@@ -1377,3 +1377,89 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
     ]);
   });
 });
+
+it("gives each imported product the folded key of its own name, whatever the bundle held", async () => {
+  const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  // A staff name spelled as its catalogue's id in capitals folds to that id, which the import
+  // rewrites wherever a value equals an exported row's id.
+  const idShaped = await withTransaction(suite.db, async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Keys" });
+    const fields = { catalogueId: menu.id, categoryId: null, pricingUnit: "each" as const };
+    await createProduct(tx, {
+      ...fields,
+      name: " Café Solo ",
+      unitPrice: "1.20",
+      vatClass: "general",
+    });
+    const name = menu.id.toUpperCase();
+    await createProduct(tx, { ...fields, name, unitPrice: "2.00", vatClass: "general" });
+    return name;
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-05T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B75318642"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await targetSuite.db
+    .select({ name: products.name, nameKey: products.nameKey, catalogueId: products.catalogueId })
+    .from(products)
+    .innerJoin(catalogues, eq(catalogues.id, products.catalogueId))
+    .where(eq(catalogues.name, "Keys"));
+  expect(imported.map(({ name, nameKey }) => ({ name, nameKey }))).toEqual(
+    expect.arrayContaining([
+      { name: " Café Solo ", nameKey: "café solo" },
+      { name: idShaped, nameKey: idShaped.toLowerCase() },
+    ]),
+  );
+  expect(imported).toHaveLength(2);
+  const catalogueId = imported[0]!.catalogueId;
+  for (const name of ["café solo", idShaped]) {
+    await expect(
+      withTransaction(targetSuite.db, (tx) =>
+        createProduct(tx, {
+          catalogueId,
+          categoryId: null,
+          name,
+          pricingUnit: "each",
+          unitPrice: "1.00",
+          vatClass: "general",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "product.name_taken" });
+  }
+
+  // The key is derived from the name, so a bundle neither carries one nor may supply one.
+  for (const row of transferred.tables.products!) expect(row).not.toHaveProperty("name_key");
+  await expect(
+    withTransaction(targetSuite.db, (tx) =>
+      importConfigurationTables(
+        tx,
+        {
+          ...transferred,
+          tables: {
+            ...transferred.tables,
+            products: transferred.tables.products!.map((row) => ({ ...row, name_key: "wrong" })),
+          },
+        },
+        { locationId: "unused" },
+        ALL_MODULES,
+        versions,
+      ),
+    ),
+  ).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "products.name_key" },
+  });
+});

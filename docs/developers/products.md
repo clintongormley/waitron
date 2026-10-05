@@ -45,8 +45,11 @@ leave an Active product, or an Active variant of an Active product, with a staff
 row in the venue already has is refused with `product.name_taken`, ignoring case and surrounding
 spaces (`packages/catalogue/src/product-names.ts`). Rows that already share a name are not refused,
 and neither are rows a configuration import brings in. The check finds other rows by
-`products.name_key`, the folded name each catalogue write stores beside `name`; a row whose name has
-not been written since that column was added holds a null key and is not compared.
+`products.name_key`, the folded name each catalogue write of the name stores beside it. A
+configuration import sets it from each imported row's name (`storeProductNameKeys`, run through
+the catalogue module's `afterImport`); a bundle never carries it, and one that does is refused. A
+row whose name has not been written since that column was added holds a null key and is not
+compared.
 
 The three resolvers, one per audience:
 

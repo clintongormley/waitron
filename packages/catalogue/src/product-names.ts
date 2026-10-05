@@ -1,6 +1,7 @@
-import { and, asc, eq, inArray, isNull, notInArray, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, notInArray, or, sql } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import { batches } from "./batches.js";
 import { firstNewClash, foldName } from "./name-uniqueness.js";
 import { parentJoin, parentProducts } from "./variant-fallback.js";
 import "./errors.js";
@@ -9,6 +10,27 @@ import "./errors.js";
  * {@link assertProductNamesFree} looks rows up by. */
 export function nameColumns(name: string): { name: string; nameKey: string } {
   return { name, nameKey: foldName(name) };
+}
+
+/** Sets every product's and variant's `name_key` from its stored name. */
+export async function storeProductNameKeys(tx: Transaction): Promise<void> {
+  const rows = await tx.select({ id: products.id, name: products.name }).from(products);
+  // Folded here rather than in SQL: this engine's `lower()` folds ASCII letters only.
+  for (const batch of batches(rows))
+    await tx
+      .update(products)
+      .set({
+        nameKey: sql`case ${products.id} ${sql.join(
+          batch.map((row) => sql`when ${row.id} then ${foldName(row.name)}`),
+          sql` `,
+        )} end`,
+      })
+      .where(
+        inArray(
+          products.id,
+          batch.map((row) => row.id),
+        ),
+      );
 }
 
 /** A stored product or variant, as the unique-name rule reads it. */

@@ -1,3 +1,5 @@
+import { storeProductNameKeys } from "./product-names.js";
+
 export const CATALOGUE_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
@@ -18,4 +20,5 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
     { name: "menu_details" },
     { name: "device_profile_home_layouts" },
   ],
+  afterImport: storeProductNameKeys,
 } as const;

@@ -3227,27 +3227,28 @@ its parent's too; a menu's own Active switch is not read. Names are compared ign
 `lower()` folds ASCII only (`foldName`, `packages/catalogue/src/name-uniqueness.ts`). The checks run
 inside the write's own transaction, which runs alone in the venue's write queue; there is no unique
 index. Each product row stores its folded staff name in `products.name_key` (core migration
-`0098_product_name_key.sql`: an added nullable column and a non-unique index), written beside `name`
-by every catalogue write that sets the name, and the product check looks other rows up by that key
-instead of reading and folding every Active name in the venue, which made each save cost more as
-the catalogue grew and seeding grow quadratically (a review finding). There is no backfill: a row
-whose name has not been written since the column was added keeps a null key, and the check does
-not see it until its name is next written (every product editor save writes it) or the venue is
-reset. Refusals are `category.name_taken` and `product.name_taken`, both 409 with
+`0098_product_name_key.sql`: an added nullable column and a non-unique index). Every catalogue
+write that sets the name writes the key beside it. A configuration import sets it from each
+imported product's name; a bundle that carries it is refused. The product check looks other rows
+up by that key instead of reading and folding every Active name in the venue, which made each save
+cost more as the catalogue grew and seeding grow quadratically (a review finding). There is no
+backfill: a row whose name has not been written since the column was added keeps a null key, and the
+check does not see it until its name is next written (every product editor save writes it) or the
+venue is reset. Refusals are `category.name_taken` and `product.name_taken`, both 409 with
 `{ field, name }`, shown beside the Name field (or the variant row) in English and Spanish, the
 draft kept. Only a clash the write creates is refused, so rows that already shared a name do not
-block an unrelated save; a category that changes parent counts as new where it lands, so moving
-(or moving up) two categories that already share a name into one parent together is refused. The
-product editor checks its whole save at once, so variants may swap
-names. The demo seed's lunch "Mains" reporting category is now "Lunch mains"; both menus still call
-their section "Mains", and a seed test checks both rules on a fresh demo. Stored data is not
-renamed: a venue that already holds duplicates keeps them until someone renames one.
-Left open, for the owner: a configuration import copies a bundle's categories and products as they
-are and is not checked (the rows are written by `importConfigurationTables`,
-`apps/server/src/configuration-transfer.ts`; `categories` and `products` are in core's table list,
-`packages/db/src/configuration-transfer.ts`), so a bundle holding
-duplicates still brings them in. At 390 px the category name box cuts its refusal off against the
-pinned Actions column, as it already did for `category.invalid` (compared in
+block an unrelated save; a category that changes parent counts as new where it lands, so moving (or
+moving up) two categories that already share a name into one parent together is refused. The product
+editor checks its whole save at once, so variants may swap names. The demo seed's lunch "Mains"
+reporting category is now "Lunch mains"; both menus still call their section "Mains", and a seed
+test checks both rules on a fresh demo. Stored data is not renamed: a venue that already holds
+duplicates keeps them until someone renames one.
+Left open, for the owner: a configuration import copies a bundle's categories and products without
+checking their names (it derives only `name_key`; the rows are written by
+`importConfigurationTables`, `apps/server/src/configuration-transfer.ts`; `categories` and
+`products` are in core's table list, `packages/db/src/configuration-transfer.ts`), so a bundle
+holding duplicates still brings them in. At 390 px the category name box cuts its refusal off
+against the pinned Actions column, as it already did for `category.invalid` (compared in
 `~/waitron-campaign/w72-shots/`, local screenshots); the same cause as the phone-width entry above.
 
 **Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
