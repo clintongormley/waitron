@@ -3,9 +3,8 @@ import { check } from "drizzle-orm/sqlite-core";
 import { count, json, nowIso, table, tsString } from "./columns.js";
 
 /**
- * The owner-authored NON-FISCAL receipt trim. The trim (`headerSubtitle` /
- * `footerMessage`) renders AROUND the immutable fiscal art on the printed ticket and can never
- * suppress or reorder a mandated element — it is not a fiscal record.
+ * The owner-authored NON-FISCAL receipt trim. It renders AROUND the immutable fiscal art on the
+ * printed ticket and can never suppress or reorder a mandated element — it is not a fiscal record.
  *
  * ONE ROW: `id` is pinned to 1 by `tenant_receipts_singleton_ck`, and that id doubles as the
  * `ON CONFLICT` target the service upserts against. A database whose owner has never opened the

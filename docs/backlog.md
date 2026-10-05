@@ -5971,7 +5971,57 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     receipt text changes or a width is chosen: a printer or till changed elsewhere does not update
     it while the page is open (probed 2026-10-01 with a temporary browser test: invalidating
     `printers` and `tills` sent no new preview and no new read, while invalidating
-    `tenant_receipts`, the control, sent one; 2026-10-04: `tills` is gone, A238).
+    `tenant_receipts`, the control, sent one; 2026-10-04: `tills` is gone, A238). _(2026-10-05,
+    W111: it also asks again when the location's address changes, read through `locations`; not
+    re-probed for printers.)_
+- **The receipt's top block is centred and carries the venue's address, a phone, an email, a slogan
+  and a logo — DONE (W111, PR pending, owner 2026-10-05).** The owner asked: "For receipts, we need
+  to include phone number, address, email address (maybe). Possibly room for a slogan, and allow
+  uploading an image for a logo. Also this text should be centred on the receipt". After the QR
+  block, which still opens the receipt (C123, below), the printed receipt now prints centred, in this
+  order: the logo, the trading name, the legal name, the slogan, the address lines, `Tel. <phone>`,
+  the email, the duplicate label and `NIF: …`; the footer message is centred too. Item lines and
+  totals keep their columns and the practice warning keeps its place and alignment
+  (`formatReceipt`, `apps/server/src/receipt-ticket.ts`). The Receipts screen's preview prints the
+  same, and the till's on-screen ticket shows the same lines, with the library image itself as the
+  logo rather than the printed dots. None of it enters the filed record or its hash.
+  - **Settings live in the existing `tenant_receipts.receipt` JSON, so there is no migration.**
+    `ReceiptConfig` (`packages/layouts/src/types.ts`) gains `phone`, `email`, `printAddress` and
+    `logo` beside `headerSubtitle` and `footerMessage`. `headerSubtitle` keeps its key; the Receipts
+    screen calls it Slogan / Eslogan. A phone is at most 30 characters of digits, spaces and
+    `+ ( ) . - /` with at least six digits; an email is at most 254 characters shaped
+    `name@domain.tld`; an empty one means not set. A bad value is refused `receipt.invalid` with a
+    `reason` (`invalid_phone`, `invalid_email`, `invalid_logo`, `image_not_found`, `not_boolean`),
+    shown under its field (`validateReceiptConfig`, `packages/layouts/src/validate.ts`).
+  - **The address is the venue location's own**, never typed again: street line 1, line 2,
+    "postal code city", and the province unless it names the city (`addressLines`,
+    `apps/server/src/venue-address.ts`). A switch on the Receipts screen leaves it off
+    (`printAddress: false`); the screen shows the address it will print, or says the location has
+    none saved.
+  - **The logo is turned into printable black-and-white dots once, when the settings are saved, not
+    when a receipt prints.** Decoding an image needs sharp, which runs only outside a transaction,
+    and a receipt is built inside the sale's transaction. The save stores one picture per paper
+    width in the same JSON (`logoRasters`, drawn by `drawLogoRasters`,
+    `apps/server/src/receipt-logo.ts`); `getReceipt` leaves them out, so neither the dashboard's read
+    nor the till's boot carries them. Printing reads the stored picture through `getReceiptLogo`
+    (`packages/layouts/src/receipt-store.ts`), which answers no logo, rather than failing the sale,
+    for a stored picture of the wrong shape — a configuration import copies the JSON unchecked. The
+    image is picked and uploaded through the media library, whose upload refuses an over-large,
+    non-image or unreadable file with its own codes; an image the receipt uses cannot be deleted
+    from the library (a `receipt` usage, `packages/media/src/images.ts`). If it vanishes anyway, the
+    stored pictures still print.
+  - **The logo's bound:** scaled, keeping its proportions and enlarged if small, to fit the width the
+    QR may take (`safeWidthDots`: 360 dots on 58 mm, 504 on 80 mm) and at most 160 dots high
+    (`LOGO_MAX_HEIGHT_DOTS`, `packages/printing/src/dither.ts`) — 20 mm at 203 dpi, 22.6 mm at
+    180 dpi. So a square or tall image takes at most about 2 cm of roll, while a wordmark up to
+    about three times as wide as it is tall still uses the full 80 mm width.
+  - **A reprint shows the current trim:** the address, phone, email, slogan and logo are read when a
+    copy prints (`buildReceiptBytes`, `apps/server/src/receipt-print.ts`), not kept with the sale, so
+    a copy of an earlier sale shows today's.
+  - **Overlap with lane E's A231 (full invoices at the till), for whoever rebases second:** on an F1
+    that prints the taxpayer's domicile, the location address is not printed as well.
+  - Not yet checked on paper: the logo, and the centred block, on the owner's box (FYI in the
+    campaign's questions file). Local screenshots in `~/waitron-campaign/w111-shots/`.
 - **«QR tributario:» above the QR (C115, owner 2026-09-30) — done (2026-10-01, #999).** Both the
   printed receipt (`apps/server/src/receipt-ticket.ts`) and the till's on-screen ticket
   (`apps/till/src/screens/till-ticket-view.ts`) print the caption, in Spanish whatever the receipt
@@ -6760,6 +6810,13 @@ characters. Left open:
 
 ### B9. CI and test infra
 
+- **A Payments screen test failed once in a local dashboard coverage run (seen 2026-10-05 on W111's
+  branch, `feat/receipt-top-block`) — OPEN, not investigated.**
+  `apps/dashboard/src/screens/payments-screen.test.ts`, "isolates a status request failure to its
+  row", failed once while the till's coverage run ran beside the dashboard's; it passed three runs
+  of its own, and the whole dashboard suite passed when re-run alone. W111's branch changes no
+  Payments screen file. Standing rule: a flaky test is fixed at the
+  root; on a recurrence, keep the log.
 - **The stream pause test's frozen-bucket control failed once in CI (PR #1101, run 37108993254
   attempt 1, job 111163230954, 2026-10-03; passed on re-run).** In
   `apps/server/src/stream-pause.e2e.test.ts` step 6, the call to the bucket made just after

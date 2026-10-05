@@ -462,9 +462,13 @@ Set the ESC/POS left margin to zero and the print area to the width the job's pi
 before selecting native centre alignment. The owner's 17:40:44 photograph on 2026-09-26 showed the
 body and QR shifted right and clipped on a 58mm roll; that payload carried no print-area commands.
 Whether the printer's own width setting also contributed was not tested. Since 2026-10-01 (C107)
-text lines are drawn into full-width pictures with their centring already in them, so the receipt's
-one native centre command is the one sent before its QR block (caption, QR picture, legend); a
-receipt with no QR sends none (`apps/server/src/receipt-ticket.ts`).
+text lines are drawn into full-width pictures with their centring already in them. The receipt
+sends a native centre command, and a return to left after it, around its QR block (caption, QR
+picture, legend), around its top block (logo, names, slogan, address, phone, email, `NIF`; W111,
+2026-10-05) and around its footer message when it has one; a receipt with no QR still sends the
+other two (`apps/server/src/receipt-ticket.ts`). The QR and the logo are drawn only as wide as
+themselves, not as wide as the line, so where they land across the paper is the printer's own
+centring.
 `apps/server/src/receipt-ticket.test.ts` pins the print area at the start of the job, 360 dots in its
 58mm case and 512 in its 80mm one, and that every line's picture is that wide;
 `apps/server/src/print-job-preview.test.ts` pins only that the dashboard preview consumes both
