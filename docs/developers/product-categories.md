@@ -224,9 +224,11 @@ switches silently otherwise (`apps/till/src/till-app.ts`).
 ## Moving and deleting
 
 Use **Select**, tick products and categories, and choose **Move to…**. Pick a destination category or
-**All products (top level)**. A selected category and its descendants are excluded as destinations,
-and the server also refuses such a move with `category.parent_cycle`. Anything selected inside a
-selected category moves with that category rather than being filed beside it.
+**All products (top level)**. The destination list shows each category by its full path
+("Dinner / Mains"), sorted by that path the way the tables sort text (numbers by value, case
+ignored), after **All products (top level)**. A selected category and its descendants are excluded
+as destinations, and the server also refuses such a move with `category.parent_cycle`. Anything
+selected inside a selected category moves with that category rather than being filed beside it.
 
 On a pointer device you can drag a product, a category, or in Select mode every selected row,
 onto a category, onto a product (to file beside it) or onto **All products** (to file in no
