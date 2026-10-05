@@ -133,7 +133,7 @@ describe("ALL_MODULES configuration transfer contribution", () => {
     ).toEqual({ kind: "none" });
   });
 
-  it("removes clearing marks and hardware authenticators from copied configuration", () => {
+  it("removes clearing marks, hardware authenticators, and the exporting machine's node, addresses and last-seen time from copied configuration", () => {
     const tables = ALL_MODULES.flatMap((module) =>
       module.configurationTransfer?.kind === "tables" ? module.configurationTransfer.tables : [],
     );
@@ -141,7 +141,14 @@ describe("ALL_MODULES configuration transfer contribution", () => {
       "needs_clearing_since",
     );
     expect(tables.find((table) => table.name === "print_agents")?.omit).toEqual(
-      expect.arrayContaining(["token_hash", "last_seen_at", "host", "node_id"]),
+      expect.arrayContaining([
+        "token_hash",
+        "last_seen_at",
+        "host",
+        "node_id",
+        "setup_url",
+        "setup_port",
+      ]),
     );
     expect(tables.find((table) => table.name === "printers")?.omit).toContain("poll_token_hash");
   });

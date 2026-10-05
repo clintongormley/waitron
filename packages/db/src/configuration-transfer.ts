@@ -25,8 +25,9 @@ export const CORE_CONFIGURATION_TRANSFER = {
     {
       name: "print_agents",
       locationColumns: ["location_id"],
-      // `node_id` names a node of the exporting venue; the importing venue makes its own.
-      omit: ["token_hash", "last_seen_at", "host", "node_id"],
+      // `node_id` names a node of the exporting venue; the importing venue makes its own. The setup
+      // page's address and port are the exporting machine's; the agent reports its own with each pull.
+      omit: ["token_hash", "last_seen_at", "host", "node_id", "setup_url", "setup_port"],
       reconnect: true,
     },
     {

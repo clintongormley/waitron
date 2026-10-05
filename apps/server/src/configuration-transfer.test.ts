@@ -1409,6 +1409,75 @@ it("leaves out a print agent's node, so the importing venue does not show it as 
   );
 });
 
+it("leaves out a print agent's setup page address and port, so the import links to no old machine", async () => {
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, async (tx) => {
+    await tx.insert(printAgents).values({
+      locationId: source.locationId,
+      name: "Bar agent",
+      tokenHash: "source-agent-token",
+      setupUrl: "http://192.168.10.40:9310",
+      setupPort: 9210,
+    });
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-05T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.print_agents).toHaveLength(1);
+  expect(transferred.tables.print_agents![0]).not.toHaveProperty("setup_url");
+  expect(transferred.tables.print_agents![0]).not.toHaveProperty("setup_port");
+  await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: async (tx, result) => {
+      await importConfigurationTables(
+        tx,
+        transferred,
+        { locationId: result.locationId },
+        ALL_MODULES,
+        versions,
+      );
+    },
+  });
+
+  const imported = await targetSuite.db
+    .select({
+      name: printAgents.name,
+      setupUrl: printAgents.setupUrl,
+      setupPort: printAgents.setupPort,
+    })
+    .from(printAgents);
+  expect(imported).toEqual([{ name: "Bar agent", setupUrl: null, setupPort: null }]);
+
+  // The last two cases list the columns empty, as an export made before this change did: an omitted
+  // column is refused even when it holds null, and one made before W72c names node_id first.
+  for (const [carried, field] of [
+    [{ setup_url: "http://192.168.10.40:9310" }, "print_agents.setup_url"],
+    [{ setup_port: 9210 }, "print_agents.setup_port"],
+    [{ setup_url: null, setup_port: null }, "print_agents.setup_url"],
+    [{ node_id: source.nodeId, setup_url: null, setup_port: null }, "print_agents.node_id"],
+  ] as const) {
+    const carrying: ConfigurationBundle = {
+      ...transferred,
+      tables: {
+        ...transferred.tables,
+        print_agents: [{ ...transferred.tables.print_agents![0], ...carried }],
+      },
+    };
+    expect(() => validateConfigurationBundle(carrying, ALL_MODULES, versions)).toThrowError(
+      expect.objectContaining({ code: "setup.request_invalid", params: { field } }),
+    );
+  }
+});
+
 it("round-trips missing home slots alongside live tiles with fresh ids and unchanged positions", async () => {
   const source = await applyVenue(planVenue(venue("B55667788"), ALL_MODULES), {
     db: suite.db,
