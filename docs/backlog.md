@@ -3398,20 +3398,29 @@ editor checks its whole save at once, so variants may swap names. The demo seed'
 reporting category is now "Lunch mains"; both menus still call their section "Mains", and a seed
 test checks both rules on a fresh demo. Stored data is not renamed: a venue that already holds
 duplicates keeps them until someone renames one.
-Left open, for the owner: a configuration import copies a bundle's categories and products without
-checking their names (it derives only `name_key`; the rows are written by
-`importConfigurationTables`, `apps/server/src/configuration-transfer.ts`; `categories` and
-`products` are in core's table list, `packages/db/src/configuration-transfer.ts`), so a bundle
-holding duplicates still brings them in. At 390 px the category name box cuts its refusal off
-against the pinned Actions column, as it already did for `category.invalid` (compared in
-`~/waitron-campaign/w72-shots/`, local screenshots); the same cause as the phone-width entry above.
-Also open, found in W72's review and older than it: a configuration import replaces ANY text value
-that equals one of the bundle's ids with the new id, in every column, not only id columns
-(`importConfigurationTables`, `apps/server/src/configuration-transfer.ts`, the `idMap.has(value)`
-line; `git blame` dates it to `fabdb224d1`, 2026-09-10). So a product or category whose name is
-spelled exactly like an id in the bundle arrives renamed to a random id. Unlikely with real names,
-since ids are random UUIDs, but nothing prevents it; the fix is to rewrite only the columns a table
-declares as references. Not fixed in W72.
+A configuration import now holds a bundle to the same two rules (W72a, 2026-10-05): a bundle with
+two categories in one place, or two Active products or variants, sharing a name is refused whole,
+nothing written, when setup opens the export and again when it is imported
+(`validateCatalogueConfiguration`, `packages/catalogue/src/configuration-transfer.ts`, run by
+`validateConfigurationBundle`); both setup routes that reach it answer the two codes 409, as the
+management API does (`PROVISION_STATUS`, `apps/server/src/setup-api.ts`). It judges what the import
+will store: a product row with no `active` value counts as Active, the column's default, and a row
+whose product `active` is not 0 or 1, or whose category or product name is not text, is refused with
+`setup.request_invalid` naming the column. Setup's live-source screen then names the duplicate and
+asks for it to be renamed in the prepared restaurant and exported again, in English and Spanish.
+Also found in W72's review, and fixed in W72a: a configuration import used to replace ANY text
+value equal to one of the bundle's ids with the new id, in every column (since `fabdb224d1`,
+2026-09-10), so a product or category named exactly like an id in the bundle arrived renamed to a
+random id. It now replaces ids only in a table's `id` column, its foreign-key columns, and the
+columns a module lists as `references` for a reference the schema gives no foreign key
+(`option_lists.default_label_id`, `device_profile_home_layouts.layout_id`). Those two were the only
+such columns a probe found, run over every import in the transfer tests and an import of the demo
+seed; a reference column added later with neither a foreign key nor a `references` entry keeps the
+old id, and nothing checks for one.
+Still open, for the owner: in the dashboard's category editor, at 390 px the category name box cuts
+its duplicate-name refusal off against the pinned Actions column, as it already did for
+`category.invalid` (compared in `~/waitron-campaign/w72-shots/`, local screenshots); the same cause
+as the phone-width entry above.
 
 **Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
 owner 2026-10-04; since 2026-10-05 a tree, W82a, see the last paragraph).** The bulk Move

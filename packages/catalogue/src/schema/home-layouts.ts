@@ -10,7 +10,8 @@ export const deviceProfileHomeLayouts = table(
     // No key, on purpose (D14): a deleted layout must leave the selection in place, so
     // `deviceHomeLayouts` reports it as `selectedRemoved` rather than dropping it. What establishes
     // the target exists: `setDeviceHomeLayout` checks it; a configuration import copies it
-    // unchecked; afterwards, nothing does.
+    // unchecked; afterwards, nothing does. No key, so `CATALOGUE_CONFIGURATION_TRANSFER` lists it
+    // in `references`; without that an import keeps the old id.
     layoutId: id("layout_id").notNull(),
   },
   (t) => [

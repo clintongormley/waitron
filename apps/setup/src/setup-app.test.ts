@@ -2611,6 +2611,64 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     expect(readDraft(el).configurationImport).toBeUndefined();
   });
 
+  it.each([
+    [
+      "en-GB",
+      "category.name_taken",
+      "The export has two categories named “Bebidas” in the same place. Rename one in your prepared restaurant, export again, then load the new export.",
+    ],
+    [
+      "en-GB",
+      "product.name_taken",
+      "The export has two active products or variants named “Bebidas”. Rename one in your prepared restaurant, export again, then load the new export.",
+    ],
+    [
+      "es-ES",
+      "category.name_taken",
+      "La exportación tiene dos categorías llamadas «Bebidas» en el mismo lugar. Cambia el nombre de una en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
+    ],
+    [
+      "es-ES",
+      "product.name_taken",
+      "La exportación tiene dos productos o variantes activos llamados «Bebidas». Cambia el nombre de uno en tu restaurante preparado, vuelve a exportar y carga la nueva exportación.",
+    ],
+  ] as const)(
+    "names the duplicate when setup refuses a configuration export for it (%s, %s)",
+    async (locale, code, sentence) => {
+      try {
+        const el = await mountSetupApp(
+          stubApi({
+            stageConfiguration: vi
+              .fn()
+              .mockRejectedValue({ code, params: { field: "name", name: "Bebidas" }, status: 409 }),
+          }),
+        );
+        setLocale(locale);
+        configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+        await flush(el);
+        expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
+        expect(readDraft(el).configurationImport).toBeUndefined();
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+
+  it("falls back to the could-not-open sentence for a duplicate refusal carrying no name", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        stageConfiguration: vi
+          .fn()
+          .mockRejectedValue({ code: "product.name_taken", params: {}, status: 409 }),
+      }),
+    );
+    configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+    await flush(el);
+    expect(await bottomOf(await screenHost(el, "live-source"))).toBe(
+      "The configuration export could not be opened. Check the file and passphrase.",
+    );
+  });
+
   it("treats a fiscal test the regime does not need as accepted", async () => {
     const el = await mountSetupApp(
       stubApi({ runFiscalTest: vi.fn().mockResolvedValue({ status: "not-applicable" }) }),

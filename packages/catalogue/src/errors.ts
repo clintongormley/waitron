@@ -169,5 +169,8 @@ declare module "@waitron/shared" {
      * till never offers such a product as an extra. `field` is `items.<i>.productId` of the first.
      */
     "extras.product_has_variants": { field: string; productId: string };
+    /** A configuration export's catalogue row holds a value no export writes; `field` is
+     * `<table>.<column>`. Declared with identical params in `apps/server/src/errors.ts`. */
+    "setup.request_invalid": { field: string };
   }
 }
