@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, catalogues, locations, products, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  catalogues,
+  kitchenTimingDefaults,
+  locations,
+  products,
+  withTransaction,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -26,6 +33,7 @@ import {
   updateStation,
 } from "./kitchen.js";
 import "./errors.js";
+import { getKitchenTimingDefaults, setKitchenTimingDefaults } from "./kitchen-timing.js";
 
 // The one-default partial unique is pinned in packages/db/src/schema/kitchen-stations.test.ts.
 const LOCALE = "es-ES";
@@ -48,6 +56,7 @@ async function setupVenue(): Promise<TillConfig> {
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
+  await db.insert(kitchenTimingDefaults).values({ locationId });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   return {
     nodeId: brandNodeId(nodeId),
@@ -188,10 +197,7 @@ describe("kitchen-station config", () => {
     });
   });
 
-  it("createStation and updateStation rethrow a NON-unique DB error raw, not as station.name_taken", async () => {
-    // Each half provokes a refusal that is not the name unique. CREATE: a location id naming no row
-    // fails the location foreign key. UPDATE: warm 99 above the untouched default overdue (10) fails
-    // `kitchen_stations_thresholds_ordered`.
+  it("createStation preserves a foreign-key error and updateStation names an invalid effective threshold", async () => {
     const cfg = await setupVenue();
     const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
     const createErr = await asApp(cfg, (tx) => createStation(tx, badCfg, { name: "Big" })).catch(
@@ -204,8 +210,62 @@ describe("kitchen-station config", () => {
     const updateErr = await asApp(cfg, (tx) =>
       updateStation(tx, cfg, id, { warmAfterMinutes: 99 }),
     ).catch((e: unknown) => e);
-    expect(updateErr).toBeInstanceOf(Error);
-    expect(updateErr).not.toBeInstanceOf(AppError);
+    expect(updateErr).toMatchObject({
+      code: "station.thresholds_invalid",
+      params: { field: "overdueAfterMinutes", stationId: id, name: "Ord" },
+    });
+  });
+
+  it("new stations inherit venue defaults and independent overrides retain omitted fields", async () => {
+    const cfg = await setupVenue();
+    await db.execute(sql`update kitchen_timing_defaults set warm_after_minutes = 4,
+      overdue_after_minutes = 9, forgotten_after_minutes = 14 where location_id = ${cfg.locationId}`);
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Inherited" }));
+    expect(
+      (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id),
+    ).toMatchObject({
+      warmAfterMinutes: 4,
+      overdueAfterMinutes: 9,
+      forgottenAfterMinutes: 14,
+    });
+    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { warmAfterMinutes: 2 }));
+    await asApp(cfg, (tx) =>
+      updateStation(tx, cfg, id, { name: "Renamed", overdueAfterMinutes: 7 }),
+    );
+    expect(
+      (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id),
+    ).toMatchObject({
+      name: "Renamed",
+      warmAfterMinutes: 2,
+      overdueAfterMinutes: 7,
+      forgottenAfterMinutes: 14,
+    });
+  });
+
+  it("refuses missing venue defaults rather than fabricating or overwriting them", async () => {
+    const cfg = await setupVenue();
+    await db.execute(
+      sql`delete from kitchen_timing_defaults where location_id = ${cfg.locationId}`,
+    );
+    await expect(asApp(cfg, (tx) => getKitchenTimingDefaults(tx, cfg))).rejects.toThrow(
+      "Venue has no kitchen timing defaults",
+    );
+    await expect(
+      asApp(cfg, (tx) =>
+        setKitchenTimingDefaults(tx, cfg, {
+          warmAfterMinutes: 3,
+          overdueAfterMinutes: 8,
+          forgottenAfterMinutes: 12,
+        }),
+      ),
+    ).rejects.toThrow("Venue has no kitchen timing defaults");
+    expect(
+      (
+        await db.execute(
+          sql`select * from kitchen_timing_defaults where location_id = ${cfg.locationId}`,
+        )
+      ).rows,
+    ).toEqual([]);
   });
 
   it("setDefaultStation throws station.not_found for an absent OR a deactivated station", async () => {

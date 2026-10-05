@@ -1305,7 +1305,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
     });
   });
 
-  it("POST stores all timing thresholds atomically and rejects a partial or unordered set without a row", async () => {
+  it("POST stores timing overrides atomically and rejects an unordered effective set without a row", async () => {
     const name = unique("Atomic");
     const created = await req(
       "/stations",
@@ -1329,7 +1329,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       forgotten_after_minutes: number;
     }>(
       sql`select warm_after_minutes, overdue_after_minutes, forgotten_after_minutes
-        from kitchen_stations where id = ${id}`,
+        from kitchen_station_timing where station_id = ${id}`,
     );
     expect(row.rows[0]).toMatchObject({
       warm_after_minutes: 3,
@@ -1337,7 +1337,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       forgotten_after_minutes: 12,
     });
     for (const thresholds of [
-      { warmAfterMinutes: 3 },
+      { warmAfterMinutes: 10 },
       { warmAfterMinutes: 9, overdueAfterMinutes: 8, forgottenAfterMinutes: 12 },
     ]) {
       const rejectedName = unique("Rejected");
@@ -1347,8 +1347,169 @@ describe("/management-api/stations (KDS-1 config)", () => {
         managerCookie,
       );
       expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toMatchObject({
+        error: {
+          code: "station.thresholds_invalid",
+          params: { field: "overdueAfterMinutes", name: rejectedName },
+        },
+      });
       expect((await listStations()).some((station) => station.name === rejectedName)).toBe(false);
     }
+  });
+
+  it("POST accepts partial and null overrides and GET resolves the inherited fields", async () => {
+    for (const thresholds of [
+      { warmAfterMinutes: 2 },
+      { warmAfterMinutes: null, overdueAfterMinutes: 8 },
+    ]) {
+      const created = await req(
+        "/stations",
+        { method: "POST", body: JSON.stringify({ name: unique("Inherit"), ...thresholds }) },
+        managerCookie,
+      );
+      expect(created.status).toBe(201);
+      const { id } = (await created.json()) as { id: string };
+      const stations = (await (
+        await req("/stations", { method: "GET" }, managerCookie)
+      ).json()) as Record<string, unknown>[];
+      expect(stations.find((station) => station.id === id)).toMatchObject({
+        warmAfterMinutes: thresholds.warmAfterMinutes === null ? 5 : 2,
+        overdueAfterMinutes: "overdueAfterMinutes" in thresholds ? 8 : 10,
+        forgottenAfterMinutes: 15,
+      });
+    }
+  });
+
+  it("PATCH null inherits one field while omission retains overrides and defaults stay unchanged", async () => {
+    const id = await createStation(unique("Clear override"));
+    const patch = (body: unknown) =>
+      req(`/stations/${id}`, { method: "PATCH", body: JSON.stringify(body) }, managerCookie);
+    const read = async () =>
+      (
+        await suite.db
+          .select()
+          .from(kitchenStationTiming)
+          .where(eq(kitchenStationTiming.stationId, id))
+      )[0];
+    const beforeDefaults = await (
+      await req("/kitchen-timing-defaults", { method: "GET" }, managerCookie)
+    ).json();
+    expect(
+      (await patch({ warmAfterMinutes: 2, overdueAfterMinutes: 8, forgottenAfterMinutes: 12 }))
+        .status,
+    ).toBe(204);
+    expect((await patch({ warmAfterMinutes: null })).status).toBe(204);
+    expect(await read()).toEqual({
+      stationId: id,
+      warmAfterMinutes: null,
+      overdueAfterMinutes: 8,
+      forgottenAfterMinutes: 12,
+    });
+    const stations = (await (
+      await req("/stations", { method: "GET" }, managerCookie)
+    ).json()) as Record<string, unknown>[];
+    expect(stations.find((station) => station.id === id)).toMatchObject({
+      warmAfterMinutes: 5,
+      overdueAfterMinutes: 8,
+      forgottenAfterMinutes: 12,
+    });
+    expect((await patch({ overdueAfterMinutes: null, forgottenAfterMinutes: null })).status).toBe(
+      204,
+    );
+    expect(await read()).toEqual({
+      stationId: id,
+      warmAfterMinutes: null,
+      overdueAfterMinutes: null,
+      forgottenAfterMinutes: null,
+    });
+    expect(
+      await (await req("/kitchen-timing-defaults", { method: "GET" }, managerCookie)).json(),
+    ).toEqual(beforeDefaults);
+  });
+
+  it.each(["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"])(
+    "PATCH refuses invalid %s types and ranges without changing any station fields",
+    async (field) => {
+      const name = unique("Bad override");
+      const id = await createStation(name);
+      for (const value of ["3", [3], {}, true, 0, -1, 1.5, 2147483648]) {
+        const response = await req(
+          `/stations/${id}`,
+          { method: "PATCH", body: JSON.stringify({ name: "Should not save", [field]: value }) },
+          managerCookie,
+        );
+        expect(response.status).toBe(400);
+        expect(await response.json()).toMatchObject({
+          error: { code: "management.request_invalid", params: { field } },
+        });
+        expect((await listStations()).find((station) => station.id === id)).toMatchObject({ name });
+        expect(
+          await suite.db
+            .select()
+            .from(kitchenStationTiming)
+            .where(eq(kitchenStationTiming.stationId, id)),
+        ).toEqual([]);
+      }
+    },
+  );
+
+  it("PATCH refuses inherited order inversions before saving name or overrides, and unknown ids affect no station", async () => {
+    const name = unique("Effective order");
+    const id = await createStation(name);
+    expect(
+      (
+        await req(
+          `/stations/${id}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ warmAfterMinutes: 2, overdueAfterMinutes: 4 }),
+          },
+          managerCookie,
+        )
+      ).status,
+    ).toBe(204);
+    const before = await suite.db
+      .select()
+      .from(kitchenStationTiming)
+      .where(eq(kitchenStationTiming.stationId, id));
+    const refused = await req(
+      `/stations/${id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ name: "Should not save", warmAfterMinutes: null }),
+      },
+      managerCookie,
+    );
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: {
+        code: "station.thresholds_invalid",
+        params: { field: "overdueAfterMinutes", stationId: id, name },
+      },
+    });
+    const missing = randomUUID();
+    const unknown = await req(
+      `/stations/${missing}`,
+      { method: "PATCH", body: JSON.stringify({ overdueAfterMinutes: 7 }) },
+      managerCookie,
+    );
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toMatchObject({
+      error: { code: "station.not_found", params: { stationId: missing } },
+    });
+    expect(
+      await suite.db
+        .select()
+        .from(kitchenStationTiming)
+        .where(eq(kitchenStationTiming.stationId, missing)),
+    ).toEqual([]);
+    expect(
+      await suite.db
+        .select()
+        .from(kitchenStationTiming)
+        .where(eq(kitchenStationTiming.stationId, id)),
+    ).toEqual(before);
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({ name });
   });
 
   it("POST with a duplicate name → 409 station.name_taken", async () => {
@@ -1512,7 +1673,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
     });
   });
 
-  it("PATCH edits the warm/overdue/forgotten thresholds together; a non-positive value, an out-of-order set, or a partial trio → 400 management.request_invalid", async () => {
+  it("PATCH saves independent thresholds, rejects non-positive values and names an invalid effective order", async () => {
     const id = await createStation(unique("Thresh"));
     const ok = await req(
       `/stations/${id}`,
@@ -1533,7 +1694,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       forgotten_after_minutes: number;
     }>(
       sql`select warm_after_minutes, overdue_after_minutes, forgotten_after_minutes
-        from kitchen_stations where id = ${id}`,
+        from kitchen_station_timing where station_id = ${id}`,
     );
     expect(row.rows[0]).toMatchObject({
       warm_after_minutes: 3,
@@ -1574,24 +1735,19 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(outOfOrder.status).toBe(400);
     expect(await outOfOrder.json()).toMatchObject({
       error: {
-        code: "management.request_invalid",
-        params: { field: "warmAfterMinutes|overdueAfterMinutes|forgottenAfterMinutes" },
+        code: "station.thresholds_invalid",
+        params: { field: "overdueAfterMinutes", stationId: id },
       },
     });
 
-    // A partial trio is refused like an out-of-order one, under the same compound field name.
+    // Omitted fields retain their saved overrides.
     const partial = await req(
       `/stations/${id}`,
       { method: "PATCH", body: JSON.stringify({ warmAfterMinutes: 3 }) },
       managerCookie,
     );
-    expect(partial.status).toBe(400);
-    expect(await partial.json()).toMatchObject({
-      error: {
-        code: "management.request_invalid",
-        params: { field: "warmAfterMinutes|overdueAfterMinutes|forgottenAfterMinutes" },
-      },
-    });
+    expect(partial.status).toBe(204);
+    expect(await partial.text()).toBe("");
 
     const after = await suite.db.execute<{
       warm_after_minutes: number;
@@ -1599,7 +1755,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       forgotten_after_minutes: number;
     }>(
       sql`select warm_after_minutes, overdue_after_minutes, forgotten_after_minutes
-        from kitchen_stations where id = ${id}`,
+        from kitchen_station_timing where station_id = ${id}`,
     );
     expect(after.rows[0]).toMatchObject({
       warm_after_minutes: 3,

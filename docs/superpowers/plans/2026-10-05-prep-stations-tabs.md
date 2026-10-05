@@ -145,3 +145,22 @@ legacy-column fallback. Keep the original columns physically present to avoid th
 rebuild, but retire their runtime reads together in Task 2. State the reset in the PR's first line.
 The original populated-upgrade test remains an inventory/preservation receipt for the additive
 schema, not a receipt that original timing settings survive the new runtime contract.
+
+## 2026-10-05 implementation checkpoint: station override writes
+
+Station creation and edits now write `kitchen_station_timing`, leaving the original station columns
+untouched. Each positive whole-minute override can be saved independently; explicit null inherits
+that field and omission retains it. The write checks the resulting values against the venue defaults
+before changing station metadata or timing. The management station list resolves overrides against
+the default row. Station/default writes share the effective-order check; an existing station's
+refusal carries its id, name and field, while a refused creation carries name and field.
+
+The existing POST/PATCH storage assertions now read the override table. The old partial-trio
+refusal is replaced by successful partial-save checks plus refusal of an unordered effective set.
+The direct warm=99 update test now checks the named domain refusal instead of a raw database CHECK
+error. These are deliberate contract changes under Task 1, recorded for owner retrospective review.
+The kitchen fixture adds the default row that provisioning already supplies.
+
+Task 2 remains open: queue, pass, raw table aggregation, table signals and overdue reports still
+read original station columns. This checkpoint is not ready to ship. Complete those readers,
+then the health, UI and printing tasks before finish-branch.

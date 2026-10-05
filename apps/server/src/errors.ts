@@ -605,7 +605,7 @@ declare module "@waitron/shared" {
     /** A kitchen-station name already exists in this venue. `name` is the operator's own text. */
     "station.name_taken": { name: string };
     /** The effective late thresholds would be unordered for this station. */
-    "station.thresholds_invalid": { field: string; stationId: string; name: string };
+    "station.thresholds_invalid": { field: string; stationId?: string; name: string };
     /** No watcher with this id in this venue. */
     "watcher.not_found": { watcherId: string };
     /** A switched-on watcher already has this name in this venue. */

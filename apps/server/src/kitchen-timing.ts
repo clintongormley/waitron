@@ -8,6 +8,45 @@ import type { TillConfig } from "./till-config.js";
 
 const fields = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
 
+export type StationTimingPatch = Partial<{
+  [Field in keyof StationThresholds]: number | null;
+}>;
+
+export function parseStationTimingPatch(body: Record<string, unknown>): StationTimingPatch {
+  const patch: StationTimingPatch = {};
+  for (const field of fields) {
+    const value = body[field];
+    if (value === undefined) continue;
+    if (
+      value !== null &&
+      (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 2_147_483_647)
+    ) {
+      throw new AppError("management.request_invalid", { field });
+    }
+    patch[field] = value;
+  }
+  return patch;
+}
+
+export function assertStationTiming(
+  overrides: StationTimingPatch,
+  defaults: StationThresholds,
+  station: { id?: string; name: string },
+): void {
+  const field = invalidTimingField({
+    warmAfterMinutes: overrides.warmAfterMinutes ?? defaults.warmAfterMinutes,
+    overdueAfterMinutes: overrides.overdueAfterMinutes ?? defaults.overdueAfterMinutes,
+    forgottenAfterMinutes: overrides.forgottenAfterMinutes ?? defaults.forgottenAfterMinutes,
+  });
+  if (field !== undefined) {
+    throw new AppError("station.thresholds_invalid", {
+      field,
+      ...(station.id === undefined ? {} : { stationId: station.id }),
+      name: station.name,
+    });
+  }
+}
+
 function parseKitchenTimingDefaults(input: unknown): StationThresholds {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw new AppError("management.request_invalid", { field: "body" });
@@ -77,18 +116,7 @@ export async function setKitchenTimingDefaults(
     .orderBy(kitchenStations.displayOrder, kitchenStations.name);
   // Disabled stations retain work and can be enabled again, so their overrides must remain valid.
   for (const station of stations) {
-    const field = invalidTimingField({
-      warmAfterMinutes: station.warmAfterMinutes ?? defaults.warmAfterMinutes,
-      overdueAfterMinutes: station.overdueAfterMinutes ?? defaults.overdueAfterMinutes,
-      forgottenAfterMinutes: station.forgottenAfterMinutes ?? defaults.forgottenAfterMinutes,
-    });
-    if (field !== undefined) {
-      throw new AppError("station.thresholds_invalid", {
-        field,
-        stationId: station.id,
-        name: station.name,
-      });
-    }
+    assertStationTiming(station, defaults, station);
   }
   await tx
     .update(kitchenTimingDefaults)
