@@ -3288,7 +3288,7 @@ lined up (W84). The Home page tab's tile preview stays uncoloured
 ([W92 spec](superpowers/specs/2026-10-05-w92-product-colours-design.md), Question 3 and
 Decision 8). How it works: [products.md](developers/products.md), _Colour_, and
 [product-categories.md](developers/product-categories.md).
-**Upgrading:** two migrations, core `0100_product_color.sql` and catalogue
+**Upgrading:** two migrations, core `0101_product_color.sql` and catalogue
 `0025_category_color.sql`, each add one nullable column (`products.color`,
 `category_details.color`) with no table rebuild, so a venue migrates in place with no reset.
 Republish every menu after upgrading: a version published before W92 carries no product colours,
