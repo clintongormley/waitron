@@ -146,6 +146,9 @@ A section has:
 There is no description until something shows one. The till does not yet show a section's image or
 colour (`apps/till/src/widgets/menu-browser.ts` shows a folder icon and the name), though the
 published menu carries both.
+Superseded 2026-10-05 for colour by W92
+(`docs/superpowers/specs/2026-10-05-w92-product-colours-design.md`): the till paints a section's
+colour on its tile.
 
 **Retired:** library sections (`sections.role = 'library'`, `packages/catalogue/src/schema/sections.ts`)
 and the Sections screen (`apps/dashboard/src/screens/sections-screen.ts`). A menu's sections are

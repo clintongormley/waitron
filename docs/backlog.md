@@ -3276,9 +3276,11 @@ works: [products.md](developers/products.md), _Colour_, and
 **Upgrading:** two migrations, core `0100_product_color.sql` and catalogue
 `0025_category_color.sql`, each add one nullable column (`products.color`,
 `category_details.color`) with no table rebuild, so a venue migrates in place with no reset.
-Republish every menu after upgrading: a version published before W92 carries no colours, so its
-tiles stay plain, and a menu with products on it reads as changed until it is published again
-(the document format number is unchanged, so such a version is still sold from). Export a configuration bundle again
+Republish every menu after upgrading: a version published before W92 carries no product colours,
+so its product tiles stay plain, and a menu with products on it reads as changed until it is
+published again (the document format number is unchanged, so such a version is still sold from).
+A section's colour was already in such a version, and the till now paints it on the section's
+tile. Export a configuration bundle again
 after upgrading: one exported before W92 records older schema versions for core and catalogue,
 which the import refuses (`validateConfigurationBundle`,
 `apps/server/src/configuration-transfer.ts`; read, not run). The test checks this change rewrote
@@ -3296,8 +3298,8 @@ Left open:
 - A case in `apps/dashboard/src/screens/catalogue-screen.test.ts` (near line 2135, added by #1087
   before W92) prints "[Unhandled rejection] Error: marker" in passing runs; the noise should go.
 - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
-  during the branch's work, and the cause was not found; the PR's dashboard CI shard is the evidence
-  that they pass.
+  during the branch's work, and the cause was not found; that they pass is to be confirmed by the
+  PR's dashboard CI shard.
 
 **A Products drag does not notice when a refresh removes what it is dragging or where it is going —
 DONE (W88a, #1228, 2026-10-05).** Found by W88's pre-merge review. The Products tree

@@ -897,10 +897,11 @@ category with no active station and the swatch of its colour; a product's varian
 only the room between its own start and the row's pinned Actions cell, measured as if the table
 were unscrolled, and wraps inside it, a single long word included; a name that fits stays on one
 line (`#fitNames`, `apps/dashboard/src/widgets/product-list.ts`). The box that names a new category
-takes the same room. At phone width (while the table carries `narrow`) that box goes on a line of
-its own under the grip space instead, taking the room from the grip space's start to the pinned
-cell, with the grip space and folder icon on the line above. A category's swatch sits after its
-name and count rather than before the name, so names at one depth still start at one place.
+is capped at the same room, though never below `--wt-tap-min`. At phone width (while the table
+carries `narrow`) that box goes on a line of its own under the grip space instead, held to the same
+room from the grip space's start, with the grip space and folder icon on the line above. A
+category's swatch sits after its name and count rather than before the name, so names at one depth
+still start at one place.
 
 Use `wt-modal` for an add or edit form. Its fields stop at `--wt-form-max-width` (see "Structure"
 above). Give it a `size` chosen by its content:

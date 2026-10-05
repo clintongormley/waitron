@@ -294,12 +294,13 @@ dialog ([product-categories.md](product-categories.md)).
 in the menu's version, as it does the photo and description (`freezeOffer`,
 `packages/catalogue/src/menu-document.ts`). Changing a category's colour, or moving an uncoloured
 category under a coloured one, whether through `updateCategory` or the Products tree's Move
-(`moveCatalogueItems`), makes a published menu holding its products read as changed, and the
-menu's Preview tab names the change "colour". The version on sale keeps the old colour until you
+(`moveCatalogueItems`), makes a published menu read as changed when it holds a product whose worked-out
+colour this changes (one with no colour of its own and no coloured category nearer to it), and the
+menu's Preview tab names the change "colour" for that product. The version on sale keeps the old colour until you
 publish (the "a category's colour" cases in `packages/catalogue/src/menu-publication.test.ts`). A
 product's own colour goes into the next version's offer in the same way
 (`packages/catalogue/src/menu-document.test.ts`), though no test reads a menu's status after one. A version published before colours
-existed carries none: it is still sold from, its products draw the plain tile, and its menu reads as
+existed carries no product colours: it is still sold from, its products draw the plain tile, and its menu reads as
 changed until it is published again.
 
 A menu section has a colour of its own, set in the section form. It paints the section's own tile
