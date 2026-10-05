@@ -9,6 +9,7 @@ import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  foldName,
   listAccessibleCatalogues,
   listAvailableProducts,
   listMenuOffers,
@@ -126,14 +127,13 @@ describe("seedCatalogues", () => {
         where p.active and (p.parent_id is null or parent.active)`);
       return { categories: categories.rows, products: products.rows };
     });
-    const fold = (name: string) => name.trim().normalize("NFC").toLowerCase().normalize("NFC");
     const repeated = (keys: string[]) => keys.filter((key, index) => keys.indexOf(key) !== index);
     expect(categories.length).toBeGreaterThan(1);
     expect(products.length).toBeGreaterThan(1);
-    expect(repeated(categories.map(({ parent, name }) => `${parent ?? ""}/${fold(name)}`))).toEqual(
-      [],
-    );
-    expect(repeated(products.map(({ name }) => fold(name)))).toEqual([]);
+    expect(
+      repeated(categories.map(({ parent, name }) => `${parent ?? ""}/${foldName(name)}`)),
+    ).toEqual([]);
+    expect(repeated(products.map(({ name }) => foldName(name)))).toEqual([]);
   });
 
   it("names each menu's top level after the menu, the provisioned one included", async () => {
