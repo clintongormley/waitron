@@ -1243,6 +1243,48 @@ test("a phone-width tree indents each level half as far, and no deeper than four
   expect(["a", "b", "e", "f"].map(indent)).toEqual(["0px", "16px", "64px", "80px"]);
 });
 
+test("a phone-width tree's arrow slot is a cell padding narrower, and a toggle button keeps a whole tap target inside its own cell", async () => {
+  const rows: TreeRow[] = [
+    { id: "food", parent: null, name: "Food" },
+    { id: "eggs", parent: "food", name: "Eggs" },
+    { id: "drinks", parent: null, name: "Drinks" },
+    { id: "wine", parent: "drinks", name: "Wine" },
+    { id: "tea", parent: null, name: "Tea" },
+  ];
+  // Food draws a toggle button, Drinks only the arrow picture (its whole row toggles), Tea a blank.
+  const el = await treeTable({
+    rows,
+    rowActivation: (row) => (row.id === "drinks" ? "toggle" : "click"),
+  });
+  host.style.setProperty("--wt-tap-min", "52px");
+  host.style.setProperty("--wt-space-3", "12px");
+  const slot = (key: string) => {
+    const row = el.shadowRoot!.querySelector(`tr[data-row-key="${key}"]`)!;
+    return {
+      cell: row.querySelector("td")!.getBoundingClientRect(),
+      box: row.querySelector(".tree-toggle, .tree-arrow, .tree-spacer")!.getBoundingClientRect(),
+    };
+  };
+  el.style.width = "360px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(true);
+  const [button, arrow, blank] = ["food", "drinks", "tea"].map(slot);
+  expect(arrow!.box.width).toBe(40);
+  expect(blank!.box.width).toBe(40);
+  expect(button!.box.width).toBe(52);
+  expect(button!.box.height).toBeGreaterThanOrEqual(52);
+  expect(button!.box.left).toBeGreaterThanOrEqual(button!.cell.left);
+  // Every row's name starts after the same 40 px slot, the button's included.
+  expect(button!.box.right).toBe(blank!.box.right);
+  expect(arrow!.box.right).toBe(blank!.box.right);
+  el.style.width = "600px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
+  const [wideButton, wideArrow, wideBlank] = ["food", "drinks", "tea"].map(slot);
+  expect([wideButton!.box.width, wideArrow!.box.width, wideBlank!.box.width]).toEqual([52, 52, 52]);
+  expect(wideButton!.box.left).toBe(wideBlank!.box.left);
+});
+
 test("a row that joins its parent is indented as its parent is, at either width, and is still a level down", async () => {
   const ids = ["a", "b", "c", "d", "e", "f"];
   const deep: TreeRow[] = ids.map((id, index) => ({

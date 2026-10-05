@@ -132,7 +132,14 @@ export class ProductList extends LitElement {
         margin-inline-end: var(--wt-space-3);
       }
       wt-data-table::part(tree-heading) {
-        margin-inline-start: calc(3 * var(--wt-tap-min) + var(--wt-space-3));
+        margin-inline-start: calc(
+          var(--tree-arrow-width) + 2 * var(--wt-tap-min) + var(--wt-space-3)
+        );
+      }
+      /* On a phone a product's photo gives its slot to the name; a category keeps its folder. */
+      wt-data-table[narrow]::part(thumb-frame),
+      wt-data-table[narrow]::part(thumb-placeholder) {
+        display: none;
       }
       /* Inline, not flex: the table lines a row up by its cells' first baselines, and a flex row
          would give the cell the thumbnail's bottom edge as its baseline instead of the name's. */
@@ -224,6 +231,9 @@ export class ProductList extends LitElement {
       /* The table draws a variant at its product's indent; this is the product's grip and photo. */
       wt-data-table::part(variant-name) {
         padding-inline-start: calc(2 * var(--wt-tap-min) + var(--wt-space-3));
+      }
+      wt-data-table[narrow]::part(variant-name) {
+        padding-inline-start: var(--wt-tap-min);
       }
       wt-data-table::part(price-unit) {
         color: var(--wt-color-text-muted);

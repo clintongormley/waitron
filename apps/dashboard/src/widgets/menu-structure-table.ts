@@ -102,7 +102,9 @@ export class MenuStructureTable extends LitElement {
       }
       /* The table's arrow, the grip and the folder come before the menu's own name. */
       wt-data-table::part(tree-heading) {
-        margin-inline-start: calc(3 * var(--wt-tap-min) + var(--wt-space-3));
+        margin-inline-start: calc(
+          var(--tree-arrow-width) + 2 * var(--wt-tap-min) + var(--wt-space-3)
+        );
       }
       /* Inline, not flex: the table lines a row up by its cells' first baselines, and a flex row
          would give the cell the thumbnail's bottom edge as its baseline instead of the name's. */

@@ -655,6 +655,20 @@ it("puts the Name heading over the menu's name", async () => {
   expect(heading.getBoundingClientRect().left).toBeCloseTo(pieces(el, "root").name.left, 0);
 });
 
+it("puts the Name heading over the menu's name at phone width, where the tree's arrow slot narrows", async () => {
+  const restore = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(390, 844);
+  try {
+    const el = await mountDeep();
+    for (let i = 0; i < 3; i += 1) await new Promise(requestAnimationFrame);
+    expect(table(el).hasAttribute("narrow")).toBe(true);
+    const heading = inTable(el, 'thead [part~="tree-heading"]')!;
+    expect(heading.getBoundingClientRect().left).toBeCloseTo(pieces(el, "root").name.left, 0);
+  } finally {
+    await page.viewport(restore.width, restore.height);
+  }
+});
+
 function grip(el: MenuStructureTable, key: string): HTMLButtonElement {
   return inTable<HTMLButtonElement>(el, `[data-test="drag-${CSS.escape(key)}"]`)!;
 }
