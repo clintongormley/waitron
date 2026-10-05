@@ -1,12 +1,13 @@
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, categories, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import {
   CATALOGUE_MIGRATIONS,
+  categoryDetails,
   menuDetails,
   menuPublications,
   menuVersions,
@@ -48,6 +49,12 @@ describe("folder selection routes", () => {
     expect(response.status).toBe(201);
     return ((await response.json()) as { id: string }).id;
   }
+  async function plantFolder(name: string): Promise<string> {
+    const id = crypto.randomUUID();
+    await suite.db.insert(categories).values({ id, name });
+    await suite.db.insert(categoryDetails).values({ categoryId: id, parentId: null });
+    return id;
+  }
   it("moves a selection, reports its contents, then deletes it", async () => {
     const app = mountApp();
     const parent = await folder(app, "Drinks");
@@ -84,8 +91,10 @@ describe("folder selection routes", () => {
     async (contents) => {
       const app = mountApp();
       const empty = await folder(app, "Mains");
-      const withActive = await folder(app, "Mains");
-      const withInactive = await folder(app, "Mains");
+      // Siblings can no longer be given one name through the routes, so the other two are written
+      // straight into the tables, as data stored before the rule.
+      const withActive = await plantFolder("Mains");
+      const withInactive = await plantFolder("Mains");
       const menu = await createCatalogueVia(app, "Mains menu");
       const make = async (name: string, categoryId: string) => {
         const created = await send(app, "POST", "/management-api/products", {
@@ -350,6 +359,18 @@ const suite = useVenueDb({
     managerCookie = `${MANAGEMENT_COOKIE}=${managerSid}`;
     staffCookie = `${MANAGEMENT_COOKIE}=${staffSid}`;
   },
+});
+
+// Every test here shares one database, and a category's name is unique among its siblings and an
+// Active product's across the venue. Each test starts as it would on its own database: the rows
+// earlier tests left keep their ids and lose their names.
+beforeEach(async () => {
+  await suite.db.execute(
+    sql`update categories set name = 'earlier test ' || id where name <> 'earlier test ' || id`,
+  );
+  await suite.db.execute(
+    sql`update products set name = 'earlier test ' || id where name <> 'earlier test ' || id`,
+  );
 });
 
 /**
@@ -959,6 +980,136 @@ describe("mountCatalogueApi — categories", () => {
     expect(res.status).toBe(200);
     const rows = (await res.json()) as { name: string }[];
     expect(rows.some((r) => r.name === "Postres")).toBe(true);
+  });
+});
+
+describe("unique category and product names", () => {
+  // The database is shared by every describe here, so each name carries a tag of its own.
+  const tag = () => crypto.randomUUID().slice(0, 8);
+  async function refused(response: Response, code: string, params: Record<string, unknown>) {
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code, params } });
+  }
+
+  it("answers a duplicate sibling category on create, rename and move with category.name_taken (409)", async () => {
+    const app = mountApp();
+    const name = `Mains ${tag()}`;
+    const first = await createCategoryVia(app, name);
+    await refused(
+      await send(app, "POST", "/management-api/categories", {
+        body: { name: ` ${name.toUpperCase()} ` },
+      }),
+      "category.name_taken",
+      { field: "name", name: name.toUpperCase() },
+    );
+    const other = await createCategoryVia(app, `Other ${tag()}`);
+    await refused(
+      await send(app, "PATCH", `/management-api/categories/${other}`, { body: { name } }),
+      "category.name_taken",
+      { field: "name", name },
+    );
+    const holder = await createCategoryVia(app, `Holder ${tag()}`);
+    const nested = await send(app, "POST", "/management-api/categories", {
+      body: { name, parentId: holder },
+    });
+    expect(nested.status).toBe(201);
+    const nestedId = ((await nested.json()) as { id: string }).id;
+    await refused(
+      await send(app, "POST", "/management-api/folders/move", {
+        body: { productIds: [], categoryIds: [nestedId], to: null },
+      }),
+      "category.name_taken",
+      { field: "name", name },
+    );
+    await refused(
+      await send(app, "POST", "/management-api/folders/delete", {
+        body: { productIds: [], categoryIds: [holder], contents: "move_up" },
+      }),
+      "category.name_taken",
+      { field: "name", name },
+    );
+    expect((await send(app, "GET", `/management-api/categories/${first}`)).status).toBe(200);
+  });
+
+  it("answers a duplicate Active product on create, rename and reactivation with product.name_taken (409)", async () => {
+    const app = mountApp();
+    const name = `Café ${tag()}`;
+    await createNamedProductVia(app, name);
+    const catalogueId = await createCatalogueVia(app, `Second menu ${tag()}`);
+    const body = {
+      catalogueId,
+      categoryId: null,
+      name: name.toLowerCase(),
+      pricingUnit: "each",
+      unitPrice: "1.00",
+      vatClass: "general",
+    };
+    await refused(
+      await send(app, "POST", "/management-api/products", { body }),
+      "product.name_taken",
+      { field: "name", name: name.toLowerCase() },
+    );
+    const other = await createNamedProductVia(app, `Té ${tag()}`);
+    await refused(
+      await send(app, "PATCH", `/management-api/products/${other}`, { body: { name } }),
+      "product.name_taken",
+      { field: "name", name },
+    );
+    const inactive = await send(app, "POST", "/management-api/products", {
+      body: { ...body, active: false },
+    });
+    expect(inactive.status).toBe(201);
+    const inactiveId = ((await inactive.json()) as { id: string }).id;
+    await refused(
+      await send(app, "PATCH", `/management-api/products/${inactiveId}`, {
+        body: { active: true },
+      }),
+      "product.name_taken",
+      { field: "name", name: name.toLowerCase() },
+    );
+  });
+
+  it("answers a product editor save whose variant takes a used name with the variant's field (409)", async () => {
+    const app = mountApp();
+    const name = `Agua ${tag()}`;
+    await createNamedProductVia(app, name);
+    const catalogueId = await createCatalogueVia(app, `Editor menu ${tag()}`);
+    const unitId = (
+      await suite.db.execute<{ id: string }>(sql`select id from units where seed_key = 'each'`)
+    ).rows[0]!.id;
+    const variant = (variantName: string) => ({
+      name: variantName,
+      customerName: null,
+      kitchenName: null,
+      image: null,
+      unitPrice: null,
+      available: true,
+      active: true,
+    });
+    await refused(
+      await send(app, "POST", `/management-api/catalogues/${catalogueId}/product-editor`, {
+        body: {
+          name: `Refresco ${tag()}`,
+          customerName: null,
+          description: null,
+          kitchenName: null,
+          image: null,
+          unitId,
+          unitPrice: "2.00",
+          active: true,
+          available: true,
+          ordering: "public",
+          vatClass: "general",
+          variants: [variant(`Pequeño ${tag()}`), variant(name)],
+          primaryCategoryId: null,
+          modifiers: [],
+          allergens: null,
+          dietaryDeclarations: [],
+        },
+      }),
+      "product.name_taken",
+      { field: "variants.1.name", name },
+    );
   });
 });
 
