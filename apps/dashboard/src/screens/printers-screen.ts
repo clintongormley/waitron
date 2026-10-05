@@ -502,6 +502,7 @@ export class PrintersScreen extends LitElement {
     saving: boolean;
     error: string | null;
   } | null = null;
+  @state() private discardDetailNameArmed = false;
   @state() private connectionOpen = false;
   @state() private calibrationOpen = false;
   @state() private testingDrawer = false;
@@ -2033,6 +2034,7 @@ export class PrintersScreen extends LitElement {
     this.calibrationOpen = false;
     this.detailActiveError = null;
     this.detailName = null;
+    this.discardDetailNameArmed = false;
   }
 
   async #saveDetailName(printer: Printer): Promise<void> {
@@ -2051,6 +2053,7 @@ export class PrintersScreen extends LitElement {
       return;
     }
     this.detailName = null;
+    this.discardDetailNameArmed = false;
     await this.#load();
   }
 
@@ -2135,6 +2138,7 @@ export class PrintersScreen extends LitElement {
                         value: event.detail.value,
                         error: null,
                       };
+                    this.discardDetailNameArmed = false;
                   }}
                 ></wt-input>
                 <wt-form-actions>
@@ -2142,10 +2146,16 @@ export class PrintersScreen extends LitElement {
                     data-test="cancel-printer-name"
                     ?disabled=${this.detailName.saving}
                     @click=${() => {
-                      this.detailName = null;
+                      if (this.detailName?.value !== p.name && !this.discardDetailNameArmed) {
+                        this.discardDetailNameArmed = true;
+                      } else {
+                        this.detailName = null;
+                        this.discardDetailNameArmed = false;
+                      }
                     }}
-                    >${t("action.cancel")}</wt-button
+                    >${this.discardDetailNameArmed ? t("printers.discard_name") : t("action.cancel")}</wt-button
                   >
+                  ${this.discardDetailNameArmed ? html`<span data-test="discard-printer-name" role="status">${t("printers.discard_name_prompt")}</span>` : nothing}
                   <wt-button
                     variant="primary"
                     data-test="save-printer-name"
@@ -2159,6 +2169,7 @@ export class PrintersScreen extends LitElement {
                 data-test="edit-printer-name"
                 @click=${() => {
                   this.detailName = { id: p.id, value: p.name, saving: false, error: null };
+                  this.discardDetailNameArmed = false;
                 }}
                 >${t("action.edit")}</wt-button
               >`

@@ -3644,6 +3644,24 @@ it("edits a printer name on its details page without opening the calibration wiz
   expect(q(el, '[name="printer-detail-name"]')).toBeNull();
 });
 
+it("asks before discarding an edited printer name", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  q(el, "[data-test=edit-printer-name]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-name"]', "New kitchen name");
+  q(el, "[data-test=cancel-printer-name]")!.click();
+  await flush(el);
+  expect(q(el, '[name="printer-detail-name"]')).not.toBeNull();
+  expect(q(el, "[data-test=discard-printer-name]")).not.toBeNull();
+  q(el, "[data-test=cancel-printer-name]")!.click();
+  await flush(el);
+  expect(q(el, '[name="printer-detail-name"]')).toBeNull();
+});
+
 it("shows the saved drawer independently of the profiles offering it, and the delivering agent without discovery", async () => {
   const api = stubApi({
     listPrinters: vi.fn().mockResolvedValue([
