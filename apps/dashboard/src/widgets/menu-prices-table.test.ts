@@ -236,6 +236,13 @@ async function leave(el: MenuPricesTable, key: string) {
   await el.updateComplete;
 }
 
+async function search(el: MenuPricesTable, term: string): Promise<void> {
+  const box = table(el).shadowRoot.querySelector<HTMLInputElement>('input[name="search"]')!;
+  box.value = term;
+  box.dispatchEvent(new Event("input"));
+  await table(el).updateComplete;
+}
+
 function priceSaves(el: MenuPricesTable) {
   const heard = vi.fn<(detail: PriceSave) => void>();
   el.addEventListener("wt-price-save", (event) => heard((event as CustomEvent<PriceSave>).detail));
@@ -363,11 +370,36 @@ it("names a missing section or category, and a product with no reporting categor
 
 it("finds a product by its name", async () => {
   const el = await mount();
-  const search = table(el).shadowRoot.querySelector<HTMLInputElement>('input[name="search"]')!;
-  search.value = "lemon";
-  search.dispatchEvent(new Event("input"));
-  await table(el).updateComplete;
+  await search(el, "lemon");
   expect(shown(el)).toEqual(["mi-lemonade"]);
+});
+
+it.each(["Bebidas / Cerveza", "Bebidas › Cerveza", "Bebidas > Cerveza"])(
+  "finds a product by its main category's path typed as %s",
+  async (term) => {
+    const el = await mount();
+    await search(el, term);
+    expect(shown(el)).toEqual(["mi-lager"]);
+  },
+);
+
+it("does not find a product by text that runs from one spelling of its category's path into the next", async () => {
+  const el = await mount();
+  await search(el, "Cerveza Bebidas");
+  expect(shown(el)).toEqual([]);
+});
+
+it("finds a product whose main category is missing, or that has none, by what the column says", async () => {
+  const el = await mount({
+    rows: [
+      { ...lager, categoryId: null },
+      { ...burger, categoryId: "c-gone" },
+    ],
+  });
+  await search(el, t("editor.missing_choice"));
+  expect(shown(el)).toEqual(["mi-burger"]);
+  await search(el, t("categories.uncategorised"));
+  expect(shown(el)).toEqual(["mi-lager"]);
 });
 
 // A term typed from the keyboard carries an ordinary space where Spanish shows a no-break one.
@@ -381,10 +413,7 @@ it.each([
   setLocale(c.locale);
   try {
     const el = await mount();
-    const search = table(el).shadowRoot.querySelector<HTMLInputElement>('input[name="search"]')!;
-    search.value = c.term;
-    search.dispatchEvent(new Event("input"));
-    await table(el).updateComplete;
+    await search(el, c.term);
     expect(shown(el)).toEqual(c.want);
   } finally {
     setLocale("es-ES");
@@ -1652,13 +1681,6 @@ describe("variants", () => {
       toggleOf(el, key)!.click();
       await table(el).updateComplete;
     }
-  }
-
-  async function search(el: MenuPricesTable, term: string): Promise<void> {
-    const box = table(el).shadowRoot.querySelector<HTMLInputElement>('input[name="search"]')!;
-    box.value = term;
-    box.dispatchEvent(new Event("input"));
-    await table(el).updateComplete;
   }
 
   it("puts each variant under its product, collapsed until the product is opened", async () => {

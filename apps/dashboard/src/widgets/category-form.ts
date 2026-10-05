@@ -31,6 +31,17 @@ export function categoryPath(
     .join(separator);
 }
 
+/** The path spelled with each separator a person might type, one spelling per line so a term
+ * typed into a one-line search box cannot run from the end of one spelling into the next. */
+export function categoryPathSearchText(
+  category: CategorySummary,
+  categories: readonly CategorySummary[],
+): string {
+  return [PATH_SEPARATOR, " / ", " > "]
+    .map((separator) => categoryPath(category, categories, separator))
+    .join("\n");
+}
+
 /** The collation `wt-data-table` sorts text with, so a picker or list and the tables agree. */
 export function byLabel(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });

@@ -3698,7 +3698,17 @@ list (`menu-prices-table.ts`) and the add-products dialog's category picker
 (`apps/dashboard/src/widgets/category-form.ts`). The text the Products search box matches
 (`apps/dashboard/src/widgets/product-list.ts`) holds each category path spelled with " › ", " / "
 and " > ", so "Food / Meat / Grill", "Food › Meat › Grill" and "Food > Meat > Grill" all find a
-product in Grill (the path-search cases in `apps/dashboard/src/widgets/product-list.test.ts`).
+product in Grill (the path-search cases in `apps/dashboard/src/widgets/product-list.test.ts`). The
+menu prices table's search box matches a product's main category the same three ways
+(`categoryPathSearchText`, used by both). Each spelling sits on its own line of that text, so a
+search running from the end of one spelling into the start of the next does not find the
+product: "Grill Food / Meat" does not find a product in Grill on the Products screen, and "Cerveza
+Bebidas" does not find one in Bebidas › Cerveza in the prices table (a case in each suite). The search inside the Menus screen's two category pickers — the prices
+table's category filter and the add-products dialog's category list — matches only the text the
+list shows, so a path finds its category there only when typed with " › "; one category's name
+alone still finds it. Those pickers are the shared `wt-combobox`, whose search matches the text
+each option shows (its `valueLabel` where it has one, else its `label`); neither Menus picker sets
+a `valueLabel`, and the combobox was left unchanged.
 
 **Sales: the category report names each category by its full path — DONE (W73, #1212, owner 2026-10-04: "we should
 report on category paths, not just the final name").** The Sales screen's category report showed a

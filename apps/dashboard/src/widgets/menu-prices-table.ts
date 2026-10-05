@@ -36,7 +36,13 @@ import type {
 import { currentLocale, t } from "../i18n/t.js";
 import { productStatusName } from "../i18n/domain.js";
 import { leftToBrowser } from "../navigation.js";
-import { byLabel, categoryAncestors, categoryPath, PATH_SEPARATOR } from "./category-form.js";
+import {
+  byLabel,
+  categoryAncestors,
+  categoryPath,
+  categoryPathSearchText,
+  PATH_SEPARATOR,
+} from "./category-form.js";
 import { priceSearchText, priceText } from "./form-fields.js";
 
 /** One field's value to write. `previous` is the value it replaces in the order writes are made,
@@ -232,6 +238,7 @@ export class MenuPricesTable extends LitElement {
   /** Each row's sections, every placement's together, for the section filter. */
   #reached: ReadonlyMap<MenuPriceRow, string[]> = new Map();
   #categoryPaths: ReadonlyMap<string, string> = new Map();
+  #categorySearchTexts: ReadonlyMap<string, string> = new Map();
   /** Each category with the categories above it, so a filter on a category keeps those inside it. */
   #categoryChains: ReadonlyMap<string, string[]> = new Map();
   #variants: ReadonlyMap<string, Product["variants"][number]> = new Map();
@@ -424,6 +431,12 @@ export class MenuPricesTable extends LitElement {
   #readCategories(): void {
     this.#categoryPaths = new Map(
       this.categories.map((category) => [category.id, categoryPath(category, this.categories)]),
+    );
+    this.#categorySearchTexts = new Map(
+      this.categories.map((category) => [
+        category.id,
+        categoryPathSearchText(category, this.categories),
+      ]),
     );
     this.#categoryChains = new Map(
       this.categories.map((category) => [
@@ -812,6 +825,11 @@ export class MenuPricesTable extends LitElement {
     return this.#categoryPaths.get(row.categoryId) ?? t("editor.missing_choice");
   }
 
+  #categorySearchText(row: MenuPriceRow): string {
+    if (row.categoryId === null) return t("categories.uncategorised");
+    return this.#categorySearchTexts.get(row.categoryId) ?? t("editor.missing_choice");
+  }
+
   #emit(name: string, detail: object): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
@@ -864,6 +882,7 @@ export class MenuPricesTable extends LitElement {
         label: t("editor.main_category"),
         choosable: "shown",
         sortValue: ({ item }) => this.#categoryName(item),
+        searchValue: ({ item }) => this.#categorySearchText(item),
         cell: ({ item, variant }) => (variant ? nothing : this.#categoryName(item)),
         filter: {
           label: t("menu_prices.category_filter"),

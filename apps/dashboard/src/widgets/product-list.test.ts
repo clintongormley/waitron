@@ -3560,13 +3560,39 @@ describe("the Products tree's Name column", () => {
     },
   );
 
-  it("finds an empty category by its parent's path typed with ›", async () => {
-    const { el, root } = await mountDeep({ products: [] });
-    el.search = "Food › Meat";
+  it.each(["Food › Meat", "Food > Meat"])(
+    "finds an empty category by its parent's path typed as %s",
+    async (typed) => {
+      const { el, root } = await mountDeep({ products: [] });
+      el.search = typed;
+      await el.updateComplete;
+      await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+      expect(rowKeys(root)).toContain("folder:g");
+      expect(rowKeys(root)).not.toContain("folder:d");
+    },
+  );
+
+  it("finds a product by its category's path after a category above it is renamed", async () => {
+    const { el, root } = await mountDeep();
+    el.categories = el.categories.map((each) =>
+      each.id === "m" ? { ...each, name: "Butcher" } : each,
+    );
+    el.search = "Food / Butcher / Grill";
     await el.updateComplete;
     await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
-    expect(rowKeys(root)).toContain("folder:g");
-    expect(rowKeys(root)).not.toContain("folder:d");
+    expect(rowKeys(root)).toContain("ribs");
+    el.search = "Food / Meat / Grill";
+    await el.updateComplete;
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    expect(rowKeys(root)).not.toContain("ribs");
+  });
+
+  it("does not find a product by text that runs from one spelling of its path into the next", async () => {
+    const { el, root } = await mountDeep();
+    el.search = "Grill Food / Meat";
+    await el.updateComplete;
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    expect(rowKeys(root)).not.toContain("ribs");
   });
 });
 

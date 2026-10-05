@@ -19,6 +19,7 @@ import type {
 import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
 import { localizedName } from "../i18n/localized.js";
+import { PATH_SEPARATOR } from "./category-form.js";
 import { describeSetting } from "./price-source.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -258,7 +259,7 @@ export class MenuPreviewPanel extends LitElement {
 
   /** One place inside a sentence. */
   #place(path: readonly string[]): string {
-    return path.length === 0 ? t("menu_preview.top_level") : path.join(" › ");
+    return path.length === 0 ? t("menu_preview.top_level") : path.join(PATH_SEPARATOR);
   }
 
   #places(paths: readonly (readonly string[])[]): string {
