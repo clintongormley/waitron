@@ -786,7 +786,7 @@ export class ProductEditor extends LitElement {
   /** The nested form's screen may hand focus back before this editor has drawn the control enabled
    * again, and a disabled control does not take focus; then it waits for that update. It gives up if
    * another element has taken focus meanwhile, but not if focus merely dropped to the page: the shut
-   * form can still hold focus at the first try and lose it to the page without a `focusout`. */
+   * form can still hold focus at the first try and lose it to the page. */
   private async focusOnceEnabled(find: () => HTMLElement | null | undefined): Promise<void> {
     const target = find();
     target?.focus();
