@@ -8532,7 +8532,7 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
 **Dashboard, till and setup:**
 
 - **One word for "switched off, kept for the record" across the dashboard — done by W110
-  (#1255), four points left open.** The owner's rule (2026-10-05): a record switched off but kept
+  (#1255), three points left open.** The owner's rule (2026-10-05): a record switched off but kept
   says **Disable / Deshabilitar**, comes back with **Enable / Habilitar**, and reads **Active** or
   **Disabled** (Deshabilitado or Deshabilitada, agreeing with the noun); **Delete / Eliminar** only
   for a real delete. W110 moved products, variants, options and extras lists, departments, zones,
@@ -8541,16 +8541,15 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   longer said what they show; the rule is in `docs/developers/design-system.md`, "Switching off
   versus deleting". (a) is done by W110a (#1268): a printer's Active status reads "Activa", agreeing with
   "Deshabilitada" as lists and variants already did, and print agents read "Activo" from a key of their own
-  (`printers.agent_status_active`). Left open: (b) A kitchen-screen watcher's **Remove** marks the
+  (`printers.agent_status_active`). (c) is done by W110c: a disabled product's own row on the
+  products list offers Enable, not Disable, through the editor's own save; a bulk selection of
+  products that are all disabled already offers no Disable (no bulk Enable exists). Left open: (b) A kitchen-screen watcher's **Remove** marks the
   watcher inactive and drops its printers, its screens then say it was removed, and nothing lists or
   brings it back (`removeWatcher`, `apps/server/src/watchers.ts`), so it is neither a delete nor a
   switch-off; a kitchen course's **Remove** is the same kind of action: it sets `active: false` and
   keeps the row, and no screen lists it or brings it back (`deactivateCourse`; `listCourses` returns
   active courses only, `apps/server/src/kitchen.ts`). Both keep
-  "Remove" until the owner decides which they are. (c) On the products list a
-  disabled product's own row offers Disable again rather than Enable (a disabled variant's row does
-  offer Enable); Enable for a product is only in its editor (`apps/dashboard/src/widgets/product-list.ts`,
-  the actions column). (d) Departments, zones, floor tables and adjustment reasons can be disabled
+  "Remove" until the owner decides which they are. (d) Departments, zones, floor tables and adjustment reasons can be disabled
   but no screen offers Enable for them. (e) a test gap, reported by W110's review and not
   re-checked: `#fallbackReason` (`packages/venue-service/src/dashboard/prep-stations-screen.ts`)
   turns the server's `switched_off` reason into `prep.test_disabled` for both of its callers, and
