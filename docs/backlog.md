@@ -3207,7 +3207,7 @@ with `main`. Seen in the same check, also not traced: in the product editor's va
 Unit button sits against the Price heading with no gap. Needs the owner to say whether either
 wants an item.
 
-**Products: the Move dialog lists destination categories by full path in name order — DONE (W82,
+**Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
 owner 2026-10-04).** The bulk Move dialog's Destination list showed categories in the order the
 server lists them, by creation time and then id (`listCategories`,
 `packages/catalogue/src/categories.ts`).
