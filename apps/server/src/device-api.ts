@@ -19,7 +19,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { readDeviceCookie, requireDevice, setDeviceCookie } from "./device-session.js";
-import { requireDeviceBinding } from "./device.js";
+import { mapDeviceNameTaken, requireDeviceName, resolveDeviceBinding } from "./device.js";
 import { requestCfg } from "./request-config.js";
 import {
   acceptDeviceJoinRequest,
@@ -422,51 +422,89 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     }),
   );
 
-  // ── Reassign a device's device profile (device.manage) ────────────────────────────────────────
-  app.post("/management-api/devices/:id/assign-device-profile", (c) =>
+  // ── Edit a device (device.manage) ────────────────────────────────────────────────────────────────────
+  app.patch("/management-api/devices/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
-      // `device_profile_id` is NOT NULL, so this route REASSIGNS and cannot clear the binding.
-      const body = await readJsonBody<{ deviceProfileId?: unknown }>(c);
-      const deviceProfileId = requireBodyUuid(body.deviceProfileId, "deviceProfileId");
-      // The FK still refuses a dangling write; the pre-read turns that into an error the operator can
-      // act on (see the helper).
-      const updated = await gated(sessionId, async (tx) => {
-        await requireDeviceBinding(tx, deviceProfileId);
+      // Parsed out here, screened inside the gate: an unauthorised caller is refused before anything
+      // is said about its id or body.
+      const body = await readJsonBody<{
+        name?: unknown;
+        profileId?: unknown;
+        stationId?: unknown;
+        watcherId?: unknown;
+        receiptPrinterId?: unknown;
+        paymentSlipPrinterId?: unknown;
+        madeHereStationIds?: unknown;
+      }>(c);
+      await gated(sessionId, async (tx) => {
+        if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
         const [device] = await tx
-          .select({ locationId: devices.locationId, deviceProfileId: devices.deviceProfileId })
+          .select({
+            active: devices.active,
+            locationId: devices.locationId,
+            deviceProfileId: devices.deviceProfileId,
+            receiptPrinterId: devices.receiptPrinterId,
+            paymentSlipPrinterId: devices.paymentSlipPrinterId,
+          })
           .from(devices)
           .where(ownDeviceById(id));
-        if (device === undefined) return [];
-        // Reassigning the profile it already has is not a move, so staff's choices stay.
-        if (device.deviceProfileId === deviceProfileId) return [{ id }];
-        const printers = await firstUsablePrinters(tx, deviceProfileId, device.locationId);
-        return tx
-          .update(devices)
-          .set({ deviceProfileId, ...printers })
-          .where(ownDeviceById(id))
-          .returning({ id: devices.id });
-      });
-      if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
-      return c.body(null, 204);
-    }),
-  );
-
-  app.put("/management-api/devices/:id/made-here", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
-      const body = await readJsonBody<{ stationIds?: unknown }>(c);
-      if (!Array.isArray(body.stationIds) || !body.stationIds.every(isUuid)) {
-        throw new AppError("management.request_invalid", { field: "stationIds" });
-      }
-      await gated(sessionId, async (tx) => {
-        const [device] = await tx.select({ id: devices.id }).from(devices).where(ownDeviceById(id));
-        if (device === undefined) throw new AppError("device.not_found", { deviceId: id });
-        await setMadeHereStations(tx, deps.cfg, id, body.stationIds as string[]);
+        if (device === undefined || !device.active) {
+          throw new AppError("device.not_found", { deviceId: id });
+        }
+        const label = requireDeviceName(body.name);
+        const profileId = requireBodyUuid(body.profileId, "profileId");
+        const stationId =
+          body.stationId == null ? null : requireBodyUuid(body.stationId, "stationId");
+        const watcherId =
+          body.watcherId == null ? null : requireBodyUuid(body.watcherId, "watcherId");
+        const chosen: Record<PrinterRole, string | null> = {
+          receipt: requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId"),
+          payment_slip: requireNullableBodyUuid(body.paymentSlipPrinterId, "paymentSlipPrinterId"),
+        };
+        const madeHere = body.madeHereStationIds;
+        if (!Array.isArray(madeHere) || !madeHere.every(isUuid)) {
+          throw new AppError("management.request_invalid", { field: "madeHereStationIds" });
+        }
+        const binding = await resolveDeviceBinding(tx, deps.cfg, {
+          profileId,
+          stationId,
+          watcherId,
+        });
+        const held =
+          profileId === device.deviceProfileId
+            ? {
+                receiptPrinterId: device.receiptPrinterId,
+                paymentSlipPrinterId: device.paymentSlipPrinterId,
+              }
+            : await firstUsablePrinters(tx, profileId, device.locationId);
+        try {
+          await tx
+            .update(devices)
+            .set({
+              label,
+              deviceProfileId: profileId,
+              stationId: binding.stationId,
+              watcherId: binding.watcherId,
+              ...held,
+            })
+            .where(ownDeviceById(id));
+        } catch (error) {
+          throw mapDeviceNameTaken(error);
+        }
+        // Only a printer that differs from the one held is checked: `chooseDevicePrinter` takes
+        // switched-on printers only, and a device may still hold a listed one since switched off.
+        const current: Record<PrinterRole, string | null> = {
+          receipt: held.receiptPrinterId,
+          payment_slip: held.paymentSlipPrinterId,
+        };
+        for (const role of ["receipt", "payment_slip"] as const) {
+          if (chosen[role] === current[role]) continue;
+          const result = await chooseDevicePrinter(tx, id, role, chosen[role]);
+          if (!result.ok) throw new AppError("device.binding_invalid", { field: result.field });
+        }
+        await setMadeHereStations(tx, deps.cfg, id, madeHere as string[]);
       });
       return c.body(null, 204);
     }),

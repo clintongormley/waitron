@@ -87,6 +87,28 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  test("clickable rows beside a row rowClickable refuses", async () => {
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Users"></wt-data-table>',
+      theme,
+    )) as WtDataTable<Row>;
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name },
+      { key: "status", label: "Status", cell: (row) => row.status },
+    ] satisfies DataTableColumn<Row>[];
+    el.rows = [
+      { id: "1", name: "Ada", status: "Active" },
+      { id: "2", name: "Bea", status: "Removed" },
+    ];
+    el.rowKey = (row) => row.id;
+    el.rowClick = (row) => void row.id;
+    el.rowClickLabel = (row) => `Open ${row.name}`;
+    el.rowClickable = (row) => row.status === "Active";
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelectorAll(".row-activate")).toHaveLength(1);
+    await expectNoA11yViolations(host);
+  });
+
   test("selectable rows with a select-all and per-row checkboxes", async () => {
     const el = (await mountThemed(
       '<wt-data-table aria-label="Users"></wt-data-table>',

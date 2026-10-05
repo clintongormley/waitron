@@ -2580,14 +2580,20 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/devices/${id}/revoke`, "POST");
   }
 
-  reassignDeviceProfile(id: string, deviceProfileId: string | null): Promise<void> {
-    return this.#request<void>(`/management-api/devices/${id}/assign-device-profile`, "POST", {
-      deviceProfileId,
-    });
-  }
-
-  setDeviceMadeHere(id: string, stationIds: string[]): Promise<void> {
-    return this.#request<void>(`/management-api/devices/${id}/made-here`, "PUT", { stationIds });
+  /** Everything about a device but its card reader, which `setDeviceReader` saves. */
+  updateDevice(
+    id: string,
+    input: {
+      name: string;
+      profileId: string;
+      stationId?: string | null;
+      watcherId?: string | null;
+      receiptPrinterId: string | null;
+      paymentSlipPrinterId: string | null;
+      madeHereStationIds: string[];
+    },
+  ): Promise<void> {
+    return this.#request<void>(`/management-api/devices/${id}`, "PATCH", input);
   }
 
   // ── Printing (print agents + printers + jobs) ────────────────────────────────────────────────────

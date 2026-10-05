@@ -696,7 +696,8 @@ declare module "@waitron/shared" {
     /** A cash payment from a device whose profile does not take cash (`assertTakesCash`). */
     "device.cash_not_allowed": Record<string, never>;
     /**
-     * The device-management surface named a device id that matches nothing. Unlike
+     * The device-management surface named a device id that matches nothing, or, on
+     * `PATCH /management-api/devices/:id` alone, a removed device (`active = false`). Unlike
      * `device.unauthorized`, this surface is for an authenticated manager, so the id is echoed.
      */
     "device.not_found": { deviceId: string };
@@ -715,14 +716,10 @@ declare module "@waitron/shared" {
     /** A receipt-language change refused because `count` open orders at the location hold a line. */
     "receipt.language_orders_open": { field: "receiptLanguage"; count: number };
     /**
-     * A request named a device binding id that matches no row, or a printer the device may not use
-     * (`chooseDevicePrinter`, `@waitron/layouts`). Checked by a read before the write, because this
-     * engine's foreign-key refusal does not say which key failed; `device.ts` states that reasoning
-     * where the read is taken. `field` carries the FIELD NAME only, never the id value.
+     * A request named a printer the device may not use (`chooseDevicePrinter`, `@waitron/layouts`).
+     * `field` carries the FIELD NAME only, never the id value.
      */
-    "device.binding_invalid": {
-      field: "receiptPrinterId" | "paymentSlipPrinterId" | "deviceProfileId";
-    };
+    "device.binding_invalid": { field: "receiptPrinterId" | "paymentSlipPrinterId" };
     /**
      * A knock arrived at `POST /api/device/join` while pairing mode is shut, or after it shut during
      * the knock — the ordinary state, not an anomaly. NO params: nothing about the window is the
