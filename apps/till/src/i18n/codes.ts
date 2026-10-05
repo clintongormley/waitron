@@ -343,9 +343,9 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "You already have time off that overlaps those dates",
     es: "Ya tienes una ausencia que se solapa con esas fechas",
   },
-  // `device.join_rate_limited` and `device.join_full` are deliberately UNMAPPED: both leave the operator
-  // only "try again", which the generic sentence says, and naming either would tell an unapproved
-  // device something about the venue's state.
+  // `device.join_rate_limited`, `device.join_full` and `device.join_stale` are deliberately UNMAPPED:
+  // each leaves the operator only "try again", which the generic sentence says, and naming one would
+  // tell an unapproved device something about the venue's state.
   // `device.forbidden_action` is deliberately UNMAPPED: the server refuses other actions with it too
   // (`assertDeviceCapability`, `apps/server/src/device-session.ts`), so the two
   // card reader paths (the counter's card collect and the bill pay dialog) show

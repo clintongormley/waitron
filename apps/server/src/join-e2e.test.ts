@@ -5,7 +5,7 @@
  */
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { deviceMadeHereStations, deviceProfiles, devices, withTransaction } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { cardReaders, deviceCardReaders } from "@waitron/payments";
@@ -18,6 +18,24 @@ import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
+
+/** Runs after an ask has proved a disabled device and before its transaction opens: where a race
+ * with another ask, or with Pair, lands. A no-op unless a case sets it. */
+const between = vi.hoisted(() => ({ proofAndTransaction: async (): Promise<void> => {} }));
+vi.mock("./join-requests.js", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./join-requests.js")>();
+  return {
+    ...real,
+    provenDisabledDevice: async (...args: Parameters<typeof real.provenDisabledDevice>) => {
+      const proof = await real.provenDisabledDevice(...args);
+      await between.proofAndTransaction();
+      return proof;
+    },
+  };
+});
+afterEach(() => {
+  between.proofAndTransaction = async () => {};
+});
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -610,6 +628,45 @@ describe("a disabled device comes back as the same device", () => {
       200,
     );
     expect((await send(app, "GET", "/api/device/me", { cookie: second.jar })).status).toBe(200);
+  });
+
+  it("an ask whose proof another ask overtook is refused with no cookie, and the browser keeps the winner's", async () => {
+    const { venue, app, deviceId, jar } = await disabledTill();
+    let winner: Awaited<ReturnType<typeof joined>> | undefined;
+    between.proofAndTransaction = async () => {
+      between.proofAndTransaction = async () => {};
+      winner = await joined(await knockWith(app, "Bar till", jar));
+    };
+
+    const overtaken = await knockWith(app, "Bar till", jar);
+    expect(overtaken.status).toBe(409);
+    expect((await errorOf(overtaken)).code).toBe("device.join_stale");
+    expect(overtaken.headers.get("set-cookie")).toBeNull();
+    expect(winner!.joinId).toBe(deviceId);
+    expect(await pendingCount()).toBe(1);
+    expect(await listDevices(app, venue)).toMatchObject([{ id: deviceId, returning: {} }]);
+
+    const again = await joined(await knockWith(app, "Bar till", winner!.jar));
+    expect(again.joinId).toBe(deviceId);
+  });
+
+  it("an ask that Pair overtook is refused with no cookie, and the browser's cookie is the enabled device's", async () => {
+    const { venue, app, profileId, holdId, deviceId, jar } = await disabledTill();
+    const first = await joined(await knockWith(app, "Bar till", jar));
+    between.proofAndTransaction = async () => {
+      between.proofAndTransaction = async () => {};
+      const accepted = await pair(app, venue, holdId, first, { name: "Bar till", profileId });
+      expect(accepted.status).toBe(200);
+    };
+
+    const overtaken = await knockWith(app, "Bar till", first.jar);
+    expect(overtaken.status).toBe(409);
+    expect((await errorOf(overtaken)).code).toBe("device.join_stale");
+    expect(overtaken.headers.get("set-cookie")).toBeNull();
+    expect(await pendingCount()).toBe(0);
+    const me = await send(app, "GET", "/api/device/me", { cookie: first.jar });
+    expect(me.status).toBe(200);
+    expect(await me.json()).toMatchObject({ deviceId });
   });
 
   it("enabling under a name an active device has taken since is refused, and the request survives", async () => {

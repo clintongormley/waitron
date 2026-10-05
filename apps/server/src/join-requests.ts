@@ -121,22 +121,20 @@ export async function createJoinRequest(
 ): Promise<{ joinId: string; verificationNumber: string; token: string }> {
   await sweepLapsed(tx, cfg);
 
-  // The proof was checked before this transaction; it stands only if the row has not changed since.
+  // The proof was checked before this transaction. A row changed since means another knock or Pair
+  // got there first; a new-id request would take the browser's cookie and strand the device.
   let returningId: string | undefined;
   if (input.returning != null) {
     const [row] = await tx
       .select({ tokenHash: devices.tokenHash })
       .from(devices)
       .where(and(eq(devices.id, input.returning.deviceId), eq(devices.active, false)));
-    if (row?.tokenHash === input.returning.tokenHash) {
-      returningId = input.returning.deviceId;
-      // A device has at most one pending request; a second knock replaces the first.
-      await tx
-        .delete(joinRequests)
-        .where(
-          and(ownedBy(cfg), eq(joinRequests.id, returningId), eq(joinRequests.kind, "device")),
-        );
-    }
+    if (row?.tokenHash !== input.returning.tokenHash) throw new AppError("device.join_stale", {});
+    returningId = input.returning.deviceId;
+    // The device's id is the request's primary key, so a second knock replaces the first.
+    await tx
+      .delete(joinRequests)
+      .where(and(ownedBy(cfg), eq(joinRequests.id, returningId), eq(joinRequests.kind, "device")));
   }
 
   const [{ count }] = await tx
@@ -487,6 +485,7 @@ export async function acceptDeviceJoinRequest(
 
   const [disabled] = await tx
     .select({
+      locationId: devices.locationId,
       deviceProfileId: devices.deviceProfileId,
       receiptPrinterId: devices.receiptPrinterId,
       paymentSlipPrinterId: devices.paymentSlipPrinterId,
@@ -496,13 +495,14 @@ export async function acceptDeviceJoinRequest(
   if (disabled !== undefined) {
     // A disabled device coming back keeps its row and everything hung on it; an ACTIVE row with
     // this id is left to the insert below, which refuses it.
+    // The row keeps its own location, not the request's, so its printers are chosen there.
     const printers =
       input.profileId === disabled.deviceProfileId
         ? {
             receiptPrinterId: disabled.receiptPrinterId,
             paymentSlipPrinterId: disabled.paymentSlipPrinterId,
           }
-        : await firstUsablePrinters(tx, input.profileId, row.locationId);
+        : await firstUsablePrinters(tx, input.profileId, disabled.locationId);
     try {
       await tx
         .update(devices)

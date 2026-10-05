@@ -95,6 +95,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.pairing_closed": 403,
   "device.join_full": 429,
   "device.join_rate_limited": 429,
+  "device.join_stale": 409,
   // A wrong number denies the request (the row is already gone), so this is a plain request fault.
   "device.join_mismatch": 400,
   "join_request.not_found": 404,
@@ -193,10 +194,10 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       });
       for (const id of dropped) deps.pairingMode.dropClaim(id);
       // The cookie's SELECTOR is the join request's id, which accept carries onto the devices row — so
-      // this cookie is set once and never re-issued. Until then it names no active device, so
-      // `requireDevice` finds nothing and every other device route answers `device.unauthorized`: the
-      // token is inert by construction rather than by a flag. The token itself leaves the process only
-      // here.
+      // no approval re-issues it; only a later knock does, and a disabled device's browser gets a new
+      // one at each. Until approval it names no active device, so `requireDevice` finds nothing and
+      // every other device route answers `device.unauthorized`: the token is inert by construction
+      // rather than by a flag. The token itself leaves the process only here.
       setDeviceCookie(c, `${made.joinId}.${made.token}`, deps.secureCookies, deps.tenantDomain);
       return c.json({ joinId: made.joinId, verificationNumber: made.verificationNumber }, 200);
     }),

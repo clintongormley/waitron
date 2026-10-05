@@ -57,6 +57,11 @@ it("degrades the other join refusals to the generic sentence, naming nothing abo
   expect(codeMessage("device.join_full", "en")).toBe("Something went wrong, try again");
 });
 
+it("degrades a knock overtaken by another knock or by Pair to the generic try-again sentence", () => {
+  expect(codeMessage("device.join_stale", "en")).toBe("Something went wrong, try again");
+  expect(codeMessage("device.join_stale", "es")).toBe("Algo salió mal, inténtalo de nuevo");
+});
+
 it("tells staff a card payment is running on the order, and that a dish has sold out, in both languages", () => {
   expect(codeMessage("order.payment_in_flight", "en")).toBe(
     "A card payment for this order is in progress. Wait for it to finish before changing the order",

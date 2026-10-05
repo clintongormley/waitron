@@ -749,6 +749,13 @@ declare module "@waitron/shared" {
      */
     "device.join_mismatch": Record<string, never>;
     /**
+     * A knock proved it came from a disabled device's browser, but by the time its transaction ran
+     * the device had changed: another knock from it had replaced its token, or Pair had enabled it.
+     * The knock is refused with no new cookie, so the browser keeps the one it has; asking again is
+     * the recovery. NO params.
+     */
+    "device.join_stale": Record<string, never>;
+    /**
      * A node's own print agent asked to self-enrol against a row that was deliberately revoked;
      * self-enrol refuses rather than reactivating it, so a revoke sticks until an admin re-allows it.
      */

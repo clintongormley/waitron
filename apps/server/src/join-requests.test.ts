@@ -18,6 +18,7 @@ import {
   provenDisabledDevice,
   readAgentJoinStatus,
   readJoinStatus,
+  returningDevicesOf,
   selfEnrolNodeAgent,
 } from "./join-requests.js";
 import { createPairingMode, type PairingMode } from "./pairing-mode.js";
@@ -784,6 +785,13 @@ describe("a returning disabled device", () => {
     return made.joinId;
   }
 
+  async function pendingRows(): Promise<number> {
+    const { rows } = await suite.db.execute<{ n: number }>(
+      sql`select count(*) as n from join_requests`,
+    );
+    return rows[0]!.n;
+  }
+
   async function storedHash(deviceId: string): Promise<string> {
     const [row] = await suite.db
       .select({ tokenHash: devices.tokenHash })
@@ -888,37 +896,111 @@ describe("a returning disabled device", () => {
     expect(row).toEqual({ active: true, stationId: venue.defaultStationId, label: "Pase" });
   });
 
-  it("gives the request a new id when the hash it was proven against has changed since", async () => {
+  it("refuses device.join_stale when the hash it was proven against has changed since", async () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("till");
     const deviceId = await disabledDevice(venue, profileId);
     const before = await storedHash(deviceId);
-    const made = await withTransaction(suite.db, (tx) =>
-      createJoinRequest(tx, venue.cfg, {
-        kind: "device",
-        label: "Tablet",
-        returning: { deviceId, tokenHash: "a hash the row no longer holds" },
-      }),
+    const code = await codeOf(() =>
+      withTransaction(suite.db, (tx) =>
+        createJoinRequest(tx, venue.cfg, {
+          kind: "device",
+          label: "Tablet",
+          returning: { deviceId, tokenHash: "a hash the row no longer holds" },
+        }),
+      ),
     );
-    expect(made.joinId).not.toBe(deviceId);
+    expect(code).toBe("device.join_stale");
     expect(await storedHash(deviceId)).toBe(before);
+    expect(await pendingRows()).toBe(0);
   });
 
-  it("gives the request a new id when the device has been enabled since", async () => {
+  it("refuses device.join_stale when the device has been enabled since", async () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("till");
     const deviceId = await disabledDevice(venue, profileId);
     const tokenHash = await storedHash(deviceId);
     await suite.db.update(devices).set({ active: true }).where(eq(devices.id, deviceId));
-    const made = await withTransaction(suite.db, (tx) =>
-      createJoinRequest(tx, venue.cfg, {
+    const code = await codeOf(() =>
+      withTransaction(suite.db, (tx) =>
+        createJoinRequest(tx, venue.cfg, {
+          kind: "device",
+          label: "Tablet",
+          returning: { deviceId, tokenHash },
+        }),
+      ),
+    );
+    expect(code).toBe("device.join_stale");
+    expect(await storedHash(deviceId)).toBe(tokenHash);
+    expect(await pendingRows()).toBe(0);
+  });
+
+  it("takes the printers of a new profile at the device's own location, not the request's", async () => {
+    const venue = await setupVenue(suite.db);
+    const [printer] = await suite.db
+      .insert(printers)
+      .values({
+        locationId: venue.cfg.locationId,
+        name: "Bar",
+        transport: "network_tcp" as const,
+        host: "10.0.0.5",
+      })
+      .returning({ id: printers.id });
+    const first = await seedProfile("till");
+    const other = await seedProfile("till");
+    await withTransaction(suite.db, (tx) =>
+      setProfilePrinterLists(tx, other, {
+        receiptPrinterIds: [printer!.id],
+        paymentSlipPrinterIds: [],
+      }),
+    );
+    const deviceId = await disabledDevice(venue, first);
+    const tokenHash = await storedHash(deviceId);
+    await withTransaction(suite.db, async (tx) => {
+      await createJoinRequest(tx, venue.cfg, {
         kind: "device",
         label: "Tablet",
         returning: { deviceId, tokenHash },
-      }),
+      });
+      // A request's location is the node's configured one; the device keeps the row's own.
+      await tx
+        .update(joinRequests)
+        .set({ locationId: randomUUID() })
+        .where(eq(joinRequests.id, deviceId));
+      await acceptDeviceJoinRequest(tx, venue.cfg, deviceId, {
+        label: "Bar till",
+        profileId: other,
+      });
+    });
+    const [row] = await suite.db
+      .select({ receiptPrinterId: devices.receiptPrinterId, locationId: devices.locationId })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    expect(row).toEqual({ receiptPrinterId: printer!.id, locationId: venue.cfg.locationId });
+  });
+
+  it("does not mark a request returning when an ACTIVE device has its id", async () => {
+    const venue = await setupVenue(suite.db);
+    const profileId = await seedProfile("till");
+    const made = await withTransaction(suite.db, (tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" }),
     );
-    expect(made.joinId).not.toBe(deviceId);
-    expect(await storedHash(deviceId)).toBe(tokenHash);
+    await suite.db.insert(devices).values({
+      id: made.joinId,
+      locationId: venue.cfg.locationId,
+      deviceProfileId: profileId,
+      label: "Same id",
+      tokenHash: "x",
+      active: true,
+    });
+    const returning = await withTransaction(suite.db, (tx) =>
+      returningDevicesOf(tx, [made.joinId]),
+    );
+    expect([...returning.keys()]).toEqual([]);
+    // The other direction: the same row disabled is marked.
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, made.joinId));
+    const disabled = await withTransaction(suite.db, (tx) => returningDevicesOf(tx, [made.joinId]));
+    expect([...disabled.keys()]).toEqual([made.joinId]);
   });
 
   it("stores the new request's token on the disabled row, so the browser holding it is still proven after a deny", async () => {

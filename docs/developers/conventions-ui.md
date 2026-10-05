@@ -423,7 +423,11 @@ Devices follow the same rule, though nothing discovers them. A disabled device's
 marks it `returning`, with the row's name, profile and binding, and accepting it enables the same
 row. It still needs an open Add a device dialog and the number check. The knock gives the disabled
 row the new request's token, so the old cookie stops working and the same browser can knock as
-itself again after a deny or a lapse; enabling ends any shift session left open on the device.
+itself again after a deny or a lapse; enabling ends any shift session left open on the device. A
+knock whose proof another knock or Pair overtook is refused `device.join_stale` with no new cookie,
+so the browser keeps the one it has. One case is not covered: if a knock's response is lost after
+the server committed it, the browser still holds the old token, which no longer matches, and its
+next knock joins as a new device. The cost is a new device row; the old one stays disabled.
 Guards: the "a disabled device comes back as the same device" cases in
 `apps/server/src/join-e2e.test.ts` and "a returning disabled device" in
 `apps/server/src/join-requests.test.ts`. Built in W105b.
