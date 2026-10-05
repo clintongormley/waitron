@@ -1669,7 +1669,17 @@ describe("the management prices read", () => {
       ({ productId }) => productId === f.lager,
     )!;
     expect(lager.active).toBe(false);
-    expect(lager.combined.price).toMatchObject({ state: "clash" });
+    expect(lager.combined.price).toEqual({
+      state: "clash",
+      candidates: [
+        { place: { kind: "own_sections" }, value: "4.00", source: { kind: "product" } },
+        {
+          place: { kind: "menu", menuId: f.drinksMenu, menuName: "Drinks" },
+          value: "5.00",
+          source: { kind: "menu", menuId: f.drinksMenu, menuName: "Drinks", from: { kind: "own" } },
+        },
+      ],
+    });
     const preview = await app((tx) => previewMenu(tx, f.dinner));
     expect(preview.clashes.filter(({ productId }) => productId === f.lager)).toEqual([]);
     expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)!.clashes).toBe(0);
