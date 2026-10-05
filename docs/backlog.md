@@ -1669,8 +1669,8 @@ Still open from W74:
   The check dates from commit `5ffa5c633c` (2026-10-01).
 - **The delete dialog stretches to nearly the full screen height**, with empty space below its
   text, at 1280 and 390 wide (seen on the demo stack while checking #1220; not caused by it, and
-  not traced further). _2026-10-05 (W70): the dialog is now the standard size, still nearly as tall
-  as the screen; see W70's open point (1)._
+  not traced further). _2026-10-05: W70a (#1265) changes compact height only; this standard
+  dialog retains its height._
 
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE.** The
 owner, on two screenshots of the same three options, the Name column starting far to the right
@@ -2343,8 +2343,8 @@ that serves jobs of clearly different sizes picks one per job (the profile's det
 authenticator setup are standard, its other steps compact). Leaving the size off still gives the wide
 modal, as before. W66's Pricing unit
 chooser stays a small dialog (`wt-dialog`), held to the compact width. Detail: design-system.md,
-the `wt-modal` entry. W70a (owner, 2026-10-05,
-"compact only") makes compact modals fit their content up to the screen's height, with the body
+the `wt-modal` entry. W70a — DONE (#1265; owner, 2026-10-05,
+"compact only") — makes compact modals fit their content up to the screen's height, with the body
 scrolling beyond it and footer actions held in view. Standard and wide modals retain their full
 height. The category delete dialog is standard and retains its empty space; W74's height finding
 therefore remains open. Left open: in the wide Extras editor at 1280px wide, the items table scrolls
