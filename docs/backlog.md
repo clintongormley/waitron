@@ -3241,6 +3241,25 @@ the code, not run). Other screens pass `t("categories.combobox_search")` and
 from 2026-10-01, `5ffa5c633`). Needs the owner to say whether the two strings want an item, and
 whether the Move list should follow the tree order instead.
 
+**Sales: the category report names each category by its full path — DONE (W73, owner 2026-10-04: "we should
+report on category paths, not just the final name").** The Sales screen's category report showed a
+nested category by its own name alone, indented, with its parents' names read only to a screen
+reader; the printed page printed the name alone. So "Food › Mains" and "Lunch › Mains" both read
+"Mains". Each category row now shows its parents' names before its own, in muted text on the
+screen (`apps/dashboard/src/screens/dashboard-sales-screen.ts`), and the printed page prints the
+whole path as the label (`apps/server/src/category-sales-page.ts`); a Directly-in row says
+"Directly in Food › Mains" on both. The indent stays, so the tree's totals still read as before.
+The path is built from the report's own tree, so "at time of sale" shows the recorded names and
+"current" today's; no total changed. Uncategorised, Not recorded and the free-text names under Not
+recorded get no path (a screen reader still hears "Not recorded ›" before the last two, as
+before). On paper the separator is joined to the name before it by a no-break space, so a long path
+wraps after a "›", never before one. No other output names report categories: the reports API
+answers with the tree, and no other screen or printed page reads it. One existing test check
+changed, because this item changes what it checks: the screen's indent test asserted the parents'
+names were hidden and now asserts they are shown; and five existing checks now expect the full
+path where they expected the bare name (one on the screen, four on the printed page), listed in
+the PR.
+
 **Products: a category's Made at shows where its dishes are made — DONE (W86, #1203, owner 2026-10-04).**
 In the Products tree each category row's Made at cell now shows the category's baseline route, in
 the product rows' words (a station's name, No preparation, No replacement, Nowhere), linked to the

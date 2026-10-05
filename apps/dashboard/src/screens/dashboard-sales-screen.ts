@@ -28,6 +28,7 @@ import type {
   VatSummaryDto,
 } from "../api/client.js";
 import { today } from "../date-utils.js";
+import { PATH_SEPARATOR } from "../widgets/classification-fields.js";
 
 const money = (value: string): string => formatMoney(value, currentLocale());
 
@@ -37,6 +38,9 @@ interface CategoryRow {
   /** The ancestors' names, read out before the row's own so the nesting is not carried by the indent
    * alone. */
   path: string[];
+  /** A category's ancestors are its path and are shown; Not recorded is no category, so under it
+   * they are only read out. */
+  pathShown: boolean;
   depth: number;
   gross: string;
   net: string;
@@ -166,6 +170,10 @@ export class SalesScreen extends LitElement {
       }
       tr.direct th {
         font-style: italic;
+      }
+      .path {
+        color: var(--wt-color-text-muted);
+        font-weight: var(--wt-font-weight-normal);
       }
       .warning {
         margin: var(--wt-space-2) 0;
@@ -495,9 +503,15 @@ export class SalesScreen extends LitElement {
               >
                 <th scope="row" class="cat-name" style="--depth: ${row.depth}">
                   ${
-                    row.path.length > 0
-                      ? html`<span class="visually-hidden">${row.path.join(" › ")} › </span>`
-                      : nothing
+                    row.path.length === 0
+                      ? nothing
+                      : row.pathShown
+                        ? html`<span class="path" data-test="category-path"
+                            >${row.path.join(PATH_SEPARATOR)}${PATH_SEPARATOR}</span
+                          >`
+                        : html`<span class="visually-hidden"
+                            >${row.path.join(PATH_SEPARATOR)}${PATH_SEPARATOR}</span
+                          >`
                   }<span data-test="category-label">${row.label}</span>
                 </th>
                 <td class="num" data-test="category-gross">${money(row.gross)}</td>
@@ -537,6 +551,7 @@ export class SalesScreen extends LitElement {
         kind: node.kind,
         label: name,
         path,
+        pathShown: node.kind === "category",
         depth: node.depth,
         gross: node.gross,
         net: node.net,
@@ -545,13 +560,14 @@ export class SalesScreen extends LitElement {
     ];
     const inside = [...path, name];
     if (parent && node.direct.lines > 0) {
+      const category = node.kind !== "not_recorded";
       rows.push({
         kind: "direct",
-        label:
-          node.kind === "not_recorded"
-            ? t("sales.no_category_recorded")
-            : fill(t("sales.directly_in"), "name", name),
-        path: inside,
+        label: category
+          ? fill(t("sales.directly_in"), "name", inside.join(PATH_SEPARATOR))
+          : t("sales.no_category_recorded"),
+        path: category ? [] : inside,
+        pathShown: false,
         depth: node.depth + 1,
         gross: node.direct.gross,
         net: node.direct.net,

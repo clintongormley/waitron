@@ -146,8 +146,8 @@ describe("formatCategorySalesPage", () => {
   it("indents each category by its depth and prints its gross and net, money in the page's language", () => {
     const lines = page();
     expect(lineFor(lines, "Drinks")).toMatch(/^Drinks +€5\.50 +€5\.00$/);
-    expect(lineFor(lines, "Softs")).toMatch(/^ {2}Softs +€3\.30 +€3\.00$/);
-    expect(lineFor(lines, "Tapas")).toMatch(/^ {2}Tapas +€11\.00 +€10\.00$/);
+    expect(lineFor(lines, "Drinks › Softs")).toMatch(/^ {2}Drinks › Softs +€3\.30 +€3\.00$/);
+    expect(lineFor(lines, "Food › Tapas")).toMatch(/^ {2}Food › Tapas +€11\.00 +€10\.00$/);
     expect(lineFor(page({ locale: "es-ES" }), "Drinks")).toMatch(/^Drinks +5,50 € +5,00 €$/);
     expect(lines.find((line) => /Gross +Net$/.test(line))).toBeDefined();
     expect(page({ locale: "es-ES" }).find((line) => /Bruto +Neto$/.test(line))).toBeDefined();
@@ -156,7 +156,7 @@ describe("formatCategorySalesPage", () => {
   it("right-aligns the gross and net columns across rows", () => {
     const lines = page();
     const drinks = lineFor(lines, "Drinks");
-    const tapas = lineFor(lines, "Tapas");
+    const tapas = lineFor(lines, "Food › Tapas");
     expect(drinks.length).toBe(42);
     expect(tapas.length).toBe(42);
     expect(drinks.indexOf("€5.50") + "€5.50".length).toBe(tapas.indexOf("€11.00") + 6);
@@ -176,11 +176,94 @@ describe("formatCategorySalesPage", () => {
     const direct = lines.findIndex((line) => line.trimStart().startsWith("Directly in Drinks"));
     expect(lines[direct]).toMatch(/^ {2}Directly in Drinks +€2\.20 +€2\.00$/);
     expect(direct).toBeGreaterThan(lines.indexOf(lineFor(lines, "Drinks")));
-    expect(direct).toBeLessThan(lines.indexOf(lineFor(lines, "Softs")));
+    expect(direct).toBeLessThan(lines.indexOf(lineFor(lines, "Drinks › Softs")));
     // Food has children but no direct lines; Softs has direct lines but no children.
     expect(lines.join("\n")).not.toContain("Directly in Food");
     expect(lines.join("\n")).not.toContain("Directly in Softs");
     expect(page({ locale: "es-ES" }).join("\n")).toContain("Directamente en Drinks");
+  });
+
+  it("prints each category by its whole path, so two with one name are told apart", () => {
+    const branch = (id: string, name: string): CategoryTotal =>
+      node({
+        id,
+        name,
+        gross: "12.00",
+        net: "10.80",
+        direct: { gross: "4.00", net: "3.60", lines: 1 },
+        children: [
+          node({
+            id: `${id}-mains`,
+            name: "Mains",
+            depth: 1,
+            gross: "8.00",
+            net: "7.20",
+            direct: { gross: "6.00", net: "5.40", lines: 1 },
+            children: [
+              node({
+                id: `${id}-fish`,
+                name: "Fish",
+                depth: 2,
+                gross: "2.00",
+                net: "1.80",
+                direct: { gross: "2.00", net: "1.80", lines: 1 },
+              }),
+            ],
+          }),
+        ],
+      });
+    const report = sampleReport({ tree: [branch("food", "Food"), branch("lunch", "Lunch")] });
+    for (const mode of ["at_time_of_sale", "current"] as const) {
+      const lines = page({ report: { ...report, mode } });
+      expect(lineFor(lines, "Food › Mains ")).toMatch(/^ {2}Food › Mains +€8\.00 +€7\.20$/);
+      expect(lineFor(lines, "Lunch › Mains ")).toMatch(/^ {2}Lunch › Mains +€8\.00 +€7\.20$/);
+      expect(lineFor(lines, "Food › Mains › Fish")).toMatch(
+        /^ {4}Food › Mains › Fish +€2\.00 +€1\.80$/,
+      );
+      // A Directly-in row names its category by the same whole path; too long to share a line
+      // with its amounts on 42 columns, it puts them on the next.
+      const direct = lines.indexOf(lineFor(lines, "Directly in Lunch › Mains"));
+      expect(lines[direct]).toBe("    Directly in Lunch › Mains");
+      expect(lines[direct + 1]).toMatch(/^ +€6\.00 +€5\.40$/);
+      expect(lines.some((line) => /^ +Mains /.test(line))).toBe(false);
+    }
+    expect(
+      lineFor(page({ report, locale: "es-ES" }), "Directamente en Food › Mains"),
+    ).toBeDefined();
+  });
+
+  it("wraps a long path on narrow paper after a separator, never before one", () => {
+    // "Drinks › Alcoholic drink" fills the leaf's first line (30 columns less six of depth)
+    // exactly, so a break at any space would start the next line with the separator.
+    const names = ["Drinks", "Alcoholic drink", "Spirits and liqueurs", "Single malts"];
+    const chain = (depth: number): CategoryTotal =>
+      node({
+        id: `c${depth}`,
+        name: names[depth]!,
+        depth,
+        gross: "1.00",
+        net: "1.00",
+        direct: depth === names.length - 1 ? { gross: "1.00", net: "1.00", lines: 1 } : undefined,
+        children: depth < names.length - 1 ? [chain(depth + 1)] : [],
+      });
+    const lines = page({
+      report: sampleReport({ tree: [chain(0)] }),
+      printer: { paperWidth: "58mm", resolution: "203dpi" },
+    });
+    // The leaf's row: six spaces of depth, then its continuation lines' own two.
+    const start = lines.findIndex((line) => /^ {6}Drinks ›/.test(line));
+    const end = lines.findIndex((line) => line.includes("malts"));
+    const leaf = lines.slice(start, end + 1);
+    expect(start).toBeGreaterThan(-1);
+    expect(leaf.length).toBeGreaterThan(2);
+    for (const line of leaf) expect(line.length, line).toBeLessThanOrEqual(30);
+    for (const line of leaf.slice(1)) {
+      expect(line).toMatch(/^ {8}\S/);
+      expect(line.trimStart().startsWith("›")).toBe(false);
+    }
+    expect(leaf.map((line) => line.trim()).join(" ")).toMatch(
+      /^Drinks › Alcoholic drink › Spirits and liqueurs › Single malts +€1\.00 +€1\.00$/,
+    );
   });
 
   it("names Uncategorised and Not recorded, with Not recorded's free-text children beneath it", () => {
