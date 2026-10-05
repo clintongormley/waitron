@@ -238,16 +238,16 @@ async function itemPortions(
     const precision = unit?.precision ?? 0;
     const each = unit?.unitId === null || unit?.seedKey === "each";
     const saved = item.id === undefined ? undefined : savedById.get(item.id);
-    // Kept means the list holds a row for the item's product under its id, not that an id was sent:
+    // Held means the list holds a row for the item's product under its id, not that an id was sent:
     // the dashboard's editor sends one for every row it adds.
-    const kept = saved?.productId === item.productId;
+    const held = saved?.productId === item.productId;
     if (item.portion === undefined) {
       if (each) return ONE_PORTION;
-      if (!kept) throw new AppError("extras.invalid", { field: `items.${index}.portion` });
+      if (!held) throw new AppError("extras.invalid", { field: `items.${index}.portion` });
       return saved.portion;
     }
     const portion = decimalToThousandths(decimal(item.portion));
-    if (kept && saved.portion === portion) return portion;
+    if (held && saved.portion === portion) return portion;
     try {
       if (each && item.portion !== "1.000") throw new Error("Each portion must be one");
       assertQuantityPrecision(item.portion, precision, {

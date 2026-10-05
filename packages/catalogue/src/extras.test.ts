@@ -389,7 +389,7 @@ describe("extra list CRUD", () => {
       return product.id;
     });
 
-  it("keeps a kept weighed item's saved portion when it is sent again without one", async () => {
+  it("keeps the saved portion of a held weighed item sent again without one", async () => {
     const productId = await kgProduct();
     const list = await run((tx) =>
       createExtraList(tx, { name: "Cheese", items: [{ productId, portion: "0.050" }] }, "en"),
@@ -408,7 +408,7 @@ describe("extra list CRUD", () => {
     expect(read.items[0]!.portion).toBe("0.050");
   });
 
-  it("keeps a kept poured item's saved portion when it moves position without one", async () => {
+  it("keeps the saved portion of a held poured item that moves position, sent without one", async () => {
     const productId = await mlProduct();
     const list = await run((tx) =>
       createExtraList(
@@ -439,7 +439,7 @@ describe("extra list CRUD", () => {
     ]);
   });
 
-  it("replaces a kept item's saved portion with one sent explicitly", async () => {
+  it("replaces a held item's saved portion with one sent explicitly", async () => {
     const productId = await kgProduct();
     const list = await run((tx) =>
       createExtraList(tx, { name: "Cheese", items: [{ productId, portion: "0.050" }] }, "en"),
@@ -457,7 +457,7 @@ describe("extra list CRUD", () => {
     expect(read.items[0]!.portion).toBe("0.100");
   });
 
-  it("refuses an explicit null portion for a kept item and leaves the saved one", async () => {
+  it("refuses an explicit null portion for a held item and leaves the saved one", async () => {
     const productId = await kgProduct();
     const list = await run((tx) =>
       createExtraList(tx, { name: "Cheese", items: [{ productId, portion: "0.050" }] }, "en"),
@@ -481,7 +481,7 @@ describe("extra list CRUD", () => {
 
   // The dashboard's Extras editor sends no portion for an Each product, whatever an earlier unit
   // left saved on the item.
-  it("stores one for a kept item whose product became Each, sent without a portion", async () => {
+  it("stores one for a held item whose product became Each, sent without a portion", async () => {
     const productId = await kgProduct();
     const list = await run((tx) =>
       createExtraList(tx, { name: "Cheese", items: [{ productId, portion: "0.050" }] }, "en"),
@@ -500,7 +500,7 @@ describe("extra list CRUD", () => {
     expect(read.items[0]!.portion).toBe("1.000");
   });
 
-  it("keeps a kept Each item at one when it is sent again without a portion", async () => {
+  it("keeps a held Each item at one when it is sent again without a portion", async () => {
     const list = await run((tx) =>
       createExtraList(tx, { name: "Sides", items: [{ productId: breads.rye }] }, "en"),
     );
@@ -517,8 +517,6 @@ describe("extra list CRUD", () => {
     expect(read.items[0]!.portion).toBe("1.000");
   });
 
-  // The item sent with no id keeps the check from returning before it reads any unit, so the
-  // id-carrying items' units must be read too.
   it("takes no portion for an Each extra sent with an id the list does not hold, and stores one", async () => {
     const list = await run((tx) =>
       createExtraList(
