@@ -2618,4 +2618,185 @@ describe("add a device", () => {
       codeMessage("connection.failed"),
     );
   });
+
+  describe("a disabled device that asks again", () => {
+    /** The disabled kitchen screen d2 knocking under a new label, beside an ordinary request. */
+    const returning: JoinRequestRow = {
+      id: "d2",
+      kind: "device",
+      label: "Tablet",
+      createdAt: "2026-09-08T10:04:00.000Z",
+      pairingBy: null,
+      returning: { name: "Pase revocado", profileId: "dp3", stationId: "s1", watcherId: null },
+    };
+    const waiting = (row: JoinRequestRow = returning) =>
+      stubApi({ joinRequests: vi.fn().mockResolvedValue([pending[0]!, row]) });
+
+    async function toEnableSettings(el: DevicesScreen): Promise<void> {
+      await openPair(el, "d2");
+      await vi.waitFor(() => expect(q(el, `[data-choice="${REAL_NUMBER}"]`)).not.toBeNull());
+      q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=pair-name]")).not.toBeNull());
+      await flush(el);
+    }
+
+    it("is offered as Enable under its old name, with a hint, in English and Spanish", async () => {
+      const before = currentLocale();
+      try {
+        for (const [locale, enable, pair, hint, enabled] of [
+          [
+            "en",
+            "Enable",
+            "Pair",
+            "Disabled device. Enabling it restores its settings.",
+            "Enabled Pase revocado",
+          ],
+          [
+            "es-ES",
+            "Habilitar",
+            "Emparejar",
+            "Dispositivo deshabilitado. Al habilitarlo se restauran sus ajustes.",
+            "Pase revocado habilitado",
+          ],
+        ] as const) {
+          setLocale(locale);
+          const api = waiting();
+          const el = await openAdd(api);
+
+          expect(d(el, "[data-test=waiting-row-d2]")?.textContent?.trim()).toBe("Pase revocado");
+          expect(d(el, "[data-test=returning-hint-d2]")?.textContent?.trim()).toBe(hint);
+          expect(d(el, "[data-test=pair-d2]")?.textContent?.trim()).toBe(enable);
+          expect(d(el, "[data-test=pair-d2]")?.getAttribute("aria-label")).toBe(
+            `${enable} Pase revocado`,
+          );
+          expect(d(el, "[data-test=waiting-row-r1]")?.textContent?.trim()).toBe("Barra 1");
+          expect(d(el, "[data-test=returning-hint-r1]")).toBeNull();
+          expect(d(el, "[data-test=pair-r1]")?.textContent?.trim()).toBe(pair);
+
+          await toEnableSettings(el);
+          expect(q(el, "[data-test=pair-modal]")!.getAttribute("heading")).toBe(
+            `${enable} Pase revocado`,
+          );
+          expect(text(el, "[data-test=pair-submit]")).toBe(enable);
+          vi.mocked(api.acceptDeviceJoinRequest).mockResolvedValue({
+            deviceId: "d2",
+            name: "Pase revocado",
+            formFactor: "kds",
+          });
+          q(el, "[data-test=pair-submit]")!.click();
+          await vi.waitFor(() => expect(text(el, "[data-test=added-device]")).toBe(enabled));
+          cleanupWidgets();
+        }
+      } finally {
+        setLocale(before);
+      }
+    });
+
+    it("checks the number, opens filled in from the device, and Enable sends it to the device's own id", async () => {
+      const api = waiting();
+      const el = await openAdd(api);
+      await openPair(el, "d2");
+
+      await vi.waitFor(() => expect(q(el, `[data-choice="${REAL_NUMBER}"]`)).not.toBeNull());
+      expect(q(el, "[data-test=pair-name]")).toBeNull();
+      q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=pair-name]")).not.toBeNull());
+      await flush(el);
+
+      expect(api.checkDeviceJoinNumber).toHaveBeenCalledExactlyOnceWith("d2", {
+        choice: REAL_NUMBER,
+        holdId: "h1",
+      });
+      expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Pase revocado");
+      expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
+      expect((q(el, "[data-test=pair-binding]") as Field).value).toBe("station:s1");
+      vi.mocked(api.acceptDeviceJoinRequest).mockResolvedValue({
+        deviceId: "d2",
+        name: "Pase revocado",
+        formFactor: "kds",
+      });
+      q(el, "[data-test=pair-submit]")!.click();
+
+      await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+      expect(api.acceptDeviceJoinRequest).toHaveBeenCalledExactlyOnceWith("d2", {
+        name: "Pase revocado",
+        profileId: "dp3",
+        stationId: "s1",
+      });
+      expect(text(el, "[data-test=added-device]")).toBe(
+        t("devices.enabled").replace("{name}", "Pase revocado"),
+      );
+      expect(api.denyJoinRequest).not.toHaveBeenCalled();
+    });
+
+    it("fills in a kitchen screen's watcher", async () => {
+      const api = waiting({
+        ...returning,
+        returning: { name: "Pase revocado", profileId: "dp3", stationId: null, watcherId: "w1" },
+      });
+      const el = await openAdd(api);
+      await toEnableSettings(el);
+
+      expect((q(el, "[data-test=pair-binding]") as Field).value).toBe("watcher:w1");
+      q(el, "[data-test=pair-submit]")!.click();
+      await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
+      expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("d2", {
+        name: "Pase revocado",
+        profileId: "dp3",
+        watcherId: "w1",
+      });
+    });
+
+    it("whose profile is gone opens with the profile empty, and Enable waits until one is chosen", async () => {
+      const api = waiting({
+        ...returning,
+        returning: { name: "Caja vieja", profileId: "deleted", stationId: null, watcherId: null },
+      });
+      const el = await openAdd(api);
+      await toEnableSettings(el);
+
+      expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Caja vieja");
+      expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("");
+      q(el, "[data-test=pair-submit]")!.click();
+      await flush(el);
+      expect((q(el, "[data-test=pair-profile]") as Field).error).toBe(
+        t("devices.join_pick_profile"),
+      );
+      expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(true);
+      expect(api.acceptDeviceJoinRequest).not.toHaveBeenCalled();
+
+      await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+      await el.updateComplete;
+      expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(false);
+      q(el, "[data-test=pair-submit]")!.click();
+      await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
+      expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("d2", {
+        name: "Caja vieja",
+        profileId: "dp1",
+      });
+    });
+
+    it("whose station was switched off opens with Shows empty", async () => {
+      const api = waiting();
+      vi.mocked(api.listStations).mockResolvedValue([
+        { ...stations[0]!, active: false },
+        stations[1]!,
+      ]);
+      const el = await openAdd(api);
+      await toEnableSettings(el);
+
+      expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
+      expect((q(el, "[data-test=pair-binding]") as Field).value).toBe("");
+    });
+
+    it("already claimed by this login opens straight at its filled-in settings", async () => {
+      const api = waiting({ ...returning, pairingBy: { name: "Me", mine: true } });
+      const el = await openAdd(api);
+      await openPair(el, "d2");
+
+      expect(api.joinChallenge).not.toHaveBeenCalled();
+      expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Pase revocado");
+      expect((q(el, "[data-test=pair-profile]") as Field).value).toBe("dp3");
+    });
+  });
 });

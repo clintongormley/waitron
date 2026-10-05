@@ -130,6 +130,16 @@ function bindsStation(formFactor: FormFactor): boolean {
   return formFactor === "kds";
 }
 
+/** A returning device goes by the name it had, which Enable keeps, not the one its browser asked with. */
+function waitingName(request: JoinRequestRow): string {
+  return request.returning?.name ?? request.label;
+}
+
+/** Bringing back a disabled device says Enable, as re-adding a disabled printer does. */
+function pairAction(request: JoinRequestRow): string {
+  return request.returning ? t("devices.enable") : t("devices.pair");
+}
+
 /** A battery report older than this is greyed and says when it was taken (spec §6). */
 const BATTERY_STALE_MS = 10 * 60_000;
 
@@ -191,8 +201,14 @@ export class DevicesScreen extends LitElement {
       wt-data-table::part(battery-stale) {
         color: var(--wt-color-text-muted);
       }
-      wt-data-table::part(battery-as-of) {
+      wt-data-table::part(battery-as-of),
+      wt-data-table::part(returning-hint) {
         display: block;
+      }
+      /* The table is as wide as its content, so the hint wraps only under a width of its own. */
+      wt-data-table::part(returning-hint) {
+        max-width: 50vw;
+        color: var(--wt-color-text-muted);
       }
       wt-data-table::part(visually-hidden) {
         ${visuallyHiddenStyles}
@@ -267,7 +283,8 @@ export class DevicesScreen extends LitElement {
   @state() private addingDevice = false;
   @state() private deviceAddress = "";
   @state() private qr = "";
-  @state() private addedName: string | null = null;
+  /** The last device this dialog paired, and whether it was enabled rather than added. */
+  @state() private added: { name: string; enabled: boolean } | null = null;
   /** The Add dialog's own refusal: a wrong number, a failed discard, or its read of the address. */
   @state() private addError: string | null = null;
   @state() private holdStatus: PairingHoldStatus = "idle";
@@ -406,7 +423,7 @@ export class DevicesScreen extends LitElement {
     if (this.addingDevice) return;
     const epoch = ++this.#addEpoch;
     this.addingDevice = true;
-    this.addedName = null;
+    this.added = null;
     this.addError = null;
     this.qr = "";
     this.deviceAddress = "";
@@ -430,7 +447,7 @@ export class DevicesScreen extends LitElement {
     this.addingDevice = false;
     this.#closePair();
     this.#hold.stop();
-    this.addedName = null;
+    this.added = null;
     this.addError = null;
   }
 
@@ -473,7 +490,7 @@ export class DevicesScreen extends LitElement {
     this.#pairSettled = false;
     this.pairRequest = request;
     this.addError = null;
-    this.addedName = null;
+    this.added = null;
     this.pairError = null;
     this.choices = null;
     if (request.pairingBy?.mine) {
@@ -489,11 +506,18 @@ export class DevicesScreen extends LitElement {
     }
   }
 
+  /** A returning device starts from its own row; a profile, station or watcher since gone starts empty. */
   #toSettings(request: JoinRequestRow): void {
+    const back = request.returning ?? null;
+    const profileId =
+      back !== null && this.deviceProfiles.some((p) => p.id === back.profileId)
+        ? back.profileId
+        : "";
     this.pairStep = "settings";
-    this.pairName = request.label;
-    this.chosenProfileId = "";
-    this.chosenBinding = "";
+    this.pairName = back?.name ?? request.label;
+    this.chosenProfileId = profileId;
+    this.chosenBinding =
+      back !== null && this.#bindingShownFor(profileId) ? this.#activeBinding(back) : "";
     this.formAttempted = false;
     this.fieldRefusal = null;
     this.pairError = null;
@@ -611,7 +635,7 @@ export class DevicesScreen extends LitElement {
     this.pendingJoins = this.pendingJoins.filter((row) => row.id !== request.id);
     await this.#closeModal("pair-modal");
     this.#closePair();
-    this.addedName = result.name;
+    this.added = { name: result.name, enabled: Boolean(request.returning) };
     try {
       await this.#reloadDevices();
     } catch (error) {
@@ -717,17 +741,18 @@ export class DevicesScreen extends LitElement {
     return ids.find((id) => this.printers.find((p) => p.id === id)?.active) ?? "";
   }
 
-  #storedBinding(device: DeviceRow): string {
+  /** The stored station or watcher as a Shows choice, or empty when it is gone or switched off. */
+  #activeBinding(stored: { stationId: string | null; watcherId: string | null }): string {
     if (
-      device.stationId !== null &&
-      this.stations.some((s) => s.id === device.stationId && s.active)
+      stored.stationId !== null &&
+      this.stations.some((s) => s.id === stored.stationId && s.active)
     )
-      return `station:${device.stationId}`;
+      return `station:${stored.stationId}`;
     if (
-      device.watcherId !== null &&
-      this.watchers.some((w) => w.id === device.watcherId && w.active)
+      stored.watcherId !== null &&
+      this.watchers.some((w) => w.id === stored.watcherId && w.active)
     )
-      return `watcher:${device.watcherId}`;
+      return `watcher:${stored.watcherId}`;
     return "";
   }
 
@@ -737,7 +762,7 @@ export class DevicesScreen extends LitElement {
     this.editForm = {
       name: device.label,
       profileId: device.deviceProfileId ?? "",
-      binding: this.#storedBinding(device),
+      binding: this.#activeBinding(device),
       receiptPrinterId: device.receiptPrinterId ?? "",
       paymentSlipPrinterId: device.paymentSlipPrinterId ?? "",
       madeHere: device.madeHereStationIds,
@@ -1054,7 +1079,13 @@ export class DevicesScreen extends LitElement {
         key: "name",
         label: t("devices.name"),
         cell: (request) =>
-          html`<span data-test=${`waiting-row-${request.id}`}>${request.label}</span>`,
+          html`<span data-test=${`waiting-row-${request.id}`}>${waitingName(request)}</span>${
+              request.returning
+                ? html`<span part="returning-hint" data-test=${`returning-hint-${request.id}`}
+                    >${t("devices.enable_hint")}</span
+                  >`
+                : nothing
+            }`,
       },
       {
         key: "actions",
@@ -1068,10 +1099,10 @@ export class DevicesScreen extends LitElement {
             : html`<wt-button
                 size="sm"
                 data-test=${`pair-${request.id}`}
-                aria-label=${`${t("devices.pair")} ${request.label}`}
+                aria-label=${`${pairAction(request)} ${waitingName(request)}`}
                 ?disabled=${!held}
                 @click=${() => void this.#openPair(request)}
-                >${t("devices.pair")}</wt-button
+                >${pairAction(request)}</wt-button
               >`,
       },
     ];
@@ -1104,10 +1135,13 @@ export class DevicesScreen extends LitElement {
       ${until === null ? nothing : html`<p class="hint" data-test="pairing-until">${t("devices.open_until").replace("{time}", formatIsoMinute(until))}</p>`}
       ${holdNotice(this.holdStatus, () => void this.#hold.start())}
       ${
-        this.addedName === null
+        this.added === null
           ? nothing
           : html`<p class="added" role="status" data-test="added-device">
-              ${t("devices.added").replace("{name}", this.addedName)}
+              ${t(this.added.enabled ? "devices.enabled" : "devices.added").replace(
+                "{name}",
+                this.added.name,
+              )}
             </p>`
       }
       ${this.#renderWaiting()}
@@ -1271,7 +1305,10 @@ export class DevicesScreen extends LitElement {
     return html`<wt-modal
       size="standard"
       data-test="pair-modal"
-      heading=${t("devices.pair_title").replace("{name}", request.label)}
+      heading=${(request.returning ? t("devices.enable_title") : t("devices.pair_title")).replace(
+        "{name}",
+        waitingName(request),
+      )}
       .open=${true}
       .dismissible=${!this.submitting}
       @wt-close=${() => this.#closePair()}
@@ -1297,7 +1334,7 @@ export class DevicesScreen extends LitElement {
                 ?loading=${this.submitting}
                 ?disabled=${blocked}
                 @click=${() => void this.#submitPair()}
-                >${t("devices.pair")}</wt-button
+                >${pairAction(request)}</wt-button
               >`
             : nothing
         }
