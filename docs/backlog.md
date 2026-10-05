@@ -3251,9 +3251,21 @@ whole path as the label (`apps/server/src/category-sales-page.ts`); a Directly-i
 "Directly in Food › Mains" on both. The indent stays, so the tree's totals still read as before.
 The path is built from the report's own tree, so "at time of sale" shows the recorded names and
 "current" today's; no total changed. Uncategorised, Not recorded and the free-text names under Not
-recorded get no path (a screen reader still hears "Not recorded ›" before the last two, as
-before). On paper the separator is joined to the name before it by a no-break space, so a long path
-wraps after a "›", never before one. No other output names report categories: the reports API
+recorded get no path (a screen reader still hears "Not recorded ›" before the No category recorded
+row and each free-text name, as before). On paper a no-break space joins each "›" to the name before
+it, and the printer layout's `wrapText` (`packages/printing/src/layout.ts`) no longer splits a
+too-long word just before or after a no-break space, so a "›" stays on a line with the end of the
+name before it — except where a split falls on a line with under three columns of room (rows
+nested about 13 deep on 58mm paper, about 19 on 80mm), or where a name's own no-break spaces leave
+no other place to split. The `wrapText` change reaches every printed document: a word with a
+no-break space inside it (a Spanish amount such as "123,50 €" written with one) that is wider than
+its line is now split earlier inside the word rather than at the no-break space; this only happens
+when one word is wider than a whole line. Because every row now carries its whole path, a very deep
+tree prints far more lines than before: the page of the test "never prints a line wider than the
+paper, however long the names or deep the tree" in `apps/server/src/category-sales-page.test.ts`,
+printed at 58mm and 203dpi and counted in drawn lines, went from about 1,000 lines to about 14,500
+(and to about 5,500 on 80mm), measured 2026-10-05, and its print preview is cut short; whether to shorten deep paths on paper is open for
+the owner. No other output names report categories: the reports API
 answers with the tree, and no other screen or printed page reads it. One existing test check
 changed, because this item changes what it checks: the screen's indent test asserted the parents'
 names were hidden and now asserts they are shown; and five existing checks now expect the full
@@ -3486,7 +3498,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     baseline 24 dots down leaves 3 (ď, ĥ, ŉ), and 31 or 32 dots still leave those 3.
   - The preview reads at most 4 MiB of a job and shows at most 2,048 blocks (one per printed
     line, feed, cut or QR code, among others), so a job of more than about 2,040 lines is cut
-    short at any width. A deep category sales page printed about 1,000 lines in a test.
+    short at any width. The deep-tree case in `apps/server/src/category-sales-page.test.ts`
+    printed about 14,500 lines on 58mm paper once rows carried their whole path (W73).
   - What a printer narrower than 576 dots does with the part of the ruler beyond its head is not
     measured. The preview shrinks a picture wider than the job's line instead of cutting it, so on
     the ruler page, whose captions are 360 dots wide, the 576-dot ruler is shrunk on every

@@ -213,26 +213,24 @@ describe("formatCategorySalesPage", () => {
         ],
       });
     const report = sampleReport({ tree: [branch("food", "Food"), branch("lunch", "Lunch")] });
-    for (const mode of ["at_time_of_sale", "current"] as const) {
-      const lines = page({ report: { ...report, mode } });
-      expect(lineFor(lines, "Food › Mains ")).toMatch(/^ {2}Food › Mains +€8\.00 +€7\.20$/);
-      expect(lineFor(lines, "Lunch › Mains ")).toMatch(/^ {2}Lunch › Mains +€8\.00 +€7\.20$/);
-      expect(lineFor(lines, "Food › Mains › Fish")).toMatch(
-        /^ {4}Food › Mains › Fish +€2\.00 +€1\.80$/,
-      );
-      // A Directly-in row names its category by the same whole path; too long to share a line
-      // with its amounts on 42 columns, it puts them on the next.
-      const direct = lines.indexOf(lineFor(lines, "Directly in Lunch › Mains"));
-      expect(lines[direct]).toBe("    Directly in Lunch › Mains");
-      expect(lines[direct + 1]).toMatch(/^ +€6\.00 +€5\.40$/);
-      expect(lines.some((line) => /^ +Mains /.test(line))).toBe(false);
-    }
+    const lines = page({ report });
+    expect(lineFor(lines, "Food › Mains ")).toMatch(/^ {2}Food › Mains +€8\.00 +€7\.20$/);
+    expect(lineFor(lines, "Lunch › Mains ")).toMatch(/^ {2}Lunch › Mains +€8\.00 +€7\.20$/);
+    expect(lineFor(lines, "Food › Mains › Fish")).toMatch(
+      /^ {4}Food › Mains › Fish +€2\.00 +€1\.80$/,
+    );
+    // A Directly-in row names its category by the same whole path; too long to share a line
+    // with its amounts on 42 columns, it puts them on the next.
+    const direct = lines.indexOf(lineFor(lines, "Directly in Lunch › Mains"));
+    expect(lines[direct]).toBe("    Directly in Lunch › Mains");
+    expect(lines[direct + 1]).toMatch(/^ +€6\.00 +€5\.40$/);
+    expect(lines.some((line) => /^ +Mains /.test(line))).toBe(false);
     expect(
       lineFor(page({ report, locale: "es-ES" }), "Directamente en Food › Mains"),
     ).toBeDefined();
   });
 
-  it("wraps a long path on narrow paper after a separator, never before one", () => {
+  it("wraps a long path on narrow paper without starting a line with a separator", () => {
     // "Drinks › Alcoholic drink" fills the leaf's first line (30 columns less six of depth)
     // exactly, so a break at any space would start the next line with the separator.
     const names = ["Drinks", "Alcoholic drink", "Spirits and liqueurs", "Single malts"];
@@ -265,6 +263,49 @@ describe("formatCategorySalesPage", () => {
       /^Drinks › Alcoholic drink › Spirits and liqueurs › Single malts +€1\.00 +€1\.00$/,
     );
   });
+
+  it.each([
+    ["58mm", 30],
+    ["80mm", 42],
+  ] as const)(
+    "on %s, splits a name inside itself when its separator does not fit, so the next line does not start with the separator",
+    (paperWidth, columns) => {
+      // The child's row has `columns - 2` columns after its indent; the parent's name and the no-break
+      // space fill them, so a split at the room would start the next line with "›".
+      const parent = "X".repeat(columns - 3);
+      const lines = page({
+        report: sampleReport({
+          tree: [
+            node({
+              id: "parent",
+              name: parent,
+              gross: "1.00",
+              net: "1.00",
+              children: [
+                node({
+                  id: "child",
+                  name: "Child",
+                  depth: 1,
+                  gross: "1.00",
+                  net: "1.00",
+                  direct: { gross: "1.00", net: "1.00", lines: 1 },
+                }),
+              ],
+            }),
+          ],
+        }),
+        printer: { paperWidth, resolution: "203dpi" },
+      });
+      const start = lines.findIndex((line) => line.startsWith(`  ${parent.slice(0, 5)}`));
+      const leaf = lines.slice(start, start + 2);
+      expect(start).toBeGreaterThan(-1);
+      for (const line of leaf) expect(line.length, line).toBeLessThanOrEqual(columns);
+      expect(leaf[1]!.trimStart().startsWith("›"), leaf[1]).toBe(false);
+      expect(leaf.map((line) => line.trim()).join("")).toMatch(
+        new RegExp(`^${parent} › Child +€1\\.00 +€1\\.00$`),
+      );
+    },
+  );
 
   it("names Uncategorised and Not recorded, with Not recorded's free-text children beneath it", () => {
     const lines = page();

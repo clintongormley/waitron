@@ -5,7 +5,7 @@ import { byLabel, categoryPath } from "./category-form.js";
 import { t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 
-/** How the product editor joins a category path's names. */
+/** How the product editor and the Sales category report join a category path's names. */
 export const PATH_SEPARATOR = " › ";
 
 /** A category's whole path, as the product editor shows it; `missing` for an id the list lacks. */

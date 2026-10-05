@@ -35,8 +35,7 @@ const money = (value: string): string => formatMoney(value, currentLocale());
 interface CategoryRow {
   kind: CategoryTotalDto["kind"] | "direct";
   label: string;
-  /** The ancestors' names, read out before the row's own so the nesting is not carried by the indent
-   * alone. */
+  /** The ancestors' names, before the row's own. */
   path: string[];
   /** A category's ancestors are its path and are shown; Not recorded is no category, so under it
    * they are only read out. */

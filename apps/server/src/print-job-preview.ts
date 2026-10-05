@@ -33,8 +33,8 @@ export interface PrintJobPreview {
 }
 
 /**
- * A line is an image of 8 + W/8 × 28 bytes, 2,024 at 576 dots, so 4 MiB holds about 2,000 lines: a
- * deep category report prints about 1,000.
+ * A line is an image of 8 + W/8 × 28 bytes, 2,024 at 576 dots, so 4 MiB holds about 2,000 lines. A
+ * very deep category report can print more than that, and its preview comes back `truncated`.
  */
 const MAX_INPUT_BYTES = 4_194_304;
 const MAX_IMAGE_BYTES = 4_194_304;

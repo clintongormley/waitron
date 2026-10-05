@@ -359,7 +359,7 @@ describe("dashboard-sales-screen — category report", () => {
     expect(cells[5]!.querySelector("[data-test=category-path]")).toBeNull();
   });
 
-  it("tells two categories with one name apart by their paths, in either mode", async () => {
+  it("tells two categories with one name apart by their paths, each mode naming its own parents", async () => {
     const mains = (id: string, parent: string, name: string, mode: CategorySalesDto["mode"]) =>
       ({
         mode,
@@ -389,9 +389,11 @@ describe("dashboard-sales-screen — category report", () => {
         grossComplete: true,
         linesWithoutGross: 0,
       }) satisfies CategorySalesDto;
+    // Today's tree renamed Almuerzo to Mediodía, so each mode's rows name their own parents.
     const twoBranches = (mode: CategorySalesDto["mode"]): CategorySalesDto => {
       const food = mains("c-food-mains", "c-food", "Comida", mode);
-      const lunch = mains("c-lunch-mains", "c-lunch", "Almuerzo", mode);
+      const lunchName = mode === "current" ? "Mediodía" : "Almuerzo";
+      const lunch = mains("c-lunch-mains", "c-lunch", lunchName, mode);
       return { ...food, tree: [...lunch.tree, ...food.tree], gross: "20.00", net: "18.00" };
     };
     const api = stubApi({
@@ -417,8 +419,8 @@ describe("dashboard-sales-screen — category report", () => {
     await flush(el);
     expect(api.getCategorySales).toHaveBeenLastCalledWith(today(), today(), "current", false);
     expect(shown()).toEqual([
-      "Almuerzo",
-      "Almuerzo › Principales",
+      "Mediodía",
+      "Mediodía › Principales",
       "Comida",
       "Comida › Principales",
     ]);
