@@ -3018,7 +3018,7 @@ chosen products a filter hides chosen; Add still adds every chosen product. It i
 the picker is busy or nothing matches the filters, and not drawn when there are no products or the
 section already holds them all.
 
-**A menu's Structure tab is one tree — DONE (W88, owner 2026-10-04).** The Structure tab draws the
+**A menu's Structure tab is one tree — DONE (W88, #1209, main `21b57d280`, 2026-10-05; owner 2026-10-04).** The Structure tab draws the
 menu as one full-width tree table, like the Products tree. Its first row, "Menu: <name>", holds
 New section here, Include a menu and Add products in its ⋮; each section the menu owns holds the
 same three adds, then Edit and Delete, and an add acts on that section from whichever place it was
