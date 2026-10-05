@@ -362,7 +362,7 @@ export class DevicesScreen extends LitElement {
     paymentSlipPrinterId: "",
     madeHere: [],
   };
-  /** Offered in Edit's Shows while the dialog is open, even once it is switched off. */
+  /** Edit's Shows offers it even when switched off; dropped once a save moves the device off it. */
   @state() private editHeld: HeldBinding | null = null;
   @state() private editAttempted = false;
   @state() private editRefusal: FieldRefusal = null;
@@ -1389,7 +1389,7 @@ export class DevicesScreen extends LitElement {
       else
         watcherOptions.push({
           value: held.value,
-          label: `${held.name} (${t("devices.watcher_disabled")})`,
+          label: `${held.name} (${t("devices.watcher_removed_mark")})`,
           group: t("devices.watchers_group"),
         });
     }

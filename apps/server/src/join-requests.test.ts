@@ -42,6 +42,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { createStation } from "./kitchen.js";
+import { createWatcher, removeWatcher } from "./watchers.js";
 import type { TillConfig } from "./till-config.js";
 
 const suite = useVenueDb({
@@ -948,6 +949,54 @@ describe("a returning disabled device", () => {
       .from(devices)
       .where(eq(devices.id, deviceId));
     expect(row).toEqual({ active: false, stationId: station.id });
+  });
+
+  it("refuses to enable a kitchen screen on the watcher it held once that watcher is removed", async () => {
+    const venue = await setupVenue(suite.db);
+    const kds = await seedProfile("kds");
+    const watcher = await withTransaction(suite.db, (tx) =>
+      createWatcher(tx, venue.cfg, {
+        name: "Pase",
+        everyStation: true,
+        stationIds: [],
+        everyZone: true,
+        zoneIds: [],
+        runsPass: false,
+      }),
+    );
+    const deviceId = await withTransaction(suite.db, async (tx) => {
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Pase" });
+      await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
+        label: "Pase",
+        profileId: kds,
+        watcherId: watcher.id,
+      });
+      return made.joinId;
+    });
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+    await withTransaction(suite.db, (tx) => removeWatcher(tx, venue.cfg, watcher.id));
+
+    const tokenHash = await storedHash(deviceId);
+    const code = await codeOf(() =>
+      withTransaction(suite.db, async (tx) => {
+        await createJoinRequest(tx, venue.cfg, {
+          kind: "device",
+          label: "Pase",
+          returning: { deviceId, tokenHash },
+        });
+        await acceptDeviceJoinRequest(tx, venue.cfg, deviceId, {
+          label: "Pase",
+          profileId: kds,
+          watcherId: watcher.id,
+        });
+      }),
+    );
+    expect(code).toBe("watcher.not_found");
+    const [row] = await suite.db
+      .select({ active: devices.active, watcherId: devices.watcherId })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    expect(row).toEqual({ active: false, watcherId: watcher.id });
   });
 
   it("refuses device.join_stale when the hash it was proven against has changed since", async () => {

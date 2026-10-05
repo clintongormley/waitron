@@ -1111,6 +1111,12 @@ describe("the Edit dialog", () => {
       t("devices.shows"),
       "station:s1",
     ]);
+    // Its live station is listed once, unmarked.
+    expect(binding.options).toEqual([
+      { value: "station:s1", label: "Cocina", group: t("devices.stations_group") },
+      { value: "station:s2", label: "Barra", group: t("devices.stations_group") },
+      { value: "watcher:w1", label: "Pass", group: t("devices.watchers_group") },
+    ]);
     expect(q(el, "[data-test=edit-made-here]")).toBeNull();
 
     q(el, "[data-test=edit-cancel]")!.click();
@@ -1200,6 +1206,31 @@ describe("the Edit dialog", () => {
     await save(el);
     expect(api.updateDevice).toHaveBeenCalledTimes(1);
     expect(field(el, "edit-binding").error).toBe(codeMessage("device.station_required"));
+  });
+
+  it("a held station switched back on while the dialog is open is listed once, unmarked", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      editApi({
+        listDevices: vi.fn().mockResolvedValue([onOffStation]),
+        listStations: vi.fn().mockResolvedValue([...stations, offStation]),
+      }),
+      { liveData },
+    );
+    const el = await openEdit(api, "k1");
+    expect(field(el, "edit-binding").options.map((o) => o.value)).toContain("station:s-off");
+
+    vi.mocked(api.listStations).mockResolvedValue([...stations, { ...offStation, active: true }]);
+    liveData.invalidate([{ type: "kitchen_stations", id: "s-off" }]);
+    await vi.waitFor(() => expect(api.listStations).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(field(el, "edit-binding").value).toBe("station:s-off");
+    expect(field(el, "edit-binding").options).toEqual([
+      { value: "station:s1", label: "Cocina", group: t("devices.stations_group") },
+      { value: "station:s2", label: "Barra", group: t("devices.stations_group") },
+      { value: "station:s-off", label: "Old", group: t("devices.stations_group") },
+      { value: "watcher:w1", label: "Pass", group: t("devices.watchers_group") },
+    ]);
   });
 
   it("renaming a kitchen screen whose station was switched off keeps what it shows", async () => {
