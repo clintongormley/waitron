@@ -27,6 +27,7 @@ import {
   deviceProfiles,
   devices,
   joinRequests,
+  kitchenStations,
   printAgents,
   printers,
   withTransaction,
@@ -40,6 +41,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { setupVenue } from "./testing/venue-fixtures.js";
+import { createStation } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
 
 const suite = useVenueDb({
@@ -902,6 +904,50 @@ describe("a returning disabled device", () => {
       .from(devices)
       .where(eq(devices.id, deviceId));
     expect(row).toEqual({ active: true, stationId: venue.defaultStationId, label: "Pase" });
+  });
+
+  it("refuses to enable a kitchen screen on the station it held once that station is switched off", async () => {
+    const venue = await setupVenue(suite.db);
+    const kds = await seedProfile("kds");
+    const station = await withTransaction(suite.db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Horno" }),
+    );
+    const deviceId = await withTransaction(suite.db, async (tx) => {
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Horno" });
+      await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
+        label: "Horno",
+        profileId: kds,
+        stationId: station.id,
+      });
+      return made.joinId;
+    });
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+    await suite.db
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(eq(kitchenStations.id, station.id));
+
+    const tokenHash = await storedHash(deviceId);
+    const code = await codeOf(() =>
+      withTransaction(suite.db, async (tx) => {
+        await createJoinRequest(tx, venue.cfg, {
+          kind: "device",
+          label: "Horno",
+          returning: { deviceId, tokenHash },
+        });
+        await acceptDeviceJoinRequest(tx, venue.cfg, deviceId, {
+          label: "Horno",
+          profileId: kds,
+          stationId: station.id,
+        });
+      }),
+    );
+    expect(code).toBe("station.not_found");
+    const [row] = await suite.db
+      .select({ active: devices.active, stationId: devices.stationId })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    expect(row).toEqual({ active: false, stationId: station.id });
   });
 
   it("refuses device.join_stale when the hash it was proven against has changed since", async () => {

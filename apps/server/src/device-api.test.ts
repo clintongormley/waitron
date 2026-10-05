@@ -40,7 +40,7 @@ import { decimal } from "@waitron/shared";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { deleteDeviceProfile, setProfilePrinterLists } from "@waitron/layouts";
 import "./errors.js";
-import { createWatcher } from "./watchers.js";
+import { createWatcher, removeWatcher } from "./watchers.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 
@@ -1088,6 +1088,47 @@ describe("Device management routes (device.manage)", () => {
     });
   });
 
+  it("GET /management-api/devices names what each kitchen screen shows, and whether it is switched on", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const [liveStation, offStation] = await withTransaction(suite.db, async (tx) => [
+      await createStation(tx, venue.cfg, { name: "Plancha" }),
+      await createStation(tx, venue.cfg, { name: "Horno" }),
+    ]);
+    const live = await enrolKds(app, venue, liveStation!.id, "Pantalla plancha");
+    const off = await enrolKds(app, venue, offStation!.id, "Pantalla horno");
+    await suite.db
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(eq(kitchenStations.id, offStation!.id));
+    const watcher = await withTransaction(suite.db, (tx) =>
+      createWatcher(tx, venue.cfg, {
+        name: "Pase",
+        everyStation: true,
+        stationIds: [],
+        everyZone: true,
+        zoneIds: [],
+        runsPass: false,
+      }),
+    );
+    const watching = await enrolDeviceForTest(suite.db, venue.cfg, {
+      name: "Pantalla pase",
+      profileId: await seedProfile("kds"),
+      watcherId: watcher.id,
+    });
+    await withTransaction(suite.db, (tx) => removeWatcher(tx, venue.cfg, watcher.id));
+    const till = await enrolTill(app, venue, "Caja");
+
+    const res = await send(app, "GET", "/management-api/devices", { cookie: venue.managerCookie });
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as { id: string; binding: unknown }[];
+    const bindingOf = (id: string) => rows.find((r) => r.id === id)?.binding;
+    expect(bindingOf(live.deviceId)).toEqual({ name: "Plancha", active: true });
+    expect(bindingOf(off.deviceId)).toEqual({ name: "Horno", active: false });
+    expect(bindingOf(watching.deviceId)).toEqual({ name: "Pase", active: false });
+    expect(bindingOf(till.deviceId)).toBeNull();
+  });
+
   it("GET /management-api/devices says whether each device's profile was retired", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
@@ -1423,6 +1464,117 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       name: "Pantalla Cocina",
       stationId: venue.defaultStationId,
     });
+  });
+
+  /** A kitchen screen showing a new watcher named `name`. */
+  async function enrolWatching(venue: Venue, name = "Pass") {
+    const watcher = await withTransaction(suite.db, (tx) =>
+      createWatcher(tx, venue.cfg, {
+        name,
+        everyStation: true,
+        stationIds: [],
+        everyZone: true,
+        zoneIds: [],
+        runsPass: false,
+      }),
+    );
+    const { deviceId } = await enrolDeviceForTest(suite.db, venue.cfg, {
+      name: "Pass screen",
+      profileId: await seedProfile("kds"),
+      watcherId: watcher.id,
+    });
+    return { deviceId, watcherId: watcher.id };
+  }
+
+  async function switchStationOff(stationId: string): Promise<void> {
+    await suite.db
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(eq(kitchenStations.id, stationId));
+  }
+
+  it("renames a kitchen screen whose station has since been switched off, keeping the station", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const off = await withTransaction(suite.db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Off" }),
+    );
+    const { deviceId } = await enrolKds(app, venue, off.id);
+    await switchStationOff(off.id);
+
+    const res = await edit(app, venue.managerCookie, deviceId, { name: "Renamed" });
+    expect(res.status).toBe(204);
+    expect(await storedBody(deviceId)).toMatchObject({
+      name: "Renamed",
+      stationId: off.id,
+      watcherId: null,
+    });
+  });
+
+  it("renames a kitchen screen whose watcher has since been removed, keeping the watcher", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId, watcherId } = await enrolWatching(venue);
+    await withTransaction(suite.db, (tx) => removeWatcher(tx, venue.cfg, watcherId));
+
+    const res = await edit(app, venue.managerCookie, deviceId, { name: "Renamed" });
+    expect(res.status).toBe(204);
+    expect(await storedBody(deviceId)).toMatchObject({
+      name: "Renamed",
+      stationId: null,
+      watcherId,
+    });
+  });
+
+  it("refuses switching a kitchen screen to a switched-off station that is not its own", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolKds(app, venue, venue.defaultStationId);
+    const off = await withTransaction(suite.db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Off" }),
+    );
+    await switchStationOff(off.id);
+
+    const res = await edit(app, venue.managerCookie, deviceId, {
+      name: "Renamed",
+      stationId: off.id,
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      error: { code: "station.not_found", params: { stationId: off.id } },
+    });
+    expect(await storedBody(deviceId)).toMatchObject({
+      name: "Pantalla Cocina",
+      stationId: venue.defaultStationId,
+    });
+  });
+
+  it("refuses switching a kitchen screen to a removed watcher that is not its own", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId, watcherId } = await enrolWatching(venue);
+    const other = await withTransaction(suite.db, async (tx) => {
+      const made = await createWatcher(tx, venue.cfg, {
+        name: "Other",
+        everyStation: true,
+        stationIds: [],
+        everyZone: true,
+        zoneIds: [],
+        runsPass: false,
+      });
+      await removeWatcher(tx, venue.cfg, made.id);
+      return made;
+    });
+
+    const res = await edit(app, venue.managerCookie, deviceId, {
+      name: "Renamed",
+      watcherId: other.id,
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({
+      error: { code: "watcher.not_found", params: { watcherId: other.id } },
+    });
+    expect(await storedBody(deviceId)).toMatchObject({ name: "Pass screen", watcherId });
   });
 
   it("sets the made-here stations, and the management GET lists them", async () => {
