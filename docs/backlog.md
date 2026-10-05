@@ -2829,8 +2829,12 @@ the allocation and recovery contract in §9 and granted W41s-4 a narrow H2 scope
 2026-10-05. Task 2's ordered filing and duplicate-evidence changes landed as [#1213](https://github.com/clintongormley/waitron/pull/1213)
 on 2026-10-05. W41s-1 completed eight synthetic preproduction probes;
 [the dated protocol receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1)
-records each outcome and its limits. The library PR #132 remains for owner review. **Next action:**
-follow the lane queue; Task 3 and D2 enablement retain the reviewed-PR gate, and D5 still needs
+records each outcome and its limits. The owner approved and landed
+[the library probe PR #132](https://github.com/waitron-io/verifactu/pull/132) on 2026-10-05
+(squash `8c680b699942c460ecb1c03f6cb8750130fc6648`); no release tag was created.
+**Next action:** follow the lane queue. W41s-1d will add the test-system observations to the
+asesor questions after the compliance-document overlap with A261-2 and parked A231 clears.
+Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still needs
 old-chain evidence and its adviser answer. Independent queue items may proceed under the plan. The following paragraph records the 2026-10-03 state;
 its old next action and allocation assumptions are superseded by this update.
 
