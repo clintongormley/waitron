@@ -225,14 +225,15 @@ export class WtRelativeTime extends LitElement {
   override render() {
     const reading = this.#reading;
     if (reading === null) return nothing;
+    // Unformatted: a line break before the words would be drawn, and underlined, as a space.
+    // prettier-ignore
     return html`<button
         type="button"
         aria-describedby=${this.tipId}
         aria-expanded=${this.open}
         popovertarget=${this.tipId}
         @click=${this.onClick}
-      >
-        <time datetime=${this.datetime}>${reading.words}</time></button
+      ><time datetime=${this.datetime}>${reading.words}</time></button
       ><span id=${this.tipId} popover role="tooltip" @toggle=${this.onToggle}
         >${reading.exact}</span
       >`;

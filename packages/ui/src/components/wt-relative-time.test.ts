@@ -136,7 +136,8 @@ describe("the exact time", () => {
     expect(button.getAttribute("aria-describedby")).toBe(tip.id);
     expect(tip.getAttribute("role")).toBe("tooltip");
     // The phrase is the button's name; the exact time is only its description.
-    expect(button.textContent!.trim()).toBe("1 minute ago");
+    // Exactly the words: a space inside the button would be drawn, and underlined, before them.
+    expect(button.textContent).toBe("1 minute ago");
     expect(button.getAttribute("aria-label")).toBeNull();
   });
 
