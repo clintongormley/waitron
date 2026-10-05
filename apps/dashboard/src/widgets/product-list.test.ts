@@ -1706,6 +1706,114 @@ describe("the product list at phone width", () => {
       }),
   );
 
+  /** The open name box against its row's grip (or grip space) and folder icon. */
+  async function nameBoxLine(root: ShadowRoot) {
+    const edges = await nameBoxEdges(root);
+    const box = root.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      'wt-input[name="category-name"]',
+    )!;
+    const row = box.closest("tr")!;
+    const error = box.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+    return {
+      edges,
+      box: box.getBoundingClientRect(),
+      grip: row.querySelector('.drag-grip, [part~="grip-space"]')!.getBoundingClientRect(),
+      icon: row.querySelector('[part~="folder-frame"]')!.getBoundingClientRect(),
+      error: error.textContent,
+      errorOverflows: error.scrollWidth > error.clientWidth,
+      scrollLeft: root.querySelector<HTMLElement>(".scroll")!.scrollLeft,
+    };
+  }
+
+  /** The tree mounted and laid out at phone width before a box opens, as when a person picks Rename
+   * or Add category from a row's menu. */
+  async function mountNarrowTree(props: Partial<ProductList> = {}) {
+    const tree = await mountTree(props);
+    await vi.waitFor(() => expect(tree.table.hasAttribute("narrow")).toBe(true));
+    for (let frame = 0; frame < 2; frame++) await new Promise(requestAnimationFrame);
+    return tree;
+  }
+
+  function expectOwnLine(line: Awaited<ReturnType<typeof nameBoxLine>>) {
+    expect(line.error).toBe(codeMessage("category.name_taken"));
+    expect(line.scrollLeft).toBe(0);
+    expect(line.box.width).toBeGreaterThanOrEqual(140);
+    expect(line.box.top).toBeGreaterThanOrEqual(line.grip.bottom);
+    expect(line.box.left).toBeLessThanOrEqual(line.grip.left + 1);
+    expectInView(line.edges);
+    expect(line.box.right).toBeLessThanOrEqual(line.edges.pinned);
+    expect(line.errorOverflows).toBe(false);
+  }
+
+  it.each(
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      ["f", "d", "b"].map((categoryId) => ({ locale, categoryId })),
+    ),
+  )(
+    "puts a renamed category's name box and its refusal on their own line under the grip at 390 px ($locale, $categoryId)",
+    ({ locale, categoryId }) =>
+      onPhone(locale, 390, async () => {
+        // An asterisk and Drinks' two-part count leave the least room beside the grip and icon.
+        const { el, root } = await mountNarrowTree({ unroutedFolderIds: ["f", "d", "b"] });
+        await openWithRefusal(el, { kind: "rename", categoryId });
+        const line = await nameBoxLine(root);
+        expectOwnLine(line);
+        const row = root.querySelector(`tr[data-row-key="folder:${categoryId}"]`)!;
+        for (const after of row.querySelectorAll('[part~="count"], [part~="unrouted-folder"]')) {
+          const rect = after.getBoundingClientRect();
+          expect(rect.right).toBeLessThanOrEqual(line.edges.pinned);
+          expect(rect.bottom).toBeLessThanOrEqual(line.box.top);
+        }
+      }),
+  );
+
+  it.each(
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      [null, "d", "b"].map((parentId) => ({ locale, parentId })),
+    ),
+  )(
+    "puts a new category's name box and its refusal on their own line under the grip space at 390 px ($locale, $parentId)",
+    ({ locale, parentId }) =>
+      onPhone(locale, 390, async () => {
+        const { el, root } = await mountNarrowTree();
+        await openWithRefusal(el, { kind: "create", parentId });
+        expectOwnLine(await nameBoxLine(root));
+      }),
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "moves an open name box onto its own line when the screen narrows from 1280 to 390 px (%s)",
+    (locale) =>
+      onPhone(locale, 1280, async () => {
+        const { el, table, root } = await mountTree({ unroutedFolderIds: ["f", "d", "b"] });
+        await openWithRefusal(el, { kind: "rename", categoryId: "d" });
+        expect(table.hasAttribute("narrow")).toBe(false);
+        await page.viewport(390, 844);
+        await vi.waitFor(async () => expectOwnLine(await nameBoxLine(root)));
+      }),
+  );
+
+  it.each(
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      [
+        { kind: "rename", categoryId: "b" } as const,
+        { kind: "create", parentId: "d" } as const,
+      ].map((draft) => ({ locale, draft })),
+    ),
+  )(
+    "keeps the name box beside the grip and folder icon at 1280 px ($locale, $draft.kind)",
+    ({ locale, draft }) =>
+      onPhone(locale, 1280, async () => {
+        const { el, root } = await mountTree();
+        await openWithRefusal(el, draft);
+        const line = await nameBoxLine(root);
+        expect(line.box.top).toBeLessThan(line.grip.bottom);
+        expect(line.box.bottom).toBeGreaterThan(line.grip.top);
+        expect(line.box.left).toBeGreaterThanOrEqual(line.icon.right);
+        expectInView(line.edges);
+      }),
+  );
+
   const longCategory = {
     id: "long",
     name: "Embutidos ibéricos y quesos curados de la casa",

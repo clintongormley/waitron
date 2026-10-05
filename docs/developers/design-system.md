@@ -886,7 +886,11 @@ category with no active station, a product's variant count), takes only the room
 start and the row's pinned Actions cell, measured as if the table were unscrolled, and wraps inside
 it, a single long word included; a name that fits stays on one line (`#fitNames`,
 `apps/dashboard/src/widgets/product-list.ts`). The one exception: while a category is being renamed,
-its count and asterisk follow the name box and are not capped.
+its count and asterisk follow the name box and are not capped. At phone width (while the table
+carries `narrow`) the name box of a category being renamed or added goes on a line of its own under
+the grip instead, taking the room from the grip's start to the pinned cell; the grip, the folder
+icon and a renamed category's count and asterisk stay on the line above, and the count wraps inside
+that room.
 
 Use `wt-modal` for an add or edit form. Its fields stop at `--wt-form-max-width` (see "Structure"
 above). Give it a `size` chosen by its content:
