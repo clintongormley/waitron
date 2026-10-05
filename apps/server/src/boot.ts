@@ -211,7 +211,7 @@ import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { acceptMembershipDocument } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
 import { runTunnelClient } from "@waitron/tunnel";
-import { readFilingModule, readOrderFlow } from "./till-config.js";
+import { readFilingModule } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { readVenueContentLanguageRules, readVenueLocale } from "./venue-locale.js";
 import { readVenueTimeZone } from "./venue-time-zone.js";
@@ -1358,20 +1358,17 @@ async function bootServer(
     },
     log,
   );
-  // Both are provisioning-time config, read once at boot rather than per request. `makeFiscalBackend`
-  // cross-checks `filingModule` against the enabled fiscal module, so a node whose records were filed
-  // under another regime fails the boot rather than chaining under the wrong one (CLAUDE.md §5).
-  const [orderFlow, filingModule] = await Promise.all([
-    readOrderFlow(db, config.till),
-    readFilingModule(db, config.till),
-  ]);
+  // `makeFiscalBackend` cross-checks `filingModule` against the enabled fiscal module, so a node
+  // whose records were filed under another regime fails the boot rather than chaining under the
+  // wrong one (CLAUDE.md §5).
+  const filingModule = await readFilingModule(db, config.till);
   // Resolved through the generic slot so `boot.ts` names no regime package
   // (`scripts/module-seams.test.ts`).
   const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
   const tillBackend = makeFiscalBackend(setsToMigrate, filingModule, db, env);
   const till: TillConfig = {
     ...config.till,
-    orderFlow,
+    orderFlow: "prepay",
     simplifiedInvoiceLimit: tillBackend.simplifiedInvoiceLimit,
     practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
   };

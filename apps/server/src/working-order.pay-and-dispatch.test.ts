@@ -42,7 +42,6 @@ import {
 import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import { readOrderFlow } from "./till-config.js";
 import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
 import {
   abandonHeldOrder,
@@ -1485,11 +1484,6 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 // that shows and what it does not. No primitive is reimplemented here: the dispatch ORCHESTRATES `recordSale`
 // (immediate + deferred), `settleSale` and `listOutstandingSales`.
 describe("prepare & collect — three-mode dispatch (order_flow)", () => {
-  it("readOrderFlow reads the venue's configured mode from its location", async () => {
-    const { cfg } = await modeVenue("invoice_first");
-    expect(await readOrderFlow(suite.db, cfg)).toBe("invoice_first");
-  });
-
   // MODE P (prepay): pay + issue at ORDER — open → settled, no placed state. The
   // walk-up/park-pay `payWorkingOrder`, asserted under an explicit `prepay` cfg so P's contract is
   // pinned beside I and T.

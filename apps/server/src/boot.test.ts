@@ -305,14 +305,14 @@ beforeAll(async () => {
   sharedStore = await openVenueDatabase(sharedVenueDir);
   sharedDb = sharedStore.venue;
 
-  // `startServer` reads the location's `order_flow` at boot (`readOrderFlow`), so the location must
-  // exist. A distinctive NIF (90M base) stays clear of every other seed generator.
+  // A distinctive NIF (90M base) stays clear of every other seed generator.
   await sharedDb
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90000000K", legalName: "Boot Till SL" });
   await sharedDb.insert(locations).values({
     id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
     name: "Barra",
+    orderFlow: "invoice_first",
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });
@@ -1608,8 +1608,7 @@ describe("startServer, against a migrated venue directory", () => {
   it("trading mode migrates ONLY the modules.json-enabled sets, skipping a disabled toggleable module (SP-1b)", async () => {
     // A trading boot migrates only the sets `<stateDir>/modules.json` enables. Only an empty directory
     // can show a skip: the shared one already carries every journal. This boot throws after the
-    // migration seam (a disabled module, and no seeded venue for `readOrderFlow`), so the assertion is
-    // on the resulting journals, not on boot success.
+    // migration seam, so the assertion is on the resulting journals, not on boot success.
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-modules-filter-state-"));
     // `scheduler` is toggleable and owns `__drizzle_migrations_scheduler`.
@@ -2269,9 +2268,10 @@ describe("startServer, against a migrated venue directory", () => {
       // The enabled fiscal backend's simplified-invoice limit reaches the till's boot read.
       const till = await fetch(`http://127.0.0.1:${port}/api/till`);
       expect(till.status).toBe(200);
-      expect(
-        ((await till.json()) as { simplifiedInvoiceLimit: unknown }).simplifiedInvoiceLimit,
-      ).toBe("3010.00");
+      expect(await till.json()).toMatchObject({
+        simplifiedInvoiceLimit: "3010.00",
+        orderFlow: "prepay",
+      });
 
       // A bare 404: no setup routes, and no till SPA catch-all since WAITRON_TILL_APP_DIR is unset.
       const status = await fetch(`http://127.0.0.1:${port}/setup-api/status`);
