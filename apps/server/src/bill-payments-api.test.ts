@@ -1381,6 +1381,78 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     }
   });
 
+  it("reprints the bill's issued trading name after the department changes", async () => {
+    const billId = await tabWith("Ensalada");
+    const [profile] = suite.db.all<{ id: string; capabilities: string }>(sql`
+      select p.id, p.capabilities from device_profiles p
+      join devices d on d.device_profile_id = p.id where d.id = ${venue.deviceId}`);
+    const [department] = suite.db.all<{ id: string; trading_name: string }>(sql`
+      select id, trading_name from departments
+      where id = (select department_id from zone_service_policies where zone_id = ${venue.offers.zoneId})`);
+    const [policy] = suite.db.all<{ print_trading_name: number }>(sql`
+      select print_trading_name from department_sale_policies
+      where department_id = ${department!.id}`);
+    await suite.db.execute(sql`
+      update departments set trading_name = 'Terraza Azul' where id = ${department!.id}`);
+    try {
+      expect((await contribute(billId, "12.00")).status).toBe(200);
+      const [sale] = await saleOf(billId);
+      const [snapshot] = suite.db.all<{
+        department_id: string;
+        trading_name: string;
+        print_trading_name: number;
+      }>(sql`select department_id, trading_name, print_trading_name
+             from sale_receipt_headers where sale_id = ${sale!.id}`);
+      expect(snapshot).toEqual({
+        department_id: department!.id,
+        trading_name: "Terraza Azul",
+        print_trading_name: 1,
+      });
+
+      await suite.db.execute(sql`
+        update departments set trading_name = 'Nombre nuevo' where id = ${department!.id}`);
+      await suite.db.execute(sql`
+        update department_sale_policies set print_trading_name = 0
+        where department_id = ${department!.id}`);
+      await suite.db.execute(sql`
+        update device_profiles set capabilities = ${JSON.stringify([
+          ...JSON.parse(profile!.capabilities),
+          "print-receipt",
+        ])} where id = ${profile!.id}`);
+      const before = suite.db.all<{ count: number }>(sql`
+        select count(*) as count from drawer_opens`)[0]!.count;
+      const printed = await request("POST", `/api/sales/${billId}/reprint`);
+      expect(printed.status).toBe(200);
+      const jobs = await inTx((tx) =>
+        tx
+          .select({ payload: printJobs.payload })
+          .from(printJobs)
+          .where(and(eq(printJobs.saleId, sale!.id), eq(printJobs.kind, "document"))),
+      );
+      expect(jobs).toHaveLength(2);
+      const paper = jobs.map((job) => printedLines(job.payload).join("\n"));
+      for (const copy of paper) {
+        expect(copy).toContain("Terraza Azul");
+        expect(copy).toContain("Cuentas SL");
+        expect(copy).not.toContain("Nombre nuevo");
+      }
+      expect(paper.some((copy) => copy.includes("DUPLICADO"))).toBe(true);
+      expect(registroCount(billId)).toBe(1);
+      expect(
+        suite.db.all<{ count: number }>(sql`
+        select count(*) as count from drawer_opens`)[0]!.count,
+      ).toBe(before);
+    } finally {
+      await suite.db.execute(sql`
+        update departments set trading_name = ${department!.trading_name} where id = ${department!.id}`);
+      await suite.db.execute(sql`
+        update department_sale_policies set print_trading_name = ${policy!.print_trading_name}
+        where department_id = ${department!.id}`);
+      await suite.db.execute(sql`
+        update device_profiles set capabilities = ${profile!.capabilities} where id = ${profile!.id}`);
+    }
+  });
+
   it("files nothing while anything is outstanding, then exactly one record", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
 
