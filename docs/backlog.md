@@ -3241,7 +3241,7 @@ the code, not run). Other screens pass `t("categories.combobox_search")` and
 from 2026-10-01, `5ffa5c633`). Needs the owner to say whether the two strings want an item, and
 whether the Move list should follow the tree order instead.
 
-**Sales: the category report names each category by its full path — DONE (W73, owner 2026-10-04: "we should
+**Sales: the category report names each category by its full path — DONE (W73, #1212, owner 2026-10-04: "we should
 report on category paths, not just the final name").** The Sales screen's category report showed a
 nested category by its own name alone, indented, with its parents' names read only to a screen
 reader; the printed page printed the name alone. So "Food › Mains" and "Lunch › Mains" both read
