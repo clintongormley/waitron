@@ -183,7 +183,7 @@ import type { Logger } from "./logger.js";
 import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
-import { enqueueOriginalReceipt } from "./receipt-print.js";
+import { enqueueCollectionTicket, enqueueOriginalReceipt } from "./receipt-print.js";
 import { ordersWithUnfiledPayment, paymentAttemptIsLive, receiptQr } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
@@ -5402,7 +5402,7 @@ export async function placeOrder(
 ): Promise<PlaceOrderResult> {
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
-      .select({ status: workingOrders.status })
+      .select({ status: workingOrders.status, orderNumber: workingOrders.orderNumber })
       .from(workingOrders)
       .where(eq(workingOrders.id, id));
     if (locked === undefined || locked.status !== "open") {
@@ -5413,7 +5413,7 @@ export async function placeOrder(
     // whose collect `refuseBillWithPayments` refuses.
     await refuseBillWithPayments(tx, id);
     const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
-    const orderFlow = serviceContext?.serviceMode ?? cfg.orderFlow;
+    const orderFlow = serviceContext?.serviceMode ?? "prepay";
 
     // Placing changes no line's quantity, course or note, so the lines read now are the ones fired.
     // Read before the stamp below. A bill moved here from a table has dishes already sent.
@@ -5450,6 +5450,10 @@ export async function placeOrder(
     }
 
     await markOrderPlaced(tx, deps.clock, cfg, id, operatorId);
+
+    if (orderFlow === "ticket_then_pay" && serviceContext !== null) {
+      await enqueueCollectionTicket(tx, cfg, serviceContext.zoneId, locked.orderNumber);
+    }
 
     await fireLines(tx, cfg, id, lines);
 
@@ -5517,6 +5521,8 @@ export async function issueUnpaidInvoice(
     operatorId,
     settlement: { kind: "deferred" },
   });
+  const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
+  await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
   const order = await readReceiptOrder(tx, cfg, id, { atIssuance: true });
   await tx
     .update(workingOrders)
@@ -5771,12 +5777,12 @@ async function sentUnpaidCounterOrder(
 ): Promise<boolean> {
   if (order.status !== "placed" || order.partyId !== null) return false;
   const context = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
-  return paysAfterSending(context?.serviceMode, cfg);
+  return paysAfterSending(context?.serviceMode);
 }
 
-/** An order with no frozen mode takes the venue's order flow. */
-export function paysAfterSending(mode: string | undefined, cfg: TillConfig): boolean {
-  return PAY_AFTER_SENDING.has(mode ?? cfg.orderFlow);
+/** An order without a recorded zone mode uses the unscoped prepay default. */
+export function paysAfterSending(mode: string | undefined): boolean {
+  return PAY_AFTER_SENDING.has(mode ?? "prepay");
 }
 
 /** A counter order the counter is still waiting on: sent and not paid, or paid and not handed over. */
@@ -5794,8 +5800,7 @@ export interface CounterWaitingOrder {
   total: string;
   /** {@link handOverOrder} would accept it now. */
   canHandOver: boolean;
-  /** A placed order's frozen service mode, or `cfg.orderFlow` when it has none frozen; null on a
-   * settled one. */
+  /** A placed order's frozen service mode, or prepay when it has none; null on a settled one. */
   serviceMode: ServiceMode | null;
   /** Only on a placed order whose invoice is issued: its number. */
   invoiceNumber?: string;
@@ -5858,7 +5863,7 @@ export async function listCounterWaiting(
       const eligible =
         Boolean(row.fired) &&
         row.collectedAt === null &&
-        (!placed || paysAfterSending(modes.get(row.id), cfg));
+        (!placed || paysAfterSending(modes.get(row.id)));
       waiting.push({
         id: row.id,
         orderNumber: row.orderNumber,
@@ -5869,7 +5874,7 @@ export async function listCounterWaiting(
         collectedAt: row.collectedAt,
         total: sale?.amountDue ?? rawCentsToDecimal(row.total),
         canHandOver: eligible,
-        serviceMode: placed ? (modes.get(row.id) ?? cfg.orderFlow) : null,
+        serviceMode: placed ? (modes.get(row.id) ?? "prepay") : null,
         ...(sale === undefined ? {} : { invoiceNumber: numbers.get(sale.saleId)! }),
       });
     }

@@ -1161,7 +1161,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         onboardingIntent: deps.onboardingIntent,
         venueName: boot.issuer.venueName,
         nif: boot.issuer.nif,
-        orderFlow: deps.cfg.orderFlow,
+        orderFlow: "prepay",
         bumpMode: boot.bumpMode,
         fireControl: boot.fireControl,
         courses: boot.courses,
@@ -1222,8 +1222,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const context = await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
           deviceId: device.deviceId,
         });
+        const salePolicy = await VENUE_SERVICE.resolveSalePolicy(tx, deps.cfg, context.zoneId);
         return {
-          context,
+          context: {
+            ...context,
+            serviceMode:
+              context.serviceMode === "table_tab" || context.serviceMode === "invoice_first"
+                ? context.serviceMode
+                : salePolicy.paidWhen,
+            receiptPrintMode: salePolicy.receiptPrintMode,
+          },
           zones: (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).filter(
             (zone) => zone.serviceMode !== "table_tab",
           ),
@@ -1245,8 +1253,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
       const result = await withTransaction(deps.db, async (tx) => {
         const context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
+        const salePolicy = await VENUE_SERVICE.resolveSalePolicy(tx, deps.cfg, zoneId);
         return {
-          context,
+          context: {
+            ...context,
+            serviceMode:
+              context.serviceMode === "table_tab" || context.serviceMode === "invoice_first"
+                ? context.serviceMode
+                : salePolicy.paidWhen,
+            receiptPrintMode: salePolicy.receiptPrintMode,
+          },
           ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, zoneId, {
             deviceProfileId: device.deviceProfileId,
           })),
@@ -1315,7 +1331,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const mode =
           context?.serviceMode ??
           (zoneId === undefined
-            ? cfg.orderFlow
+            ? "prepay"
             : (await VENUE_SERVICE.resolveZoneContext(tx, cfg, zoneId)).serviceMode);
         const unsentCount =
           order === undefined ? body.lines.length : (await unsentDishLines(tx, order.id)).length;
@@ -1325,7 +1341,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
               (mode === "prepay" ||
                 (order?.partyId !== null && order?.partyId !== undefined
                   ? false
-                  : paysAfterSending(mode, cfg)))
+                  : paysAfterSending(mode)))
             : body.step === "place"
               ? unsentCount > 0
               : body.lines.length > 0;
@@ -2434,8 +2450,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const sends =
           unsent.length > 0 &&
           (body.toZoneId === undefined
-            ? (context?.serviceMode ?? cfg.orderFlow) === "prepay" ||
-              (order.partyId === null && paysAfterSending(context?.serviceMode, cfg))
+            ? (context?.serviceMode ?? "prepay") === "prepay" ||
+              (order.partyId === null && paysAfterSending(context?.serviceMode))
             : await moveWouldSend(tx, cfg, id, body.toZoneId));
         const chosen =
           unsent.length === 0

@@ -92,6 +92,51 @@ const TRIM: ReceiptTrim = {
   footerMessage: "¡Gracias por su visita!",
 };
 
+it.each([PRINTER_58, PRINTER_80])(
+  "prints a distinct enabled department trading name above the legal issuer on $paperWidth",
+  (printer) => {
+    const lines = drawn(
+      formatReceipt({
+        result: NO_QR_SALE,
+        issuer: ISSUER,
+        receipt: TRIM,
+        receiptHeader: { tradingName: "Bar La Buena", printTradingName: true },
+        invoiceLocale: "es-ES",
+        printer,
+      }),
+    );
+    expect(lines.slice(0, 4)).toEqual([
+      "Bar La Buena",
+      ISSUER.venueName,
+      TRIM.headerSubtitle,
+      "NIF: B12345678",
+    ]);
+  },
+);
+
+it.each([
+  { tradingName: "", printTradingName: true },
+  { tradingName: ISSUER.venueName, printTradingName: true },
+  { tradingName: ` ${ISSUER.venueName} `, printTradingName: true },
+  { tradingName: "Bar La Buena", printTradingName: false },
+])(
+  "prints the legal issuer once when the trading name is $tradingName and enabled=$printTradingName",
+  (receiptHeader) => {
+    const lines = drawn(
+      formatReceipt({
+        result: NO_QR_SALE,
+        issuer: ISSUER,
+        receipt: TRIM,
+        receiptHeader,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    );
+    expect(lines.slice(0, 3)).toEqual([ISSUER.venueName, TRIM.headerSubtitle, "NIF: B12345678"]);
+    expect(lines.filter((line) => line === ISSUER.venueName)).toHaveLength(1);
+  },
+);
+
 it("puts the QR legend immediately after the raster and a blank line after it", () => {
   const bytes = formatReceipt({
     result: FILED_SALE,

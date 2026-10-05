@@ -25,12 +25,6 @@ import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { DashboardApi, DashboardTable, FloorZone, TableShape } from "../api/client.js";
 
-interface EditableZone {
-  id: string;
-  name: string;
-  displayOrder: number;
-}
-
 /** The placement fields are `null` while the table is unplaced, in the Plano tab's tray. */
 interface EditableTable {
   id: string;
@@ -44,7 +38,7 @@ interface EditableTable {
 }
 
 /**
- * Floor zones and dining tables: a config tab of per-row forms and a Plano tab with the floor canvas.
+ * Dining tables: a config tab of per-row forms and a Plano tab with the floor canvas.
  * Every mutation reloads afterwards. A row's save reads its values from state at click time, not
  * from a render closure, so an edit made just before the click is the one that persists.
  */
@@ -123,7 +117,6 @@ export class FloorScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  readonly #zonesDrafts = new DraftRows<EditableZone>();
   readonly #tablesDrafts = new DraftRows<EditableTable>();
   readonly #queries = new DashboardQueries(
     this,
@@ -135,9 +128,8 @@ export class FloorScreen extends LitElement {
   );
 
   @state() private submitting = false;
-  @state() private zones: EditableZone[] = [];
+  @state() private zones: FloorZone[] = [];
   @state() private tables: EditableTable[] = [];
-  @state() private newZone = "";
   @state() private newTable = "";
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
@@ -200,10 +192,7 @@ export class FloorScreen extends LitElement {
     try {
       await Promise.all([
         this.#queries.watch("listZones", [], (rows) => {
-          this.zones = this.#zonesDrafts.merge(
-            this.zones,
-            rows.map((z: FloorZone) => ({ id: z.id, name: z.name, displayOrder: z.displayOrder })),
-          );
+          this.zones = rows;
         }),
         this.#queries.watch("listTables", [], (rows) => {
           this.tables = this.#tablesDrafts.merge(this.tables, this.#toEditableTables(rows));
@@ -223,60 +212,6 @@ export class FloorScreen extends LitElement {
       });
     } catch (error) {
       this.#showReadError(error);
-    }
-  }
-
-  // ── Zonas ────────────────────────────────────────────────────────────────────────────────────────
-
-  #onNewZone(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.newZone = event.detail.value;
-  }
-
-  async #createZone(): Promise<void> {
-    if (this.submitting) return;
-    this.#showError(null);
-    const name = this.newZone.trim();
-    if (name === "") return;
-    this.submitting = true;
-    try {
-      await this.api.createZone({ name });
-      this.newZone = "";
-      await this.#load();
-    } catch (error) {
-      this.#showError(codeOf(error));
-    } finally {
-      this.submitting = false;
-    }
-  }
-
-  #editZone(id: string, patch: Partial<EditableZone>): void {
-    this.zones = this.zones.map((z) => (z.id === id ? { ...z, ...patch } : z));
-  }
-
-  async #saveZone(id: string): Promise<void> {
-    if (this.submitting) return;
-    this.#showError(null);
-    const row = this.zones.find((z) => z.id === id);
-    if (row === undefined) return;
-    this.submitting = true;
-    try {
-      await this.api.updateZone(row.id, { name: row.name, displayOrder: row.displayOrder });
-      await this.#load();
-    } catch (error) {
-      this.#showError(codeOf(error));
-    } finally {
-      this.submitting = false;
-    }
-  }
-
-  async #deactivateZone(id: string): Promise<void> {
-    this.#showError(null);
-    try {
-      await this.api.deactivateZone(id);
-      await this.#load();
-    } catch (error) {
-      this.#showError(codeOf(error));
     }
   }
 
@@ -354,51 +289,6 @@ export class FloorScreen extends LitElement {
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────────────────────────────
-
-  #renderZone(z: EditableZone): TemplateResult {
-    return html`<li data-test="zone-row-${z.id}">
-      <wt-card>
-        <div class="row">
-          <wt-input
-            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="zone-save-${z.id}"]`))}
-            label=${t("floor.zone_name")}
-            data-test="zone-name-${z.id}"
-            .value=${z.name}
-            @wt-change=${(e: CustomEvent<{ value: string }>) => {
-              e.stopPropagation();
-              this.#editZone(z.id, { name: e.detail.value });
-            }}
-          ></wt-input>
-          <wt-input
-            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test="zone-save-${z.id}"]`))}
-            type="number"
-            label=${t("floor.zone_order")}
-            data-test="zone-order-${z.id}"
-            .value=${String(z.displayOrder)}
-            @wt-change=${(e: CustomEvent<{ value: string }>) => {
-              e.stopPropagation();
-              this.#editZone(z.id, { displayOrder: Number(e.detail.value) || 0 });
-            }}
-          ></wt-input>
-          <wt-button
-            variant="primary"
-            size="sm"
-            data-test="zone-save-${z.id}"
-            ?disabled=${this.submitting}
-            @click=${() => void this.#saveZone(z.id)}
-            >${t("action.save")}</wt-button
-          >
-          <wt-button
-            variant="danger"
-            size="sm"
-            data-test="zone-deactivate-${z.id}"
-            @click=${() => void this.#deactivateZone(z.id)}
-            >${t("action.deactivate")}</wt-button
-          >
-        </div>
-      </wt-card>
-    </li>`;
-  }
 
   #renderTable(tbl: EditableTable): TemplateResult {
     return html`<li data-test="table-row-${tbl.id}">
@@ -571,33 +461,6 @@ export class FloorScreen extends LitElement {
   #renderConfig(): TemplateResult {
     return html`
       <div class="panels">
-        <section class="panel" data-test="zones-panel">
-          <h2 class="panel-title">${t("floor.zones_title")}</h2>
-          ${
-            this.zones.length === 0
-              ? html`<p class="empty">${t("floor.no_zones")}</p>`
-              : html`<ol>
-                  ${this.zones.map((z) => this.#renderZone(z))}
-                </ol>`
-          }
-          <div class="new">
-            <wt-input
-              @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-add-zone]"))}
-              label=${t("floor.new_zone")}
-              data-new-zone
-              .value=${this.newZone}
-              @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNewZone(e)}
-            ></wt-input>
-            <wt-button
-              variant="primary"
-              data-add-zone
-              ?disabled=${this.submitting}
-              @click=${() => void this.#createZone()}
-              >${t("floor.add_zone")}</wt-button
-            >
-          </div>
-        </section>
-
         <section class="panel" data-test="tables-panel">
           <h2 class="panel-title">${t("floor.tables_title")}</h2>
           ${

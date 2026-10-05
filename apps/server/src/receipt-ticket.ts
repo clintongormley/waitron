@@ -68,6 +68,8 @@ export interface FormatReceiptInput {
   result: TillSaleResult;
   /** The issuer identity legally printed on the ticket (art. 7.1.d). */
   issuer: ReceiptIssuer;
+  /** The department heading supplied for this filed sale. */
+  receiptHeader?: { tradingName: string | null; printTradingName: boolean };
   /** The owner-authored non-fiscal header/footer trim; `{}` (or missing fields) prints no trim. */
   receipt: ReceiptTrim;
   /** The locale the fixed words are printed in and the money, discount percentages and date are FORMATTED in (e.g. "es-ES"). NOT the operator UI. */
@@ -122,6 +124,7 @@ function issueDate(iso: string, locale: string): string {
 export function formatReceipt({
   result,
   issuer,
+  receiptHeader,
   receipt,
   invoiceLocale,
   namesLocale = invoiceLocale,
@@ -174,6 +177,10 @@ export function formatReceipt({
   }
 
   // Issuer block — venue name, optional non-fiscal subtitle, NIF (art. 7.1.d).
+  const tradingName = receiptHeader?.tradingName?.trim();
+  if (receiptHeader?.printTradingName && tradingName && tradingName !== issuer.venueName.trim()) {
+    text(tradingName);
+  }
   text(issuer.venueName);
   if (receipt.headerSubtitle) text(receipt.headerSubtitle);
   if (duplicate) text(label.duplicate);

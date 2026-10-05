@@ -3520,7 +3520,7 @@ describe("dashboard URL navigation", () => {
     },
   );
 
-  it("preserves a module-owned tab through refresh and Back from another section", async () => {
+  it("restores a saved venue link through refresh and Back from another section", async () => {
     const url = new URL(location.href);
     url.pathname = "/manage/venue-operations/view/zones";
     url.searchParams.set("dev", "1");
@@ -3551,28 +3551,30 @@ describe("dashboard URL navigation", () => {
         : []) as never;
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
     await flush(el);
-    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
+    expect(location.pathname).toBe("/manage/venue-operations");
     await expect
-      .poll(
-        () =>
+      .poll(() =>
+        Boolean(
           el
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
-            ?.shadowRoot?.querySelector("wt-tabs")?.value,
+            ?.shadowRoot?.querySelector('[data-test="policy-tree"]'),
+        ),
       )
-      .toBe("zones");
-    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
+      .toBe(true);
+    expect(location.pathname).toBe("/manage/venue-operations");
     el.remove();
     const { el: refreshed } = await mountWidget<DashboardApp>("dashboard-app", { api, request });
     await flush(refreshed);
     await expect
-      .poll(
-        () =>
+      .poll(() =>
+        Boolean(
           refreshed
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
-            ?.shadowRoot?.querySelector("wt-tabs")?.value,
+            ?.shadowRoot?.querySelector('[data-test="policy-tree"]'),
+        ),
       )
-      .toBe("zones");
-    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
+      .toBe(true);
+    expect(location.pathname).toBe("/manage/venue-operations");
     expect(location.search).toBe(url.search);
     navItem(refreshed, "staff")!.click();
     await flush(refreshed);
@@ -3584,18 +3586,19 @@ describe("dashboard URL navigation", () => {
     await back;
     await flush(refreshed);
     await expect
-      .poll(
-        () =>
+      .poll(() =>
+        Boolean(
           refreshed
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
-            ?.shadowRoot?.querySelector("wt-tabs")?.value,
+            ?.shadowRoot?.querySelector('[data-test="policy-tree"]'),
+        ),
       )
-      .toBe("zones");
-    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
+      .toBe(true);
+    expect(location.pathname).toBe("/manage/venue-operations");
     expect(location.search).toBe(url.search);
   });
 
-  it("preserves a module-owned tab while signing in to a protected destination", async () => {
+  it("opens a saved venue link after signing in to a protected destination", async () => {
     const url = new URL(location.href);
     url.pathname = "/manage/venue-operations/view/zones";
     url.searchParams.set("dev", "1");
@@ -3632,16 +3635,17 @@ describe("dashboard URL navigation", () => {
     });
     emitLoggedIn(login(el)!);
     await flush(el);
-    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
+    expect(location.pathname).toBe("/manage/venue-operations");
     await expect
-      .poll(
-        () =>
+      .poll(() =>
+        Boolean(
           el
             .shadowRoot!.querySelector("dashboard-venue-operations-screen")
-            ?.shadowRoot?.querySelector("wt-tabs")?.value,
+            ?.shadowRoot?.querySelector('[data-test="policy-tree"]'),
+        ),
       )
-      .toBe("zones");
-    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
+      .toBe(true);
+    expect(location.pathname).toBe("/manage/venue-operations");
     expect(location.search).toBe(url.search);
   });
 

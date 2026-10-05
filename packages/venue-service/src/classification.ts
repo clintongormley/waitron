@@ -1,4 +1,4 @@
-import { classify, type ClassifiedTable } from "@waitron/sync-enrolment";
+import { appendOnly, classify, type ClassifiedTable } from "@waitron/sync-enrolment";
 import type { ChangeSource } from "@waitron/shared";
 
 const STATE =
@@ -6,7 +6,10 @@ const STATE =
 
 export const VENUE_SERVICE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("departments", "state", STATE),
+  classify("department_sale_policies", "state", STATE),
   classify("zone_service_policies", "state", STATE),
+  classify("zone_sale_policies", "state", STATE),
+  appendOnly("sale_receipt_headers", "ledger", "receipt header as issued for a sale"),
   classify("zone_menus", "state", STATE),
   classify("device_zone_defaults", "state", STATE),
   classify("station_claims", "state", STATE),

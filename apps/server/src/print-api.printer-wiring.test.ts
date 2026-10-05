@@ -605,7 +605,7 @@ async function locationDrawerPolicy(locationId: string): Promise<string> {
   return row.rows[0]!.drawer_open_policy;
 }
 
-describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
+describe("Receipt-printer and drawer config routes (printer.manage)", () => {
   it("has no till list, and no per-till receipt printer or drawer route", async () => {
     const app = mountApp(tenantA);
     const tillId = randomUUID();
@@ -619,8 +619,9 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
     }
   });
 
-  it("sets a location's receipt print mode as a manager (persists)", async () => {
+  it("keeps the retired venue receipt-mode route closed for every former value", async () => {
     const app = mountApp(tenantA);
+    const before = await locationPrintMode(tenantA.locationId);
     for (const mode of ["never", "on_request", "auto"] as const) {
       const res = await send(
         app,
@@ -628,12 +629,12 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
         `/management-api/locations/${tenantA.locationId}/receipt-print-mode`,
         { cookie: managerCookie, body: { mode } },
       );
-      expect(res.status).toBe(204);
-      expect(await locationPrintMode(tenantA.locationId)).toBe(mode);
+      expect(res.status).toBe(404);
+      expect(await locationPrintMode(tenantA.locationId)).toBe(before);
     }
   });
 
-  it("400s an unknown location and a bad print-mode value", async () => {
+  it("keeps the retired route closed for unknown locations and invalid values", async () => {
     const app = mountApp(tenantA);
     const unknown = await send(
       app,
@@ -641,8 +642,7 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
       `/management-api/locations/${randomUUID()}/receipt-print-mode`,
       { cookie: managerCookie, body: { mode: "auto" } },
     );
-    expect(unknown.status).toBe(400);
-    expect(await unknown.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+    expect(unknown.status).toBe(404);
 
     const badMode = await send(
       app,
@@ -650,8 +650,7 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
       `/management-api/locations/${tenantA.locationId}/receipt-print-mode`,
       { cookie: managerCookie, body: { mode: "sometimes" } },
     );
-    expect(badMode.status).toBe(400);
-    expect(await badMode.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+    expect(badMode.status).toBe(404);
   });
 
   it("sets a location's drawer open policy as a manager (persists)", async () => {
@@ -742,27 +741,15 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
     expect(manager.status).toBe(200);
   });
 
-  it("require printer.manage on ALL config routes — 401 unauth, 403 staff, 2xx manager (gate proven by deletion via the shared `gated`)", async () => {
+  it("requires printer.manage on the drawer config route — 401 unauth, 403 staff, 2xx manager", async () => {
     const app = mountApp(tenantA);
-    const modeRoute = `/management-api/locations/${tenantA.locationId}/receipt-print-mode`;
     const policyRoute = `/management-api/locations/${tenantA.locationId}/drawer-open-policy`;
 
-    for (const route of [modeRoute, policyRoute]) {
-      const unauth = await send(app, "PATCH", route, {
-        body: { mode: "auto", policy: "gated" },
-      });
-      expect(unauth.status).toBe(401);
-      expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
-    }
-
-    const staffMode = await send(app, "PATCH", modeRoute, {
-      cookie: staffCookie,
-      body: { mode: "never" },
+    const unauth = await send(app, "PATCH", policyRoute, {
+      body: { policy: "gated" },
     });
-    expect(staffMode.status).toBe(403);
-    expect(await staffMode.json()).toMatchObject({
-      error: { code: "authorization.not_permitted" },
-    });
+    expect(unauth.status).toBe(401);
+    expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
     const staffPolicy = await send(app, "PATCH", policyRoute, {
       cookie: staffCookie,
       body: { policy: "open" },
@@ -772,10 +759,6 @@ describe("Receipt-printer + print-mode config routes (printer.manage)", () => {
       error: { code: "authorization.not_permitted" },
     });
 
-    expect(
-      (await send(app, "PATCH", modeRoute, { cookie: managerCookie, body: { mode: "auto" } }))
-        .status,
-    ).toBe(204);
     expect(
       (
         await send(app, "PATCH", policyRoute, {

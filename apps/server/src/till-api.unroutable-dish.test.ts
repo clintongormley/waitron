@@ -1246,6 +1246,54 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     },
   );
 
+  it("asks about an unscoped order on pay even when the retired location mode says invoice first", async () => {
+    const made = await strandedDish("Unscoped order");
+    const id = randomUUID();
+    await park(id, [made]);
+    await inTx(v, async (tx) =>
+      tx.run(sql`delete from order_service_contexts where working_order_id = ${id}`),
+    );
+    v.cfg.orderFlow = "invoice_first";
+
+    const response = await app.request("/api/dead-ends/order", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({ workingOrderId: id }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      sends: true,
+      deadEnds: [{ name: made.name }],
+    });
+  });
+
+  it("checks an unscoped table bill on pay despite the retired invoice-first location mode", async () => {
+    const made = await strandedDish("Unscoped sale basket");
+    const id = randomUUID();
+    await park(id, [made]);
+    const tableId = await v.table(`Unscoped-${randomUUID().slice(0, 8)}`);
+    const { partyId } = await seat(v, tableId);
+    await inTx(v, async (tx) => {
+      await tx.run(sql`update working_orders set party_id = ${partyId} where id = ${id}`);
+      await tx.run(sql`delete from order_service_contexts where working_order_id = ${id}`);
+    });
+    v.cfg.orderFlow = "invoice_first";
+
+    const response = await app.request("/api/dead-ends/sale", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({
+        step: "pay",
+        workingOrderId: id,
+        lines: [{ menuItemId: made.counterOffer, quantity: "1" }],
+      }),
+    });
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).error.code).toBe("order.service_context_missing");
+  });
+
   it("does not say a placed counter order sends when all its dishes already have tickets", async () => {
     const made = await dish("Placed lager");
     const chosen = await station("Placed bar");

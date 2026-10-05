@@ -1052,11 +1052,15 @@ describe("the dishes of an open bill moved between service modes", () => {
         .values({ locationId: v.cfg.locationId, name: `Barra ${name}` })
         .returning({ id: floorZones.id });
       // Offering Tarta here writes no prep-station rule; the suite's other rules remain.
-      return offerProducts(tx, v.cfg, {
+      const offered = await offerProducts(tx, v.cfg, {
         zone: { zoneId: zone!.id },
         serviceMode: "ticket_then_pay",
         productIds: [v.productId("Tarta")],
       });
+      await tx.execute(sql`
+        update zone_sale_policies set paid_when = 'ticket_then_pay'
+        where zone_id = ${offered.zoneId}`);
+      return offered;
     });
     const [orderId, walkUp] = [randomUUID(), randomUUID()];
     for (const id of [orderId, walkUp]) {

@@ -267,6 +267,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "status.not_found": 404,
   "status.label_taken": 409,
   "zone.not_found": 404,
+  "zone.table_in_use": 409,
   "zone.name_taken": 409,
   "table.not_found": 404,
   "table.label_taken": 409,
@@ -1577,7 +1578,9 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const zones = await withVenueAuth(deps, sessionId, (tx) => listZones(tx, cfg));
+      const zones = await withVenueAuth(deps, sessionId, (tx) =>
+        listZones(tx, cfg, { includeInactive: c.req.query("includeInactive") === "true" }),
+      );
       return c.json(zones);
     }),
   );

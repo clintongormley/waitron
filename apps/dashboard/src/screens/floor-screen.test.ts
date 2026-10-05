@@ -96,59 +96,31 @@ function selectValue(el: FloorScreen, sel: string, value: string): void {
 }
 
 describe("floor-screen", () => {
-  it("loads and lists the zones and tables on connect", async () => {
+  it("loads zones for table placement and lists tables on connect", async () => {
     const api = stubApi();
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     expect(api.listZones).toHaveBeenCalledTimes(1);
     expect(api.listTables).toHaveBeenCalledTimes(1);
-    expect(q(el, "[data-test=zone-row-z1]")).not.toBeNull();
+    expect((q(el, "[data-test=table-zone-t1]") as Dropdown).options).toContainEqual({
+      value: "z1",
+      label: "Comedor",
+    });
     expect(q(el, "[data-test=table-row-t1]")).not.toBeNull();
     expect(el.shadowRoot!.querySelectorAll("h1").length).toBe(1);
   });
 
-  it("creates a zone from the new-zone form (createZone with the name), then reloads", async () => {
+  it("places tables in existing zones without offering zone creation on Floor", async () => {
     const api = stubApi();
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
-    type(el, "[data-new-zone]", "Comedor");
-    q(el, "[data-add-zone]")!.click();
-    await flush(el);
-    expect(api.createZone).toHaveBeenCalledWith({ name: "Comedor" });
-    expect(api.listZones).toHaveBeenCalledTimes(2);
-  });
 
-  it("does not create an empty-name zone", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
-    await flush(el);
-    q(el, "[data-add-zone]")!.click();
-    await flush(el);
-    expect(api.createZone).not.toHaveBeenCalled();
-  });
-
-  it("saves an edited zone row (updateZone with the row's current name + order), then reloads", async () => {
-    const api = stubApi({}, TWO_ZONES);
-    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
-    await flush(el);
-    type(el, "[data-test=zone-name-z1]", "Salón");
-    type(el, "[data-test=zone-order-z1]", "x");
-    type(el, "[data-test=zone-order-z1]", "2");
-    q(el, "[data-test=zone-save-z1]")!.click();
-    await flush(el);
-    expect(api.updateZone).toHaveBeenCalledTimes(1);
-    expect(api.updateZone).toHaveBeenCalledWith("z1", { name: "Salón", displayOrder: 2 });
-    expect(api.listZones).toHaveBeenCalledTimes(2);
-  });
-
-  it("deactivates a zone row", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
-    await flush(el);
-    q(el, "[data-test=zone-deactivate-z1]")!.click();
-    await flush(el);
-    expect(api.deactivateZone).toHaveBeenCalledWith("z1");
-    expect(api.listZones).toHaveBeenCalledTimes(2);
+    expect(q(el, "[data-new-zone]")).toBeNull();
+    expect(q(el, "[data-add-zone]")).toBeNull();
+    expect(q(el, "[data-test=zone-name-z1]")).toBeNull();
+    expect(q(el, "[data-test=zone-save-z1]")).toBeNull();
+    expect(q(el, "[data-test=zone-deactivate-z1]")).toBeNull();
+    expect(q(el, "[data-test=table-zone-t1]")).not.toBeNull();
   });
 
   it("assigns a table's zone (updateTable with only the zoneId), then reloads", async () => {
@@ -264,17 +236,17 @@ describe("floor-screen", () => {
     expect(api.listTables).toHaveBeenCalledTimes(2);
   });
 
-  it("surfaces a rejected zone create as a localised role=alert (never the raw code)", async () => {
-    const api = stubApi({ createZone: vi.fn().mockRejectedValue({ code: "zone.name_taken" }) });
+  it("surfaces a rejected table create as a localised role=alert (never the raw code)", async () => {
+    const api = stubApi({ createTable: vi.fn().mockRejectedValue({ code: "table.label_taken" }) });
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
-    type(el, "[data-new-zone]", "Comedor");
-    q(el, "[data-add-zone]")!.click();
+    type(el, "[data-new-table]", "4");
+    q(el, "[data-add-table]")!.click();
     await flush(el);
-    expect(errorKey(el)).toBe("zone.name_taken");
+    expect(errorKey(el)).toBe("table.label_taken");
     const banner = q(el, "[role=alert]")?.textContent;
-    expect(banner).toContain(codeMessage("zone.name_taken", "es-ES"));
-    expect(banner).not.toContain("zone.name_taken");
+    expect(banner).toContain(codeMessage("table.label_taken", "es-ES"));
+    expect(banner).not.toContain("table.label_taken");
   });
 
   it("surfaces a rejected table zone-assign as a localised role=alert", async () => {
@@ -317,29 +289,6 @@ describe("floor-screen", () => {
     expect(banner).toContain(codeMessage("table.label_taken", "es-ES"));
   });
 
-  it("surfaces a rejected zone deactivate as a localised role=alert", async () => {
-    const api = stubApi({ deactivateZone: vi.fn().mockRejectedValue({ code: "zone.not_found" }) });
-    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
-    await flush(el);
-    q(el, "[data-test=zone-deactivate-z1]")!.click();
-    await flush(el);
-    expect(errorKey(el)).toBe("zone.not_found");
-    const banner = q(el, "[role=alert]")?.textContent;
-    expect(banner).toContain(codeMessage("zone.not_found", "es-ES"));
-  });
-
-  it("surfaces a rejected zone save as a localised role=alert", async () => {
-    const api = stubApi({ updateZone: vi.fn().mockRejectedValue({ code: "zone.not_found" }) });
-    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
-    await flush(el);
-    type(el, "[data-test=zone-name-z1]", "Salón");
-    q(el, "[data-test=zone-save-z1]")!.click();
-    await flush(el);
-    expect(errorKey(el)).toBe("zone.not_found");
-    const banner = q(el, "[role=alert]")?.textContent;
-    expect(banner).toContain(codeMessage("zone.not_found", "es-ES"));
-  });
-
   it("surfaces a rejected table save as a localised role=alert", async () => {
     const api = stubApi({ updateTable: vi.fn().mockRejectedValue({ code: "table.label_taken" }) });
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
@@ -366,11 +315,11 @@ describe("floor-screen", () => {
   });
 
   it("falls back to server.internal when a rejected mutation carries no code", async () => {
-    const api = stubApi({ createZone: vi.fn().mockRejectedValue({}) });
+    const api = stubApi({ createTable: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
-    type(el, "[data-new-zone]", "Whatever");
-    q(el, "[data-add-zone]")!.click();
+    type(el, "[data-new-table]", "Whatever");
+    q(el, "[data-add-table]")!.click();
     await flush(el);
     expect(errorKey(el)).toBe("server.internal");
   });
@@ -388,8 +337,6 @@ describe("floor-screen", () => {
     await flush(el);
     let leaked = false;
     host.addEventListener("wt-change", () => (leaked = true));
-    type(el, "[data-new-zone]", "X");
-    type(el, "[data-test=zone-name-z1]", "Y");
     type(el, "[data-new-table]", "Z");
     type(el, "[data-test=table-label-t1]", "W");
     expect(leaked).toBe(false);
@@ -441,12 +388,12 @@ describe("floor-screen — Plano editor (FP-2)", () => {
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
     expect(canvasOf(el)).toBeNull();
-    expect(q(el, "[data-test=zones-panel]")).not.toBeNull();
+    expect(q(el, "[data-test=tables-panel]")).not.toBeNull();
     await openPlano(el);
     const canvas = canvasOf(el);
     expect(canvas).not.toBeNull();
     expect(canvas.editable).toBe(true);
-    expect(q(el, "[data-test=zones-panel]")).toBeNull();
+    expect(q(el, "[data-test=tables-panel]")).toBeNull();
   });
 
   it("draws a placed table on the canvas and lists an unplaced one in the tray", async () => {
@@ -690,18 +637,6 @@ describe("floor URL tabs", () => {
 
 it.each([
   {
-    method: "createZone",
-    field: "[data-new-zone]",
-    button: "[data-add-zone]",
-    result: { id: "z9" },
-  },
-  {
-    method: "updateZone",
-    field: "[data-test=zone-name-z1]",
-    button: "[data-test=zone-save-z1]",
-    result: null,
-  },
-  {
     method: "createTable",
     field: "[data-new-table]",
     button: "[data-add-table]",
@@ -791,12 +726,6 @@ it("restores the Sin zona sub-tab from history", async () => {
 
 it.each([
   {
-    method: "updateZone",
-    field: "[data-test=zone-order-z1]",
-    value: "7",
-    call: ["z1", { name: "Comedor", displayOrder: 7 }],
-  },
-  {
     method: "updateTable",
     field: "[data-test=table-capacity-t1]",
     value: "6",
@@ -817,14 +746,11 @@ it.each([
     input.focus();
     await userEvent.keyboard("{Enter}");
     await flush(el);
-    expect(api[method as "updateZone" | "updateTable"]).toHaveBeenCalledExactlyOnceWith(...call);
+    expect(api[method as "updateTable"]).toHaveBeenCalledExactlyOnceWith(...call);
   },
 );
 
-it.each([
-  { method: "updateZone", rows: "zones", button: "[data-test=zone-save-z1]" },
-  { method: "updateTable", rows: "tables", button: "[data-test=table-save-t1]" },
-])(
+it.each([{ method: "updateTable", rows: "tables", button: "[data-test=table-save-t1]" }])(
   "a save landing before the re-render of a refresh that removed its row sends nothing ($method)",
   async ({ method, rows, button }) => {
     const api = stubApi();
@@ -833,7 +759,7 @@ it.each([
     (el as unknown as Record<string, unknown[]>)[rows] = [];
     q(el, button)!.click();
     await flush(el);
-    expect(api[method as "updateZone" | "updateTable"]).not.toHaveBeenCalled();
+    expect(api[method as "updateTable"]).not.toHaveBeenCalled();
     expect(errorKey(el)).toBeNull();
   },
 );
@@ -855,55 +781,58 @@ it("clears a failed load's message once the server answers again", async () => {
   );
   liveData.refresh();
   await vi.waitFor(() => expect(q(el, "[role=alert]")).toBeNull());
-  expect(q(el, "[data-test=zone-row-z1]")).not.toBeNull();
+  expect((q(el, "[data-test=table-zone-t1]") as Dropdown).options).toContainEqual({
+    value: "z1",
+    label: "Comedor",
+  });
   expect(q(el, "[data-test=table-row-t1]")).not.toBeNull();
 });
 
-it("keeps an unsaved, typed zone name through a failed read and its recovery", async () => {
+it("keeps an unsaved, typed table label through a failed read and its recovery", async () => {
   const liveData = new LiveData();
   const api = Object.assign(stubApi(), { liveData });
   const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
-  await vi.waitFor(() => expect(q(el, "[data-test=zone-row-z1]")).not.toBeNull());
+  await vi.waitFor(() => expect(q(el, "[data-test=table-row-t1]")).not.toBeNull());
   const innerInput = async (sel: string): Promise<HTMLInputElement> => {
     const control = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(sel)!;
     await control.updateComplete;
     return control.shadowRoot!.querySelector("input")!;
   };
-  const name = await innerInput("[data-test=zone-name-z1]");
-  name.value = "Salón";
-  name.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  const label = await innerInput("[data-test=table-label-t1]");
+  label.value = "Mesa nueva";
+  label.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await el.updateComplete;
 
-  vi.mocked(api.listZones).mockRejectedValue({ code: "connection.failed" });
+  vi.mocked(api.listTables).mockRejectedValue({ code: "connection.failed" });
   liveData.refresh();
   await vi.waitFor(() =>
     expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed")),
   );
-  vi.mocked(api.listZones).mockResolvedValue([{ ...ZONES[0]!, displayOrder: 3 }]);
+  vi.mocked(api.listTables).mockResolvedValue([{ ...TABLES[0]!, capacity: 3 }]);
   liveData.refresh();
   await vi.waitFor(() => expect(q(el, "[role=alert]")).toBeNull());
 
-  expect((await innerInput("[data-test=zone-order-z1]")).value).toBe("3");
-  expect((await innerInput("[data-test=zone-name-z1]")).value).toBe("Salón");
-  expect(api.updateZone).not.toHaveBeenCalled();
+  expect((await innerInput("[data-test=table-capacity-t1]")).value).toBe("3");
+  expect((await innerInput("[data-test=table-label-t1]")).value).toBe("Mesa nueva");
+  expect(api.updateTable).not.toHaveBeenCalled();
 });
 
 it("keeps a save's connection failure when the reads that failed beside it recover", async () => {
   const liveData = new LiveData();
   const api = Object.assign(
-    stubApi({ deactivateZone: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+    stubApi({ deactivateTable: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
     { liveData },
   );
   const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
-  await vi.waitFor(() => expect(q(el, "[data-test=zone-row-z1]")).not.toBeNull());
+  await vi.waitFor(() => expect(q(el, "[data-test=table-row-t1]")).not.toBeNull());
 
   vi.mocked(api.listZones).mockRejectedValue({ code: "connection.failed" });
   liveData.refresh();
   await vi.waitFor(() =>
     expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed")),
   );
-  q(el, "[data-test=zone-deactivate-z1]")!.click();
-  await vi.waitFor(() => expect(api.deactivateZone).toHaveBeenCalledTimes(1));
+  q(el, "[data-test=table-deactivate-t1]")!.click();
+  await vi.waitFor(() => expect(api.deactivateTable).toHaveBeenCalledTimes(1));
   await flush(el);
   const readsBefore = vi.mocked(api.listZones).mock.calls.length;
   liveData.refresh();
@@ -914,33 +843,39 @@ it("keeps a save's connection failure when the reads that failed beside it recov
 
   vi.mocked(api.listZones).mockResolvedValue(TWO_ZONES.map((z) => ({ ...z })));
   liveData.refresh();
-  await vi.waitFor(() => expect(q(el, "[data-test=zone-row-z2]")).not.toBeNull());
+  await vi.waitFor(() =>
+    expect((q(el, "[data-test=table-zone-t1]") as Dropdown).options).toContainEqual({
+      value: "z2",
+      label: "Terraza",
+    }),
+  );
   await flush(el);
   expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed"));
 });
 
-it("keeps a failed table deactivation when an earlier zone deactivation completes after it", async () => {
-  let finishZone!: () => void;
+it("keeps a failed table deactivation when an earlier table creation completes after it", async () => {
+  let finishCreate!: () => void;
   const api = stubApi({
-    deactivateZone: vi.fn().mockReturnValue(
+    createTable: vi.fn().mockReturnValue(
       new Promise<void>((resolve) => {
-        finishZone = resolve;
+        finishCreate = resolve;
       }),
     ),
     deactivateTable: vi.fn().mockRejectedValue({ code: "table.not_found" }),
   });
   const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
-  await vi.waitFor(() => expect(q(el, "[data-test=zone-row-z1]")).not.toBeNull());
+  await vi.waitFor(() => expect(q(el, "[data-test=table-row-t1]")).not.toBeNull());
 
-  q(el, "[data-test=zone-deactivate-z1]")!.click();
-  await vi.waitFor(() => expect(api.deactivateZone).toHaveBeenCalledTimes(1));
+  type(el, "[data-new-table]", "Mesa nueva");
+  q(el, "[data-add-table]")!.click();
+  await vi.waitFor(() => expect(api.createTable).toHaveBeenCalledTimes(1));
   q(el, "[data-test=table-deactivate-t1]")!.click();
   await vi.waitFor(() =>
     expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("table.not_found")),
   );
 
   const reads = vi.mocked(api.listZones).mock.calls.length;
-  finishZone();
+  finishCreate();
   await vi.waitFor(() => expect(api.listZones).toHaveBeenCalledTimes(reads + 1));
   await flush(el);
   expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("table.not_found"));

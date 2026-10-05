@@ -24,6 +24,7 @@ registerIcons({
 export interface DataTableColumn<Row> {
   key: string;
   label: string;
+  group?: string;
   cell: (row: Row, context: { ancestorOnly: boolean }) => unknown;
   sortValue?: (row: Row) => string | number | null | undefined;
   searchValue?: (row: Row) => string;
@@ -1741,8 +1742,29 @@ export class WtDataTable<Row = unknown> extends LitElement {
    */
   #renderHead(visibleKeys: string[], shown: readonly DataTableColumn<Row>[]) {
     const { allSelected, someSelected } = this.#selectionState(visibleKeys);
+    const groups: { label: string; span: number }[] = [];
+    for (const column of shown) {
+      const previous = groups.at(-1);
+      if (column.group && previous?.label === column.group) previous.span += 1;
+      else groups.push({ label: column.group ?? "", span: 1 });
+    }
+    const hasGroups = groups.some((group) => group.label !== "");
     return html`
       <thead role="rowgroup">
+        ${
+          hasGroups
+            ? html`<tr role="row" class="column-groups">
+                ${this.selectable ? html`<td aria-hidden="true"></td>` : nothing}
+                ${groups.map((group) =>
+                  group.label
+                    ? html`<th role="columnheader" scope="colgroup" colspan=${group.span}>
+                        ${group.label}
+                      </th>`
+                    : html`<td aria-hidden="true" colspan=${group.span}></td>`,
+                )}
+              </tr>`
+            : nothing
+        }
         <tr role="row">
           ${
             this.selectable

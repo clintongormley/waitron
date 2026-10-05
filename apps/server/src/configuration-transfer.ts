@@ -44,7 +44,6 @@ export interface PreparedVenue {
     province: string | null;
     timeZone: string;
     dayCutover: string;
-    orderFlow: string;
     bumpMode: string;
     fireControl: string;
     receiptPrintMode: string;
@@ -82,7 +81,7 @@ export async function buildConfigurationBundle(
       l.operation_description as "operationDescription", l.fiscal_territory as "fiscalTerritory",
       l.address_line1 as "addressLine1", l.address_line2 as "addressLine2",
       l.postal_code as "postalCode", l.city, l.province, l.time_zone as "timeZone",
-      l.day_cutover as "dayCutover", l.order_flow as "orderFlow", l.bump_mode as "bumpMode",
+      l.day_cutover as "dayCutover", l.bump_mode as "bumpMode",
       l.fire_control as "fireControl", l.receipt_print_mode as "receiptPrintMode",
       l.drawer_open_policy as "drawerOpenPolicy", l.catalogue_id as "catalogueId",
       max(s.code) filter (where s.purpose = 'standard') as "seriesCode",
@@ -136,7 +135,6 @@ export async function applyPreparedLocation(
     update locations set
       invoice_locales = ${invoiceLocales},
       operation_description = ${location.operationDescription},
-      order_flow = ${location.orderFlow},
       bump_mode = ${location.bumpMode},
       fire_control = ${location.fireControl},
       receipt_print_mode = ${location.receiptPrintMode},
@@ -287,7 +285,6 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     "fiscalTerritory",
     "timeZone",
     "dayCutover",
-    "orderFlow",
     "bumpMode",
     "fireControl",
     "receiptPrintMode",

@@ -910,7 +910,7 @@ describe("till-app receipt issuance", () => {
     return ticket(el)!;
   }
 
-  it("treats a server that sends no receipt print mode as printing automatically", async () => {
+  it("uses automatic printing when zone offers omit the receipt choice, even if boot says otherwise", async () => {
     const legacyTill: Record<string, unknown> = { ...till };
     delete legacyTill.receiptPrintMode;
 
@@ -918,13 +918,68 @@ describe("till-app receipt issuance", () => {
     cleanupWidgets();
     expect(
       (await ticketAfterSale({ ...till, receiptPrintMode: "on_request" })).originalReceiptAvailable,
-    ).toBe(true);
+    ).toBe(false);
+  });
+
+  it("takes pay timing from the zone context when no zone chooser is supplied", async () => {
+    const catalogue = zoneOffers(
+      { menus: [defaultMenu], products: [cafe] },
+      "zone-counter",
+      "ticket_then_pay",
+    );
+    delete catalogue.zones;
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+    });
+    const c = await toCounter(el);
+
+    expect(c.orderFlow).toBe("ticket_then_pay");
+  });
+
+  it("offers the original receipt according to the selected zone, even when boot says auto", async () => {
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    catalogue.context.receiptPrintMode = "on_request";
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "auto" }),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+    });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(ticket(el)!.originalReceiptAvailable).toBe(true);
+  });
+
+  it("updates original receipt availability when the counter switches zones", async () => {
+    const initial = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    initial.context.receiptPrintMode = "on_request";
+    initial.zones = [zone("zone-counter", "prepay"), zone("zone-deli", "prepay")];
+    const deli = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-deli");
+    deli.context.receiptPrintMode = "auto";
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(initial),
+      listZoneOffers: vi.fn().mockResolvedValue(deli),
+    });
+    const c = await toCounter(el);
+    emit(c, "counter-zone-selected", { zoneId: "zone-deli" });
+    await flush(el);
+    expect(c.selectedServiceZoneId).toBe("zone-deli");
+    c.store.addProduct(c.products[0]!, "1");
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(ticket(el)!.originalReceiptAvailable).toBe(false);
   });
 
   it("keeps the original receipt on offer and says why when printing it fails", async () => {
     const printReceipt = vi.fn().mockRejectedValue({ code: "printing.no_printer" });
+    const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
+    catalogue.context.receiptPrintMode = "on_request";
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
       printReceipt,
     });
     const c = await toCounter(el);
@@ -978,6 +1033,18 @@ describe("till-app receipt issuance", () => {
 });
 
 describe("till-app counter menus and service zones", () => {
+  it("uses pay-first controls when zone offers fail despite a retired venue-wide mode", async () => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
+      listDefaultZoneOffers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+
+    const c = await toCounter(el);
+
+    expect(c.orderFlow).toBe("prepay");
+    expect(banner(el)!.textContent).toContain(t("service_zone.load_error"));
+  });
+
   const twoMenus = [
     { id: "menu-food", name: "Comida", isDefault: false },
     { id: "menu-drinks", name: "Bebidas", isDefault: true },
@@ -1599,7 +1666,14 @@ describe("till-app logout while a request is waiting for the server", () => {
 
   it("does not read waiting orders when a cash sale's station read outlives sign-out", async () => {
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue({
+        ...zoneOffers(
+          { menus: [defaultMenu], products: [cafe] },
+          "zone-counter",
+          "ticket_then_pay",
+        ),
+        zones: [zone("zone-counter", "ticket_then_pay")],
+      }),
     });
     const c = await toCounter(el);
     let answerStations!: (rows: []) => void;
@@ -1622,7 +1696,14 @@ describe("till-app logout while a request is waiting for the server", () => {
 
   it("does not read waiting orders when a card capture's station read outlives sign-out", async () => {
     const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue({
+        ...zoneOffers(
+          { menus: [defaultMenu], products: [cafe] },
+          "zone-counter",
+          "ticket_then_pay",
+        ),
+        zones: [zone("zone-counter", "ticket_then_pay")],
+      }),
     });
     const c = await toCounter(el);
     let answerStations!: (rows: []) => void;

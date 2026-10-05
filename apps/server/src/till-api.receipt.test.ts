@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
@@ -27,7 +27,7 @@ import { createPinThrottle, hashPassword, hashPin, persons } from "@waitron/iden
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { createPrinter, updatePrinter } from "@waitron/printing";
-import { stationClaims } from "@waitron/venue-service";
+import { departmentSalePolicies, departments, stationClaims } from "@waitron/venue-service";
 import type { PrintConfig } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -262,6 +262,19 @@ async function configureReceipt(
         .update(locations)
         .set({ receiptPrintMode: opts.mode })
         .where(eq(locations.id, cfg.locationId));
+      const scopedDepartments = await tx
+        .select({ id: departments.id })
+        .from(departments)
+        .where(eq(departments.locationId, cfg.locationId));
+      await tx
+        .update(departmentSalePolicies)
+        .set({ receiptPrintMode: opts.mode })
+        .where(
+          inArray(
+            departmentSalePolicies.departmentId,
+            scopedDepartments.map((row) => row.id),
+          ),
+        );
     }
     if (opts.printerId !== undefined) {
       venueReceiptPrinter = opts.printerId;
@@ -1404,6 +1417,47 @@ describe("payment slip with nothing to print", () => {
 });
 
 describe("persisted cash receipt facts", () => {
+  it("returns the filed department heading on first sale and replay after a rename", async () => {
+    const { cfg, each, operatorId } = await setupVenue();
+    const scopes = await suite.db.execute<{ zone_id: string; department_id: string }>(sql`
+      select zone_id, department_id from zone_service_policies where location_id = ${cfg.locationId}
+      limit 1
+    `);
+    const [scope] = scopes.rows;
+    await suite.db.execute(sql`
+      update departments set trading_name = 'Terrace Bar' where id = ${scope!.department_id}
+    `);
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+    const deviceCookie = await enrolTillCookie(cfg);
+    const request = {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        workingOrderId: randomUUID(),
+        zoneId: scope!.zone_id,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "1.50" },
+      }),
+    };
+    const first = await app.request("/api/sales", request);
+    expect(first.status).toBe(200);
+    expect((await first.json()).receiptHeader).toMatchObject({
+      tradingName: "Terrace Bar",
+      printTradingName: true,
+    });
+    await suite.db.execute(sql`
+      update departments set trading_name = 'Renamed' where id = ${scope!.department_id}
+    `);
+    const replay = await app.request("/api/sales", request);
+    expect(replay.status).toBe(200);
+    expect((await replay.json()).receiptHeader).toMatchObject({
+      tradingName: "Terrace Bar",
+      printTradingName: true,
+    });
+  });
+
   it("replays and reprints the original cash handed over and change", async () => {
     const { cfg, each, operatorId } = await setupVenue();
     await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });

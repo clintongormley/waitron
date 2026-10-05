@@ -12,6 +12,7 @@ import type { ServiceMode } from "@waitron/module";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   listStationQueue,
+  listCounterWaiting,
   markCollected,
   parkOrder,
   placeOrder,
@@ -42,6 +43,11 @@ useVenueDb({
           .values({ locationId: venue.cfg.locationId, name: `Barra ${mode}` })
           .returning({ id: floorZones.id });
         await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, serviceMode: mode });
+        if (mode === "ticket_then_pay") {
+          await tx.execute(sql`
+            update zone_sale_policies set paid_when = 'ticket_then_pay'
+            where zone_id = ${zone!.id}`);
+        }
         return zone!.id;
       });
     }
@@ -687,6 +693,23 @@ describe("GET /api/orders/counter-waiting", () => {
     );
     return id;
   }
+
+  it("reports prepay for a placed order without a frozen zone mode", async () => {
+    const id = await placed("prepay", "Tarta");
+    await inTx(venue, async (tx) => {
+      await tx.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
+    });
+
+    const rows = await listCounterWaiting(
+      { db: venue.db },
+      { ...venue.cfg, orderFlow: "invoice_first" },
+    );
+    expect(rows.find((row) => row.id === id)).toMatchObject({
+      status: "placed",
+      serviceMode: "prepay",
+      canHandOver: false,
+    });
+  });
 
   it("lists sent-not-paid, handed-over-not-paid and paid-not-handed-over counter orders, with what can be handed over now", async () => {
     const sent = await placed("ticket_then_pay", "Tarta");

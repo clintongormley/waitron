@@ -174,6 +174,49 @@ describe("GET /management-api/receipt-preview", () => {
     expect(result.preview.text).toContain("5,50 €");
   });
 
+  it("previews a department's enabled trading name before the legal issuer without saving", async () => {
+    const [{ id, trading_name: originalName }] = (
+      await suite.db.execute<{ id: string; trading_name: string }>(
+        sql`select id, trading_name from departments where location_id = ${venue.cfg.locationId} limit 1`,
+      )
+    ).rows;
+    await suite.db.execute(
+      sql`update departments set trading_name = 'Deli Counter' where id = ${id}`,
+    );
+    try {
+      const response = await previewQuery(`?receipt=%7B%7D&departmentId=${encodeURIComponent(id)}`);
+      expect(response.status).toBe(200);
+      const lines = printedLines((await response.json()) as ReceiptPreviewResponse);
+      expect(lines.indexOf("Deli Counter")).toBeGreaterThanOrEqual(0);
+      expect(lines.indexOf("Deli Counter")).toBeLessThan(lines.indexOf("Deli Test SL"));
+    } finally {
+      await suite.db.execute(
+        sql`update departments set trading_name = ${originalName} where id = ${id}`,
+      );
+    }
+  });
+
+  it("refuses malformed and unknown department choices", async () => {
+    const malformed = await previewQuery("?receipt=%7B%7D&departmentId=not-a-uuid");
+    expect(malformed.status).toBe(400);
+    expect((await malformed.json()).error.code).toBe("shared.invalid_id");
+
+    const unknown = await previewQuery(
+      "?receipt=%7B%7D&departmentId=aa000000-0000-4000-8000-000000000001",
+    );
+    expect(unknown.status).toBe(404);
+    expect((await unknown.json()).error.code).toBe("department.not_found");
+
+    const repeated = await previewQuery(
+      "?receipt=%7B%7D&departmentId=aa000000-0000-4000-8000-000000000001&departmentId=aa000000-0000-4000-8000-000000000001",
+    );
+    expect(repeated.status).toBe(400);
+    expect((await repeated.json()).error).toEqual({
+      code: "management.request_invalid",
+      params: { field: "departmentId" },
+    });
+  });
+
   it("saves nothing and enqueues no print job, even with a receipt printer registered", async () => {
     await withPrinters(
       [{ device: "Caja 1", paperWidth: "80mm", resolution: "203dpi" }],

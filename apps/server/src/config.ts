@@ -83,9 +83,6 @@ export interface ServerConfig {
   logMaxFiles: number;
   /** Operator-supplied PEM files, both or neither; they override the box leaf under `stateDir`. */
   tls?: { certFile: string; keyFile: string };
-  /** The venue's identity on this node (`tryLoadTillConfig`); `orderFlow` is a per-location
-   * column, not an env var. Undefined when none of the three `WAITRON_TILL_*_ID` are set — SETUP
-   * MODE; a partial set throws. */
   till?: TillIdentityConfig;
   /** The WebAuthn Relying Party ID: a bare domain, no scheme or port. A passkey is only offered
    * back on the RP ID it was registered under. Defaults to `localhost`; REQUIRED in production. */

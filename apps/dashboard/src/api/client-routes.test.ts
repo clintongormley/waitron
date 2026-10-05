@@ -31,6 +31,17 @@ function callsOf(fetchImpl: ReturnType<typeof vi.fn>): Call[] {
 }
 
 describe("DashboardApi routes", () => {
+  it("reads venue departments for the receipt preview without changing their active state", async () => {
+    const departments = [
+      { id: "deli", name: "Deli", active: true },
+      { id: "closed", name: "Closed", active: false },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ departments, zones: [] }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getVenueDepartments()).toEqual(departments);
+    expect(callsOf(fetchImpl)).toEqual([["/management-api/venue-service", "GET", undefined]]);
+  });
+
   it("reads pending pretend reader payments and sends a decision", async () => {
     const fetchImpl = vi
       .fn()
@@ -353,6 +364,19 @@ describe("DashboardApi routes", () => {
       [`/management-api/receipt-preview?receipt=${receipt}&language=gl-ES`, "GET", undefined],
       [
         `/management-api/receipt-preview?receipt=${receipt}&paperWidth=58mm&language=eu-ES`,
+        "GET",
+        undefined,
+      ],
+    ]);
+  });
+
+  it("asks for the selected department's receipt preview without saving that choice", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ preview: {} }));
+    const api = new DashboardApi("", fetchImpl);
+    await api.previewReceipt({}, undefined, undefined, "aa000000-0000-4000-8000-000000000001");
+    expect(callsOf(fetchImpl)).toEqual([
+      [
+        "/management-api/receipt-preview?receipt=%7B%7D&departmentId=aa000000-0000-4000-8000-000000000001",
         "GET",
         undefined,
       ],

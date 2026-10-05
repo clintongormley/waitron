@@ -269,11 +269,15 @@ describe("the card reader on a bill whose every line was given away", () => {
         .insert(floorZones)
         .values({ locationId: venue.cfg.locationId, name: "Barra ticket" })
         .returning({ id: floorZones.id });
-      return offerProducts(tx, venue.cfg, {
+      const offered = await offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
         serviceMode: "ticket_then_pay",
         productIds: [productIdOf("Caña")],
       });
+      await tx.execute(sql`
+        update zone_sale_policies set paid_when = 'ticket_then_pay'
+        where zone_id = ${offered.zoneId}`);
+      return offered;
     });
     const [partyBill, walkUp] = [randomUUID(), randomUUID()];
     for (const id of [partyBill, walkUp]) {

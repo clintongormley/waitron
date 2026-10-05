@@ -11,6 +11,49 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("VenueServiceApi", () => {
+  it("renames a floor zone through the zone route", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    await api.updateZone("z1", { name: "Garden room" });
+    expect(
+      fetchImpl.mock.calls.map(([path, init]) => [
+        path,
+        init.method,
+        JSON.parse(init.body as string),
+      ]),
+    ).toEqual([["/management-api/zones/z1", "PATCH", { name: "Garden room" }]]);
+  });
+
+  it("removes a floor zone through the zone route", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    await api.deactivateZone("z1");
+    expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
+      ["/management-api/zones/z1", "DELETE"],
+    ]);
+  });
+
+  it("writes one department field and clears one zone override", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    await api.setDepartmentSalePolicyField("d1", "receiptPrintMode", "on_request");
+    await api.setZoneSalePolicyOverride("z1", "paidWhen", null);
+    expect(
+      fetchImpl.mock.calls.map(([path, init]) => [
+        path,
+        init.method,
+        JSON.parse(init.body as string),
+      ]),
+    ).toEqual([
+      [
+        "/management-api/venue-service/departments/d1/sale-policy/receiptPrintMode",
+        "PATCH",
+        { value: "on_request" },
+      ],
+      ["/management-api/venue-service/zones/z1/sale-policy/paidWhen", "PATCH", { value: null }],
+    ]);
+  });
+
   it("loads a supervisor's settings from the settings-only route", async () => {
     const settings = {
       settings: { editSentLines: true },
@@ -89,6 +132,26 @@ describe("VenueServiceApi", () => {
         JSON.parse(init.body as string),
       ]),
     ).toEqual([["/management-api/venue-service/departments/d1", "PATCH", department]]);
+  });
+
+  it("reads the exact removal impact before asking a manager to confirm", async () => {
+    const impact = { zones: [{ id: "z1", name: "Dining room", activeTableCount: 2 }] };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(impact));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    expect(await api.departmentRemovalImpact("d1")).toEqual(impact);
+    expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method ?? "GET"])).toEqual([
+      ["/management-api/venue-service/departments/d1/removal-impact", "GET"],
+    ]);
+  });
+
+  it("reads an unconfigured zone's removal impact", async () => {
+    const impact = { zones: [{ id: "z2", name: "Deli counter", activeTableCount: 2 }] };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(impact));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    expect(await api.zoneRemovalImpact("z2")).toEqual(impact);
+    expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method ?? "GET"])).toEqual([
+      ["/management-api/venue-service/zones/z2/removal-impact", "GET"],
+    ]);
   });
 
   it("stores whether items already sent to the kitchen may be changed", async () => {
@@ -176,7 +239,7 @@ describe("VenueServiceApi", () => {
         }),
       )
       .mockResolvedValueOnce(jsonResponse([{ id: "m1", name: "Restaurant", active: true }]))
-      .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs" }]))
+      .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs", active: false }]))
       .mockResolvedValueOnce(
         jsonResponse([{ id: "t1", label: "Till", kind: "till", active: true }]),
       );
@@ -184,13 +247,13 @@ describe("VenueServiceApi", () => {
 
     await expect(api.load()).resolves.toMatchObject({
       menus: [{ id: "m1", name: "Restaurant" }],
-      floorZones: [{ id: "z1", name: "Upstairs" }],
+      floorZones: [{ id: "z1", name: "Upstairs", active: false }],
       devices: [{ id: "t1", label: "Till", kind: "till", active: true }],
     });
     expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
       "/management-api/venue-service",
       "/management-api/catalogues",
-      "/management-api/zones",
+      "/management-api/zones?includeInactive=true",
       "/management-api/devices",
     ]);
   });

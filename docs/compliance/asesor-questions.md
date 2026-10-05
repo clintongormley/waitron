@@ -1148,6 +1148,11 @@ so there is nothing on the document that says who each *duplicado* belongs to.
 
 ### Q22. Printing the ticket only on request, or never (added 2026-09-23)
 
+**Scope update, 2026-10-05:** A261 step 2 moves the receipt choice from the venue to each
+department, with an optional zone override. A sale without a zone uses automatic printing. The
+delivery question below applies to a manager choosing **On request** or **Never** at either scope;
+the change of scope does not answer it. See the [step 2 plan](../superpowers/plans/2026-10-04-departments-and-zones.md).
+
 **Why it matters.** Each venue sets `receipt_print_mode` (`packages/db/src/schema/tenants.ts`):
 `auto` prints after every sale, `on_request` and `never` do not. In every mode the invoice is issued
 and filed, and the reprint route has no mode gate, so a customer who asks can always be handed paper.

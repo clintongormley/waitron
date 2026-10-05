@@ -77,8 +77,7 @@ export interface ReadOptions {
 }
 
 /**
- * `GET /api/till` — the public boot info the app reads before login. `orderFlow` is needed before login
- * so the app can choose which pay control to render; `cardProvider`/`tipsEnabled` decide whether the
+ * `GET /api/till` — the public boot info the app reads before login. `cardProvider`/`tipsEnabled` decide whether the
  * integrated-card pay control renders at all and whether it prompts for a tip (`cardProvider: "none"`
  * for a till with no integrated reader). `receipt` is the owner-authored receipt trim, or the built-in
  * default.
@@ -372,6 +371,7 @@ export interface ZoneOfferCatalogue {
     zoneId: string;
     departmentId: string;
     serviceMode: "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
+    receiptPrintMode?: "auto" | "on_request" | "never";
   };
   defaultMenuId: string | null;
   menus: TillZoneMenu[];
@@ -817,6 +817,7 @@ export type TenderBlock =
 export interface TillSaleResult {
   /** Issuer identity stored with the filed invoice; immediate issuance responses may omit it. */
   issuer?: { venueName: string; nif: string };
+  receiptHeader?: { tradingName: string; printTradingName: boolean };
   /** The table/operator label and venue order number printed on every document as its grouping key. */
   orderLabel: string | null;
   orderNumber: number;
@@ -2024,7 +2025,7 @@ export class TillApi {
 
   /**
    * Reprint a FILED sale's customer receipt → `POST /api/sales/:id/reprint`, by the till's own
-   * working-order id. Paper only: it files NOTHING and ignores the location's `receipt_print_mode`. An
+   * working-order id. Paper only: it files NOTHING and ignores automatic receipt selection. An
    * id naming no filed sale, or a till with no active printer, is a 200 no-op. The copy's fixed words
    * and formatting are in `language`, one of {@link TillInfo.receiptLanguages}, or without one in
    * the language the sale was filed in.

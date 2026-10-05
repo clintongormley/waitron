@@ -208,6 +208,9 @@ export class ReceiptsScreen extends LitElement {
   @state() private saved = false;
 
   @state() private preview: ReceiptPreview | null = null;
+  @state() private departments: { id: string; name: string }[] = [];
+  @state() private previewDepartmentId: string | null = null;
+  #departmentsLoaded = false;
   @state() private previewFailed = false;
   @state() private focusedTrim: TrimField | null = null;
   /** The paper width the person chose, kept for every later preview; never saved. */
@@ -221,13 +224,57 @@ export class ReceiptsScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
+    void this.#loadDepartments();
     void this.#loadContentLanguages();
+    window.addEventListener("popstate", this.#restorePreviewDepartment);
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     clearTimeout(this.#previewTimer);
     this.#previewAgain = false;
+    window.removeEventListener("popstate", this.#restorePreviewDepartment);
+  }
+
+  readonly #restorePreviewDepartment = (): void => {
+    if (!this.#departmentsLoaded) return;
+    const url = new URL(location.href);
+    if (url.pathname !== "/manage/venue-settings/view/receipts") return;
+    const requested = url.searchParams.get("departmentId");
+    const selected =
+      this.departments.length > 1
+        ? (this.departments.find((department) => department.id === requested)?.id ??
+          this.departments[0]?.id ??
+          null)
+        : null;
+    if (selected !== null && selected !== requested) {
+      url.searchParams.set("departmentId", selected);
+      history.replaceState(history.state, "", url);
+    }
+    if (selected !== this.previewDepartmentId) {
+      this.previewDepartmentId = selected;
+      if (this.receiptLoaded) void this.#sendPreview();
+    }
+  };
+
+  async #loadDepartments(): Promise<void> {
+    try {
+      this.departments = (await this.api.getVenueDepartments()).filter(
+        (department) => department.active,
+      );
+    } catch {
+      this.departments = [];
+    }
+    this.#departmentsLoaded = true;
+    this.#restorePreviewDepartment();
+  }
+
+  #choosePreviewDepartment(departmentId: string): void {
+    if (!this.departments.some((department) => department.id === departmentId)) return;
+    const url = new URL(location.href);
+    url.searchParams.set("departmentId", departmentId);
+    history.pushState(history.state, "", url);
+    this.#restorePreviewDepartment();
   }
 
   async #load(): Promise<void> {
@@ -379,16 +426,23 @@ export class ReceiptsScreen extends LitElement {
     const config = this.#trim();
     const width = this.chosenWidth;
     const language = this.#changedLanguage();
-    const requested = JSON.stringify([config, width, language]);
+    const requested = JSON.stringify([config, width, language, this.previewDepartmentId]);
     if (requested === this.#previewRequested) return;
     this.#previewRequested = requested;
     this.#previewInFlight = true;
     try {
-      this.preview = await (language !== null
-        ? client.previewReceipt(config, width ?? undefined, language)
-        : width === null
-          ? client.previewReceipt(config)
-          : client.previewReceipt(config, width));
+      this.preview = await (this.previewDepartmentId !== null
+        ? client.previewReceipt(
+            config,
+            width ?? undefined,
+            language ?? undefined,
+            this.previewDepartmentId,
+          )
+        : language !== null
+          ? client.previewReceipt(config, width ?? undefined, language)
+          : width === null
+            ? client.previewReceipt(config)
+            : client.previewReceipt(config, width));
       this.previewFailed = false;
     } catch {
       this.previewFailed = true;
@@ -685,6 +739,10 @@ export class ReceiptsScreen extends LitElement {
           @focusout=${() => this.#blurTrim()}
           @keydown=${(event: KeyboardEvent) => this.#enter(event)}
         ></wt-input>
+        <p class="reason">
+          ${t("receipts.trading_name_location")}
+          <a href="/manage/venue-operations">${t("receipts.departments_zones")}</a>.
+        </p>
         ${this.#renderFooter()}
       </section>
       <section class="settings" aria-labelledby="location-heading">
@@ -754,6 +812,17 @@ export class ReceiptsScreen extends LitElement {
     }
     return html`<div class="preview">
       <h2>${t("receipts.preview")}</h2>
+      ${
+        this.departments.length > 1
+          ? html`<wt-combobox
+              name="previewDepartment"
+              label=${t("receipts.preview_for")}
+              .options=${this.departments.map((department) => ({ value: department.id, label: department.name }))}
+              .value=${this.previewDepartmentId ?? ""}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => this.#choosePreviewDepartment(event.detail.value)}
+            ></wt-combobox>`
+          : nothing
+      }
       ${preview && preview.paperWidths.length > 1 ? this.#renderWidth(preview) : nothing}
       ${
         this.previewFailed

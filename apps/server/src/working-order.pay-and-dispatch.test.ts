@@ -41,8 +41,7 @@ import {
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
-import { ALL_MODULES } from "./modules.js";
-import { readOrderFlow } from "./till-config.js";
+import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
 import {
   abandonHeldOrder,
@@ -57,6 +56,7 @@ import {
   listStationQueue,
   markCollected,
   parkOrder,
+  paysAfterSending,
   placeOrder,
   recallLines,
   sendLines,
@@ -71,12 +71,19 @@ import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { collectOrder, payWorkingOrder } from "./till-sale.js";
+import { collectOrder, fireDishesAtPayment, payWorkingOrder } from "./till-sale.js";
 import { overridePinAttempts } from "./till-api.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
+
+describe("counter handover timing", () => {
+  it("uses prepay when an order has no frozen service mode", () => {
+    expect(paysAfterSending(undefined)).toBe(false);
+    expect(paysAfterSending("ticket_then_pay")).toBe(true);
+  });
+});
 
 // The working-order verbs driven on a venue provisioned through `applyVenue`, with a real
 // `VerifactuBackend` on the settle path, so a case here can follow an order through
@@ -148,8 +155,6 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-    // The venue provisions with the DEFAULT `prepay` mode; a mode-specific test overrides both the
-    // cfg field AND the location's `order_flow` column via `modeVenue` (below).
     orderFlow: "prepay",
   };
 }
@@ -251,13 +256,6 @@ async function offerAtCounter(
   };
 }
 
-/**
- * A fresh venue set to a specific pay-timing `mode`: `setupVenue` provisions with the DEFAULT
- * `prepay` (planVenue has no mode input), then this flips the location's `order_flow` column to
- * `mode`, sets `cfg.orderFlow` to match, and sets the counter zone to `mode` too — a zoned order's
- * pay timing is its zone's (`serviceContext?.serviceMode ?? cfg.orderFlow`, till-sale.ts), so all
- * three agree.
- */
 async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
   const venue = await setupVenue();
   await suite.db.execute(
@@ -1244,6 +1242,45 @@ const UNUSED_SESSION_OPERATOR = {
 // (`installAppendOnlyTriggers`, applied per migration set by `useVenueDb`), so a rewrite is refused
 // by the trigger alone.
 describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
+  it("fires an unscoped order at payment without reading the retired venue flow", async () => {
+    const { cfg, cafe, zoneId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+    await suite.db.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
+
+    await withTransaction(suite.db, (tx) =>
+      fireDishesAtPayment(tx, { ...cfg, orderFlow: "invoice_first" }, id),
+    );
+
+    expect(await ticketStateOf(id)).toBe("queued");
+  });
+
+  it("does not issue an invoice from the retired venue flow when an order has no service context", async () => {
+    const { cfg, cafe, zoneId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+    await suite.db.execute(sql`delete from order_service_contexts where working_order_id = ${id}`);
+
+    const placed = await placeOrder(
+      { db: suite.db, backend, clock },
+      { ...cfg, orderFlow: "invoice_first" },
+      id,
+      OPERATOR,
+    );
+
+    expect(placed).toEqual({ id, status: "placed" });
+    expect(await saleCount(id)).toBe(0);
+    expect(await registroCount(id)).toBe(0);
+  });
+
   it("placeOrder: open → placed, freezes composition, opens the log with a genesis order_placed entry", async () => {
     const { cfg, cafe, zoneId } = await setupVenue();
     const id = randomUUID();
@@ -1477,9 +1514,49 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 // that shows and what it does not. No primitive is reimplemented here: the dispatch ORCHESTRATES `recordSale`
 // (immediate + deferred), `settleSale` and `listOutstandingSales`.
 describe("prepare & collect — three-mode dispatch (order_flow)", () => {
-  it("readOrderFlow reads the venue's configured mode from its location", async () => {
-    const { cfg } = await modeVenue("invoice_first");
-    expect(await readOrderFlow(suite.db, cfg)).toBe("invoice_first");
+  it("uses each zone's pay timing through payment, placement and collection in one department", async () => {
+    const { cfg, cafe, zoneId: prepayZoneId } = await setupVenue();
+    const collectZone = await withTransaction(suite.db, (tx) =>
+      offerProducts(tx, cfg, { zone: "tables", serviceMode: "prepay" }),
+    );
+    await suite.db.execute(sql`
+      update zone_sale_policies set paid_when = 'ticket_then_pay'
+      where zone_id = ${collectZone.zoneId}`);
+
+    const prepayId = randomUUID();
+    const prepay = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
+      id: prepayId,
+      zoneId: prepayZoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      tender: { method: "cash", amount: "1.50" },
+    });
+    expect(prepay.invoiceNumber).toBe("A/1");
+    expect(await orderState(prepayId)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(prepayId)).toBe(1);
+
+    const collectId = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id: collectId,
+      zoneId: collectZone.zoneId,
+      lines: [{ menuItemId: collectZone.offerFor(cafe.id), quantity: "1" }],
+    });
+    const { rows: contexts } = await suite.db.execute<{ service_mode: string }>(sql`
+      select service_mode from order_service_contexts where working_order_id = ${collectId}`);
+    expect(contexts).toEqual([{ service_mode: "ticket_then_pay" }]);
+    const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, collectId, OPERATOR);
+    expect(placed.invoiceNumber).toBeUndefined();
+    expect(await orderState(collectId)).toEqual({ status: "placed", settledAtSet: false });
+    expect(await saleCount(collectId)).toBe(0);
+
+    const collected = await collectOrder({ db: suite.db, backend, clock }, cfg, {
+      id: collectId,
+      lines: [],
+      tender: { method: "cash", amount: "1.50" },
+    });
+    expect(collected.invoiceNumber).toBe("A/2");
+    expect(await orderState(collectId)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(collectId)).toBe(1);
+    expect(await registroCount(collectId)).toBe(1);
   });
 
   // MODE P (prepay): pay + issue at ORDER — open → settled, no placed state. The
@@ -1595,6 +1672,34 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await registroCount(id)).toBe(1); // STILL one registro
     expect(await outstanding()).toEqual([]); // settled → no longer owed
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "3.50" }]);
+  });
+
+  it("snapshots the department trading name when an invoice-first order is placed", async () => {
+    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    await suite.db.execute(
+      sql`update departments set trading_name = 'Deli Before Payment' where location_id = ${cfg.locationId}`,
+    );
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    const [sale] = await suite.db
+      .select({ id: sales.id })
+      .from(sales)
+      .where(eq(sales.workingOrderId, id));
+    expect(sale).toBeDefined();
+    await suite.db.execute(
+      sql`update departments set trading_name = 'Renamed After Filing' where location_id = ${cfg.locationId}`,
+    );
+
+    const header = await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.readSaleReceiptHeader(tx, sale!.id),
+    );
+    expect(header?.tradingName).toBe("Deli Before Payment");
+    expect(header?.printTradingName).toBe(true);
   });
 
   it("Mode I: the placed result carries the backend's words beside its QR", async () => {

@@ -32,6 +32,11 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createPinThrottle, hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
 import { insertCapturedPayment, payments, SimulatorPaymentProvider } from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";
+import {
+  createDepartment,
+  createServiceZone,
+  departmentSalePolicies,
+} from "@waitron/venue-service";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import {
   basisPointsToDecimal,
@@ -1356,6 +1361,223 @@ describe("a split after a contribution (design §8 test 6, §4.2)", () => {
 });
 
 describe("the invoice at full payment (design §8 test 8)", () => {
+  it("issues a moved bill with the destination department header and receipt mode", async () => {
+    const billId = await tabWith("Ensalada");
+    const destination = await inTx(async (tx) => {
+      const department = await createDepartment(tx, venue.cfg, {
+        name: `Destino ${randomUUID()}`,
+        tradingName: "Comedor Nuevo",
+        defaultServiceMode: "table_tab",
+      });
+      const zone = await createServiceZone(tx, venue.cfg, {
+        name: `Zona ${randomUUID()}`,
+        departmentId: department.id,
+      });
+      await tx
+        .update(departmentSalePolicies)
+        .set({ receiptPrintMode: "never" })
+        .where(eq(departmentSalePolicies.departmentId, department.id));
+      const table = await createTable(tx, venue.cfg, {
+        label: `D-${randomUUID().slice(0, 8)}`,
+        zoneId: zone.id,
+      });
+      return { departmentId: department.id, tableId: table.id };
+    });
+
+    const moved = await request("POST", `/api/bills/${billId}/move`, {
+      to: { tableId: destination.tableId },
+      expectedPartyRevision: await partyRevisionOf(billId),
+      otherPartyId: null,
+    });
+    expect(moved.status).toBe(200);
+    const paid = await contribute(billId, "12.00");
+    expect(paid.status).toBe(200);
+    expect(paid.json.invoice).toMatchObject({
+      receiptHeader: { tradingName: "Comedor Nuevo", printTradingName: true },
+    });
+    const [sale] = await saleOf(billId);
+    const [snapshot] = suite.db.all<{
+      department_id: string;
+      trading_name: string;
+    }>(
+      sql`select department_id, trading_name from sale_receipt_headers where sale_id = ${sale!.id}`,
+    );
+    expect(snapshot).toEqual({
+      department_id: destination.departmentId,
+      trading_name: "Comedor Nuevo",
+    });
+    expect(
+      suite.db.all<{ count: number }>(sql`
+        select count(*) as count from print_jobs where sale_id = ${sale!.id}`)[0]!.count,
+    ).toBe(0);
+  });
+
+  it("uses the bill's department for a receipt while retaining each line's original department", async () => {
+    const billId = await tabWith("Ensalada");
+    const [original] = suite.db.all<{ department_id: string }>(sql`
+      select department_id from working_line_contexts c
+      join working_order_lines l on l.id = c.working_order_line_id
+      where l.working_order_id = ${billId}`);
+    const destination = await inTx(async (tx) => {
+      const department = await createDepartment(tx, venue.cfg, {
+        name: `Destino ${randomUUID()}`,
+        tradingName: "Mesa Nueva",
+        defaultServiceMode: "table_tab",
+      });
+      const zone = await createServiceZone(tx, venue.cfg, {
+        name: `Zona ${randomUUID()}`,
+        departmentId: department.id,
+      });
+      const offers = await offerProducts(tx, venue.cfg, {
+        zone: { zoneId: zone.id },
+        serviceMode: "table_tab",
+      });
+      const table = await createTable(tx, venue.cfg, {
+        label: `D-${randomUUID().slice(0, 8)}`,
+        zoneId: zone.id,
+      });
+      return {
+        departmentId: department.id,
+        tableId: table.id,
+        beerOfferId: offers.offerFor(venue.productIds.get("Caña")!),
+      };
+    });
+
+    const moved = await request("POST", `/api/bills/${billId}/move`, {
+      to: { tableId: destination.tableId },
+      expectedPartyRevision: await partyRevisionOf(billId),
+      otherPartyId: null,
+    });
+    expect(moved.status).toBe(200);
+    const [party] = suite.db.all<{ party_id: string }>(sql`
+      select party_id from working_orders where id = ${billId}`);
+    const added = await request("POST", `/api/parties/${party!.party_id}/groups`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await partyRevisionOf(billId),
+      groups: [
+        { lines: [{ menuItemId: destination.beerOfferId, quantity: "1" }], release: "fire" },
+      ],
+    });
+    expect(added.status).toBe(200);
+    expect(original!.department_id).not.toBe(destination.departmentId);
+
+    const paid = await contribute(billId, "15.00");
+    expect(paid.status).toBe(200);
+    const lineDepartments = suite.db.all<{ department_id: string }>(sql`
+      select c.department_id from working_line_contexts c
+      join working_order_lines l on l.id = c.working_order_line_id
+      where l.working_order_id = ${billId} order by l.line_no`);
+    expect(lineDepartments).toEqual([
+      { department_id: original!.department_id },
+      { department_id: destination.departmentId },
+    ]);
+    expect(paid.json.invoice).toMatchObject({
+      receiptHeader: { tradingName: "Mesa Nueva", printTradingName: true },
+    });
+    const [sale] = await saleOf(billId);
+    expect(
+      suite.db.all<{ department_id: string }>(sql`
+      select department_id from sale_receipt_headers where sale_id = ${sale!.id}`),
+    ).toEqual([{ department_id: destination.departmentId }]);
+  });
+
+  it("keeps the bill department's trading name on its issued receipt", async () => {
+    const billId = await tabWith("Ensalada");
+    const [previous] = suite.db.all<{ trading_name: string }>(sql`
+      select trading_name from departments
+      where id = (select department_id from zone_service_policies where zone_id = ${venue.offers.zoneId})`);
+    await suite.db.execute(sql`
+      update departments set trading_name = 'Terraza Azul'
+      where id = (select department_id from zone_service_policies where zone_id = ${venue.offers.zoneId})`);
+    try {
+      const paid = await contribute(billId, "12.00");
+      expect(paid.status).toBe(200);
+      expect(paid.json.invoice).toMatchObject({
+        receiptHeader: { tradingName: "Terraza Azul", printTradingName: true },
+      });
+      const [sale] = await saleOf(billId);
+      const [snapshot] = suite.db.all<{ trading_name: string }>(sql`
+        select trading_name from sale_receipt_headers where sale_id = ${sale!.id}`);
+      expect(snapshot).toEqual({ trading_name: "Terraza Azul" });
+    } finally {
+      await suite.db.execute(sql`
+        update departments set trading_name = ${previous!.trading_name}
+        where id = (select department_id from zone_service_policies where zone_id = ${venue.offers.zoneId})`);
+    }
+  });
+
+  it("reprints the bill's issued trading name after the department changes", async () => {
+    const billId = await tabWith("Ensalada");
+    const [profile] = suite.db.all<{ id: string; capabilities: string }>(sql`
+      select p.id, p.capabilities from device_profiles p
+      join devices d on d.device_profile_id = p.id where d.id = ${venue.deviceId}`);
+    const [department] = suite.db.all<{ id: string; trading_name: string }>(sql`
+      select id, trading_name from departments
+      where id = (select department_id from zone_service_policies where zone_id = ${venue.offers.zoneId})`);
+    const [policy] = suite.db.all<{ print_trading_name: number }>(sql`
+      select print_trading_name from department_sale_policies
+      where department_id = ${department!.id}`);
+    await suite.db.execute(sql`
+      update departments set trading_name = 'Terraza Azul' where id = ${department!.id}`);
+    try {
+      expect((await contribute(billId, "12.00")).status).toBe(200);
+      const [sale] = await saleOf(billId);
+      const [snapshot] = suite.db.all<{
+        department_id: string;
+        trading_name: string;
+        print_trading_name: number;
+      }>(sql`select department_id, trading_name, print_trading_name
+             from sale_receipt_headers where sale_id = ${sale!.id}`);
+      expect(snapshot).toEqual({
+        department_id: department!.id,
+        trading_name: "Terraza Azul",
+        print_trading_name: 1,
+      });
+
+      await suite.db.execute(sql`
+        update departments set trading_name = 'Nombre nuevo' where id = ${department!.id}`);
+      await suite.db.execute(sql`
+        update department_sale_policies set print_trading_name = 0
+        where department_id = ${department!.id}`);
+      await suite.db.execute(sql`
+        update device_profiles set capabilities = ${JSON.stringify([
+          ...JSON.parse(profile!.capabilities),
+          "print-receipt",
+        ])} where id = ${profile!.id}`);
+      const before = suite.db.all<{ count: number }>(sql`
+        select count(*) as count from drawer_opens`)[0]!.count;
+      const printed = await request("POST", `/api/sales/${billId}/reprint`);
+      expect(printed.status).toBe(200);
+      const jobs = await inTx((tx) =>
+        tx
+          .select({ payload: printJobs.payload })
+          .from(printJobs)
+          .where(and(eq(printJobs.saleId, sale!.id), eq(printJobs.kind, "document"))),
+      );
+      expect(jobs).toHaveLength(2);
+      const paper = jobs.map((job) => printedLines(job.payload).join("\n"));
+      for (const copy of paper) {
+        expect(copy).toContain("Terraza Azul");
+        expect(copy).toContain("Cuentas SL");
+        expect(copy).not.toContain("Nombre nuevo");
+      }
+      expect(paper.some((copy) => copy.includes("DUPLICADO"))).toBe(true);
+      expect(registroCount(billId)).toBe(1);
+      expect(
+        suite.db.all<{ count: number }>(sql`
+        select count(*) as count from drawer_opens`)[0]!.count,
+      ).toBe(before);
+    } finally {
+      await suite.db.execute(sql`
+        update departments set trading_name = ${department!.trading_name} where id = ${department!.id}`);
+      await suite.db.execute(sql`
+        update department_sale_policies set print_trading_name = ${policy!.print_trading_name}
+        where department_id = ${department!.id}`);
+      await suite.db.execute(sql`
+        update device_profiles set capabilities = ${profile!.capabilities} where id = ${profile!.id}`);
+    }
+  });
+
   it("files nothing while anything is outstanding, then exactly one record", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
 

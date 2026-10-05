@@ -1,5 +1,10 @@
 # Departments, service styles and opening hours
 
+> **Update, 2026-10-05 (A261 step 2):** The "What exists today" section below records the code
+> as it stood on 2026-10-03. The [Departments and zones plan](../plans/2026-10-04-departments-and-zones.md)
+> replaces live venue-wide pay timing and receipt printing with department defaults and optional
+> zone overrides, and prints an enabled department trading name above the legal issuer name.
+
 > **2026-10-04 follow-up:** the [devices, menus and service zones design](2026-10-04-devices-menus-and-service-zones-design.md)
 > replaces the unrestricted-device proposal in §2 with profile-based departmental access and
 > allowed zones, and records accepted transfers through a shared receiving desk. Its written spec

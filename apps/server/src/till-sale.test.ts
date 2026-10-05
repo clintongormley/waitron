@@ -549,7 +549,7 @@ describe("recordTillSale", () => {
         zone_id: zoneId,
         menu_item_id: waterOfferId,
         menu_name: "Delicatessen",
-        department_name: "Venue",
+        department_name: "Sala principal",
       },
     ]);
     const prep = await suite.db.execute<{ count: number }>(sql`

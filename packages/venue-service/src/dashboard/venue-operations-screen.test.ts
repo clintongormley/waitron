@@ -57,6 +57,7 @@ const model: VenueServiceView = {
       serviceModeOverride: "prepay",
     },
   ],
+  salePolicies: { departments: [], zones: [] },
   hours: [{ departmentId: "d2", weekday: 1, opensAt: "09:00:00", closesAt: "18:00:00" }],
   zoneMenus: [{ zoneId: "z1", menuId: "m1", displayOrder: 0, isDefault: true }],
   menus: [
@@ -195,19 +196,1356 @@ async function changesHeardOutside(act: () => Promise<void>): Promise<number> {
 }
 
 describe("venue operations screen", () => {
-  it("puts each tab's available Add actions beside the tablist", async () => {
+  it("shows the departments and zones policy tree when the screen opens", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree");
+    expect(tree.getBoundingClientRect().height).toBeGreaterThan(0);
+    expect(tree.shadowRoot!.textContent).toContain("Dining room");
+  });
+
+  it("places the unified policy tree before the remaining legacy controls", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree");
+    const legacy = el.shadowRoot!.querySelector("wt-tabs")!;
+    expect(tree.compareDocumentPosition(legacy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows venue readiness beneath the policy tree without a separate Status tab", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree");
+    const readiness = el.shadowRoot!.querySelector<HTMLElement>('[data-test="readiness"]')!;
+    const tabs = [
+      ...el.shadowRoot!.querySelector("wt-tabs")!.shadowRoot!.querySelectorAll('[role="tab"]'),
+    ];
+    expect(readiness.textContent).toContain("default prep station");
+    expect(tree.compareDocumentPosition(readiness) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tabs.map((tab) => tab.getAttribute("data-key"))).toEqual(["departments", "zones"]);
+  });
+
+  it("keeps department hours available outside the legacy tabs", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    const hours = table(el, "hours");
+    expect(hours.closest("wt-tabs")).toBeNull();
+    expect(hours.checkVisibility()).toBe(true);
+    await action(el, "new-hours");
+    expect(modal(el)?.getAttribute("heading")).toBe("Add hours");
+  });
+
+  it("keeps device starting zones available below the policy tree outside the legacy tabs", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
+      }),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree");
+    const tills = table(el, "tills");
+    expect(tills.closest("wt-tabs")).toBeNull();
+    expect(tree.compareDocumentPosition(tills) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tills.checkVisibility()).toBe(true);
+    expect(tills.shadowRoot!.querySelector('wt-combobox[name="till-t1-starts-in"]')).not.toBeNull();
+  });
+
+  it("opens retained zone menus from the policy tree outside the legacy tabs", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree");
+    await action(el, "menus-tree-zone-z1");
+    const menus = table(el, "zone-menus");
+    expect(menus.closest("wt-tabs")).toBeNull();
+    expect(tree.compareDocumentPosition(menus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(menus.checkVisibility()).toBe(true);
+    await action(el, "new-assignment-z1");
+    expect(modal(el)?.getAttribute("heading")).toBe("Make available");
+  });
+
+  it("opens zone menus from the policy tree without a duplicate old-table action", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    expect(find(el, '[data-test="zone-menus-z1"]')).toBeNull();
+    await action(el, "menus-tree-zone-z1");
+    expect(table(el, "zone-menus").checkVisibility()).toBe(true);
+  });
+
+  it("opens an unconfigured zone's menus from the tree without a duplicate old-table action", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    expect(find(el, '[data-test="zone-menus-z2"]')).toBeNull();
+    await action(el, "menus-tree-zone-z2");
+    expect(table(el, "zone-menus").checkVisibility()).toBe(true);
+    expect(find(el, '[data-test="new-assignment-z2"]')!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("opens a new department from the policy tree's top action", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree");
+    const add = el.shadowRoot!.querySelector<HTMLElement>(
+      '[data-test="policy-tree-actions"] [data-test="new-department"]',
+    );
+    expect(add).not.toBeNull();
+    expect(add!.compareDocumentPosition(tree) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    add!.click();
+    await settle(el);
+    expect(modal(el)?.getAttribute("heading")).toBe("Add department");
+  });
+
+  it("edits a department's retained service style from its policy-tree row", async () => {
+    const updateDepartment = vi.fn().mockResolvedValue(undefined);
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      updateDepartment,
+    } as unknown as VenueServiceApi);
+    await action(el, "edit-tree-department-d1");
+    expect(modal(el)?.getAttribute("heading")).toBe("Edit department");
+    expect(field(el, "department-mode").value).toBe("table_tab");
+    field(el, "department-mode").value = "prepay";
+    await action(el, "save-editor");
+    expect(updateDepartment).toHaveBeenCalledWith("d1", {
+      name: "Restaurant and bar",
+      tradingName: "Casa Delgado",
+      defaultServiceMode: "prepay",
+    });
+  });
+
+  it("offers one Add department action above the policy tree", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const actions = el.shadowRoot!.querySelectorAll<HTMLElement>('[data-test="new-department"]');
+    expect(actions).toHaveLength(1);
+    expect(actions[0]!.closest('[data-test="policy-tree-actions"]')).not.toBeNull();
+    actions[0]!.click();
+    await settle(el);
+    expect(modal(el)?.getAttribute("heading")).toBe("Add department");
+  });
+
+  it.each(["en", "es"] as const)(
+    "keeps the %s policy tree actions apart on a phone",
+    async (locale) => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      try {
+        await page.viewport(390, 844);
+        setLocale(locale);
+        const el = await mount({
+          load: vi.fn().mockResolvedValue(model),
+        } as unknown as VenueServiceApi);
+        const actions = el.shadowRoot!.querySelector('[data-test="policy-tree-actions"]')!;
+        const department = actions.querySelector<HTMLElement>('[data-test="new-department"]')!;
+        const zone = actions.querySelector<HTMLElement>('[data-test="new-zone"]')!;
+        const first = department.getBoundingClientRect();
+        const second = zone.getBoundingClientRect();
+        expect(
+          Math.max(second.left - first.right, second.top - first.bottom),
+        ).toBeGreaterThanOrEqual(8);
+      } finally {
+        await page.viewport(width, height);
+      }
+    },
+  );
+
+  it("creates a new zone under the chosen department from the policy tree", async () => {
+    const createZone = vi.fn().mockResolvedValue({ id: "z3" });
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      createZone,
+    } as unknown as VenueServiceApi);
+    const add = el.shadowRoot!.querySelector<HTMLElement>(
+      '[data-test="policy-tree-actions"] [data-test="new-zone"]',
+    );
+    expect(add).not.toBeNull();
+    add!.click();
+    await settle(el);
+    expect(modal(el)?.getAttribute("heading")).toBe("New zone");
+    expect(field(el, "new-zone-name").getAttribute("label")).toBe("Zone name");
+    await type(el, "new-zone-name", "Garden");
+    const department = field(el, "new-zone-department") as HTMLElement & { value: string };
+    department.value = "d2";
+    department.dispatchEvent(
+      new CustomEvent("wt-change", { bubbles: true, detail: { value: "d2" } }),
+    );
+    await action(el, "save-editor");
+    expect(createZone).toHaveBeenCalledWith({ name: "Garden", departmentId: "d2" });
+  });
+
+  it("refuses a blank new zone name before sending a create request", async () => {
+    const createZone = vi.fn();
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      createZone,
+    } as unknown as VenueServiceApi);
+    await action(el, "new-zone");
+    await action(el, "save-editor");
+    expect(fieldError(el, "new-zone-name")).toBe("This field is required.");
+    expect(createZone).not.toHaveBeenCalled();
+  });
+
+  it("shows a duplicate new zone name beside the field and keeps the draft", async () => {
+    const createZone = vi.fn().mockRejectedValue({ code: "zone.name_taken" });
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      createZone,
+    } as unknown as VenueServiceApi);
+    await action(el, "new-zone");
+    await type(el, "new-zone-name", "Garden");
+    const department = field(el, "new-zone-department") as HTMLElement & { value: string };
+    department.value = "d2";
+    department.dispatchEvent(
+      new CustomEvent("wt-change", { bubbles: true, detail: { value: "d2" } }),
+    );
+    await action(el, "save-editor");
+    expect(createZone).toHaveBeenCalledWith({ name: "Garden", departmentId: "d2" });
+    expect(fieldError(el, "new-zone-name")).toBeTruthy();
+    expect((field(el, "new-zone-name") as HTMLElement & { value: string }).value).toBe("Garden");
+  });
+
+  it("renames a zone from its policy-tree cell", async () => {
+    const updateZone = vi.fn().mockResolvedValue(undefined);
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      updateZone,
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    tree.querySelector<HTMLButtonElement>('[data-test="edit-zone-name"]')!.click();
+    await settle(el);
+    const input = tree
+      .querySelector('wt-input[name="zoneName"]')!
+      .shadowRoot!.querySelector("input")!;
+    input.value = "Garden room";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    tree.querySelector<HTMLButtonElement>('[data-test="save-zone-name"]')!.click();
+    await vi.waitFor(() => expect(updateZone).toHaveBeenCalledWith("z1", { name: "Garden room" }));
+  });
+
+  it("keeps a zone rename open and reports a rejected save", async () => {
+    setLocale("es");
+    const updateZone = vi.fn().mockRejectedValue({ code: "zone.not_found" });
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      updateZone,
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    tree.querySelector<HTMLButtonElement>('[data-test="edit-zone-name"]')!.click();
+    await settle(el);
+    const input = tree
+      .querySelector('wt-input[name="zoneName"]')!
+      .shadowRoot!.querySelector("input")!;
+    input.value = "Garden room";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    tree.querySelector<HTMLButtonElement>('[data-test="save-zone-name"]')!.click();
+    await vi.waitFor(() => expect(updateZone).toHaveBeenCalledWith("z1", { name: "Garden room" }));
+    await settle(el);
+    expect(tree.querySelector('wt-input[name="zoneName"]')).not.toBeNull();
+    expect(pageAlert(el)).toBe("No se pudo guardar el cambio.");
+  });
+
+  it("shows a zone's readiness problem beneath that zone in the policy table", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        readiness: [{ code: "zone.menu_missing", zoneId: "z1", zoneName: "Dining room" }],
+      }),
+    } as unknown as VenueServiceApi);
+    const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
+    const zone = rows.find((row) => row.textContent?.includes("Dining room"));
+    expect(zone).toBeDefined();
+    expect(zone!.querySelector('[data-test="zone-readiness"]')?.textContent).toContain(
+      "needs a default menu",
+    );
+    expect(
+      rows
+        .filter((row) => row !== zone)
+        .every((row) => row.querySelector('[data-test="zone-readiness"]') === null),
+    ).toBe(true);
+  });
+
+  it("opens the zone's menu assignment from its missing-menu warning", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        readiness: [{ code: "zone.menu_missing", zoneId: "z1", zoneName: "Dining room" }],
+      }),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const zone = [...tree.querySelectorAll('tbody [role="row"]')].find((row) =>
+      row.textContent?.includes("Dining room"),
+    )!;
+    const action = zone.querySelector<HTMLButtonElement>('[data-test="zone-readiness-action"]');
+    expect(action).not.toBeNull();
+    expect(action!.textContent).toContain("Make available");
+    action!.click();
+    await settle(el);
+    expect(modal(el)?.getAttribute("heading")).toBe("Make available");
+  });
+
+  it("renames a department from its table cell", async () => {
+    const updateDepartment = vi.fn().mockResolvedValue(undefined);
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      updateDepartment,
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    tree.querySelector<HTMLButtonElement>('[data-test="edit-department-name"]')!.click();
+    await settle(el);
+    const input = tree
+      .querySelector('wt-input[name="departmentName"]')!
+      .shadowRoot!.querySelector("input")!;
+    input.value = "Dining and bar";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    tree.querySelector<HTMLButtonElement>('[data-test="save-department-name"]')!.click();
+    await vi.waitFor(() =>
+      expect(updateDepartment).toHaveBeenCalledWith("d1", {
+        name: "Dining and bar",
+        tradingName: "Casa Delgado",
+        defaultServiceMode: "table_tab",
+      }),
+    );
+  });
+
+  it("edits a department trading name in its table cell", async () => {
+    const updateDepartment = vi.fn().mockResolvedValue(undefined);
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      updateDepartment,
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    tree.querySelector<HTMLButtonElement>('[data-test="edit-trading-name"]')!.click();
+    await settle(el);
+    const input = tree
+      .querySelector('wt-input[name="tradingName"]')!
+      .shadowRoot!.querySelector("input")!;
+    input.value = "Casa Nueva";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    tree.querySelector<HTMLButtonElement>('[data-test="save-trading-name"]')!.click();
+    await vi.waitFor(() =>
+      expect(updateDepartment).toHaveBeenCalledWith("d1", {
+        name: "Restaurant and bar",
+        tradingName: "Casa Nueva",
+        defaultServiceMode: "table_tab",
+      }),
+    );
+  });
+
+  it("shows the sole department's own name with its zone beneath it", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        departments: [model.departments[0]],
+        salePolicies: {
+          departments: [
+            {
+              departmentId: "d1",
+              paidWhen: "prepay",
+              collectionNumber: "none",
+              receiptPrintMode: "auto",
+              printTradingName: true,
+            },
+          ],
+          zones: [
+            {
+              zoneId: "z1",
+              paidWhen: null,
+              collectionNumber: null,
+              receiptPrintMode: null,
+              effective: {
+                paidWhen: "prepay",
+                collectionNumber: "none",
+                receiptPrintMode: "auto",
+                printTradingName: true,
+              },
+            },
+          ],
+        },
+      }),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!.querySelector('[role="treegrid"]')!;
+    const rows = [...tree.querySelectorAll('tbody [role="row"]')];
+    expect(rows).toHaveLength(3);
+    expect(rows[0].getAttribute("aria-level")).toBe("1");
+    expect(rows[0].textContent).toContain("Restaurant and bar");
+    expect(rows[0].textContent).not.toContain("Every zone");
+    expect(rows[0].textContent).toContain("Casa Delgado");
+    expect(rows[1].getAttribute("aria-level")).toBe("2");
+    expect(rows[1].textContent).toContain("Dining room");
+    expect(rows[1].textContent).not.toContain("Casa Delgado");
+    expect(rows[2].getAttribute("aria-level")).toBe("1");
+    expect(rows[2].textContent).toContain("Deli counter");
+    expect(rows[2].textContent).toContain("Not configured");
+  });
+
+  it("groups receipt, quick sale and every sale settings above their column labels", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const headings = [...table(el, "policy-tree").shadowRoot!.querySelectorAll("thead tr")];
+    expect(headings).toHaveLength(2);
+    expect(
+      [...headings[0].querySelectorAll('th[scope="colgroup"]')].map((heading) => [
+        heading.textContent?.trim(),
+        heading.getAttribute("colspan"),
+      ]),
+    ).toEqual([
+      ["On the receipt", "2"],
+      ["Quick sales", "2"],
+      ["Every sale", "1"],
+    ]);
+    expect(
+      [...headings[1].querySelectorAll("th")].map((heading) => heading.textContent?.trim()),
+    ).toEqual([
+      "Department name",
+      "Trading name",
+      "Print it",
+      "Paid",
+      "Order number",
+      "Receipt",
+      "Actions",
+    ]);
+  });
+
+  it("offers row actions in the policy tree and renames a zone in place", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const rows = [...tree.querySelectorAll('tbody [role="row"]')];
+    expect(rows).toHaveLength(4);
+    expect(tree.querySelector('th[data-actions][data-pinned="end"]')).not.toBeNull();
+    expect(rows[0].querySelector("wt-row-actions")!.textContent).toContain("Opening hours");
+    expect(rows[1].querySelector("wt-row-actions")!.textContent).toContain("Remove");
+    expect(rows[3].textContent).toContain("Deli counter");
+    expect(rows[3].querySelector("wt-row-actions")!.textContent).toContain("Edit");
+    const rename = rows[1].querySelector<HTMLElement>('[data-test="rename-tree-zone-z1"]')!;
+    rename
+      .closest("wt-row-actions")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    rename.click();
+    await settle(el);
+    expect(tree.querySelector('wt-input[name="zoneName"]')).not.toBeNull();
+  });
+
+  it("moves a zone to another department through its row menu", async () => {
+    const configureZone = vi.fn().mockResolvedValue(undefined);
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      configureZone,
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const move = tree.querySelector<HTMLElement>('[data-test="move-tree-zone-z1"]')!;
+    expect(move.textContent).toBe("Move to department");
+    move.closest("wt-row-actions")!.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+    move.click();
+    await settle(el);
+    const department = find(el, 'wt-combobox[name="zone-department-z1"]')! as HTMLElement & {
+      value: string;
+    };
+    expect(department.value).toBe("d1");
+    await chooseOption(department, "d2");
+    await action(el, "save-editor");
+    expect(configureZone).toHaveBeenCalledWith("z1", {
+      departmentId: "d2",
+      serviceMode: "prepay",
+    });
+  });
+
+  it("shows an unconfigured floor zone in the tree and lets it join a department", async () => {
+    const configureZone = vi.fn().mockResolvedValue(undefined);
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      configureZone,
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const row = [...tree.querySelectorAll('tbody [role="row"]')].find((candidate) =>
+      candidate.textContent?.includes("Deli counter"),
+    );
+    expect(row).toBeDefined();
+    expect(row!.getAttribute("aria-level")).toBe("1");
+    expect(row!.textContent).toContain("Not configured");
+    await action(el, "configure-tree-zone-z2");
+    const department = find(el, 'wt-combobox[name="zone-department-z2"]')! as HTMLElement & {
+      value: string;
+    };
+    await chooseOption(department, "d2");
+    await action(el, "save-editor");
+    expect(configureZone).toHaveBeenCalledWith("z2", {
+      departmentId: "d2",
+      serviceMode: null,
+    });
+  });
+
+  it("does not label a zone of an inactive department as unconfigured", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        departments: [{ ...model.departments[0], active: false }, model.departments[1]],
+      }),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const rows = [...tree.querySelectorAll('tbody [role="row"]')];
+    expect(rows.some((row) => row.textContent?.includes("Deli counter"))).toBe(true);
+    const zone = rows.find((row) => row.textContent?.includes("Dining room"));
+    expect(zone?.getAttribute("aria-level")).toBe("2");
+    expect(zone?.textContent).not.toContain("Not configured");
+  });
+
+  it("retains an inactive department in the policy tree", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        departments: [{ ...model.departments[0], active: false }, model.departments[1]],
+      }),
+    } as unknown as VenueServiceApi);
+    const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
+    const department = rows.find((row) => row.textContent?.includes("Restaurant and bar"));
+    expect(department?.textContent).toContain("Inactive");
+    const name = department!.querySelector<HTMLElement>('[data-test="edit-department-name"]')!;
+    const walker = document.createTreeWalker(department!, NodeFilter.SHOW_TEXT);
+    let inactiveText: Text | null = null;
+    while (walker.nextNode()) {
+      if (walker.currentNode.textContent?.trim() === "Inactive") {
+        inactiveText = walker.currentNode as Text;
+        break;
+      }
+    }
+    expect(inactiveText).not.toBeNull();
+    const range = document.createRange();
+    range.selectNodeContents(inactiveText!);
+    expect(
+      range.getBoundingClientRect().left - name.getBoundingClientRect().right,
+    ).toBeGreaterThanOrEqual(8);
+  });
+
+  it("retains an inactive configured zone in the policy tree", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        floorZones: [{ ...model.floorZones[0]!, active: false }, model.floorZones[1]!],
+      }),
+    } as unknown as VenueServiceApi);
+    const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
+    const zone = rows.find((row) => row.textContent?.includes("Dining room"));
+    expect(zone?.textContent).toContain("Inactive");
+  });
+
+  it("names a sole active department and offers no move to an inactive one", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        departments: [model.departments[0], { ...model.departments[1], active: false }],
+      }),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const rows = [...tree.querySelectorAll('tbody [role="row"]')];
+    const active = rows.find((row) => row.textContent?.includes("Dining room"));
+    expect(rows[0].textContent).toContain("Restaurant and bar");
+    expect(rows[0].textContent).not.toContain("Every zone");
+    expect(active).toBeDefined();
+    expect(active!.querySelector('[data-test="move-tree-zone-z1"]')).toBeNull();
+  });
+
+  it("confirms removal of a zone from its policy-tree row", async () => {
+    const deactivateZone = vi.fn().mockResolvedValue(undefined);
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      deactivateZone,
+      departmentRemovalImpact: vi.fn().mockResolvedValue({
+        zones: [{ id: "z1", name: "Dining room", activeTableCount: 0 }],
+      }),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const remove = tree.querySelector<HTMLElement>('[data-test="remove-tree-zone-z1"]')!;
+    remove
+      .closest("wt-row-actions")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    remove.click();
+    await settle(el);
+    expect(deactivateZone).not.toHaveBeenCalled();
+    await action(el, "save-editor");
+    expect(deactivateZone).toHaveBeenCalledWith("z1");
+  });
+
+  it("shows active tables before removing an unconfigured zone", async () => {
+    const deactivateZone = vi.fn().mockResolvedValue(undefined);
+    const zoneRemovalImpact = vi.fn().mockResolvedValue({
+      zones: [{ id: "z2", name: "Deli counter", activeTableCount: 2 }],
+    });
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      deactivateZone,
+      zoneRemovalImpact,
+    } as unknown as VenueServiceApi);
+    await action(el, "remove-tree-zone-z2");
+    expect(zoneRemovalImpact).toHaveBeenCalledWith("z2");
+    expect(modal(el)?.textContent).toContain("Deli counter");
+    expect(modal(el)?.textContent).toContain("2 active tables");
+    expect(deactivateZone).not.toHaveBeenCalled();
+    await action(el, "save-editor");
+    expect(deactivateZone).toHaveBeenCalledWith("z2");
+  });
+
+  it("keeps zone removal available after a rejected request", async () => {
+    const deactivateZone = vi.fn().mockRejectedValue({ code: "zone.not_found" });
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      deactivateZone,
+      departmentRemovalImpact: vi.fn().mockResolvedValue({
+        zones: [{ id: "z1", name: "Dining room", activeTableCount: 0 }],
+      }),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const remove = tree.querySelector<HTMLElement>('[data-test="remove-tree-zone-z1"]')!;
+    remove
+      .closest("wt-row-actions")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    remove.click();
+    await settle(el);
+    await action(el, "save-editor");
+    await vi.waitFor(() => expect(deactivateZone).toHaveBeenCalledWith("z1"));
+    expect(modal(el)).not.toBeNull();
+    expect(await bottom(el)).toBe("The change could not be saved.");
+  });
+
+  it("names the zone and its active tables before removal", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      departmentRemovalImpact: vi.fn().mockResolvedValue({
+        zones: [{ id: "z1", name: "Dining room", activeTableCount: 2 }],
+      }),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const remove = tree.querySelector<HTMLElement>('[data-test="remove-tree-zone-z1"]')!;
+    remove
+      .closest("wt-row-actions")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    remove.click();
+    await settle(el);
+    expect(modal(el)?.textContent).toMatch(/Dining room:\s*2 active tables/);
+  });
+
+  it("opens hours for the chosen policy-tree department", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree").shadowRoot!;
+    const hours = tree.querySelector<HTMLElement>('[data-test="hours-tree-department-d2"]')!;
+    hours
+      .closest("wt-row-actions")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    hours.click();
+    await settle(el);
+    expect(modal(el)!.getAttribute("heading")).toBe("Add hours");
+    expect(
+      (find(el, 'wt-combobox[name="hours-department"]') as HTMLElement & { value: string }).value,
+    ).toBe("d2");
+  });
+
+  it("shows the effective quick-sale and receipt policy beside each department and zone", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        salePolicies: {
+          departments: [
+            {
+              departmentId: "d1",
+              paidWhen: "prepay",
+              collectionNumber: "none",
+              receiptPrintMode: "auto",
+              printTradingName: true,
+            },
+            {
+              departmentId: "d2",
+              paidWhen: "ticket_then_pay",
+              collectionNumber: "numbered",
+              receiptPrintMode: "on_request",
+              printTradingName: false,
+            },
+          ],
+          zones: [
+            {
+              zoneId: "z1",
+              paidWhen: "ticket_then_pay",
+              collectionNumber: null,
+              receiptPrintMode: "never",
+              effective: {
+                paidWhen: "ticket_then_pay",
+                collectionNumber: "none",
+                receiptPrintMode: "never",
+                printTradingName: true,
+              },
+            },
+          ],
+        },
+      }),
+    } as unknown as VenueServiceApi);
+    const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
+    expect(rows).toHaveLength(4);
+    expect(rows[0].textContent).toContain("Pay before preparation");
+    expect(rows[0].textContent).toContain("None");
+    expect(rows[0].textContent).toContain("Always");
+    expect(rows[1].textContent).toContain("Pay on collection");
+    expect(rows[1].textContent).toContain("None");
+    expect(rows[1].textContent).toContain("Never");
+    expect(rows[2].textContent).toContain("Pay on collection");
+    expect(rows[2].textContent).toContain("Numbered");
+    expect(rows[2].textContent).toContain("On request");
+    expect(rows[3].textContent).toContain("Not configured");
+    expect(rows[3].querySelector('[data-test="edit-paid"]')).toBeNull();
+  });
+
+  it("mutes an inherited zone value while leaving its own override prominent", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        salePolicies: {
+          departments: [
+            {
+              departmentId: "d1",
+              paidWhen: "prepay",
+              collectionNumber: "numbered",
+              receiptPrintMode: "auto",
+              printTradingName: true,
+            },
+          ],
+          zones: [
+            {
+              zoneId: "z1",
+              paidWhen: "ticket_then_pay",
+              collectionNumber: null,
+              receiptPrintMode: null,
+              effective: {
+                paidWhen: "ticket_then_pay",
+                collectionNumber: "numbered",
+                receiptPrintMode: "auto",
+                printTradingName: true,
+              },
+            },
+          ],
+        },
+      }),
+    } as unknown as VenueServiceApi);
+    const zoneRow = table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')[1]!;
+    const paid = zoneRow.querySelector<HTMLElement>('[data-test="edit-paid"]')!;
+    const collection = zoneRow.querySelector<HTMLElement>('[data-test="edit-collection"]')!;
+    const receipt = zoneRow.querySelector<HTMLElement>('[data-test="edit-receipt"]')!;
+    expect(collection.textContent).toContain("Numbered");
+    expect(receipt.textContent).toContain("Always");
+    expect(getComputedStyle(collection).color).toBe(getComputedStyle(receipt).color);
+    expect(getComputedStyle(collection).color).not.toBe(getComputedStyle(paid).color);
+  });
+
+  it("changes paid timing on a department and lets a zone inherit it again", async () => {
+    let departmentPaidWhen: "prepay" | "ticket_then_pay" = "prepay";
+    let zonePaidWhen: "prepay" | "ticket_then_pay" | null = "ticket_then_pay";
+    const setDepartmentSalePolicyField = vi.fn(async (_id, _field, value) => {
+      departmentPaidWhen = value;
+    });
+    const setZoneSalePolicyOverride = vi.fn(async (_id, _field, value) => {
+      zonePaidWhen = value;
+    });
+    const load = vi.fn(async () => ({
+      ...model,
+      departments: [model.departments[0]],
+      salePolicies: {
+        departments: [
+          {
+            departmentId: "d1",
+            paidWhen: departmentPaidWhen,
+            collectionNumber: "none" as const,
+            receiptPrintMode: "auto" as const,
+            printTradingName: true,
+          },
+        ],
+        zones: [
+          {
+            zoneId: "z1",
+            paidWhen: zonePaidWhen,
+            collectionNumber: null,
+            receiptPrintMode: null,
+            effective: {
+              paidWhen: zonePaidWhen ?? departmentPaidWhen,
+              collectionNumber: "none" as const,
+              receiptPrintMode: "auto" as const,
+              printTradingName: true,
+            },
+          },
+        ],
+      },
+    }));
+    const el = await mount({
+      load,
+      setDepartmentSalePolicyField,
+      setZoneSalePolicyOverride,
+    } as unknown as VenueServiceApi);
+    const paidControls = () => [
+      ...table(el, "policy-tree").shadowRoot!.querySelectorAll<HTMLElement>(
+        'wt-combobox[name="paidWhen"]',
+      ),
+    ];
+    const paidButtons = () => [
+      ...table(el, "policy-tree").shadowRoot!.querySelectorAll<HTMLButtonElement>(
+        '[data-test="edit-paid"]',
+      ),
+    ];
+    expect(paidButtons()).toHaveLength(2);
+    paidButtons()[0].click();
+    await settle(el);
+    expect(paidControls()).toHaveLength(1);
+    expect(
+      (paidControls()[0] as HTMLElement & { options: { value: string }[] }).options.map(
+        (option) => option.value,
+      ),
+    ).toEqual(["prepay", "ticket_then_pay"]);
+    await chooseOption(paidControls()[0], "ticket_then_pay");
+    await vi.waitFor(() =>
+      expect(setDepartmentSalePolicyField).toHaveBeenCalledWith(
+        "d1",
+        "paidWhen",
+        "ticket_then_pay",
+      ),
+    );
+    await vi.waitFor(() => expect(paidButtons()).toHaveLength(2));
+    paidButtons()[1].click();
+    await settle(el);
+    expect(
+      (paidControls()[0] as HTMLElement & { options: { value: string }[] }).options[0].value,
+    ).toBe("");
+    expect(
+      (paidControls()[0] as HTMLElement & { options: { label: string }[] }).options[0].label,
+    ).toContain("Pay on collection");
+    await chooseOption(paidControls()[0], "");
+    await vi.waitFor(() =>
+      expect(setZoneSalePolicyOverride).toHaveBeenCalledWith("z1", "paidWhen", null),
+    );
+    await vi.waitFor(() => expect(paidButtons()).toHaveLength(2));
+    expect(paidButtons()[1].textContent).toContain("Pay on collection");
+  });
+
+  it("keeps a refused paid-timing choice ready to retry", async () => {
+    const save = vi.fn().mockRejectedValue(new Error("offline"));
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        departments: [model.departments[0]],
+        salePolicies: {
+          departments: [
+            {
+              departmentId: "d1",
+              paidWhen: "prepay",
+              collectionNumber: "none",
+              receiptPrintMode: "auto",
+              printTradingName: true,
+            },
+          ],
+          zones: [],
+        },
+      }),
+      setDepartmentSalePolicyField: save,
+    } as unknown as VenueServiceApi);
+    table(el, "policy-tree")
+      .shadowRoot!.querySelector<HTMLButtonElement>('[data-test="edit-paid"]')!
+      .click();
+    await settle(el);
+    const control = () =>
+      table(el, "policy-tree").shadowRoot!.querySelector<HTMLElement & { value: string }>(
+        'wt-combobox[name="paidWhen"]',
+      )!;
+    await chooseOption(control(), "ticket_then_pay");
+    await vi.waitFor(() => expect(save).toHaveBeenCalledWith("d1", "paidWhen", "ticket_then_pay"));
+    await vi.waitFor(() => expect(pageAlert(el)).toContain("could not be saved"));
+    expect(control().value).toBe("ticket_then_pay");
+    await chooseOption(control(), "prepay");
+    await settle(el);
+    const departmentRow = table(el, "policy-tree").shadowRoot!.querySelector('tbody [role="row"]')!;
+    expect(departmentRow.querySelector('wt-combobox[name="paidWhen"]')).toBeNull();
+    expect(departmentRow.querySelector('[data-test="edit-paid"]')?.textContent).toContain(
+      "Pay before preparation",
+    );
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not present a missing paid policy as pay before preparation", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    expect(
+      table(el, "policy-tree").shadowRoot!.querySelector('[data-test="edit-paid"]'),
+    ).toBeNull();
+  });
+
+  it("changes a department collection number and lets a zone inherit it", async () => {
+    let departmentCollection: "none" | "numbered" = "none";
+    let zoneCollection: "none" | "numbered" | null = "numbered";
+    const setDepartmentSalePolicyField = vi.fn(async (_id, _field, value) => {
+      departmentCollection = value;
+    });
+    const setZoneSalePolicyOverride = vi.fn(async (_id, _field, value) => {
+      zoneCollection = value;
+    });
+    const load = vi.fn(async () => ({
+      ...model,
+      departments: [model.departments[0]],
+      salePolicies: {
+        departments: [
+          {
+            departmentId: "d1",
+            paidWhen: "prepay" as const,
+            collectionNumber: departmentCollection,
+            receiptPrintMode: "auto" as const,
+            printTradingName: true,
+          },
+        ],
+        zones: [
+          {
+            zoneId: "z1",
+            paidWhen: null,
+            collectionNumber: zoneCollection,
+            receiptPrintMode: null,
+            effective: {
+              paidWhen: "prepay" as const,
+              collectionNumber: zoneCollection ?? departmentCollection,
+              receiptPrintMode: "auto" as const,
+              printTradingName: true,
+            },
+          },
+        ],
+      },
+    }));
+    const el = await mount({
+      load,
+      setDepartmentSalePolicyField,
+      setZoneSalePolicyOverride,
+    } as unknown as VenueServiceApi);
+    const tree = () => table(el, "policy-tree").shadowRoot!;
+    const buttons = () => [
+      ...tree().querySelectorAll<HTMLButtonElement>('[data-test="edit-collection"]'),
+    ];
+    const control = () =>
+      tree().querySelector<HTMLElement & { value: string; options: { value: string }[] }>(
+        'wt-combobox[name="collectionNumber"]',
+      )!;
+    expect(buttons()).toHaveLength(2);
+    buttons()[0].click();
+    await settle(el);
+    expect(control().options.map((option) => option.value)).toEqual(["none", "numbered"]);
+    await chooseOption(control(), "numbered");
+    await vi.waitFor(() =>
+      expect(setDepartmentSalePolicyField).toHaveBeenCalledWith(
+        "d1",
+        "collectionNumber",
+        "numbered",
+      ),
+    );
+    await vi.waitFor(() => expect(buttons()).toHaveLength(2));
+    buttons()[1].click();
+    await settle(el);
+    expect(control().options[0].value).toBe("");
+    await chooseOption(control(), "");
+    await vi.waitFor(() =>
+      expect(setZoneSalePolicyOverride).toHaveBeenCalledWith("z1", "collectionNumber", null),
+    );
+    await vi.waitFor(() => expect(buttons()[1].textContent).toContain("Numbered"));
+  });
+
+  it("changes a department receipt choice and lets a zone inherit it", async () => {
+    let departmentMode: "auto" | "on_request" = "auto";
+    let zoneMode: "never" | null = "never";
+    const setDepartmentSalePolicyField = vi.fn(async (_id, _field, value) => {
+      departmentMode = value;
+    });
+    const setZoneSalePolicyOverride = vi.fn(async (_id, _field, value) => {
+      zoneMode = value;
+    });
+    const load = vi.fn(async () => ({
+      ...model,
+      departments: [model.departments[0]],
+      salePolicies: {
+        departments: [
+          {
+            departmentId: "d1",
+            paidWhen: "prepay" as const,
+            collectionNumber: "none" as const,
+            receiptPrintMode: departmentMode,
+            printTradingName: true,
+          },
+        ],
+        zones: [
+          {
+            zoneId: "z1",
+            paidWhen: null,
+            collectionNumber: null,
+            receiptPrintMode: zoneMode,
+            effective: {
+              paidWhen: "prepay" as const,
+              collectionNumber: "none" as const,
+              receiptPrintMode: zoneMode ?? departmentMode,
+              printTradingName: true,
+            },
+          },
+        ],
+      },
+    }));
+    const el = await mount({
+      load,
+      setDepartmentSalePolicyField,
+      setZoneSalePolicyOverride,
+    } as unknown as VenueServiceApi);
+    const tree = () => table(el, "policy-tree").shadowRoot!;
+    const buttons = () => [
+      ...tree().querySelectorAll<HTMLButtonElement>('[data-test="edit-receipt"]'),
+    ];
+    const control = () =>
+      tree().querySelector<HTMLElement & { options: { value: string; label: string }[] }>(
+        'wt-combobox[name="receiptPrintMode"]',
+      )!;
+    expect(buttons()).toHaveLength(2);
+    buttons()[0].click();
+    await settle(el);
+    expect(control().options.map((option) => option.value)).toEqual([
+      "auto",
+      "on_request",
+      "never",
+    ]);
+    await chooseOption(control(), "on_request");
+    await vi.waitFor(() =>
+      expect(setDepartmentSalePolicyField).toHaveBeenCalledWith(
+        "d1",
+        "receiptPrintMode",
+        "on_request",
+      ),
+    );
+    await vi.waitFor(() => expect(buttons()).toHaveLength(2));
+    buttons()[1].click();
+    await settle(el);
+    expect(control().options[0].value).toBe("");
+    expect(control().options[0].label).toContain("On request");
+    await chooseOption(control(), "");
+    await vi.waitFor(() =>
+      expect(setZoneSalePolicyOverride).toHaveBeenCalledWith("z1", "receiptPrintMode", null),
+    );
+    await vi.waitFor(() => expect(buttons()[1].textContent).toContain("On request"));
+  });
+
+  describe.each([
+    {
+      field: "paidWhen",
+      button: "edit-paid",
+      stored: "prepay",
+      changed: "ticket_then_pay",
+      label: "Pay before preparation",
+    },
+    {
+      field: "collectionNumber",
+      button: "edit-collection",
+      stored: "none",
+      changed: "numbered",
+      label: "None",
+    },
+    {
+      field: "receiptPrintMode",
+      button: "edit-receipt",
+      stored: "auto",
+      changed: "never",
+      label: "Always",
+    },
+  ] as const)("$field inline recovery", ({ field, button, stored, changed, label }) => {
+    const policies = {
+      departments: [
+        {
+          departmentId: "d1",
+          paidWhen: "prepay" as const,
+          collectionNumber: "none" as const,
+          receiptPrintMode: "auto" as const,
+          printTradingName: true,
+        },
+      ],
+      zones: [
+        {
+          zoneId: "z1",
+          paidWhen: null,
+          collectionNumber: null,
+          receiptPrintMode: null,
+          effective: {
+            paidWhen: "prepay" as const,
+            collectionNumber: "none" as const,
+            receiptPrintMode: "auto" as const,
+            printTradingName: true,
+          },
+        },
+      ],
+    };
+
+    it.each(["department", "zone"] as const)(
+      "returns a refused %s edit to the saved choice without another write",
+      async (kind) => {
+        const departmentSave = vi.fn().mockRejectedValue(new Error("offline"));
+        const zoneSave = vi.fn().mockRejectedValue(new Error("offline"));
+        const el = await mount({
+          load: vi.fn().mockResolvedValue({
+            ...model,
+            departments: [model.departments[0]],
+            salePolicies: policies,
+          }),
+          setDepartmentSalePolicyField: departmentSave,
+          setZoneSalePolicyOverride: zoneSave,
+        } as unknown as VenueServiceApi);
+        const tree = () => table(el, "policy-tree").shadowRoot!;
+        const buttons = () => [
+          ...tree().querySelectorAll<HTMLButtonElement>(`[data-test="${button}"]`),
+        ];
+        const index = kind === "department" ? 0 : 1;
+        buttons()[index].click();
+        await settle(el);
+        const control = () =>
+          tree().querySelector<HTMLElement & { value: string }>(`wt-combobox[name="${field}"]`)!;
+        await chooseOption(control(), changed);
+        const save = kind === "department" ? departmentSave : zoneSave;
+        await vi.waitFor(() =>
+          expect(save).toHaveBeenCalledWith(kind === "department" ? "d1" : "z1", field, changed),
+        );
+        await vi.waitFor(() => expect(pageAlert(el)).toContain("could not be saved"));
+        expect(control().value).toBe(changed);
+        await chooseOption(control(), kind === "department" ? stored : "");
+        await vi.waitFor(() => expect(buttons()).toHaveLength(2));
+        expect(buttons()[index].textContent).toContain(label);
+        expect(tree().querySelector(`wt-combobox[name="${field}"]`)).toBeNull();
+        expect(save).toHaveBeenCalledTimes(1);
+        expect(kind === "department" ? zoneSave : departmentSave).not.toHaveBeenCalled();
+        expect(pageAlert(el)).toBe("");
+      },
+    );
+
+    it("shows an explicit zone override after saving", async () => {
+      let saved = false;
+      const save = vi.fn(async () => {
+        saved = true;
+      });
+      const el = await mount({
+        load: vi.fn(async () => ({
+          ...model,
+          departments: [model.departments[0]],
+          salePolicies: {
+            ...policies,
+            zones: [
+              {
+                ...policies.zones[0],
+                [field]: saved ? changed : null,
+                effective: { ...policies.zones[0].effective, [field]: saved ? changed : stored },
+              },
+            ],
+          },
+        })),
+        setZoneSalePolicyOverride: save,
+      } as unknown as VenueServiceApi);
+      const tree = () => table(el, "policy-tree").shadowRoot!;
+      const buttons = () => [
+        ...tree().querySelectorAll<HTMLButtonElement>(`[data-test="${button}"]`),
+      ];
+      buttons()[1].click();
+      await settle(el);
+      await chooseOption(
+        tree().querySelector<HTMLElement>(`wt-combobox[name="${field}"]`)!,
+        changed,
+      );
+      await vi.waitFor(() => expect(save).toHaveBeenCalledWith("z1", field, changed));
+      await vi.waitFor(() => expect(buttons()).toHaveLength(2));
+      await vi.waitFor(() =>
+        expect(buttons()[1].getAttribute("part")).not.toContain("inherited-value"),
+      );
+      buttons()[1].click();
+      await settle(el);
+      expect(
+        tree().querySelector<HTMLElement & { value: string }>(`wt-combobox[name="${field}"]`)!
+          .value,
+      ).toBe(changed);
+    });
+  });
+
+  it.each([
+    {
+      name: "zoneName",
+      edit: "edit-zone-name",
+      save: "save-zone-name",
+      cancel: "cancel-zone-name",
+      old: "Dining room",
+    },
+    {
+      name: "departmentName",
+      edit: "edit-department-name",
+      save: "save-department-name",
+      cancel: "cancel-department-name",
+      old: "Restaurant and bar",
+    },
+    {
+      name: "tradingName",
+      edit: "edit-trading-name",
+      save: "save-trading-name",
+      cancel: "cancel-trading-name",
+      old: "Casa Delgado",
+    },
+  ])(
+    "refuses a blank $name and restores its displayed name on Cancel",
+    async ({ name, edit, save, cancel, old }) => {
+      const updateDepartment = vi.fn();
+      const updateZone = vi.fn();
+      const el = await mount({
+        load: vi.fn().mockResolvedValue(model),
+        updateDepartment,
+        updateZone,
+      } as unknown as VenueServiceApi);
+      await action(el, edit);
+      const control = find(el, `wt-input[name="${name}"]`)!;
+      control.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "   " }, bubbles: true, composed: true }),
+      );
+      await settle(el);
+      await action(el, save);
+      expect(control.getAttribute("error")).toContain("required");
+      expect(updateDepartment).not.toHaveBeenCalled();
+      expect(updateZone).not.toHaveBeenCalled();
+      await action(el, cancel);
+      expect(find(el, `wt-input[name="${name}"]`)).toBeNull();
+      expect(find(el, `[data-test="${edit}"]`)!.textContent).toContain(old);
+    },
+  );
+
+  it("switches receipt trading names on a department without offering the switch on a zone", async () => {
+    let printTradingName = false;
+    const save = vi.fn(async (departmentId: string, field: string, value: boolean) => {
+      expect([departmentId, field, value]).toEqual(["d1", "printTradingName", true]);
+      printTradingName = value;
+    });
+    const load = vi.fn(async () => ({
+      ...model,
+      departments: [model.departments[0]],
+      salePolicies: {
+        departments: [
+          {
+            departmentId: "d1",
+            paidWhen: "prepay" as const,
+            collectionNumber: "none" as const,
+            receiptPrintMode: "auto" as const,
+            printTradingName,
+          },
+        ],
+        zones: [
+          {
+            zoneId: "z1",
+            paidWhen: null,
+            collectionNumber: null,
+            receiptPrintMode: null,
+            effective: {
+              paidWhen: "prepay" as const,
+              collectionNumber: "none" as const,
+              receiptPrintMode: "auto" as const,
+              printTradingName,
+            },
+          },
+        ],
+      },
+    }));
+    const el = await mount({
+      load,
+      setDepartmentSalePolicyField: save,
+    } as unknown as VenueServiceApi);
+    const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
+    const control = rows[0].querySelector<HTMLElement>('wt-switch[name="printTradingName"]')!;
+    expect(control).not.toBeNull();
+    expect(rows[1].querySelector('wt-switch[name="printTradingName"]')).toBeNull();
+    expect(control.hasAttribute("checked")).toBe(false);
+    control.shadowRoot!.querySelector<HTMLInputElement>("input")!.click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+    await vi.waitFor(() =>
+      expect(
+        table(el, "policy-tree")
+          .shadowRoot!.querySelector('wt-switch[name="printTradingName"]')
+          ?.hasAttribute("checked"),
+      ).toBe(true),
+    );
+  });
+
+  it("keeps a refused receipt trading-name choice visible", async () => {
+    let printTradingName = false;
+    const save = vi.fn(async (_departmentId: string, _field: string, value: boolean) => {
+      if (save.mock.calls.length === 1) throw new Error("offline");
+      printTradingName = value;
+    });
+    const load = vi.fn(async () => ({
+      ...model,
+      departments: [model.departments[0]],
+      salePolicies: {
+        departments: [
+          {
+            departmentId: "d1",
+            paidWhen: "prepay" as const,
+            collectionNumber: "none" as const,
+            receiptPrintMode: "auto" as const,
+            printTradingName,
+          },
+        ],
+        zones: [],
+      },
+    }));
+    const el = await mount({
+      load,
+      setDepartmentSalePolicyField: save,
+    } as unknown as VenueServiceApi);
+    const switchInput = () =>
+      table(el, "policy-tree")
+        .shadowRoot!.querySelector<HTMLElement>('wt-switch[name="printTradingName"]')!
+        .shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    switchInput().click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+    await vi.waitFor(() =>
+      expect(find(el, '[data-test="page-alert"]')?.textContent).toContain("could not be saved"),
+    );
+    expect(switchInput().checked).toBe(true);
+    expect(printTradingName).toBe(false);
+  });
+
+  it("keeps the tree, Hours and zone-menu Add outside the tabs", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
     const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
     await selectTab(el, "departments");
-    expect(tabs.querySelector('[slot="actions"] [data-test="new-department"]')).not.toBeNull();
+    expect(tabs.querySelector('[slot="actions"] [data-test="new-department"]')).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector(
+        '[data-test="policy-tree-actions"] [data-test="new-department"]',
+      ),
+    ).not.toBeNull();
     expect(find(el, '[data-test="new-department"]')!.checkVisibility()).toBe(true);
-    expect(tabs.querySelector('[slot="actions"] [data-test="new-hours"]')).not.toBeNull();
+    expect(tabs.querySelector('[slot="actions"] [data-test="new-hours"]')).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector('[data-test="hours-actions"] [data-test="new-hours"]'),
+    ).not.toBeNull();
     expect(tabs.querySelector('[slot="departments"] [data-test="new-department"]')).toBeNull();
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
-    expect(tabs.querySelector('[slot="actions"] [data-test="new-assignment-z1"]')).not.toBeNull();
+    await action(el, "menus-tree-zone-z1");
+    expect(tabs.querySelector('[slot="actions"] [data-test="new-assignment-z1"]')).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector(
+        '[data-test="zone-menu-actions"] [data-test="new-assignment-z1"]',
+      ),
+    ).not.toBeNull();
     expect(find(el, '[data-test="new-assignment-z1"]')!.checkVisibility()).toBe(true);
     expect(tabs.querySelector('[slot="zones"] [data-test="new-assignment-z1"]')).toBeNull();
   });
@@ -249,7 +1587,7 @@ describe("venue operations screen", () => {
       load: vi.fn().mockResolvedValue({ ...model, zoneMenus: [] }),
     } as unknown as VenueServiceApi);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     const button = table(el, "zone-menus").querySelector<HTMLElement>(
       ":scope > [slot=empty-action]",
     )!;
@@ -312,7 +1650,7 @@ describe("venue operations screen", () => {
       load: vi.fn().mockResolvedValue({ ...model, zoneMenus: [] }),
     } as unknown as VenueServiceApi);
     await selectTab(noMenus, "zones");
-    await action(noMenus, "zone-menus-z1");
+    await action(noMenus, "menus-tree-zone-z1");
     expect(emptySentence(noMenus, "zone-menus")).toBe(expected["zone-menus"]);
   });
 
@@ -320,8 +1658,7 @@ describe("venue operations screen", () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
-    await selectTab(el, "zones");
-    await action(el, "zone-menus-z2");
+    await action(el, "menus-tree-zone-z2");
     const button = find(el, '[data-test="new-assignment-z2"]')!;
     expect(button).not.toBeNull();
     expect(button.hasAttribute("disabled")).toBe(true);
@@ -374,6 +1711,27 @@ describe("venue operations screen", () => {
     await selectTab(el, "zones");
     const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
     expect(selector.value).toBe("z1");
+  });
+
+  it("does not offer inactive zones or zones in inactive departments as starting zones", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        departments: [model.departments[0]!, { ...model.departments[1]!, active: false }],
+        zones: [
+          { ...model.zones[0]!, active: false },
+          { ...model.zones[0]!, id: "z2", name: "Deli counter", departmentId: "d2", active: true },
+        ],
+        floorZones: [
+          { ...model.floorZones[0]!, active: false },
+          { ...model.floorZones[1]!, active: true },
+        ],
+        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
+      }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    const selector = table(el, "tills").shadowRoot!.querySelector<TillZone>("wt-combobox")!;
+    expect(selector.options.map((option) => option.value)).toEqual([""]);
   });
 
   it("returns a refused starting-zone choice to the stored counter default", async () => {
@@ -606,9 +1964,50 @@ describe("venue operations screen", () => {
     expect(field(el, "zone-mode-z1").value).toBe("prepay");
   });
 
+  it("opens receipt preview for the selected department", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const link = table(el, "policy-tree").shadowRoot!.querySelector<HTMLAnchorElement>(
+      'a[href="/manage/venue-settings/view/receipts?departmentId=d2"]',
+    );
+    expect(link?.textContent?.trim()).toBe("Preview");
+  });
+
+  it("separates the trading name edit and receipt preview links", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const root = table(el, "policy-tree").shadowRoot!;
+    const edit = root.querySelector<HTMLElement>('[data-test="edit-trading-name"]')!;
+    const preview = root.querySelector<HTMLElement>(
+      'a[href="/manage/venue-settings/view/receipts?departmentId=d1"]',
+    )!;
+
+    expect(
+      preview.getBoundingClientRect().left - edit.getBoundingClientRect().right,
+    ).toBeGreaterThanOrEqual(8);
+  });
+
+  it("offers each active department’s receipt preview from the unified tree", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree");
+    const links = [...tree.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a[href]")];
+    expect(links.map((link) => [link.textContent?.trim(), link.getAttribute("href")])).toEqual([
+      ["Preview", "/manage/venue-settings/view/receipts?departmentId=d1"],
+      ["Preview", "/manage/venue-settings/view/receipts?departmentId=d2"],
+    ]);
+    expect(
+      el.shadowRoot!.querySelectorAll('a[href^="/manage/venue-settings/view/receipts?"]'),
+    ).toHaveLength(0);
+  });
+
   it("deactivates a department that has no active zones", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),
+      departmentRemovalImpact: vi.fn().mockResolvedValue({ zones: [] }),
       deactivateDepartment: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
@@ -626,6 +2025,7 @@ describe("venue operations screen", () => {
     });
     const api = {
       load: vi.fn().mockResolvedValue(model),
+      departmentRemovalImpact: vi.fn().mockResolvedValue({ zones: [] }),
       deactivateDepartment: vi.fn().mockReturnValue(pending),
     } as unknown as VenueServiceApi;
     const el = await mount(api);
@@ -679,7 +2079,7 @@ describe("venue operations screen", () => {
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     const button = find(el, '[data-test="default-assignment-m2"]')!;
     const menu = button.closest("wt-row-actions")!;
     const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
@@ -733,7 +2133,7 @@ describe("venue operations screen", () => {
     expect(text).toContain("Terraza necesita una carta activa y publicada.");
   });
 });
-it("shows three tabs, read-only tables, and creates departments in a cancellable modal", async () => {
+it("keeps the interim lists and creates departments in a cancellable modal", async () => {
   const api = {
     load: vi.fn().mockResolvedValue(model),
     createDepartment: vi.fn(),
@@ -741,7 +2141,7 @@ it("shows three tabs, read-only tables, and creates departments in a cancellable
   const el = await mount(api);
   expect(
     el.shadowRoot!.querySelector("wt-tabs")!.shadowRoot!.querySelectorAll('[role="tab"]'),
-  ).toHaveLength(3);
+  ).toHaveLength(2);
   expect(
     el.shadowRoot!.querySelector('[data-test="readiness"]')!.getBoundingClientRect().height,
   ).toBeGreaterThan(0);
@@ -764,11 +2164,7 @@ it("offers no Menus tab: a menu's contents and prices are edited on the Menus sc
   const el = await mount({ load: vi.fn().mockResolvedValue(model) } as unknown as VenueServiceApi);
   const strip = el.shadowRoot!.querySelector("wt-tabs")!;
   const tabs = [...strip.shadowRoot!.querySelectorAll('[role="tab"]')];
-  expect(tabs.map((tab) => tab.getAttribute("data-key"))).toEqual([
-    "status",
-    "departments",
-    "zones",
-  ]);
+  expect(tabs.map((tab) => tab.getAttribute("data-key"))).toEqual(["departments", "zones"]);
   expect(tabs.map((tab) => tab.textContent!.trim())).not.toContain("Menus");
   expect(el.shadowRoot!.querySelector('[slot="menus"]')).toBeNull();
 });
@@ -881,7 +2277,7 @@ it("creates and edits zone menu assignments and preserves a current default", as
   } as unknown as VenueServiceApi;
   const el = await mount(api);
   await selectTab(el, "zones");
-  await action(el, "zone-menus-z1");
+  await action(el, "menus-tree-zone-z1");
   expect(tableText(el, "zone-menus")).toContain("Casa Delgado");
   await action(el, "new-assignment-z1");
   expect(field(el, "assignment-menu").value).toBe("m2");
@@ -936,16 +2332,39 @@ it("ignores change events from controls inside a tab panel", async () => {
   expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("zones");
 });
 
-it("explains why a department with active zones cannot be deactivated", async () => {
+it("names the zones and active tables before removing a department", async () => {
   const api = {
     load: vi.fn().mockResolvedValue(model),
-    deactivateDepartment: vi.fn().mockRejectedValue({ code: "department.has_active_zones" }),
+    departmentRemovalImpact: vi.fn().mockResolvedValue({
+      zones: [{ id: "z1", name: "Dining room", activeTableCount: 2 }],
+    }),
+    deactivateDepartment: vi.fn().mockResolvedValue(undefined),
+  } as unknown as VenueServiceApi;
+  const el = await mount(api);
+  await selectTab(el, "departments");
+  await action(el, "deactivate-department-d1");
+  expect(await bottom(el)).toBe("");
+  expect(modal(el)?.textContent).toContain("Dining room");
+  expect(modal(el)?.textContent).toContain("2 active tables");
+  expect(api.deactivateDepartment).not.toHaveBeenCalled();
+  await action(el, "save-editor");
+  expect(api.deactivateDepartment).toHaveBeenCalledWith("d1");
+});
+
+it.each([
+  [{ code: "zone.table_in_use", params: { tableName: "Window 4" } }, "Window 4"],
+  [{ code: "department.last_active" }, "last active department"],
+])("keeps the removal modal open with a named refusal", async (refusal, expected) => {
+  const api = {
+    load: vi.fn().mockResolvedValue(model),
+    departmentRemovalImpact: vi.fn().mockResolvedValue({ zones: [] }),
+    deactivateDepartment: vi.fn().mockRejectedValue(refusal),
   } as unknown as VenueServiceApi;
   const el = await mount(api);
   await selectTab(el, "departments");
   await action(el, "deactivate-department-d1");
   await action(el, "save-editor");
-  expect(await bottom(el)).toContain("Move its active service zones");
+  expect(await bottom(el)).toContain(expected);
   expect(pageAlert(el)).toBe("");
   expect(el.shadowRoot!.querySelector("wt-modal")).not.toBeNull();
 });
@@ -1036,7 +2455,7 @@ describe("the venue lists", () => {
     await selectTab(el, "departments");
     expect(column(el, "departments", 3)).toEqual(["Active", "Inactive"]);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     expect(column(el, "zone-menus", 1)).toEqual(["Yes", "No"]);
   });
 
@@ -1051,7 +2470,7 @@ describe("the venue lists", () => {
       }),
     } as unknown as VenueServiceApi);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     expect(
       [...table(el, "zone-menus").shadowRoot!.querySelectorAll("wt-row-actions")].map((menu) =>
         menu.getAttribute("label"),
@@ -1072,7 +2491,7 @@ describe("the venue lists", () => {
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     expect(find(el, '[data-test="default-assignment-m1"]')!.hasAttribute("disabled")).toBe(true);
     await action(el, "default-assignment-m2");
     expect(api.allowMenu).toHaveBeenCalledWith("z1", "m2", { displayOrder: 4, makeDefault: true });
@@ -1105,7 +2524,7 @@ describe("the venue lists' column choosers", () => {
         load: vi.fn().mockResolvedValue(model),
       } as unknown as VenueServiceApi);
       await selectTab(el, tab);
-      if (name === "zone-menus") await action(el, "zone-menus-z1");
+      if (name === "zone-menus") await action(el, "menus-tree-zone-z1");
       expect(chooser(el, name)).toBe("Customise columns");
       expect(choices(el, name)).toEqual(keys.map((key) => [key, true]));
       const before = headers(el, name);
@@ -1132,7 +2551,7 @@ describe("the venue lists' column choosers", () => {
     expect(chooser(el, "departments")).toBe("Personalizar columnas");
     expect(chooser(el, "hours")).toBe("Personalizar columnas");
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     expect(chooser(el, "zones")).toBe("Personalizar columnas");
     expect(chooser(el, "zone-menus")).toBe("Personalizar columnas");
   });
@@ -1144,7 +2563,7 @@ describe("the venue lists' column choosers", () => {
     } as unknown as VenueServiceApi);
     await selectTab(el, "departments");
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     for (const name of ["departments", "hours", "zones", "zone-menus"]) {
       const list = table(el, name) as Element & {
         alwaysShownColumnLabel: string;
@@ -1208,7 +2627,7 @@ describe("the venue editors refuse an incomplete form", () => {
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     await action(el, "new-assignment-z1");
     expect(field(el, "assignment-menu").value).toBe("");
     await action(el, "save-editor");
@@ -1224,7 +2643,7 @@ describe("the venue editors refuse an incomplete form", () => {
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     await action(el, "new-assignment-z1");
     for (const order of ["-1", "1.5"]) {
       field(el, "assignment-order").value = order;
@@ -1479,7 +2898,7 @@ describe("an editor's messages", () => {
     },
     {
       tab: "zones",
-      open: ["zone-menus-z1", "edit-assignment-m1"],
+      open: ["menus-tree-zone-z1", "edit-assignment-m1"],
       method: "allowMenu",
       name: "displayOrder",
       control: "assignment-order",
@@ -1516,7 +2935,7 @@ describe("an editor's messages", () => {
     },
     {
       tab: "zones",
-      open: ["zone-menus-z1", "edit-assignment-m1"],
+      open: ["menus-tree-zone-z1", "edit-assignment-m1"],
       method: "allowMenu",
       code: "catalogue.not_found",
       control: "assignment-menu",
@@ -1569,7 +2988,7 @@ it("says a refused list action at the top of the screen, with no editor open", a
   } as unknown as VenueServiceApi;
   const el = await mount(api);
   await selectTab(el, "zones");
-  await action(el, "zone-menus-z1");
+  await action(el, "menus-tree-zone-z1");
   await action(el, "default-assignment-m2");
   expect(api.allowMenu).toHaveBeenCalledTimes(1);
   expect(modal(el)).toBeNull();
@@ -1582,6 +3001,7 @@ it("says a refused list action at the top of the screen, with no editor open", a
 it("shows the general save error when a write is refused without a reason", async () => {
   const api = {
     load: vi.fn().mockResolvedValue(model),
+    departmentRemovalImpact: vi.fn().mockResolvedValue({ zones: [] }),
     deactivateDepartment: vi.fn().mockRejectedValue(undefined),
   } as unknown as VenueServiceApi;
   const el = await mount(api);
@@ -1614,6 +3034,7 @@ describe("the editor's keyboard", () => {
     let finish!: () => void;
     const api = {
       load: vi.fn().mockResolvedValue(model),
+      departmentRemovalImpact: vi.fn().mockResolvedValue({ zones: [] }),
       deactivateDepartment: vi.fn().mockReturnValue(
         new Promise<void>((resolve) => {
           finish = resolve;
@@ -1654,7 +3075,7 @@ describe("the editor's keyboard", () => {
   });
 });
 
-it("returns focus to the row that opened an editor, or to the tabs once that row is gone", async () => {
+it("returns focus to a retained row or the tree's Add action when that row is gone", async () => {
   const liveData = new LiveData();
   const load = vi.fn().mockResolvedValue(structuredClone(model));
   const el = await mount({ load, liveData } as unknown as VenueServiceApi);
@@ -1673,7 +3094,33 @@ it("returns focus to the row that opened an editor, or to the tabs once that row
   liveData.invalidate([{ type: "departments", id: "d2" }]);
   await vi.waitFor(() => expect(column(el, "departments", 0)).toEqual(["Restaurant and bar"]));
   await action(el, "cancel-editor");
-  expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("wt-tabs"));
+  expect(el.shadowRoot!.activeElement).toBe(
+    el.shadowRoot!.querySelector('[data-test="policy-tree-actions"] [data-test="new-department"]'),
+  );
+});
+
+it("returns focus to the tree's Add action when an edited department disappears", async () => {
+  const liveData = new LiveData();
+  const load = vi.fn().mockResolvedValue(structuredClone(model));
+  const el = await mount({ load, liveData } as unknown as VenueServiceApi);
+  await action(el, "edit-tree-department-d2");
+  const updated = structuredClone(model);
+  updated.departments = [updated.departments[0]!];
+  updated.hours = [];
+  load.mockResolvedValue(updated);
+  liveData.invalidate([{ type: "departments", id: "d2" }]);
+  await vi.waitFor(() =>
+    expect(table(el, "policy-tree").shadowRoot!.textContent).not.toContain("Casa Delgado Deli"),
+  );
+  expect(find(el, '[data-test="edit-tree-department-d2"]')).toBeNull();
+  await action(el, "cancel-editor");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.activeElement).toBe(
+      el.shadowRoot!.querySelector(
+        '[data-test="policy-tree-actions"] [data-test="new-department"]',
+      ),
+    ),
+  );
 });
 
 it("returns focus to a row's menu after an edit opened from it is saved", async () => {
@@ -1721,7 +3168,7 @@ describe("where focus goes after a change that saves at once", () => {
       setDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     await action(el, "new-assignment-z1");
     await action(el, "cancel-editor");
     const makeAvailable = find(el, '[data-test="new-assignment-z1"]')!;
@@ -1750,7 +3197,7 @@ describe("where focus goes after a change that saves at once", () => {
       allowMenu: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     await action(el, "new-assignment-z1");
     await action(el, "cancel-editor");
     const menu = table(el, "zone-menus").shadowRoot!.querySelector<HTMLElement>(
@@ -1839,7 +3286,7 @@ describe("where focus goes when an editor opened from an Add button closes", () 
       add: "new-hours",
       empty: { hours: [] },
       write: "replaceHours",
-      show: (el: VenueOperationsScreen) => selectTab(el, "departments"),
+      show: (el: VenueOperationsScreen) => selectTab(el, "zones"),
       fill: (el: VenueOperationsScreen) => {
         field(el, "hours-opens").value = "09:00";
         field(el, "hours-closes").value = "17:00";
@@ -1852,14 +3299,18 @@ describe("where focus goes when an editor opened from an Add button closes", () 
       write: "allowMenu",
       show: async (el: VenueOperationsScreen) => {
         await selectTab(el, "zones");
-        await action(el, "zone-menus-z1");
+        await action(el, "menus-tree-zone-z1");
       },
       fill: () => {},
     },
   ];
   function top(el: VenueOperationsScreen, add: string) {
     const button = el.shadowRoot!.querySelector<HTMLElement>(
-      `wt-tabs > [slot="actions"] [data-test="${add}"]`,
+      add === "new-hours"
+        ? `[data-test="hours-actions"] [data-test="${add}"]`
+        : add.startsWith("new-assignment-")
+          ? `[data-test="zone-menu-actions"] [data-test="${add}"]`
+          : `[data-test="policy-tree-actions"] [data-test="${add}"]`,
     );
     expect(button, add).not.toBeNull();
     return button!;
@@ -1919,7 +3370,7 @@ describe("where focus goes when an editor opened from an Add button closes", () 
     await selectTab(el, "departments");
     expect(inBox(el, "hours")).toBeNull();
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     expect(inBox(el, "zone-menus")).toBeNull();
   });
 });
@@ -2078,7 +3529,7 @@ describe("the venue screen's fields are the shared field components", () => {
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     await action(el, "new-assignment-z1");
     const menu = dropdown(el.shadowRoot!, "assignment-menu");
     expect([menu.label, menu.required, menu.search, menu.value]).toEqual([
@@ -2177,7 +3628,7 @@ describe("the venue screen's fields are the shared field components", () => {
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     await action(el, "new-assignment-z1");
     const menu = dropdown(el.shadowRoot!, "assignment-menu");
     expect([menu.searchPlaceholder, menu.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
@@ -2214,7 +3665,7 @@ describe("the venue tables at phone width", () => {
     { name: "departments", tab: "departments", rows: phoneModel.departments.length },
     { name: "hours", tab: "departments", rows: phoneModel.hours.length },
     { name: "zones", tab: "zones", rows: phoneModel.floorZones.length },
-    { name: "zone-menus", tab: "zones", open: "zone-menus-z1", rows: 1 },
+    { name: "zone-menus", tab: "zones", open: "menus-tree-zone-z1", rows: 1 },
   ];
   it.each(tables.flatMap((table) => ["en", "es"].map((locale) => ({ ...table, locale }))))(
     "keeps every $name row's menu on screen and uncovered while the other columns scroll sideways (390 px, $locale)",
@@ -2230,7 +3681,9 @@ describe("the venue tables at phone width", () => {
         } as unknown as VenueServiceApi);
         await selectTab(el, tab);
         if (open) await action(el, open);
-        expectRowMenusOnScreen(table(el, name), rows);
+        const list = table(el, name);
+        list.scrollIntoView({ block: "center" });
+        expectRowMenusOnScreen(list, rows);
       } finally {
         await page.viewport(width, height);
       }

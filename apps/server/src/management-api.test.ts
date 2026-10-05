@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { kitchenCourses, kitchenStations, withTransaction } from "@waitron/db";
+import {
+  kitchenCourses,
+  kitchenStations,
+  parties,
+  partyTables,
+  withTransaction,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
@@ -468,6 +474,10 @@ describe("/management-api/zones", () => {
       id: string;
     }[];
     expect(afterDel.find((z) => z.id === id)).toBeUndefined();
+    const forManagement = (await (
+      await req("/zones?includeInactive=true", { method: "GET" }, managerCookie)
+    ).json()) as { id: string; active: boolean }[];
+    expect(forManagement.find((z) => z.id === id)).toMatchObject({ active: false });
 
     // Reactivating via PATCH shows it was a soft delete.
     await req(
@@ -480,6 +490,31 @@ describe("/management-api/zones", () => {
       name: string;
     }[];
     expect(afterRestore.find((z) => z.id === id)).toMatchObject({ name });
+  });
+
+  it("DELETE reports the occupied table's name when a zone has an open party", async () => {
+    const zoneId = await createZone(unique("Occupied"));
+    const label = unique("T7");
+    const table = (await (
+      await req(
+        "/tables",
+        { method: "POST", body: JSON.stringify({ label, zoneId }) },
+        managerCookie,
+      )
+    ).json()) as { id: string };
+    await withTransaction(suite.db, async (tx) => {
+      const [party] = await tx
+        .insert(parties)
+        .values({ openedBy: randomUUID() })
+        .returning({ id: parties.id });
+      await tx.insert(partyTables).values({ partyId: party!.id, tableId: table.id });
+    });
+
+    const response = await req(`/zones/${zoneId}`, { method: "DELETE" }, managerCookie);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "zone.table_in_use", params: { zoneId, tableId: table.id, tableName: label } },
+    });
   });
 
   it("DELETE an unknown id → 404 zone.not_found; a malformed :id → 404 too", async () => {

@@ -1103,6 +1103,10 @@ paper without prior express, revocable consent, and paper can never be charged f
 the receipt instead" flow is opt-in only. Today this is moot — grep receipt: there is **no** electronic
 receipt path in `apps/server/src` or `packages/printing/src`; every receipt is ESC/POS on paper.
 
+**Scope update, 2026-10-05:** A261 step 2 moves the receipt choice to each department, with an
+optional zone override. A sale without a zone uses automatic printing. The delivery concern below
+still applies to **On request** and **Never**. See the [step 2 plan](../superpowers/plans/2026-10-04-departments-and-zones.md).
+
 **Where `receipt_print_mode` sits against this.** The enum is `auto | on_request | never`
 (`packages/db/src/schema/tenants.ts`), and only `auto` auto-prints (`receipt-print.ts` §1). The saving
 grace is that the reprint route carries **no** mode gate — *"a reprint is ALWAYS available"* — so a

@@ -291,8 +291,8 @@ receipts screen's form column),
 so they were left alone. At 390px wide a modal's body is narrower than the token, so a field there
 still takes the body's whole width.
 
-A screen that styles its own native control reads the same variable on the element wrapping it
-(the Departments and zones screen's Default checkbox label does). A screen whose own layout
+A screen that styles its own native control reads the same variable on the element wrapping it.
+A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
 beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print width ruler"
 button beside the ruler's answer, and the member list editor's `.add` row does, for its Add button
@@ -537,9 +537,8 @@ ni con tus filtros."), which every dashboard table passes as `noMatchesMessage`,
 with no search or filter today, so a filter added later is covered (owner, A177). The empty sentence
 stays the screen's own and reads "No <things> yet." ("No extras lists yet.", "Todavía no hay listas
 de extras."), except where the table lists the answer to a question rather than things made, such as
-the Alerts screen's "Nothing needs attention.", or where the screen hands the table only part of what
-was made, such as the Departments and zones screen's Tills table, which leaves out revoked devices and kitchen
-screens and says "No active tills." A screen that filters its rows before handing them to
+the Alerts screen's "Nothing needs attention." The Departments and zones policy tree says
+"No departments yet." when empty. A screen that filters its rows before handing them to
 the table chooses the empty sentence itself, because the table cannot tell nothing made from nothing
 matching: the Orders screen's rows are always the result of its search and filters, so it passes
 `tableNoMatches()` as `emptyMessage`; the Users and Payments screens do while they hold people or
@@ -2213,19 +2212,18 @@ commit with Save, bind it to that Save even when its preview updates as you type
 
 ### Tabbed management pages
 
-When one management area contains several lists, use `wt-tabs` to show one concern at a time.
+When a management page separates concerns into selectable panels, use `wt-tabs`.
 Give each tab a stable key, a localized label and a matching named slot:
 
 ```ts
 html`<wt-tabs
-  label="Departments and zones"
-  .items=${[{ key: "status", label: "Status" }, { key: "departments", label: "Departments" }]}
+  label="Venue settings"
+  .items=${[{ key: "receipts", label: "Receipts" }, { key: "tables", label: "Tables" }]}
   .value=${this.view}
   @wt-tab-change=${this.selectView}
 >
-  <div slot="actions">${this.view === "departments" ? this.renderAddDepartment() : nothing}</div>
-  <section slot="status">${this.renderStatus()}</section>
-  <section slot="departments">${this.renderDepartments()}</section>
+  <section slot="receipts">${this.renderReceipts()}</section>
+  <section slot="tables">${this.renderTables()}</section>
 </wt-tabs>`;
 ```
 
@@ -2320,7 +2318,7 @@ replacement history for defaults and invalid destinations, and push history for 
 Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`. Departments and zones
-(`/manage/venue-operations`) uses `status`, `departments` and `zones`. Venue settings
+uses the single `/manage/venue-operations` page; old tab addresses are replaced with that URL. Venue settings
 (`/manage/venue-settings`) uses `receipts`, `tables`, `adjustment-reasons` and `kitchen`; a tab
 appears only when a panel on it is visible to the session, and an address naming a hidden tab
 opens the first visible tab. The dashboard preserves module-owned

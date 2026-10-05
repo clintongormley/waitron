@@ -31,9 +31,16 @@ import {
   deviceProfiles,
   engineErrorMessage,
   devices,
+  diningTables,
+  parties,
+  partyTables,
   floorZones,
+  invoiceSeries,
   kitchenStations,
   locations,
+  sales,
+  watchers,
+  watcherZones,
   withTransaction,
   workingOrderLines,
 } from "@waitron/db";
@@ -46,12 +53,16 @@ import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createException, resolveMakers, setClaim } from "./routing-store.js";
+import { routeExceptions } from "./schema/routing.js";
+import { deviceZoneDefaults, zoneSalePolicies, zoneMenus } from "./schema/service.js";
 import {
   copyOrderServiceContext,
   copyWorkingLineContext,
   configureZone,
   createDepartment,
   deactivateDepartment,
+  departmentRemovalImpact,
+  deactivateServiceZone,
   allowMenuInZone,
   findOrderServiceContext,
   findOrderServiceModes,
@@ -67,9 +78,15 @@ import {
   recordWorkingLineContexts,
   replaceDepartmentHours,
   resolveNewOrderZone,
+  resolveSalePolicy,
+  recordSaleReceiptHeader,
+  readSaleReceiptHeader,
   resolveZoneContext,
   retargetOrderServiceContext,
   setDeviceDefaultZone,
+  setDepartmentSalePolicyField,
+  setZoneSalePolicyOverride,
+  updateDepartment,
   clearDeviceDefaultZone,
   listDeviceDefaultZones,
   menuState,
@@ -234,7 +251,7 @@ describe("venue service routing", () => {
     });
   });
 
-  it("reports incomplete active zones and refuses to deactivate their department", async () => {
+  it("reports incomplete active zones and cascades department removal", async () => {
     await seedUnitTenant();
     const location = await seedLocation("Venue");
     const locationId = brandLocationId(location);
@@ -245,6 +262,11 @@ describe("venue service routing", () => {
         tx,
         { locationId },
         { name: "Restaurant", defaultServiceMode: "table_tab" },
+      );
+      const otherDepartment = await createDepartment(
+        tx,
+        { locationId },
+        { name: "Bar", defaultServiceMode: "prepay" },
       );
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         { code: "zone.department_missing", zoneId: zone, zoneName: "Terrace" },
@@ -280,15 +302,15 @@ describe("venue service routing", () => {
         },
       ]);
 
-      await expect(deactivateDepartment(tx, { locationId }, department.id)).rejects.toMatchObject({
-        code: "department.has_active_zones",
-        params: { departmentId: department.id, zoneId: zone },
-      });
+      await expect(
+        deactivateDepartment(tx, { locationId }, department.id),
+      ).resolves.toBeUndefined();
 
       await tx.execute(sql`update floor_zones set active = false where id = ${zone}`);
       await expect(
         deactivateDepartment(tx, { locationId }, department.id),
       ).resolves.toBeUndefined();
+      await tx.execute(sql`update departments set active = false where id = ${otherDepartment.id}`);
       await expect(listVenueReadiness(tx, { locationId })).resolves.toEqual([
         { code: "venue.department_missing" },
       ]);
@@ -911,6 +933,143 @@ describe("routing outcomes and menu readiness", () => {
 });
 
 describe("departments", () => {
+  it("resolves a recorded zone's receipt policy after the zone is deactivated", async () => {
+    const locationId = brandLocationId(await seedLocation("Retained sale policy"));
+    const zoneId = await seedZone(locationId, "Old counter");
+    const cfg = { locationId };
+    await scoped(async (tx) => {
+      const department = await createDepartment(tx, cfg, {
+        name: "Restaurant",
+        defaultServiceMode: "prepay",
+      });
+      await configureZone(tx, cfg, { zoneId, departmentId: department.id });
+      await setZoneSalePolicyOverride(tx, cfg, zoneId, "receiptPrintMode", "never");
+      await deactivateServiceZone(tx, cfg, zoneId);
+    });
+
+    await expect(scoped((tx) => resolveSalePolicy(tx, cfg, zoneId))).resolves.toMatchObject({
+      zoneId,
+      receiptPrintMode: "never",
+    });
+    await expect(
+      scoped((tx) => setZoneSalePolicyOverride(tx, cfg, zoneId, "receiptPrintMode", "auto")),
+    ).rejects.toMatchObject({ code: "service_zone.not_found" });
+  });
+
+  it("clears one zone override without changing another policy field", async () => {
+    const locationId = brandLocationId(await seedLocation("Cleared sale override"));
+    const zoneId = await seedZone(locationId, "Terrace");
+    const cfg = { locationId };
+    const department = await scoped(async (tx) => {
+      const row = await createDepartment(tx, cfg, {
+        name: "Restaurant",
+        defaultServiceMode: "prepay",
+      });
+      await configureZone(tx, cfg, { zoneId, departmentId: row.id });
+      return row;
+    });
+
+    await scoped(async (tx) => {
+      await setDepartmentSalePolicyField(tx, cfg, department.id, "receiptPrintMode", "on_request");
+      await setZoneSalePolicyOverride(tx, cfg, zoneId, "paidWhen", "ticket_then_pay");
+      await setZoneSalePolicyOverride(tx, cfg, zoneId, "receiptPrintMode", "never");
+      await setZoneSalePolicyOverride(tx, cfg, zoneId, "receiptPrintMode", null);
+      await expect(resolveSalePolicy(tx, cfg, zoneId)).resolves.toMatchObject({
+        paidWhen: "ticket_then_pay",
+        receiptPrintMode: "on_request",
+      });
+    });
+  });
+
+  it("inherits each sale policy field separately from the department", async () => {
+    const locationId = brandLocationId(await seedLocation("Inherited sale policy"));
+    const zoneId = await seedZone(locationId, "Terrace");
+    const department = await scoped(async (tx) => {
+      const row = await createDepartment(
+        tx,
+        { locationId },
+        {
+          name: "Restaurant",
+          tradingName: "Terrace Kitchen",
+          defaultServiceMode: "prepay",
+        },
+      );
+      await configureZone(tx, { locationId }, { zoneId, departmentId: row.id });
+      return row;
+    });
+    await db.execute(sql`
+      update department_sale_policies
+      set paid_when = 'ticket_then_pay', collection_number = 'numbered',
+          receipt_print_mode = 'on_request', print_trading_name = 0
+      where department_id = ${department.id}`);
+    await db.execute(sql`
+      update zone_sale_policies set receipt_print_mode = 'never' where zone_id = ${zoneId}`);
+
+    await scoped(async (tx) => {
+      await expect(resolveSalePolicy(tx, { locationId }, zoneId)).resolves.toEqual({
+        zoneId,
+        departmentId: department.id,
+        departmentName: "Restaurant",
+        tradingName: "Terrace Kitchen",
+        paidWhen: "ticket_then_pay",
+        collectionNumber: "numbered",
+        receiptPrintMode: "never",
+        printTradingName: false,
+      });
+    });
+  });
+
+  it("gives a newly configured zone blank quick-sale and receipt overrides", async () => {
+    const locationId = brandLocationId(await seedLocation("Zone policy defaults"));
+    const zoneId = await seedZone(locationId, "Terrace");
+    await scoped(async (tx) => {
+      const department = await createDepartment(
+        tx,
+        { locationId },
+        {
+          name: "Restaurant",
+          defaultServiceMode: "prepay",
+        },
+      );
+      await configureZone(tx, { locationId }, { zoneId, departmentId: department.id });
+    });
+
+    const policies = await db.execute<{
+      paid_when: string | null;
+      collection_number: string | null;
+      receipt_print_mode: string | null;
+    }>(sql`
+      select paid_when, collection_number, receipt_print_mode
+      from zone_sale_policies where zone_id = ${zoneId}`);
+    expect(policies.rows).toEqual([
+      { paid_when: null, collection_number: null, receipt_print_mode: null },
+    ]);
+  });
+
+  it("gives a newly created department the quick-sale and receipt defaults", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("New department policies")) };
+    const department = await scoped((tx) =>
+      createDepartment(tx, cfg, { name: "Terrace", defaultServiceMode: "prepay" }),
+    );
+
+    const policies = await db.execute<{
+      paid_when: string;
+      collection_number: string;
+      receipt_print_mode: string;
+      print_trading_name: number;
+    }>(sql`
+      select paid_when, collection_number, receipt_print_mode, print_trading_name
+      from department_sale_policies where department_id = ${department.id}`);
+    expect(policies.rows).toEqual([
+      {
+        paid_when: "prepay",
+        collection_number: "none",
+        receipt_print_mode: "auto",
+        print_trading_name: 1,
+      },
+    ]);
+  });
+
   it("refuses hours and deactivation for a department outside this venue, and an empty set clears the hours", async () => {
     const here = { locationId: brandLocationId(await seedLocation("Venue")) };
     const there = { locationId: brandLocationId(await seedLocation("Second venue")) };
@@ -946,6 +1105,221 @@ describe("departments", () => {
       await replaceDepartmentHours(tx, here, department.id, []);
       await expect(listDepartmentHours(tx, here)).resolves.toEqual([]);
     });
+  });
+
+  it("refuses to remove the venue's last active department", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Single department")) };
+    const department = await scoped((tx) =>
+      createDepartment(tx, cfg, { name: "Dining", defaultServiceMode: "table_tab" }),
+    );
+
+    await expect(
+      scoped((tx) => deactivateDepartment(tx, cfg, department.id)),
+    ).rejects.toMatchObject({
+      code: "department.last_active",
+      params: { departmentId: department.id },
+    });
+    expect(await scoped((tx) => listDepartments(tx, cfg))).toEqual([
+      expect.objectContaining({ id: department.id, active: true }),
+    ]);
+  });
+
+  it("removes another department with its zones and tables while retaining their service policy", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Two departments")) };
+    const terrace = await seedZone(cfg.locationId, "Terrace");
+    const dining = await seedZone(cfg.locationId, "Dining room");
+    const { restaurant, bar, tableId } = await scoped(async (tx) => {
+      const restaurant = await createDepartment(tx, cfg, {
+        name: "Restaurant",
+        defaultServiceMode: "table_tab",
+      });
+      const bar = await createDepartment(tx, cfg, { name: "Bar", defaultServiceMode: "prepay" });
+      await configureZone(tx, cfg, { zoneId: terrace, departmentId: restaurant.id });
+      await configureZone(tx, cfg, { zoneId: dining, departmentId: bar.id });
+      const [table] = await tx
+        .insert(diningTables)
+        .values({ locationId: cfg.locationId, label: "T12", zoneId: terrace })
+        .returning({ id: diningTables.id });
+      return { restaurant, bar, tableId: table!.id };
+    });
+
+    await scoped((tx) => deactivateDepartment(tx, cfg, restaurant.id));
+    const departmentsAfter = await scoped((tx) => listDepartments(tx, cfg));
+    expect(departmentsAfter).toContainEqual(
+      expect.objectContaining({ id: restaurant.id, active: false }),
+    );
+    expect(departmentsAfter).toContainEqual(expect.objectContaining({ id: bar.id, active: true }));
+    expect(await scoped((tx) => listServiceZones(tx, cfg))).toEqual([
+      expect.objectContaining({ id: dining, departmentId: bar.id }),
+    ]);
+    expect(
+      (
+        await db
+          .select({ active: floorZones.active })
+          .from(floorZones)
+          .where(eq(floorZones.id, terrace))
+      )[0],
+    ).toEqual({ active: false });
+    expect(
+      (
+        await db
+          .select({ active: diningTables.active })
+          .from(diningTables)
+          .where(eq(diningTables.id, tableId))
+      )[0],
+    ).toEqual({ active: false });
+    expect(
+      (
+        await db.execute<{ zone_id: string }>(
+          sql`select zone_id from zone_service_policies where zone_id = ${terrace}`,
+        )
+      ).rows,
+    ).toEqual([{ zone_id: terrace }]);
+  });
+
+  it("refuses the whole department cascade when a party still occupies a table in any zone", async () => {
+    const cfg = { locationId: brandLocationId(await seedLocation("Occupied department")) };
+    const front = await seedZone(cfg.locationId, "Front");
+    const back = await seedZone(cfg.locationId, "Back");
+    const { restaurant, frontTable, backTable } = await scoped(async (tx) => {
+      const restaurant = await createDepartment(tx, cfg, {
+        name: "Restaurant",
+        defaultServiceMode: "table_tab",
+      });
+      await createDepartment(tx, cfg, { name: "Bar", defaultServiceMode: "prepay" });
+      await configureZone(tx, cfg, { zoneId: front, departmentId: restaurant.id });
+      await configureZone(tx, cfg, { zoneId: back, departmentId: restaurant.id });
+      const [frontTable] = await tx
+        .insert(diningTables)
+        .values({
+          locationId: cfg.locationId,
+          label: "F1",
+          zoneId: front,
+        })
+        .returning({ id: diningTables.id });
+      const [backTable] = await tx
+        .insert(diningTables)
+        .values({
+          locationId: cfg.locationId,
+          label: "B2",
+          zoneId: back,
+        })
+        .returning({ id: diningTables.id });
+      const [party] = await tx
+        .insert(parties)
+        .values({ openedBy: randomUUID() })
+        .returning({ id: parties.id });
+      await tx.insert(partyTables).values({ partyId: party!.id, tableId: backTable!.id });
+      return { restaurant, frontTable: frontTable!.id, backTable: backTable!.id };
+    });
+
+    await expect(
+      scoped((tx) => deactivateDepartment(tx, cfg, restaurant.id)),
+    ).rejects.toMatchObject({
+      code: "zone.table_in_use",
+      params: { zoneId: back, tableId: backTable, tableName: "B2" },
+    });
+    const state = await db
+      .select({ id: diningTables.id, active: diningTables.active })
+      .from(diningTables);
+    expect(state).toEqual(
+      expect.arrayContaining([
+        { id: frontTable, active: true },
+        { id: backTable, active: true },
+      ]),
+    );
+    expect(
+      (
+        await db
+          .select({ active: floorZones.active })
+          .from(floorZones)
+          .where(eq(floorZones.id, front))
+      )[0],
+    ).toEqual({ active: true });
+    expect(
+      (
+        await db
+          .select({ active: floorZones.active })
+          .from(floorZones)
+          .where(eq(floorZones.id, back))
+      )[0],
+    ).toEqual({ active: true });
+  });
+
+  it("removes a zone's routing, watcher and device selections while retaining its menu and policy", async () => {
+    await seedUnitTenant();
+    const cfg = { locationId: brandLocationId(await seedLocation("Zone cleanup")) };
+    const zoneId = await seedZone(cfg.locationId, "Terrace");
+    const { routeId, watcherId, deviceId, menuId } = await scoped(async (tx) => {
+      const department = await createDepartment(tx, cfg, {
+        name: "Restaurant",
+        defaultServiceMode: "table_tab",
+      });
+      await configureZone(tx, cfg, { zoneId, departmentId: department.id });
+      const menu = await createCatalogue(tx, { name: "Terrace menu" });
+      await allowMenuInZone(tx, cfg, zoneId, menu.id, { makeDefault: true });
+      const [route] = await tx
+        .insert(routeExceptions)
+        .values({
+          locationId: cfg.locationId,
+          position: 0,
+          zoneId,
+          noPreparation: true,
+        })
+        .returning({ id: routeExceptions.id });
+      const [watcher] = await tx
+        .insert(watchers)
+        .values({
+          locationId: cfg.locationId,
+          name: "Pass",
+        })
+        .returning({ id: watchers.id });
+      await tx.insert(watcherZones).values({ watcherId: watcher!.id, zoneId });
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({
+          name: `Till ${randomUUID()}`,
+          formFactor: "till",
+        })
+        .returning({ id: deviceProfiles.id });
+      const [device] = await tx
+        .insert(devices)
+        .values({
+          locationId: cfg.locationId,
+          deviceProfileId: profile!.id,
+          label: "Till 1",
+          tokenHash: "scrypt$00$00",
+        })
+        .returning({ id: devices.id });
+      await setDeviceDefaultZone(tx, cfg, device!.id, zoneId);
+      return { routeId: route!.id, watcherId: watcher!.id, deviceId: device!.id, menuId: menu.id };
+    });
+
+    await scoped((tx) => deactivateServiceZone(tx, cfg, zoneId));
+    expect(
+      await db
+        .select({ id: routeExceptions.id })
+        .from(routeExceptions)
+        .where(eq(routeExceptions.id, routeId)),
+    ).toEqual([]);
+    expect(
+      await db.select().from(watcherZones).where(eq(watcherZones.watcherId, watcherId)),
+    ).toEqual([]);
+    expect(
+      await db.select().from(deviceZoneDefaults).where(eq(deviceZoneDefaults.deviceId, deviceId)),
+    ).toEqual([]);
+    expect(
+      await db
+        .select({ menuId: zoneMenus.menuId })
+        .from(zoneMenus)
+        .where(eq(zoneMenus.zoneId, zoneId)),
+    ).toEqual([{ menuId }]);
+    expect(
+      await db
+        .select({ zoneId: zoneSalePolicies.zoneId })
+        .from(zoneSalePolicies)
+        .where(eq(zoneSalePolicies.zoneId, zoneId)),
+    ).toEqual([{ zoneId }]);
   });
 });
 
@@ -999,6 +1373,219 @@ async function seedSellingVenue() {
 }
 
 type SellingVenue = Awaited<ReturnType<typeof seedSellingVenue>>;
+
+it("keeps the receipt's department heading after the department is renamed and its switch changes", async () => {
+  const venue = await seedSellingVenue();
+  const saleId = await scoped(async (tx) => {
+    await updateDepartment(tx, venue.cfg, venue.barId, {
+      name: "Bar",
+      tradingName: "Bar La Buena",
+      defaultServiceMode: "table_tab",
+    });
+    const [series] = await tx
+      .insert(invoiceSeries)
+      .values({ nodeId: venue.nodeId, code: `H${randomUUID().slice(0, 6)}` })
+      .returning({ id: invoiceSeries.id });
+    const [sale] = await tx
+      .insert(sales)
+      .values({
+        source: "readiness_test",
+        seriesId: series!.id,
+        nodeId: venue.nodeId,
+        invoiceNumber: 1,
+        issuedAt: new Date().toISOString(),
+        issuedOffsetMinutes: 0,
+        total: 0,
+        vatBreakdown: [],
+        locale: "en-GB",
+        invoiceLocales: ["en-GB"],
+        fiscalBackend: "none",
+        fiscalState: "not_applicable",
+      })
+      .returning({ id: sales.id });
+    await recordSaleReceiptHeader(tx, venue.cfg, sale!.id, venue.barZone);
+    return sale!.id;
+  });
+
+  await scoped(async (tx) => {
+    await updateDepartment(tx, venue.cfg, venue.barId, {
+      name: "Renamed bar",
+      tradingName: "New sign",
+      defaultServiceMode: "table_tab",
+    });
+    await setDepartmentSalePolicyField(tx, venue.cfg, venue.barId, "printTradingName", false);
+  });
+  await expect(scoped((tx) => readSaleReceiptHeader(tx, saleId))).resolves.toEqual({
+    departmentId: venue.barId,
+    tradingName: "Bar La Buena",
+    printTradingName: true,
+  });
+});
+
+it("records an empty receipt heading for a sale without a service zone", async () => {
+  const venue = await seedSellingVenue();
+  const saleId = await scoped(async (tx) => {
+    const [series] = await tx
+      .insert(invoiceSeries)
+      .values({ nodeId: venue.nodeId, code: `H${randomUUID().slice(0, 6)}` })
+      .returning({ id: invoiceSeries.id });
+    const [sale] = await tx
+      .insert(sales)
+      .values({
+        source: "readiness_test",
+        seriesId: series!.id,
+        nodeId: venue.nodeId,
+        invoiceNumber: 1,
+        issuedAt: new Date().toISOString(),
+        issuedOffsetMinutes: 0,
+        total: 0,
+        vatBreakdown: [],
+        locale: "en-GB",
+        invoiceLocales: ["en-GB"],
+        fiscalBackend: "none",
+        fiscalState: "not_applicable",
+      })
+      .returning({ id: sales.id });
+    await recordSaleReceiptHeader(tx, venue.cfg, sale!.id, null);
+    return sale!.id;
+  });
+  await expect(scoped((tx) => readSaleReceiptHeader(tx, saleId))).resolves.toEqual({
+    departmentId: null,
+    tradingName: "",
+    printTradingName: false,
+  });
+  await expect(scoped((tx) => readSaleReceiptHeader(tx, randomUUID()))).resolves.toBeNull();
+});
+
+it("uses an explicitly selected zone instead of the venue fallback", async () => {
+  const venue = await seedSellingVenue();
+  await expect(
+    scoped((tx) => resolveNewOrderZone(tx, venue.cfg, { zoneId: venue.barZone })),
+  ).resolves.toMatchObject({
+    zoneId: venue.barZone,
+    departmentId: venue.barId,
+    departmentName: "Bar",
+    serviceMode: "prepay",
+  });
+});
+
+it("refuses an unknown sale-policy zone with the domain error", async () => {
+  const venue = await seedSellingVenue();
+  const zoneId = randomUUID();
+  await expect(scoped((tx) => resolveSalePolicy(tx, venue.cfg, zoneId))).rejects.toMatchObject({
+    code: "service_zone.not_found",
+    params: { zoneId },
+  });
+});
+
+it("reports no zones for an empty department and no tables for an empty zone", async () => {
+  const venue = await seedSellingVenue();
+  const empty = await scoped((tx) =>
+    createDepartment(tx, venue.cfg, { name: "Empty", defaultServiceMode: "prepay" }),
+  );
+  await expect(scoped((tx) => departmentRemovalImpact(tx, venue.cfg, empty.id))).resolves.toEqual({
+    zones: [],
+  });
+  await expect(
+    scoped((tx) => departmentRemovalImpact(tx, venue.cfg, venue.barId)),
+  ).resolves.toEqual({ zones: [{ id: venue.barZone, name: "Bar", activeTableCount: 0 }] });
+  const missing = randomUUID();
+  await expect(
+    scoped((tx) => departmentRemovalImpact(tx, venue.cfg, missing)),
+  ).rejects.toMatchObject({ code: "department.not_found", params: { departmentId: missing } });
+  await expect(scoped((tx) => deactivateServiceZone(tx, venue.cfg, missing))).rejects.toMatchObject(
+    { code: "service_zone.not_found", params: { zoneId: missing } },
+  );
+});
+
+describe("retired and moved zones", () => {
+  it("keeps an existing order and sale after their department is removed", async () => {
+    const venue = await seedSellingVenue();
+    const { orderId, saleId } = await scoped(async (tx) => {
+      const id = await openOrder(tx, venue, 91);
+      await recordOrderServiceContext(tx, venue.cfg, id, venue.barZone);
+      const [series] = await tx
+        .insert(invoiceSeries)
+        .values({ nodeId: venue.nodeId, code: `T${randomUUID().slice(0, 6)}` })
+        .returning({ id: invoiceSeries.id });
+      const [sale] = await tx
+        .insert(sales)
+        .values({
+          source: "readiness_test",
+          seriesId: series!.id,
+          nodeId: venue.nodeId,
+          invoiceNumber: 1,
+          issuedAt: new Date().toISOString(),
+          issuedOffsetMinutes: 0,
+          total: 0,
+          vatBreakdown: [],
+          locale: "en-GB",
+          invoiceLocales: ["en-GB"],
+          fiscalBackend: "none",
+          fiscalState: "not_applicable",
+          workingOrderId: id,
+        })
+        .returning({ id: sales.id });
+      return { orderId: id, saleId: sale!.id };
+    });
+
+    await scoped((tx) => deactivateDepartment(tx, venue.cfg, venue.barId));
+
+    await expect(scoped((tx) => getOrderServiceContext(tx, venue.cfg, orderId))).resolves.toEqual({
+      zoneId: venue.barZone,
+      departmentId: venue.barId,
+      serviceMode: "prepay",
+    });
+    expect(
+      (
+        await db
+          .select({ workingOrderId: sales.workingOrderId })
+          .from(sales)
+          .where(eq(sales.id, saleId))
+      )[0],
+    ).toEqual({ workingOrderId: orderId });
+  });
+
+  it("moves a zone between departments without changing its tables or menu", async () => {
+    const venue = await seedSellingVenue();
+    const [table] = await db
+      .insert(diningTables)
+      .values({
+        locationId: venue.cfg.locationId,
+        label: "B3",
+        zoneId: venue.barZone,
+      })
+      .returning({ id: diningTables.id });
+
+    await scoped((tx) =>
+      configureZone(tx, venue.cfg, {
+        zoneId: venue.barZone,
+        departmentId: venue.restaurantId,
+      }),
+    );
+
+    expect(await scoped((tx) => listServiceZones(tx, venue.cfg))).toContainEqual(
+      expect.objectContaining({ id: venue.barZone, departmentId: venue.restaurantId }),
+    );
+    expect(
+      (
+        await db
+          .select({ zoneId: diningTables.zoneId, active: diningTables.active })
+          .from(diningTables)
+          .where(eq(diningTables.id, table!.id))
+      )[0],
+    ).toEqual({
+      zoneId: venue.barZone,
+      active: true,
+    });
+    expect(
+      await db
+        .select({ menuId: zoneMenus.menuId })
+        .from(zoneMenus)
+        .where(eq(zoneMenus.zoneId, venue.barZone)),
+    ).toEqual([{ menuId: venue.menuId }]);
+  });
+});
 
 async function openOrder(tx: Transaction, venue: SellingVenue, orderNumber: number) {
   const id = randomUUID();
@@ -1126,6 +1713,24 @@ describe("order service context", () => {
       expect(snapshot.rows).toEqual([
         { department_id: venue.restaurantId, department_name: "Restaurant" },
       ]);
+    });
+  });
+
+  it("uses the destination zone's effective quick-sale payment timing when moving an order", async () => {
+    const venue = await seedSellingVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      const orderId = await openOrder(tx, venue, 1);
+      await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
+      await setZoneSalePolicyOverride(tx, cfg, venue.barZone, "paidWhen", "ticket_then_pay");
+
+      await retargetOrderServiceContext(tx, cfg, orderId, venue.barZone);
+
+      await expect(getOrderServiceContext(tx, cfg, orderId)).resolves.toEqual({
+        zoneId: venue.barZone,
+        departmentId: venue.barId,
+        serviceMode: "ticket_then_pay",
+      });
     });
   });
 

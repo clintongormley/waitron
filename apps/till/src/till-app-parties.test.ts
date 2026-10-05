@@ -224,8 +224,20 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     }),
     getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     listStaff: vi.fn().mockResolvedValue([]),
-    listDefaultZoneOffers: vi.fn().mockResolvedValue(offers),
-    listZoneOffers: vi.fn().mockResolvedValue(offers),
+    listDefaultZoneOffers: vi.fn().mockResolvedValue({
+      ...offers,
+      context: {
+        ...offers.context,
+        ...(overrides.zonePolicy as Partial<ZoneOfferCatalogue["context"]>),
+      },
+    }),
+    listZoneOffers: vi.fn().mockResolvedValue({
+      ...offers,
+      context: {
+        ...offers.context,
+        ...(overrides.zonePolicy as Partial<ZoneOfferCatalogue["context"]>),
+      },
+    }),
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
@@ -2946,6 +2958,7 @@ describe("till-app: paying a bill by its state", () => {
     ["offers no original receipt when the bill's sale was filed before", true, false],
   ])("%s", async (_case, filedBefore, offered) => {
     const { el } = await mountApp({
+      zonePolicy: { receiptPrintMode: "on_request" },
       getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
       getPartyBills: vi
         .fn()

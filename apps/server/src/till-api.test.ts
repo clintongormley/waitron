@@ -221,6 +221,10 @@ const suite = useVenueDb({
           (location_id, zone_id, department_id, default_menu_id, is_counter_default)
         values (${loc!.id}, ${zone!.id}, ${department!.id}, null, true)`);
         await tx.execute(sql`
+        insert into department_sale_policies (department_id) values (${department!.id})`);
+        await tx.execute(sql`
+        insert into zone_sale_policies (zone_id) values (${zone!.id})`);
+        await tx.execute(sql`
         insert into zone_menus (zone_id, menu_id)
         values (${zone!.id}, ${cat.id})`);
         await tx.execute(sql`
@@ -1168,6 +1172,19 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
 });
 
 describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)", () => {
+  it("starts an unscoped till at prepay even when the retired venue mode differs", async () => {
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...deps(suite.db), cfg: { ...cfg, orderFlow: "invoice_first" } },
+      collect([]),
+    );
+
+    const res = await app.request("/api/till");
+    expect(res.status).toBe(200);
+    expect((await res.json()).orderFlow).toBe("prepay");
+  });
+
   it("GET /api/staff lists ACTIVE staff sorted by name, no cookie required, no secrets", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -1660,6 +1677,105 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
 });
 
 describe("GET /api/products (session-guarded catalogue)", () => {
+  it("offers the effective zone pay timing to the counter", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const token = await openSession(suite.db);
+    const headers = { cookie: `${SESSION_COOKIE}=${token}` };
+    await suite.db.execute(sql`
+      update department_sale_policies set paid_when = 'ticket_then_pay'
+      where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+    try {
+      for (const path of [
+        "/api/default-service-zone/offers",
+        `/api/service-zones/${counterZoneId}/offers`,
+      ]) {
+        const response = await app.request(path, { headers });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({
+          context: { zoneId: counterZoneId, serviceMode: "ticket_then_pay" },
+        });
+      }
+    } finally {
+      await suite.db.execute(sql`
+        update department_sale_policies set paid_when = 'prepay'
+        where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+    }
+  });
+
+  it("offers different pay timing for two zones in the same department", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const token = await openSession(suite.db);
+    const headers = { cookie: `${SESSION_COOKIE}=${token}` };
+    const [second] = await suite.db
+      .insert(floorZones)
+      .values({ locationId: cfg.locationId, name: "Collect at counter" })
+      .returning({ id: floorZones.id });
+    await suite.db.execute(sql`
+      insert into zone_service_policies (location_id, zone_id, department_id, service_mode)
+      select ${cfg.locationId}, ${second!.id}, department_id, 'prepay'
+      from zone_service_policies where zone_id = ${counterZoneId}`);
+    await suite.db.execute(sql`
+      insert into zone_sale_policies (zone_id, paid_when) values (${second!.id}, 'ticket_then_pay')`);
+    await suite.db.execute(sql`
+      insert into zone_menus (zone_id, menu_id) values (${second!.id}, ${aguaProduct.catalogueId})`);
+    try {
+      for (const [zoneId, serviceMode] of [
+        [counterZoneId, "prepay"],
+        [second!.id, "ticket_then_pay"],
+      ] as const) {
+        const response = await app.request(`/api/service-zones/${zoneId}/offers`, { headers });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({ context: { zoneId, serviceMode } });
+      }
+    } finally {
+      await suite.db.execute(sql`delete from zone_menus where zone_id = ${second!.id}`);
+      await suite.db.execute(sql`delete from zone_sale_policies where zone_id = ${second!.id}`);
+      await suite.db.execute(sql`delete from zone_service_policies where zone_id = ${second!.id}`);
+      await suite.db.delete(floorZones).where(eq(floorZones.id, second!.id));
+    }
+  });
+
+  it("offers the selected zone's effective receipt choice instead of the venue-wide choice", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const token = await openSession(suite.db);
+    const headers = { cookie: `${SESSION_COOKIE}=${token}` };
+    await suite.db.execute(sql`
+      update department_sale_policies set receipt_print_mode = 'on_request'
+      where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+    await suite.db.execute(sql`
+      update zone_sale_policies set receipt_print_mode = 'never' where zone_id = ${counterZoneId}`);
+    try {
+      for (const path of [
+        "/api/default-service-zone/offers",
+        `/api/service-zones/${counterZoneId}/offers`,
+      ]) {
+        const response = await app.request(path, { headers });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({
+          context: { zoneId: counterZoneId, receiptPrintMode: "never" },
+        });
+      }
+      await suite.db.execute(sql`
+        update zone_sale_policies set receipt_print_mode = null where zone_id = ${counterZoneId}`);
+      const inherited = await app.request(`/api/service-zones/${counterZoneId}/offers`, {
+        headers,
+      });
+      expect(inherited.status).toBe(200);
+      expect(await inherited.json()).toMatchObject({
+        context: { zoneId: counterZoneId, receiptPrintMode: "on_request" },
+      });
+    } finally {
+      await suite.db.execute(sql`
+        update zone_sale_policies set receipt_print_mode = null where zone_id = ${counterZoneId}`);
+      await suite.db.execute(sql`
+        update department_sale_policies set receipt_print_mode = 'auto'
+        where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+    }
+  });
+
   it("returns the configured default counter zone and its offers", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -1692,6 +1808,8 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       select ${cfg.locationId}, ${second!.id}, department_id, 'prepay'
       from zone_service_policies
       where zone_id = ${counterZoneId}`);
+    await suite.db.execute(sql`
+      insert into zone_sale_policies (zone_id) values (${second!.id})`);
     await suite.db.execute(sql`
       insert into zone_menus (zone_id, menu_id)
       values (${second!.id}, ${aguaProduct.catalogueId})`);

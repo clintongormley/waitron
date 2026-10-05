@@ -11,11 +11,13 @@ import {
 } from "@waitron/db";
 import {
   departmentHours,
+  departmentSalePolicies,
   departments,
   createException,
   replaceStationHours,
   setStationFallback,
   zoneMenus,
+  zoneSalePolicies,
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import {
@@ -86,6 +88,7 @@ export async function seedFloor(
   const deliDepartmentId = deliRow?.id;
   if (deliDepartmentId === undefined)
     throw new Error("seedFloor: failed to create deli department");
+  await tx.insert(departmentSalePolicies).values({ departmentId: deliDepartmentId });
 
   const zoneIds = new Map<string, string>();
   for (const zone of DEMO_ZONES) {
@@ -113,6 +116,7 @@ export async function seedFloor(
         serviceMode: null,
         isCounterDefault: false,
       });
+      await tx.insert(zoneSalePolicies).values({ zoneId });
     }
     const restaurantMenus = menuIds === undefined ? [] : [menuIds.restaurant, menuIds.lunch];
     for (const [index, menuId] of restaurantMenus.entries()) {
@@ -143,6 +147,7 @@ export async function seedFloor(
     serviceMode: "prepay",
     isCounterDefault: false,
   });
+  await tx.insert(zoneSalePolicies).values({ zoneId: upstairsBarZone.id });
   if (menuIds !== undefined) {
     for (const [index, menuId] of [menuIds.restaurant, menuIds.lunch].entries()) {
       await tx
@@ -222,6 +227,7 @@ export async function seedFloor(
     serviceMode: null,
     isCounterDefault: false,
   });
+  await tx.insert(zoneSalePolicies).values({ zoneId: deliZoneId });
   if (menuIds !== undefined) {
     await tx
       .insert(zoneMenus)

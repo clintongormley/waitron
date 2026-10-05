@@ -76,6 +76,17 @@ export interface OrderServiceContext {
   readonly serviceMode: ServiceMode;
 }
 
+export interface EffectiveSalePolicy {
+  readonly zoneId: string;
+  readonly departmentId: string;
+  readonly departmentName: string;
+  readonly tradingName: string;
+  readonly paidWhen: "prepay" | "ticket_then_pay";
+  readonly collectionNumber: "none" | "numbered";
+  readonly receiptPrintMode: "auto" | "on_request" | "never";
+  readonly printTradingName: boolean;
+}
+
 export interface ServiceZoneSummary {
   readonly id: string;
   readonly name: string;
@@ -333,6 +344,25 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     zoneId: string,
   ): Promise<OrderServiceContext>;
+  resolveSalePolicy(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zoneId: string,
+  ): Promise<EffectiveSalePolicy>;
+  recordSaleReceiptHeader(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    saleId: string,
+    zoneId: string | null,
+  ): Promise<void>;
+  readSaleReceiptHeader(
+    tx: Transaction,
+    saleId: string,
+  ): Promise<{
+    departmentId: string | null;
+    tradingName: string;
+    printTradingName: boolean;
+  } | null>;
   /** Where each product is made, for an order in `zoneId` (null: an order with no service zone).
    *  An unknown product throws `route.subject_not_found`; an unknown zone `service_zone.not_found`.
    *  Keys are the caller's spelling of each id (the first, when two spellings name one product). */

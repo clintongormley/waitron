@@ -3,13 +3,15 @@
 // one running on the venue file, so a deactivation cannot land between that read and the enqueue.
 // Originals and duplicates are separate actions; a queue resend preserves the original job bytes.
 import { and, eq } from "drizzle-orm";
-import { deviceProfiles, devices, drawerOpens, locations, printers, readTenant } from "@waitron/db";
+import { deviceProfiles, devices, drawerOpens, printers, readTenant, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { EscSetting, PrintConfig } from "@waitron/printing";
 import { getReceipt } from "@waitron/layouts";
+import { receiptLabelsFor } from "@waitron/country-packs";
 import type { Origin } from "@waitron/shared";
 import { formatReceipt } from "./receipt-ticket.js";
+import { VENUE_SERVICE } from "./modules.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import type { TillSaleResult } from "./till-sale.js";
 
@@ -86,6 +88,7 @@ async function buildReceiptBytes(
   tx: Transaction,
   cfg: Pick<TillConfig, "practiceMode">,
   ticket: TillSaleResult,
+  saleId: string,
   duplicate: boolean,
   printer: EscSetting,
   language?: string,
@@ -99,10 +102,12 @@ async function buildReceiptBytes(
   }
   /* v8 ignore stop */
   const receipt = await getReceipt(tx);
+  const receiptHeader = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
   return formatReceipt({
     result: ticket,
     issuer: ticket.issuer ?? { venueName: taxpayer.legalName, nif: taxpayer.taxId },
     receipt,
+    receiptHeader: receiptHeader ?? undefined,
     invoiceLocale: language ?? ticket.locale,
     namesLocale: ticket.locale,
     printer,
@@ -119,30 +124,63 @@ async function resolvePrinterAndReceipt(
   tx: Transaction,
   cfg: OriginConfig,
   ticket: TillSaleResult,
+  saleId: string,
   duplicate: boolean,
 ): Promise<{ printer: DevicePrinter; receiptBytes: Uint8Array } | undefined> {
   const printer = await resolveReceiptPrinter(tx, cfg.origin);
   if (printer === undefined) return undefined;
-  const receiptBytes = await buildReceiptBytes(tx, cfg, ticket, duplicate, printer);
+  const receiptBytes = await buildReceiptBytes(tx, cfg, ticket, saleId, duplicate, printer);
   /* v8 ignore start -- issuer row structurally always present (buildReceiptBytes); degrade, never throw (§5) */
   if (receiptBytes === undefined) return undefined;
   /* v8 ignore stop */
   return { printer, receiptBytes };
 }
 
-/** Automatic document printing follows the receipt setting and has no drawer side effects. */
+/** Unscoped sales default to automatic printing; a scoped sale follows its effective zone policy. */
 export async function enqueueSaleReceipt(
   tx: Transaction,
   cfg: OriginConfig,
   ticket: TillSaleResult,
   saleId: string,
 ): Promise<void> {
-  const [loc] = await tx
-    .select({ mode: locations.receiptPrintMode })
-    .from(locations)
-    .where(eq(locations.id, cfg.locationId));
-  if (loc?.mode !== "auto") return;
+  const [sale] = await tx
+    .select({ workingOrderId: sales.workingOrderId })
+    .from(sales)
+    .where(eq(sales.id, saleId));
+  const context = sale?.workingOrderId
+    ? await VENUE_SERVICE.findOrderContext(tx, cfg, sale.workingOrderId)
+    : null;
+  if (context?.serviceMode === "prepay") {
+    await enqueueCollectionTicket(tx, cfg, context.zoneId, ticket.orderNumber);
+  }
+  const mode = context
+    ? (await VENUE_SERVICE.resolveSalePolicy(tx, cfg, context.zoneId)).receiptPrintMode
+    : "auto";
+  if (mode !== "auto") return;
   await enqueueOriginalReceipt(tx, cfg, ticket, saleId);
+}
+
+/** A collection number is a separate document, never a fiscal receipt or a drawer command. */
+export async function enqueueCollectionTicket(
+  tx: Transaction,
+  cfg: OriginConfig,
+  zoneId: string,
+  orderNumber: number,
+): Promise<void> {
+  const policy = await VENUE_SERVICE.resolveSalePolicy(tx, cfg, zoneId);
+  if (policy.collectionNumber !== "numbered") return;
+  const printer = await resolveReceiptPrinter(tx, cfg.origin);
+  if (printer === undefined) return;
+  const builder = esc(printer);
+  const bytes = builder
+    .init()
+    .printArea(builder.grid.widthDots)
+    .align("center")
+    .line(receiptLabelsFor(cfg.locale).order)
+    .line(String(orderNumber))
+    .feedAndCut()
+    .bytes();
+  await enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document");
 }
 
 /**
@@ -172,7 +210,7 @@ export async function enqueueReceiptCopy(
   printer: { id: string } & EscSetting,
   language?: string,
 ): Promise<{ jobId: string } | undefined> {
-  const bytes = await buildReceiptBytes(tx, cfg, ticket, true, printer, language);
+  const bytes = await buildReceiptBytes(tx, cfg, ticket, saleId, true, printer, language);
   if (bytes === undefined) return undefined;
   return enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document", { saleId });
 }
@@ -212,7 +250,7 @@ export async function enqueueOriginalReceipt(
   ticket: TillSaleResult,
   saleId: string,
 ): Promise<void> {
-  const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, false);
+  const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, saleId, false);
   if (resolved === undefined) return;
   await enqueuePrintJob(
     tx,

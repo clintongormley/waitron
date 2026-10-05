@@ -18,6 +18,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { departmentSalePolicies, departments, zoneSalePolicies } from "@waitron/venue-service";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -245,8 +246,6 @@ async function makePrinter(
   });
 }
 
-/** Set the location's `receipt_print_mode` and/or the printer `cfg`'s device prints its receipts
- *  and payment slips on. Pass `printerId: null` to leave the device with no printer. */
 async function configureReceipt(
   cfg: DeviceRequestConfig,
   opts: { mode?: "auto" | "on_request" | "never"; printerId?: string | null },
@@ -257,6 +256,19 @@ async function configureReceipt(
         .update(locations)
         .set({ receiptPrintMode: opts.mode })
         .where(eq(locations.id, cfg.locationId));
+      const scopedDepartments = await tx
+        .select({ id: departments.id })
+        .from(departments)
+        .where(eq(departments.locationId, cfg.locationId));
+      await tx
+        .update(departmentSalePolicies)
+        .set({ receiptPrintMode: opts.mode })
+        .where(
+          inArray(
+            departmentSalePolicies.departmentId,
+            scopedDepartments.map((row) => row.id),
+          ),
+        );
     }
     if (opts.printerId !== undefined) {
       await tx
@@ -411,6 +423,90 @@ describe("the words around a receipt's QR come from the venue's fiscal backend",
   });
 });
 
+it("prints one non-fiscal numbered collection ticket when a pay-on-collection order is placed", async () => {
+  const { cfg, each, zoneId } = await setupVenue("ticket_then_pay");
+  const printerId = await makePrinter(cfg);
+  await configureReceipt(cfg, { printerId });
+  await suite.db.execute(sql`
+    update department_sale_policies
+    set paid_when = 'ticket_then_pay', collection_number = 'numbered'
+    where department_id = (select department_id from zone_service_policies where zone_id = ${zoneId})
+  `);
+  const id = randomUUID();
+  const { orderNumber } = await parkOrder({ db: suite.db }, cfg, {
+    id,
+    zoneId,
+    lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+  });
+
+  await placeOrder(deps(), cfg, id, OPERATOR);
+
+  const jobs = (await printJobsFor(cfg)).filter((job) => job.printerId === printerId);
+  expect(jobs).toHaveLength(1);
+  const [job] = await suite.db
+    .select({ kind: printJobs.kind, saleId: printJobs.saleId })
+    .from(printJobs)
+    .where(eq(printJobs.printerId, printerId));
+  expect(job).toEqual({ kind: "document", saleId: null });
+  const ticket = decodeTicket(new Uint8Array(jobs[0]!.payload));
+  expect(ticket).toContain("Pedido");
+  expect(ticket).toContain(String(orderNumber));
+  expect(ticket).not.toContain("FACTURA");
+  expect(ticket).not.toContain("TOTAL");
+  expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
+  expect(await registroCount(cfg)).toBe(0);
+  expect(await drawerOpensFor(cfg)).toEqual([]);
+  await expect(placeOrder(deps(), cfg, id, OPERATOR)).rejects.toMatchObject({
+    code: "working_order.not_open",
+  });
+  expect((await printJobsFor(cfg)).filter((job) => job.printerId === printerId)).toHaveLength(1);
+});
+
+it("prints a separate numbered collection ticket when a prepaid order is paid", async () => {
+  const { cfg, each, zoneId } = await setupVenue("prepay");
+  const printerId = await makePrinter(cfg);
+  await configureReceipt(cfg, { printerId });
+  await suite.db.execute(sql`
+    update department_sale_policies
+    set paid_when = 'prepay', collection_number = 'numbered'
+    where department_id = (select department_id from zone_service_policies where zone_id = ${zoneId})
+  `);
+  const id = randomUUID();
+  const { orderNumber } = await parkOrder({ db: suite.db }, cfg, {
+    id,
+    zoneId,
+    lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+  });
+
+  await recordTillSale(
+    deps(),
+    cfg,
+    { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
+    OPERATOR,
+  );
+
+  const jobs = (await printJobsFor(cfg)).filter((job) => job.printerId === printerId);
+  const papers = jobs.map((job) => decodeTicket(new Uint8Array(job.payload))).filter(Boolean);
+  expect(papers).toHaveLength(2);
+  const collection = papers.find((paper) => !paper.includes("TOTAL"))!;
+  expect(collection).toContain(String(orderNumber));
+  expect(collection).not.toContain("FACTURA");
+  expect(collection).not.toContain("TOTAL");
+  expect(await registroCount(cfg)).toBe(1);
+  await recordTillSale(
+    deps(),
+    cfg,
+    { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
+    OPERATOR,
+  );
+  expect(
+    (await printJobsFor(cfg))
+      .filter((job) => job.printerId === printerId)
+      .map((job) => decodeTicket(new Uint8Array(job.payload)))
+      .filter(Boolean),
+  ).toHaveLength(2);
+});
+
 describe("receipt grouping after table changes", () => {
   it.each(["prepay", "ticket_then_pay", "invoice_first"] as const)(
     "%s freezes the table label at issuance across renaming, collection and table turnover",
@@ -555,6 +651,36 @@ describe("cash payment drawer separation", () => {
 });
 
 describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbox)", () => {
+  it("uses the zone's automatic receipt policy when the retired location setting is never", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { mode: "never", printerId });
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .update(zoneSalePolicies)
+        .set({ receiptPrintMode: "auto" })
+        .where(eq(zoneSalePolicies.zoneId, zoneId));
+    });
+
+    await recordTillSale(
+      deps(),
+      cfg,
+      {
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "card", amount: "1.50" },
+      },
+      OPERATOR,
+    );
+
+    expect(await registroCount(cfg)).toBe(1);
+    const documents = (await printJobsFor(cfg)).filter((job) =>
+      decodeTicket(new Uint8Array(job.payload)).includes("TOTAL"),
+    );
+    expect(documents).toHaveLength(1);
+    expect(opensDrawer(new Uint8Array(documents[0]!.payload))).toBe(false);
+  });
+
   it("lays the automatic receipt out for the device printer's paper width and resolution", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter(cfg);
@@ -1364,6 +1490,39 @@ describe("a record with no device prints nothing", () => {
 });
 
 describe("receipt issuer", () => {
+  it("keeps a department's printed trading name on reprint after its settings change", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(
+        sql`update departments set trading_name = 'Deli Counter' where location_id = ${cfg.locationId}`,
+      ),
+    );
+    const filed = await recordTillSale(deps(), cfg, {
+      zoneId,
+      lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      tender: { method: "card", amount: "1.50" },
+    });
+    const saleId = await onlySaleId(cfg);
+    const original = (await printJobsFor(cfg)).map((job) =>
+      printedLines(new Uint8Array(job.payload)).map((line) => line.trim()),
+    )[0]!;
+    expect(original.indexOf("Deli Counter")).toBeGreaterThanOrEqual(0);
+    expect(original.indexOf("Deli Counter")).toBeLessThan(original.indexOf("Deli Recibos SL"));
+
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(
+        sql`update departments set trading_name = 'Renamed', active = 0 where location_id = ${cfg.locationId}`,
+      ),
+    );
+    await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, filed, saleId));
+    const jobs = await printJobsFor(cfg);
+    const reprint = printedLines(new Uint8Array(jobs.at(-1)!.payload)).map((line) => line.trim());
+    expect(reprint.indexOf("Deli Counter")).toBeGreaterThanOrEqual(0);
+    expect(reprint.indexOf("Deli Counter")).toBeLessThan(reprint.indexOf("Deli Recibos SL"));
+    expect(reprint).not.toContain("Renamed");
+  });
+
   it("leaves a manual till reprint unqueued when its taxpayer row is missing", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     await configureReceipt(cfg, { mode: "never", printerId: await makePrinter(cfg) });

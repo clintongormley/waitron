@@ -139,7 +139,6 @@ const bundle: ConfigurationBundle = {
       province: "Madrid",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
-      orderFlow: "prepay",
       bumpMode: "line",
       fireControl: "waiter",
       receiptPrintMode: "auto",
@@ -417,6 +416,9 @@ describe("configuration transfer database path", () => {
         and id <> '12121212-aaaa-aaaa-aaaa-121212121212'
     `);
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    await suite.db.execute(
+      sql`update locations set order_flow = 'invoice_first' where id = ${source.locationId}`,
+    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       { ...source, sourceOperatorId: sourceOperator.rows[0]!.id },
@@ -425,6 +427,7 @@ describe("configuration transfer database path", () => {
       versions,
     );
     expect(transferred.venue).not.toHaveProperty("tillName");
+    expect(transferred.venue.location).not.toHaveProperty("orderFlow");
     for (const person of transferred.tables.persons ?? []) {
       expect(person).not.toHaveProperty("pin_hash");
       expect(person).not.toHaveProperty("password_hash");
@@ -449,6 +452,10 @@ describe("configuration transfer database path", () => {
         );
       },
     });
+    const targetOrderFlow = await targetSuite.db.execute<{ order_flow: string }>(sql`
+      select order_flow from locations where id = ${target.locationId}
+    `);
+    expect(targetOrderFlow.rows).toEqual([{ order_flow: "prepay" }]);
     await withTransaction(targetSuite.db, async (tx) => {
       const [metadata] = transferred.tables.media_images!;
       const bytes = await readImageBytes(tx, metadata!.filename as string);

@@ -937,8 +937,6 @@ export interface StationPrinter {
 
 // ── Receipt-printer + print-mode configuration ───────────────────────────────────────────────────
 
-export type ReceiptPrintMode = "auto" | "on_request" | "never";
-
 export type DrawerOpenPolicy = "gated" | "open";
 
 // ── Reporting (sales & takings) types ────────────────────────────────────────────────────────────
@@ -2202,6 +2200,13 @@ export class DashboardApi {
     return this.#request<{ receipt: ReceiptConfig }>("/management-api/receipt", "GET");
   }
 
+  async getVenueDepartments(): Promise<{ id: string; name: string; active: boolean }[]> {
+    const venue = await this.#request<{
+      departments: { id: string; name: string; active: boolean }[];
+    }>("/management-api/venue-service", "GET");
+    return venue.departments;
+  }
+
   putReceipt(receipt: ReceiptConfig): Promise<void> {
     return this.#request<void>("/management-api/receipt", "PUT", { receipt });
   }
@@ -2220,11 +2225,14 @@ export class DashboardApi {
     receipt: ReceiptConfig,
     paperWidth?: PrintPaperWidth,
     language?: string,
+    departmentId?: string,
   ): Promise<ReceiptPreview> {
     const width = paperWidth === undefined ? "" : `&paperWidth=${encodeURIComponent(paperWidth)}`;
     const drawnIn = language === undefined ? "" : `&language=${encodeURIComponent(language)}`;
+    const department =
+      departmentId === undefined ? "" : `&departmentId=${encodeURIComponent(departmentId)}`;
     return this.#request<ReceiptPreview>(
-      `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify(receipt))}${width}${drawnIn}`,
+      `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify(receipt))}${width}${drawnIn}${department}`,
       "GET",
     );
   }
@@ -2767,17 +2775,7 @@ export class DashboardApi {
     );
   }
 
-  // ── Receipt printer + print mode + drawer policy ───────────────────────────────────────────────
-
-  setReceiptPrintMode(locationId: string, mode: ReceiptPrintMode): Promise<void> {
-    return this.#request<void>(
-      `/management-api/locations/${locationId}/receipt-print-mode`,
-      "PATCH",
-      {
-        mode,
-      },
-    );
-  }
+  // ── Receipt printer + drawer policy ────────────────────────────────────────────────────────────
 
   setDrawerOpenPolicy(locationId: string, policy: DrawerOpenPolicy): Promise<void> {
     return this.#request<void>(

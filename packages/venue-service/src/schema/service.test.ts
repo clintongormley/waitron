@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 import {
+  departmentSalePolicies,
   departmentHours,
   departments,
   deviceZoneDefaults,
   orderServiceContexts,
+  saleReceiptHeaders,
   workingLineContexts,
   zoneMenus,
+  zoneSalePolicies,
   zoneServicePolicies,
 } from "./service.js";
 import { serviceSettings } from "./settings.js";
@@ -39,6 +42,18 @@ const EXPECTED: Record<
     uniqueConstraints: ["departments_location_name_key"],
     primaryKeys: [],
   },
+  department_sale_policies: {
+    table: departmentSalePolicies,
+    foreignKeys: ["department_sale_policies_department_fk"],
+    checks: [
+      "department_sale_policies_paid_when_ck",
+      "department_sale_policies_collection_number_ck",
+      "department_sale_policies_receipt_mode_ck",
+    ],
+    indexes: [],
+    uniqueConstraints: [],
+    primaryKeys: [],
+  },
   zone_service_policies: {
     table: zoneServicePolicies,
     foreignKeys: [
@@ -52,6 +67,26 @@ const EXPECTED: Record<
     indexes: ["zone_service_policies_one_counter_default_key"],
     uniqueConstraints: [],
     primaryKeys: ["zone_service_policies_pk"],
+  },
+  zone_sale_policies: {
+    table: zoneSalePolicies,
+    foreignKeys: ["zone_sale_policies_zone_fk"],
+    checks: [
+      "zone_sale_policies_paid_when_ck",
+      "zone_sale_policies_collection_number_ck",
+      "zone_sale_policies_receipt_mode_ck",
+    ],
+    indexes: [],
+    uniqueConstraints: [],
+    primaryKeys: [],
+  },
+  sale_receipt_headers: {
+    table: saleReceiptHeaders,
+    foreignKeys: ["sale_receipt_headers_sale_fk", "sale_receipt_headers_department_fk"],
+    checks: [],
+    indexes: [],
+    uniqueConstraints: [],
+    primaryKeys: [],
   },
   zone_menus: {
     table: zoneMenus,
@@ -187,8 +222,8 @@ const EXPECTED: Record<
 
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
-  it("covers all fourteen of the package's tables", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(14);
+  it("covers all seventeen of the package's tables", () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(17);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {

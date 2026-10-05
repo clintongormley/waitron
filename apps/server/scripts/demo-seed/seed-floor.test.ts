@@ -10,6 +10,8 @@ import { sql } from "drizzle-orm";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { listSalePolicies } from "@waitron/venue-service";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { seedFloor } from "./seed-floor.js";
 
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./menu.js";
@@ -28,6 +30,25 @@ const provisionVenue = createDemoVenueProvisioner(() => suite.db, {
 });
 
 describe("seedFloor", () => {
+  it("leaves every seeded department and service zone with a sale policy for management reads", async () => {
+    const { locationId } = await provisionVenue();
+
+    const policies = await withTransaction(suite.db, async (tx) => {
+      await seedFloor(tx, { locationId, locale: LOCALE });
+      return listSalePolicies(tx, { locationId: brandLocationId(locationId) });
+    });
+
+    expect(policies.departments).toHaveLength(2);
+    expect(policies.zones).toHaveLength(5);
+    expect(policies.zones.map((zone) => zone.effective.paidWhen)).toEqual([
+      "prepay",
+      "prepay",
+      "prepay",
+      "prepay",
+      "prepay",
+    ]);
+  });
+
   it("creates restaurant and deli service zones, the placed restaurant floor, and statuses", async () => {
     const { locationId } = await provisionVenue();
 

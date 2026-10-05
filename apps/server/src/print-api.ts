@@ -20,7 +20,6 @@ import {
   printResolution,
   printers,
   printTransport,
-  receiptPrintMode,
   withTransaction,
   type Database,
   type Transaction,
@@ -1245,27 +1244,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .orderBy(deviceProfiles.name, deviceProfilePrinters.printerId),
       );
       return c.json(rows);
-    }),
-  );
-
-  // An unknown location is `management.request_invalid`: there is no `location.*` code.
-  app.patch("/management-api/locations/:id/receipt-print-mode", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const locationRowId = requireUuidParam(c.req.param("id"), "LocationId");
-      const body = await readJsonBody<{ mode?: unknown }>(c);
-      const mode = requireEnum(body.mode, "mode", receiptPrintMode.enumValues);
-      await gated(sessionId, async (tx) => {
-        const updated = await tx
-          .update(locations)
-          .set({ receiptPrintMode: mode })
-          .where(eq(locations.id, locationRowId))
-          .returning({ id: locations.id });
-        if (updated.length === 0) {
-          throw new AppError("management.request_invalid", { field: "locationId" });
-        }
-      });
-      return c.body(null, 204);
     }),
   );
 

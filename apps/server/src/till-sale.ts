@@ -193,6 +193,7 @@ export interface BillTenderRefund {
 
 export interface TillSaleResult {
   issuer?: { venueName: string; nif: string };
+  receiptHeader?: { tradingName: string; printTradingName: boolean };
   /** The language the sale was filed in (`sales.locale`). */
   locale: string;
   orderLabel: string | null;
@@ -636,6 +637,7 @@ export async function readSettledTicket(
 
   return {
     ...(await readReceiptOrder(tx, cfg, workingOrderId)),
+    receiptHeader: (await VENUE_SERVICE.readSaleReceiptHeader(tx, issued.saleId)) ?? undefined,
     locale: issued.locale,
     invoiceNumber: formatInvoiceNumber(issued.code, issued.number),
     // So a replay's `issuedAt` reads identically to the original's `fiscal.issuedAt.toISOString()`.
@@ -752,6 +754,8 @@ async function fileImmediateSale(
             ],
     },
   });
+  const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, workingOrderId);
+  await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
 
   // A manual card also gets a captured `payments` row, linked to the sale in this transaction.
   // `recordManualCardPayment` makes no network call, so it commits inline with the sale.
@@ -782,6 +786,7 @@ async function fileImmediateSale(
   // `FiscalRecordRef` is regime-opaque, so the "A/1" is read back from the sale row and its series.
   const ticket: TillSaleResult = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),
+    receiptHeader: (await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId)) ?? undefined,
     ...(await readReceiptOrder(tx, cfg, workingOrderId)),
     locale: language.locale,
     invoiceNumber: await readInvoiceNumber(tx, saleId),
@@ -1263,6 +1268,8 @@ async function finalizeCapture(
           ],
         },
       });
+      const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
+      await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
 
       // The provider already recorded the payment row; this only points its `sale_id` at the sale.
       await associatePaymentWithSale(tx, {
@@ -1302,6 +1309,7 @@ async function finalizeCapture(
 
       const ticket: TillSaleResult = {
         ...(await readReceiptIssuer(deps.backend, tx, saleId)),
+        receiptHeader: (await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId)) ?? undefined,
         ...(await readReceiptOrder(tx, cfg, req.id)),
         locale: language.locale,
         invoiceNumber: await readInvoiceNumber(tx, saleId),
@@ -1407,6 +1415,8 @@ async function finalizeRecovery(
         tenders: [{ method: "card", amount: capturedAmount, tipAmount: tip, settledAt }],
       },
     });
+    const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
+    await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
 
     await associatePaymentWithSale(tx, {
       provider: deps.provider.provider,
@@ -1447,6 +1457,7 @@ async function finalizeRecovery(
 
     const ticket: TillSaleResult = {
       ...(await readReceiptIssuer(deps.backend, tx, saleId)),
+      receiptHeader: (await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId)) ?? undefined,
       ...(await readReceiptOrder(tx, cfg, req.id)),
       locale: language.locale,
       invoiceNumber: await readInvoiceNumber(tx, saleId),
@@ -1465,7 +1476,7 @@ async function finalizeRecovery(
 }
 
 /**
- * Fire an open order's unsent dishes at payment when its service mode (the venue's order flow for
+ * Fire an open order's unsent dishes at payment when its service mode (prepay for
  * an order with none) is prepay, or when it is a counter order (no party) in a mode that sends
  * before payment; a party's bill in such a mode is left alone. A bill moved here from a table has
  * dishes already sent, which are not sent again. A zoned order's dish no station can take is not
@@ -1480,8 +1491,8 @@ export async function fireDishesAtPayment(
   partyId?: string | null,
 ): Promise<DishesNotSent | null> {
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, workingOrderId);
-  if ((serviceContext?.serviceMode ?? cfg.orderFlow) !== "prepay") {
-    if (!paysAfterSending(serviceContext?.serviceMode, cfg)) return null;
+  if ((serviceContext?.serviceMode ?? "prepay") !== "prepay") {
+    if (!paysAfterSending(serviceContext?.serviceMode)) return null;
     const party =
       partyId !== undefined
         ? partyId

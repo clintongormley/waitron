@@ -510,6 +510,37 @@ beforeAll(() => {
 });
 
 describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 2)", () => {
+  it("snapshots the zone department's receipt header with a captured card sale", async () => {
+    const { cfg, cafe } = await setupVenue();
+    suite.db.run(
+      sql`update departments set trading_name = 'Deli Counter' where location_id = ${cfg.locationId}`,
+    );
+    const id = randomUUID();
+    const provider = new SimulatorPaymentProvider(suite.db);
+
+    const out = await payWorkingOrderIntegrated({ db: suite.db, backend, clock, provider }, cfg, {
+      id,
+      zoneId: cafe.zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      simulationOutcome: "captured",
+    });
+
+    expect(out.outcome).toBe("captured");
+    if (out.outcome !== "captured") throw new Error("unreachable");
+    expect(out.ticket.receiptHeader).toMatchObject({
+      tradingName: "Deli Counter",
+      printTradingName: true,
+    });
+    const saleId = await saleIdFor(id);
+    const receiptHeader = await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.readSaleReceiptHeader(tx, saleId),
+    );
+    expect(receiptHeader).toMatchObject({
+      tradingName: "Deli Counter",
+      printTradingName: true,
+    });
+  });
+
   it("runs a simulated approval through capture, fiscal filing and payment association", async () => {
     const { cfg, cafe } = await setupVenue();
     const app = suite.db;
@@ -977,6 +1008,32 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     });
     return { id, externalRef };
   }
+
+  it("snapshots the original zone department when a captured card payment is recovered", async () => {
+    const { cfg, cafe } = await setupVenue();
+    suite.db.run(
+      sql`update departments set trading_name = 'Deli Counter' where location_id = ${cfg.locationId}`,
+    );
+    const { id } = await seedLostCapture(cfg, cafe, "1", "1.50");
+    const { deps } = integratedDeps(cfg, suite.db);
+
+    const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
+
+    expect(out.outcome).toBe("captured");
+    if (out.outcome !== "captured") throw new Error("unreachable");
+    expect(out.ticket.receiptHeader).toMatchObject({
+      tradingName: "Deli Counter",
+      printTradingName: true,
+    });
+    const saleId = await saleIdFor(id);
+    const receiptHeader = await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.readSaleReceiptHeader(tx, saleId),
+    );
+    expect(receiptHeader).toMatchObject({
+      tradingName: "Deli Counter",
+      printTradingName: true,
+    });
+  });
 
   it("recovers a lost-T2 captured payment: files from locked lines, no re-charge, links the existing row", async () => {
     const { cfg, cafe } = await setupVenue();

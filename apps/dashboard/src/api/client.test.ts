@@ -2816,18 +2816,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     });
   });
 
-  // ── Receipt printer + print mode ───────────────────────────────────────────────────────────────
-  it("setReceiptPrintMode PATCHes the location's print-mode route with { mode }", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
-    const api = new DashboardApi("", fetchImpl);
-    await expect(api.setReceiptPrintMode("loc-1", "on_request")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/locations/loc-1/receipt-print-mode", {
-      method: "PATCH",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mode: "on_request" }),
-    });
-  });
+  // ── Receipt printer + drawer policy ────────────────────────────────────────────────────────────
 
   it("setDrawerOpenPolicy PATCHes the location's drawer-open-policy route with { policy }", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());

@@ -15,6 +15,7 @@ import {
 } from "@waitron/ui";
 import type {
   Department,
+  DepartmentRemovalImpact,
   FloorZone,
   HoursInterval,
   ServiceMode,
@@ -23,18 +24,33 @@ import type {
   VenueServiceView,
 } from "./client.js";
 import { t } from "./strings.js";
+import "@waitron/ui/src/components/wt-switch.js";
+
+const format = (key: Parameters<typeof t>[0], values: Record<string, string>) =>
+  Object.entries(values).reduce(
+    (value, [name, replacement]) => value.replaceAll(`{${name}}`, replacement),
+    t(key) as string,
+  );
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "invoice_first", "ticket_then_pay"];
 const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
-const VIEWS = ["status", "departments", "zones"] as const;
-type View = (typeof VIEWS)[number];
+type View = "departments" | "zones";
 type Editor =
   | { kind: "department"; row?: Department }
-  | { kind: "hours"; row?: HoursInterval; index?: number }
+  | { kind: "new-zone" }
+  | { kind: "hours"; row?: HoursInterval; index?: number; departmentId?: string }
   | { kind: "zone"; row: FloorZone }
   | { kind: "assignment"; zoneId: string; menuId?: string }
-  | { kind: "delete"; name: string; action: () => Promise<unknown> };
+  | {
+      kind: "delete";
+      name: string;
+      action: () => Promise<unknown>;
+      impact?: DepartmentRemovalImpact;
+    };
 type Action = { key: string; label: string; run: () => void; disabled?: boolean };
+type PolicyRow =
+  | { kind: "department"; department: Department }
+  | { kind: "zone"; zone: FloorZone; departmentId: string | null };
 /** `check` reads the fields and returns a message per invalid one; `save` runs only once `check`
  * returns none. */
 type EditorContent = {
@@ -65,11 +81,47 @@ export class VenueOperationsScreen extends LitElement {
       wt-data-table::part(till-zone) {
         font-size: var(--wt-font-size-sm);
       }
+      wt-data-table::part(edit-paid),
+      wt-data-table::part(edit-collection),
+      wt-data-table::part(edit-receipt),
+      wt-data-table::part(edit-department-name),
+      wt-data-table::part(edit-zone-name),
+      wt-data-table::part(edit-trading-name),
+      wt-data-table::part(zone-readiness-action) {
+        border: 0;
+        background: transparent;
+        color: var(--wt-color-primary-text);
+        font: inherit;
+        cursor: pointer;
+        padding: 0;
+        text-decoration: underline;
+      }
+      wt-data-table::part(trading-name-cell) {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+      wt-data-table::part(inactive-department-label) {
+        margin-inline-start: var(--wt-space-2);
+      }
+      wt-data-table::part(inherited-value) {
+        color: var(--wt-color-text-muted);
+      }
+      wt-data-table::part(zone-readiness) {
+        color: var(--wt-color-danger);
+        font-size: var(--wt-font-size-sm);
+      }
       .toolbar {
         display: flex;
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-3);
+      }
+      .toolbar[data-test="policy-tree-actions"] > div {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
       }
       .form {
         display: grid;
@@ -120,18 +172,33 @@ export class VenueOperationsScreen extends LitElement {
   /** Save has been pressed in the open editor, so it re-checks its fields on every change. */
   @state() private attempted = false;
   @state() private busy = false;
-  @state() private view: View = "status";
+  @state() private printTradingNameDrafts: Record<string, boolean> = {};
+  @state() private departmentNameEditor?: string;
+  @state() private departmentNameDraft = "";
+  @state() private departmentNameError = "";
+  @state() private zoneNameEditor?: string;
+  @state() private zoneNameDraft = "";
+  @state() private zoneNameError = "";
+  @state() private tradingNameEditor?: string;
+  @state() private tradingNameDraft = "";
+  @state() private tradingNameError = "";
+  @state() private paidEditor?: string;
+  @state() private paidDrafts: Record<string, string> = {};
+  @state() private collectionEditor?: string;
+  @state() private collectionDrafts: Record<string, string> = {};
+  @state() private receiptEditor?: string;
+  @state() private receiptDrafts: Record<string, string> = {};
+  @state() private view: View = "departments";
   @state() private editor?: Editor;
   @state() private zoneId = "";
   #opener?: HTMLElement;
+  #openerAction?: { element: HTMLElement; key: string };
 
   readonly #url = new UrlStateController(
     this,
     () => {
       if (this.#url.read("dashboard") !== "venue-operations") return;
-      const value = this.#url.read("view");
-      this.view = VIEWS.includes(value as View) ? (value as View) : "status";
-      this.#url.write({ dashboard: "venue-operations", view: this.view }, true);
+      this.#url.write({ dashboard: "venue-operations", view: null }, true);
     },
     { basePath: "/manage", primary: "dashboard", children: { "*": { view: "view" } } },
   );
@@ -181,23 +248,35 @@ export class VenueOperationsScreen extends LitElement {
     this.#restart();
     this.#returnFocus();
   }
-  /** An empty table's Add button is gone once the row it made is listed; its twin beside the
-   * tablist takes the focus instead. */
+  /** Once an empty table gains a row, focus returns to its persistent Add button. */
   #returnFocus(): void {
     void this.updateComplete.then(() => {
       const opener = this.#opener;
+      const openerAction = this.#openerAction;
       const twin =
         opener?.slot === "empty-action"
           ? this.renderRoot.querySelector<HTMLElement>(
-              `wt-tabs > [slot="actions"] [data-test="${opener.dataset.test}"]`,
+              opener.dataset.test === "new-hours"
+                ? '[data-test="hours-actions"] [data-test="new-hours"]'
+                : opener.dataset.test?.startsWith("new-assignment-")
+                  ? `[data-test="zone-menu-actions"] [data-test="${opener.dataset.test}"]`
+                  : `[data-test="policy-tree-actions"] [data-test="${opener.dataset.test}"]`,
             )
           : null;
-      (opener?.isConnected ? opener : (twin ?? this.renderRoot.querySelector("wt-tabs")))?.focus();
+      (opener?.isConnected &&
+      (!openerAction ||
+        (openerAction.element.isConnected &&
+          openerAction.element.dataset.test === openerAction.key))
+        ? opener
+        : (twin ??
+          this.renderRoot.querySelector<HTMLElement>(
+            '[data-test="policy-tree-actions"] [data-test="new-department"]',
+          ))
+      )?.focus();
     });
   }
   #selectView(event: CustomEvent<{ value: View }>): void {
     this.view = event.detail.value;
-    this.#url.write({ dashboard: "venue-operations", view: this.view });
   }
   #restart(): void {
     this.attempted = false;
@@ -220,7 +299,7 @@ export class VenueOperationsScreen extends LitElement {
       }
       await this.#load();
     } catch (error) {
-      if (editor === undefined) this.actionError = this.#refusal(codeOf(error ?? {}));
+      if (editor === undefined) this.actionError = this.#refusal(codeOf(error ?? {}), error);
       else this.#refused(error, fields);
     } finally {
       this.busy = false;
@@ -228,10 +307,14 @@ export class VenueOperationsScreen extends LitElement {
     // Every Add button is disabled while busy, and focus does not take on a disabled one.
     if (closed) this.#returnFocus();
   }
-  #refusal(code: string): string {
-    return code === "department.has_active_zones"
-      ? t("venue.department_has_zones")
-      : t("venue.save_error");
+  #refusal(code: string, error?: unknown): string {
+    if (code === "department.last_active") return t("venue.department_last_active");
+    if (code === "zone.table_in_use") {
+      const tableName = (error as { params?: { tableName?: unknown } } | undefined)?.params
+        ?.tableName;
+      if (typeof tableName === "string") return format("venue.table_in_use", { table: tableName });
+    }
+    return t("venue.save_error");
   }
   #refused(error: unknown, { fields = {}, codes = {} }: ServerFields): void {
     const code = codeOf(error ?? {});
@@ -248,7 +331,7 @@ export class VenueOperationsScreen extends LitElement {
       this.refusedFields = { [control]: t("venue.field_refused") };
       this.#focusInvalid();
     } else {
-      this.editorError = this.#refusal(code);
+      this.editorError = this.#refusal(code, error);
     }
   }
   /** The screen's shadow root also holds the lists, so only the editor is searched. */
@@ -335,6 +418,7 @@ export class VenueOperationsScreen extends LitElement {
             @click=${(event: Event) => {
               const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions")!;
               this.#opener = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+              this.#openerAction = { element: event.currentTarget as HTMLElement, key: action.key };
               // An action that saves at once disables every action before the menu sees this click,
               // and the menu stays open for a click on a disabled action. Hiding it leaves focus
               // on the page, not on the menu's button.
@@ -390,6 +474,7 @@ export class VenueOperationsScreen extends LitElement {
       ?disabled=${this.busy || action.disabled === true}
       @click=${(event: Event) => {
         this.#opener = event.currentTarget as HTMLElement;
+        this.#openerAction = undefined;
         action.run();
       }}
       >${action.label}</wt-button
@@ -400,6 +485,14 @@ export class VenueOperationsScreen extends LitElement {
       key: "new-department",
       label: t("venue.add_department"),
       run: () => this.#open({ kind: "department" }),
+    };
+  }
+  #addZone(): Action {
+    return {
+      key: "new-zone",
+      label: t("venue.add_zone"),
+      disabled: !this.model!.departments.some((department) => department.active),
+      run: () => this.#open({ kind: "new-zone" }),
     };
   }
   #addHours(): Action {
@@ -418,20 +511,37 @@ export class VenueOperationsScreen extends LitElement {
       run: () => this.#open({ kind: "assignment", zoneId }),
     };
   }
-  #tabActions() {
-    const model = this.model!;
-    const zone = model.floorZones.find((row) => row.id === this.zoneId);
-    return html`<div slot="actions">
-      ${
-        this.view === "departments"
-          ? html`${this.#tabAction(this.#addDepartment())}${this.#tabAction(this.#addHours())}`
-          : nothing
-      }
-      ${this.view === "zones" && zone ? this.#tabAction(this.#addAssignment(zone.id)) : nothing}
-    </div>`;
-  }
   #confirm(name: string, action: () => Promise<unknown>): void {
     this.#open({ kind: "delete", name, action });
+  }
+  async #confirmDepartment(row: Department): Promise<void> {
+    try {
+      const impact = await this.api.departmentRemovalImpact(row.id);
+      this.#open({
+        kind: "delete",
+        name: row.name,
+        action: () => this.api.deactivateDepartment(row.id),
+        impact,
+      });
+    } catch (error) {
+      this.actionError = this.#refusal(codeOf(error ?? {}), error);
+    }
+  }
+  async #confirmZone(row: FloorZone, departmentId: string | null): Promise<void> {
+    try {
+      const impact =
+        departmentId === null
+          ? await this.api.zoneRemovalImpact(row.id)
+          : await this.api.departmentRemovalImpact(departmentId);
+      this.#open({
+        kind: "delete",
+        name: row.name,
+        action: () => this.api.deactivateZone(row.id),
+        impact: { zones: impact.zones.filter((zone) => zone.id === row.id) },
+      });
+    } catch (error) {
+      this.actionError = this.#refusal(codeOf(error ?? {}), error);
+    }
   }
   #readinessMessage(issue: VenueReadinessIssue): string {
     switch (issue.code) {
@@ -468,6 +578,615 @@ export class VenueOperationsScreen extends LitElement {
               </ul>
             </div>`
       }
+    </section>`;
+  }
+
+  #policyTree() {
+    const model = this.model!;
+    const departments = model.departments;
+    const activeDepartmentCount = departments.filter((department) => department.active).length;
+    const rows: PolicyRow[] = departments.flatMap((department) => [
+      { kind: "department" as const, department },
+      ...model.zones
+        .filter((zone) => zone.departmentId === department.id)
+        .flatMap((zone) => {
+          const floorZone = model.floorZones.find((row) => row.id === zone.id);
+          return floorZone
+            ? [{ kind: "zone" as const, zone: floorZone, departmentId: department.id }]
+            : [];
+        }),
+    ]);
+    rows.push(
+      ...model.floorZones
+        .filter((zone) => !model.zones.some((configured) => configured.id === zone.id))
+        .map((zone) => ({ kind: "zone" as const, zone, departmentId: null })),
+    );
+    const policyFor = (row: PolicyRow) =>
+      row.kind === "department"
+        ? model.salePolicies.departments.find((policy) => policy.departmentId === row.department.id)
+        : model.salePolicies.zones.find((policy) => policy.zoneId === row.zone.id)?.effective;
+    const columns: DataTableColumn<PolicyRow>[] = [
+      {
+        key: "name",
+        label: t("venue.name"),
+        cell: (row) => {
+          if (row.kind !== "department")
+            return html`${
+              this.zoneNameEditor === row.zone.id
+                ? html`<wt-input
+                      name="zoneName"
+                      label=${t("venue.name")}
+                      hide-label
+                      required
+                      .value=${live(this.zoneNameDraft)}
+                      error=${this.zoneNameError}
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                        event.stopPropagation();
+                        this.zoneNameDraft = event.detail.value;
+                        this.zoneNameError = "";
+                      }}
+                    ></wt-input>
+                    <button
+                      type="button"
+                      data-test="save-zone-name"
+                      ?disabled=${this.busy}
+                      @click=${() => {
+                        const name = this.zoneNameDraft.trim();
+                        if (!name) {
+                          this.zoneNameError = t("venue.field_required");
+                          return;
+                        }
+                        void this.#save(async () => {
+                          await this.api.updateZone(row.zone.id, { name });
+                          if (this.zoneNameEditor === row.zone.id) this.zoneNameEditor = undefined;
+                        });
+                      }}
+                    >
+                      ${t("venue.save")}
+                    </button>
+                    <button
+                      type="button"
+                      data-test="cancel-zone-name"
+                      @click=${() => (this.zoneNameEditor = undefined)}
+                    >
+                      ${t("venue.cancel")}
+                    </button>`
+                : html`<button
+                    type="button"
+                    part="edit-zone-name"
+                    data-test="edit-zone-name"
+                    aria-label=${`${row.zone.name}: ${t("venue.name")}`}
+                    @click=${() => {
+                      this.zoneNameDraft = row.zone.name;
+                      this.zoneNameError = "";
+                      this.zoneNameEditor = row.zone.id;
+                    }}
+                  >
+                    ${row.zone.name}
+                  </button>`
+            }${row.zone.active === false ? html` ${t("venue.inactive")}` : row.departmentId === null ? html` ${t("venue.unconfigured")}` : nothing}${model.readiness
+              .filter((issue) => "zoneId" in issue && issue.zoneId === row.zone.id)
+              .map(
+                (issue) =>
+                  html`<div part="zone-readiness" data-test="zone-readiness">
+                    ${this.#readinessMessage(issue)}
+                    ${
+                      issue.code === "zone.menu_missing"
+                        ? html`<button
+                            type="button"
+                            part="zone-readiness-action"
+                            data-test="zone-readiness-action"
+                            @click=${(event: Event) => {
+                              this.#opener = event.currentTarget as HTMLElement;
+                              this.#openerAction = undefined;
+                              this.#open({ kind: "assignment", zoneId: row.zone.id });
+                            }}
+                          >
+                            ${t("venue.make_available")}
+                          </button>`
+                        : nothing
+                    }
+                  </div>`,
+              )}`;
+          const displayName = row.department.name;
+          if (this.departmentNameEditor !== row.department.id)
+            return html`<button
+                type="button"
+                part="edit-department-name"
+                data-test="edit-department-name"
+                aria-label=${`${row.department.name}: ${t("venue.name")}`}
+                @click=${() => {
+                  this.departmentNameDraft = row.department.name;
+                  this.departmentNameError = "";
+                  this.departmentNameEditor = row.department.id;
+                }}
+              >
+                ${displayName}</button
+              >${
+                row.department.active
+                  ? nothing
+                  : html`<span part="inactive-department-label">${t("venue.inactive")}</span>`
+              }`;
+          return html`<wt-input
+              name="departmentName"
+              label=${t("venue.name")}
+              hide-label
+              required
+              .value=${live(this.departmentNameDraft)}
+              error=${this.departmentNameError}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                this.departmentNameDraft = event.detail.value;
+                this.departmentNameError = "";
+              }}
+            ></wt-input>
+            <button
+              type="button"
+              data-test="save-department-name"
+              ?disabled=${this.busy}
+              @click=${() => {
+                const name = this.departmentNameDraft.trim();
+                if (!name) {
+                  this.departmentNameError = t("venue.field_required");
+                  return;
+                }
+                void this.#save(async () => {
+                  await this.api.updateDepartment(row.department.id, {
+                    name,
+                    tradingName: row.department.tradingName,
+                    defaultServiceMode: row.department.defaultServiceMode,
+                  });
+                  if (this.departmentNameEditor === row.department.id)
+                    this.departmentNameEditor = undefined;
+                });
+              }}
+            >
+              ${t("venue.save")}
+            </button>
+            <button
+              type="button"
+              data-test="cancel-department-name"
+              @click=${() => (this.departmentNameEditor = undefined)}
+            >
+              ${t("venue.cancel")}
+            </button>`;
+        },
+      },
+      {
+        key: "trading",
+        label: t("venue.trading_name"),
+        group: t("venue.on_receipt"),
+        cell: (row) => {
+          if (row.kind !== "department") return nothing;
+          if (this.tradingNameEditor !== row.department.id)
+            return html`<span part="trading-name-cell"
+              ><button
+                type="button"
+                part="edit-trading-name"
+                data-test="edit-trading-name"
+                aria-label=${`${row.department.name}: ${t("venue.trading_name")}, ${row.department.tradingName}`}
+                @click=${() => {
+                  this.tradingNameDraft = row.department.tradingName;
+                  this.tradingNameError = "";
+                  this.tradingNameEditor = row.department.id;
+                }}
+              >
+                ${row.department.tradingName}
+              </button>
+              <a
+                href=${`/manage/venue-settings/view/receipts?departmentId=${encodeURIComponent(row.department.id)}`}
+                >${t("venue.preview")}</a
+              ></span
+            >`;
+          return html`<wt-input
+              name="tradingName"
+              label=${`${row.department.name}: ${t("venue.trading_name")}`}
+              hide-label
+              required
+              .value=${live(this.tradingNameDraft)}
+              error=${this.tradingNameError}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                this.tradingNameDraft = event.detail.value;
+                this.tradingNameError = "";
+              }}
+            ></wt-input>
+            <button
+              type="button"
+              data-test="save-trading-name"
+              ?disabled=${this.busy}
+              @click=${() => {
+                const tradingName = this.tradingNameDraft.trim();
+                if (!tradingName) {
+                  this.tradingNameError = t("venue.field_required");
+                  return;
+                }
+                void this.#save(async () => {
+                  await this.api.updateDepartment(row.department.id, {
+                    name: row.department.name,
+                    tradingName,
+                    defaultServiceMode: row.department.defaultServiceMode,
+                  });
+                  if (this.tradingNameEditor === row.department.id)
+                    this.tradingNameEditor = undefined;
+                });
+              }}
+            >
+              ${t("venue.save")}
+            </button>
+            <button
+              type="button"
+              data-test="cancel-trading-name"
+              @click=${() => (this.tradingNameEditor = undefined)}
+            >
+              ${t("venue.cancel")}
+            </button>`;
+        },
+      },
+      {
+        key: "printTradingName",
+        label: t("venue.print_it"),
+        group: t("venue.on_receipt"),
+        cell: (row) => {
+          if (row.kind !== "department") return nothing;
+          const checked =
+            this.printTradingNameDrafts[row.department.id] ??
+            policyFor(row)?.printTradingName ??
+            false;
+          return html`<wt-switch
+            name="printTradingName"
+            label=${t("venue.print_it")}
+            .checked=${live(checked)}
+            .disabled=${this.busy}
+            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+              event.stopPropagation();
+              this.printTradingNameDrafts = {
+                ...this.printTradingNameDrafts,
+                [row.department.id]: event.detail.checked,
+              };
+              void this.#save(async () => {
+                await this.api.setDepartmentSalePolicyField(
+                  row.department.id,
+                  "printTradingName",
+                  event.detail.checked,
+                );
+                const drafts = { ...this.printTradingNameDrafts };
+                delete drafts[row.department.id];
+                this.printTradingNameDrafts = drafts;
+              });
+            }}
+          ></wt-switch>`;
+        },
+      },
+      {
+        key: "paid",
+        label: t("venue.paid"),
+        group: t("venue.quick_sales"),
+        cell: (row) => {
+          const key =
+            row.kind === "department" ? `department-${row.department.id}` : `zone-${row.zone.id}`;
+          const paidWhen = policyFor(row)?.paidWhen;
+          if (paidWhen === undefined) return nothing;
+          const stored =
+            row.kind === "department"
+              ? paidWhen
+              : model.salePolicies.zones.find((policy) => policy.zoneId === row.zone.id)?.paidWhen;
+          const effectiveLabel =
+            paidWhen === "ticket_then_pay" ? t("venue.pay_on_collection") : t("venue.prepay");
+          if (this.paidEditor !== key) {
+            return html`<button
+              type="button"
+              part=${row.kind === "zone" && stored == null ? "edit-paid inherited-value" : "edit-paid"}
+              data-test="edit-paid"
+              aria-label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.paid")}, ${effectiveLabel}`}
+              @click=${() => (this.paidEditor = key)}
+            >
+              ${effectiveLabel}
+            </button>`;
+          }
+          return html`<wt-combobox
+            name="paidWhen"
+            label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.paid")}`}
+            hide-label
+            .options=${[
+              ...(row.kind === "zone"
+                ? [{ value: "", label: `${t("venue.inherit")} (${effectiveLabel})` }]
+                : []),
+              { value: "prepay", label: t("venue.prepay") },
+              { value: "ticket_then_pay", label: t("venue.pay_on_collection") },
+            ]}
+            .value=${live(this.paidDrafts[key] ?? stored ?? "")}
+            ?disabled=${this.busy}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              const value = event.detail.value;
+              if (value === (stored ?? "")) {
+                const drafts = { ...this.paidDrafts };
+                delete drafts[key];
+                this.paidDrafts = drafts;
+                this.paidEditor = undefined;
+                this.actionError = undefined;
+                return;
+              }
+              this.paidDrafts = { ...this.paidDrafts, [key]: value };
+              void this.#save(async () => {
+                if (row.kind === "department")
+                  await this.api.setDepartmentSalePolicyField(
+                    row.department.id,
+                    "paidWhen",
+                    value as "prepay" | "ticket_then_pay",
+                  );
+                else
+                  await this.api.setZoneSalePolicyOverride(
+                    row.zone.id,
+                    "paidWhen",
+                    value ? (value as "prepay" | "ticket_then_pay") : null,
+                  );
+                const drafts = { ...this.paidDrafts };
+                delete drafts[key];
+                this.paidDrafts = drafts;
+                this.paidEditor = undefined;
+              });
+            }}
+          ></wt-combobox>`;
+        },
+      },
+      {
+        key: "collection",
+        label: t("venue.collection_number"),
+        group: t("venue.quick_sales"),
+        cell: (row) => {
+          const key =
+            row.kind === "department" ? `department-${row.department.id}` : `zone-${row.zone.id}`;
+          const collectionNumber = policyFor(row)?.collectionNumber;
+          if (collectionNumber === undefined) return nothing;
+          const stored =
+            row.kind === "department"
+              ? collectionNumber
+              : model.salePolicies.zones.find((policy) => policy.zoneId === row.zone.id)
+                  ?.collectionNumber;
+          const effectiveLabel =
+            collectionNumber === "numbered" ? t("venue.numbered") : t("venue.none");
+          if (this.collectionEditor !== key)
+            return html`<button
+              type="button"
+              part=${row.kind === "zone" && stored == null ? "edit-collection inherited-value" : "edit-collection"}
+              data-test="edit-collection"
+              aria-label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.collection_number")}, ${effectiveLabel}`}
+              @click=${() => (this.collectionEditor = key)}
+            >
+              ${effectiveLabel}
+            </button>`;
+          return html`<wt-combobox
+            name="collectionNumber"
+            label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.collection_number")}`}
+            hide-label
+            .options=${[
+              ...(row.kind === "zone"
+                ? [{ value: "", label: `${t("venue.inherit")} (${effectiveLabel})` }]
+                : []),
+              { value: "none", label: t("venue.none") },
+              { value: "numbered", label: t("venue.numbered") },
+            ]}
+            .value=${live(this.collectionDrafts[key] ?? stored ?? "")}
+            ?disabled=${this.busy}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              const value = event.detail.value;
+              if (value === (stored ?? "")) {
+                const drafts = { ...this.collectionDrafts };
+                delete drafts[key];
+                this.collectionDrafts = drafts;
+                this.collectionEditor = undefined;
+                this.actionError = undefined;
+                return;
+              }
+              this.collectionDrafts = { ...this.collectionDrafts, [key]: value };
+              void this.#save(async () => {
+                if (row.kind === "department")
+                  await this.api.setDepartmentSalePolicyField(
+                    row.department.id,
+                    "collectionNumber",
+                    value as "none" | "numbered",
+                  );
+                else
+                  await this.api.setZoneSalePolicyOverride(
+                    row.zone.id,
+                    "collectionNumber",
+                    value ? (value as "none" | "numbered") : null,
+                  );
+                const drafts = { ...this.collectionDrafts };
+                delete drafts[key];
+                this.collectionDrafts = drafts;
+                this.collectionEditor = undefined;
+              });
+            }}
+          ></wt-combobox>`;
+        },
+      },
+      {
+        key: "receipt",
+        label: t("venue.receipt"),
+        group: t("venue.every_sale"),
+        cell: (row) => {
+          const key =
+            row.kind === "department" ? `department-${row.department.id}` : `zone-${row.zone.id}`;
+          const receiptPrintMode = policyFor(row)?.receiptPrintMode;
+          if (receiptPrintMode === undefined) return nothing;
+          const stored =
+            row.kind === "department"
+              ? receiptPrintMode
+              : model.salePolicies.zones.find((policy) => policy.zoneId === row.zone.id)
+                  ?.receiptPrintMode;
+          const effectiveLabel =
+            receiptPrintMode === "auto"
+              ? t("venue.always")
+              : receiptPrintMode === "on_request"
+                ? t("venue.on_request")
+                : receiptPrintMode === "never"
+                  ? t("venue.never")
+                  : "";
+          const inheritedMode =
+            row.kind === "zone"
+              ? model.salePolicies.departments.find(
+                  (policy) => policy.departmentId === row.departmentId,
+                )?.receiptPrintMode
+              : undefined;
+          const inheritedLabel =
+            inheritedMode === "auto"
+              ? t("venue.always")
+              : inheritedMode === "on_request"
+                ? t("venue.on_request")
+                : t("venue.never");
+          if (this.receiptEditor !== key)
+            return html`<button
+              type="button"
+              part=${row.kind === "zone" && stored == null ? "edit-receipt inherited-value" : "edit-receipt"}
+              data-test="edit-receipt"
+              aria-label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.receipt")}, ${effectiveLabel}`}
+              @click=${() => (this.receiptEditor = key)}
+            >
+              ${effectiveLabel}
+            </button>`;
+          return html`<wt-combobox
+            name="receiptPrintMode"
+            label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.receipt")}`}
+            hide-label
+            .options=${[
+              ...(row.kind === "zone"
+                ? [{ value: "", label: `${t("venue.inherit")} (${inheritedLabel})` }]
+                : []),
+              { value: "auto", label: t("venue.always") },
+              { value: "on_request", label: t("venue.on_request") },
+              { value: "never", label: t("venue.never") },
+            ]}
+            .value=${live(this.receiptDrafts[key] ?? stored ?? "")}
+            ?disabled=${this.busy}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              const value = event.detail.value;
+              if (value === (stored ?? "")) {
+                const drafts = { ...this.receiptDrafts };
+                delete drafts[key];
+                this.receiptDrafts = drafts;
+                this.receiptEditor = undefined;
+                this.actionError = undefined;
+                return;
+              }
+              this.receiptDrafts = { ...this.receiptDrafts, [key]: value };
+              void this.#save(async () => {
+                if (row.kind === "department")
+                  await this.api.setDepartmentSalePolicyField(
+                    row.department.id,
+                    "receiptPrintMode",
+                    value as "auto" | "on_request" | "never",
+                  );
+                else
+                  await this.api.setZoneSalePolicyOverride(
+                    row.zone.id,
+                    "receiptPrintMode",
+                    value ? (value as "auto" | "on_request" | "never") : null,
+                  );
+                const drafts = { ...this.receiptDrafts };
+                delete drafts[key];
+                this.receiptDrafts = drafts;
+                this.receiptEditor = undefined;
+              });
+            }}
+          ></wt-combobox>`;
+        },
+      },
+      {
+        key: "actions",
+        label: t("venue.actions"),
+        pinned: "end",
+        cell: (row) =>
+          row.kind === "department"
+            ? this.#actions(row.department.name, [
+                {
+                  key: `edit-tree-department-${row.department.id}`,
+                  label: t("venue.edit"),
+                  run: () => this.#open({ kind: "department", row: row.department }),
+                },
+                {
+                  key: `rename-tree-department-${row.department.id}`,
+                  label: t("venue.rename"),
+                  run: () => {
+                    this.departmentNameDraft = row.department.name;
+                    this.departmentNameError = "";
+                    this.departmentNameEditor = row.department.id;
+                  },
+                },
+                {
+                  key: `hours-tree-department-${row.department.id}`,
+                  label: t("venue.hours"),
+                  run: () => this.#open({ kind: "hours", departmentId: row.department.id }),
+                },
+                {
+                  key: `remove-tree-department-${row.department.id}`,
+                  label: t("venue.remove"),
+                  run: () => void this.#confirmDepartment(row.department),
+                },
+              ])
+            : this.#actions(row.zone.name, [
+                {
+                  key: `rename-tree-zone-${row.zone.id}`,
+                  label: t("venue.rename"),
+                  run: () => {
+                    this.zoneNameDraft = row.zone.name;
+                    this.zoneNameError = "";
+                    this.zoneNameEditor = row.zone.id;
+                  },
+                },
+                ...(row.departmentId === null || activeDepartmentCount > 1
+                  ? [
+                      {
+                        key: `${row.departmentId === null ? "configure" : "move"}-tree-zone-${row.zone.id}`,
+                        label:
+                          row.departmentId === null
+                            ? t("venue.edit")
+                            : t("venue.move_to_department"),
+                        run: () => this.#open({ kind: "zone", row: row.zone }),
+                      },
+                    ]
+                  : []),
+                {
+                  key: `menus-tree-zone-${row.zone.id}`,
+                  label: t("venue.menus"),
+                  run: () => {
+                    this.zoneId = row.zone.id;
+                  },
+                },
+                {
+                  key: `remove-tree-zone-${row.zone.id}`,
+                  label: t("venue.remove"),
+                  run: () => void this.#confirmZone(row.zone, row.departmentId),
+                },
+              ]),
+      },
+    ];
+    return html`<section>
+      <div class="toolbar" data-test="policy-tree-actions">
+        <h2>${t("venue.title")}</h2>
+        <div>${this.#tabAction(this.#addDepartment())} ${this.#tabAction(this.#addZone())}</div>
+      </div>
+      <wt-data-table
+        data-test="policy-tree"
+        viewKey="waitron.venue.policy-tree"
+        aria-label=${t("venue.title")}
+        .rows=${rows}
+        .columns=${columns}
+        .rowKey=${(row: PolicyRow) =>
+          row.kind === "department" ? `department-${row.department.id}` : `zone-${row.zone.id}`}
+        .rowParent=${(row: PolicyRow) =>
+          row.kind === "department" || row.departmentId === null
+            ? null
+            : `department-${row.departmentId}`}
+        .rowCollapsible=${() => false}
+        .rowActivation=${() => "none" as const}
+        .emptyMessage=${t("venue.no_departments")}
+        .noMatchesMessage=${tableNoMatches()}
+      ></wt-data-table>
     </section>`;
   }
 
@@ -521,7 +1240,7 @@ export class VenueOperationsScreen extends LitElement {
                   key: `deactivate-department-${row.id}`,
                   label: t("venue.deactivate_department"),
                   disabled: !row.active,
-                  run: () => this.#confirm(row.name, () => this.api.deactivateDepartment(row.id)),
+                  run: () => void this.#confirmDepartment(row),
                 },
               ]),
           },
@@ -529,7 +1248,15 @@ export class VenueOperationsScreen extends LitElement {
         (row) => row.id,
         this.#addDepartment(),
       )}
-      ${this.#toolbar(t("venue.hours"))}
+    </section>`;
+  }
+  #hoursSection() {
+    const model = this.model!;
+    return html`<section>
+      <div class="toolbar" data-test="hours-actions">
+        <h2>${t("venue.hours")}</h2>
+        ${this.#tabAction(this.#addHours())}
+      </div>
       ${this.#table(
         "hours",
         "waitron.venue.hours.table",
@@ -590,9 +1317,71 @@ export class VenueOperationsScreen extends LitElement {
       )}
     </section>`;
   }
+  #deviceStartingZones() {
+    const model = this.model!;
+    return html`<section>
+      <h2>${t("venue.tills")}</h2>
+      ${this.#table(
+        "tills",
+        "waitron.venue.tills.table",
+        t("venue.tills"),
+        t("venue.no_tills"),
+        model.devices.filter((device) => device.active && device.kind !== "kds_station"),
+        [
+          {
+            key: "name",
+            label: t("venue.tills"),
+            cell: (device) => device.label,
+            sortValue: (device) => device.label,
+          },
+          {
+            key: "startsIn",
+            label: t("venue.starts_in"),
+            cell: (device) => {
+              const stored = model.deviceZones.find((row) => row.deviceId === device.id)?.zoneId;
+              return html`<wt-combobox
+                part="till-zone"
+                name=${`till-${device.id}-starts-in`}
+                label=${`${device.label}: ${t("venue.starts_in")}`}
+                hide-label
+                search="auto"
+                placeholder=${t("venue.counter_zone")}
+                searchPlaceholder=${t("venue.combobox_search")}
+                noResultsLabel=${t("venue.combobox_no_results")}
+                .options=${[
+                  { value: "", label: t("venue.counter_zone") },
+                  ...model.zones
+                    .filter(
+                      (zone) =>
+                        zone.active !== false &&
+                        model.departments.some(
+                          (department) => department.id === zone.departmentId && department.active,
+                        ),
+                    )
+                    .map((zone) => ({ value: zone.id, label: zone.name })),
+                ]}
+                .value=${live(stored ?? "")}
+                ?disabled=${this.busy}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  const zoneId = event.detail.value;
+                  if (zoneId === (stored ?? "")) return;
+                  void this.#save(() =>
+                    zoneId
+                      ? this.api.setDeviceDefaultZone(device.id, zoneId)
+                      : this.api.clearDeviceDefaultZone(device.id),
+                  );
+                }}
+              ></wt-combobox>`;
+            },
+          },
+        ],
+        (device) => device.id,
+      )}
+    </section>`;
+  }
   #zones() {
     const model = this.model!;
-    const zone = model.floorZones.find((row) => row.id === this.zoneId);
     return html`<section>
       <h2>${t("venue.zones")}</h2>
       ${this.#table(
@@ -646,129 +1435,85 @@ export class VenueOperationsScreen extends LitElement {
                   label: t("venue.edit"),
                   run: () => this.#open({ kind: "zone", row }),
                 },
-                {
-                  key: `zone-menus-${row.id}`,
-                  label: t("venue.menus"),
-                  run: () => {
-                    this.zoneId = row.id;
-                  },
-                },
               ]),
           },
         ],
         (row) => row.id,
       )}
-      <h2>${t("venue.tills")}</h2>
-      ${this.#table(
-        "tills",
-        "waitron.venue.tills.table",
-        t("venue.tills"),
-        t("venue.no_tills"),
-        model.devices.filter((device) => device.active && device.kind !== "kds_station"),
-        [
-          {
-            key: "name",
-            label: t("venue.tills"),
-            cell: (device) => device.label,
-            sortValue: (device) => device.label,
-          },
-          {
-            key: "startsIn",
-            label: t("venue.starts_in"),
-            cell: (device) => {
-              const stored = model.deviceZones.find((row) => row.deviceId === device.id)?.zoneId;
-              return html`<wt-combobox
-                part="till-zone"
-                name=${`till-${device.id}-starts-in`}
-                label=${`${device.label}: ${t("venue.starts_in")}`}
-                hide-label
-                search="auto"
-                placeholder=${t("venue.counter_zone")}
-                searchPlaceholder=${t("venue.combobox_search")}
-                noResultsLabel=${t("venue.combobox_no_results")}
-                .options=${[
-                  { value: "", label: t("venue.counter_zone") },
-                  ...model.zones.map((zone) => ({ value: zone.id, label: zone.name })),
-                ]}
-                .value=${live(stored ?? "")}
-                ?disabled=${this.busy}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                  event.stopPropagation();
-                  const zoneId = event.detail.value;
-                  if (zoneId === (stored ?? "")) return;
-                  void this.#save(() =>
-                    zoneId
-                      ? this.api.setDeviceDefaultZone(device.id, zoneId)
-                      : this.api.clearDeviceDefaultZone(device.id),
-                  );
-                }}
-              ></wt-combobox>`;
-            },
-          },
-        ],
-        (device) => device.id,
-      )}
+    </section>`;
+  }
+  #zoneMenus() {
+    const model = this.model!;
+    const zone = model.floorZones.find((row) => row.id === this.zoneId);
+    return html`<section>
       ${
         zone
-          ? html` ${this.#toolbar(`${zone.name}: ${t("venue.menus")}`)}
-            ${this.#table(
-              "zone-menus",
-              "waitron.venue.zone-menus.table",
-              t("venue.menus"),
-              t("venue.no_zone_menus"),
-              model.zoneMenus.filter((row) => row.zoneId === zone.id),
-              [
-                {
-                  key: "menu",
-                  label: t("venue.menu_name"),
-                  cell: (row) => model.menus.find((menu) => menu.id === row.menuId)?.name,
-                },
-                {
-                  key: "default",
-                  label: t("venue.default"),
-                  choosable: "shown",
-                  cell: (row) => t(row.isDefault ? "venue.yes" : "venue.no"),
-                },
-                {
-                  key: "order",
-                  label: t("venue.display_order"),
-                  choosable: "shown",
-                  cell: (row) => String(row.displayOrder),
-                },
-                {
-                  key: "actions",
-                  label: t("venue.actions"),
-                  pinned: "end",
-                  cell: (row) =>
-                    this.#actions(
-                      model.menus.find((menu) => menu.id === row.menuId)?.name ?? row.menuId,
-                      [
-                        {
-                          key: `edit-assignment-${row.menuId}`,
-                          label: t("venue.edit"),
-                          run: () =>
-                            this.#open({ kind: "assignment", zoneId: zone.id, menuId: row.menuId }),
-                        },
-                        {
-                          key: `default-assignment-${row.menuId}`,
-                          label: t("venue.make_default"),
-                          disabled: row.isDefault,
-                          run: () => {
-                            void this.#save(() =>
-                              this.api.allowMenu(zone.id, row.menuId, {
-                                displayOrder: row.displayOrder,
-                                makeDefault: true,
+          ? html`<div class="toolbar" data-test="zone-menu-actions">
+                <h2>${zone.name}: ${t("venue.menus")}</h2>
+                ${this.#tabAction(this.#addAssignment(zone.id))}
+              </div>
+              ${this.#table(
+                "zone-menus",
+                "waitron.venue.zone-menus.table",
+                t("venue.menus"),
+                t("venue.no_zone_menus"),
+                model.zoneMenus.filter((row) => row.zoneId === zone.id),
+                [
+                  {
+                    key: "menu",
+                    label: t("venue.menu_name"),
+                    cell: (row) => model.menus.find((menu) => menu.id === row.menuId)?.name,
+                  },
+                  {
+                    key: "default",
+                    label: t("venue.default"),
+                    choosable: "shown",
+                    cell: (row) => t(row.isDefault ? "venue.yes" : "venue.no"),
+                  },
+                  {
+                    key: "order",
+                    label: t("venue.display_order"),
+                    choosable: "shown",
+                    cell: (row) => String(row.displayOrder),
+                  },
+                  {
+                    key: "actions",
+                    label: t("venue.actions"),
+                    pinned: "end",
+                    cell: (row) =>
+                      this.#actions(
+                        model.menus.find((menu) => menu.id === row.menuId)?.name ?? row.menuId,
+                        [
+                          {
+                            key: `edit-assignment-${row.menuId}`,
+                            label: t("venue.edit"),
+                            run: () =>
+                              this.#open({
+                                kind: "assignment",
+                                zoneId: zone.id,
+                                menuId: row.menuId,
                               }),
-                            );
                           },
-                        },
-                      ],
-                    ),
-                },
-              ],
-              (row) => row.menuId,
-              this.#addAssignment(zone.id),
-            )}`
+                          {
+                            key: `default-assignment-${row.menuId}`,
+                            label: t("venue.make_default"),
+                            disabled: row.isDefault,
+                            run: () => {
+                              void this.#save(() =>
+                                this.api.allowMenu(zone.id, row.menuId, {
+                                  displayOrder: row.displayOrder,
+                                  makeDefault: true,
+                                }),
+                              );
+                            },
+                          },
+                        ],
+                      ),
+                  },
+                ],
+                (row) => row.menuId,
+                this.#addAssignment(zone.id),
+              )}`
           : nothing
       }
     </section>`;
@@ -785,6 +1530,34 @@ export class VenueOperationsScreen extends LitElement {
   #editorContent(editor: Editor): EditorContent {
     const model = this.model!;
     switch (editor.kind) {
+      case "new-zone":
+        return {
+          heading: t("venue.add_zone"),
+          body: html`${this.#input("new-zone-name", t("venue.zone_name"))}${this.#select(
+            "new-zone-department",
+            t("venue.department"),
+            model.departments.filter((department) => department.active),
+            undefined,
+            true,
+          )}`,
+          check: () => this.#required(["new-zone-name", "new-zone-department"]),
+          save: () => {
+            void this.#save(
+              () =>
+                this.api.createZone({
+                  name: this.#value("new-zone-name").trim(),
+                  departmentId: this.#value("new-zone-department"),
+                }),
+              {
+                fields: { name: "new-zone-name", departmentId: "new-zone-department" },
+                codes: {
+                  "zone.name_taken": "new-zone-name",
+                  "department.not_found": "new-zone-department",
+                },
+              },
+            );
+          },
+        };
       case "department":
         return {
           heading: t(editor.row ? "venue.edit_department" : "venue.add_department"),
@@ -814,7 +1587,7 @@ export class VenueOperationsScreen extends LitElement {
       case "hours":
         return {
           heading: t(editor.row ? "venue.edit_hours" : "venue.add_hours"),
-          body: html`${this.#select("hours-department", t("venue.department"), model.departments, editor.row?.departmentId, true, !!editor.row)}${this.#select(
+          body: html`${this.#select("hours-department", t("venue.department"), model.departments, editor.row?.departmentId ?? editor.departmentId, true, !!editor.row || !!editor.departmentId)}${this.#select(
             "hours-weekday",
             t("venue.weekday"),
             DAYS.map((day) => ({ id: String(day), name: t(`venue.day.${day}`) })),
@@ -920,7 +1693,14 @@ export class VenueOperationsScreen extends LitElement {
       case "delete":
         return {
           heading: t("venue.confirm_remove"),
-          body: html`<p>${editor.name}</p>`,
+          body: html`<p>${editor.name}</p>
+            ${editor.impact?.zones.map(
+              (zone) =>
+                html`<p>
+                  ${zone.name}:
+                  ${format("venue.active_tables", { count: String(zone.activeTableCount) })}
+                </p>`,
+            )}`,
           check: () => ({}),
           save: () => {
             void this.#save(editor.action);
@@ -1009,18 +1789,17 @@ export class VenueOperationsScreen extends LitElement {
       ${this.#pageAlert()}
       ${
         this.model
-          ? html`<wt-tabs
+          ? html`${this.#policyTree()} ${this.#readiness()} ${this.#hoursSection()}
+              ${this.#deviceStartingZones()} ${this.#zoneMenus()}
+              <wt-tabs
                 label=${t("venue.title")}
                 .value=${this.view}
                 .items=${[
-                  { key: "status", label: t("venue.status") },
                   { key: "departments", label: t("venue.departments") },
                   { key: "zones", label: t("venue.zones") },
                 ]}
                 @wt-tab-change=${this.#selectView}
               >
-                ${this.#tabActions()}
-                <div slot="status">${this.#readiness()}</div>
                 <div slot="departments">${this.#departments()}</div>
                 <div slot="zones">${this.#zones()}</div>
               </wt-tabs>

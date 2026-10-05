@@ -8,6 +8,9 @@ export interface Department {
   defaultServiceMode: ServiceMode;
   active: boolean;
 }
+export interface DepartmentRemovalImpact {
+  zones: { id: string; name: string; activeTableCount: number }[];
+}
 export interface ServiceZone {
   id: string;
   name: string;
@@ -15,6 +18,7 @@ export interface ServiceZone {
   departmentName: string;
   serviceMode: ServiceMode;
   serviceModeOverride: ServiceMode | null;
+  active?: boolean;
 }
 export interface HoursInterval {
   departmentId: string;
@@ -27,6 +31,23 @@ export interface ZoneMenu {
   menuId: string;
   displayOrder: number;
   isDefault: boolean;
+}
+export type PaidWhen = "prepay" | "ticket_then_pay";
+export type CollectionNumber = "none" | "numbered";
+export type ReceiptPrintMode = "auto" | "on_request" | "never";
+export interface DepartmentSalePolicy {
+  departmentId: string;
+  paidWhen: PaidWhen;
+  collectionNumber: CollectionNumber;
+  receiptPrintMode: ReceiptPrintMode;
+  printTradingName: boolean;
+}
+export interface ZoneSalePolicy {
+  zoneId: string;
+  paidWhen: PaidWhen | null;
+  collectionNumber: CollectionNumber | null;
+  receiptPrintMode: ReceiptPrintMode | null;
+  effective: Omit<DepartmentSalePolicy, "departmentId">;
 }
 export type VenueReadinessIssue =
   | { code: "venue.default_station_missing" }
@@ -51,6 +72,7 @@ export interface FloorZone extends NamedRow {
 export interface VenueServiceModel {
   departments: Department[];
   zones: ServiceZone[];
+  salePolicies: { departments: DepartmentSalePolicy[]; zones: ZoneSalePolicy[] };
   deviceZones: { deviceId: string; zoneId: string }[];
   hours: HoursInterval[];
   zoneMenus: ZoneMenu[];
@@ -101,7 +123,7 @@ export class VenueServiceApi {
     const [model, menus, floorZones, devices] = await Promise.all([
       this.#read<VenueServiceModel>("/management-api/venue-service"),
       this.#read<VenueServiceChoices["menus"]>("/management-api/catalogues"),
-      this.#read<FloorZone[]>("/management-api/zones"),
+      this.#read<FloorZone[]>("/management-api/zones?includeInactive=true"),
       this.#read<VenueServiceChoices["devices"]>("/management-api/devices"),
     ]);
     return {
@@ -154,6 +176,14 @@ export class VenueServiceApi {
     return this.request(`/management-api/venue-service/departments/${departmentId}`, "DELETE");
   }
 
+  departmentRemovalImpact(departmentId: string): Promise<DepartmentRemovalImpact> {
+    return this.#read(`/management-api/venue-service/departments/${departmentId}/removal-impact`);
+  }
+
+  zoneRemovalImpact(zoneId: string): Promise<DepartmentRemovalImpact> {
+    return this.#read(`/management-api/venue-service/zones/${zoneId}/removal-impact`);
+  }
+
   replaceHours(departmentId: string, hours: Omit<HoursInterval, "departmentId">[]): Promise<void> {
     return this.request(`/management-api/venue-service/departments/${departmentId}/hours`, "PUT", {
       hours,
@@ -165,6 +195,42 @@ export class VenueServiceApi {
     input: { departmentId: string; serviceMode: ServiceMode | null },
   ): Promise<void> {
     return this.request(`/management-api/venue-service/zones/${zoneId}`, "PUT", input);
+  }
+
+  createZone(input: { name: string; departmentId: string }): Promise<{ id: string }> {
+    return this.request("/management-api/venue-service/zones", "POST", input);
+  }
+
+  updateZone(zoneId: string, patch: { name: string }): Promise<void> {
+    return this.request(`/management-api/zones/${zoneId}`, "PATCH", patch);
+  }
+
+  deactivateZone(zoneId: string): Promise<void> {
+    return this.request(`/management-api/zones/${zoneId}`, "DELETE");
+  }
+
+  setDepartmentSalePolicyField<K extends keyof Omit<DepartmentSalePolicy, "departmentId">>(
+    departmentId: string,
+    field: K,
+    value: DepartmentSalePolicy[K],
+  ): Promise<void> {
+    return this.request(
+      `/management-api/venue-service/departments/${departmentId}/sale-policy/${field}`,
+      "PATCH",
+      { value },
+    );
+  }
+
+  setZoneSalePolicyOverride<K extends "paidWhen" | "collectionNumber" | "receiptPrintMode">(
+    zoneId: string,
+    field: K,
+    value: ZoneSalePolicy[K],
+  ): Promise<void> {
+    return this.request(
+      `/management-api/venue-service/zones/${zoneId}/sale-policy/${field}`,
+      "PATCH",
+      { value },
+    );
   }
 
   setDeviceDefaultZone(deviceId: string, zoneId: string): Promise<void> {

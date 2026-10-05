@@ -4,12 +4,12 @@ import "./errors.js";
 import { eq } from "drizzle-orm";
 import { AppError, locationId, nodeId, seriesId } from "@waitron/shared";
 import type { Decimal, DeviceOrigin, LocationId, NodeId, Origin, SeriesId } from "@waitron/shared";
-import { locations, nodes, orderFlow, withTransaction } from "@waitron/db";
+import { nodes, orderFlow, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { isUnset } from "./env-value.js";
 
 /**
- * The per-venue pay-timing mode. It decides which issuance primitive fires and when, so a wrong
+ * A pay-timing mode. It decides which issuance primitive fires and when, so a wrong
  * dispatch files the wrong kind of unrepairable fiscal record.
  */
 export type OrderFlow = (typeof orderFlow.enumValues)[number];
@@ -43,10 +43,6 @@ export interface TillConfig {
   sendingDeviceId?: string;
   /** Line ids of made-here records this request writes, for its till answer. */
   madeHereSink?: Set<string>;
-  /**
-   * Read from the till's location row by `readOrderFlow`, not the environment — which is why
-   * `loadTillConfig` returns a {@link TillIdentityConfig}: no placeholder mode can reach a dispatch.
-   */
   orderFlow: OrderFlow;
   /**
    * The largest total this regime records for a sale with no named customer, from the fiscal
@@ -132,24 +128,6 @@ export function tryLoadTillConfig(env: NodeJS.ProcessEnv): TillIdentityConfig | 
     });
   }
   return loadTillConfig(env);
-}
-
-export async function readOrderFlow(
-  db: Database,
-  cfg: Pick<TillConfig, "locationId">,
-): Promise<OrderFlow> {
-  return withTransaction(db, async (tx) => {
-    const [row] = await tx
-      .select({ orderFlow: locations.orderFlow })
-      .from(locations)
-      .where(eq(locations.id, cfg.locationId));
-    /* v8 ignore start */
-    if (row === undefined) {
-      throw new Error(`readOrderFlow: no location ${cfg.locationId}`);
-    }
-    /* v8 ignore stop */
-    return row.orderFlow;
-  });
 }
 
 /**

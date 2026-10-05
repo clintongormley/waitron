@@ -50,6 +50,34 @@ async function table(props: Partial<WtDataTable<Row>> = {}): Promise<WtDataTable
   return el;
 }
 
+test("groups adjacent visible columns above their individual headings", async () => {
+  const el = await table({
+    columns: [
+      columns[0],
+      { ...columns[1], group: "Totals", choosable: "shown" },
+      { ...columns[2], group: "Totals", choosable: "shown" },
+    ],
+    viewKey: "grouped-test",
+  });
+  const headings = () => [...el.shadowRoot!.querySelectorAll("thead tr")];
+  expect(headings()).toHaveLength(2);
+  expect(headings()[0].textContent).toContain("Totals");
+  expect(headings()[0].querySelector('th[scope="colgroup"]')!.getAttribute("colspan")).toBe("2");
+  expect([...headings()[1].querySelectorAll("th")].map((th) => th.textContent?.trim())).toEqual([
+    "Name",
+    "Count",
+    "Actions",
+  ]);
+
+  el.shadowRoot!.querySelector<HTMLInputElement>('input[data-column="count"]')!.click();
+  await el.updateComplete;
+  expect(headings()[0].querySelector('th[scope="colgroup"]')!.getAttribute("colspan")).toBe("1");
+  expect([...headings()[1].querySelectorAll("th")].map((th) => th.textContent?.trim())).toEqual([
+    "Name",
+    "Actions",
+  ]);
+});
+
 test("an unselectable row has no checkbox, and select-all counts only selectable rows", async () => {
   const el = await table({ selectable: true, rowSelectable: (row) => row.id !== "b" });
   expect(el.shadowRoot!.querySelector("[data-test=select-a]")).not.toBeNull();

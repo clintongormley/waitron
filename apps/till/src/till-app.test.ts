@@ -307,7 +307,10 @@ function servedAs(menuItemId: string, productId: string) {
   };
 }
 
-function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
+function fixtureOffers(
+  catalogue: ProductCatalogue,
+  zonePolicy: Partial<ZoneOfferCatalogue["context"]> = {},
+): ZoneOfferCatalogue {
   const defaultMenuId = catalogue.menus.find((menu) => menu.isDefault)?.id ?? null;
   const offers = catalogue.products.map((product, index): ZoneOfferCatalogue["offers"][number] => ({
     id: product.menuItemId ?? `menu-item-${product.id}-${index}`,
@@ -373,7 +376,13 @@ function fixtureOffers(catalogue: ProductCatalogue): ZoneOfferCatalogue {
     courseId: product.courseId ?? null,
   }));
   return {
-    context: { zoneId: "zone-counter", departmentId: "department-default", serviceMode: "prepay" },
+    context: {
+      zoneId: "zone-counter",
+      departmentId: "department-default",
+      serviceMode: "prepay",
+      receiptPrintMode: "auto",
+      ...zonePolicy,
+    },
     defaultMenuId,
     // No `versionId`: a line added from these offers asserts no version, so the wire bodies the
     // suites pin are the ones a till sends against the live version.
@@ -477,10 +486,20 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     ...overrides,
   } as unknown as TillApi;
   if (!("listDefaultZoneOffers" in overrides)) {
-    api.listDefaultZoneOffers = vi.fn(async () => fixtureOffers(await api.listProducts()));
+    api.listDefaultZoneOffers = vi.fn(async () =>
+      fixtureOffers(
+        await api.listProducts(),
+        overrides.zonePolicy as Partial<ZoneOfferCatalogue["context"]>,
+      ),
+    );
   }
   if (!("listZoneOffers" in overrides)) {
-    api.listZoneOffers = vi.fn(async () => fixtureOffers(await api.listProducts()));
+    api.listZoneOffers = vi.fn(async () =>
+      fixtureOffers(
+        await api.listProducts(),
+        overrides.zonePolicy as Partial<ZoneOfferCatalogue["context"]>,
+      ),
+    );
   }
   return api;
 }
@@ -789,6 +808,7 @@ describe("till-app", () => {
       .mockRejectedValueOnce({ code: "station.no_replacement" })
       .mockResolvedValue(placedResult);
     const { el } = await mountApp({
+      zonePolicy: { serviceMode: "ticket_then_pay" },
       getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
       askSaleDeadEnds,
       placeOrder,
@@ -827,6 +847,7 @@ describe("till-app", () => {
       .mockRejectedValueOnce({ code: "station.no_replacement" })
       .mockImplementation(() => new Promise(() => {}));
     const { el } = await mountApp({
+      zonePolicy: { serviceMode: "ticket_then_pay" },
       getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
       askSaleDeadEnds,
       placeOrder,
@@ -872,6 +893,7 @@ describe("till-app", () => {
         stations: [],
       });
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: orderFlow },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow }),
         askSaleDeadEnds,
       });
@@ -904,6 +926,7 @@ describe("till-app", () => {
         stations: [{ id: "kitchen", name: "Kitchen", open: true }],
       });
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: orderFlow },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow }),
         askSaleDeadEnds,
       });
@@ -1083,6 +1106,7 @@ describe("till-app", () => {
       const pay = vi.fn().mockResolvedValue({ outcome: "captured", ticket: saleResult });
       const placeOrder = vi.fn().mockResolvedValue(placedResult);
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: action === "Place" ? "ticket_then_pay" : "prepay" },
         getTill: vi.fn().mockResolvedValue({
           ...till,
           orderFlow: action === "Place" ? "ticket_then_pay" : "prepay",
@@ -1837,6 +1861,10 @@ describe("till-app", () => {
       overrides: Record<string, unknown> = {},
     ): Promise<TillApp> {
       const { el } = await mountApp({
+        zonePolicy: {
+          serviceMode: tillOverrides.orderFlow ?? "prepay",
+          receiptPrintMode: tillOverrides.receiptPrintMode ?? "auto",
+        },
         getTill: vi.fn().mockResolvedValue({ ...till, canvas, ...tillOverrides }),
         getDeviceIdentity: vi
           .fn()
@@ -2003,6 +2031,7 @@ describe("till-app", () => {
         if (device === "handheld")
           return toHandheld(withFloorCard(card), { orderFlow: "invoice_first" }, overrides);
         const { el } = await mountApp({
+          zonePolicy: { serviceMode: "invoice_first" },
           getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
           ...overrides,
         });
@@ -2895,6 +2924,7 @@ describe("till-app", () => {
     async (receiptPrintMode) => {
       const printReceipt = vi.fn().mockResolvedValue(undefined);
       const { el } = await mountApp({
+        zonePolicy: { receiptPrintMode: receiptPrintMode },
         getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode }),
         printReceipt,
       });
@@ -2917,6 +2947,7 @@ describe("till-app", () => {
 
   it("invoice-first collection offers a duplicate because the original printed at placement", async () => {
     const { el } = await mountApp({
+      zonePolicy: { serviceMode: "invoice_first", receiptPrintMode: "on_request" },
       getTill: vi.fn().mockResolvedValue({
         ...till,
         orderFlow: "invoice_first",
@@ -5183,6 +5214,7 @@ describe("till-app", () => {
         .mockResolvedValueOnce([defaultStation])
         .mockRejectedValue(new Error("offline"));
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -5213,6 +5245,7 @@ describe("till-app", () => {
         .mockImplementationOnce(() => new Promise((resolve) => (finishTableRead = resolve)))
         .mockResolvedValueOnce([newer]);
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         getTablesState: vi.fn().mockResolvedValue([freeTable]),
         listZones: vi.fn().mockResolvedValue([floorZone]),
@@ -7315,6 +7348,7 @@ describe("till-app", () => {
 
     it("boots into Mode I (invoice_first): tender-pay starts on the order stage; the default station's queue is fetched and rendered", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         // A non-empty queue so the has-items-gated prep-queue card renders (an empty queue hides it).
         getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
@@ -7330,6 +7364,7 @@ describe("till-app", () => {
 
     it("boots into Mode T (ticket_then_pay): the same per-mode selection applies", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
         // A non-empty queue so the has-items-gated prep-queue card renders (an empty queue hides it).
         getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
@@ -7341,6 +7376,7 @@ describe("till-app", () => {
 
     it("renders the station queue from fetched data, not just an empty placeholder", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
       });
@@ -7350,6 +7386,7 @@ describe("till-app", () => {
 
     it("no default station configured leaves the counter queue empty rather than throwing", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         listStations: vi.fn().mockResolvedValue([{ ...defaultStation, isDefault: false }]),
       });
@@ -7361,6 +7398,7 @@ describe("till-app", () => {
 
     it("place-order (fresh basket): parks then places, moves to the collect stage, refreshes the prep queue", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
       });
       const c = await toCounter(el);
@@ -7394,6 +7432,7 @@ describe("till-app", () => {
       // order server-side).
       // `placeOrder` files the STORED composition straight.
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
       });
       const c = await toCounter(el);
@@ -7420,6 +7459,7 @@ describe("till-app", () => {
       const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
       const placeOrder = vi.fn().mockResolvedValue(placedResult);
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
         updateWorkingOrder,
         placeOrder,
@@ -7463,6 +7503,7 @@ describe("till-app", () => {
       const updateWorkingOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
       const placeOrder = vi.fn().mockRejectedValue({ code: "working_order.not_open" });
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
         updateWorkingOrder,
         placeOrder,
@@ -7486,6 +7527,7 @@ describe("till-app", () => {
 
     it("a failed place keeps the counter, the order stage and the basket, showing a non-fatal error", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         parkOrder: vi.fn().mockRejectedValue({ code: "working_order.rejected" }),
       });
@@ -7511,6 +7553,7 @@ describe("till-app", () => {
       // `place.refused` rather than `sale.refused`: a refund instruction would be wrong here, and
       // this asserts the two messages are not interchangeable.
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         placeOrder: vi.fn().mockRejectedValue({ code: "fiscal.record_invalid" }),
       });
@@ -7534,6 +7577,7 @@ describe("till-app", () => {
       // "did it file?" `sale.unconfirmed`. `placeOrder` is never reached.
       const parkOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         parkOrder,
       });
@@ -7557,6 +7601,7 @@ describe("till-app", () => {
       // request is `sale.unconfirmed` — the placement / deferred invoice may have filed.
       const placeOrder = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         placeOrder,
       });
@@ -7577,6 +7622,7 @@ describe("till-app", () => {
     it("place single-flight: a second place-order while the first is pending places EXACTLY ONCE", async () => {
       const parkOrder = vi.fn(() => new Promise(() => {}));
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         parkOrder,
       });
@@ -7601,6 +7647,7 @@ describe("till-app", () => {
       async (_method, event, detail, route) => {
         const getStationQueue = vi.fn().mockResolvedValue({ items: [], notices: [] });
         const { el } = await mountApp({
+          zonePolicy: { serviceMode: "ticket_then_pay" },
           getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
           getStationQueue,
         });
@@ -7622,6 +7669,7 @@ describe("till-app", () => {
 
     it("Pay by an integrated card at the order stage of an invoice_first zone issues the invoice now, so the original receipt is offered", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first", receiptPrintMode: "on_request" },
         getTill: vi.fn().mockResolvedValue({
           ...till,
           orderFlow: "invoice_first",
@@ -7640,6 +7688,7 @@ describe("till-app", () => {
 
     it("collect-order: settles the placed order and shows the ticket", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
       });
       const c = await toCounter(el);
@@ -7712,6 +7761,7 @@ describe("till-app", () => {
         });
         const { el } = await mountApp({
           lookUpBills: lookup,
+          zonePolicy: { receiptPrintMode: "on_request" },
           getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
         });
         await toCounter(el);
@@ -7802,6 +7852,7 @@ describe("till-app", () => {
 
     it("a failed collect keeps the counter (collect stage) and the basket, showing a non-fatal error", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         collectOrder: vi.fn().mockRejectedValue({ code: "working_order.not_placed" }),
       });
@@ -7827,6 +7878,7 @@ describe("till-app", () => {
       // charge the operator already put through, so it needs the same stop-and-refund message the
       // counter's own pay gets.
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         collectOrder: vi.fn().mockRejectedValue({ code: "fiscal.foreign_recipient_unsupported" }),
       });
@@ -7847,6 +7899,7 @@ describe("till-app", () => {
 
     it("collect-order: says the operator may not take payments when refused the payment permission", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         collectOrder: vi.fn().mockRejectedValue({
           code: "authorization.not_permitted",
@@ -7871,6 +7924,7 @@ describe("till-app", () => {
 
     it("collect-order: an order over the simplified-invoice limit is refused in its own words, naming the limit", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         collectOrder: vi.fn().mockRejectedValue({
           code: "sale.total_exceeds_simplified_limit",
@@ -7905,6 +7959,7 @@ describe("till-app", () => {
       // as `#onConfirmPayment` (#264): `sale.unconfirmed`, not the free-to-retry
       // `sale.error`. The `{ code }` refusal path stays `sale.error` (the test above).
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         collectOrder: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
       });
@@ -7927,6 +7982,7 @@ describe("till-app", () => {
     it("collect single-flight: a second collect-order while the first is pending collects EXACTLY ONCE", async () => {
       const collectOrder = vi.fn(() => new Promise<TillSaleResult>(() => {}));
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         collectOrder,
       });
@@ -7947,6 +8003,7 @@ describe("till-app", () => {
 
     it("new-sale resets the collect stage back to order for the next basket", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
       });
       const c = await toCounter(el);
@@ -7966,6 +8023,7 @@ describe("till-app", () => {
 
     it("advance-ticket-item: advances the line, then refreshes the default station's queue", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         getStationQueue: vi
           .fn()
@@ -7987,6 +8045,7 @@ describe("till-app", () => {
 
     it("a failed advance-ticket-item still refreshes the queue and shows a non-fatal error", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         advanceTicketItem: vi.fn().mockRejectedValue({ code: "ticket.invalid_transition" }),
       });
@@ -8008,6 +8067,7 @@ describe("till-app", () => {
     // advance-ticket-item tests above do.
     it("mark-collected: hands over the order via markCollected, then refreshes the default station's queue", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         getStationQueue: vi
           .fn()
@@ -8029,6 +8089,7 @@ describe("till-app", () => {
 
     it("a failed mark-collected still refreshes the queue and shows a non-fatal error", async () => {
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: "invoice_first" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
         markCollected: vi.fn().mockRejectedValue({ code: "working_order.already_collected" }),
       });
@@ -10245,6 +10306,7 @@ describe("the device profile decides which screens a device offers", () => {
       let release!: (rows: never[]) => void;
       const { el } = await mountApp({
         // Not pay-first, so the station queue is a real read the counter lists would make next.
+        zonePolicy: { serviceMode: "ticket_then_pay" },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
         listWorkingOrders: vi.fn(() => new Promise((done) => (release = done))),
       });
@@ -10867,6 +10929,7 @@ describe("a failed list refresh after a successful write", () => {
       printersDown: [],
     });
     const { el } = await mountApp({
+      zonePolicy: { serviceMode: "invoice_first" },
       getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
       getStationQueue,
     });
@@ -10904,6 +10967,7 @@ describe("a failed list refresh after a successful write", () => {
         printersDown: [],
       });
       const { el } = await mountApp({
+        zonePolicy: { serviceMode: orderFlow },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow }),
         getStationQueue,
       });
@@ -11037,7 +11101,10 @@ describe("a counter pay, place or hold refused for a reason the operator can act
         const { el } = await mountApp({
           ...(orderFlow === undefined
             ? {}
-            : { getTill: vi.fn().mockResolvedValue({ ...till, orderFlow }) }),
+            : {
+                zonePolicy: { serviceMode: orderFlow },
+                getTill: vi.fn().mockResolvedValue({ ...till, orderFlow }),
+              }),
           [method]: vi.fn().mockRejectedValue({ code }),
         });
         const c = await toCounter(el);
@@ -11614,6 +11681,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     waitingList(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-waiting-order="${id}"]`);
   const alert = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>('[role="alert"]');
   const invoiceFirst = {
+    zonePolicy: { serviceMode: "invoice_first" },
     getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "invoice_first" }),
   };
 
@@ -11699,6 +11767,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     "a held order retrieved after Pay on a %s till is taken in the till's own mode, at the order stage",
     async (tillMode, orderMode) => {
       const { el, c } = await counterWaiting({
+        zonePolicy: { serviceMode: tillMode },
         getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: tillMode }),
         listCounterWaiting: vi.fn().mockResolvedValue([{ ...sentOrder, serviceMode: orderMode }]),
         retrievePlacedOrder: vi.fn().mockResolvedValue(placedRead("wo-sent")),
@@ -11726,6 +11795,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
     "a %s order collected on a till whose zone is %s, by %s, offers the original receipt by the order's mode",
     async (orderMode, tillMode, method, original) => {
       const { el } = await counterWaiting({
+        zonePolicy: { serviceMode: tillMode, receiptPrintMode: "on_request" },
         getTill: vi
           .fn()
           .mockResolvedValue({ ...till, orderFlow: tillMode, receiptPrintMode: "on_request" }),
