@@ -40,6 +40,10 @@ A variant's names are never inherited: a blank customer or kitchen name falls ba
 staff name, never to the parent's. A line that names no variant renders exactly as it did before
 variants existed.
 
+**No two Active rows share a staff name.** An Active product's Name, and an Active variant's of an
+Active product, is refused with `product.name_taken` when another such row in the venue has it,
+ignoring case and surrounding spaces (`packages/catalogue/src/product-names.ts`).
+
 The three resolvers, one per audience:
 
 - `staffPresentationName` — the variant's staff name, else the product's. Takes only the two staff
