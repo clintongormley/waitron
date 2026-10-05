@@ -6326,6 +6326,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   The Spanish reminder check now uses the approved Deshabilitado wording.
   Additional browser checks cover retained printer IDs, tied station/watcher ordering, extra
   routing explanations, retryable watcher refusals and dialog cancellation/invalid rename recovery.
+  A refused unassigned-folder claim keeps its field message beside that folder; unavailable watcher
+  metadata keeps the retained watcher ID visible on its printer choice.
   The schema foundation adds venue defaults and separate nullable station
   timing storage. Provisioning now creates 5/10/15 defaults, with a supervisor-readable defaults
   API whose writes refuse an invalid effective station order. Station creation and edits now write

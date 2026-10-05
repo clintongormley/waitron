@@ -5834,3 +5834,38 @@ it.each(["watcher.name_taken", "connection.failed"])(
     expect(q(el, '[data-test="watcher-modal"]')).toBeNull();
   },
 );
+
+it("Tickets names an unavailable watcher by its retained id when watcher metadata is absent", async () => {
+  setLocale("en");
+  const server = structuredClone(ticketView);
+  server.watchers = [];
+  server.printers.find((row) => row.id === "watcher")!.watcherId = "missing-watcher";
+  const { el, table } = await mountTickets({ load: vi.fn().mockResolvedValue(server) });
+  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
+  await settle(el);
+  const choice = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
+  expect(choice.options.find((row) => row.value === "watcher")).toEqual({
+    value: "watcher",
+    label: "Pass printer",
+    disabled: true,
+    description: "Used by watcher missing-watcher",
+  });
+  expect(choice.values).toEqual(["old"]);
+});
+
+it("Routing puts a refused unassigned folder claim beside that folder without writing", async () => {
+  setLocale("en");
+  history.replaceState(null, "", "/manage/prep-stations/view/routing");
+  const a = api({ preview: vi.fn().mockRejectedValue({ code: "route.station_inactive" }) });
+  const el = await mount(a);
+  q(el, '[data-test="assign-food"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bar" } }),
+  );
+  await settle(el);
+  expect(q(el, '[data-field-error="food"]')!.textContent).toBe(
+    "This station is disabled. Choose an active station.",
+  );
+  expect(q(el, '[data-field-error="cocktails"]')).toBeNull();
+  expect(a.setClaim).not.toHaveBeenCalled();
+  expect(q(el, '[data-test="preview"]')).toBeNull();
+});
