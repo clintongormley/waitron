@@ -1273,9 +1273,9 @@ describe("device pairing: check, claim, approve", () => {
     mode.open();
     offset += 1_000;
     const after = await knock(venue, { kind: "device", label: "After" });
+    const afterCreatedAt = new Date(Date.now() + offset).toISOString();
     await suite.db.execute(
-      sql`update join_requests set created_at = ${new Date(Date.now() + offset).toISOString()}
-          where id = ${after.joinId}`,
+      sql`update join_requests set created_at = ${afterCreatedAt} where id = ${after.joinId}`,
     );
     const rows = (await listDevices(app, venue.managerCookie)) as { id: string }[];
     expect(rows.map((r) => r.id)).toEqual([after.joinId]);
