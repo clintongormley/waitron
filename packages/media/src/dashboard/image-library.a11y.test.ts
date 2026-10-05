@@ -101,4 +101,12 @@ describe.each(["light", "dark"] as const)("image library accessibility (%s)", (t
     await vi.waitFor(() => expect(modal.querySelector("[data-test=no-uses]")).not.toBeNull());
     await expectNoA11yViolations(host);
   });
+  it("announces a failed lookup of the image's uses, with Try again, in the preview", async () => {
+    const library = await mount(theme);
+    vi.mocked(library.api.getImage).mockRejectedValue({ code: "connection.failed" });
+    const modal = await openDialog(library, "preview-bread");
+    await vi.waitFor(() => expect(modal.querySelector(".uses [role=alert]")).not.toBeNull());
+    expect(modal.querySelector("[data-test=retry-uses]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
 });

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { setContentLanguages } from "@waitron/ui";
-import { applyTokens } from "@waitron/ui/src/tokens/index.js";
+import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage, setLocale, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import "./image-library.js";
@@ -1555,11 +1554,13 @@ for (const picker of [false, true]) {
   });
 }
 
-for (const locale of ["en-GB", "es-ES"]) {
+for (const [locale, label] of [
+  ["en-GB", "Preview"],
+  ["es-ES", "Vista previa"],
+]) {
   it(`names the thumbnail's button as a preview of the image, and shows that it opens one (${locale})`, async () => {
     setLocale(locale);
     await mount();
-    const label = MEDIA_STRINGS[locale === "en-GB" ? "en" : "es"]["image.view"];
     expect(thumbnail().getAttribute("aria-label")).toBe(`${label}: Pan`);
     expect(thumbnail().textContent!.trim()).toBe(label);
     expect(thumbnail().type).toBe("button");

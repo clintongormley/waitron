@@ -227,6 +227,7 @@ export class ImageLibrary extends LitElement {
       }
       a {
         color: var(--wt-color-primary);
+        overflow-wrap: anywhere;
       }
     `,
   ];
@@ -251,7 +252,6 @@ export class ImageLibrary extends LitElement {
   @state() private duplicateImage: LibraryImage | null = null;
   @state() private deletion: { image: LibraryImage; uses: ImageUsage[] } | null = null;
   @state() private deleteError = false;
-  /** The image whose preview is open, with its uses once looked up and whether the lookup failed. */
   @state() private viewing: {
     image: LibraryImage;
     uses: ImageUsage[] | null;
@@ -458,15 +458,17 @@ export class ImageLibrary extends LitElement {
       if (generation === this.#viewGeneration) this.viewing = { image, uses: null, failed: true };
     }
   }
-  /** The preview's modal leaves the page as it closes, so focus is put back on the thumbnail here. */
+  /** Closing by Close or a backdrop click leaves focus on the page body, so it is put back on the
+   * thumbnail here. */
   async #closeViewer(id: string): Promise<void> {
     this.#viewGeneration++;
     this.viewing = null;
     await this.updateComplete;
     this.shadowRoot!.querySelector<HTMLElement>(`[data-test="preview-${CSS.escape(id)}"]`)?.focus();
   }
-  /** `wt-dialog` has no close on a backdrop click, so it is caught here: such a click reaches the
-   * `<dialog>` itself, at a point outside the dialog's box. */
+  /** `wt-dialog` has no close on a backdrop click (it sets `closedby` only to `closerequest` or
+   * `none`), so it is caught here: such a click reaches the `<dialog>` itself, at a point outside
+   * the dialog's box. */
   #closeOnBackdrop(event: MouseEvent, id: string): void {
     const target = event.composedPath()[0];
     if (!(target instanceof HTMLDialogElement)) return;
@@ -740,14 +742,14 @@ export class ImageLibrary extends LitElement {
               type="button"
               class="thumb"
               data-test=${`preview-${image.id}`}
-              aria-label=${`${t("image.view")}: ${name}`}
+              aria-label=${`${t("image.preview_open")}: ${name}`}
               @click=${() => void this.#view(image)}
             >
               <img
                 src=${`/media/${encodeURIComponent(image.filename)}`}
                 alt=${name}
                 loading="lazy"
-              /><span class="chip">${t("image.view")}</span>
+              /><span class="chip">${t("image.preview_open")}</span>
             </button>
             <h2>${name}</h2>
             <time datetime=${image.createdAt}
