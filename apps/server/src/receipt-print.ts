@@ -7,11 +7,12 @@ import { deviceProfiles, devices, drawerOpens, printers, readTenant, sales } fro
 import type { Transaction } from "@waitron/db";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { EscSetting, PrintConfig } from "@waitron/printing";
-import { getReceipt } from "@waitron/layouts";
+import { getReceipt, getReceiptLogo } from "@waitron/layouts";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import type { Origin } from "@waitron/shared";
 import { formatReceipt } from "./receipt-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { readReceiptAddress } from "./venue-address.js";
 import type { OriginConfig, TillConfig } from "./till-config.js";
 import type { TillSaleResult } from "./till-sale.js";
 
@@ -83,10 +84,10 @@ async function resolveDevicePrinter(
   return { ...printer, opensDrawer: (capabilities as string[]).includes("open-cash-drawer") };
 }
 
-/** Use the filed issuer where available and the current optional trim. */
+/** Use the filed issuer where available and the current optional trim, address and logo. */
 async function buildReceiptBytes(
   tx: Transaction,
-  cfg: Pick<TillConfig, "practiceMode">,
+  cfg: Pick<TillConfig, "locationId" | "practiceMode">,
   ticket: TillSaleResult,
   saleId: string,
   duplicate: boolean,
@@ -102,11 +103,15 @@ async function buildReceiptBytes(
   }
   /* v8 ignore stop */
   const receipt = await getReceipt(tx);
+  const venueAddress = await readReceiptAddress(tx, cfg.locationId, receipt);
+  const logo = await getReceiptLogo(tx, printer.paperWidth);
   const receiptHeader = await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId);
   return formatReceipt({
     result: ticket,
     issuer: ticket.issuer ?? { venueName: taxpayer.legalName, nif: taxpayer.taxId },
     receipt,
+    venueAddress,
+    logo,
     receiptHeader: receiptHeader ?? undefined,
     invoiceLocale: language ?? ticket.locale,
     namesLocale: ticket.locale,

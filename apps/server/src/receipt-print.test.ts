@@ -61,7 +61,12 @@ import {
   resolvePaymentSlipPrinter,
   resolveReceiptPrinter,
 } from "./receipt-print.js";
-import { decodeTicket, opensDrawer, printedLines } from "./testing/decode-ticket.js";
+import {
+  decodeTicket,
+  opensDrawer,
+  printedCommands,
+  printedLines,
+} from "./testing/decode-ticket.js";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import { venueModuleConfig } from "./provision.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -1635,5 +1640,137 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
     const { orderLabel } = await inTx(v, (tx) => readReceiptOrder(tx, v.cfg, orderId));
 
     expect(orderLabel).toBe("Terraza 2");
+  });
+});
+
+describe("the receipt's top block: logo, address, phone and email", () => {
+  const LOGO = `${"a".repeat(64)}.png`;
+  /** 16 × 2 dots: a printable raster for either paper. */
+  const LOGO_BITS = [0xff, 0x00, 0x0f, 0xf0];
+  const logoRaster = {
+    widthDots: 16,
+    heightDots: 2,
+    data: Buffer.from(LOGO_BITS).toString("base64"),
+  };
+
+  async function storeReceipt(receipt: Record<string, unknown>): Promise<void> {
+    await withTransaction(suite.db, async (tx) => {
+      await tx
+        .insert(tenantReceipts)
+        .values({ receipt })
+        .onConflictDoUpdate({ target: tenantReceipts.id, set: { receipt } });
+    });
+  }
+
+  async function sellOne(cfg: DeviceRequestConfig, each: { menuItemId: string }, zoneId: string) {
+    return recordTillSale(
+      deps(),
+      cfg,
+      {
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "card", amount: "1.50" },
+      },
+      OPERATOR,
+    );
+  }
+
+  /** The receipt jobs' payloads, oldest first. */
+  async function receiptPayloads(cfg: DeviceRequestConfig): Promise<Uint8Array[]> {
+    return (await printJobsFor(cfg))
+      .map((job) => new Uint8Array(job.payload))
+      .filter((payload) => decodeTicket(payload).includes("VERI*FACTU"));
+  }
+
+  /** The pictures a payload prints that are not a drawn line of text, as width, height and bits. */
+  function pictures(payload: Uint8Array): [number, number, number[]][] {
+    return printedCommands(payload)
+      .filter((command) => command.widthDots !== undefined && command.text === undefined)
+      .map((command) => [command.widthDots!, command.heightDots!, [...command.bytes.subarray(8)]]);
+  }
+
+  /** The centred lines from the legal name to the NIF, trimmed. */
+  function topBlock(payload: Uint8Array): string[] {
+    const lines = printedLines(payload).map((line) => line.trim());
+    const name = lines.indexOf("Deli Recibos SL");
+    return lines.slice(name, lines.findIndex((line) => line.startsWith("NIF:")) + 1);
+  }
+
+  it("prints the stored logo for the printer's paper, then the location's address, phone and email", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { mode: "auto", printerId });
+    await storeReceipt({
+      logo: LOGO,
+      phone: "+34 910 000 000",
+      email: "hola@deli.test",
+      logoRasters: {
+        "58mm": { widthDots: 8, heightDots: 1, data: Buffer.from([0x81]).toString("base64") },
+        "80mm": logoRaster,
+      },
+    });
+
+    await sellOne(cfg, each, zoneId);
+    const [payload] = await receiptPayloads(cfg);
+    // The QR first, then the 80 mm logo.
+    expect(pictures(payload!).slice(1)).toEqual([[16, 2, LOGO_BITS]]);
+    const taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
+    expect(topBlock(payload!)).toEqual([
+      "Deli Recibos SL",
+      "Calle Mayor 1",
+      "28013 Madrid",
+      "Tel. +34 910 000 000",
+      "hola@deli.test",
+      `NIF: ${taxId}`,
+    ]);
+  });
+
+  it("prints no address when the receipt switches it off", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
+    await storeReceipt({ printAddress: false });
+
+    await sellOne(cfg, each, zoneId);
+    const [payload] = await receiptPayloads(cfg);
+    const taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
+    expect(topBlock(payload!)).toEqual(["Deli Recibos SL", `NIF: ${taxId}`]);
+  });
+
+  it("files and prints the sale without a logo when the stored picture is not one the paper can print", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
+    // Three bytes for a 16 × 2 picture, which needs four: the printer command would refuse it.
+    await storeReceipt({
+      logo: LOGO,
+      logoRasters: { "58mm": logoRaster, "80mm": { ...logoRaster, data: "////" } },
+    });
+
+    const result = await sellOne(cfg, each, zoneId);
+    expect(result.total).toBe("1.50");
+    expect(await registroCount(cfg)).toBe(1);
+    const [payload] = await receiptPayloads(cfg);
+    expect(pictures(payload!)).toHaveLength(1);
+    expect(topBlock(payload!)).toContain("Calle Mayor 1");
+  });
+
+  it("reprints with the trim saved since, as it does the slogan", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
+    const filed = await sellOne(cfg, each, zoneId);
+    const saleId = await onlySaleId(cfg);
+    await storeReceipt({
+      logo: LOGO,
+      phone: "910000000",
+      printAddress: false,
+      logoRasters: { "58mm": logoRaster, "80mm": logoRaster },
+    });
+
+    await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, filed, saleId));
+    const [original, reprint] = await receiptPayloads(cfg);
+    expect(pictures(original!)).toHaveLength(1);
+    expect(topBlock(original!)).toContain("Calle Mayor 1");
+    expect(pictures(reprint!).slice(1)).toEqual([[16, 2, LOGO_BITS]]);
+    expect(topBlock(reprint!)).toContain("Tel. 910000000");
+    expect(topBlock(reprint!)).not.toContain("Calle Mayor 1");
   });
 });

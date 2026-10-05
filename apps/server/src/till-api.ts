@@ -187,6 +187,7 @@ import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
 import { resolveInstalledReceiptLanguageRules } from "@waitron/country-packs";
 import { geographyOf } from "./venue-locale.js";
+import { readReceiptAddress } from "./venue-address.js";
 import { resolveLoginLocale } from "./login-locale.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
@@ -1082,6 +1083,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           displayOrder: course.displayOrder,
         }));
         const receipt = await getReceipt(tx);
+        const venueAddress = await readReceiptAddress(tx, deps.cfg.locationId, receipt);
         let canvas: CanvasDef;
         let capabilities: CapabilityFlag[] = [];
         let inactivityTimeoutSeconds: number | null = null;
@@ -1137,6 +1139,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           receiptPrintMode: loc?.receiptPrintMode,
           courses,
           receipt,
+          venueAddress,
           canvas,
           capabilities,
           inactivityTimeoutSeconds,
@@ -1180,6 +1183,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             : boot.activeReaders,
         tipsEnabled: deps.cfg.tipsEnabled,
         receipt: boot.receipt,
+        venueAddress: boot.venueAddress,
         receiptPrintMode: boot.receiptPrintMode,
         canvas: boot.canvas,
         capabilities: boot.capabilities,
