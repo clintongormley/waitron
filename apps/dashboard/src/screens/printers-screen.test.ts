@@ -4187,7 +4187,15 @@ it("reopens printer status from its URL and reflects a saved drawer choice", asy
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
   expect(text(el, "[data-test=printer-drawer]")).toBe(t("printers.no"));
-  q(el, "[data-test=edit-printer-details]")!.click();
+  q(el, "[data-test=printer-section-calibration]")!
+    .shadowRoot!.querySelector<HTMLElement>("button")!
+    .click();
+  await flush(el);
+  q(el, "[data-test=calibrate-printer-details]")!.click();
+  await flush(el);
+  q(el, "[data-test=calibration-next]")!.click();
+  await flush(el);
+  q(el, "[data-test=calibration-next]")!.click();
   await flush(el);
   toggleSwitch(el, '[name="printer-cash-drawer"]', true);
   await flush(el);
