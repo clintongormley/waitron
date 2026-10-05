@@ -3787,8 +3787,6 @@ describe("menuOfferToTillProduct", () => {
     expect(menuOfferToTillProduct(offer)).not.toHaveProperty("ordering");
   });
 
-  // The menu browser paints a tile by this value, and draws a version published before colours
-  // existed neutral, so that version must arrive with none.
   it("carries the offer's colour, null included, and nothing when the version carries none", () => {
     const offer: TillMenuOffer = {
       id: "offer-beer",
