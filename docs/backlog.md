@@ -3351,7 +3351,7 @@ buttons _(2026-10-05, W85d: wherever the list is 40rem wide or less, not only in
 icon button and tooltip styles are shared from `@waitron/ui` (`iconButtonStyles`). One existing
 test assertion changed, for the owner to review: the catalogue browser's toolbar-order test pinned
 the old order (search, Filters, Expand all, Select, Customise) and now pins the new one (Filters,
-Select, search, Expand all, Customise). Left open: on a phone the search is drawn under Expand all
+Select, search, Expand all, Customise). Left open: on a phone _(2026-10-05, W85d: now wherever the list is 40rem wide or less, desktop windows with the sidebar showing included; the reviewers judged it at phone width only)_ the search is drawn under Expand all
 and Customise while Tab reaches it before them (two reviewers judged this not a WCAG 1.3.2 or 2.4.3
 failure, by stepping through with the keyboard and reading Chromium's accessibility tree; what a
 screen reader says was not checked); and a desktop window narrow enough to leave the table under

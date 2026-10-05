@@ -2555,16 +2555,16 @@ it("at phone width puts Filters, Select, Expand all and Customise on the first t
 });
 
 it.each([
-  ["en-GB", 320],
-  ["en-GB", 430],
-  ["en-GB", 620],
-  ["en-GB", 640],
-  ["es-ES", 430],
-  ["es-ES", 600],
-  ["es-ES", 640],
+  [320, "en-GB"],
+  [430, "en-GB"],
+  [620, "en-GB"],
+  [640, "en-GB"],
+  [430, "es-ES"],
+  [600, "es-ES"],
+  [640, "es-ES"],
 ])(
-  "in a wide window, a %s list %ipx wide puts the four buttons on one line and the search under them",
-  async (locale, listWidth) => {
+  "in a wide window, a list %ipx wide puts the four buttons on one line and the search under them (%s)",
+  async (listWidth, locale) => {
     const { page } = await import("vitest/browser");
     const width = window.innerWidth,
       height = window.innerHeight;
