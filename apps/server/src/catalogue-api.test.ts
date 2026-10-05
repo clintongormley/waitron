@@ -1664,7 +1664,7 @@ describe("mountCatalogueApi — products", () => {
     }
     const stray = crypto.randomUUID();
     const unknown = await send(app, "PATCH", `${listPath}/${stray}`, { body: { price: "9.90" } });
-    expect(unknown.status).toBe(400);
+    expect(unknown.status).toBe(404);
     expect(await unknown.json()).toMatchObject({
       error: { code: "product.variant_not_found", params: { variantId: stray } },
     });

@@ -312,6 +312,12 @@ const runFolder = createErrorBoundary(
   { ...STATUS, "category.parent_cycle": 409 },
   "catalogue.failed",
 );
+// The single-size route names its size in the path, so an unknown one is a 404; the whole-list
+// PUT names sizes in its body, and an unknown one there stays a 400.
+const runSize = createErrorBoundary(
+  { ...STATUS, "product.variant_not_found": 404 },
+  "catalogue.failed",
+);
 
 /**
  * Nothing below this screen objects to a malformed id — every id column is plain `text`, so the
@@ -1025,7 +1031,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   );
 
   app.patch("/management-api/catalogues/:id/items/:itemId/variants/:variantId", (c) =>
-    run(c, log, async () => {
+    runSize(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const menuItemId = requireUuidParam(c.req.param("itemId"), "MenuItemId");

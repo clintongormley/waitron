@@ -127,7 +127,7 @@ price as it is. The body is `{ price }`, a price or null; it returns 204. A miss
 that is neither a string nor null, answers `management.request_invalid` (400, `field: "price"`),
 and any other key in the body answers the same code naming that key. A malformed price answers
 `product.variant_invalid` (400, `field: "price"`); a size that is not one of the product's,
-`product.variant_not_found` (400); an item of another menu, or one this menu no longer reaches,
+`product.variant_not_found` (404); an item of another menu, or one this menu no longer reaches,
 `menu_item.not_found` (404).
 
 `GET /management-api/catalogues/:id/prices` gives one row per product reached by the working
