@@ -231,6 +231,7 @@ export class ProductList extends LitElement {
       wt-data-table::part(name-box) {
         flex: 1 1 calc(var(--wt-tap-min) * 4);
         min-width: 0;
+        max-inline-size: max(var(--wt-tap-min), var(--name-box-room));
       }
       wt-data-table::part(maker-link) {
         display: block;
@@ -293,17 +294,30 @@ export class ProductList extends LitElement {
   #pointer = { x: 0, y: 0 };
   @state() private ghost: DragGhost | null = null;
 
+  readonly #tableResize = new ResizeObserver(() => this.#scheduleFit());
+  #fitFrame = 0;
+
   override disconnectedCallback(): void {
     if (this.#pointerDrag) this.#finishDrag();
+    this.#tableResize.disconnect();
+    cancelAnimationFrame(this.#fitFrame);
+    this.#fitFrame = 0;
     super.disconnectedCallback();
   }
 
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.hasUpdated) this.#tableResize.observe(this.#table()!);
+  }
+
   protected override firstUpdated(): void {
-    // The table keeps a surviving row's cells, marks included, when its rows change mid-drag, so
-    // after each of its updates the drop is judged again on the rows the list now holds and the
-    // marks redrawn.
+    this.#tableResize.observe(this.#table()!);
     this.#table()!.addController({
       hostUpdated: () => {
+        this.#scheduleFit();
+        // The table keeps a surviving row's cells, marks included, when its rows change mid-drag,
+        // so after each of its updates the drop is judged again on the rows the list now holds and
+        // the marks redrawn.
         if (!this.#pointerDrag?.active) return;
         if (this.#target !== undefined) this.#target = this.#dropTargetFor(this.#target);
         this.#paint();
@@ -547,6 +561,8 @@ export class ProductList extends LitElement {
     );
     if (!box) return;
     await box.updateComplete;
+    // Fitted first, or focus scrolls the table sideways to show the whole uncapped box.
+    this.#fitNameBox();
     box.focus();
     box.shadowRoot!.querySelector("input")!.select();
   }
@@ -611,6 +627,39 @@ export class ProductList extends LitElement {
         else this.#commitName();
       }}
     ></wt-input>`;
+  }
+
+  /** Re-measured a frame after the table resizes or updates, never inside the resize observer's
+   * callback, which the box's new height would re-trigger. */
+  #scheduleFit(): void {
+    if (this.#fitFrame) return;
+    this.#fitFrame = requestAnimationFrame(() => {
+      this.#fitFrame = 0;
+      this.#fitNameBox();
+    });
+  }
+
+  /** The table is as wide as its widest row, which on a phone runs under the pinned column, so the
+   * name box takes only the room before that column, measured as if unscrolled, and its refusal
+   * wraps inside it. A box whose start the table is scrolled past is scrolled back to, so a refusal
+   * that arrives after the person scrolled sideways is read from its first letter. */
+  #fitNameBox(): void {
+    const root = this.#table()!.shadowRoot!;
+    const box = root.querySelector<HTMLElement>('wt-input[name="category-name"]');
+    if (!box) return;
+    const scroll = root.querySelector<HTMLElement>(".scroll")!;
+    const cell = box.closest("td")!;
+    const end = cell
+      .closest("tr")!
+      .querySelector('td[data-pinned="end"]')!
+      .getBoundingClientRect().left;
+    const room =
+      end -
+      (box.getBoundingClientRect().left + scroll.scrollLeft) -
+      parseFloat(getComputedStyle(cell).paddingInlineEnd);
+    box.style.setProperty("--name-box-room", `${room}px`);
+    const hidden = scroll.getBoundingClientRect().left - box.getBoundingClientRect().left;
+    if (hidden > 0) scroll.scrollLeft -= hidden;
   }
 
   #renaming(id: string): boolean {

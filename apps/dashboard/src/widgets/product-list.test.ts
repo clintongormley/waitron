@@ -12,6 +12,7 @@ import type { FolderMadeAt } from "./folder-made-at.js";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 
 registerIcons(DASHBOARD_ICONS);
 afterEach(cleanupWidgets);
@@ -1515,6 +1516,194 @@ describe("the product list at phone width", () => {
         await page.viewport(width, height);
       }
     },
+  );
+
+  it.each(
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      ["category.name_taken", "category.invalid"].flatMap((code) =>
+        ["f", "b"].map((categoryId) => ({ locale, code, categoryId })),
+      ),
+    ),
+  )(
+    "shows a rename's whole refusal beside the pinned actions at 390 px without scrolling ($locale, $code, $categoryId)",
+    async ({ locale, code, categoryId }) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        const { el, root } = await mountTree();
+        el.nameDraft = { kind: "rename", categoryId };
+        el.nameError = codeMessage(code);
+        await el.updateComplete;
+        await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+        const row = root.querySelector<HTMLElement>(`tr[data-row-key="folder:${categoryId}"]`)!;
+        const box = row.querySelector<HTMLElementTagNameMap["wt-input"]>(
+          'wt-input[name="category-name"]',
+        )!;
+        await box.updateComplete;
+        for (let frame = 0; frame < 2; frame++) await new Promise(requestAnimationFrame);
+        const scroll = root.querySelector<HTMLElement>(".scroll")!;
+        expect(scroll.scrollLeft).toBe(0);
+        const actions = row.querySelector<HTMLElement>('td[data-pinned="end"]')!;
+        const error = box.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
+        expect(error.textContent).toBe(codeMessage(code));
+        for (const part of [box.shadowRoot!.querySelector<HTMLElement>("input")!, error]) {
+          const rect = part.getBoundingClientRect();
+          expect(rect.left).toBeGreaterThanOrEqual(scroll.getBoundingClientRect().left);
+          expect(rect.right).toBeLessThanOrEqual(actions.getBoundingClientRect().left);
+        }
+        expect(error.scrollWidth).toBeLessThanOrEqual(error.clientWidth);
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
+
+  /** Runs `body` in `locale` on a phone `width` px wide, restoring both afterwards. */
+  async function onPhone(locale: string, width: number, body: () => Promise<void>) {
+    const restore = {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      locale: currentLocale(),
+    };
+    try {
+      setLocale(locale);
+      await page.viewport(width, 844);
+      await body();
+    } finally {
+      setLocale(restore.locale);
+      await page.viewport(restore.width, restore.height);
+    }
+  }
+
+  /** The tree as the only thing in a 600 px column with sticky headings, as the Products screen
+   * bounds it, so the table's own box keeps its size while its rows change. */
+  async function mountBoundedTree() {
+    const tree = await mountTree({ stickyHeader: true });
+    const host = tree.el.parentElement!;
+    host.style.display = "flex";
+    host.style.flexDirection = "column";
+    host.style.height = "600px";
+    await new Promise(requestAnimationFrame);
+    return tree;
+  }
+
+  async function openWithRefusal(el: ProductList, draft: NonNullable<ProductList["nameDraft"]>) {
+    el.nameDraft = draft;
+    el.nameError = codeMessage("category.name_taken");
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+  }
+
+  /** The open name box's input and refusal, against the scroller's start and the row's pinned cell. */
+  async function nameBoxEdges(root: ShadowRoot) {
+    for (let frame = 0; frame < 2; frame++) await new Promise(requestAnimationFrame);
+    const box = root.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      'wt-input[name="category-name"]',
+    )!;
+    const actions = box.closest("tr")!.querySelector<HTMLElement>('td[data-pinned="end"]')!;
+    const span = (part: Element) => {
+      const { left, right } = part.getBoundingClientRect();
+      return { left, right };
+    };
+    return {
+      input: span(box.shadowRoot!.querySelector("input")!),
+      error: span(box.shadowRoot!.querySelector("[data-error]")!),
+      start: root.querySelector(".scroll")!.getBoundingClientRect().left,
+      pinned: actions.getBoundingClientRect().left,
+    };
+  }
+
+  function expectInView(edges: Awaited<ReturnType<typeof nameBoxEdges>>) {
+    for (const part of [edges.input, edges.error]) {
+      expect(part.left).toBeGreaterThanOrEqual(edges.start);
+      expect(part.right).toBeLessThanOrEqual(edges.pinned);
+    }
+  }
+
+  it.each(["en-GB", "es-ES"])(
+    "fits the open name box again when the screen narrows from 430 to 390 px (%s)",
+    (locale) =>
+      onPhone(locale, 430, async () => {
+        const { el, root } = await mountTree();
+        await openWithRefusal(el, { kind: "rename", categoryId: "f" });
+        await page.viewport(390, 844);
+        expectInView(await nameBoxEdges(root));
+      }),
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "fits the open name box again when selection adds a column before it in a bounded list at 390 px (%s)",
+    (locale) =>
+      onPhone(locale, 390, async () => {
+        const { el, root } = await mountBoundedTree();
+        await openWithRefusal(el, { kind: "rename", categoryId: "f" });
+        const before = await nameBoxEdges(root);
+        el.selecting = true;
+        await el.updateComplete;
+        const after = await nameBoxEdges(root);
+        expect(
+          root.querySelector('tr[data-row-key="folder:f"] input[type="checkbox"]'),
+        ).not.toBeNull();
+        expectInView(after);
+        expect(after.pinned).toBe(before.pinned);
+      }),
+  );
+
+  it.each(
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      (["before", "after"] as const).map((scrolled) => ({ locale, scrolled })),
+    ),
+  )(
+    "shows the name box and its refusal from their first letter when the table is scrolled sideways $scrolled the rename opens at 390 px ($locale)",
+    ({ locale, scrolled }) =>
+      onPhone(locale, 390, async () => {
+        const { el, root } = await mountTree();
+        for (let frame = 0; frame < 2; frame++) await new Promise(requestAnimationFrame);
+        const scroll = root.querySelector<HTMLElement>(".scroll")!;
+        const scrollSideways = () => {
+          scroll.scrollLeft = 172;
+          expect(scroll.scrollLeft).toBe(172);
+        };
+        if (scrolled === "before") scrollSideways();
+        el.nameDraft = { kind: "rename", categoryId: "f" };
+        await el.updateComplete;
+        await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+        if (scrolled === "after") scrollSideways();
+        el.nameError = codeMessage("category.name_taken");
+        await el.updateComplete;
+        expectInView(await nameBoxEdges(root));
+      }),
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "fits the open name box again when the screen narrows after the list is moved on the page (%s)",
+    (locale) =>
+      onPhone(locale, 430, async () => {
+        const { el, root } = await mountTree();
+        await openWithRefusal(el, { kind: "rename", categoryId: "f" });
+        const host = el.parentElement!;
+        el.remove();
+        host.append(el);
+        await el.updateComplete;
+        await page.viewport(390, 844);
+        expectInView(await nameBoxEdges(root));
+      }),
+  );
+
+  it.each(
+    ["en-GB", "es-ES"].flatMap((locale) => [null, "b"].map((parentId) => ({ locale, parentId }))),
+  )(
+    "fits a category being added, and its refusal, beside the pinned actions at 390 px ($locale, $parentId)",
+    ({ locale, parentId }) =>
+      onPhone(locale, 390, async () => {
+        const { el, root } = await mountTree();
+        await openWithRefusal(el, { kind: "create", parentId });
+        expectInView(await nameBoxEdges(root));
+      }),
   );
 
   it("lines each name up with the price beside it, with a thumbnail, a placeholder or neither", async () => {
