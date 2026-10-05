@@ -67,7 +67,7 @@ Files: `packages/ui-core/src/tokens/structure.css`, `packages/ui-core/src/tokens
      whole-list pin gaining keys, allowed — name it in the PR); a test that compact < standard <
      wide (`--wt-modal-max-width`) in pixels; a test that standard − 2 × 1px border − 2 ×
      `--wt-space-5` − 17px (a classic scrollbar) ≥ `--wt-form-max-width`. Rename the title "the standard modal is 64rem wide, …" to "the wide modal is …"
-     (title only, its assertions unchanged — "standard" now names the 40rem size).
+     (title only, its assertions unchanged — "standard" now names the 42rem size).
    - `wt-modal.test.ts`: at 1280×900, `size="compact"`, `"standard"`, `"wide"` and unset each
      render `min(token, viewport − 2 × margin)` wide with equal side margins (unknown value, e.g.
      `size="huge"`, renders as wide); at 390×844 and 320×568 every size is `viewport − 2 ×
