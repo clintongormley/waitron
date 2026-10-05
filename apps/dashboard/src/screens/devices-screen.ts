@@ -883,16 +883,30 @@ export class DevicesScreen extends LitElement {
     );
   }
 
-  /** Switched-off printers are left out, except one the device holds on the profile it keeps. */
+  /**
+   * Switched-off printers are left out. While the profile is unchanged the device keeps the printer
+   * it holds, so that one is offered even when switched off, and marked when the profile no longer
+   * lists it.
+   */
   #printerOptions(ids: readonly string[], held: string | null): { value: string; label: string }[] {
     const keep = this.editForm.profileId === this.editing?.deviceProfileId ? held : null;
     const listed = ids.flatMap((id) => {
       const printer = this.printers.find((p) => p.id === id);
       return printer !== undefined && (printer.active || printer.id === keep) ? [printer] : [];
     });
+    const unlisted =
+      keep === null || ids.includes(keep) ? undefined : this.printers.find((p) => p.id === keep);
     return [
       { value: "", label: t("devices.no_printer") },
       ...listed.map((p) => ({ value: p.id, label: printerLabel(p) })),
+      ...(unlisted === undefined
+        ? []
+        : [
+            {
+              value: unlisted.id,
+              label: `${printerLabel(unlisted)} (${t("devices.printer_not_on_profile_mark")})`,
+            },
+          ]),
     ];
   }
 

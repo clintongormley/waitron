@@ -909,6 +909,7 @@ export const en = {
   "devices.receipt_printer_now": "Receipt printer",
   "devices.slip_printer_now": "Payment slip printer",
   "devices.no_printer": "None",
+  "devices.printer_not_on_profile_mark": "not on this profile",
   "devices.default_reader": "Default card reader",
   "devices.made_here": "Made here, no ticket",
   "devices.made_here_hint":
@@ -3095,6 +3096,7 @@ export const es: Record<StringKey, string> = {
   "devices.receipt_printer_now": "Impresora de tickets",
   "devices.slip_printer_now": "Impresora de justificantes de pago",
   "devices.no_printer": "Ninguna",
+  "devices.printer_not_on_profile_mark": "no está en este perfil",
   "devices.default_reader": "Lector predeterminado",
   "devices.made_here": "Se prepara aquí, sin comanda",
   "devices.made_here_hint":

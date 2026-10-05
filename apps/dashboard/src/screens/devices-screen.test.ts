@@ -1122,6 +1122,109 @@ describe("the Edit dialog", () => {
     expect(slip.options.map((o) => o.value)).toEqual([""]);
   });
 
+  describe("a printer the device holds that its profile no longer lists", () => {
+    const moved: Printer = { ...printers[0]!, id: "pr4", name: "Salón" };
+    // pa lists pr4 nowhere, and pr3 (switched off) only as a receipt printer, which it does not hold.
+    const holding: DeviceRow = { ...till, receiptPrinterId: "pr4", paymentSlipPrinterId: "pr3" };
+    const holdingApi = () =>
+      editApi({
+        listDevices: vi.fn().mockResolvedValue([holding]),
+        listPrinters: vi.fn().mockResolvedValue([...editPrinters, moved]),
+      });
+
+    it("is offered and chosen, marked as not on the profile, in English and Spanish", async () => {
+      const before = currentLocale();
+      try {
+        for (const [locale, receiptLabel, slipLabel] of [
+          ["en", "Salón (not on this profile)", "Barra (Disabled) (not on this profile)"],
+          [
+            "es-ES",
+            "Salón (no está en este perfil)",
+            "Barra (Deshabilitada) (no está en este perfil)",
+          ],
+        ] as const) {
+          setLocale(locale);
+          const el = await openEdit(holdingApi());
+          const receipt = field(el, "edit-receipt-printer");
+          expect(receipt.value).toBe("pr4");
+          expect(receipt.options).toEqual([
+            { value: "", label: t("devices.no_printer") },
+            { value: "pr1", label: "Cocina" },
+            { value: "pr2", label: "Terraza" },
+            { value: "pr4", label: receiptLabel },
+          ]);
+          const slip = field(el, "edit-slip-printer");
+          expect(slip.value).toBe("pr3");
+          expect(slip.options).toEqual([
+            { value: "", label: t("devices.no_printer") },
+            { value: "pr2", label: "Terraza" },
+            { value: "pr3", label: slipLabel },
+          ]);
+          for (const [id, label] of [
+            ["edit-receipt-printer", receiptLabel],
+            ["edit-slip-printer", slipLabel],
+          ] as const) {
+            const shown = q(el, `[data-test=${id}]`)!.shadowRoot!.querySelector(
+              "button.trigger .value",
+            )!;
+            expect(shown.textContent!.trim()).toBe(label);
+          }
+          cleanupWidgets();
+        }
+      } finally {
+        setLocale(before);
+      }
+    });
+
+    it("Save keeps both, unchanged", async () => {
+      const api = holdingApi();
+      const el = await openEdit(api);
+      await save(el);
+      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({
+        receiptPrinterId: "pr4",
+        paymentSlipPrinterId: "pr3",
+      });
+    });
+
+    it("can be swapped for one the profile lists, and taken back while the profile is unchanged", async () => {
+      const api = holdingApi();
+      const el = await openEdit(api);
+      await chooseOption(q(el, "[data-test=edit-receipt-printer]")!, "pr1");
+      await flush(el);
+      expect(field(el, "edit-receipt-printer").options.map((o) => o.value)).toContain("pr4");
+      await chooseOption(q(el, "[data-test=edit-receipt-printer]")!, "pr4");
+      await flush(el);
+      expect(field(el, "edit-receipt-printer").value).toBe("pr4");
+    });
+
+    it("is no longer offered once the profile changes", async () => {
+      const el = await openEdit(holdingApi());
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
+      await flush(el);
+      const receipt = field(el, "edit-receipt-printer");
+      expect(receipt.value).toBe("pr2");
+      expect(receipt.options.map((o) => o.value)).toEqual(["", "pr2"]);
+      const slip = field(el, "edit-slip-printer");
+      expect(slip.value).toBe("");
+      expect(slip.options.map((o) => o.value)).toEqual([""]);
+    });
+
+    it("is not offered while the printer list does not hold it, and Save still keeps it", async () => {
+      const api = editApi({
+        listDevices: vi.fn().mockResolvedValue([holding]),
+        listPrinters: vi.fn().mockResolvedValue(editPrinters),
+      });
+      const el = await openEdit(api);
+      const receipt = field(el, "edit-receipt-printer");
+      expect(receipt.value).toBe("pr4");
+      expect(receipt.options.map((o) => o.value)).toEqual(["", "pr1", "pr2"]);
+      await save(el);
+      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(api.updateDevice).mock.calls[0]![1].receiptPrinterId).toBe("pr4");
+    });
+  });
+
   it("Save sends exactly the edit, then closes and refreshes the list", async () => {
     const api = editApi();
     const el = await openEdit(api);
