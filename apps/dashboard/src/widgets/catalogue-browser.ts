@@ -16,12 +16,7 @@ import type {
   Unit,
 } from "../api/client.js";
 import type { ModifierListChoice } from "./product-editor-model.js";
-import {
-  byLabel,
-  categoryPath,
-  categoryRefusalErrors,
-  categoryWithDescendants,
-} from "./category-form.js";
+import { categoryPath, categoryRefusalErrors, categoryWithDescendants } from "./category-form.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -31,6 +26,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import { acceptsCatalogueDrop, type CategoryNameDraft, type ProductList } from "./product-list.js";
 import { coveredByRule, folderMadeAt, type FolderMadeAt } from "./folder-made-at.js";
+import { categoryTree } from "./classification-fields.js";
 
 @customElement("dashboard-catalogue-browser")
 export class CatalogueBrowser extends LitElement {
@@ -407,13 +403,7 @@ export class CatalogueBrowser extends LitElement {
     );
     const destinations = [
       { value: "top", label: t("folders.top_level") },
-      ...this.categories
-        .filter((category) => !excluded.has(category.id))
-        .map((category) => ({
-          value: category.id,
-          label: categoryPath(category, this.categories),
-        }))
-        .sort((a, b) => byLabel(a.label, b.label)),
+      ...categoryTree(this.categories).filter(({ value }) => !excluded.has(value)),
     ];
     const rootSummaries = this.summaries.filter(
       (summary) =>
@@ -466,6 +456,8 @@ export class CatalogueBrowser extends LitElement {
                 name="destination"
                 required
                 label=${t("folders.destination")}
+                searchPlaceholder=${t("categories.combobox_search")}
+                noResultsLabel=${t("categories.combobox_no_results")}
                 .options=${destinations}
                 .value=${this.destination}
                 .disabled=${this.operationBusy}

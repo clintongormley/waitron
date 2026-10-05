@@ -20,7 +20,7 @@ export function categoryPathText(
 
 /** Every category depth-first, siblings sorted by name. A category whose parent the
  * list lacks is listed at the top level. */
-function categoryTree(categories: readonly CategorySummary[]): ComboboxOption[] {
+export function categoryTree(categories: readonly CategorySummary[]): ComboboxOption[] {
   const known = new Set(categories.map(({ id }) => id));
   const childrenOf = (parentId: string | null) =>
     categories

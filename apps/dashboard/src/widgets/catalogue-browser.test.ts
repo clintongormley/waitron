@@ -1247,7 +1247,7 @@ it("requires a move destination, excludes selected folders and descendants, and 
   expect(combo.value).toBe("");
   expect(combo.options).toEqual([
     { value: "top", label: "All products (top level)" },
-    { value: "f", label: "Food" },
+    { value: "f", label: "Food", depth: 0, valueLabel: "Food" },
   ]);
   expect(
     el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled"),
@@ -1299,7 +1299,7 @@ it("shows a delete refused because a moved-up category's name is taken in the de
     ),
   );
 });
-it("lists move destinations by full path in label order, after the top level, leaving out the moved subtree", async () => {
+it("lists move destinations as the category tree, each level in label order, after the top level, leaving out the moved subtree", async () => {
   const el = await mountBrowser({
     categories: [
       folder("s", "Starters", null),
@@ -1313,23 +1313,80 @@ it("lists move destinations by full path in label order, after the top level, le
       folder("m2", "Menu 2", null),
       folder("ds", "desserts", null),
       folder("ac", "Accompaniments", null),
+      folder("mo", "Menu (old)", null),
+      folder("mz", "Zeta", "m"),
+      folder("ma", "alpha", "m"),
+      folder("m", "Menu", null),
     ],
   });
   await selectKeys(el, ["folder:x"]);
   await press(el, "move");
   expect(el.shadowRoot!.querySelector("wt-combobox")!.options).toEqual([
     { value: "top", label: "All products (top level)" },
-    { value: "ac", label: "Accompaniments" },
-    { value: "ds", label: "desserts" },
-    { value: "dn", label: "Dinner" },
-    { value: "dm", label: "Dinner / Mains" },
-    { value: "l", label: "Lunch" },
-    { value: "lm", label: "Lunch / Mains" },
-    { value: "m2", label: "Menu 2" },
-    { value: "m10", label: "Menu 10" },
-    { value: "s", label: "Starters" },
+    { value: "ac", label: "Accompaniments", depth: 0, valueLabel: "Accompaniments" },
+    { value: "ds", label: "desserts", depth: 0, valueLabel: "desserts" },
+    { value: "dn", label: "Dinner", depth: 0, valueLabel: "Dinner" },
+    { value: "dm", label: "Mains", depth: 1, valueLabel: "Dinner › Mains" },
+    { value: "l", label: "Lunch", depth: 0, valueLabel: "Lunch" },
+    { value: "lm", label: "Mains", depth: 1, valueLabel: "Lunch › Mains" },
+    { value: "m", label: "Menu", depth: 0, valueLabel: "Menu" },
+    { value: "ma", label: "alpha", depth: 1, valueLabel: "Menu › alpha" },
+    { value: "mz", label: "Zeta", depth: 1, valueLabel: "Menu › Zeta" },
+    { value: "mo", label: "Menu (old)", depth: 0, valueLabel: "Menu (old)" },
+    { value: "m2", label: "Menu 2", depth: 0, valueLabel: "Menu 2" },
+    { value: "m10", label: "Menu 10", depth: 0, valueLabel: "Menu 10" },
+    { value: "s", label: "Starters", depth: 0, valueLabel: "Starters" },
   ]);
 });
+it("leaves out a moved category nested below the top level, and everything under it", async () => {
+  const el = await mountBrowser({
+    categories: [
+      folder("f", "Food", null),
+      folder("m", "Mains", "f"),
+      folder("g", "Grill", "m"),
+      folder("s", "Starters", "f"),
+    ],
+  });
+  await selectKeys(el, ["folder:f"]);
+  await press(el, "move");
+  expect(el.shadowRoot!.querySelector("wt-combobox")!.options).toEqual([
+    { value: "top", label: "All products (top level)" },
+  ]);
+});
+it.each([
+  ["en-GB", "Search", "No results"],
+  ["es", "Buscar", "Sin resultados"],
+])(
+  "searches move destinations by full path, in the session's language (%s)",
+  async (locale, placeholder, noResults) => {
+    setLocale(locale);
+    const el = await mountBrowser({
+      categories: [
+        folder("dn", "Dinner", null),
+        folder("dm", "Mains", "dn"),
+        folder("l", "Lunch", null),
+        folder("lm", "Mains", "l"),
+      ],
+    });
+    await selectKeys(el, ["bread"]);
+    await press(el, "move");
+    const combo = el.shadowRoot!.querySelector("wt-combobox")!;
+    await userEvent.click(combo.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
+    const search = combo.shadowRoot!.querySelector<HTMLInputElement>("input.search")!;
+    expect(search.placeholder).toBe(placeholder);
+    await userEvent.fill(search, "mains");
+    await combo.updateComplete;
+    const rows = () =>
+      [...combo.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].map((row) =>
+        row.textContent!.trim(),
+      );
+    expect(rows()).toEqual(["Dinner › Mains", "Lunch › Mains"]);
+    await userEvent.fill(search, "nothing like this");
+    await combo.updateComplete;
+    expect(rows()).toEqual([]);
+    expect(combo.shadowRoot!.querySelector(".empty")!.textContent!.trim()).toBe(noResults);
+  },
+);
 it("moves products to the explicitly chosen top level", async () => {
   const el = await mountBrowser();
   await selectKeys(el, ["bread"]);
@@ -2125,7 +2182,7 @@ it("Move to… on a category's menu opens the move dialog for that category alon
   expect(dialog(el)!.heading).toBe("Move 1 item");
   expect(el.shadowRoot!.querySelector("wt-combobox")!.options).toEqual([
     { value: "top", label: "All products (top level)" },
-    { value: "f", label: "Food" },
+    { value: "f", label: "Food", depth: 0, valueLabel: "Food" },
   ]);
   await destination(el, "f");
   await press(el, "confirm");
