@@ -327,6 +327,33 @@ async function enrolHandheld(
   return { deviceId, jar, profileId };
 }
 
+/** A kitchen screen showing a new watcher named `name`. */
+async function enrolWatching(venue: Venue, name = "Pass") {
+  const watcher = await withTransaction(suite.db, (tx) =>
+    createWatcher(tx, venue.cfg, {
+      name,
+      everyStation: true,
+      stationIds: [],
+      everyZone: true,
+      zoneIds: [],
+      runsPass: false,
+    }),
+  );
+  const { deviceId } = await enrolDeviceForTest(suite.db, venue.cfg, {
+    name: "Pass screen",
+    profileId: await seedProfile("kds"),
+    watcherId: watcher.id,
+  });
+  return { deviceId, watcherId: watcher.id };
+}
+
+async function switchStationOff(stationId: string): Promise<void> {
+  await suite.db
+    .update(kitchenStations)
+    .set({ active: false })
+    .where(eq(kitchenStations.id, stationId));
+}
+
 describe("POST /api/device/join", () => {
   it("refuses with device.pairing_closed when the window is shut, and touches NO row", async () => {
     const venue = await setupVenue(suite.db);
@@ -1097,26 +1124,9 @@ describe("Device management routes (device.manage)", () => {
     ]);
     const live = await enrolKds(app, venue, liveStation!.id, "Pantalla plancha");
     const off = await enrolKds(app, venue, offStation!.id, "Pantalla horno");
-    await suite.db
-      .update(kitchenStations)
-      .set({ active: false })
-      .where(eq(kitchenStations.id, offStation!.id));
-    const watcher = await withTransaction(suite.db, (tx) =>
-      createWatcher(tx, venue.cfg, {
-        name: "Pase",
-        everyStation: true,
-        stationIds: [],
-        everyZone: true,
-        zoneIds: [],
-        runsPass: false,
-      }),
-    );
-    const watching = await enrolDeviceForTest(suite.db, venue.cfg, {
-      name: "Pantalla pase",
-      profileId: await seedProfile("kds"),
-      watcherId: watcher.id,
-    });
-    await withTransaction(suite.db, (tx) => removeWatcher(tx, venue.cfg, watcher.id));
+    await switchStationOff(offStation!.id);
+    const watching = await enrolWatching(venue, "Pase");
+    await withTransaction(suite.db, (tx) => removeWatcher(tx, venue.cfg, watching.watcherId));
     const till = await enrolTill(app, venue, "Caja");
 
     const res = await send(app, "GET", "/management-api/devices", { cookie: venue.managerCookie });
@@ -1465,33 +1475,6 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       stationId: venue.defaultStationId,
     });
   });
-
-  /** A kitchen screen showing a new watcher named `name`. */
-  async function enrolWatching(venue: Venue, name = "Pass") {
-    const watcher = await withTransaction(suite.db, (tx) =>
-      createWatcher(tx, venue.cfg, {
-        name,
-        everyStation: true,
-        stationIds: [],
-        everyZone: true,
-        zoneIds: [],
-        runsPass: false,
-      }),
-    );
-    const { deviceId } = await enrolDeviceForTest(suite.db, venue.cfg, {
-      name: "Pass screen",
-      profileId: await seedProfile("kds"),
-      watcherId: watcher.id,
-    });
-    return { deviceId, watcherId: watcher.id };
-  }
-
-  async function switchStationOff(stationId: string): Promise<void> {
-    await suite.db
-      .update(kitchenStations)
-      .set({ active: false })
-      .where(eq(kitchenStations.id, stationId));
-  }
 
   it("renames a kitchen screen whose station has since been switched off, keeping the station", async () => {
     const venue = await setupVenue(suite.db);

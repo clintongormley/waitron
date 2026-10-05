@@ -141,7 +141,9 @@ listed, with no Edit and a row that does not open.
 - Profile is required, which removes today's "no profile" choice: it sends `null`, which the server
   refuses (`apps/dashboard/src/screens/devices-screen.ts`, the reassign dropdown).
 - Pairing's settings step uses the same name, profile and Shows fields, and the server applies the
-  same name and station checks on both paths.
+  same name and station checks on both paths. (2026-10-05, W105d: editing a device accepts the
+  station or watcher it already shows, sent back unchanged, even once the station is switched off
+  or the watcher removed; pairing and Enable still refuse either.)
 - Renaming changes how the device's past sales and cash-ups are displayed, because records store the
   device's id and screens show its current name. Nothing recorded changes. When a device that is
   running shows its new name is for the plan to establish from the till's code; showing it at once

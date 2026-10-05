@@ -8584,9 +8584,11 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   selection's Disable should be greyed out like the toolbar's other buttons rather than hidden.
   W110c's review read #1269 as having changed (b)'s watcher wording and added a test for (e); not
   re-checked, so (b) and (e) below may be stale. Left open: (b) A kitchen-screen watcher's **Remove** marks the
-  watcher inactive and drops its printers, its screens then say it was removed, and nothing lists or
-  brings it back (`removeWatcher`, `apps/server/src/watchers.ts`), so it is neither a delete nor a
-  switch-off; a kitchen course's **Remove** is the same kind of action: it sets `active: false` and
+  watcher inactive and drops its printers, its screens then say it was removed, and no watcher list
+  shows it or brings it back (`removeWatcher`, `apps/server/src/watchers.ts`); since W105d the Edit
+  dialog of a kitchen screen that holds it shows it marked "(Removed)", and a save keeps it; that
+  mark (`devices.watcher_removed_mark`) is to follow whatever wording the owner picks here. Remove is
+  neither a delete nor a switch-off; a kitchen course's **Remove** is the same kind of action: it sets `active: false` and
   keeps the row, and no screen lists it or brings it back (`deactivateCourse`; `listCourses` returns
   active courses only, `apps/server/src/kitchen.ts`). Both keep
   "Remove" until the owner decides which they are. (d) Zones and adjustment reasons now offer Enable (W110d,

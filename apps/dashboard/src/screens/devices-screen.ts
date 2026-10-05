@@ -1385,7 +1385,7 @@ export class DevicesScreen extends LitElement {
       if (held.value.startsWith("station:"))
         stationOptions.push({
           value: held.value,
-          label: `${held.name} (${t("devices.station_disabled")})`,
+          label: `${held.name} (${t("devices.station_disabled_mark")})`,
           group: t("devices.stations_group"),
         });
       else

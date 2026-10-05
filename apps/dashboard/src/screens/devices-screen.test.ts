@@ -388,8 +388,7 @@ describe("devices-screen", () => {
   });
 
   it("falls back to the neutral placeholder for a device bound to a station not in the active list", async () => {
-    // A device bound to a since-retired station: listStations (active only) does not carry it, so the
-    // name cannot be resolved — the row shows the same neutral placeholder as an unbound device.
+    // The table reads station names from the switched-on station list only.
     const orphan: DeviceRow = {
       ...devices[0],
       id: "d3",
