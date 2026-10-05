@@ -2641,6 +2641,48 @@ describe("printers-screen", () => {
     }
   });
 
+  it("registers a network printer two agents see once, and offers Add on neither agent's row afterwards", async () => {
+    const seenOnBoth = (agentId: string, agentName: string): DiscoveredPrinter => ({
+      ...discoveredNetwork[0]!,
+      agentId,
+      agentName,
+    });
+    const both = [seenOnBoth("a1", "Cocina agent"), seenOnBoth("a2", "Barra agent")];
+    const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(both) });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    try {
+      await openDiscovery(el);
+      const table = q(el, "[data-test=discovered-table]")!;
+      const addButtons = () =>
+        table.shadowRoot!.querySelectorAll<HTMLElement>("[data-test^=register-]");
+      expect(addButtons()).toHaveLength(2);
+      // The naming dialog reports its close while the Add dialog, and its table, are still open.
+      const offeredAfterAdd: number[] = [];
+      el.shadowRoot!.addEventListener("wt-close", (event) => {
+        if ((event.target as HTMLElement).dataset.test === "name-printer-modal")
+          offeredAfterAdd.push(addButtons().length);
+      });
+      const barra = [...table.shadowRoot!.querySelectorAll<HTMLElement>("tbody tr")].find((row) =>
+        row.textContent!.includes("Barra agent"),
+      )!;
+      await addDiscovered(el, barra.querySelector<HTMLElement>("[data-test^=register-]")!);
+      await flush(el);
+
+      expect(api.createPrinter).toHaveBeenCalledOnce();
+      expect(api.createPrinter).toHaveBeenCalledWith({
+        name: "Kitchen IP",
+        transport: "network_tcp",
+        host: "10.0.0.77",
+        port: 9100,
+      });
+      // Fails if both the registered set and the reports' registered flag are keyed by agent.
+      expect(offeredAfterAdd).toEqual([0]);
+    } finally {
+      el.remove();
+    }
+  });
+
   it("shows the empty discovery message after scanning finishes", async () => {
     vi.useFakeTimers();
     try {
