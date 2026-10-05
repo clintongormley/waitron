@@ -1643,6 +1643,17 @@ deleted the right category; the dashboard was at fault. Fixed:
   summed over every selected one; under "Delete it too", of every rule in the deleted subtrees, as
   before. The delete sends `ownRoutes` with the other counts it showed, and the dashboard's second
   read at Delete and the server both treat a change to it like a change to the others.
+- The Printers screen's discovered-device rows no longer share a key (W74d). Reproduced in a
+  browser test: with two agents reporting one network printer, both rows carried one key, and when
+  a later scan read dropped the first agent's report, the table handed that agent's drawn row to
+  the second agent and removed the second agent's own row. The discovered table's row key now
+  names the reporting agent too. The rows stay one per agent, and Add still registers a network
+  printer once by its address: "registers a network printer two agents see once, and offers Add on
+  neither agent's row afterwards", beside "keeps one agent's row for a printer two agents see when
+  the other agent's report drops" in `apps/dashboard/src/screens/printers-screen.test.ts`. Left as
+  it was: the `data-test` names inside each row (`discovered-row-`, `register-`, `pair-`,
+  `forget-device-` and the rest) use the device alone, so a lookup by name finds the first row
+  drawn for that device.
 - Under "Delete it too" the routing-rules warning says the rules name "these categories or ones
   inside them" (Spanish: "estas categorías o las que hay dentro de ellas"), since its count
   includes rules on subcategories the dialog does not list (W74e, #1224). Under "Move it up to the parent
@@ -1656,11 +1667,6 @@ Still open from W74:
 - **A category holding only routing rules is deleted without the dialog** (raised in #1217's
   review): the no-dialog path checks subcategories and products only, so its rules go unannounced.
   The check dates from commit `5ffa5c633c` (2026-10-01).
-- **The Printers screen's discovered-device rows can share a key.** From reading the code, not run:
-  `#deviceKey` (`apps/dashboard/src/screens/printers-screen.ts`) leaves out which print agent
-  reported the device, while the server lists one entry per agent, so two agents that see the same
-  network printer give two rows the same key. The table now draws both; anything that finds a row
-  by its key would reach only the first.
 - **The delete dialog stretches to nearly the full screen height**, with empty space below its
   text, at 1280 and 390 wide (seen on the demo stack while checking #1220; not caused by it, and
   not traced further). _2026-10-05 (W70): the dialog is now the standard size, still nearly as tall
