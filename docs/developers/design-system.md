@@ -1494,10 +1494,10 @@ A form that shows everything an entity can carry becomes one long stack of cards
 somebody actually changes most days get lost in it. Fold the optional detail away instead: keep the
 frequently-edited fields always visible and put each group of the rest inside a `wt-disclosure`.
 The product editor (`apps/dashboard/src/widgets/product-editor.ts`) is the pattern's first home —
-Name, Category, Available, Standalone ordering, Variants and Modifiers stay on screen; Kitchen,
-Descriptors and Nutritional info fold; Pricing stays on screen until the product has an Active
-variant, and then folds too, with the base price and VAT on its closed line as named values
-(`summaryFields`).
+Name, Category, the colour chooser, Available, Standalone ordering, Variants and Modifiers stay on
+screen; Kitchen, Descriptors and Nutritional info fold; Pricing stays on screen until the product
+has an Active variant, and then folds too, with the base price and VAT on its closed line as named
+values (`summaryFields`).
 
 Three rules make the fold safe rather than merely tidy.
 

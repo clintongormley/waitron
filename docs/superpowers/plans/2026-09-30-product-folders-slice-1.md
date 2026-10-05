@@ -8,8 +8,10 @@ colour), remove labels, and retire the Categories screen.
 
 **Architecture:** Server first, screens last. Labels come out of the recorded classification and
 the reports, then out of every package, then out of the schema. Categories lose translations, then
-their image and colour. Two new catalogue operations — move a selection, delete a selection — back
-the new screen. The screen is a new `dashboard-catalogue-browser` widget wrapping the existing
+their image and colour. Superseded 2026-10-05 by W92
+(`docs/superpowers/specs/2026-10-05-w92-product-colours-design.md`): a category has an optional
+colour again, which products inherit. Two new catalogue operations — move a selection, delete a
+selection — back the new screen. The screen is a new `dashboard-catalogue-browser` widget wrapping the existing
 `dashboard-product-list`, which learns to show folder rows beside product rows.
 
 **Tech Stack:** TypeScript, Hono (server routes), drizzle-orm + drizzle-kit on `node:sqlite`
@@ -516,6 +518,10 @@ git commit -s -m "A category's name is one plain internal name, not a set of tra
 ---
 
 ### Task 5: Categories lose their image and colour
+
+Superseded 2026-10-05 by W92
+(`docs/superpowers/specs/2026-10-05-w92-product-colours-design.md`): a category has an optional
+colour again, which products inherit.
 
 Order matters on an existing venue (measured by the research for this plan on SQLite 3.53.4:
 `ALTER TABLE … DROP COLUMN image` fails while any trigger names the column, and a dangling trigger

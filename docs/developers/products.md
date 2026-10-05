@@ -547,11 +547,14 @@ value for each of those fields in `inherited` — for allergens, the parent's pu
 while nothing on the parent has been reviewed or its recipe has an unreviewed ingredient), since
 that is what a blank reads as, while the variant's own allergens field holds only what staff set on
 the variant. Saving a blank keeps the field inheriting, and saving a value overrides it for that
-variant alone. The main category and the unit are the exceptions: the read gives a variant
-`primaryCategoryId: null` and `unitId: null`, the save refuses a non-null value of either with
-`product.invalid`, and the variant always takes its parent's (`readProductEditor` and
-`saveProductEditor`). The page shows the parent's unit beside the price as fixed text, with no unit
-button or dropdown (`renderPrice`, `apps/dashboard/src/widgets/product-editor.ts`). A variant's body may leave its price, tax rate and dietary declarations blank, which
+variant alone. The main category, the unit and the colour are the exceptions: the read gives a
+variant `primaryCategoryId: null`, `unitId: null` and `color: null`, and the save refuses a non-null
+value of any of them with `product.invalid`. The variant always takes its parent's category and
+unit, and the save stores no colour on it (`readProductEditor` and `saveProductEditor`, with the
+refusals in `parseProductEditorInput`, `packages/catalogue/src/product-editor-input.ts`). The page
+shows the parent's unit beside the price as fixed text, with no unit button or dropdown
+(`renderPrice`, `apps/dashboard/src/widgets/product-editor.ts`). A variant's body may leave its
+price, tax rate and dietary declarations blank, which
 a product with no parent may not; it carries no variants and no extras or options lists of its own;
 and its parent never changes, so a body naming a different `parentId` is refused
 (`saveProductEditor`, `packages/catalogue/src/product-editor.ts`).
@@ -588,12 +591,12 @@ fold leaves a blank base price, and a VAT class the form does not offer, off its
 Descriptors rows are cut after one and two lines, which can hide a later language's value, so
 opening the section is what shows every value. Top to bottom: the category path, Name, with the
 photo beside it as a small button that opens the image library (absent when the editor is given no
-`api`), Available, Standalone ordering (absent on a variant's page), ▸ Kitchen, ▸ Descriptors,
-▸ Nutritional info, Pricing (a ▸ fold once some variant is Active), Variants, Modifiers, then Cancel
-and Save. A disabled product's editor also shows a line saying so, under the category path, and
-offers Enable beside Save. Opened on a variant, the same form is the variant's own
-page: it has no Standalone ordering, Modifiers or Variants section, and each field the variant may
-leave blank to take the parent's value shows that value as its hint; the course, description,
+`api`), the colour chooser (absent on a variant's page), Available, Standalone ordering (absent on
+a variant's page), ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info, Pricing (a ▸ fold once some
+variant is Active), Variants, Modifiers, then Cancel and Save. A disabled product's editor also
+shows a line saying so, under the category path, and offers Enable beside Save. Opened on a
+variant, the same form is the variant's own page: it has no colour chooser and no Standalone
+ordering, Modifiers or Variants section, and each field the variant may leave blank to take the parent's value shows that value as its hint; the course, description,
 allergens and dietary preferences also show it in italic on their folded section's closed line.
 
 The form's Modifiers section is one ordered list mixing extras lists and options lists, reordered by

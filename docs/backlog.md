@@ -3270,8 +3270,8 @@ change to publish: the menu reads as changed, its Preview tab names the change "
 tills show it once the menu is published. On the till, a coloured product or section tile fills
 with its colour and its labels turn black or white, whichever reads better; a sold-out painted tile
 keeps the usual fade. The swatches sit after the name, not before it, so names at one depth stay
-lined up (W84). The Home page tab's tile preview stays uncoloured; W93 replaces that tab. How it
-works: [products.md](developers/products.md), _Colour_, and
+lined up (W84). The Home page tab's tile preview stays uncoloured: the campaign queue's W93, not
+yet in this backlog, is to replace that tab. How it works: [products.md](developers/products.md), _Colour_, and
 [product-categories.md](developers/product-categories.md).
 **Upgrading:** two migrations, core `0100_product_color.sql` and catalogue
 `0025_category_color.sql`, each add one nullable column (`products.color`,
