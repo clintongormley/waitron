@@ -70,6 +70,22 @@ export type DocumentTile =
   | { kind: "section"; sectionId: string }
   | { kind: "empty" };
 
+export type HomeDevice = "handheld" | "till";
+export type HomeTileMode = "colours" | "thumbnails";
+export type HomeOrder = "home_first" | "menu_first";
+
+export interface HomeDisplay {
+  columns: number;
+  tiles: HomeTileMode;
+  order: HomeOrder;
+}
+
+export interface DeviceHome {
+  shortcuts: DocumentTile[];
+  handheld: HomeDisplay;
+  till: HomeDisplay;
+}
+
 export interface DocumentLayout {
   id: string;
   name: string;

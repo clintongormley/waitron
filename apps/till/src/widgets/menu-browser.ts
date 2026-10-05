@@ -8,7 +8,7 @@ import {
   registerIcons,
 } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
-import { TILL_COLUMNS } from "@waitron/catalogue/src/home-layout-columns.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import type { DocumentMember, DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
 import "./modifier-picker.js";
 import "./tender-pay.js";
@@ -278,7 +278,7 @@ export class TillMenuBrowser extends LitElement {
   @property({ attribute: false }) store!: WorkingOrderStore;
 
   /** The most columns a grid shows. */
-  @property({ type: Number }) columns = TILL_COLUMNS;
+  @property({ type: Number }) columns = HOME_DISPLAY_DEFAULTS.till.columns;
 
   /** Asks a weighed dish's weight itself, with the pay widget's weight entry, for a screen whose own
    * pay widget does not take the dish. */

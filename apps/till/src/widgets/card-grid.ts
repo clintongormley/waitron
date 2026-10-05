@@ -1,7 +1,7 @@
 import { type DietPredicate, memoVisibleProducts, shownMenu } from "../menu-filter.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { HANDHELD_COLUMNS, TILL_COLUMNS } from "@waitron/catalogue/src/home-layout-columns.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 // Side-effect imports: registering each widget element so the switch below can render its tag.
@@ -242,8 +242,8 @@ export class TillCardGrid extends LitElement {
             typeof configured === "number"
               ? configured
               : this.handheld
-                ? HANDHELD_COLUMNS
-                : TILL_COLUMNS
+                ? HOME_DISPLAY_DEFAULTS.handheld.columns
+                : HOME_DISPLAY_DEFAULTS.till.columns
           }
         ></till-menu-browser>`;
       }

@@ -33,7 +33,7 @@ import {
 import { deriveExtraSelections } from "../state/held-extras.js";
 import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
-import { HANDHELD_COLUMNS, TILL_COLUMNS } from "@waitron/catalogue/src/home-layout-columns.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import "../widgets/basket.js";
 import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
@@ -2258,7 +2258,7 @@ export class TillTableOrderScreen extends LitElement {
       .menu=${menu}
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
       .store=${store}
-      .columns=${this.handheld ? HANDHELD_COLUMNS : TILL_COLUMNS}
+      .columns=${this.handheld ? HOME_DISPLAY_DEFAULTS.handheld.columns : HOME_DISPLAY_DEFAULTS.till.columns}
       weighs
     ></till-menu-browser>`;
   }

@@ -3,7 +3,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles } from "@waitron/ui";
-import { HANDHELD_COLUMNS, TILL_COLUMNS } from "@waitron/catalogue/src/home-layout-columns.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import type { HomeLayout, HomeTile, MemberRef, SectionMember } from "../api/client.js";
@@ -122,13 +122,13 @@ export class HomeLayoutEditor extends LitElement {
         background: var(--wt-color-bg);
       }
       .handheld {
-        grid-template-columns: repeat(${HANDHELD_COLUMNS}, minmax(0, 1fr));
+        grid-template-columns: repeat(${HOME_DISPLAY_DEFAULTS.handheld.columns}, minmax(0, 1fr));
         max-width: calc(var(--wt-tap-min) * 9);
       }
       /* A till's row of tiles squeezed into a phone's width breaks every word, so its preview keeps
          a till-like width and scrolls sideways instead. */
       .till {
-        grid-template-columns: repeat(${TILL_COLUMNS}, minmax(0, 1fr));
+        grid-template-columns: repeat(${HOME_DISPLAY_DEFAULTS.till.columns}, minmax(0, 1fr));
         min-width: calc(var(--wt-tap-min) * 13);
         max-width: calc(var(--wt-tap-min) * 18);
       }
