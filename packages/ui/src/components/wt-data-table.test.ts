@@ -3277,6 +3277,22 @@ test("activates a row on click when rowClick is set", async () => {
   expect(clicked).toEqual(["b"]);
 });
 
+test("a row rowClickable refuses has no activator and is not clickable, while the others are", async () => {
+  const clicked: string[] = [];
+  const el = await table({
+    rowClick: (row: Row) => clicked.push(row.id),
+    rowClickable: (row: Row) => row.id !== "b",
+  });
+  const refused = el.shadowRoot!.querySelector('tr[data-row-key="b"]')!;
+  const allowed = el.shadowRoot!.querySelector('tr[data-row-key="a"]')!;
+  expect(refused.querySelector(".row-activate")).toBeNull();
+  expect(refused.classList.contains("clickable")).toBe(false);
+  expect(allowed.querySelectorAll(".row-activate")).toHaveLength(1);
+  expect(allowed.classList.contains("clickable")).toBe(true);
+  allowed.querySelector<HTMLButtonElement>(".row-activate")!.click();
+  expect(clicked).toEqual(["a"]);
+});
+
 test("labels a row's activator 'Open row' when the consumer names none", async () => {
   const el = await table({ rowClick: (row: Row) => row.id });
   expect(el.shadowRoot!.querySelector(".row-activate")!.getAttribute("aria-label")).toBe(
@@ -4709,6 +4725,16 @@ test("a real click on a pinned cell's empty space opens its clickable row once",
   const { el } = await narrowTable("end", { rowClick: (row: Row) => clicked.push(row.id) });
   await clickPinnedPadding(el);
   expect(clicked).toEqual(["b"]);
+});
+
+test("a real click on a pinned cell's empty space opens nothing in a row rowClickable refuses", async () => {
+  const clicked: string[] = [];
+  const { el } = await narrowTable("end", {
+    rowClick: (row: Row) => clicked.push(row.id),
+    rowClickable: () => false,
+  });
+  await clickPinnedPadding(el);
+  expect(clicked).toEqual([]);
 });
 
 test.each([

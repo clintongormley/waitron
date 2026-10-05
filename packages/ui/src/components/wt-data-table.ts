@@ -668,6 +668,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * activator, so they are never swallowed. In a tree, `rowActivation` can give a row a toggle instead. */
   @property({ attribute: false }) rowClick?: (row: Row) => void;
   @property({ attribute: false }) rowClickLabel: (row: Row) => string = () => "Open row";
+  /** On a flat table, a row this returns false for draws no activator and does not open from a
+   * click on its pinned cell. Unset, every row clicks. A tree uses `rowActivation` instead. */
+  @property({ attribute: false }) rowClickable?: (row: Row) => boolean;
   /** In tree mode, what a click or Enter anywhere on a row does: "toggle" opens and closes a branch,
    * "click" calls `rowClick`, "none" leaves the row to its own controls. Unset, every row clicks. */
   @property({ attribute: false }) rowActivation?: (row: Row) => "toggle" | "click" | "none";
@@ -2268,11 +2271,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
             <tbody>
               ${repeat(sorted, repeatKeys(rowKeys), (row, index) => {
                 const key = rowKeys[index]!;
+                const clicks = this.rowClick !== undefined && (this.rowClickable?.(row) ?? true);
                 return html`
-                  <tr
-                    data-row-key=${key}
-                    class=${classMap({ clickable: this.rowClick !== undefined })}
-                  >
+                  <tr data-row-key=${key} class=${classMap({ clickable: clicks })}>
                     ${this.#renderSelectCell(key, row, false)}
                     ${shown.map(
                       (column, ci) => html`
@@ -2282,15 +2283,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
                           data-actions=${column.key === "actions" ? "" : nothing}
                           data-row-activate=${column.activatesRow === false ? "false" : nothing}
                           @click=${
-                            column.pinned &&
-                            column.activatesRow !== false &&
-                            this.rowClick !== undefined
+                            column.pinned && column.activatesRow !== false && clicks
                               ? (event: Event) => this.#openFromPinnedCell(event, row)
                               : nothing
                           }
                         >
                           ${
-                            ci === 0 && this.rowClick !== undefined
+                            ci === 0 && clicks
                               ? html`<button
                                     class="row-activate"
                                     aria-label=${this.rowClickLabel(row)}
