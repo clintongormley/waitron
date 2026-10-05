@@ -3662,6 +3662,19 @@ it("edits a printer name on its details page without opening the calibration wiz
   expect(q(el, '[name="printer-detail-name"]')).toBeNull();
 });
 
+it("marks the inline printer name as required", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  q(el, "[data-test=edit-printer-name]")!.click();
+  await flush(el);
+  const field = q(el, '[name="printer-detail-name"]')!;
+  expect(field.shadowRoot!.querySelector("input")!.required).toBe(true);
+  expect(field.shadowRoot!.querySelector("[data-required]")?.textContent).toBe("*");
+});
+
 it("asks before discarding an edited printer name", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {

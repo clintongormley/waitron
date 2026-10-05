@@ -2235,6 +2235,7 @@ export class PrintersScreen extends LitElement {
                 <wt-input
                   name="printer-detail-name"
                   label=${t("printers.name")}
+                  required
                   .value=${this.detailName.value}
                   .invalid=${this.detailName.error !== null}
                   .error=${this.detailName.error ?? ""}
