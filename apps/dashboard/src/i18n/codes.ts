@@ -510,8 +510,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este perfil necesita una estación. Elige una",
   },
   "device.name_taken": {
-    en: "An active device here already has that name. Rename the device and let it ask again",
-    es: "Ya hay un dispositivo activo con ese nombre aquí. Cambia el nombre del dispositivo y que lo solicite de nuevo",
+    en: "An active device here already has that name — choose another",
+    es: "Ya hay un dispositivo activo con ese nombre aquí. Elige otro",
   },
   "device.binding_invalid": {
     en: "That profile is no longer available",
