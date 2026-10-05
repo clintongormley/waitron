@@ -1,3 +1,6 @@
+import { isNull, ne, or } from "drizzle-orm";
+import { tableExists } from "@waitron/db";
+import { registrosFacturacion } from "./schema/registros.js";
 import type { FiscalContribution } from "@waitron/fiscal";
 import { VerifactuBackend } from "./backend.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
@@ -22,6 +25,17 @@ export const FISCAL_SLOT: FiscalContribution = {
   activationReadiness: "accepted-test-submission",
   activationReadinessTarget: (secret) =>
     aeatEndpointFor("preproduction")(parseAeatCert(secret).certKind),
+  hasNonproductionRecords: async (db) => {
+    if (!(await tableExists(db, "registros_facturacion"))) return false;
+    const rows = await db
+      .select({ id: registrosFacturacion.id })
+      .from(registrosFacturacion)
+      .where(
+        or(isNull(registrosFacturacion.entorno), ne(registrosFacturacion.entorno, "production")),
+      )
+      .limit(1);
+    return rows.length > 0;
+  },
   makeBackend: ({ db, clock, environment }) =>
     new VerifactuBackend({
       clock,

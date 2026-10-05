@@ -356,9 +356,14 @@ stream `pointer.ts`/`supervisor.ts`; till receipt-result handling and durable de
   membership before enabling fencing. Test genuine newer evidence, stale/replayed evidence,
   forged signatures and unavailable storage. Online fencing remains additional protection;
   paper recovery makes no remote-fencing claim.
-- [ ] Refuse production use of an unstamped database containing nonproduction fiscal records.
-  Preserve a legitimate empty setup. Warn on measured clock drift beyond one minute without
-  refusing sales; no reachable time source means unknown, not a fabricated drift value.
+- [x] W41s-10c implementation checkpoint, 2026-10-05 (not landed): refuse production use of an
+  unstamped database containing preproduction or unknown-environment fiscal records. Preserve
+  an empty setup and production-record history. The deployment-guard suite exercises the real
+  boot refusal before a missing migration directory can be reached, preserving the original
+  record and empty stamp; the module probe also covers fiscal tables not yet migrated.
+- [ ] Warn on measured clock drift beyond one minute without refusing sales; no reachable time
+  source means unknown, not a fabricated drift value. The retained P7 design requires an alert
+  and till banner; the banner's `apps/till/src/till-app.ts` overlaps Lane A's receipt work.
 - [ ] Surface actual readiness-test rejection details and the measured limits of name checking.
   Run each changed source's focused suite and the startup recovery routes. Split this task into
   independently reviewed queue items by witness, deployment and readiness responsibility.

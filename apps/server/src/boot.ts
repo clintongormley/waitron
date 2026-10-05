@@ -778,7 +778,11 @@ async function bootServer(
   // stop here. A short-lived open, closed before `applyMigrations` opens the directory itself.
   const stampProbe = await openVenueDatabase(config.venueDir);
   try {
-    await assertDeploymentMatches(stampProbe.venue, config.environment);
+    await assertDeploymentMatches(
+      stampProbe.venue,
+      config.environment,
+      ALL_MODULES.flatMap((module) => (module.fiscal === undefined ? [] : [module.fiscal])),
+    );
   } finally {
     await stampProbe.close();
   }

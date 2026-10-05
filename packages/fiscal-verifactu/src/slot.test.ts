@@ -167,3 +167,27 @@ it("validates a changed operation description through its own seat", () => {
     FISCAL_SLOT.venueFields!.validateOperationDescription("Venta en establecimiento"),
   ).not.toThrow();
 });
+
+describe("the fiscal deployment history probe", () => {
+  const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
+
+  it("reports an empty fiscal history as compatible", async () => {
+    await expect(FISCAL_SLOT.hasNonproductionRecords!(suite.db)).resolves.toBe(false);
+  });
+
+  it.each([
+    { entorno: "preproduction" as const, want: true },
+    { entorno: null, want: true },
+    { entorno: "production" as const, want: false },
+  ])("reports $entorno history as incompatible: $want", async ({ entorno, want }) => {
+    await seedPendingEnvios(suite.db, { count: 1, entorno });
+    await expect(FISCAL_SLOT.hasNonproductionRecords!(suite.db)).resolves.toBe(want);
+  });
+});
+
+describe("the fiscal deployment probe before fiscal migrations", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+  it("keeps an empty initial setup compatible", async () => {
+    await expect(FISCAL_SLOT.hasNonproductionRecords!(suite.db)).resolves.toBe(false);
+  });
+});

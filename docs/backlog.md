@@ -2862,7 +2862,14 @@ records each outcome and its limits. The owner approved and landed
 **Update, 2026-10-05 (W41s-1d):** [the asesor questions](compliance/asesor-questions.md)
 Q33–Q41 and [the findings, §16](compliance/verifactu-findings.md#16-aeat-test-service-observations-for-conflict-recovery-added-2026-10-05-w41s-1)
 now carry the test-system receipts and their limits. The legal questions remain open.
-**Next action:** follow the lane queue; resume A231 after A261-2's landing.
+**Update, 2026-10-05 (W41s-10c, implementation checkpoint; not landed):** the production
+boot probe now checks the fiscal module's read-only history before migrations. Focused tests
+refuse unstamped preproduction and unknown-environment records, retain empty setup and
+production-history controls, and check that the refused boot preserves the record and stamp.
+Clock alerts/till banner and readiness rejection details remain to be built; the clock banner
+shares `apps/till/src/till-app.ts` with Lane A's receipt work.
+**Next action:** finish A231's current-head CI checkpoint and continue W41s-10c under the lane's
+outage/overlap rules. A231's owner and physical-paper gates still apply.
 Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still needs
 old-chain evidence and its adviser answer. Independent queue items may proceed under the plan. The following paragraph records the 2026-10-03 state;
 its old next action and allocation assumptions are superseded by this update.
