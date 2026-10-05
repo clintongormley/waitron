@@ -17,7 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { CATALOGUE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
-import { addProductToMenu, createCatalogue, createProduct } from "./operations.js";
+import { addProductToMenu, createCatalogue, createProduct, updateProduct } from "./operations.js";
 import {
   createExtraList,
   deleteExtraList,
@@ -95,6 +95,14 @@ describe("extra list CRUD", () => {
     expect(created.items[0]!.maxQuantity).toBeNull();
     const read = await run((tx) => getExtraList(tx, created.id));
     expect(read.items[0]!.maxQuantity).toBeNull();
+  });
+
+  it("saves an inactive list that offers no product", async () => {
+    const created = await run((tx) =>
+      createExtraList(tx, { name: "Bread", active: false, items: [] }, "en"),
+    );
+    const read = await run((tx) => getExtraList(tx, created.id));
+    expect(read).toMatchObject({ active: false, items: [] });
   });
 
   it("refuses a new portion finer than the extra product's unit", async () => {
@@ -342,7 +350,6 @@ describe("extra list CRUD", () => {
     });
   });
 
-  // What the kept item's portion becomes is the open point in W75c's backlog entry.
   it("takes no portion for a held id sent with the same product", async () => {
     const productId = await mlProduct();
     const list = await run((tx) =>
@@ -361,6 +368,153 @@ describe("extra list CRUD", () => {
     expect(read.items.map((item) => [item.id, item.productId])).toEqual([
       [list.items[0]!.id, productId],
     ]);
+  });
+
+  const kgProduct = () =>
+    run(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },
+        "en",
+      );
+      const catalogue = await createCatalogue(tx, { name: "Weighted extras" });
+      const product = await createProduct(tx, {
+        catalogueId: catalogue.id,
+        categoryId: null,
+        name: "Cheese",
+        unitId: unit.id,
+        unitPrice: "100.00",
+        vatClass: "reduced",
+      });
+      return product.id;
+    });
+
+  it("keeps a kept weighed item's saved portion when it is sent again without one", async () => {
+    const productId = await kgProduct();
+    const list = await run((tx) =>
+      createExtraList(tx, { name: "Cheese", items: [{ productId, portion: "0.050" }] }, "en"),
+    );
+
+    const updated = await run((tx) =>
+      updateExtraList(
+        tx,
+        list.id,
+        { name: "Cheese", items: [{ id: list.items[0]!.id, productId }] },
+        "en",
+      ),
+    );
+    const read = await run((tx) => getExtraList(tx, list.id));
+    expect(updated.items[0]!.portion).toBe("0.050");
+    expect(read.items[0]!.portion).toBe("0.050");
+  });
+
+  it("keeps a kept poured item's saved portion when it moves position without one", async () => {
+    const productId = await mlProduct();
+    const list = await run((tx) =>
+      createExtraList(
+        tx,
+        { name: "Oils", items: [{ productId, portion: "30" }, { productId: breads.rye }] },
+        "en",
+      ),
+    );
+
+    await run((tx) =>
+      updateExtraList(
+        tx,
+        list.id,
+        {
+          name: "Oils",
+          items: [
+            { id: list.items[1]!.id, productId: breads.rye },
+            { id: list.items[0]!.id, productId },
+          ],
+        },
+        "en",
+      ),
+    );
+    const read = await run((tx) => getExtraList(tx, list.id));
+    expect(read.items.map((item) => [item.productId, item.portion])).toEqual([
+      [breads.rye, "1.000"],
+      [productId, "30.000"],
+    ]);
+  });
+
+  it("replaces a kept item's saved portion with one sent explicitly", async () => {
+    const productId = await kgProduct();
+    const list = await run((tx) =>
+      createExtraList(tx, { name: "Cheese", items: [{ productId, portion: "0.050" }] }, "en"),
+    );
+
+    await run((tx) =>
+      updateExtraList(
+        tx,
+        list.id,
+        { name: "Cheese", items: [{ id: list.items[0]!.id, productId, portion: "0.100" }] },
+        "en",
+      ),
+    );
+    const read = await run((tx) => getExtraList(tx, list.id));
+    expect(read.items[0]!.portion).toBe("0.100");
+  });
+
+  it("refuses an explicit null portion for a kept item and leaves the saved one", async () => {
+    const productId = await kgProduct();
+    const list = await run((tx) =>
+      createExtraList(tx, { name: "Cheese", items: [{ productId, portion: "0.050" }] }, "en"),
+    );
+
+    const error = await refusal((tx) =>
+      updateExtraList(
+        tx,
+        list.id,
+        { name: "Cheese", items: [{ id: list.items[0]!.id, productId, portion: null }] },
+        "en",
+      ),
+    );
+    expect(error).toMatchObject({
+      code: "extras.invalid",
+      params: { field: "items.0.portion" },
+    });
+    const read = await run((tx) => getExtraList(tx, list.id));
+    expect(read.items[0]!.portion).toBe("0.050");
+  });
+
+  // The dashboard's Extras editor sends no portion for an Each product, whatever an earlier unit
+  // left saved on the item.
+  it("stores one for a kept item whose product became Each, sent without a portion", async () => {
+    const productId = await kgProduct();
+    const list = await run((tx) =>
+      createExtraList(tx, { name: "Cheese", items: [{ productId, portion: "0.050" }] }, "en"),
+    );
+    await run((tx) => updateProduct(tx, productId, { unitId: null }));
+
+    await run((tx) =>
+      updateExtraList(
+        tx,
+        list.id,
+        { name: "Cheese", items: [{ id: list.items[0]!.id, productId }] },
+        "en",
+      ),
+    );
+    const read = await run((tx) => getExtraList(tx, list.id));
+    expect(read.items[0]!.portion).toBe("1.000");
+  });
+
+  it("keeps a kept Each item at one when it is sent again without a portion", async () => {
+    const list = await run((tx) =>
+      createExtraList(tx, { name: "Sides", items: [{ productId: breads.rye }] }, "en"),
+    );
+
+    await run((tx) =>
+      updateExtraList(
+        tx,
+        list.id,
+        { name: "Sides", items: [{ id: list.items[0]!.id, productId: breads.rye }] },
+        "en",
+      ),
+    );
+    const read = await run((tx) => getExtraList(tx, list.id));
+    expect(read.items[0]!.portion).toBe("1.000");
   });
 
   // The item sent with no id keeps the check from returning before it reads any unit, so the
