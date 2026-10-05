@@ -73,8 +73,8 @@ describe("folder selection routes", () => {
     );
     expect(summary.status).toBe(200);
     expect(await summary.json()).toEqual([
-      { id: parent, folders: 1, products: 0, activeProducts: 0, routes: 0 },
-      { id: child, folders: 0, products: 0, activeProducts: 0, routes: 0 },
+      { id: parent, folders: 1, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
+      { id: child, folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
     ]);
     expect(
       (
@@ -84,8 +84,8 @@ describe("folder selection routes", () => {
             categoryIds: [parent, child],
             contents: "delete",
             shown: [
-              { id: parent, folders: 1, activeProducts: 0, routes: 0 },
-              { id: child, folders: 0, activeProducts: 0, routes: 0 },
+              { id: parent, folders: 1, activeProducts: 0, routes: 0, ownRoutes: 0 },
+              { id: child, folders: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
             ],
           },
         })
@@ -148,7 +148,7 @@ describe("folder selection routes", () => {
 
       const summary = await send(app, "GET", `/management-api/folders/summary?id=${empty}`);
       expect(await summary.json()).toEqual([
-        { id: empty, folders: 0, products: 0, activeProducts: 0, routes: 0 },
+        { id: empty, folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
       ]);
       expect(
         (
@@ -157,7 +157,7 @@ describe("folder selection routes", () => {
               productIds: [],
               categoryIds: [empty],
               contents,
-              shown: [{ id: empty, folders: 0, activeProducts: 0, routes: 0 }],
+              shown: [{ id: empty, folders: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
             },
           })
         ).status,
@@ -180,11 +180,12 @@ describe("folder selection routes", () => {
   );
 
   describe("the counts the person was shown", () => {
-    const counts = (id: string, folders = 0, activeProducts = 0, routes = 0) => ({
+    const counts = (id: string, folders = 0, activeProducts = 0, routes = 0, ownRoutes = 0) => ({
       id,
       folders,
       activeProducts,
       routes,
+      ownRoutes,
     });
     async function addProduct(app: Hono, categoryId: string, name: string) {
       const created = await send(app, "POST", "/management-api/products", {
@@ -248,6 +249,14 @@ describe("folder selection routes", () => {
       ["a fractional count", { categoryIds: [id], shown: [counts(id, 0, 0.5)] }],
       ["a count given as text", { categoryIds: [id], shown: [{ ...counts(id), routes: "0" }] }],
       ["a missing count", { categoryIds: [id], shown: [{ id, folders: 0, activeProducts: 0 }] }],
+      [
+        "missing the category's own routing rules",
+        { categoryIds: [id], shown: [{ id, folders: 0, activeProducts: 0, routes: 0 }] },
+      ],
+      [
+        "an own count given as text",
+        { categoryIds: [id], shown: [{ ...counts(id), ownRoutes: "0" }] },
+      ],
       ["a repeated id", { categoryIds: [id, other], shown: [counts(id), counts(id)] }],
       ["a selected category left out", { categoryIds: [id, other], shown: [counts(id)] }],
       [
@@ -1127,7 +1136,7 @@ describe("unique category and product names", () => {
           productIds: [],
           categoryIds: [holder],
           contents: "move_up",
-          shown: [{ id: holder, folders: 1, activeProducts: 0, routes: 0 }],
+          shown: [{ id: holder, folders: 1, activeProducts: 0, routes: 0, ownRoutes: 0 }],
         },
       }),
       "category.name_taken",

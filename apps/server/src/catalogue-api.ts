@@ -219,7 +219,8 @@ function shownBody(value: unknown, categoryIds: readonly string[]): ShownFolderC
       !isUuid(entry.id) ||
       !count(entry.folders) ||
       !count(entry.activeProducts) ||
-      !count(entry.routes)
+      !count(entry.routes) ||
+      !count(entry.ownRoutes)
     )
       throw invalid();
     return {
@@ -227,6 +228,7 @@ function shownBody(value: unknown, categoryIds: readonly string[]): ShownFolderC
       folders: entry.folders,
       activeProducts: entry.activeProducts,
       routes: entry.routes,
+      ownRoutes: entry.ownRoutes,
     };
   });
   const ids = new Set(shown.map(({ id }) => id));

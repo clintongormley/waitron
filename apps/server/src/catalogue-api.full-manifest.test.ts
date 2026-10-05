@@ -55,7 +55,7 @@ it("folder summaries count claims and exceptions in the subtree and deletion rem
   );
   expect(summary.status).toBe(200);
   expect(await summary.json()).toEqual([
-    { id: parent, folders: 1, products: 0, activeProducts: 0, routes: 2 },
+    { id: parent, folders: 1, products: 0, activeProducts: 0, routes: 2, ownRoutes: 0 },
   ]);
   expect(
     (
@@ -64,8 +64,8 @@ it("folder summaries count claims and exceptions in the subtree and deletion rem
         categoryIds: [child, parent],
         contents: "delete",
         shown: [
-          { id: child, folders: 0, activeProducts: 0, routes: 2 },
-          { id: parent, folders: 1, activeProducts: 0, routes: 2 },
+          { id: child, folders: 0, activeProducts: 0, routes: 2, ownRoutes: 2 },
+          { id: parent, folders: 1, activeProducts: 0, routes: 2, ownRoutes: 0 },
         ],
       })
     ).status,
@@ -79,6 +79,55 @@ it("folder summaries count claims and exceptions in the subtree and deletion rem
   ).toEqual([]);
 });
 
+it("moving a category's contents up removes only its own routing rules, which its summary counts apart", async () => {
+  const v = await setupVenue();
+  const app = mountApp();
+  const parent = await createCategory(app, v.managerCookie, "Drinks");
+  const child = await createCategory(app, v.managerCookie, "Beer");
+  expect(
+    (
+      await send(app, "PATCH", `/management-api/categories/${child}`, v.managerCookie, {
+        parentId: parent,
+      })
+    ).status,
+  ).toBe(200);
+  await suite.db.insert(stationClaims).values([
+    { locationId: v.locationId, categoryId: parent, noPreparation: true },
+    { locationId: v.locationId, categoryId: child, noPreparation: true },
+  ]);
+  await suite.db
+    .insert(routeExceptions)
+    .values({ locationId: v.locationId, categoryId: child, position: 0, noPreparation: true });
+  const summary = await send(
+    app,
+    "GET",
+    `/management-api/folders/summary?id=${parent}&id=${child}`,
+    v.managerCookie,
+  );
+  expect(await summary.json()).toEqual([
+    { id: parent, folders: 1, products: 0, activeProducts: 0, routes: 3, ownRoutes: 1 },
+    { id: child, folders: 0, products: 0, activeProducts: 0, routes: 2, ownRoutes: 2 },
+  ]);
+  expect(
+    (
+      await send(app, "POST", "/management-api/folders/delete", v.managerCookie, {
+        productIds: [],
+        categoryIds: [parent],
+        contents: "move_up",
+        shown: [{ id: parent, folders: 1, activeProducts: 0, routes: 3, ownRoutes: 1 }],
+      })
+    ).status,
+  ).toBe(204);
+  const left = async (table: "station_claims" | "route_exceptions") =>
+    (
+      await suite.db.execute<{ category_id: string }>(
+        sql`select category_id from ${sql.raw(table)} where category_id in (${parent}, ${child})`,
+      )
+    ).rows.map((row) => row.category_id);
+  expect(await left("station_claims")).toEqual([child]);
+  expect(await left("route_exceptions")).toEqual([child]);
+});
+
 it("refuses a category delete with 409 when a routing rule was added since the counts were shown", async () => {
   const v = await setupVenue();
   const app = mountApp();
@@ -90,7 +139,7 @@ it("refuses a category delete with 409 when a routing rule was added since the c
     productIds: [],
     categoryIds: [drinks],
     contents: "delete",
-    shown: [{ id: drinks, folders: 0, activeProducts: 0, routes: 0 }],
+    shown: [{ id: drinks, folders: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
   });
   expect(response.status).toBe(409);
   expect(await response.json()).toMatchObject({
