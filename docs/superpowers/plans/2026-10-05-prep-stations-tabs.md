@@ -106,3 +106,25 @@ All choice/list values in Tickets, Watchers and Settings use an in-cell dropdown
 - A new printer assignment must not send duplicate station or watcher copies, including after reprint (Tasks 5 and 6).
 - A supervisor must see live numbers without gaining a configuration or kitchen-state write (Tasks 3 and 4).
 - A populated core station-table rebuild must preserve incoming child rows and triggers, or the migration must be redesigned (migration gate and Task 1).
+
+## 2026-10-05 implementation checkpoint: storage redesign
+
+The first generated nullable-column migration rebuilt `kitchen_stations`. On Node v26.7.0,
+`pnpm exec vitest run scripts/migration-upgrade.test.ts` failed at its `DROP TABLE kitchen_stations`
+with SQLite error 787 (`FOREIGN KEY constraint failed`). The new nullable-storage case passed on a
+fresh database, so that pass did not establish a working upgrade. The rejected migration was removed
+from this branch before committing; no shipped migration was edited.
+
+Use the redesign option above: `kitchen_timing_defaults` holds venue defaults and
+`kitchen_station_timing` holds nullable station overrides. The generated migration creates only
+these tables. The original station timing columns remain until their removal can be handled without
+rebuilding a referenced parent. Before wiring the readers, decide their retirement and any reset
+requirement under the house's pre-live no-data-migration rule; do not add a converter by default.
+
+The schema increment classifies both new tables as core state and exposes them through the schema
+and public db barrels. Core already owns stations and their timing readers, and reporting depends on
+db/shared rather than venue-service. Its focused upgrade test retains a 2/4/8 station, printer and
+watcher mappings, and a device's made-here mapping; it compares every original core application table's row values,
+non-internal schema objects and foreign-key inventory with a live change feed and append-only triggers installed.
+The cross-module upgrade guard still supplies its separate row-count check. Default provisioning,
+write validation, effective timing readers and the screen tasks remain to be built.

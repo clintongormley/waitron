@@ -6314,7 +6314,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.
   Eight build steps, each its own queue item.
   [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) was approved on 2026-10-05;
-  its Prep stations tabs, live numbers and inherited late flags are not implemented. Approved decisions
+  its build is in progress. The schema foundation adds venue defaults and separate nullable station
+  timing storage; provisioning, timing consumers, Prep stations tabs and live numbers remain open.
+  The generated station-parent rebuild failed the populated upgrade with a foreign-key refusal;
+  the ongoing build uses the plan’s storage-redesign option. Approved decisions
   cover what live counts include, ready-but-unserved work, interim station hours, inactive display
   bindings and the core station-table rebuild/reset risk.
   [Step 5 Hours plan](superpowers/plans/2026-10-05-hours.md) was approved on 2026-10-05;
