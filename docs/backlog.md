@@ -5975,7 +5975,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     W111: it also asks again when the location's address changes, read through `locations`; not
     re-probed for printers.)_
 - **The receipt's top block is centred and carries the venue's address, a phone, an email, a slogan
-  and a logo — DONE (W111, PR pending, owner 2026-10-05).** The owner asked: "For receipts, we need
+  and a logo — DONE (W111, #1261, owner 2026-10-05).** The owner asked: "For receipts, we need
   to include phone number, address, email address (maybe). Possibly room for a slogan, and allow
   uploading an image for a logo. Also this text should be centred on the receipt". After the QR
   block, which still opens the receipt (C123, below), the printed receipt now prints centred, in this
