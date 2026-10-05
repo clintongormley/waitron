@@ -3541,14 +3541,15 @@ after the change, renaming a top-level category and one a level down that were a
 with a search typed and the duplicate-name refusal shown, the box measured 146 to 163 px on its own
 line under the grip (local screenshots in `~/waitron-campaign/w72g-shots/`). Pinned by the "on
 their own line" cases, the 1280-to-390 px case and the 1280 px "beside the grip and folder icon"
-cases in `apps/dashboard/src/widgets/product-list.test.ts`; desktop width is unchanged. W72g left Chromium logging "ResizeObserver loop completed with
-undelivered notifications" when the table crossed 440 px while a name box was open. Fixed in W72h
-(2026-10-05, the owner's choice): `wt-data-table` now sets `narrow` a frame after its resize observer
-reports the new width (`packages/ui/src/components/wt-data-table.ts`). With Vitest's console output
-shown, `apps/dashboard/src/widgets/product-list.test.ts` printed that error 31 times on main
-f92dc84e6 and none on the W72h branch. Pinned by the "crossing the phone width into rows its layout
-makes taller" case in `packages/ui/src/components/wt-data-table.test.ts`, which failed with the
-error before the change.
+cases in `apps/dashboard/src/widgets/product-list.test.ts`; desktop width is unchanged. W72g left
+Chromium logging "ResizeObserver loop completed with undelivered notifications" when the table
+crossed 440 px while a name box was open. Fixed in W72h (2026-10-05, the owner's choice):
+`wt-data-table` now sets `narrow` a frame after its resize observer reports the new width
+(`packages/ui/src/components/wt-data-table.ts`). `env -u AI_AGENT -u CLAUDECODE pnpm --filter
+@waitron/dashboard exec vitest run src/widgets/product-list.test.ts` printed that error 31 times in
+one run and 29 in another on main f92dc84e6, and none on the W72h branch after its last change.
+Pinned by the "crossing the phone width into rows its layout makes taller" case in
+`packages/ui/src/components/wt-data-table.test.ts`, which failed with the error before the change.
 
 **Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
 owner 2026-10-04; since 2026-10-05 a tree, W82a, see the last paragraph).** The bulk Move

@@ -1370,6 +1370,37 @@ test("a tree stops watching its width while it is out of the page, and watches a
   expect(el.hasAttribute("narrow")).toBe(true);
 });
 
+test("a wide tree whose rows change while it is out of the page does not take the phone width", async () => {
+  const el = await treeTable();
+  el.style.width = "600px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
+  el.remove();
+  el.rows = [...treeRows];
+  await el.updateComplete;
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
+  host.append(el);
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
+  el.style.width = "360px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(true);
+});
+
+test("a narrow tree that becomes flat while out of the page drops `narrow` on return", async () => {
+  const el = await treeTable();
+  el.style.width = "360px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(true);
+  el.remove();
+  el.rowParent = undefined;
+  await el.updateComplete;
+  host.append(el);
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
+});
+
 test("crossing the phone width into rows its layout makes taller reports no ResizeObserver loop, and the phone layout still applies", async () => {
   const style = document.createElement("style");
   style.textContent = "wt-data-table[narrow]::part(tall) { display: block; block-size: 200px; }";

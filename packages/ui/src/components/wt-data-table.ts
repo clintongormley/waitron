@@ -785,8 +785,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
   private readonly seededBranches = new Set<string>();
   #restored = false;
   /** A CSS condition cannot read a token, so the width is compared here and the host carries the
-   * answer as `narrow`. It waits a frame for the reason #hostObserver's effects do: a screen's
-   * `narrow` rules can resize the box this observer watches. */
+   * answer as `narrow`. Setting it inside the callback would let rules keyed on `narrow` resize
+   * the box this observer watches, which Chromium reports as a ResizeObserver loop. */
   readonly #scrollObserver = new ResizeObserver((entries) => {
     for (const { contentRect } of entries) this.#scrollWidth = contentRect.width;
     if (this.#narrowFrame !== null) return;
@@ -850,13 +850,13 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** The indent follows the tree's own width, not the window's; a flat table is not watched. */
   #observeScroll(): void {
     const scroll = this.rowParent ? this.renderRoot.querySelector(".scroll") : null;
-    if (scroll === this.#observedScroll) return;
-    if (this.#observedScroll) this.#scrollObserver.unobserve(this.#observedScroll);
-    if (scroll) this.#scrollObserver.observe(scroll);
-    else {
+    if (!scroll) {
       this.#cancelNarrowFrame();
       this.removeAttribute("narrow");
     }
+    if (!this.isConnected || scroll === this.#observedScroll) return;
+    if (this.#observedScroll) this.#scrollObserver.unobserve(this.#observedScroll);
+    if (scroll) this.#scrollObserver.observe(scroll);
     this.#observedScroll = scroll;
   }
 
