@@ -79,13 +79,13 @@ export class CatalogueBrowser extends LitElement {
         flex: 1 1 calc(var(--wt-tap-min) * 7);
         min-width: min(100%, calc(var(--wt-tap-min) * 7));
       }
-      /* Below the width all five controls need on one line (about 620px in Spanish), the search
-         takes the line under the buttons; Tab still reaches it before the table's own. Keyed on
-         the list's width, not the window's, since the sidebar can leave a wide window a narrow
-         list. */
+      /* Below the width all five controls need on one line, the search takes the line under the
+         buttons; Tab still reaches it before the table's own. The list's width decides, since the
+         sidebar can leave a wide window a narrow list. */
       @container (max-width: 40rem) {
         wt-input {
           order: 1;
+          flex-basis: 100%;
         }
       }
     `,

@@ -3379,8 +3379,10 @@ or less, Filters, Select, Expand all and Customise share the first line and the 
 line under them; wider, all five stay on one line as before. Products is the only table with these
 controls (the menu structure table has Expand all and no search; the units, modifiers, content
 languages and menu prices tables use the table's own search and have no Expand all or Select), so
-no other screen changed. Pinned by the "in a wide window" cases (lists 320, 430 and 600px wide, in
-English and Spanish) and the "Spanish list 660px wide" case in
+no other screen changed. The search is given the whole line (`flex-basis: 100%`) as well as moved
+after the buttons: with `order` alone, English lists 620 and 640px wide and a Spanish list 640px
+wide drew all five on one line with the search last. Pinned by the "in a wide window" cases (English lists 320, 430, 620 and
+640px wide; Spanish lists 430, 600 and 640px wide) and the "Spanish list 660px wide" case in
 `apps/dashboard/src/widgets/catalogue-browser.test.ts`; the 390px phone case and the 1280px
 one-line case are unchanged. Looked at on the demo stack at 390, 800, 900 and 1280px, light and
 dark, English and Spanish (local screenshots in `~/waitron-campaign/w85d-shots/`). Not covered:
