@@ -362,7 +362,7 @@ export class DevicesScreen extends LitElement {
     paymentSlipPrinterId: "",
     madeHere: [],
   };
-  /** Edit's Shows offers it even when switched off; dropped once a save moves the device off it. */
+  /** Edit's Shows offers it even when switched off; a save replaces it with what was saved. */
   @state() private editHeld: HeldBinding | null = null;
   @state() private editAttempted = false;
   @state() private editRefusal: FieldRefusal = null;
@@ -972,10 +972,12 @@ export class DevicesScreen extends LitElement {
     this.editSaving = true;
     this.editError = null;
     this.editRefusal = null;
+    const savedBinding = this.#editBindingShown() ? form.binding : "";
+    const picked = this.#bindingOptions().find((option) => option.value === savedBinding);
     const sent = {
       name: form.name.trim(),
       profileId: form.profileId,
-      ...bindingIds(this.#editBindingShown() ? form.binding : ""),
+      ...bindingIds(savedBinding),
       receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
       paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
       ...(this.#editBindingShown() ? {} : { madeHereStationIds: this.#madeHereToSend() }),
@@ -998,8 +1000,8 @@ export class DevicesScreen extends LitElement {
     }
     this.#reloadDevices().catch((error: unknown) => this.#showReadError(error));
     if (epoch !== this.#editEpoch) return;
-    const savedBinding = this.#bindingShownFor(form.profileId) ? form.binding : "";
-    if (savedBinding !== this.editHeld?.value) this.editHeld = null;
+    if (savedBinding !== this.editHeld?.value)
+      this.editHeld = picked === undefined ? null : { value: savedBinding, name: picked.label };
     // The reader save below can fail and keep the dialog open, which then edits what was just saved.
     const { name: label, profileId: deviceProfileId, ...rest } = sent;
     this.editing = { ...device, ...rest, label, deviceProfileId };

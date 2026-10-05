@@ -1328,6 +1328,48 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-binding").options.map((o) => o.value)).toContain("station:s-off");
   });
 
+  it("once a save moves a screen to another station, that station stays in Shows, marked, if it is then switched off", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      editApi({
+        listDevices: vi.fn().mockResolvedValue([onOffStation]),
+        listStations: vi.fn().mockResolvedValue([...stations, offStation]),
+        setDeviceReader: vi.fn().mockRejectedValue({ code: "reader.not_found" }),
+      }),
+      { liveData },
+    );
+    const el = await openEdit(api, "k1");
+    await chooseOption(q(el, "[data-test=edit-binding]")!, "station:s2");
+    await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+    await flush(el);
+    await save(el);
+    await vi.waitFor(() =>
+      expect(field(el, "edit-reader").error).toBe(codeMessage("reader.not_found")),
+    );
+
+    const listedBefore = vi.mocked(api.listStations).mock.calls.length;
+    vi.mocked(api.listStations).mockResolvedValue([
+      stations[0]!,
+      { ...stations[1]!, active: false },
+      offStation,
+    ]);
+    liveData.invalidate([{ type: "kitchen_stations", id: "s2" }]);
+    await vi.waitFor(() => expect(api.listStations).toHaveBeenCalledTimes(listedBefore + 1));
+    await flush(el);
+    const shown = q(el, "[data-test=edit-binding]")!
+      .shadowRoot!.querySelector("button.trigger .value")!
+      .textContent!.trim();
+    expect(shown).toBe("Barra (Deshabilitada)");
+    expect(field(el, "edit-binding").value).toBe("station:s2");
+
+    await save(el);
+    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(2));
+    expect(api.updateDevice).toHaveBeenLastCalledWith(
+      "k1",
+      expect.objectContaining({ stationId: "s2", watcherId: null }),
+    );
+  });
+
   it("marks a held station as disabled and a held watcher as removed, in English and Spanish", async () => {
     const before = currentLocale();
     try {
