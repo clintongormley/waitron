@@ -60,7 +60,7 @@ export const QUERY_DEPENDENCIES = {
   ],
   pairingMode: ["pairing"],
   // A device's ask; `dependenciesOf` narrows a print agent's.
-  joinRequests: ["join_requests", "devices"],
+  joinRequests: ["join_requests", "devices", "device_profiles"],
   listDiscoveredPrinters: ["printer_discovery", "printers", "print_agents"],
   getSalesOverview: [
     "sales",
@@ -288,10 +288,11 @@ function dependenciesOf<N extends DashboardQueryName>(
     const current: readonly string[] = CURRENT_CLASSIFICATION_READS;
     return QUERY_DEPENDENCIES.getCategorySales.filter((type) => !current.includes(type));
   }
-  // Only a device's ask reads a `devices` row (a returning device's own), and a stored battery
-  // report rewrites one (`PUT /api/device/battery`, apps/server/src/device-api.ts).
+  // Only a device's ask reads a `devices` row (a returning device's own) and its profile, and a
+  // stored battery report rewrites a `devices` row (`PUT /api/device/battery`,
+  // apps/server/src/device-api.ts).
   if (name === "joinRequests" && (args as readonly unknown[])[0] === "print_agent") {
-    return QUERY_DEPENDENCIES.joinRequests.filter((type) => type !== "devices");
+    return QUERY_DEPENDENCIES.joinRequests.filter((type) => type === "join_requests");
   }
   return QUERY_DEPENDENCIES[name];
 }

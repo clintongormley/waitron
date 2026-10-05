@@ -5362,10 +5362,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Su perfil se eliminó: elige uno para habilitarlo." (`devices.enable_hint_profile_deleted`), and
   every other returning device keeps "Enabling it restores its settings."; the server says which, as
   `returning.profileRetired` in the device join list (`returningDevicesOf`,
-  `apps/server/src/join-requests.ts`). Left open by W105g: the list's live updates name only
-  `join_requests` and `devices` (`joinRequests`, `apps/dashboard/src/api/live-queries.ts`), and
-  deleting a profile writes neither, so a profile deleted while the device's request is already
-  showing keeps the old hint until the list re-reads for another reason (read, not tested). (9) a device holding a printer its unchanged profile no longer lists
+  `apps/server/src/join-requests.ts`). The device join list's live updates now name
+  `device_profiles` too (`joinRequests`, `apps/dashboard/src/api/live-queries.ts`, pinned in its
+  test), so a profile deleted while a returning device's request is showing re-reads the list. (9) a device holding a printer its unchanged profile no longer lists
   opens with that field empty, and Save keeps the old printer without saying so. (10) for a manager
   without `payments.manage` the card reader field is drawn greyed while it loads and then disappears,
   so the layout jumps. Review suggestions #1235 did not take, listed in its description: the edit
