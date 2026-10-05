@@ -5991,13 +5991,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
   special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.
   Eight build steps, each its own queue item.
-  [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) is written for owner review;
-  its Prep stations tabs, live numbers and inherited late flags are not implemented. Review choices
+  [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) was approved on 2026-10-05;
+  its Prep stations tabs, live numbers and inherited late flags are not implemented. Approved decisions
   cover what live counts include, ready-but-unserved work, interim station hours, inactive display
   bindings and the core station-table rebuild/reset risk.
-  [Step 5 Hours plan](superpowers/plans/2026-10-05-hours.md) is written for owner review;
+  [Step 5 Hours plan](superpowers/plans/2026-10-05-hours.md) was approved on 2026-10-05;
   its standard week, special-date list/calendar and shared menu/wages date interface are not
-  implemented. Build waits for step 3. Review choices cover unset versus Closed/all-day hours,
+  implemented. Build waits for step 3. Approved decisions cover unset versus Closed/all-day hours,
   overnight and clock-change rules, manual override expiry, whole-venue closure and palette,
   single-department display, read permissions and the proposed pre-live schedule reset.
   [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) is approved with
@@ -6013,13 +6013,24 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   incomplete-year notices, full label/naming rules, permissions and all other behavior remain.
   The consolidated 2027 BOE list was not located by the plan's dated search; recheck it before the
   build rather than extrapolating dates or treating a regional publication as nationwide coverage.
-  [Step 4 Routing grid plan](superpowers/plans/2026-10-05-routing-grid.md) is written for owner
-  review; the grid and row-first cell storage are not implemented. Build waits for this plan’s
-  approval and Prep stations landing. Review choices cover uncategorised products (No category
-  remains unconfirmed), nested collapsed counts, configured versus fallback cell presentation,
+  [Step 4 Routing grid plan](superpowers/plans/2026-10-05-routing-grid.md) was approved on
+  2026-10-05; the grid and row-first cell storage are not implemented. Build waits for Prep stations
+  landing. Approved decisions cover the No category group, nested collapsed counts, configured
+  versus fallback cell presentation,
   read-only default-cell permissions, retained disabled targets, zone cleanup and pre-live routing
   reset. It replaces claims/ordered exceptions without conversion, with five stored coordinate
   classes and populated-upgrade/configuration-transfer checks.
+  [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) is written for owner
+  review; its editor is not implemented. Recommendations allow current display-name/street/city
+  corrections and same-province postcode edits, preserve recorded names and facts, keep taxpayer
+  identity read-only, and lock province/clock after sales. Clock edits also stop after order history
+  or a daily close. Pre-sale province edits need equal fiscal/language/clock context and the same
+  sourced holiday region; absent that holiday capability only real province edits stay locked.
+  Review choices also cover no-op and stale-draft behavior, legacy-null field validation, warning
+  acknowledgement, the default tab and clock-change previews using the existing reporting resolver.
+  No schema migration or reset is proposed; changes needing another fiscal/geographic context or
+  history removal use a separately approved setup/reset instead. Build waits for plan approval,
+  with step 2 already landed; later Hours/holidays/menu builds retain their own compatibility tests.
   [Step 1, PR #1166](https://github.com/clintongormley/waitron/pull/1166) gathers Receipts,
   Tables and Kitchen settings into tabs; supervisors can read Tables and Kitchen, while writes
   remain manager-only (owner amendment, 2026-10-04).
