@@ -154,6 +154,36 @@ describe("validateCatalogueConfiguration: product names", () => {
   });
 });
 
+describe("validateCatalogueConfiguration: colours", () => {
+  const coloured = (table: string, color: unknown) =>
+    table === "products"
+      ? { products: [{ id: "p1", name: "Agua", active: 1, parent_id: null, color }] }
+      : { [table]: [{ color }] };
+
+  it.each(["products", "category_details", "sections"])(
+    "refuses a %s colour that is not lowercase #rrggbb",
+    (table) => {
+      for (const color of ["#256bb1;position:fixed;inset:0", "#256BB1", "red", "", 7]) {
+        expect(() => validateCatalogueConfiguration(coloured(table, color))).toThrowError(
+          expect.objectContaining({
+            code: "setup.request_invalid",
+            params: { field: `${table}.color` },
+          }),
+        );
+      }
+    },
+  );
+
+  it.each(["products", "category_details", "sections"])(
+    "accepts a %s colour that is lowercase #rrggbb, null or absent",
+    (table) => {
+      for (const color of ["#256bb1", null, undefined]) {
+        expect(() => validateCatalogueConfiguration(coloured(table, color))).not.toThrow();
+      }
+    },
+  );
+});
+
 describe("validateCatalogueConfiguration: many siblings", () => {
   it("judges a hundred thousand categories under one parent", () => {
     const categories = Array.from({ length: 100_000 }, (_, index) => ({

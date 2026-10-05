@@ -284,10 +284,14 @@ its first choice, "Use category colour", shows the colour the product would take
 (following a category you change in the editor before saving), or says "Its category has no
 colour." Choosing it saves no colour of the product's own. In a menu's Structure tree, a product's
 swatch opens a "Colour of …" dialog that says the change applies on every menu that uses the
-product; it sends `PATCH /management-api/products/:id` with `{ "color": … }`. A stored colour is
-always lowercase `#rrggbb`. Anything else, an empty string included, is refused as
+product; it sends `PATCH /management-api/products/:id` with `{ "color": … }`. A colour is
+lowercase `#rrggbb`, or null for none. A save refuses anything else, an empty string included, as
 `product.invalid` with `field: "color"`; at the PATCH route a value that is neither a string nor
-null is refused first, as `management.request_invalid`. A category's colour is set from its Edit
+null is refused first, as `management.request_invalid`. A configuration import refuses the whole
+bundle when a product's, a category's or a menu section's colour is anything else, as
+`setup.request_invalid` with `field` set to `products.color`, `category_details.color` or
+`sections.color` (`validateCatalogueConfiguration`,
+`packages/catalogue/src/configuration-transfer.ts`). A category's colour is set from its Edit
 dialog ([product-categories.md](product-categories.md)).
 
 **A colour reaches a till only when a menu is published.** Publishing records each offer's colour

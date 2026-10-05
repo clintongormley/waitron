@@ -1,4 +1,5 @@
 import { AppError } from "@waitron/shared";
+import { isStoredColor } from "./color-inheritance.js";
 import { firstNewClash } from "./name-uniqueness.js";
 import { storeProductNameKeys } from "./product-names.js";
 import "./errors.js";
@@ -22,6 +23,15 @@ function isActive(row: Record<string, unknown>): boolean {
   return row.active === 1;
 }
 
+/** Screens paint a stored colour into a style attribute, so only the spelling a save stores may come
+ * in. */
+function checkColors(rows: Rows | undefined, table: string): void {
+  for (const row of rows ?? []) {
+    if (row.color !== undefined && row.color !== null && !isStoredColor(row.color))
+      throw new AppError("setup.request_invalid", { field: `${table}.color` });
+  }
+}
+
 /** The first name two of `names` share, ignoring case and surrounding spaces. An import replaces
  * every stored category and product, so each imported row counts as changed. */
 function sharedName(names: readonly string[]): string | undefined {
@@ -32,10 +42,14 @@ function sharedName(names: readonly string[]): string | undefined {
  * Refuses a bundle holding two categories with one parent, or two Active products or variants,
  * that share a name: the rules `assertCategoryNamesFree` and `assertFamilyNamesFree` hold on a save.
  * A category with no `category_details` row is top-level, as it is to the save's check.
- * Also refuses (`setup.request_invalid`) a product whose `active` is not 0 or 1, or a category or
- * product whose name is not text.
+ * Also refuses (`setup.request_invalid`) a product whose `active` is not 0 or 1, a category or
+ * product whose name is not text, or a product, category or section colour other than lowercase
+ * `#rrggbb` or null.
  */
 export function validateCatalogueConfiguration(tables: Readonly<Record<string, Rows>>): void {
+  checkColors(tables.products, "products");
+  checkColors(tables.category_details, "category_details");
+  checkColors(tables.sections, "sections");
   const parentOf = new Map(
     (tables.category_details ?? []).map((row) => [row.category_id, row.parent_id ?? null]),
   );

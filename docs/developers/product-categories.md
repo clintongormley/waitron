@@ -323,7 +323,9 @@ null. A blank name is `category.invalid` (400); a non-string name is `management
 (400). A `color` that is neither a string nor null is `management.request_invalid` with
 `field: "color"`, and a string that is not lowercase `#rrggbb`, an empty one included, is
 `category.invalid` with `field: "color"`. A create without `color` stores none; an update without
-it keeps the current one; `null` clears it.
+it keeps the current one; `null` clears it. A configuration import refuses a bundle holding a
+category colour that is neither null nor lowercase `#rrggbb`, as `setup.request_invalid` with
+`field: "category_details.color"`.
 
 | Route | Body or response |
 | --- | --- |
