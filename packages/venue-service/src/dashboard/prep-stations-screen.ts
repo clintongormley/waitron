@@ -37,11 +37,13 @@ import type {
   PrepStationsView,
   StationInput,
   OutputsDown,
+  StationHealthSnapshot,
   WatcherInput,
 } from "./routing-client.js";
 import { watchersOfStation, watchersSeeing, type WatcherView } from "./watchers-seen.js";
 import { t } from "./strings.js";
 import "./station-hours-form.js";
+import "./station-health-table.js";
 import "./watcher-form.js";
 
 type StationAction =
@@ -229,6 +231,8 @@ export class PrepStationsScreen extends LitElement {
   @state() private stationFieldError = "";
   private editingHours: readonly WeeklyInterval[] = [];
   @state() private hoursServerErrors: Record<number, string> = {};
+  @state() private health?: StationHealthSnapshot;
+  #healthTimer?: ReturnType<typeof setInterval>;
   @state() private outputsDown: OutputsDown = { printersDown: [], screensDark: [] };
   #outputsTimer?: ReturnType<typeof setInterval>;
   #testRequest = 0;
@@ -272,6 +276,9 @@ export class PrepStationsScreen extends LitElement {
     this,
     () => this.api.liveData,
     () => this.#showReadError(t("prep.load_error")),
+    () => {
+      if (this.#readErrorShown) this.#showError("");
+    },
   );
   #loaded = false;
   #showError(message: string, fromRead = false): void {
@@ -285,12 +292,33 @@ export class PrepStationsScreen extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     void this.#load();
+    void this.#loadHealth();
+    if (!this.api.liveData) this.#healthTimer = setInterval(() => void this.#loadHealth(), 15_000);
     void this.#loadOutputs();
     this.#outputsTimer = setInterval(() => void this.#loadOutputs(), 60_000);
   }
   override disconnectedCallback() {
     if (this.#outputsTimer) clearInterval(this.#outputsTimer);
+    if (this.#healthTimer) clearInterval(this.#healthTimer);
     super.disconnectedCallback();
+  }
+  async #loadHealth() {
+    try {
+      await this.#queries.watch(
+        "health",
+        {
+          key: "venue-service:station-health",
+          dependencies: QUERY_DEPENDENCIES.health.map((type) => ({ type })),
+          refreshMs: 15_000,
+          read: () => this.api.readStationHealth(),
+        },
+        (value) => {
+          this.health = value;
+        },
+      );
+    } catch {
+      this.#showReadError(t("prep.load_error"));
+    }
   }
   async #loadOutputs() {
     try {
@@ -320,7 +348,6 @@ export class PrepStationsScreen extends LitElement {
           this.exceptionOrder = [...value.routing.exceptions]
             .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
             .map((e) => e.id);
-          if (this.#readErrorShown) this.#showError("");
           if (this.testProduct) void this.#explain();
         },
       );
@@ -1740,7 +1767,17 @@ export class PrepStationsScreen extends LitElement {
       </div>
       ${
         view
-          ? html`${this.#tester()}${this.#exceptions()}
+          ? html`<prep-station-health-table
+                .snapshot=${this.health}
+                .stations=${view.stations}
+                .today=${Object.fromEntries(
+                  view.stations.map((station) => {
+                    const status = this.#stationStatus(station);
+                    return [station.id, status === nothing ? "" : status];
+                  }),
+                )}
+              ></prep-station-health-table
+              >${this.#tester()}${this.#exceptions()}
               <div class="cards">
                 ${active.map((s) => this.#stationCard(s))}<wt-card data-test="no-preparation"
                   ><h2>${t("prep.no_preparation")}</h2>

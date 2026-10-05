@@ -6321,8 +6321,11 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   overdue report resolve inherited values, and configuration transfer carries defaults and overrides.
   The station-health API now returns dish-row counts, per-band lateness and oldest-first kitchen
   drilldowns with remaining quantities, using one captured time. Supervisors can read it; staff
-  cannot. The passive dashboard client and health source list are declared. Prep stations tabs,
-  screen subscription/timer wiring, live number cells and printing handover remain open.
+  cannot. The screen now observes the health read and refreshes elapsed values every fifteen
+  seconds. A shared table renders live counts, per-band and state drilldowns, remaining quantities,
+  Default/Disabled labels and separate printer/screen problems. Health refreshes retain open drafts;
+  read recovery waits for the failing read and preserves action refusals. Prep stations tabs,
+  the new Today controls, station row menus/reorder and printing handover remain open.
   The generated station-parent rebuild failed the populated upgrade with a foreign-key refusal;
   the ongoing build uses the plan’s storage-redesign option. Approved decisions
   cover what live counts include, ready-but-unserved work, interim station hours, inactive display

@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
-import type { PrepStationsApi, PrepStationsView } from "./routing-client.js";
+import type { PrepStationsApi, PrepStationsView, StationHealthSnapshot } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";
 
@@ -66,6 +66,11 @@ const view: PrepStationsView = {
 function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
   return {
     load: vi.fn().mockResolvedValue(view),
+    readStationHealth: vi.fn().mockResolvedValue({
+      capturedAt: "2026-10-05T12:00:00Z",
+      stations: [],
+      outputsDown: { printersDown: [], screensDark: [] },
+    }),
     setClaim: vi.fn(),
     createException: vi.fn(),
     assignProduct: vi.fn(),
@@ -2675,4 +2680,143 @@ it("clears the scheduled answer and shows the required-time problem when time is
   expect(time.getAttribute("aria-invalid")).toBe("true");
   expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain("Made at: Bar");
   expect(vi.mocked(a.explain).mock.calls.length).toBe(count);
+});
+
+const healthSnapshot: StationHealthSnapshot = {
+  capturedAt: "2026-10-05T12:00:00Z",
+  outputsDown: { printersDown: [], screensDark: [] },
+  stations: [
+    {
+      id: "bar",
+      name: "Bar",
+      hasScreen: true,
+      waiting: 1,
+      preparing: 0,
+      ready: 0,
+      late: { warm: 0, overdue: 0, forgotten: 0 },
+      oldestMinutes: 4,
+      items: [
+        {
+          id: "soup",
+          name: "KITCHEN SOUP",
+          orderId: "o1",
+          orderNumber: 7,
+          label: null,
+          tableNames: ["Table 5"],
+          state: "queued",
+          queuedAt: "2026-10-05T11:56:00Z",
+          remainingQuantity: "1.000",
+          band: "fresh",
+        },
+      ],
+    },
+  ],
+};
+function healthSummary(el: PrepStationsScreen) {
+  return el.shadowRoot
+    ?.querySelector("prep-station-health-table")
+    ?.shadowRoot?.querySelector("wt-data-table")?.shadowRoot;
+}
+it("subscribes dish health to ticket changes and retains an open station draft", async () => {
+  const liveData = new LiveData();
+  const readStationHealth = vi.fn().mockResolvedValue(healthSnapshot);
+  const el = await mount(api({ liveData, readStationHealth }));
+  expect(healthSummary(el)?.querySelector('[data-test="waiting-bar"]')?.textContent?.trim()).toBe(
+    "1",
+  );
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  const name =
+    el.shadowRoot!.querySelector<WtInput>('[name="stationName"]') ??
+    el.shadowRoot!.querySelector<WtInput>('[name="name"]');
+  expect(name).toBeTruthy();
+  name!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Draft station" } }));
+  readStationHealth.mockResolvedValue({
+    ...healthSnapshot,
+    stations: [{ ...healthSnapshot.stations[0]!, waiting: 2 }],
+  });
+  liveData.invalidate([{ type: "ticket_items", id: "new-ticket" }]);
+  await settle(el);
+  expect(healthSummary(el)?.querySelector('[data-test="waiting-bar"]')?.textContent?.trim()).toBe(
+    "2",
+  );
+  expect(name!.value).toBe("Draft station");
+});
+it("refreshes elapsed health without a write and releases both interests and clock on detach", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    const liveData = new LiveData();
+    const readStationHealth = vi.fn().mockResolvedValue(healthSnapshot);
+    const el = await mount(api({ liveData, readStationHealth }));
+    expect(healthSummary(el)?.querySelector('[data-test="oldest-bar"]')?.textContent?.trim()).toBe(
+      "4 min",
+    );
+    readStationHealth.mockResolvedValue({
+      ...healthSnapshot,
+      stations: [
+        {
+          ...healthSnapshot.stations[0]!,
+          oldestMinutes: 5,
+          late: { warm: 1, overdue: 0, forgotten: 0 },
+        },
+      ],
+    });
+    await vi.advanceTimersByTimeAsync(15_000);
+    await settle(el);
+    expect(healthSummary(el)?.querySelector('[data-test="oldest-bar"]')?.textContent?.trim()).toBe(
+      "5 min",
+    );
+    expect(healthSummary(el)?.querySelector('[data-test="warm-bar"]')?.textContent?.trim()).toBe(
+      "1",
+    );
+    el.remove();
+    expect(liveData.interests).toEqual([]);
+    const count = readStationHealth.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(readStationHealth).toHaveBeenCalledTimes(count);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a health read failure stays until health recovers, while routing recovery retains an action refusal", async () => {
+  const liveData = new LiveData();
+  const readStationHealth = vi.fn().mockRejectedValue(new Error("offline"));
+  const el = await mount(
+    api({
+      liveData,
+      readStationHealth,
+      createStation: vi.fn().mockRejectedValue(new Error("refused")),
+    }),
+  );
+  expect(el.shadowRoot!.textContent).toContain("Prep stations could not be loaded.");
+  liveData.invalidate([{ type: "categories" }]);
+  await settle(el);
+  expect(el.shadowRoot!.textContent).toContain("Prep stations could not be loaded.");
+  readStationHealth.mockResolvedValue(healthSnapshot);
+  liveData.invalidate([{ type: "ticket_items" }]);
+  await settle(el);
+  expect(el.shadowRoot!.textContent).not.toContain("Prep stations could not be loaded.");
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  const name =
+    el.shadowRoot!.querySelector<WtInput>('[name="stationName"]') ??
+    el.shadowRoot!.querySelector<WtInput>('[name="name"]');
+  name!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "New bar" } }));
+  await settle(el);
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  liveData.invalidate([{ type: "ticket_items" }, { type: "categories" }]);
+  await settle(el);
+  expect(el.shadowRoot!.textContent).toContain("The change could not be saved.");
+});
+it("a health snapshot ahead of routing metadata leaves Today blank until the station's status arrives", async () => {
+  const el = await mount(
+    api({
+      readStationHealth: vi.fn().mockResolvedValue(healthSnapshot),
+      load: vi.fn().mockResolvedValue({ ...view, routing: { ...view.routing, stationTimes: [] } }),
+    }),
+  );
+  const row = healthSummary(el)?.querySelector("tbody tr");
+  expect(row).toBeTruthy();
+  expect(row!.querySelectorAll("td")[1]?.textContent?.trim()).toBe("");
 });

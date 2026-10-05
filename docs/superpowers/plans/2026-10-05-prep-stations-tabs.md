@@ -222,3 +222,33 @@ browser checks. The core descriptor already exposes the timing tables through cl
 change sources. Tasks 4–8 remain: the health list is not yet subscribed by the screen, and no UI
 timer, tabs, number cells or printing-control handover is implemented by this checkpoint. Keep the
 approved reset declaration and earlier changed-test notes when finishing the whole branch.
+
+
+## 2026-10-05 implementation checkpoint: live health table
+
+Task 4 is partially implemented. `station-health-table.ts` renders seven columns from the health
+snapshot, with Default/Disabled labels, disabled rows last, separate printer/screen problems and
+read-only drilldowns for station/state, late band and oldest work. Drilldowns retain their selection
+while new snapshots change membership. Labels are translated; table-cell styling uses parts and
+tokens. Summary and detail regions have distinct accessible names.
+
+The screen watches `QUERY_DEPENDENCIES.health` through its query controller with a fifteen-second
+refresh. Without live data it owns the matching interval; disconnect releases observations and
+intervals. The controller's recovery callback clears only a read message after the failing reads
+recover, instead of an unrelated routing snapshot clearing it. Open station drafts remain.
+
+Focused real-browser validation ran six files and 235 tests; unchanged subscription/style-token/
+pinned-action guards ran three files and 17 tests. Venue-service typechecking and focused lint passed.
+The initial table cases failed before registration; three screen cases failed before wiring; the
+loading and disabled-row cases failed before their changes. In a frozen-installed disposable copy,
+removing the detail filters failed two cases, removing the refresh interval failed one, and restoring
+both passed five selected cases. Existing test assertions remain; screen and axe API doubles gained
+the new passive health-read fixture. A synthetic dialog-cancel probe did not invoke the browser's
+Escape behavior; the corrected real Escape check passes. Axe found duplicate region names in the
+new drilldown; the named regions passed its light/dark checks.
+
+The component summary and drilldown were opened and inspected in EN/ES, light/dark, 390/1280 widths;
+these are component observations, not a completed Prep stations page review. Task 4 still needs the
+five URL-backed tabs, the final Today cells/buttons, station row menus/reorder and interim hours
+placement. The health table is temporarily mounted above the existing screen; do not land this
+checkpoint as the completed step. Tasks 5–8 and the final review/CI/landing gates remain.

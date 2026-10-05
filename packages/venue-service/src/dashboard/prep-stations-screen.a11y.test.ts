@@ -47,6 +47,11 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     await mountThemed("<div></div>", theme);
     const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
     el.api = {
+      readStationHealth: vi.fn().mockResolvedValue({
+        capturedAt: "2026-10-05T12:00:00Z",
+        stations: [],
+        outputsDown: { printersDown: [], screensDark: [] },
+      }),
       load: vi.fn().mockResolvedValue(
         state === "empty"
           ? empty
@@ -207,6 +212,11 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
       },
     ];
     el.api = {
+      readStationHealth: vi.fn().mockResolvedValue({
+        capturedAt: "2026-10-05T12:00:00Z",
+        stations: [],
+        outputsDown: { printersDown: [], screensDark: [] },
+      }),
       load: vi.fn().mockResolvedValue({
         ...empty,
         stations,
@@ -334,6 +344,11 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
         host.style.boxSizing = "border-box";
         const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
         el.api = {
+          readStationHealth: vi.fn().mockResolvedValue({
+            capturedAt: "2026-10-05T12:00:00Z",
+            stations: [],
+            outputsDown: { printersDown: [], screensDark: [] },
+          }),
           load: vi.fn().mockResolvedValue({
             ...empty,
             testProducts: [
