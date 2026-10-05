@@ -2829,3 +2829,190 @@ it("falls back as product rows do when a switched-off station's or a category's 
     "No replacement (Nowhere is switched off) from Unavailable selection",
   );
 });
+
+describe("a refresh during a drag", () => {
+  function press(target: Element, type: string, over: Element = target) {
+    const box = over.getBoundingClientRect();
+    target.dispatchEvent(
+      new PointerEvent(type, {
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+        pointerId: 1,
+        clientX: box.x + 8,
+        clientY: box.y + 8,
+      }),
+    );
+  }
+
+  const nameOf = (root: ShadowRoot, key: string) =>
+    root.querySelector<HTMLElement>(
+      `tr[data-row-key="${key}"] [part~="${key.startsWith("folder:") ? "folder-cell" : "product-cell"}"]`,
+    )!;
+
+  async function refreshed(el: ProductList, props: Partial<ProductList>): Promise<ShadowRoot> {
+    Object.assign(el, props);
+    await el.updateComplete;
+    return tableRoot(el);
+  }
+
+  function watch(el: ProductList) {
+    const offered: string[][] = [];
+    const drops: { keys: string[]; folderId: string | null }[] = [];
+    el.addEventListener("drag-items", (event) =>
+      offered.push((event as CustomEvent<{ keys: string[] }>).detail.keys),
+    );
+    el.addEventListener("drop-items", (event) =>
+      drops.push((event as CustomEvent<{ keys: string[]; folderId: string | null }>).detail),
+    );
+    return { offered, drops };
+  }
+
+  const anyDropMark = (root: ShadowRoot) =>
+    root.querySelector(
+      '[part~="drop-target"], [part~="drop-gap-before"], [part~="drop-gap-after"]',
+    );
+
+  it("starts no drag, and throws nothing, when a refresh removes the pressed product before it moves", async () => {
+    const { el, root } = await mountTree();
+    const { offered, drops } = watch(el);
+    const errors: string[] = [];
+    const onError = (event: ErrorEvent) => {
+      errors.push(event.message);
+      event.preventDefault();
+    };
+    window.addEventListener("error", onError);
+    onTestFinished(() => window.removeEventListener("error", onError));
+    press(nameOf(root, "bread"), "pointerdown");
+    const after = await refreshed(el, {
+      products: treeProducts().filter(({ id }) => id !== "bread"),
+    });
+    const food = nameOf(after, "folder:f");
+    press(food, "pointermove");
+    await el.updateComplete;
+    expect(errors).toEqual([]);
+    expect(offered.filter((keys) => keys.length)).toEqual([]);
+    expect(document.body.style.cursor).not.toBe("grabbing");
+    expect(el.shadowRoot!.querySelector('[data-test="drag-ghost"]')).toBeNull();
+    expect(after.querySelector('[part~="drop-target"]')).toBeNull();
+    press(food, "pointerup");
+    expect(drops).toEqual([]);
+  });
+
+  it("sends nothing when released after a refresh removed the category it would drop into, and the next drag still drops", async () => {
+    const { el, root } = await mountTree();
+    const { drops } = watch(el);
+    press(nameOf(root, "bread"), "pointerdown");
+    press(nameOf(root, "folder:f"), "pointermove");
+    await el.updateComplete;
+    expect(root.querySelector('tr[data-row-key="folder:f"] [part~="drop-target"]')).not.toBeNull();
+    const after = await refreshed(el, { categories: [drinks, beer] });
+    expect(after.querySelector('tr[data-row-key="folder:f"]')).toBeNull();
+    press(document.body, "pointerup", nameOf(after, "bread"));
+    await el.updateComplete;
+    expect(drops).toEqual([]);
+    expect(document.body.style.cursor).not.toBe("grabbing");
+
+    press(nameOf(after, "bread"), "pointerdown");
+    press(nameOf(after, "folder:d"), "pointermove");
+    press(nameOf(after, "folder:d"), "pointerup");
+    expect(drops).toEqual([{ keys: ["bread"], folderId: "d" }]);
+  });
+
+  it("sends nothing when released after a refresh removed the dragged product", async () => {
+    const { el, root } = await mountTree();
+    const { drops } = watch(el);
+    press(nameOf(root, "bread"), "pointerdown");
+    press(nameOf(root, "folder:f"), "pointermove");
+    await el.updateComplete;
+    const after = await refreshed(el, {
+      products: treeProducts().filter(({ id }) => id !== "bread"),
+    });
+    press(nameOf(after, "folder:f"), "pointerup");
+    await el.updateComplete;
+    expect(drops).toEqual([]);
+    expect(document.body.style.cursor).not.toBe("grabbing");
+  });
+
+  it("offers no category, and sends nothing when released, after a refresh removed the dragged product and the pointer moved on", async () => {
+    const { el, root } = await mountTree();
+    const { drops } = watch(el);
+    press(nameOf(root, "bread"), "pointerdown");
+    press(nameOf(root, "folder:f"), "pointermove");
+    await el.updateComplete;
+    expect(root.querySelector('tr[data-row-key="folder:f"] [part~="drop-target"]')).not.toBeNull();
+    const after = await refreshed(el, {
+      products: treeProducts().filter(({ id }) => id !== "bread"),
+    });
+    expect(anyDropMark(after)).toBeNull();
+    press(nameOf(after, "folder:d"), "pointermove");
+    await el.updateComplete;
+    expect(anyDropMark(after)).toBeNull();
+    press(nameOf(after, "folder:d"), "pointerup");
+    await el.updateComplete;
+    expect(drops).toEqual([]);
+    expect(document.body.style.cursor).not.toBe("grabbing");
+  });
+
+  it("offers no category, and sends nothing when released, after a refresh removed another selected product being dragged", async () => {
+    const { el, root } = await mountTree({ selected: ["bread", "cola"] });
+    const { offered, drops } = watch(el);
+    press(nameOf(root, "bread"), "pointerdown");
+    press(nameOf(root, "folder:d"), "pointermove");
+    await el.updateComplete;
+    expect(offered).toContainEqual(["bread", "cola"]);
+    expect(root.querySelector('tr[data-row-key="folder:d"] [part~="drop-target"]')).not.toBeNull();
+    const after = await refreshed(el, {
+      products: treeProducts().filter(({ id }) => id !== "cola"),
+    });
+    expect(anyDropMark(after)).toBeNull();
+    press(nameOf(after, "folder:f"), "pointermove");
+    await el.updateComplete;
+    expect(anyDropMark(after)).toBeNull();
+    press(nameOf(after, "folder:f"), "pointerup");
+    await el.updateComplete;
+    expect(drops).toEqual([]);
+  });
+
+  it("moves the gap to the row the dragged product would now land before when a refresh adds one to the target category", async () => {
+    const { el } = await mountTree();
+    await openRow(el, "folder:d");
+    const root = await tableRoot(el);
+    const gapBefore = (at: ShadowRoot) =>
+      [
+        ...at.querySelectorAll<HTMLElement>('tr[data-row-key]:has(> td[part~="drop-gap-before"])'),
+      ].map((row) => row.dataset.rowKey);
+    press(nameOf(root, "bread"), "pointerdown");
+    press(nameOf(root, "folder:f"), "pointermove");
+    press(nameOf(root, "folder:d"), "pointermove");
+    expect(gapBefore(root)).toEqual(["cola"]);
+    const after = await refreshed(el, {
+      products: [
+        ...treeProducts(),
+        product({ id: "butter", name: "Butter", primaryCategoryId: "d" }),
+      ],
+    });
+    expect(gapBefore(after)).toEqual(["butter"]);
+    expect(after.querySelector('tr[data-row-key="folder:d"] [part~="drop-target"]')).not.toBeNull();
+    press(nameOf(after, "folder:d"), "pointercancel");
+  });
+
+  it("keeps All products as the target through a refresh that leaves the dragged product", async () => {
+    const { el } = await mountTree();
+    await openRow(el, "folder:d");
+    const root = await tableRoot(el);
+    const { drops } = watch(el);
+    const allProducts = `tr[data-row-key="${ROOT_KEY}"]`;
+    press(nameOf(root, "cola"), "pointerdown");
+    press(root.querySelector(`${allProducts} [part~="folder-cell"]`)!, "pointermove");
+    const after = await refreshed(el, {
+      products: [
+        ...treeProducts(),
+        product({ id: "butter", name: "Butter", primaryCategoryId: "f" }),
+      ],
+    });
+    expect(after.querySelector(`${allProducts} [part~="drop-target"]`)).not.toBeNull();
+    press(after.querySelector(`${allProducts} [part~="folder-cell"]`)!, "pointerup");
+    expect(drops).toEqual([{ keys: ["cola"], folderId: null }]);
+  });
+});

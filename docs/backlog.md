@@ -3196,15 +3196,20 @@ one short (seen 2026-10-05 in a throwaway test, not kept); an older one is refus
 module, in the order they are checked, whose count differs.
 
 **A Products drag does not notice when a refresh removes what it is dragging or where it is going —
-OPEN (found 2026-10-05 by W88's pre-merge review).** W88's review found the Menus tree's drag broke
-when a refresh removed the pressed item or the drop target mid-gesture, and W88 fixed that tree. The
-Products tree (`apps/dashboard/src/widgets/product-list.ts`, whose drag code predates W88) has milder
-versions of both, seen in a throwaway browser test, not kept: if the pressed product leaves before
-the drag starts, the drag still starts with an empty drag picture and a grabbing cursor, and
-announces a drag of a product no longer shown; if the target category leaves mid-drag, letting go
-still sends `drop-items` naming the deleted category. Not checked: what the server answers to that
-drop. Fix: check the dragged row still exists before the drag starts, and the target category still
-exists on release.
+DONE (W88a, 2026-10-05).** Found by W88's pre-merge review. The Products tree
+(`apps/dashboard/src/widgets/product-list.ts`) now checks a drag against the rows the list holds
+after a refresh. A drag whose pressed row a refresh removed before the pointer moved far enough does
+not start (no drag picture, no grabbing cursor, no `drag-items` naming the row). A target category
+that a refresh removed sends no `drop-items` on release; once a refresh has removed any dragged row,
+whether the only one or one of several selected, no category is offered and letting go sends
+nothing. After every update of the table during a drag, the target already chosen is judged again
+and the marks and gap redrawn, so a refresh no longer leaves a mark on a category that is no longer
+a drop target, or the gap on the wrong row; the category is chosen again from the row under the
+pointer only when the pointer moves. Checked by the "a refresh during a drag" cases in
+`apps/dashboard/src/widgets/product-list.test.ts`, all but the All products case seen failing
+without the code that makes it pass. A drag no longer sends a move once a refresh has removed the
+category; one deleted elsewhere before this screen refreshed is still sent, and what the server
+answers to it is not checked.
 
 **Unused editing code in the two widgets the Menus screen no longer edits with — OPEN (W88, owner
 default 2026-10-04: leave and record).** `dashboard-member-list-editor`
