@@ -3,6 +3,12 @@ export function isStoredColor(value: unknown): value is string {
   return typeof value === "string" && /^#[0-9a-f]{6}$/.test(value);
 }
 
+/** `value` when it is null or a stored colour; anything else goes to `refuse`, which throws the
+ * caller's own error. */
+export function colorOrNull(value: unknown, refuse: () => never): string | null {
+  return value === null || isStoredColor(value) ? value : refuse();
+}
+
 export interface ColorNode {
   parentId: string | null;
   color: string | null;

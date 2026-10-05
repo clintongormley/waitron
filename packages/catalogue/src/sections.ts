@@ -3,7 +3,7 @@ import { tableExists, type Transaction } from "@waitron/db";
 import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { allTopLevelProducts } from "./categories.js";
-import { isStoredColor } from "./color-inheritance.js";
+import { colorOrNull } from "./color-inheritance.js";
 import { findContentTranslationGap } from "./content-languages.js";
 import { sectionMembers, sections } from "./schema/sections.js";
 import {
@@ -81,9 +81,9 @@ async function mediaImageExists(tx: Transaction, filename: string): Promise<bool
 }
 
 function colorOf(value: unknown): string | null {
-  if (value === null) return null;
-  if (!isStoredColor(value)) throw new AppError("menu_section.invalid", { field: "color" });
-  return value;
+  return colorOrNull(value, () => {
+    throw new AppError("menu_section.invalid", { field: "color" });
+  });
 }
 
 async function imageOf(tx: Transaction, value: unknown): Promise<string | null> {

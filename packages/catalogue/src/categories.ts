@@ -4,7 +4,7 @@ import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { assertCategoryNamesFree } from "./category-names.js";
 import { foldName } from "./name-uniqueness.js";
-import { isStoredColor } from "./color-inheritance.js";
+import { colorOrNull } from "./color-inheritance.js";
 import { categoryDetails } from "./schema/categories.js";
 import { isTopLevelProduct, productWithId } from "./variant-fallback.js";
 import "./errors.js";
@@ -73,9 +73,9 @@ function categoryName(name: unknown): string {
   return trimmed;
 }
 function categoryColorInput(value: unknown): string | null {
-  if (value === null) return null;
-  if (!isStoredColor(value)) throw new AppError("category.invalid", { field: "color" });
-  return value;
+  return colorOrNull(value, () => {
+    throw new AppError("category.invalid", { field: "color" });
+  });
 }
 export async function createCategory(tx: Transaction, input: CategoryInput): Promise<Category> {
   const name = categoryName(input.name);

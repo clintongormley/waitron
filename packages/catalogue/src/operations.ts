@@ -7,7 +7,7 @@ import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
 import { AppError, centsToDecimal, stringToCents, type Decimal } from "@waitron/shared";
 import { catalogues, categories, locationCatalogues, locations, now, products } from "@waitron/db";
 import { readCategory } from "./categories.js";
-import { isStoredColor } from "./color-inheritance.js";
+import { colorOrNull } from "./color-inheritance.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
@@ -1152,8 +1152,10 @@ async function patchProduct(
     ...rest
   } = patch;
   const assertColor = () => {
-    if (color != null && !isStoredColor(color))
-      throw new AppError("product.invalid", { field: "color" });
+    if (color !== undefined)
+      colorOrNull(color, () => {
+        throw new AppError("product.invalid", { field: "color" });
+      });
   };
   // A category refusal outranks a malformed colour; with no category in the patch, the colour is
   // refused before the product is looked for.

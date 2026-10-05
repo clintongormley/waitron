@@ -1,5 +1,5 @@
 import { AppError } from "@waitron/shared";
-import { isStoredColor } from "./color-inheritance.js";
+import { colorOrNull } from "./color-inheritance.js";
 import { firstNewClash } from "./name-uniqueness.js";
 import { storeProductNameKeys } from "./product-names.js";
 import "./errors.js";
@@ -26,10 +26,11 @@ function isActive(row: Record<string, unknown>): boolean {
 /** Screens paint a stored colour into a style attribute, so only the spelling a save stores may come
  * in. */
 function checkColors(rows: Rows | undefined, table: string): void {
-  for (const row of rows ?? []) {
-    if (row.color !== undefined && row.color !== null && !isStoredColor(row.color))
-      throw new AppError("setup.request_invalid", { field: `${table}.color` });
-  }
+  for (const row of rows ?? [])
+    if (row.color !== undefined)
+      colorOrNull(row.color, () => {
+        throw new AppError("setup.request_invalid", { field: `${table}.color` });
+      });
 }
 
 /** The first name two of `names` share, ignoring case and surrounding spaces. An import replaces
