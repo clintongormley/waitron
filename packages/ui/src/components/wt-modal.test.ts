@@ -152,6 +152,8 @@ test.each([
   const rect = dialogOf(modal).getBoundingClientRect();
   expect(rect.width).toBeCloseTo(expected, 0);
   expect(1280 - rect.right).toBeCloseTo(rect.left, 0);
+  expect(rect.top).toBeCloseTo(24, 0);
+  expect(900 - rect.bottom).toBeCloseTo(24, 0);
 });
 
 // On a phone the side margin is --wt-space-1 (4px), so every size is the viewport less 8px.
@@ -343,6 +345,25 @@ test.each([
     expect(message.getBoundingClientRect().width).toBeCloseTo(expected, 0);
   },
 );
+
+test("holds every field at the form width in a standard modal beside a classic scrollbar", async () => {
+  await page.viewport(1280, 900);
+  const modal = await openModal(FIELDS, 'size="standard"');
+  const fields = await fieldsIn(modal);
+  // This headless Chromium hides scrollbars, so the room the widest classic one (17px) takes from the
+  // body is stood in as extra end padding.
+  const scrollbar = new CSSStyleSheet();
+  scrollbar.replaceSync(
+    ".body { padding-inline-end: calc(var(--wt-modal-inline-padding) + 17px); }",
+  );
+  modal.shadowRoot!.adoptedStyleSheets = [...modal.shadowRoot!.adoptedStyleSheets, scrollbar];
+  // 672px less a 1px border and 24px of padding each side, less 17px.
+  expect(contentWidth(modal)).toBeCloseTo(605, 0);
+  const form = px("var(--wt-form-max-width)");
+  for (const field of fields) {
+    expect(field.getBoundingClientRect().width, field.localName).toBeCloseTo(form, 0);
+  }
+});
 
 test("leaves a field outside a modal as wide as its container", async () => {
   await page.viewport(1280, 900);

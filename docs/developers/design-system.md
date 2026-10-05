@@ -204,8 +204,8 @@ the filled-background idiom only for a colour that is itself the data, never as 
 `--wt-font-weight-normal|medium|bold`, `--wt-google-mark-size` (20px), `--wt-google-mark-gap`
 (10px) and `--wt-google-button-line-height` (20px) (the Google sign-in button's "G", the gap after
 it and its label's line height), `--wt-shadow-1|2`,
-`--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-modal-max-width`,
-`--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-form-max-width`,
+`--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-modal-compact-width`,
+`--wt-modal-standard-width`, `--wt-modal-max-width`, `--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-form-max-width`,
 `--wt-field-max-width`, `--wt-cell-name-max-width`,
 `--wt-stepper-field-width` (88px), `--wt-stepper-button-width` (24px), `--wt-price-field-width`,
 `--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-duration-fade`, `--wt-duration-move`,
@@ -257,21 +257,28 @@ the login section).
 `--wt-dialog-max-width` (`min(90vw, 48rem)`) exists so `wt-dialog` never spells out a literal
 `rem` value inline — the no-hardcoded-chrome guard (see below) checks `rem`/`em` sizing, not just
 `px`, so any component-level size, including one wrapped in `min()`/`max()`/`clamp()`, must resolve
-through a token. `wt-modal` is at most `64rem` (1024px) wide; `wt-dialog` and `wt-help-tooltip`
-read their own token and are at most `48rem` (768px). Some add and edit forms are built in
-`wt-dialog` rather than `wt-modal` (the ingredient form is one), so they are held to 768px too. Overriding `--wt-modal-max-width` therefore resizes `wt-modal` alone; to resize a
-dialog, set `--wt-dialog-max-width` (the till's device chooser does).
+through a token. `wt-modal` has three sizes, each a token: compact, `--wt-modal-compact-width`
+(`28rem`, 448px); standard, `--wt-modal-standard-width` (`42rem`, 672px); and wide,
+`--wt-modal-max-width` (`64rem`, 1024px), which is also the width of a modal given no size (see
+the `wt-modal` entry below). `wt-dialog` and `wt-help-tooltip` read their own token and are at most
+`48rem` (768px). Some add and edit forms are built in `wt-dialog` rather than `wt-modal` (the
+ingredient form is one), so they are held to 768px too. Only `wt-modal` reads the three modal
+tokens, so overriding one resizes no dialog; to resize a dialog, set `--wt-dialog-max-width` (the
+till's device chooser does).
 
-`--wt-form-max-width` (`36rem`, 576px at the default text size) is the one standard width of a form
-inside a `wt-modal` (owner, 2026-09-30, C105): a field there grows no wider than it, however wide the
-modal is. `wt-modal` sets `--wt-field-max-width` to it on its body, and every shared field reads
+`--wt-form-max-width` (`36rem`, 576px at the default text size) is the form width: the one width
+of a form inside a `wt-modal` (owner, 2026-09-30, C105). A field there grows no wider than it,
+however wide the modal is, and in a modal whose body is narrower (a compact one, or any size on a
+phone) it takes the body's whole width instead. The form width is not the standard modal size: a
+standard modal is wider, so its body holds a form at the form width beside a classic scrollbar up
+to 17px wide. `wt-modal` sets `--wt-field-max-width` to it on its body, and every shared field reads
 `--wt-field-max-width` as its `max-width` — `wt-input`, `wt-textarea`, `wt-combobox`, `wt-price-input`,
 `wt-number-stepper`, `wt-switch`, and the line that shows a form's message
 (`formMessageStyles`, so both the message a dialog shows at the end of its body and the one a
 `wt-form-actions` placed in the body shows above its buttons). `--wt-field-max-width` is `none` at
 the theme root. It narrows nothing else: a table, a preview, a `wt-disclosure`, a screen's own
-paragraphs and the footer's buttons keep the modal's full width. There is one standard modal size;
-a screen does not set its own form width.
+paragraphs and the footer's buttons keep the modal's full width. A screen does not set its own
+form width; it chooses the modal's size.
 
 The six field elements' label, hint and error are inside the element, so the cap holds them too.
 
@@ -291,8 +298,9 @@ button beside the ruler's answer, and the member list editor's `.add` row does, 
 (`apps/dashboard/src/widgets/member-list-editor.ts`; the only screen drawing it is a menu's Home
 page tab, on a page through `home-layout-editor.ts`, where nothing changes). Guards: the form-width
 cases in `packages/ui/src/components/wt-modal.test.ts` (`wt-input`, `wt-textarea`, `wt-combobox`,
-`wt-price-input`, `wt-number-stepper` and `wt-switch`, and the message at 1280px; wide content and
-the footer row at full width; each field at the body's width at 390px; each field at its container's width outside a modal); the calibration case in
+`wt-price-input`, `wt-number-stepper` and `wt-switch`, and the message at 1280px; each field and the
+message bounded by the narrower of the form width and the body in every modal size at 1280px; wide
+content and the footer row at full width; each field at the body's width at 390px; each field at its container's width outside a modal); the calibration case in
 `apps/dashboard/src/screens/printers-screen.test.ts`; and one 1280px case each in
 `apps/dashboard/src/widgets/add-content-language.test.ts`,
 `apps/dashboard/src/widgets/member-list-editor.test.ts` (the editor placed in a `wt-modal`),
@@ -414,7 +422,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-number-stepper` | `value` (text), `label`, `name`, `min` (default `0`), `max` (default none), `clearable` (boolean attribute: − on any finite number at or below `min`, a fraction included, clears the box to blank and emits `""` instead of being disabled there; − stays disabled while the box is blank, holds a fraction above `min`, or holds no finite number), `placeholder`, `hint` (shown inside the empty box as its placeholder unless `placeholder` is set, and always the box's description; see Forms), `required` (reflected), `disabled` (reflected, and locks the box and both buttons), `invalid` (reflected), `error`, `hide-label` (names the box with `label` for assistive technology but draws no label, and makes the box compact), `decreaseLabel` and `increaseLabel` (functions given `label` that return the buttons' accessible names, property only, default "Decrease …" and "Increase …"; set translated ones). A whole-number field in the filled field box (Forms → "The field box"). Its label always floats on the top line, even while the box is empty, and runs across the whole box, inset `--wt-space-2` from each edge. Under it, in one row, − sits at the box's start and + at its end, and the number is centred between them; the number box itself spans the whole box under the buttons, padded by a button's width on each side. Each button is `--wt-stepper-button-width` wide (below `--wt-tap-min`; see "`--wt-tap-min`") and takes the height left under the label, or the whole compact box with `hide-label`. The buttons have no fill and no separator: each draws its icon in `--wt-color-primary`, and a hover tints that button's area with `--wt-color-stepper-button`, stopping short of the box's bottom line. A disabled button fades only its icon through `--wt-opacity-disabled`, while the box takes the disabled field look. + is disabled at `max`. Without `clearable`, − is disabled at `min` and on a box holding no whole number. + on a blank value or one that is not a whole number gives the larger of `min` and 1, never above `max`; without `clearable`, − never goes below `min`, so only clearing the box reaches blank. Typing emits exactly what was typed, never a clamped number, so the form's own validation sees a typed 0, a blank or a non-number. Its baseline is the number's, so a row aligned by baseline lines the text up. The box is at least `--wt-stepper-field-width` wide (88px: both buttons and room for a three-digit number). A label longer than that widens the box to show it whole on one line, and the number box widens with it; in a row too narrow for that, the box narrows again, never below `--wt-stepper-field-width`, and the label is cut with an ellipsis on one line, keeping a required field's `*`; in a row narrower than the box, the stepper overflows the row. Focusing the element focuses the box. The consuming app registers the `minus` and `plus` icons | `wt-change` — `detail: { value: string }` (on typing, and on each step that changes the value, a clear included) |
 | `wt-switch` | `checked`, `disabled`, `label`, `name`, `hide-label` (hides the drawn text while keeping `label` as the native switch's default accessible name), `accessible-name` (overrides the native switch's accessible name, for a row-specific name in a table whose column heading supplies the action). The drawn label is the `label` part. When drawn, its text supplies the switch's baseline for rows aligned by baseline | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it, which holds through repeated Escape presses; while it is off and `open` is still true, a close the caller did not ask for shows the dialog again and sends no `wt-close`); default slot (body), `footer` slot. The message of a `wt-form-actions` placed directly in the `footer` slot shows at the end of the body instead, every such row's message joined, and is scrolled into view when it changes and when the dialog opens; a `wt-form-actions` in the body keeps its own message, which the dialog scrolls into view when it changes. Neither is scrolled to when it changes from an `input` event inside the dialog until a zero-delay timer the dialog then sets has run | `wt-close` |
-| `wt-modal` | `open`, `heading`, `aria-label`, `dismissible`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
+| `wt-modal` | `open`, `heading`, `aria-label`, `dismissible`, `size` (`compact`, `standard` or `wide`; unset is wide; reflected); default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
 | `wt-form-error-summary` | `heading`, `errors`. Retiring: a form no longer shows a summary (see Forms); no product form uses it any more; it is deleted once its remaining users, listed in `docs/backlog.md`, are gone | — |
 | `wt-form-actions` | `error` (the form's one message about a failed submission: shown on its own line above the buttons, full width (in a `wt-modal`, no wider than `--wt-form-max-width`) and aligned to the start, announced as an alert, painted `--wt-color-danger`); `showError` (property only, default `true`; `wt-dialog` turns it off for each row directly in its footer and shows the message itself); `cancel`, `secondary`, and default slots. The same module exports `formMessage(message)` and `formMessageStyles`, which draw that message for a screen that has to place it itself; a shadow root using `formMessage` includes `formMessageStyles` | `wt-form-error` — `detail: { message: string }` (whenever `error` changes) |
 | `wt-help-tooltip` | `aria-label`; default slot | — |
@@ -873,8 +881,26 @@ variant's row draws no grip and no photo slot; its name is indented to start und
 name.
 
 Use `wt-modal` for an add or edit form. Its fields stop at `--wt-form-max-width` (see "Structure"
-above). Its width is `--wt-modal-max-width` (`64rem`) bounded by the
-viewport minus its side margins, and it fills the viewport height with 24px top and bottom margins.
+above). Give it a `size` chosen by its content:
+
+- `size="compact"` (`--wt-modal-compact-width`, 448px): a confirmation, or one or two short fields.
+- `size="standard"` (`--wt-modal-standard-width`, 672px): an ordinary editor. Its body holds a form
+  at the form width beside a classic scrollbar up to 17px wide.
+- `size="wide"` (`--wt-modal-max-width`, 1024px): a table wider than a form, a side-by-side layout,
+  an image grid, or a toolbar that needs one line.
+
+A modal given no size, or a value not listed, is wide. Choose one anyway, so a reader can see the
+choice; do not widen a modal past what its content needs. Each size is bounded by the viewport less
+the modal's side margins, so on a phone every size is the same width (measured at 390px and 320px
+wide). Each size reads only its own
+token: an ancestor's `--wt-modal-max-width` resizes an unsized or wide modal and leaves a compact or
+standard one alone, and to resize one sized modal you set its own size token on it. A size is not
+passed down: a wide or unsized modal opened inside a compact or standard one is still wide. Changing
+`size` on an open modal resizes it, and the property is reflected to the `size` attribute.
+Guards: the size cases in `packages/ui/src/components/wt-modal.test.ts`, and the order of the sizes
+and the standard modal's room for a form in `packages/ui-core/src/tokens/structure.test.ts`. The
+modal fills the viewport height with 24px top and bottom margins, whatever its size, so a compact
+confirmation is a narrow column the height of the window.
 Its side margins (`--wt-modal-inline-margin`) and the inline padding of its body and footer
 (`--wt-modal-inline-padding`) are 24px from 800px wide and shrink on a phone to 4px and 12px, so the
 width goes to the content. They are fluid `clamp()` values rather than a breakpoint because a media
@@ -1192,7 +1218,7 @@ the bottom right. Put the expected primary action there. Put Cancel or Back in t
 it stays on the bottom left. A secondary action that belongs beside the primary action goes in the
 `secondary` slot. The row's message runs from the form's left edge only when the row is the form's
 full width. Where the row shares a line with something else, show the message with `formMessage`
-directly before that line, or let the row take the full width (in a `wt-modal`, the form width)
+directly before that line, or let the row take the full width (in a `wt-modal`, no wider than the form width)
 while it has a message, as the Add printer dialog's address check does. The sign-in email,
 password, passkey and Google screens put their own way in outside `wt-form-actions`, as a
 full-width button with the form's message on its own line directly above it (shown with
@@ -1873,8 +1899,8 @@ stays anchored to the body's left padding, the same as a full-width `wt-data-tab
 it read as a visually different app from the wide table screens next to it; anchoring both to the
 same edge and varying only the width does not. `backup-screen.ts` and `receipts-screen.ts` (its
 form column) already follow this (`max-width` alone). `profile-screen.ts` no longer applies here at all — it isn't a
-screen positioned beside the sidebar any more; it's a modal, bounded by `--wt-modal-max-width`
-like any other, and its fields stop at `--wt-form-max-width`. The one legitimate exception among actual screens is a full-page one with no
+screen positioned beside the sidebar any more; it's a modal, and its fields stop at
+`--wt-form-max-width`. The one legitimate exception among actual screens is a full-page one with no
 sidebar at all, like the login screen — centering a freestanding form with nothing to anchor to is
 the normal, expected treatment there.
 
