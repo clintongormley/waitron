@@ -1501,8 +1501,7 @@ describe("venue operations screen", () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
-    await selectTab(el, "departments");
-    const link = el.shadowRoot!.querySelector<HTMLAnchorElement>(
+    const link = table(el, "policy-tree").shadowRoot!.querySelector<HTMLAnchorElement>(
       'a[href="/manage/venue-settings/view/receipts?departmentId=d2"]',
     );
     expect(link?.textContent?.trim()).toBe("Preview");
@@ -1518,6 +1517,9 @@ describe("venue operations screen", () => {
       ["Preview", "/manage/venue-settings/view/receipts?departmentId=d1"],
       ["Preview", "/manage/venue-settings/view/receipts?departmentId=d2"],
     ]);
+    expect(
+      el.shadowRoot!.querySelectorAll('a[href^="/manage/venue-settings/view/receipts?"]'),
+    ).toHaveLength(0);
   });
 
   it("deactivates a department that has no active zones", async () => {
