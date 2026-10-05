@@ -175,8 +175,9 @@ import {
 } from "./till-session.js";
 import {
   assertDeviceCapability,
+  assertDeviceStillProven,
   assertTakesCash,
-  requireDevice,
+  requireDeviceProof,
   tryReadDevice,
 } from "./device-session.js";
 import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
@@ -983,7 +984,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const personId = canonicaliseUuid(rawPersonId);
       // Not throttled: this id never reaches the lookup, so no PIN is being tried against anyone.
       if (personId === null) throw new AppError("pin.invalid", {});
-      const device = await requireDevice(deps, c);
+      const proof = await requireDeviceProof(deps, c);
+      const { device } = proof;
       // A kitchen display holds no shift.
       if (kindOfFormFactor(device.formFactor) === "kds_station")
         throw new AppError("device.forbidden_action", { action: "sign_in" });
@@ -992,6 +994,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       let session;
       try {
         session = await withTransaction(deps.db, async (tx) => {
+          await assertDeviceStillProven(tx, proof);
           return loginWithPin(tx, {
             deviceId: device.deviceId,
             personId,

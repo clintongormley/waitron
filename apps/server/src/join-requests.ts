@@ -521,6 +521,7 @@ export async function acceptDeviceJoinRequest(
       },
       { active: true, tokenHash: row.tokenHash },
     );
+    // The Disable route ends them itself; this catches a device turned off outside it.
     await endDeviceSessions(tx, row.id);
     return { deviceId: row.id, name: input.label, formFactor: binding.formFactor };
   }

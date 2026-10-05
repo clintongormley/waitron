@@ -5290,6 +5290,18 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   previous one (accepting it included, once the device is later disabled), is not forced later.
   It must first prove the token the previous ask issued, a scrypt check, so sharing a millisecond is
   unlikely, but nothing in the code rules it out.
+  **W105f (done):** Disable ends every shift session open on the device in the same transaction
+  (`POST /management-api/devices/:id/revoke`, the only path that disables a device), so a signed-in
+  person's next request is refused `session.required` straight away; other devices' sessions are
+  untouched. The till's sign-in checks the PIN outside any transaction, so inside the transaction
+  that opens the session it checks the device again (`assertDeviceStillProven`,
+  `apps/server/src/device-session.ts`): still active, and still holding the token hash the cookie
+  was verified against, or it is refused `device.unauthorized` and no session opens. A Disable, or a
+  Disable and then an Enable, landing while the PIN is checked leaves no session open
+  (`apps/server/src/join-e2e.test.ts`; with that check removed both cases fail). The refusal of a
+  session on a disabled device (`device.unauthorized`) stays, and Enable still ends the device's
+  sessions, as a second line for a device turned off outside the Disable route (with that call
+  removed, the join e2e case turning a device off directly fails).
   **W106 (done, #1240):** `devices` gains three empty-by-default columns: the battery level,
   whether it is charging and when that was reported (core `0099`). A paired device sends both to
   `PUT /api/device/battery`, which refuses a level outside 0 to 100 and stores at most one report a

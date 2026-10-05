@@ -26,7 +26,8 @@ export async function seedSessionDevice(
 
 /**
  * The cookie of `personId`'s shift session on a device at `cfg`'s location that has since been
- * revoked: the request every till route refuses `device.unauthorized`.
+ * revoked: the request every till route refuses `device.unauthorized`. Revoked out of band, because
+ * the Disable route ends the device's sessions.
  */
 export async function revokedDeviceSessionCookie(
   db: Database,
