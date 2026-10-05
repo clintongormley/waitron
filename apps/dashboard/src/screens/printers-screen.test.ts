@@ -8716,12 +8716,18 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
     expect(q(el, "[data-test=calibration-job-failed]")).toBeNull();
   });
 
-  it("does not say in a Bluetooth printer's dialog, through calibration, that printing to it is unavailable", async () => {
+  it("does not say on Bluetooth printer details or during calibration that printing is unavailable", async () => {
     const { el } = await mountWith();
-    await openPrinter(el, "p5");
-    expect(q(el, "[data-test=save-printer-p5]")).not.toBeNull();
+    await selectTab(el, "printers");
+    q(el, '[data-test="printer-row-p5"]')!.click();
+    await flush(el);
+    expect(q(el, "[data-test=printer-section-calibration]")).not.toBeNull();
     expect(q(el, "[data-test=bluetooth-printing-unavailable]")).toBeNull();
-    q(el, "[data-test=calibrate-printer]")!.click();
+    q(el, "[data-test=printer-section-calibration]")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    await flush(el);
+    q(el, "[data-test=calibrate-printer-details]")!.click();
     await flush(el);
     expect(q(el, "[data-test=calibration-next]")).not.toBeNull();
     expect(q(el, "[data-test=bluetooth-printing-unavailable]")).toBeNull();
