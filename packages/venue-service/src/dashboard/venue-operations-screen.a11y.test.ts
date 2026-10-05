@@ -91,7 +91,7 @@ describe.each(["light", "dark"] as const)("venue editors' fields accessibility (
   test.each([
     ["the hours editor, after a failed press", "departments", ["new-hours"], true],
     ["the zone editor", "zones", ["edit-zone-z1"], false],
-    ["the menu editor", "zones", ["zone-menus-z1", "new-assignment-z1"], false],
+    ["the menu editor", "zones", ["menus-tree-zone-z1", "new-assignment-z1"], false],
     ["the tills' starting zones", "zones", [], false],
   ] as const)("%s", async (_name, tab, steps, press) => {
     setLocale("en");

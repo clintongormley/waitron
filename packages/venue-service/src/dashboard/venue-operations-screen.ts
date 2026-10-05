@@ -1379,13 +1379,23 @@ export class VenueOperationsScreen extends LitElement {
                   label: t("venue.edit"),
                   run: () => this.#open({ kind: "zone", row }),
                 },
-                {
-                  key: `zone-menus-${row.id}`,
-                  label: t("venue.menus"),
-                  run: () => {
-                    this.zoneId = row.id;
-                  },
-                },
+                ...(model.zones.some(
+                  (zone) =>
+                    zone.id === row.id &&
+                    model.departments.some(
+                      (department) => department.id === zone.departmentId && department.active,
+                    ),
+                ) && row.active !== false
+                  ? []
+                  : [
+                      {
+                        key: `zone-menus-${row.id}`,
+                        label: t("venue.menus"),
+                        run: () => {
+                          this.zoneId = row.id;
+                        },
+                      },
+                    ]),
               ]),
           },
         ],

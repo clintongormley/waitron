@@ -269,6 +269,15 @@ describe("venue operations screen", () => {
     expect(modal(el)?.getAttribute("heading")).toBe("Make available");
   });
 
+  it("opens zone menus from the policy tree without a duplicate old-table action", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    expect(find(el, '[data-test="zone-menus-z1"]')).toBeNull();
+    await action(el, "menus-tree-zone-z1");
+    expect(table(el, "zone-menus").checkVisibility()).toBe(true);
+  });
+
   it("opens a new department from the policy tree's top action", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
@@ -1172,7 +1181,7 @@ describe("venue operations screen", () => {
     ).not.toBeNull();
     expect(tabs.querySelector('[slot="departments"] [data-test="new-department"]')).toBeNull();
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     expect(tabs.querySelector('[slot="actions"] [data-test="new-assignment-z1"]')).toBeNull();
     expect(
       el.shadowRoot!.querySelector(
@@ -1220,7 +1229,7 @@ describe("venue operations screen", () => {
       load: vi.fn().mockResolvedValue({ ...model, zoneMenus: [] }),
     } as unknown as VenueServiceApi);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     const button = table(el, "zone-menus").querySelector<HTMLElement>(
       ":scope > [slot=empty-action]",
     )!;
@@ -1283,7 +1292,7 @@ describe("venue operations screen", () => {
       load: vi.fn().mockResolvedValue({ ...model, zoneMenus: [] }),
     } as unknown as VenueServiceApi);
     await selectTab(noMenus, "zones");
-    await action(noMenus, "zone-menus-z1");
+    await action(noMenus, "menus-tree-zone-z1");
     expect(emptySentence(noMenus, "zone-menus")).toBe(expected["zone-menus"]);
   });
 
@@ -1677,7 +1686,7 @@ describe("venue operations screen", () => {
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     const button = find(el, '[data-test="default-assignment-m2"]')!;
     const menu = button.closest("wt-row-actions")!;
     const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
@@ -1875,7 +1884,7 @@ it("creates and edits zone menu assignments and preserves a current default", as
   } as unknown as VenueServiceApi;
   const el = await mount(api);
   await selectTab(el, "zones");
-  await action(el, "zone-menus-z1");
+  await action(el, "menus-tree-zone-z1");
   expect(tableText(el, "zone-menus")).toContain("Casa Delgado");
   await action(el, "new-assignment-z1");
   expect(field(el, "assignment-menu").value).toBe("m2");
@@ -2053,7 +2062,7 @@ describe("the venue lists", () => {
     await selectTab(el, "departments");
     expect(column(el, "departments", 3)).toEqual(["Active", "Inactive"]);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     expect(column(el, "zone-menus", 1)).toEqual(["Yes", "No"]);
   });
 
@@ -2068,7 +2077,7 @@ describe("the venue lists", () => {
       }),
     } as unknown as VenueServiceApi);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     expect(
       [...table(el, "zone-menus").shadowRoot!.querySelectorAll("wt-row-actions")].map((menu) =>
         menu.getAttribute("label"),
@@ -2089,7 +2098,7 @@ describe("the venue lists", () => {
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     expect(find(el, '[data-test="default-assignment-m1"]')!.hasAttribute("disabled")).toBe(true);
     await action(el, "default-assignment-m2");
     expect(api.allowMenu).toHaveBeenCalledWith("z1", "m2", { displayOrder: 4, makeDefault: true });
@@ -2122,7 +2131,7 @@ describe("the venue lists' column choosers", () => {
         load: vi.fn().mockResolvedValue(model),
       } as unknown as VenueServiceApi);
       await selectTab(el, tab);
-      if (name === "zone-menus") await action(el, "zone-menus-z1");
+      if (name === "zone-menus") await action(el, "menus-tree-zone-z1");
       expect(chooser(el, name)).toBe("Customise columns");
       expect(choices(el, name)).toEqual(keys.map((key) => [key, true]));
       const before = headers(el, name);
@@ -2149,7 +2158,7 @@ describe("the venue lists' column choosers", () => {
     expect(chooser(el, "departments")).toBe("Personalizar columnas");
     expect(chooser(el, "hours")).toBe("Personalizar columnas");
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     expect(chooser(el, "zones")).toBe("Personalizar columnas");
     expect(chooser(el, "zone-menus")).toBe("Personalizar columnas");
   });
@@ -2161,7 +2170,7 @@ describe("the venue lists' column choosers", () => {
     } as unknown as VenueServiceApi);
     await selectTab(el, "departments");
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     for (const name of ["departments", "hours", "zones", "zone-menus"]) {
       const list = table(el, name) as Element & {
         alwaysShownColumnLabel: string;
@@ -2225,7 +2234,7 @@ describe("the venue editors refuse an incomplete form", () => {
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     await action(el, "new-assignment-z1");
     expect(field(el, "assignment-menu").value).toBe("");
     await action(el, "save-editor");
@@ -2241,7 +2250,7 @@ describe("the venue editors refuse an incomplete form", () => {
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     await action(el, "new-assignment-z1");
     for (const order of ["-1", "1.5"]) {
       field(el, "assignment-order").value = order;
@@ -2496,7 +2505,7 @@ describe("an editor's messages", () => {
     },
     {
       tab: "zones",
-      open: ["zone-menus-z1", "edit-assignment-m1"],
+      open: ["menus-tree-zone-z1", "edit-assignment-m1"],
       method: "allowMenu",
       name: "displayOrder",
       control: "assignment-order",
@@ -2533,7 +2542,7 @@ describe("an editor's messages", () => {
     },
     {
       tab: "zones",
-      open: ["zone-menus-z1", "edit-assignment-m1"],
+      open: ["menus-tree-zone-z1", "edit-assignment-m1"],
       method: "allowMenu",
       code: "catalogue.not_found",
       control: "assignment-menu",
@@ -2586,7 +2595,7 @@ it("says a refused list action at the top of the screen, with no editor open", a
   } as unknown as VenueServiceApi;
   const el = await mount(api);
   await selectTab(el, "zones");
-  await action(el, "zone-menus-z1");
+  await action(el, "menus-tree-zone-z1");
   await action(el, "default-assignment-m2");
   expect(api.allowMenu).toHaveBeenCalledTimes(1);
   expect(modal(el)).toBeNull();
@@ -2740,7 +2749,7 @@ describe("where focus goes after a change that saves at once", () => {
       setDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     await action(el, "new-assignment-z1");
     await action(el, "cancel-editor");
     const makeAvailable = find(el, '[data-test="new-assignment-z1"]')!;
@@ -2769,7 +2778,7 @@ describe("where focus goes after a change that saves at once", () => {
       allowMenu: vi.fn().mockResolvedValue(undefined),
     } as unknown as VenueServiceApi);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     await action(el, "new-assignment-z1");
     await action(el, "cancel-editor");
     const menu = table(el, "zone-menus").shadowRoot!.querySelector<HTMLElement>(
@@ -2871,7 +2880,7 @@ describe("where focus goes when an editor opened from an Add button closes", () 
       write: "allowMenu",
       show: async (el: VenueOperationsScreen) => {
         await selectTab(el, "zones");
-        await action(el, "zone-menus-z1");
+        await action(el, "menus-tree-zone-z1");
       },
       fill: () => {},
     },
@@ -2942,7 +2951,7 @@ describe("where focus goes when an editor opened from an Add button closes", () 
     await selectTab(el, "departments");
     expect(inBox(el, "hours")).toBeNull();
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     expect(inBox(el, "zone-menus")).toBeNull();
   });
 });
@@ -3101,7 +3110,7 @@ describe("the venue screen's fields are the shared field components", () => {
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     await action(el, "new-assignment-z1");
     const menu = dropdown(el.shadowRoot!, "assignment-menu");
     expect([menu.label, menu.required, menu.search, menu.value]).toEqual([
@@ -3200,7 +3209,7 @@ describe("the venue screen's fields are the shared field components", () => {
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
     await selectTab(el, "zones");
-    await action(el, "zone-menus-z1");
+    await action(el, "menus-tree-zone-z1");
     await action(el, "new-assignment-z1");
     const menu = dropdown(el.shadowRoot!, "assignment-menu");
     expect([menu.searchPlaceholder, menu.noResultsLabel]).toEqual(["Buscar", "Sin resultados"]);
@@ -3237,7 +3246,7 @@ describe("the venue tables at phone width", () => {
     { name: "departments", tab: "departments", rows: phoneModel.departments.length },
     { name: "hours", tab: "departments", rows: phoneModel.hours.length },
     { name: "zones", tab: "zones", rows: phoneModel.floorZones.length },
-    { name: "zone-menus", tab: "zones", open: "zone-menus-z1", rows: 1 },
+    { name: "zone-menus", tab: "zones", open: "menus-tree-zone-z1", rows: 1 },
   ];
   it.each(tables.flatMap((table) => ["en", "es"].map((locale) => ({ ...table, locale }))))(
     "keeps every $name row's menu on screen and uncovered while the other columns scroll sideways (390 px, $locale)",
