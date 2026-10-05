@@ -1246,6 +1246,28 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     },
   );
 
+  it("asks about an unscoped order on pay even when the retired location mode says invoice first", async () => {
+    const made = await strandedDish("Unscoped order");
+    const id = randomUUID();
+    await park(id, [made]);
+    await inTx(v, async (tx) =>
+      tx.run(sql`delete from order_service_contexts where working_order_id = ${id}`),
+    );
+    v.cfg.orderFlow = "invoice_first";
+
+    const response = await app.request("/api/dead-ends/order", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: session },
+      body: JSON.stringify({ workingOrderId: id }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      sends: true,
+      deadEnds: [{ name: made.name }],
+    });
+  });
+
   it("does not say a placed counter order sends when all its dishes already have tickets", async () => {
     const made = await dish("Placed lager");
     const chosen = await station("Placed bar");

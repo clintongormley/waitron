@@ -2434,7 +2434,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const sends =
           unsent.length > 0 &&
           (body.toZoneId === undefined
-            ? (context?.serviceMode ?? cfg.orderFlow) === "prepay" ||
+            ? (context?.serviceMode ?? "prepay") === "prepay" ||
               (order.partyId === null && paysAfterSending(context?.serviceMode))
             : await moveWouldSend(tx, cfg, id, body.toZoneId));
         const chosen =
