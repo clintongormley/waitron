@@ -340,6 +340,36 @@ describe("venue service management routes", () => {
     });
   });
 
+  it("previews removal of an unconfigured zone with its active table count", async () => {
+    const fx = await fixture();
+    await db.insert(diningTables).values([
+      { locationId: fx.locationId, label: "T1", zoneId: fx.zoneId },
+      { locationId: fx.locationId, label: "T2", zoneId: fx.zoneId, active: false },
+    ]);
+    const response = await send(
+      fx.app,
+      "GET",
+      `/management-api/venue-service/zones/${fx.zoneId}/removal-impact`,
+      fx.managerCookie,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      zones: [{ id: fx.zoneId, name: "Terrace", activeTableCount: 1 }],
+    });
+
+    const otherVenue = await fixture();
+    const outside = await send(
+      fx.app,
+      "GET",
+      `/management-api/venue-service/zones/${otherVenue.zoneId}/removal-impact`,
+      fx.managerCookie,
+    );
+    expect(outside.status).toBe(404);
+    expect(await outside.json()).toMatchObject({
+      error: { code: "service_zone.not_found", params: { zoneId: otherVenue.zoneId } },
+    });
+  });
+
   it("reads inherited sale policy and edits one field with a clearable zone override", async () => {
     const fx = await fixture();
     const created = await send(

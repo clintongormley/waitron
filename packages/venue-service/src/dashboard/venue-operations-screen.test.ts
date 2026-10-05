@@ -668,6 +668,25 @@ describe("venue operations screen", () => {
     expect(deactivateZone).toHaveBeenCalledWith("z1");
   });
 
+  it("shows active tables before removing an unconfigured zone", async () => {
+    const deactivateZone = vi.fn().mockResolvedValue(undefined);
+    const zoneRemovalImpact = vi.fn().mockResolvedValue({
+      zones: [{ id: "z2", name: "Deli counter", activeTableCount: 2 }],
+    });
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      deactivateZone,
+      zoneRemovalImpact,
+    } as unknown as VenueServiceApi);
+    await action(el, "remove-tree-zone-z2");
+    expect(zoneRemovalImpact).toHaveBeenCalledWith("z2");
+    expect(modal(el)?.textContent).toContain("Deli counter");
+    expect(modal(el)?.textContent).toContain("2 active tables");
+    expect(deactivateZone).not.toHaveBeenCalled();
+    await action(el, "save-editor");
+    expect(deactivateZone).toHaveBeenCalledWith("z2");
+  });
+
   it("keeps zone removal available after a rejected request", async () => {
     const deactivateZone = vi.fn().mockRejectedValue({ code: "zone.not_found" });
     const el = await mount({

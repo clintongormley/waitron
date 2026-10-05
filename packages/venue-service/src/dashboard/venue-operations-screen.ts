@@ -504,9 +504,12 @@ export class VenueOperationsScreen extends LitElement {
       this.actionError = this.#refusal(codeOf(error ?? {}), error);
     }
   }
-  async #confirmZone(row: FloorZone, departmentId: string): Promise<void> {
+  async #confirmZone(row: FloorZone, departmentId: string | null): Promise<void> {
     try {
-      const impact = await this.api.departmentRemovalImpact(departmentId);
+      const impact =
+        departmentId === null
+          ? await this.api.zoneRemovalImpact(row.id)
+          : await this.api.departmentRemovalImpact(departmentId);
       this.#open({
         kind: "delete",
         name: row.name,
@@ -1122,18 +1125,11 @@ export class VenueOperationsScreen extends LitElement {
                     this.zoneId = row.zone.id;
                   },
                 },
-                ...(row.departmentId === null
-                  ? []
-                  : [
-                      {
-                        key: `remove-tree-zone-${row.zone.id}`,
-                        label: t("venue.remove"),
-                        run: () => {
-                          if (row.departmentId !== null)
-                            void this.#confirmZone(row.zone, row.departmentId);
-                        },
-                      },
-                    ]),
+                {
+                  key: `remove-tree-zone-${row.zone.id}`,
+                  label: t("venue.remove"),
+                  run: () => void this.#confirmZone(row.zone, row.departmentId),
+                },
               ]),
       },
     ];

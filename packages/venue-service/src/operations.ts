@@ -258,6 +258,23 @@ export async function departmentRemovalImpact(
   return { zones: zones.map((zone) => ({ ...zone, activeTableCount: counts.get(zone.id) ?? 0 })) };
 }
 
+export async function zoneRemovalImpact(
+  tx: Transaction,
+  cfg: VenueScope,
+  zoneId: string,
+): Promise<{ zones: { id: string; name: string; activeTableCount: number }[] }> {
+  const [zone] = await tx
+    .select({ id: floorZones.id, name: floorZones.name })
+    .from(floorZones)
+    .where(and(eq(floorZones.id, zoneId), eq(floorZones.locationId, cfg.locationId)));
+  if (zone === undefined) throw new AppError("service_zone.not_found", { zoneId });
+  const tables = await tx
+    .select({ id: diningTables.id })
+    .from(diningTables)
+    .where(and(eq(diningTables.zoneId, zoneId), eq(diningTables.active, true)));
+  return { zones: [{ ...zone, activeTableCount: tables.length }] };
+}
+
 export async function deactivateDepartment(
   tx: Transaction,
   cfg: VenueScope,

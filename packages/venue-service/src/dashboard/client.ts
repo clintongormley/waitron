@@ -179,6 +179,10 @@ export class VenueServiceApi {
     return this.#read(`/management-api/venue-service/departments/${departmentId}/removal-impact`);
   }
 
+  zoneRemovalImpact(zoneId: string): Promise<DepartmentRemovalImpact> {
+    return this.#read(`/management-api/venue-service/zones/${zoneId}/removal-impact`);
+  }
+
   replaceHours(departmentId: string, hours: Omit<HoursInterval, "departmentId">[]): Promise<void> {
     return this.request(`/management-api/venue-service/departments/${departmentId}/hours`, "PUT", {
       hours,

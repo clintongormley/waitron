@@ -20,6 +20,7 @@ import {
   createDepartment,
   deactivateDepartment,
   departmentRemovalImpact,
+  zoneRemovalImpact,
   listDepartments,
   listSalePolicies,
   listDepartmentHours,
@@ -592,6 +593,14 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         return c.json(
           await gated(sessionId, (tx) => departmentRemovalImpact(tx, ctx.cfg, departmentId)),
         );
+      }),
+    );
+
+    app.get("/management-api/venue-service/zones/:zoneId/removal-impact", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const zoneId = requireUuidParam(c.req.param("zoneId"), "ZoneId");
+        return c.json(await gated(sessionId, (tx) => zoneRemovalImpact(tx, ctx.cfg, zoneId)));
       }),
     );
 

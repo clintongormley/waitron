@@ -144,6 +144,16 @@ describe("VenueServiceApi", () => {
     ]);
   });
 
+  it("reads an unconfigured zone's removal impact", async () => {
+    const impact = { zones: [{ id: "z2", name: "Deli counter", activeTableCount: 2 }] };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(impact));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    expect(await api.zoneRemovalImpact("z2")).toEqual(impact);
+    expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method ?? "GET"])).toEqual([
+      ["/management-api/venue-service/zones/z2/removal-impact", "GET"],
+    ]);
+  });
+
   it("stores whether items already sent to the kitchen may be changed", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
