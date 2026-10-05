@@ -1334,6 +1334,14 @@ Extras editor already sent the saved portion back: a throwaway case in its brows
 list with only its name changed and it sent `30.000` for a saved ml item and `0.050` for a saved kg
 item, and no portion for an Each item. So the lost portion was reachable through the API, not
 through the editor.
+Left OPEN, not in its scope: a held item whose product has since become Each, sent back WITH its old
+portion, is still accepted and keeps it, because a portion equal to the saved one is let through
+before the Each check in `itemPortions` — as it was before #1221. Tried 2026-10-05 on main 884600660
+with a throwaway test: a kg item saved at `0.050`, its product's unit cleared, then
+`updateExtraList` with `{ id, productId, portion: "0.050" }` was not refused and read back `0.050`.
+The Extras editor sends no portion for an Each product, so this is reachable through the API only.
+Next step, if wanted: run the Each check before the equal-to-saved shortcut, so such an item is
+refused on `items.<n>.portion`.
 
 **A folded Customer-facing names section shows every language's name, inherited ones in italic
 (W77, owner 2026-10-04) — DONE (#1197).** The owner, on an Extras list: _"missing the summary of the values
