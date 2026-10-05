@@ -1582,8 +1582,9 @@ describe("add a device", () => {
     q(el, "[data-test=pair-submit]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
     await vi.waitFor(() => expect(slotted.isConnected).toBe(false));
-    // wt-dialog's own fallback takes the first focusable element in the screen, which is the
-    // heading's button too; a decoy ahead of it means only the dialog's `opener` lands there.
+    // The Add button that had focus is gone, so wt-dialog's fallback searches this shadow root in
+    // tree order and would reach the heading's button anyway; a decoy ahead of it leaves only
+    // `opener` to put focus there.
     const decoy = document.createElement("button");
     el.shadowRoot!.prepend(decoy);
 
