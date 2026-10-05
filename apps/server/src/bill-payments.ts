@@ -28,6 +28,7 @@ import {
 import type { Decimal } from "@waitron/shared";
 import { recordSale, refuseOverSimplifiedLimit, settleSale } from "@waitron/core";
 import type { SettleSaleTender } from "@waitron/core";
+import { VENUE_SERVICE } from "./modules.js";
 import {
   associatePaymentWithSale,
   findPaymentsByBillPayments,
@@ -682,6 +683,8 @@ async function issueWhenFullyPaid(
     operatorId,
     settlement: { kind: "deferred" },
   });
+  const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, workingOrderId);
+  await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
   await settleSale(tx, { saleId, tenders: tendersOfBill });
 
   const provided = await findPaymentsByBillPayments(
@@ -724,6 +727,7 @@ async function issueWhenFullyPaid(
 
   const ticket: TillSaleResult = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),
+    receiptHeader: (await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId)) ?? undefined,
     ...receiptOrder,
     locale: language.locale,
     invoiceNumber: await readInvoiceNumber(tx, saleId),

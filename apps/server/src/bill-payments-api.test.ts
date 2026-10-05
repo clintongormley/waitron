@@ -1356,6 +1356,31 @@ describe("a split after a contribution (design §8 test 6, §4.2)", () => {
 });
 
 describe("the invoice at full payment (design §8 test 8)", () => {
+  it("keeps the bill department's trading name on its issued receipt", async () => {
+    const billId = await tabWith("Ensalada");
+    const [previous] = suite.db.all<{ trading_name: string }>(sql`
+      select trading_name from departments
+      where id = (select department_id from zone_service_policies where zone_id = ${venue.offers.zoneId})`);
+    await suite.db.execute(sql`
+      update departments set trading_name = 'Terraza Azul'
+      where id = (select department_id from zone_service_policies where zone_id = ${venue.offers.zoneId})`);
+    try {
+      const paid = await contribute(billId, "12.00");
+      expect(paid.status).toBe(200);
+      expect(paid.json.invoice).toMatchObject({
+        receiptHeader: { tradingName: "Terraza Azul", printTradingName: true },
+      });
+      const [sale] = await saleOf(billId);
+      const [snapshot] = suite.db.all<{ trading_name: string }>(sql`
+        select trading_name from sale_receipt_headers where sale_id = ${sale!.id}`);
+      expect(snapshot).toEqual({ trading_name: "Terraza Azul" });
+    } finally {
+      await suite.db.execute(sql`
+        update departments set trading_name = ${previous!.trading_name}
+        where id = (select department_id from zone_service_policies where zone_id = ${venue.offers.zoneId})`);
+    }
+  });
+
   it("files nothing while anything is outstanding, then exactly one record", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
 
