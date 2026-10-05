@@ -47,6 +47,9 @@ export interface SeedProduct {
 
 export interface SeedCategory {
   name: Record<SeedLocale, string>;
+  /** The reporting category's name, when it cannot be the English section name: categories with
+   * one parent must not share a name, while two menus may each have a section called the same. */
+  categoryName?: string;
   station: "kitchen" | "bar" | "deli" | null;
   products: SeedProduct[];
 }
@@ -568,6 +571,7 @@ export const MENU_DEL_DIA: SeedCatalogue = {
     },
     {
       name: { en: "Mains", es: "Segundos" },
+      categoryName: "Lunch mains",
       station: "kitchen",
       products: [
         {
