@@ -1159,11 +1159,31 @@ export class VenueOperationsScreen extends LitElement {
                     this.zoneId = row.zone.id;
                   },
                 },
-                {
-                  key: `remove-tree-zone-${row.zone.id}`,
-                  label: t("venue.disable"),
-                  run: () => void this.#confirmZone(row.zone, row.departmentId),
-                },
+                ...(row.zone.active !== false
+                  ? [
+                      {
+                        key: `remove-tree-zone-${row.zone.id}`,
+                        label: t("venue.disable"),
+                        run: () => void this.#confirmZone(row.zone, row.departmentId),
+                      },
+                    ]
+                  : // `listServiceZones` leaves out an active zone of a disabled department, so
+                    // enabling one there would not put it back in service.
+                    row.departmentId === null ||
+                      departments.some(
+                        (department) => department.id === row.departmentId && department.active,
+                      )
+                    ? [
+                        {
+                          key: `enable-tree-zone-${row.zone.id}`,
+                          label: t("venue.enable"),
+                          run: () =>
+                            void this.#save(() =>
+                              this.api.updateZone(row.zone.id, { active: true }),
+                            ),
+                        },
+                      ]
+                    : []),
               ]),
       },
     ];
