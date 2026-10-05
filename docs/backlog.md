@@ -1590,6 +1590,9 @@ deleted the right category; the dashboard was at fault. Fixed:
   server deletes nothing and refuses with `category.contents_changed` (409); the dashboard then
   reads the contents again and shows the new counts with the refusal's own message. Before this, a
   change between the dashboard's second read and the delete was not seen.
+- Choosing Edit or Delete in a product's row menu, or Edit, Remove or Restore in a variant's, now
+  closes the menu too (W74b). Those items stopped the click as the category Delete had, so the
+  menu stayed open after each of them.
 
 Still open from W74:
 - **An empty category's no-dialog delete does not see an inactive product added meanwhile**
@@ -1599,10 +1602,6 @@ Still open from W74:
 - **A category holding only routing rules is deleted without the dialog** (raised in #1217's
   review): the no-dialog path checks subcategories and products only, so its rules go unannounced.
   The check dates from commit `5ffa5c633c` (2026-10-01).
-- **A product's row menu stays open after Delete, Edit or Restore** on the Products list: `#emit`
-  in `apps/dashboard/src/widgets/product-list.ts` stops the click the same way the category Delete
-  did. Seen for Delete in a throwaway browser test (menu still open after the click); Edit and
-  Restore go through the same code but were not tried.
 - **The routing-rules warning counts too many rules when contents move up.** From reading the code,
   not run: the summary counts the rules of the category and every category below it
   (`summariseFolders`, `packages/catalogue/src/catalogue-items.ts`), and the dialog shows that number
