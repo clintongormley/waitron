@@ -264,8 +264,8 @@ export class CatalogueBrowser extends LitElement {
       this.summaryLoading = false;
     }
   }
-  /** `shown` marks a confirmation from the dialog, whose counts are read again before deleting. */
-  async #confirm(operation = this.operation, shown = false): Promise<void> {
+  /** A confirmation from the dialog reads its counts again before deleting. */
+  async #confirm(operation = this.operation, fromDialog = false): Promise<void> {
     if (
       this.operationBusy ||
       this.summaryLoading ||
@@ -283,7 +283,7 @@ export class CatalogueBrowser extends LitElement {
           this.destination === "top" ? null : this.destination,
         );
       else {
-        if (shown && this.operationSelection.categoryIds.length && !(await this.#unchanged()))
+        if (fromDialog && this.operationSelection.categoryIds.length && !(await this.#unchanged()))
           return;
         try {
           await this.api.deleteCatalogueItems(
@@ -300,7 +300,10 @@ export class CatalogueBrowser extends LitElement {
           if (codeOf(error, "") !== "category.contents_changed") throw error;
           this.operation = operation;
           const fresh = await this.#readAgain();
-          if (fresh) this.#showChanged(fresh);
+          if (fresh) {
+            this.summaries = fresh;
+            this.operationError = codeMessage("category.contents_changed");
+          }
           return;
         }
       }
@@ -331,10 +334,6 @@ export class CatalogueBrowser extends LitElement {
     }
     return fresh as FolderSummary[];
   }
-  #showChanged(fresh: FolderSummary[]): void {
-    this.summaries = fresh;
-    this.operationError = t("folders.summary_changed");
-  }
   /** When what the dialog showed has changed, shows the new counts instead. */
   async #unchanged(): Promise<boolean> {
     const fresh = await this.#readAgain();
@@ -349,7 +348,8 @@ export class CatalogueBrowser extends LitElement {
       );
     });
     if (same) return true;
-    this.#showChanged(fresh);
+    this.summaries = fresh;
+    this.operationError = t("folders.summary_changed");
     return false;
   }
   #plural(key: Parameters<typeof t>[0], count: number): string {

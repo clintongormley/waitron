@@ -1652,7 +1652,7 @@ it("when the server refuses because the contents changed, shows the new counts, 
   await press(el, "confirm");
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
-      en["folders.summary_changed"],
+      codeMessage("category.contents_changed"),
     ),
   );
   expect(el.shadowRoot!.textContent).toContain("2 categories and 3 products");
@@ -1691,7 +1691,7 @@ it("when the server refuses an empty category's delete because it is no longer e
   await press(el, "delete");
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBe(
-      en["folders.summary_changed"],
+      codeMessage("category.contents_changed"),
     ),
   );
   expect(dialog(el)).not.toBeNull();

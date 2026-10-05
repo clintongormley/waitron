@@ -320,7 +320,10 @@ export interface FolderSummary {
   activeProducts: number;
   routes: number;
 }
-/** The counts a person was shown for one selected category before confirming its deletion. */
+/**
+ * One selected category's counts as the client read them before deleting it (its dialog showed
+ * them, when it asked).
+ */
 export type ShownFolderCounts = Pick<FolderSummary, "id" | "folders" | "activeProducts" | "routes">;
 export interface Unit {
   id: string;
