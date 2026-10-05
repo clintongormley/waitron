@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import type { ConfigurationTransferTable, WaitronModule } from "@waitron/module";
 import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import "./errors.js";
+import { assertKitchenTimingStations, getKitchenTimingDefaults } from "./kitchen-timing.js";
 
 const ENTRY = "configuration.json";
 
@@ -700,4 +701,10 @@ export async function importConfigurationTables(
     const contribution = module.configurationTransfer;
     if (contribution?.kind === "tables") await contribution.afterImport?.(tx);
   }
+  const timingScope = { locationId: brandLocationId(target.locationId) };
+  await assertKitchenTimingStations(
+    tx,
+    timingScope,
+    await getKitchenTimingDefaults(tx, timingScope),
+  );
 }

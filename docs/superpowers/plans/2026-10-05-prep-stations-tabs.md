@@ -164,3 +164,34 @@ The kitchen fixture adds the default row that provisioning already supplies.
 Task 2 remains open: queue, pass, raw table aggregation, table signals and overdue reports still
 read original station columns. This checkpoint is not ready to ship. Complete those readers,
 then the health, UI and printing tasks before finish-branch.
+
+
+## 2026-10-05 implementation checkpoint: effective timing consumers
+
+Queue, pass, floor aggregation, table/bill signals and overdue reports now join venue defaults and
+nullable overrides, resolving each field with `coalesce` in the existing operation's query. None
+reads the original station timing columns. Retained work at disabled stations keeps its station's
+resolved values. The raw floor aggregation keeps both new joins on the left so an unfired line
+still contributes to its existing non-timing totals.
+
+The seven-case consumer suite checks exact boundaries with different venue/default station values,
+a default edit changing inherited live work while retaining explicit settings, and the existing
+made-here, collected and served exclusions for their respective readers. In a frozen-installed
+disposable candidate, restoring the original queue/pass/floor reader file failed seven tests,
+restoring the original table-signal reader failed five, and restoring the report reader failed four;
+restoring the candidate's implementation passed all seven. These are reader-file controls rather
+than a claim that every expression was individually deleted.
+
+Configuration export/import now carries both timing tables and omits the original station columns.
+Its new round-trip case compares venue location remapping, station id references, explicit values
+and null inheritance. The importer uses the station/default writer's shared validation before the
+transaction commits. Two new cases refused a non-positive warm override and an inverted effective
+order, with no target venue/default/override rows left behind. Deleting that import validation in a
+disposable checkout made both refusal cases resolve successfully; the valid round-trip still passed.
+Restoring it passed all three selected cases.
+
+Working-order, reporting, order-groups, print-problems, split-bill, tabs, station-queue-rest and
+working-order-reads manual venue fixtures, plus the shared split-extras venue fixture, add the
+provisioned default row. The existing two-station expo fixture writes its same 2/4/6 values into
+override storage with all existing assertions retained. The approved reset remains required; there is no converter or
+original-column fallback. Tasks 3–8 remain before finishing or shipping this branch.

@@ -42,6 +42,8 @@ import {
   diningTables,
   floorZones,
   kitchenStations,
+  kitchenStationTiming,
+  kitchenTimingDefaults,
   printAgents,
   printers,
   watchers,
@@ -2567,4 +2569,127 @@ it("refuses a leave-behind export it cannot pair by rowid, or whose key it canno
         await suite.db.execute(sql`drop table if exists ${sql.identifier(name)}`);
     }
   }
+});
+
+it("transfers effective kitchen defaults and nullable overrides without retired column values", async () => {
+  const source = await applyVenue(planVenue(venue("B13572471"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const stationId = await withTransaction(suite.db, async (tx) => {
+    await tx
+      .update(kitchenTimingDefaults)
+      .set({ warmAfterMinutes: 4, overdueAfterMinutes: 9, forgottenAfterMinutes: 14 });
+    const [station] = await tx
+      .insert(kitchenStations)
+      .values({ locationId: source.locationId, name: "Timing export" })
+      .returning({ id: kitchenStations.id });
+    await tx.insert(kitchenStationTiming).values({
+      stationId: station!.id,
+      warmAfterMinutes: 6,
+      overdueAfterMinutes: null,
+      forgottenAfterMinutes: 16,
+    });
+    return station!.id;
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-05T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.kitchen_timing_defaults).toEqual([
+    {
+      location_id: source.locationId,
+      warm_after_minutes: 4,
+      overdue_after_minutes: 9,
+      forgotten_after_minutes: 14,
+    },
+  ]);
+  expect(transferred.tables.kitchen_station_timing).toEqual([
+    {
+      station_id: stationId,
+      warm_after_minutes: 6,
+      overdue_after_minutes: null,
+      forgotten_after_minutes: 16,
+    },
+  ]);
+  const exportedStation = transferred.tables.kitchen_stations!.find((row) => row.id === stationId)!;
+  for (const field of ["warm_after_minutes", "overdue_after_minutes", "forgotten_after_minutes"])
+    expect(exportedStation).not.toHaveProperty(field);
+  const target = await applyVenue(planVenue(venue("B97531866"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  expect(await targetSuite.db.select().from(kitchenTimingDefaults)).toEqual([
+    {
+      locationId: target.locationId,
+      warmAfterMinutes: 4,
+      overdueAfterMinutes: 9,
+      forgottenAfterMinutes: 14,
+    },
+  ]);
+  const [importedStation] = await targetSuite.db
+    .select()
+    .from(kitchenStations)
+    .where(eq(kitchenStations.name, "Timing export"));
+  expect(await targetSuite.db.select().from(kitchenStationTiming)).toEqual([
+    {
+      stationId: importedStation!.id,
+      warmAfterMinutes: 6,
+      overdueAfterMinutes: null,
+      forgottenAfterMinutes: 16,
+    },
+  ]);
+});
+
+it.each([
+  [0, "warmAfterMinutes"],
+  [12, "overdueAfterMinutes"],
+] as const)("refuses imported station timing warm=%i atomically", async (warm, field) => {
+  const source = await applyVenue(planVenue(venue("B13572472"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, async (tx) => {
+    const [station] = await tx
+      .insert(kitchenStations)
+      .values({ locationId: source.locationId, name: "Invalid imported timing" })
+      .returning({ id: kitchenStations.id });
+    await tx.insert(kitchenStationTiming).values({ stationId: station!.id, warmAfterMinutes: 3 });
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-05T12:00:00Z"),
+    versions,
+  );
+  transferred.tables.kitchen_station_timing![0]!.warm_after_minutes = warm;
+  const target = venue("B97531867");
+  await expect(
+    applyVenue(planVenue(target, ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    }),
+  ).rejects.toMatchObject({
+    code: "station.thresholds_invalid",
+    params: { name: "Invalid imported timing", field },
+  });
+  expect(
+    (
+      await targetSuite.db.execute<{ count: number }>(
+        sql`select count(*) as count from tenants where tax_id = ${target.taxId}`,
+      )
+    ).rows[0]!.count,
+  ).toBe(0);
+  expect(await targetSuite.db.select().from(kitchenTimingDefaults)).toEqual([]);
+  expect(await targetSuite.db.select().from(kitchenStationTiming)).toEqual([]);
 });

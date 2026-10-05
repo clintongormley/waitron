@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   locations,
+  kitchenTimingDefaults,
   printJobs,
   tableServiceStatuses,
   ticketItems,
@@ -97,6 +98,7 @@ async function setupVenue(): Promise<Seeded> {
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
+  await db.insert(kitchenTimingDefaults).values({ locationId });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),

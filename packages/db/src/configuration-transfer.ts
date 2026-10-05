@@ -15,7 +15,13 @@ export const CORE_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
     { name: "catalogues" },
-    { name: "kitchen_stations", locationColumns: ["location_id"] },
+    {
+      name: "kitchen_stations",
+      locationColumns: ["location_id"],
+      omit: ["warm_after_minutes", "overdue_after_minutes", "forgotten_after_minutes"],
+    },
+    { name: "kitchen_timing_defaults", locationColumns: ["location_id"] },
+    { name: "kitchen_station_timing" },
     { name: "kitchen_courses", locationColumns: ["location_id"] },
     { name: "categories" },
     // The catalogue module's `afterImport` sets `name_key` from the name.

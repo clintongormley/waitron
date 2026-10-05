@@ -74,6 +74,10 @@ function parseKitchenTimingDefaults(input: unknown): StationThresholds {
 }
 
 function invalidTimingField(timing: StationThresholds): string | undefined {
+  for (const field of fields) {
+    const value = timing[field];
+    if (!Number.isInteger(value) || value < 1 || value > 2_147_483_647) return field;
+  }
   if (timing.overdueAfterMinutes <= timing.warmAfterMinutes) return "overdueAfterMinutes";
   if (timing.forgottenAfterMinutes <= timing.overdueAfterMinutes) return "forgottenAfterMinutes";
   return undefined;
@@ -81,7 +85,7 @@ function invalidTimingField(timing: StationThresholds): string | undefined {
 
 export async function getKitchenTimingDefaults(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: Pick<TillConfig, "locationId">,
 ): Promise<StationThresholds> {
   const [defaults] = await tx
     .select({
@@ -95,13 +99,11 @@ export async function getKitchenTimingDefaults(
   return defaults;
 }
 
-export async function setKitchenTimingDefaults(
+export async function assertKitchenTimingStations(
   tx: Transaction,
-  cfg: TillConfig,
-  input: unknown,
+  cfg: Pick<TillConfig, "locationId">,
+  defaults: StationThresholds,
 ): Promise<void> {
-  const defaults = parseKitchenTimingDefaults(input);
-  await getKitchenTimingDefaults(tx, cfg);
   const stations = await tx
     .select({
       id: kitchenStations.id,
@@ -118,6 +120,16 @@ export async function setKitchenTimingDefaults(
   for (const station of stations) {
     assertStationTiming(station, defaults, station);
   }
+}
+
+export async function setKitchenTimingDefaults(
+  tx: Transaction,
+  cfg: TillConfig,
+  input: unknown,
+): Promise<void> {
+  const defaults = parseKitchenTimingDefaults(input);
+  await getKitchenTimingDefaults(tx, cfg);
+  await assertKitchenTimingStations(tx, cfg, defaults);
   await tx
     .update(kitchenTimingDefaults)
     .set(defaults)
