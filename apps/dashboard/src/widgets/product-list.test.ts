@@ -2823,13 +2823,14 @@ describe("the product list as a tree", () => {
     const square = box.querySelector<HTMLElement>('[data-test="name-box-color"]')!;
     el.addEventListener("name-color", () => (el.choosingColor = true));
     await userEvent.click(square);
-    // The colour chooser takes the cursor while it is open, and hands it back to the input.
+    expect(focusedName(el)).toBe("category-name");
+    // Stands in for the catalogue's chooser, which takes the cursor while it is open and hands it
+    // back to the input; that hand-back is pinned in catalogue-browser.test.ts.
     outside.focus();
     expect(sent).toEqual([["name-color", {}]]);
     expect(root.querySelector('wt-input[name="category-name"]')).toBe(box);
     el.choosingColor = false;
     box.shadowRoot!.querySelector("input")!.focus();
-    expect(focusedName(el)).toBe("category-name");
     expect(box.value).toBe("Juice");
     await userEvent.keyboard("{Enter}");
     expect(sent).toEqual([
