@@ -729,6 +729,11 @@ declare module "@waitron/shared" {
      */
     "device.pairing_closed": Record<string, never>;
     /**
+     * A renewal named a hold on the join window this server does not hold: it lapsed, was released,
+     * or was taken before a restart. NO params.
+     */
+    "device.pairing_hold_lapsed": Record<string, never>;
+    /**
      * This node already holds the cap of pending DEVICE join requests; an uncapped list is a
      * denial-of-service on the admin's attention. Per kind, so agents mid-install cannot lock
      * devices out.

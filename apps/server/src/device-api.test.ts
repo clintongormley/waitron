@@ -350,7 +350,6 @@ describe("POST /api/device/join", () => {
     );
     expect(rows[0]!.n).toBe(0);
     expect(res.headers.get("set-cookie")).toBeNull();
-    expect(mode.refusedRecently()).toBe(1);
   });
 
   it("mints a request, sets the cookie and returns the number when the window is open", async () => {
@@ -418,8 +417,7 @@ describe("POST /api/device/join", () => {
   });
 
   it("is rate limited BEFORE the window is consulted and before any DB work", async () => {
-    // The window is SHUT, so a 403 would also be a plausible answer — the 429 is what proves the
-    // limiter runs FIRST, and the absent `noteRefused` proves the window was never consulted.
+    // The window is SHUT, so a limiter running second would answer 403; the 429 proves it runs FIRST.
     const venue = await setupVenue(suite.db);
     const limiter = createEnrolRateLimiter({ now: () => 1_000 });
     const mode = createPairingMode();
@@ -431,7 +429,6 @@ describe("POST /api/device/join", () => {
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
       "device.join_rate_limited",
     );
-    expect(mode.refusedRecently()).toBe(0);
     const { rows } = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from join_requests `,
     );

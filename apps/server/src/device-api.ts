@@ -132,8 +132,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // a flood rather than reported as a shut door.
       enrolLimiter.check();
       // devMode accepts the knock immediately with the venue's default `till` profile, through the
-      // REAL join + accept verbs, so demo mode exercises the production path. The window is not
-      // consulted.
+      // REAL join + accept verbs, so demo mode exercises the production path.
       const auto = deps.devMode === true;
       if (!auto && !deps.pairingMode.isOpen()) {
         throw new AppError("device.pairing_closed", {});

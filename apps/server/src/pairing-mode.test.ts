@@ -99,4 +99,21 @@ describe("createPairingMode", () => {
     mode.dropClaim("r1");
     expect(mode.orphanedClaims()).toEqual([]);
   });
+
+  it("a claim is orphaned once its hold lapses on the clock, with no other read first", () => {
+    const clock = atClock();
+    const mode = createPairingMode({ now: clock.now, newId: ids() });
+    const { holdId } = mode.open();
+    mode.claim("r1", { holdId, sessionKey: "k", personName: "Ana" });
+    clock.advance(PAIRING_HOLD_MS);
+    expect(mode.orphanedClaims()).toEqual(["r1"]);
+  });
+
+  it("openUntil is null when it is the first read after the last hold lapses", () => {
+    const clock = atClock();
+    const mode = createPairingMode({ now: clock.now, newId: ids() });
+    mode.open();
+    clock.advance(PAIRING_HOLD_MS);
+    expect(mode.openUntil()).toBeNull();
+  });
 });

@@ -1,5 +1,5 @@
 /**
- * The management-side join routes — the pairing window, the queue, the challenge, deny and accept —
+ * The management-side join routes — the window's holds, the queue, the challenge, deny and accept —
  * driven over HTTP. The role-map fact they rely on is pinned in `join-api.test.ts`.
  */
 import { randomUUID } from "node:crypto";
@@ -12,7 +12,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mountJoinApi } from "./join-api.js";
 import { createJoinRequest, type JoinRequestKind, PENDING_CAP } from "./join-requests.js";
-import { createPairingMode, PAIRING_WINDOW_MS, type PairingMode } from "./pairing-mode.js";
+import { createPairingMode, PAIRING_HOLD_MS, type PairingMode } from "./pairing-mode.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -28,7 +28,11 @@ const noopLog: Logger = () => {};
 
 function mountApp(cfg: TillConfig, pairingMode: PairingMode = createPairingMode()): Hono {
   const app = new Hono();
-  mountJoinApi(app, { db: suite.db, cfg, pairingMode }, noopLog);
+  mountJoinApi(
+    app,
+    { db: suite.db, cfg, pairingMode, deviceAddress: "https://waitron.local" },
+    noopLog,
+  );
   return app;
 }
 
@@ -86,158 +90,234 @@ async function pendingCount(): Promise<number> {
   return rows[0]!.n;
 }
 
-describe("the pairing-mode control", () => {
-  it("GET reports a shut window, with the refused count", async () => {
+describe("the join window's holds", () => {
+  it("GET reports a shut window and the address devices use", async () => {
     const venue = await setupVenue(suite.db);
-    const mode = createPairingMode();
-    mode.noteRefused();
-    mode.noteRefused();
-    const app = mountApp(venue.cfg, mode);
+    const app = mountApp(venue.cfg);
     const res = await send(app, "GET", "/management-api/pairing-mode", {
       cookie: venue.managerCookie,
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ open: false, openUntil: null, refusedRecently: 2 });
-  });
-
-  it("POST opens the window and returns openUntil; a second POST extends rather than stacking", async () => {
-    const venue = await setupVenue(suite.db);
-    let clock = Date.parse("2026-09-08T10:00:00.000Z");
-    const mode = createPairingMode({ now: () => clock });
-    const app = mountApp(venue.cfg, mode);
-
-    const first = await send(app, "POST", "/management-api/pairing-mode", {
-      cookie: venue.managerCookie,
-    });
-    expect(first.status).toBe(200);
-    expect(await first.json()).toEqual({
-      openUntil: new Date(clock + PAIRING_WINDOW_MS).toISOString(),
-    });
-    expect(mode.isOpen()).toBe(true);
-
-    // A minute later, re-opening moves the lapse to ONE window from now — not to two windows from
-    // the first open, which is what stacking would give.
-    clock += 60_000;
-    const second = await send(app, "POST", "/management-api/pairing-mode", {
-      cookie: venue.managerCookie,
-    });
-    expect(await second.json()).toEqual({
-      openUntil: new Date(clock + PAIRING_WINDOW_MS).toISOString(),
+    expect(await res.json()).toEqual({
+      open: false,
+      openUntil: null,
+      deviceAddress: "https://waitron.local",
     });
   });
 
-  it("GET reports the open window's lapse instant", async () => {
+  it("taking a hold answers its id and lapse instant, and GET then reports the open window", async () => {
     const venue = await setupVenue(suite.db);
     const clock = Date.parse("2026-09-08T10:00:00.000Z");
     const mode = createPairingMode({ now: () => clock });
     const app = mountApp(venue.cfg, mode);
-    await send(app, "POST", "/management-api/pairing-mode", { cookie: venue.managerCookie });
+    const taken = await send(app, "POST", "/management-api/pairing-mode/holds", {
+      cookie: venue.managerCookie,
+    });
+    expect(taken.status).toBe(200);
+    const openUntil = new Date(clock + PAIRING_HOLD_MS).toISOString();
+    const body = (await taken.json()) as { holdId: string; openUntil: string };
+    expect(body).toEqual({ holdId: expect.any(String), openUntil });
+    expect(mode.hasHold(body.holdId)).toBe(true);
     const res = await send(app, "GET", "/management-api/pairing-mode", {
       cookie: venue.managerCookie,
     });
     expect(await res.json()).toEqual({
       open: true,
-      openUntil: new Date(clock + PAIRING_WINDOW_MS).toISOString(),
-      refusedRecently: 0,
+      openUntil,
+      deviceAddress: "https://waitron.local",
     });
   });
 
-  it("DELETE closes it", async () => {
+  it("taking a hold opens the window; releasing it shuts it", async () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
-    mode.open();
     const app = mountApp(venue.cfg, mode);
-    const res = await send(app, "DELETE", "/management-api/pairing-mode", {
+    const taken = await send(app, "POST", "/management-api/pairing-mode/holds", {
       cookie: venue.managerCookie,
     });
-    expect(res.status).toBe(204);
+    expect(taken.status).toBe(200);
+    const { holdId } = (await taken.json()) as { holdId: string; openUntil: string };
+    expect(mode.isOpen()).toBe(true);
+    const released = await send(app, "DELETE", `/management-api/pairing-mode/holds/${holdId}`, {
+      cookie: venue.managerCookie,
+    });
+    expect(released.status).toBe(204);
     expect(mode.isOpen()).toBe(false);
   });
 
-  it.each([false, true])(
-    "renews the window without extending the session (initially open: %s), while a manual open extends it",
-    async (initiallyOpen) => {
-      const venue = await setupVenue(suite.db);
-      const token = venue.managerCookie.split("=")[1]!;
-      let clock = Date.now();
-      const mode = createPairingMode({ now: () => clock });
-      const app = mountApp(venue.cfg, mode);
-      if (initiallyOpen) mode.open();
-      clock += 60_000;
-      // `clock` is the PAIRING mode's injected clock and deliberately not this value: what is being
-      // aged here is the management session's own `last_seen_at`.
-      const sessionSeenAt = new Date(Date.now() - 10 * 60_000).toISOString();
-      await suite.db.execute(sql`
-      update management_sessions set last_seen_at = ${sessionSeenAt}
-      where token_hash = ${hashSessionToken(token)}`);
-      const session = () =>
-        withTransaction(suite.db, (tx) => resolveManagementSession(tx, token, { touch: false }));
-      const before = await session();
-      const renewed = await send(app, "POST", "/management-api/pairing-mode/renew", {
-        cookie: venue.managerCookie,
-      });
-      expect(renewed.status).toBe(200);
-      expect(await renewed.json()).toEqual({
-        openUntil: new Date(clock + PAIRING_WINDOW_MS).toISOString(),
-      });
-      expect((await session()).expiresAt).toBe(before.expiresAt);
-
-      const manual = await send(app, "POST", "/management-api/pairing-mode", {
-        cookie: venue.managerCookie,
-      });
-      expect(manual.status).toBe(200);
-      expect(Date.parse((await session()).expiresAt)).toBeGreaterThan(Date.parse(before.expiresAt));
-    },
-  );
-
-  it("refuses renewal after the management session expires without opening the window", async () => {
+  it("releasing one hold leaves the window open", async () => {
     const venue = await setupVenue(suite.db);
-    const token = venue.managerCookie.split("=")[1]!;
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
+    const take = async () =>
+      (
+        (await (
+          await send(app, "POST", "/management-api/pairing-mode/holds", {
+            cookie: venue.managerCookie,
+          })
+        ).json()) as { holdId: string }
+      ).holdId;
+    const a = await take();
+    const b = await take();
+    await send(app, "DELETE", `/management-api/pairing-mode/holds/${a}`, {
+      cookie: venue.managerCookie,
+    });
+    expect(mode.isOpen()).toBe(true);
+    expect(mode.hasHold(a)).toBe(false);
+    expect(mode.hasHold(b)).toBe(true);
+  });
+
+  it("releasing an unknown hold is not an error", async () => {
+    const venue = await setupVenue(suite.db);
+    const mode = createPairingMode();
+    const { holdId } = mode.open();
+    const app = mountApp(venue.cfg, mode);
+    const res = await send(app, "DELETE", `/management-api/pairing-mode/holds/${randomUUID()}`, {
+      cookie: venue.managerCookie,
+    });
+    expect(res.status).toBe(204);
+    expect(mode.hasHold(holdId)).toBe(true);
+  });
+
+  it("renews a live hold and refuses an unknown one with device.pairing_hold_lapsed", async () => {
+    const venue = await setupVenue(suite.db);
+    let clock = Date.parse("2026-09-08T10:00:00.000Z");
+    const mode = createPairingMode({ now: () => clock });
+    const app = mountApp(venue.cfg, mode);
+    const { holdId } = mode.open();
+    clock += 60_000;
+    const ok = await send(app, "POST", `/management-api/pairing-mode/holds/${holdId}/renew`, {
+      cookie: venue.managerCookie,
+    });
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({
+      openUntil: new Date(clock + PAIRING_HOLD_MS).toISOString(),
+    });
+    const unknown = await send(
+      app,
+      "POST",
+      `/management-api/pairing-mode/holds/${randomUUID()}/renew`,
+      { cookie: venue.managerCookie },
+    );
+    expect(unknown.status).toBe(409);
+    expect(await errorOf(unknown)).toEqual({ code: "device.pairing_hold_lapsed", params: {} });
+  });
+
+  it("refuses to renew a hold that has lapsed on the clock", async () => {
+    const venue = await setupVenue(suite.db);
+    let clock = Date.parse("2026-09-08T10:00:00.000Z");
+    const mode = createPairingMode({ now: () => clock });
+    const app = mountApp(venue.cfg, mode);
+    const { holdId } = mode.open();
+    clock += PAIRING_HOLD_MS;
+    const res = await send(app, "POST", `/management-api/pairing-mode/holds/${holdId}/renew`, {
+      cookie: venue.managerCookie,
+    });
+    expect(res.status).toBe(409);
+    expect((await errorOf(res)).code).toBe("device.pairing_hold_lapsed");
+    expect(mode.isOpen()).toBe(false);
+  });
+
+  it("a fresh holder (a restart) refuses a hold taken before it", async () => {
+    const venue = await setupVenue(suite.db);
+    const before = createPairingMode();
+    const { holdId } = before.open();
+    const app = mountApp(venue.cfg, createPairingMode());
+    const res = await send(app, "POST", `/management-api/pairing-mode/holds/${holdId}/renew`, {
+      cookie: venue.managerCookie,
+    });
+    expect(res.status).toBe(409);
+    expect((await errorOf(res)).code).toBe("device.pairing_hold_lapsed");
+  });
+
+  it("renews a hold without extending the session, while taking a hold extends it", async () => {
+    const venue = await setupVenue(suite.db);
+    const token = venue.managerCookie.split("=")[1]!;
+    let clock = Date.now();
+    const mode = createPairingMode({ now: () => clock });
+    const app = mountApp(venue.cfg, mode);
+    const { holdId } = mode.open();
+    clock += 60_000;
+    // `clock` is the PAIRING mode's injected clock and deliberately not this value: what is being
+    // aged here is the management session's own `last_seen_at`.
+    const sessionSeenAt = new Date(Date.now() - 10 * 60_000).toISOString();
+    await suite.db.execute(sql`
+      update management_sessions set last_seen_at = ${sessionSeenAt}
+      where token_hash = ${hashSessionToken(token)}`);
+    const session = () =>
+      withTransaction(suite.db, (tx) => resolveManagementSession(tx, token, { touch: false }));
+    const before = await session();
+    const renewed = await send(app, "POST", `/management-api/pairing-mode/holds/${holdId}/renew`, {
+      cookie: venue.managerCookie,
+    });
+    expect(renewed.status).toBe(200);
+    expect(await renewed.json()).toEqual({
+      openUntil: new Date(clock + PAIRING_HOLD_MS).toISOString(),
+    });
+    expect((await session()).expiresAt).toBe(before.expiresAt);
+
+    const taken = await send(app, "POST", "/management-api/pairing-mode/holds", {
+      cookie: venue.managerCookie,
+    });
+    expect(taken.status).toBe(200);
+    expect(Date.parse((await session()).expiresAt)).toBeGreaterThan(Date.parse(before.expiresAt));
+  });
+
+  it("refuses renewal after the management session expires, and the hold is not renewed", async () => {
+    const venue = await setupVenue(suite.db);
+    const token = venue.managerCookie.split("=")[1]!;
+    let clock = Date.parse("2026-09-08T10:00:00.000Z");
+    const mode = createPairingMode({ now: () => clock });
+    const app = mountApp(venue.cfg, mode);
+    const { holdId, openUntil } = mode.open();
+    clock += 60_000;
     const sessionSeenAt = new Date(Date.now() - 60 * 60_000).toISOString();
     await suite.db.execute(sql`
       update management_sessions set last_seen_at = ${sessionSeenAt}
       where token_hash = ${hashSessionToken(token)}`);
-    const response = await send(app, "POST", "/management-api/pairing-mode/renew", {
+    const response = await send(app, "POST", `/management-api/pairing-mode/holds/${holdId}/renew`, {
       cookie: venue.managerCookie,
     });
     expect(response.status).toBe(401);
     expect((await errorOf(response)).code).toBe("management_session.expired");
-    expect(mode.isOpen()).toBe(false);
+    expect(mode.openUntil()).toBe(openUntil);
   });
 
-  it("all window routes need device.manage — a staff session is 403 and the window is untouched", async () => {
+  it("refuses staff on every hold route before saying anything else, and holds are untouched", async () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
+    const { holdId, openUntil } = mode.open();
     const app = mountApp(venue.cfg, mode);
     for (const [method, path] of [
       ["GET", "/management-api/pairing-mode"],
-      ["POST", "/management-api/pairing-mode"],
-      ["POST", "/management-api/pairing-mode/renew"],
-      ["DELETE", "/management-api/pairing-mode"],
+      ["POST", "/management-api/pairing-mode/holds"],
+      ["POST", `/management-api/pairing-mode/holds/${randomUUID()}/renew`],
+      ["POST", `/management-api/pairing-mode/holds/${holdId}/renew`],
+      ["DELETE", `/management-api/pairing-mode/holds/${randomUUID()}`],
+      ["DELETE", `/management-api/pairing-mode/holds/${holdId}`],
     ] as const) {
       const res = await send(app, method, path, { cookie: venue.staffCookie });
-      expect(res.status).toBe(403);
+      expect({ path, status: res.status }).toEqual({ path, status: 403 });
       expect(await errorOf(res)).toEqual({
         code: "authorization.not_permitted",
         params: { permission: "device.manage" },
       });
     }
-    expect(mode.isOpen()).toBe(false);
+    expect(mode.hasHold(holdId)).toBe(true);
+    expect(mode.openUntil()).toBe(openUntil);
   });
 
-  it("all window routes need a management session at all", async () => {
+  it("every hold route needs a management session at all", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     for (const [method, path] of [
       ["GET", "/management-api/pairing-mode"],
-      ["POST", "/management-api/pairing-mode"],
-      ["POST", "/management-api/pairing-mode/renew"],
-      ["DELETE", "/management-api/pairing-mode"],
+      ["POST", "/management-api/pairing-mode/holds"],
+      ["POST", `/management-api/pairing-mode/holds/${randomUUID()}/renew`],
+      ["DELETE", `/management-api/pairing-mode/holds/${randomUUID()}`],
     ] as const) {
       const res = await send(app, method, path);
-      expect(res.status).toBe(401);
+      expect({ path, status: res.status }).toEqual({ path, status: 401 });
       expect((await errorOf(res)).code).toBe("management_session.required");
     }
   });

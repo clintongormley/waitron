@@ -27,7 +27,11 @@ const noopLog: Logger = () => {};
 function mountBoth(cfg: TillConfig, pairingMode: PairingMode = createPairingMode()): Hono {
   const app = new Hono();
   mountDeviceApi(app, { db: suite.db, cfg, secureCookies: false, pairingMode }, noopLog);
-  mountJoinApi(app, { db: suite.db, cfg, pairingMode }, noopLog);
+  mountJoinApi(
+    app,
+    { db: suite.db, cfg, pairingMode, deviceAddress: "https://waitron.local" },
+    noopLog,
+  );
   return app;
 }
 
@@ -61,7 +65,7 @@ function deviceCookieFrom(res: Response): string {
 
 /** Through the REAL management route, not `pairingMode.open()`. */
 async function openWindow(app: Hono, venue: Venue): Promise<void> {
-  const res = await send(app, "POST", "/management-api/pairing-mode", {
+  const res = await send(app, "POST", "/management-api/pairing-mode/holds", {
     cookie: venue.managerCookie,
   });
   expect(res.status).toBe(200);
@@ -208,7 +212,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     expect(acceptAgain.status).toBe(200);
   });
 
-  it("a knock with the window shut writes nothing and is counted, not recorded", async () => {
+  it("a knock with the window shut writes nothing and leaves the window shut", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountBoth(venue.cfg);
 
@@ -217,7 +221,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
       cookie: venue.managerCookie,
     });
     expect(before.status).toBe(200);
-    expect(await before.json()).toMatchObject({ open: false, refusedRecently: 0 });
+    expect(await before.json()).toMatchObject({ open: false });
 
     const knockRes = await send(app, "POST", "/api/device/join", { body: { name: "Bar till" } });
     expect(knockRes.status).toBe(403);
@@ -225,10 +229,9 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     expect(knockRes.headers.get("set-cookie")).toBeNull();
     expect(await pendingCount()).toBe(0);
 
-    // COUNTED, not RECORDED: the refused tally went up while the pending table stayed empty.
     const after = await send(app, "GET", "/management-api/pairing-mode", {
       cookie: venue.managerCookie,
     });
-    expect(await after.json()).toMatchObject({ open: false, refusedRecently: 1 });
+    expect(await after.json()).toMatchObject({ open: false });
   });
 });

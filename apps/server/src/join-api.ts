@@ -6,7 +6,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { authorizeManager, type Permission } from "@waitron/identity";
+import { authorizeManager, withPassiveManagementRead, type Permission } from "@waitron/identity";
 import {
   createErrorBoundary,
   readJsonBody,
@@ -33,6 +33,7 @@ export interface JoinApiDeps {
   db: Database;
   cfg: TillConfig;
   pairingMode: PairingMode;
+  deviceAddress: string;
 }
 
 /**
@@ -55,6 +56,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "person.suspended": 403,
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
+  "device.pairing_hold_lapsed": 409,
 };
 
 const run = createErrorBoundary(STATUS, "join.failed");
@@ -132,7 +134,44 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       return c.json({
         open: deps.pairingMode.isOpen(),
         openUntil: deps.pairingMode.openUntil(),
+        deviceAddress: deps.deviceAddress,
       });
+    }),
+  );
+
+  // ── Take a hold on the window while an Add dialog is open (device.manage) ───────────────────────
+  app.post("/management-api/pairing-mode/holds", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      await gated(sessionId, "device.manage", async () => undefined);
+      return c.json(deps.pairingMode.open(), 200);
+    }),
+  );
+
+  // ── Renew a hold (device.manage) ────────────────────────────────────────────────────────────────
+  app.post("/management-api/pairing-mode/holds/:holdId/renew", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      // Renewal never counts as someone using the dashboard, so an unattended dialog lapses with the
+      // login.
+      await withPassiveManagementRead(() =>
+        gated(sessionId, "device.manage", async () => undefined),
+      );
+      const renewed = deps.pairingMode.renew(c.req.param("holdId"));
+      if (renewed === null) throw new AppError("device.pairing_hold_lapsed", {});
+      return c.json(renewed, 200);
+    }),
+  );
+
+  // ── Release a hold (device.manage); an unknown hold is not an error ─────────────────────────────
+  app.delete("/management-api/pairing-mode/holds/:holdId", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const holdId = c.req.param("holdId");
+      await gated(sessionId, "device.manage", async () => {
+        deps.pairingMode.release(holdId);
+      });
+      return c.body(null, 204);
     }),
   );
 

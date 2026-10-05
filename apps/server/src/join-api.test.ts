@@ -40,7 +40,16 @@ const suite = useVenueDb({
 it("join approval binds a kitchen screen to its watcher and rejects a second target", async () => {
   const venue = await setupVenue(suite.db);
   const app = new Hono();
-  mountJoinApi(app, { db: suite.db, cfg: venue.cfg, pairingMode: createPairingMode() }, () => {});
+  mountJoinApi(
+    app,
+    {
+      db: suite.db,
+      cfg: venue.cfg,
+      pairingMode: createPairingMode(),
+      deviceAddress: "https://waitron.local",
+    },
+    () => {},
+  );
   const [profile] = await suite.db
     .insert(deviceProfiles)
     .values({ name: "Watcher KDS", formFactor: "kds", capabilities: [] })
