@@ -6,8 +6,8 @@ import { readProductModifiers } from "./product-modifiers.js";
 import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
 import { AppError, centsToDecimal, stringToCents, type Decimal } from "@waitron/shared";
 import { catalogues, categories, locationCatalogues, locations, now, products } from "@waitron/db";
-import { readCategory, setMainReportingCategory } from "./categories.js";
-import { setProductColor } from "./product-colors.js";
+import { readCategory } from "./categories.js";
+import { isStoredColor } from "./color-inheritance.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
@@ -1151,8 +1151,22 @@ async function patchProduct(
     unitPrice,
     ...rest
   } = patch;
-  if (categoryId !== undefined) await setMainReportingCategory(tx, id, categoryId);
-  if (color !== undefined) await setProductColor(tx, id, color);
+  const assertColor = () => {
+    if (color != null && !isStoredColor(color))
+      throw new AppError("product.invalid", { field: "color" });
+  };
+  // A category refusal outranks a malformed colour; with no category in the patch, the colour is
+  // refused before the product is looked for.
+  if (categoryId === undefined) assertColor();
+  if (categoryId !== undefined || color !== undefined) {
+    const [product] = await tx
+      .select({ id: products.id })
+      .from(products)
+      .where(productWithId(id, "top-level"));
+    if (!product) throw new AppError("product.not_found", { productId: id });
+  }
+  if (categoryId != null) await readCategory(tx, categoryId);
+  assertColor();
   if (allergens != null) validateAllergens(allergens);
   if (dietOverride !== undefined) validateDietOverride(dietOverride);
   const directDietary =
@@ -1196,6 +1210,8 @@ async function patchProduct(
       ...(allergens !== undefined ? { manualAllergens: allergens } : {}),
       ...(dietOverride !== undefined ? { dietOverride } : {}),
       ...(directDietary === undefined ? {} : { dietaryDeclarations: directDietary }),
+      ...(categoryId === undefined ? {} : { categoryId }),
+      ...(color === undefined ? {} : { color }),
       updatedAt: now(),
     })
     .where(eq(products.id, id));

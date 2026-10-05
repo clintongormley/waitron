@@ -2,7 +2,6 @@ export * from "./pricing.js";
 export * from "./vat-rates.js";
 export * from "./product-ordering.js";
 export * from "./units.js";
-export * from "./product-colors.js";
 // Listed rather than `export *`: `createProductSkippingNameCheck`,
 // `updateProductSkippingNameCheck` and `writeProductVariantsSkippingNameCheck` skip the
 // unique-name rule and are kept out of the package entry point.

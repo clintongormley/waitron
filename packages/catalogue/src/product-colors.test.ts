@@ -4,7 +4,6 @@ import { products, withTransaction, type Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { createCatalogue, createProduct, listProducts, updateProduct } from "./operations.js";
 import { readDishFacts } from "./menu-document.js";
-import { setProductColor } from "./product-colors.js";
 import { setProductVariants } from "./variants.js";
 import { createCategory } from "./categories.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
@@ -51,32 +50,36 @@ const storedColor = async (id: string) =>
     .color;
 
 it("stores a product's own colour, lists it, and clears it", async () => {
-  await app((tx) => setProductColor(tx, productId, "#256bb1"));
+  await app((tx) => updateProduct(tx, productId, { color: "#256bb1" }));
   expect(await storedColor(productId)).toBe("#256bb1");
   const listed = await app((tx) => listProducts(tx, catalogueId));
   expect(listed.find((product) => product.id === productId)).toMatchObject({ color: "#256bb1" });
-  await app((tx) => setProductColor(tx, productId, null));
+  await app((tx) => updateProduct(tx, productId, { color: null }));
   expect(await storedColor(productId)).toBeNull();
 });
 
 it("answers a variant's id as an id that names no product, and leaves both rows", async () => {
-  await app((tx) => setProductColor(tx, productId, "#256bb1"));
-  await expect(app((tx) => setProductColor(tx, variantId, "#b12525"))).rejects.toMatchObject({
+  await app((tx) => updateProduct(tx, productId, { color: "#256bb1" }));
+  await expect(
+    app((tx) => updateProduct(tx, variantId, { color: "#b12525" })),
+  ).rejects.toMatchObject({
     code: "product.not_found",
     params: { productId: variantId },
   });
   const unknown = crypto.randomUUID();
-  await expect(app((tx) => setProductColor(tx, unknown, "#b12525"))).rejects.toMatchObject({
-    code: "product.not_found",
-    params: { productId: unknown },
-  });
+  await expect(app((tx) => updateProduct(tx, unknown, { color: "#b12525" }))).rejects.toMatchObject(
+    {
+      code: "product.not_found",
+      params: { productId: unknown },
+    },
+  );
   expect(await storedColor(variantId)).toBeNull();
   expect(await storedColor(productId)).toBe("#256bb1");
 });
 
 it("refuses a variant's id with null too, leaving a colour it holds", async () => {
   await fx.db.update(products).set({ color: "#b12525" }).where(eq(products.id, variantId));
-  await expect(app((tx) => setProductColor(tx, variantId, null))).rejects.toMatchObject({
+  await expect(app((tx) => updateProduct(tx, variantId, { color: null }))).rejects.toMatchObject({
     code: "product.not_found",
     params: { productId: variantId },
   });
@@ -86,13 +89,13 @@ it("refuses a variant's id with null too, leaving a colour it holds", async () =
 it.each(["#B12525", "", "red"])(
   "refuses the colour %j as product.invalid on color, before looking for the product",
   async (color) => {
-    await app((tx) => setProductColor(tx, productId, "#256bb1"));
-    await expect(app((tx) => setProductColor(tx, productId, color))).rejects.toMatchObject({
+    await app((tx) => updateProduct(tx, productId, { color: "#256bb1" }));
+    await expect(app((tx) => updateProduct(tx, productId, { color }))).rejects.toMatchObject({
       code: "product.invalid",
       params: { field: "color" },
     });
     await expect(
-      app((tx) => setProductColor(tx, crypto.randomUUID(), color)),
+      app((tx) => updateProduct(tx, crypto.randomUUID(), { color })),
     ).rejects.toMatchObject({ code: "product.invalid", params: { field: "color" } });
     expect(await storedColor(productId)).toBe("#256bb1");
   },
@@ -131,6 +134,41 @@ it("reads the category tree once and the products once per batch, with no separa
       expect(reads).toHaveBeenCalledTimes(2);
     } finally {
       reads.mockRestore();
+    }
+  });
+});
+
+it("writes a category and a colour in one patch, and ranks a category refusal above a bad colour", async () => {
+  const drinks = await app((tx) => createCategory(tx, { name: "Drinks" }));
+  await app((tx) => updateProduct(tx, productId, { categoryId: drinks.id, color: "#256bb1" }));
+  expect(await storedColor(productId)).toBe("#256bb1");
+  expect(
+    (await fx.db.select().from(products).where(eq(products.id, productId)))[0]!.categoryId,
+  ).toBe(drinks.id);
+  const missing = crypto.randomUUID();
+  await expect(
+    app((tx) => updateProduct(tx, productId, { categoryId: missing, color: "red" })),
+  ).rejects.toMatchObject({ code: "category.not_found", params: { categoryId: missing } });
+  await expect(
+    app((tx) => updateProduct(tx, variantId, { categoryId: drinks.id, color: "red" })),
+  ).rejects.toMatchObject({ code: "product.not_found", params: { productId: variantId } });
+  await expect(
+    app((tx) => updateProduct(tx, productId, { categoryId: null, color: "red" })),
+  ).rejects.toMatchObject({ code: "product.invalid", params: { field: "color" } });
+  expect(await storedColor(productId)).toBe("#256bb1");
+});
+
+it("looks for the product once and writes the row once for a category and a colour", async () => {
+  const drinks = await app((tx) => createCategory(tx, { name: "Drinks" }));
+  await app(async (tx) => {
+    const reads = vi.spyOn(tx, "select");
+    const writes = vi.spyOn(tx, "update");
+    try {
+      await updateProduct(tx, productId, { categoryId: drinks.id, color: "#256bb1" });
+      expect([reads.mock.calls.length, writes.mock.calls.length]).toEqual([2, 1]);
+    } finally {
+      reads.mockRestore();
+      writes.mockRestore();
     }
   });
 });

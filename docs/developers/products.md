@@ -359,8 +359,8 @@ Its colour is always its parent's too (W92), whatever its own `color` column hol
 `effectiveProductColumns.color` reads the parent's for a variant, and `readProductEditor` returns
 `color: null` for one. A variant's page shows no colour chooser; the editor save refuses a variant
 body carrying a colour (`product.invalid`, field `color`) and writes the variant's column back to
-null. `setProductColor` (`packages/catalogue/src/product-colors.ts`) answers a variant's id with
-`product.not_found`, and `PATCH /management-api/products/:id` answers a variant's id exactly as it
+null. `updateProduct` (`packages/catalogue/src/operations.ts`) given a colour answers a variant's
+id with `product.not_found`, and `PATCH /management-api/products/:id` answers a variant's id exactly as it
 answers an unknown one, because its ownership check runs first (`authorization.not_permitted`,
 403). A published offer carries one colour, its product's; its variants carry none.
 

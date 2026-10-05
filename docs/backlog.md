@@ -3293,8 +3293,6 @@ Left open:
 - At 390 px the Structure tree clips a long name under the pinned Actions column, so a long name's
   swatch needs a sideways scroll to reach. The names clip with the swatches removed too (measured
   on the W92 branch, not on `main`).
-- `scripts/errors-reachable.test.ts` still passed with the errors import deleted from
-  `packages/catalogue/src/product-colors.ts`, so for that file the guard is weaker than its name.
 - A case in `apps/dashboard/src/screens/catalogue-screen.test.ts` (near line 2135, added by #1087
   before W92) prints "[Unhandled rejection] Error: marker" in passing runs; the noise should go.
 - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
