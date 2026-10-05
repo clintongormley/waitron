@@ -245,7 +245,9 @@ export class VenueOperationsScreen extends LitElement {
           ? this.renderRoot.querySelector<HTMLElement>(
               opener.dataset.test === "new-hours"
                 ? '[data-test="hours-actions"] [data-test="new-hours"]'
-                : `wt-tabs > [slot="actions"] [data-test="${opener.dataset.test}"]`,
+                : opener.dataset.test?.startsWith("new-assignment-")
+                  ? `[data-test="zone-menu-actions"] [data-test="${opener.dataset.test}"]`
+                  : `wt-tabs > [slot="actions"] [data-test="${opener.dataset.test}"]`,
             )
           : null;
       (opener?.isConnected ? opener : (twin ?? this.renderRoot.querySelector("wt-tabs")))?.focus();
@@ -487,11 +489,8 @@ export class VenueOperationsScreen extends LitElement {
     };
   }
   #tabActions() {
-    const model = this.model!;
-    const zone = model.floorZones.find((row) => row.id === this.zoneId);
     return html`<div slot="actions">
       ${this.view === "departments" ? this.#tabAction(this.#addDepartment()) : nothing}
-      ${this.view === "zones" && zone ? this.#tabAction(this.#addAssignment(zone.id)) : nothing}
     </div>`;
   }
   #confirm(name: string, action: () => Promise<unknown>): void {
@@ -1111,6 +1110,13 @@ export class VenueOperationsScreen extends LitElement {
                     ]
                   : []),
                 {
+                  key: `menus-tree-zone-${row.zone.id}`,
+                  label: t("venue.menus"),
+                  run: () => {
+                    this.zoneId = row.zone.id;
+                  },
+                },
+                {
                   key: `remove-tree-zone-${row.zone.id}`,
                   label: t("venue.remove"),
                   run: () => void this.#confirmZone(row.zone, row.departmentId),
@@ -1325,7 +1331,6 @@ export class VenueOperationsScreen extends LitElement {
   }
   #zones() {
     const model = this.model!;
-    const zone = model.floorZones.find((row) => row.id === this.zoneId);
     return html`<section>
       <h2>${t("venue.zones")}</h2>
       ${this.#table(
@@ -1391,67 +1396,80 @@ export class VenueOperationsScreen extends LitElement {
         ],
         (row) => row.id,
       )}
+    </section>`;
+  }
+  #zoneMenus() {
+    const model = this.model!;
+    const zone = model.floorZones.find((row) => row.id === this.zoneId);
+    return html`<section>
       ${
         zone
-          ? html` ${this.#toolbar(`${zone.name}: ${t("venue.menus")}`)}
-            ${this.#table(
-              "zone-menus",
-              "waitron.venue.zone-menus.table",
-              t("venue.menus"),
-              t("venue.no_zone_menus"),
-              model.zoneMenus.filter((row) => row.zoneId === zone.id),
-              [
-                {
-                  key: "menu",
-                  label: t("venue.menu_name"),
-                  cell: (row) => model.menus.find((menu) => menu.id === row.menuId)?.name,
-                },
-                {
-                  key: "default",
-                  label: t("venue.default"),
-                  choosable: "shown",
-                  cell: (row) => t(row.isDefault ? "venue.yes" : "venue.no"),
-                },
-                {
-                  key: "order",
-                  label: t("venue.display_order"),
-                  choosable: "shown",
-                  cell: (row) => String(row.displayOrder),
-                },
-                {
-                  key: "actions",
-                  label: t("venue.actions"),
-                  pinned: "end",
-                  cell: (row) =>
-                    this.#actions(
-                      model.menus.find((menu) => menu.id === row.menuId)?.name ?? row.menuId,
-                      [
-                        {
-                          key: `edit-assignment-${row.menuId}`,
-                          label: t("venue.edit"),
-                          run: () =>
-                            this.#open({ kind: "assignment", zoneId: zone.id, menuId: row.menuId }),
-                        },
-                        {
-                          key: `default-assignment-${row.menuId}`,
-                          label: t("venue.make_default"),
-                          disabled: row.isDefault,
-                          run: () => {
-                            void this.#save(() =>
-                              this.api.allowMenu(zone.id, row.menuId, {
-                                displayOrder: row.displayOrder,
-                                makeDefault: true,
+          ? html`<div class="toolbar" data-test="zone-menu-actions">
+                <h2>${zone.name}: ${t("venue.menus")}</h2>
+                ${this.#tabAction(this.#addAssignment(zone.id))}
+              </div>
+              ${this.#table(
+                "zone-menus",
+                "waitron.venue.zone-menus.table",
+                t("venue.menus"),
+                t("venue.no_zone_menus"),
+                model.zoneMenus.filter((row) => row.zoneId === zone.id),
+                [
+                  {
+                    key: "menu",
+                    label: t("venue.menu_name"),
+                    cell: (row) => model.menus.find((menu) => menu.id === row.menuId)?.name,
+                  },
+                  {
+                    key: "default",
+                    label: t("venue.default"),
+                    choosable: "shown",
+                    cell: (row) => t(row.isDefault ? "venue.yes" : "venue.no"),
+                  },
+                  {
+                    key: "order",
+                    label: t("venue.display_order"),
+                    choosable: "shown",
+                    cell: (row) => String(row.displayOrder),
+                  },
+                  {
+                    key: "actions",
+                    label: t("venue.actions"),
+                    pinned: "end",
+                    cell: (row) =>
+                      this.#actions(
+                        model.menus.find((menu) => menu.id === row.menuId)?.name ?? row.menuId,
+                        [
+                          {
+                            key: `edit-assignment-${row.menuId}`,
+                            label: t("venue.edit"),
+                            run: () =>
+                              this.#open({
+                                kind: "assignment",
+                                zoneId: zone.id,
+                                menuId: row.menuId,
                               }),
-                            );
                           },
-                        },
-                      ],
-                    ),
-                },
-              ],
-              (row) => row.menuId,
-              this.#addAssignment(zone.id),
-            )}`
+                          {
+                            key: `default-assignment-${row.menuId}`,
+                            label: t("venue.make_default"),
+                            disabled: row.isDefault,
+                            run: () => {
+                              void this.#save(() =>
+                                this.api.allowMenu(zone.id, row.menuId, {
+                                  displayOrder: row.displayOrder,
+                                  makeDefault: true,
+                                }),
+                              );
+                            },
+                          },
+                        ],
+                      ),
+                  },
+                ],
+                (row) => row.menuId,
+                this.#addAssignment(zone.id),
+              )}`
           : nothing
       }
     </section>`;
@@ -1728,7 +1746,7 @@ export class VenueOperationsScreen extends LitElement {
       ${
         this.model
           ? html`${this.#policyTree()} ${this.#readiness()} ${this.#hoursSection()}
-              ${this.#deviceStartingZones()}
+              ${this.#deviceStartingZones()} ${this.#zoneMenus()}
               <wt-tabs
                 label=${t("venue.title")}
                 .value=${this.view}

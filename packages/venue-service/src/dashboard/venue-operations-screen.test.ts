@@ -255,6 +255,20 @@ describe("venue operations screen", () => {
     expect(tills.shadowRoot!.querySelector('wt-combobox[name="till-t1-starts-in"]')).not.toBeNull();
   });
 
+  it("opens retained zone menus from the policy tree outside the legacy tabs", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree");
+    await action(el, "menus-tree-zone-z1");
+    const menus = table(el, "zone-menus");
+    expect(menus.closest("wt-tabs")).toBeNull();
+    expect(tree.compareDocumentPosition(menus) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(menus.checkVisibility()).toBe(true);
+    await action(el, "new-assignment-z1");
+    expect(modal(el)?.getAttribute("heading")).toBe("Make available");
+  });
+
   it("opens a new department from the policy tree's top action", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
@@ -1127,7 +1141,7 @@ describe("venue operations screen", () => {
     expect(printTradingName).toBe(false);
   });
 
-  it("keeps Hours Add outside the tabs and each remaining tab action beside its tablist", async () => {
+  it("keeps Hours and zone-menu Add outside the tabs", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
@@ -1142,7 +1156,12 @@ describe("venue operations screen", () => {
     expect(tabs.querySelector('[slot="departments"] [data-test="new-department"]')).toBeNull();
     await selectTab(el, "zones");
     await action(el, "zone-menus-z1");
-    expect(tabs.querySelector('[slot="actions"] [data-test="new-assignment-z1"]')).not.toBeNull();
+    expect(tabs.querySelector('[slot="actions"] [data-test="new-assignment-z1"]')).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector(
+        '[data-test="zone-menu-actions"] [data-test="new-assignment-z1"]',
+      ),
+    ).not.toBeNull();
     expect(find(el, '[data-test="new-assignment-z1"]')!.checkVisibility()).toBe(true);
     expect(tabs.querySelector('[slot="zones"] [data-test="new-assignment-z1"]')).toBeNull();
   });
@@ -2844,7 +2863,9 @@ describe("where focus goes when an editor opened from an Add button closes", () 
     const button = el.shadowRoot!.querySelector<HTMLElement>(
       add === "new-hours"
         ? `[data-test="hours-actions"] [data-test="${add}"]`
-        : `wt-tabs > [slot="actions"] [data-test="${add}"]`,
+        : add.startsWith("new-assignment-")
+          ? `[data-test="zone-menu-actions"] [data-test="${add}"]`
+          : `wt-tabs > [slot="actions"] [data-test="${add}"]`,
     );
     expect(button, add).not.toBeNull();
     return button!;
