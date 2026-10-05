@@ -2677,7 +2677,13 @@ describe("add a device", () => {
       label: "Tablet",
       createdAt: "2026-09-08T10:04:00.000Z",
       pairingBy: null,
-      returning: { name: "Pase revocado", profileId: "dp3", stationId: "s1", watcherId: null },
+      returning: {
+        name: "Pase revocado",
+        profileId: "dp3",
+        stationId: "s1",
+        watcherId: null,
+        profileRetired: false,
+      },
     };
     const waiting = (row: JoinRequestRow = returning) =>
       stubApi({ joinRequests: vi.fn().mockResolvedValue([pending[0]!, row]) });
@@ -2742,6 +2748,27 @@ describe("add a device", () => {
       }
     });
 
+    it("whose profile was deleted says a profile must be chosen, in English and Spanish", async () => {
+      const before = currentLocale();
+      try {
+        for (const [locale, hint] of [
+          ["en", "Disabled device. Its profile was deleted: choose one to enable it."],
+          ["es-ES", "Dispositivo deshabilitado. Su perfil se eliminó: elige uno para habilitarlo."],
+        ] as const) {
+          setLocale(locale);
+          const el = await openAdd(
+            waiting({ ...returning, returning: { ...returning.returning!, profileRetired: true } }),
+          );
+
+          expect(d(el, "[data-test=returning-hint-d2]")?.textContent?.trim()).toBe(hint);
+          expect(d(el, "[data-test=returning-hint-r1]")).toBeNull();
+          cleanupWidgets();
+        }
+      } finally {
+        setLocale(before);
+      }
+    });
+
     it("checks the number, opens filled in from the device, and Enable sends it to the device's own id", async () => {
       const api = waiting();
       const el = await openAdd(api);
@@ -2783,7 +2810,13 @@ describe("add a device", () => {
     it("fills in a kitchen screen's watcher", async () => {
       const api = waiting({
         ...returning,
-        returning: { name: "Pase revocado", profileId: "dp3", stationId: null, watcherId: "w1" },
+        returning: {
+          name: "Pase revocado",
+          profileId: "dp3",
+          stationId: null,
+          watcherId: "w1",
+          profileRetired: false,
+        },
       });
       const el = await openAdd(api);
       await toEnableSettings(el);
@@ -2801,7 +2834,13 @@ describe("add a device", () => {
     it("whose profile is gone opens with the profile empty, and Enable waits until one is chosen", async () => {
       const api = waiting({
         ...returning,
-        returning: { name: "Caja vieja", profileId: "deleted", stationId: null, watcherId: null },
+        returning: {
+          name: "Caja vieja",
+          profileId: "deleted",
+          stationId: null,
+          watcherId: null,
+          profileRetired: true,
+        },
       });
       const el = await openAdd(api);
       await toEnableSettings(el);
@@ -2827,6 +2866,21 @@ describe("add a device", () => {
       });
     });
 
+    it("whose profile the server reports deleted opens with the profile empty, even while this screen's list still holds it", async () => {
+      const api = waiting({
+        ...returning,
+        returning: { ...returning.returning!, profileRetired: true },
+      });
+      const el = await openAdd(api);
+      await toEnableSettings(el);
+
+      const profile = q(el, "[data-test=pair-profile]") as Field & {
+        options: { value: string }[];
+      };
+      expect(profile.options.map((o) => o.value)).toContain("dp3");
+      expect(profile.value).toBe("");
+    });
+
     it("whose station was switched off opens with Shows empty", async () => {
       const api = waiting();
       vi.mocked(api.listStations).mockResolvedValue([
@@ -2843,7 +2897,13 @@ describe("add a device", () => {
     it("whose watcher was switched off opens with Shows empty", async () => {
       const api = waiting({
         ...returning,
-        returning: { name: "Pase revocado", profileId: "dp3", stationId: null, watcherId: "w1" },
+        returning: {
+          name: "Pase revocado",
+          profileId: "dp3",
+          stationId: null,
+          watcherId: "w1",
+          profileRetired: false,
+        },
       });
       vi.mocked(api.listWatchers).mockResolvedValue([{ ...watchers[0]!, active: false }]);
       const el = await openAdd(api);

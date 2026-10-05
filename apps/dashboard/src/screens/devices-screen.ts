@@ -543,7 +543,9 @@ export class DevicesScreen extends LitElement {
   #toSettings(request: JoinRequestRow): void {
     const back = request.returning ?? null;
     const profileId =
-      back !== null && this.deviceProfiles.some((p) => p.id === back.profileId)
+      back !== null &&
+      !back.profileRetired &&
+      this.deviceProfiles.some((p) => p.id === back.profileId)
         ? back.profileId
         : "";
     this.pairStep = "settings";
@@ -1118,7 +1120,11 @@ export class DevicesScreen extends LitElement {
           html`<span data-test=${`waiting-row-${request.id}`}>${waitingName(request)}</span>${
               request.returning
                 ? html`<span part="returning-hint" data-test=${`returning-hint-${request.id}`}
-                    >${t("devices.enable_hint")}</span
+                    >${t(
+                      request.returning.profileRetired
+                        ? "devices.enable_hint_profile_deleted"
+                        : "devices.enable_hint",
+                    )}</span
                   >`
                 : nothing
             }`,

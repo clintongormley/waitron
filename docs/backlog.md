@@ -5272,12 +5272,15 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   device dialog is open, the server checks the browser's old device cookie and marks the request
   "returning" with the device's own id, name, profile and station or watcher
   (`apps/server/src/join-requests.ts`). The dialog lists it under its old name with "Disabled
-  device. Enabling it restores its settings." and an Enable (Habilitar) button in place of Pair;
+  device. Enabling it restores its settings." (since W105g, 2026-10-05, the hint reads "Disabled
+  device. Its profile was deleted: choose one to enable it." instead when the device's profile was
+  retired; see (8) under "Left OPEN by W105" below) and an Enable (Habilitar) button in place of Pair;
   after the usual number check the step is titled "Enable <name>" and starts filled in
   (`apps/dashboard/src/screens/devices-screen.ts`). A station or watcher that is gone or switched
   off starts empty, to choose again; so does a profile missing from the dashboard's list of
   profiles, which since W105c is what a profile deleted while only disabled devices held it looks
-  like. If the device asks again while its Enable dialog is open, the
+  like; since W105g (2026-10-05) Profile also starts empty whenever the server reports the profile
+  retired, even while that list has not yet been re-read. If the device asks again while its Enable dialog is open, the
   new ask replaces the old one under the same id; the dialog closes without sending a discard,
   which the server would answer as naming an ask already gone, and says the device asked again
   with new numbers. Cancel and the number check name the ask by its
@@ -5356,9 +5359,15 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   device on a retired profile; a retired profile's home-layout choices stay in
   `device_profile_home_layouts`; and the configuration transfer has no row filter, so it copies a
   retired profile with its `retired_at` (`packages/db/src/configuration-transfer.ts`; read, not
-  tested). Also left open, the owner's wording call: the Enable hint "Disabled device. Enabling it
-  restores its settings." (`apps/dashboard/src/i18n/strings.ts`) says more than happens when the
-  device's profile was retired, since Profile then starts empty. (9) a device holding a printer its unchanged profile no longer lists
+  tested). The Enable hint's wording, done by W105g (owner decision
+  2026-10-05): when the returning device's profile was retired, the waiting list's hint reads
+  "Disabled device. Its profile was deleted: choose one to enable it." / "Dispositivo deshabilitado.
+  Su perfil se eliminó: elige uno para habilitarlo." (`devices.enable_hint_profile_deleted`), and
+  every other returning device keeps "Enabling it restores its settings."; the server says which, as
+  `returning.profileRetired` in the device join list (`returningDevicesOf`,
+  `apps/server/src/join-requests.ts`). The device join list's live updates now name
+  `device_profiles` too (`joinRequests`, `apps/dashboard/src/api/live-queries.ts`, pinned in its
+  test), so a profile deleted while a returning device's request is showing re-reads the list. (9) a device holding a printer its unchanged profile no longer lists
   opens with that field empty, and Save keeps the old printer without saying so. (10) for a manager
   without `payments.manage` the card reader field is drawn greyed while it loads and then disappears,
   so the layout jumps. Review suggestions #1235 did not take, listed in its description: the edit

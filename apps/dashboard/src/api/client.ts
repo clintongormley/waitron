@@ -576,12 +576,17 @@ export interface JoinRequestRow {
   returning?: ReturningDetails | null;
 }
 
-/** What a returning device's disabled row holds, for the Pair step to start from. */
+/**
+ * What a returning device's disabled row holds, and whether its profile was retired, for the Pair
+ * step to start from.
+ */
 export interface ReturningDetails {
   name: string;
   profileId: string;
   stationId: string | null;
   watcherId: string | null;
+  /** Its profile was deleted, so Enable must be given another. */
+  profileRetired: boolean;
 }
 
 /** `deviceAddress` is the address the server advertises to the venue's devices, not this tab's. */
