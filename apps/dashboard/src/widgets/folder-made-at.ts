@@ -26,10 +26,15 @@ export interface FolderMadeAt {
   someElsewhere: boolean;
 }
 
-/** Whether a claim or an exception, rather than the default station or nothing, reaches a place to
- * make the category's dishes. The category tree's asterisk marks a category where this is false. */
+/** Whether the category's baseline route comes from a claim or an exception and reaches a station or
+ * No preparation; any other maker, the default station, or no rule is not covered. The category
+ * tree's asterisk marks a category where this is false. */
 export function coveredByRule({ maker, source }: FolderMadeAt): boolean {
-  return source !== null && source.kind !== "default" && maker.kind !== "no_replacement";
+  return (
+    source !== null &&
+    source.kind !== "default" &&
+    (maker.kind === "station" || maker.kind === "no_preparation")
+  );
 }
 
 /** One comparable string per outcome, so two choices are the same when they make the dish in the
