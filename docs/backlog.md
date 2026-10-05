@@ -764,6 +764,16 @@ its longer side, turned upright, stripped of its metadata and stored as WebP at 
   "fills the Custom square right up to its border while a palette colour is chosen"). **Next action:** try
   the first in Safari or Playwright's WebKit, and the second by hand in Chromium.
 
+**Image library: Delete left, Edit right, and a preview showing where an image is used — DONE (W78,
+owner 2026-10-04).** On each card (`packages/media/src/dashboard/image-library.ts`) Delete now sits at
+the left of the action row and Edit at the right, with "Use image" still on its own line above them
+in the picker. The photo is a button marked "Preview" that opens a larger copy beside a list of every
+product, variant, menu section and published menu using it, each a link there; on a phone the photo
+sits above the list. The preview closes with Close, Escape or a click outside it, and focus goes back
+to the thumbnail. `wt-dialog` has no option to close on a backdrop click and was left unchanged, so
+the library closes the preview itself when a click reaches the dialog element at a point outside the
+dialog's box.
+
 **The folding section jumps about when it opens (A169, owner 2026-10-01) — DONE (#1026).** `wt-disclosure`
 (`packages/ui/src/components/wt-disclosure.ts`) now draws no border in either state, keeps its
 heading and chevron in place when it opens (chevron at the row's end), and shows its summary under
