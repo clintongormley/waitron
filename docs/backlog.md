@@ -5113,7 +5113,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 QUEUED (lane C).**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE on its branch `feat/device-battery`.**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
@@ -5136,8 +5136,17 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   and made-here routes (`apps/server/src/device-api.ts`). The Devices list is a table with an Edit
   dialog and a two-press Remove in each active row's menu; a removed device's row does not open
   (`rowClickable`, new on `wt-data-table`). The card reader is read when the dialog opens and saved
-  second, through its own route; without `payments.manage` the field is not shown. **Still owed:**
-  W106, each device's battery on the Devices list.
+  second, through its own route; without `payments.manage` the field is not shown.
+  **W106 (done on its branch):** `devices` gains three empty-by-default columns: the battery level,
+  whether it is charging and when that was reported (core `0099`). A paired device sends both to
+  `PUT /api/device/battery`, which refuses a level outside 0 to 100 and stores at most one report a
+  minute unless the charging state changed (`apps/server/src/device-api.ts`). The till sends a report
+  when it starts as a paired device and whenever the level or charging state changes, but only where
+  the browser has `navigator.getBattery` (`apps/till/src/api/battery-report.ts`). The Devices table's
+  Battery column, between Shows and Status, shows "82%" with a lightning mark while charging, "Not
+  reported" for a device that never sent one, and greys a report more than ten minutes old, adding
+  "as of" and the time it was taken (`apps/dashboard/src/screens/devices-screen.ts`). No low-battery
+  alert: that is A272, still open.
   Left OPEN by W105, not acted on: (5) a kitchen screen whose station or watcher was switched off
   opens with Shows empty, so even a rename asks for a new one; whether to let it keep a switched-off
   one is the owner's call. (6) the Status column still says "Revoked" (`devices.status_revoked`)
