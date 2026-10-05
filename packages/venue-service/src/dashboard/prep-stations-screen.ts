@@ -9,6 +9,7 @@ import {
   UrlStateController,
   type ReorderModel,
 } from "@waitron/ui";
+import { holdPageCursor, releasePageCursor } from "@waitron/ui/src/reorder-table.js";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
@@ -236,6 +237,16 @@ export class PrepStationsScreen extends LitElement {
   private editingHours: readonly WeeklyInterval[] = [];
   @state() private hoursServerErrors: Record<number, string> = {};
   @state() private tab: PrepTab = "stations";
+  @state() private stationOrder?: string[];
+  @state() private stationAnnouncement = "";
+  #stationDrag?: { id: string; pointerId: number; changed: boolean };
+  @state() private rename?: {
+    id: string;
+    name: string;
+    error: string;
+    invalid: boolean;
+    fieldError: boolean;
+  };
   @state() private health?: StationHealthSnapshot;
   #healthTimer?: ReturnType<typeof setInterval>;
   #routingTimer?: ReturnType<typeof setInterval>;
@@ -321,6 +332,7 @@ export class PrepStationsScreen extends LitElement {
     if (this.#healthTimer) clearInterval(this.#healthTimer);
     if (this.#routingTimer) clearInterval(this.#routingTimer);
     super.disconnectedCallback();
+    this.#endStationDrag();
   }
   async #loadHealth() {
     try {
@@ -497,6 +509,215 @@ export class PrepStationsScreen extends LitElement {
       field === "claim",
       field,
     );
+  }
+  #activeStationOrder() {
+    return (
+      this.stationOrder ??
+      [...(this.view?.stations ?? [])]
+        .filter((station) => station.active)
+        .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name))
+        .map((station) => station.id)
+    );
+  }
+  #healthTable() {
+    return this.renderRoot
+      .querySelector("prep-station-health-table")
+      ?.shadowRoot?.querySelector("wt-data-table");
+  }
+  #moveStation(id: string, to: number) {
+    const previous = this.#activeStationOrder();
+    const next = reorder(previous, previous.indexOf(id), to);
+    if (next.join() === previous.join()) return false;
+    this.stationOrder = next;
+    this.stationAnnouncement = format("prep.station_reordered", {
+      name: this.#stationName(id),
+      index: String(to + 1),
+      total: String(next.length),
+    });
+    return true;
+  }
+  async #saveStationOrder(id: string) {
+    if (this.busy || !this.stationOrder) return;
+    const ids = [...this.stationOrder];
+    await this.#act(() => this.api.reorderStations(ids));
+    this.stationOrder = undefined;
+    await this.updateComplete;
+    const health = this.renderRoot.querySelector("prep-station-health-table");
+    if (health) await health.updateComplete;
+    const table = this.#healthTable();
+    if (table) await table.updateComplete;
+    table?.shadowRoot?.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)?.focus();
+  }
+  #startStationDrag(event: PointerEvent, id: string) {
+    if (this.busy || this.#stationDrag || event.button !== 0) return;
+    event.preventDefault();
+    this.#stationDrag = { id, pointerId: event.pointerId, changed: false };
+    holdPageCursor();
+    document.addEventListener("pointermove", this.#moveStationDrag);
+    document.addEventListener("pointerup", this.#dropStationDrag);
+    document.addEventListener("pointercancel", this.#dropStationDrag);
+  }
+  readonly #moveStationDrag = (event: PointerEvent) => {
+    const drag = this.#stationDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const order = this.#activeStationOrder();
+    for (const row of this.#healthTable()?.shadowRoot?.querySelectorAll("tbody tr") ?? []) {
+      const bounds = row.getBoundingClientRect();
+      if (event.clientY < bounds.top || event.clientY >= bounds.bottom) continue;
+      const id = row.querySelector<HTMLElement>("[data-station-id]")?.dataset.stationId;
+      if (id && order.includes(id) && this.#moveStation(drag.id, order.indexOf(id)))
+        drag.changed = true;
+      break;
+    }
+  };
+  readonly #dropStationDrag = (event: PointerEvent) => {
+    const drag = this.#stationDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    this.#endStationDrag();
+    if (drag.changed) void this.#saveStationOrder(drag.id);
+  };
+  #endStationDrag() {
+    if (!this.#stationDrag) return;
+    this.#stationDrag = undefined;
+    releasePageCursor();
+    document.removeEventListener("pointermove", this.#moveStationDrag);
+    document.removeEventListener("pointerup", this.#dropStationDrag);
+    document.removeEventListener("pointercancel", this.#dropStationDrag);
+  }
+  #stationMenu(station: PrepStation) {
+    return html`${
+        station.active
+          ? html`<button
+              type="button"
+              part="station-grip"
+              data-test=${`drag-${station.id}`}
+              aria-label=${format("prep.reorder_station", { name: station.name })}
+              ?disabled=${this.busy}
+              @pointerdown=${(event: PointerEvent) => this.#startStationDrag(event, station.id)}
+              @keydown=${(event: KeyboardEvent) => {
+                const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+                if (!delta || this.busy) return;
+                event.preventDefault();
+                const order = this.#activeStationOrder();
+                if (this.#moveStation(station.id, order.indexOf(station.id) + delta))
+                  void this.#saveStationOrder(station.id);
+              }}
+            >
+              <wt-icon name="grip"></wt-icon>
+            </button>`
+          : nothing
+      }<wt-row-actions
+        data-station-id=${station.id}
+        data-test=${`station-menu-${station.id}`}
+        label=${format("prep.row_actions", { name: station.name })}
+      >
+        <wt-button
+          align="start"
+          data-test=${`rename-${station.id}`}
+          ?disabled=${this.busy}
+          @click=${() => {
+            this.rename = {
+              id: station.id,
+              name: station.name,
+              error: "",
+              invalid: false,
+              fieldError: false,
+            };
+          }}
+          >${t("venue.rename")}</wt-button
+        >
+        ${
+          station.active && !station.isDefault
+            ? html`<wt-button
+                align="start"
+                data-test=${`make-default-${station.id}`}
+                ?disabled=${this.busy}
+                @click=${() => void this.#act(() => this.api.setDefaultStation(station.id))}
+                >${t("prep.make_default")}</wt-button
+              >`
+            : nothing
+        }
+        <wt-button
+          align="start"
+          data-test=${`${station.active ? "disable" : "enable"}-${station.id}`}
+          ?disabled=${this.busy}
+          @click=${() => (station.active ? this.#openFallback(station.id, "switch_off") : this.#openStationAction({ kind: "switch_on", stationId: station.id }))}
+          >${t(station.active ? "prep.switch_off" : "prep.switch_on")}</wt-button
+        >
+      </wt-row-actions>`;
+  }
+  async #saveStationName() {
+    const draft = this.rename;
+    if (!draft || this.busy) return;
+    if (!draft.name.trim()) {
+      this.rename = { ...draft, error: t("prep.name_required"), invalid: true, fieldError: true };
+      return;
+    }
+    this.busy = true;
+    this.rename = { ...draft, error: "", invalid: false, fieldError: false };
+    try {
+      await this.api.updateStation(draft.id, { name: draft.name.trim() });
+    } catch (error) {
+      this.rename = {
+        ...draft,
+        error: t(codeOf(error) === "station.name_taken" ? "prep.name_taken" : "prep.save_error"),
+        invalid: false,
+        fieldError: codeOf(error) === "station.name_taken",
+      };
+      this.busy = false;
+      return;
+    }
+    this.rename = undefined;
+    await this.#load();
+    this.busy = false;
+  }
+  #renameDialog() {
+    const draft = this.rename;
+    if (!draft) return nothing;
+    return html`<wt-modal
+      open
+      size="compact"
+      data-test="station-rename"
+      heading=${t("venue.rename")}
+      @wt-close=${() => {
+        this.rename = undefined;
+      }}
+    >
+      <wt-input
+        name="stationName"
+        label=${t("prep.name")}
+        required
+        .value=${draft.name}
+        .error=${draft.fieldError ? draft.error : ""}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          this.rename = {
+            ...draft,
+            name: event.detail.value,
+            error: "",
+            invalid: false,
+            fieldError: false,
+          };
+        }}
+        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-station-name"]'))}
+      ></wt-input>
+      ${draft.error ? html`<p class="error" role="alert">${draft.invalid ? t("prep.fix_fields") : draft.error}</p>` : nothing}
+      <wt-form-actions slot="footer">
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          @click=${() => {
+            this.rename = undefined;
+          }}
+          >${t("prep.cancel")}</wt-button
+        >
+        <wt-button
+          data-test="save-station-name"
+          ?disabled=${this.busy || draft.invalid}
+          @click=${() => void this.#saveStationName()}
+          >${t("prep.save")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-modal>`;
   }
   #openStation(station?: PrepStation) {
     this.editor = { kind: "station", id: station?.id };
@@ -1827,9 +2048,18 @@ export class PrepStationsScreen extends LitElement {
                   >
                 </div>
                 <div slot="stations">
+                  <div
+                    class="reorder-status"
+                    data-test="station-order-status"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    ${this.stationAnnouncement}
+                  </div>
                   <prep-station-health-table
                     .snapshot=${this.health}
-                    .stations=${view.stations}
+                    .stations=${view.stations.map((station) => ({ ...station, displayOrder: this.stationOrder?.indexOf(station.id) ?? station.displayOrder }))}
+                    .actions=${Object.fromEntries(view.stations.map((station) => [station.id, this.#stationMenu(station)]))}
                     .today=${Object.fromEntries(
                       view.stations.map((station) => {
                         const status = this.#todayCell(station);
@@ -1910,6 +2140,6 @@ export class PrepStationsScreen extends LitElement {
                   )}
               </section>`
           : nothing
-      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}`;
+      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}${this.#renameDialog()}`;
   }
 }

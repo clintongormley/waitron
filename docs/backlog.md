@@ -6340,9 +6340,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   say Always open without an action; disabled stations and an unreadable clock offer no hours
   action. Today now shows the next scheduled opening or closing, distinguishing tomorrow and later
   weekdays; overlapping or adjoining intervals keep the station open until the actual closure.
-  Its passive minute refresh changes the displayed state without a database event. Station row
-  menus/reorder, Tickets/Watchers/Settings cell editors, venue-defaults UI and printing handover
-  remain open.
+  Its passive minute refresh changes the displayed state without a database event. Stations now
+  has Rename, Make default and confirmed Disable/Enable row actions, plus pointer and keyboard
+  ordering saved as one validated active-station set. Rename submits only the name and closes before
+  refresh; refusal retains an editable draft. The Prep page explicitly reads retained station
+  metadata so disabled health rows can show their state and Enable action; ordinary station lists
+  remain active-only. Routing-only card replacement, Tickets/Watchers/Settings cell editors,
+  venue-defaults UI, supervisor page-loading permissions and printing handover remain open.
   The generated station-parent rebuild failed the populated upgrade with a foreign-key refusal;
   the ongoing build uses the plan’s storage-redesign option. Approved decisions
   cover what live counts include, ready-but-unserved work, interim station hours, inactive display

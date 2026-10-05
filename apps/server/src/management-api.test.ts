@@ -1291,6 +1291,92 @@ describe("/management-api/stations (KDS-1 config)", () => {
     }[];
   }
 
+  it("explicitly lists retained disabled station metadata without changing the default active-only list", async () => {
+    const id = await createStation(unique("Retained metadata"));
+    await req(`/stations/${id}`, { method: "DELETE" }, managerCookie);
+    expect((await listStations()).some((station) => station.id === id)).toBe(false);
+    const response = await req("/stations?includeDisabled=true", { method: "GET" }, managerCookie);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toContainEqual(expect.objectContaining({ id, active: false }));
+  });
+  it("saves the complete active station order atomically without changing default or disabled rows", async () => {
+    await createStation(unique("First order"), { displayOrder: 8 });
+    await createStation(unique("Second order"), { displayOrder: 9 });
+    const disabled = await createStation(unique("Retained order"), { displayOrder: 17 });
+    await req(`/stations/${disabled}`, { method: "DELETE" }, managerCookie);
+    const disabledBefore = await suite.db
+      .select()
+      .from(kitchenStations)
+      .where(eq(kitchenStations.id, disabled));
+    const before = await listStations();
+    const active = before.filter((station) => station.active);
+    const ids = active.map((station) => station.id).reverse();
+    const response = await req(
+      "/stations/order",
+      { method: "PUT", body: JSON.stringify({ ids }) },
+      managerCookie,
+    );
+    expect(response.status).toBe(204);
+    const after = await listStations();
+    expect(after.filter((station) => station.active).map((station) => station.id)).toEqual(ids);
+    expect(
+      after.filter((station) => station.active).map((station) => station.displayOrder),
+    ).toEqual(ids.map((_, index) => index));
+    expect(
+      await suite.db.select().from(kitchenStations).where(eq(kitchenStations.id, disabled)),
+    ).toEqual(disabledBefore);
+    expect(after.filter((station) => station.isDefault).map((station) => station.id)).toEqual(
+      before.filter((station) => station.isDefault).map((station) => station.id),
+    );
+  });
+  it("refuses malformed, incomplete, duplicate, missing and disabled station order sets before any write", async () => {
+    const disabled = await createStation(unique("Disabled order"));
+    await req(`/stations/${disabled}`, { method: "DELETE" }, managerCookie);
+    const before = await listStations();
+    const ids = before.filter((station) => station.active).map((station) => station.id);
+    for (const body of [
+      null,
+      [],
+      {},
+      { ids: null },
+      { ids: "wrong" },
+      { ids: [] },
+      { ids: ids.slice(1) },
+      { ids: [...ids, ids[0]] },
+      { ids: [...ids, disabled] },
+      { ids: [...ids, randomUUID()] },
+    ]) {
+      const response = await req(
+        "/stations/order",
+        { method: "PUT", body: JSON.stringify(body) },
+        managerCookie,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "ids" } },
+      });
+      expect(await listStations()).toEqual(before);
+    }
+  });
+  it("station ordering requires configuration permission and a session", async () => {
+    const ids = (await listStations())
+      .filter((station) => station.active)
+      .map((station) => station.id);
+    const before = await listStations();
+    for (const [cookie, status] of [
+      [undefined, 401],
+      [staffCookie, 403],
+      [supervisorCookie, 403],
+    ] as const) {
+      const response = await req(
+        "/stations/order",
+        { method: "PUT", body: JSON.stringify({ ids }) },
+        cookie,
+      );
+      expect(response.status).toBe(status);
+    }
+    expect(await listStations()).toEqual(before);
+  });
   it("POST creates (201 { id }) + GET lists it, active, at its display order (manager)", async () => {
     const name = unique("Cocina");
     const id = await createStation(name, { displayOrder: 2 });

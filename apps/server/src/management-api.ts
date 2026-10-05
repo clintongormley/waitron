@@ -109,6 +109,7 @@ import {
   getFireControl,
   listCourses,
   moveCourse,
+  reorderStations,
   listStations,
   setBumpMode,
   setDefaultStation,
@@ -1847,8 +1848,25 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const stations = await withVenueAuth(deps, sessionId, (tx) => listStations(tx, cfg));
+      const includeDisabled = c.req.query("includeDisabled") === "true";
+      const stations = await withVenueAuth(deps, sessionId, (tx) =>
+        listStations(tx, cfg, includeDisabled),
+      );
       return c.json(stations);
+    }),
+  );
+
+  app.put("/management-api/stations/order", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const body = await readRawJsonBody(c);
+      const ids =
+        body && typeof body === "object" && !Array.isArray(body)
+          ? (body as { ids?: unknown }).ids
+          : undefined;
+      await withVenueAuth(deps, sessionId, (tx) => reorderStations(tx, cfg, ids));
+      return c.body(null, 204);
     }),
   );
 

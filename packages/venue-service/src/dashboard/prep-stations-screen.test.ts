@@ -3,11 +3,16 @@ import { afterEach, expect, it, vi } from "vitest";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
-import { applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
+import { registerIcons, applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
 import type { PrepStationsApi, PrepStationsView, StationHealthSnapshot } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";
 
+registerIcons({
+  kebab:
+    "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
+  grip: "M6 3.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 3.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M6 8a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 8a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M6 12.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0M12.2 12.5a1.1 1.1 0 1 1-2.2 0a1.1 1.1 0 0 1 2.2 0",
+});
 const hosts: HTMLElement[] = [];
 afterEach(() => {
   for (const host of hosts.splice(0)) host.remove();
@@ -3276,6 +3281,271 @@ it.each([false, true])(
       expect(backgroundLoad).toHaveBeenCalledTimes(count);
     } finally {
       vi.useRealTimers();
+    }
+  },
+);
+
+it.each([
+  ["en", "Rename", "Disable", "Enable"],
+  ["es", "Cambiar nombre", "Deshabilitar", "Habilitar"],
+])(
+  "Stations row menus identify their row and use retained-state wording in %s",
+  async (locale, rename, disable, enable) => {
+    setLocale(locale as "en" | "es");
+    const next = withUpstairs({ open: true, why: "in_hours" });
+    next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
+    const { el } = await mountToday(next);
+    const summary = healthSummary(el)!;
+    const menu = summary.querySelector('wt-row-actions[data-test="station-menu-upstairs"]');
+    expect(menu).not.toBeNull();
+    expect(menu!.getAttribute("label")).toContain("Upstairs bar");
+    expect(menu!.querySelector('[data-test="rename-upstairs"]')!.textContent).toContain(rename);
+    expect(menu!.querySelector('[data-test="disable-upstairs"]')!.textContent).toContain(disable);
+    expect(menu!.querySelector('[data-test="make-default-upstairs"]')).not.toBeNull();
+    expect(summary.querySelector('[data-test="make-default-bar"]')).toBeNull();
+    expect(summary.querySelector('[data-test="enable-retired"]')!.textContent).toContain(enable);
+    expect(summary.querySelector('[data-test="disable-retired"]')).toBeNull();
+    expect(summary.querySelector('[data-test="make-default-retired"]')).toBeNull();
+  },
+);
+it("renames from Stations without submitting timing settings and closes before a failed refresh", async () => {
+  const next = withUpstairs({ open: true, why: "in_hours" });
+  const load = vi.fn().mockResolvedValueOnce(next).mockRejectedValue({ code: "connection.failed" });
+  const { el, a } = await mountToday(next, { load });
+  const action = healthSummary(el)!.querySelector<HTMLElement>('[data-test="rename-upstairs"]');
+  expect(action).not.toBeNull();
+  action!.click();
+  await settle(el);
+  const name = q(el, 'wt-input[name="stationName"]') as WtInput;
+  expect(name).not.toBeNull();
+  name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Cold kitchen" } }));
+  await settle(el);
+  q(el, '[data-test="save-station-name"]')!.click();
+  await settle(el);
+  expect(a.updateStation).toHaveBeenCalledWith("upstairs", { name: "Cold kitchen" });
+  expect(q(el, '[data-test="station-rename"]')).toBeNull();
+  expect(q(el, '[role="alert"]')!.textContent).toContain("could not be loaded");
+});
+it("keeps a refused station name editable, marks duplicates and validates a corrected blank locally", async () => {
+  const { el, a } = await mountToday(withUpstairs({ open: true, why: "in_hours" }), {
+    updateStation: vi
+      .fn()
+      .mockRejectedValueOnce({ code: "station.name_taken" })
+      .mockResolvedValue(undefined),
+  });
+  const action = healthSummary(el)!.querySelector<HTMLElement>('[data-test="rename-upstairs"]');
+  expect(action).not.toBeNull();
+  action!.click();
+  await settle(el);
+  q(el, '[data-test="save-station-name"]')!.click();
+  await settle(el);
+  expect(q(el, '[data-test="station-rename"]')).not.toBeNull();
+  expect((q(el, 'wt-input[name="stationName"]') as WtInput).error).toContain("already");
+  expect(q(el, '[data-test="save-station-name"]')!.hasAttribute("disabled")).toBe(false);
+  const name = q(el, 'wt-input[name="stationName"]')!;
+  name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: " " } }));
+  await settle(el);
+  q(el, '[data-test="save-station-name"]')!.click();
+  await settle(el);
+  expect(a.updateStation).toHaveBeenCalledTimes(1);
+  expect(q(el, '[data-test="save-station-name"]')!.hasAttribute("disabled")).toBe(true);
+  name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "New name" } }));
+  await settle(el);
+  name
+    .shadowRoot!.querySelector("input")!
+    .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+  await settle(el);
+  expect(a.updateStation).toHaveBeenLastCalledWith("upstairs", { name: "New name" });
+  expect(q(el, '[data-test="station-rename"]')).toBeNull();
+});
+it("Stations row actions reuse default and retained disable/enable writes", async () => {
+  const next = withUpstairs({ open: true, why: "in_hours" });
+  const { el, a } = await mountToday(next, { activateStation: vi.fn() });
+  const makeDefault = healthSummary(el)!.querySelector<HTMLElement>(
+    '[data-test="make-default-upstairs"]',
+  );
+  expect(makeDefault).not.toBeNull();
+  makeDefault!.click();
+  await settle(el);
+  expect(a.setDefaultStation).toHaveBeenCalledWith("upstairs");
+  healthSummary(el)!.querySelector<HTMLElement>('[data-test="disable-upstairs"]')!.click();
+  await settle(el);
+  expect(a.deactivateStation).not.toHaveBeenCalled();
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  expect(a.deactivateStation).not.toHaveBeenCalled();
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  expect(a.deactivateStation).toHaveBeenCalledWith("upstairs");
+  next.stations[1]!.active = false;
+  await (el as unknown as { requestUpdate(): void }).requestUpdate();
+  await settle(el);
+  healthSummary(el)!.querySelector<HTMLElement>('[data-test="enable-upstairs"]')!.click();
+  await settle(el);
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  expect(a.activateStation).toHaveBeenCalledWith("upstairs");
+});
+
+it("reorders Stations with the keyboard, retains focus and leaves routing priorities unchanged", async () => {
+  const next = withUpstairs({ open: true, why: "in_hours" });
+  const order = vi.fn().mockImplementation(async (ids: string[]) => {
+    ids.forEach((id, index) => {
+      next.stations.find((station) => station.id === id)!.displayOrder = index;
+    });
+  });
+  const { el } = await mountToday(next, { reorderStations: order } as Partial<PrepStationsApi>);
+  const handle = healthSummary(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
+  expect(handle).not.toBeNull();
+  handle!.focus();
+  handle!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+  await settle(el);
+  expect(order).toHaveBeenCalledWith(["upstairs", "bar"]);
+  expect(
+    [...healthSummary(el)!.querySelectorAll("tbody tr")].map((row) =>
+      row.querySelector("wt-row-actions")!.getAttribute("data-test"),
+    ),
+  ).toEqual(["station-menu-upstairs", "station-menu-bar"]);
+  expect(healthSummary(el)!.activeElement?.getAttribute("data-test")).toBe("drag-upstairs");
+  expect(next.routing.claims).toEqual(view.routing.claims);
+  expect(next.routing.exceptions).toEqual([]);
+});
+it("restores the Stations order after refusal and never moves disabled rows", async () => {
+  const next = withUpstairs({ open: true, why: "in_hours" });
+  next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
+  const order = vi.fn().mockRejectedValue({ code: "connection.failed" });
+  const { el } = await mountToday(next, { reorderStations: order } as Partial<PrepStationsApi>);
+  expect(healthSummary(el)!.querySelector('[data-test="drag-retired"]')).toBeNull();
+  const handle = healthSummary(el)!.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
+  expect(handle).not.toBeNull();
+  handle!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+  await settle(el);
+  expect(order).toHaveBeenCalledWith(["upstairs", "bar"]);
+  expect(
+    [...healthSummary(el)!.querySelectorAll("tbody tr")].map((row) =>
+      row.querySelector("wt-row-actions")!.getAttribute("data-test"),
+    ),
+  ).toEqual(["station-menu-bar", "station-menu-upstairs", "station-menu-retired"]);
+  expect(q(el, '[role="alert"]')!.textContent).toContain("could not be saved");
+});
+it("persists a pointer reorder once on release and releases the drag on disconnect", async () => {
+  const next = withUpstairs({ open: true, why: "in_hours" });
+  const order = vi.fn().mockResolvedValue(undefined);
+  const { el } = await mountToday(next, { reorderStations: order } as Partial<PrepStationsApi>);
+  const summary = healthSummary(el)!;
+  const handle = summary.querySelector<HTMLButtonElement>('[data-test="drag-upstairs"]');
+  expect(handle).not.toBeNull();
+  const target = summary
+    .querySelector('[data-test="station-menu-bar"]')!
+    .closest("tr")!
+    .getBoundingClientRect();
+  handle!.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      pointerId: 91,
+      clientY: handle!.getBoundingClientRect().top,
+      bubbles: true,
+    }),
+  );
+  document.dispatchEvent(
+    new PointerEvent("pointermove", { pointerId: 91, clientY: target.top + target.height / 2 }),
+  );
+  await settle(el);
+  expect(order).not.toHaveBeenCalled();
+  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 91 }));
+  await settle(el);
+  expect(order).toHaveBeenCalledExactlyOnceWith(["upstairs", "bar"]);
+  const nextHandle = healthSummary(el)!.querySelector<HTMLButtonElement>(
+    '[data-test="drag-upstairs"]',
+  )!;
+  nextHandle.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      pointerId: 92,
+      clientY: nextHandle.getBoundingClientRect().top,
+      bubbles: true,
+    }),
+  );
+  el.remove();
+  document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 92 }));
+  expect(order).toHaveBeenCalledTimes(1);
+  expect(document.body.style.cursor).not.toBe("grabbing");
+});
+
+it("keeps a general rename refusal below the field and permits retry", async () => {
+  const { el, a } = await mountToday(withUpstairs({ open: true, why: "in_hours" }), {
+    updateStation: vi
+      .fn()
+      .mockRejectedValueOnce({ code: "connection.failed" })
+      .mockResolvedValue(undefined),
+  });
+  healthSummary(el)!.querySelector<HTMLElement>('[data-test="rename-upstairs"]')!.click();
+  await settle(el);
+  q(el, '[data-test="save-station-name"]')!.click();
+  await settle(el);
+  expect((q(el, 'wt-input[name="stationName"]') as WtInput).error).toBe("");
+  expect(q(el, '[data-test="station-rename"]')!.textContent).toContain("could not be saved");
+  q(el, '[data-test="save-station-name"]')!.click();
+  await settle(el);
+  expect(a.updateStation).toHaveBeenCalledTimes(2);
+  expect(q(el, '[data-test="station-rename"]')).toBeNull();
+});
+it("announces the reordered station and its position to a screen reader", async () => {
+  const { el } = await mountToday(withUpstairs({ open: true, why: "in_hours" }), {
+    reorderStations: vi.fn().mockResolvedValue(undefined),
+  });
+  healthSummary(el)!
+    .querySelector<HTMLElement>('[data-test="drag-upstairs"]')!
+    .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+  await settle(el);
+  expect(q(el, '[data-test="station-order-status"]')?.textContent?.trim()).toBe(
+    "Upstairs bar is now 1 of 2.",
+  );
+});
+
+it.each([
+  ["en", "light", 390],
+  ["en", "dark", 390],
+  ["es", "light", 390],
+  ["es", "dark", 390],
+  ["en", "light", 1280],
+  ["en", "dark", 1280],
+  ["es", "light", 1280],
+  ["es", "dark", 1280],
+] as const)(
+  "Stations menus and rename remain accessible in %s %s at %ipx",
+  async (locale, theme, width) => {
+    const previous = {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      body: document.body.style.background,
+      canvas: document.documentElement.style.background,
+    };
+    try {
+      await page.viewport(width, 900);
+      setLocale(locale);
+      history.replaceState(null, "", "/manage/prep-stations");
+      const { el } = await mountToday(withUpstairs({ open: true, why: "in_hours" }), {}, theme);
+      const host = el.parentElement!;
+      host.style.background = "var(--wt-color-bg)";
+      document.body.style.background = getComputedStyle(host).backgroundColor;
+      document.documentElement.style.background = getComputedStyle(host).backgroundColor;
+      const menu = healthSummary(el)!.querySelector(
+        'wt-row-actions[data-test="station-menu-upstairs"]',
+      )!;
+      await page.elementLocator(menu.shadowRoot!.querySelector("button")!).click();
+      await settle(el);
+      await expectNoA11yViolations(host);
+      const rename = menu.querySelector<HTMLElement>('[data-test="rename-upstairs"]')!;
+      await page.elementLocator(rename).click();
+      await settle(el);
+      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+      expect(
+        q(el, '[data-test="station-rename"]')!.getBoundingClientRect().right,
+      ).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+    } finally {
+      document.body.style.background = previous.body;
+      document.documentElement.style.background = previous.canvas;
+      await page.viewport(previous.width, previous.height);
     }
   },
 );

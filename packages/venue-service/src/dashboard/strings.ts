@@ -1,6 +1,9 @@
 import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
 const en = {
+  "prep.row_actions": "Actions: {name}",
+  "prep.reorder_station": "Reorder: {name}",
+  "prep.station_reordered": "{name} is now {index} of {total}.",
   "prep.health.loading": "Loading station health…",
   "prep.health.disabled": "Disabled",
   "prep.today_column": "Today",
@@ -355,6 +358,9 @@ const en = {
 } as const;
 
 const es: Record<keyof typeof en, string> = {
+  "prep.row_actions": "Acciones: {name}",
+  "prep.reorder_station": "Cambiar orden: {name}",
+  "prep.station_reordered": "{name} está ahora en la posición {index} de {total}.",
   "prep.health.loading": "Cargando el estado de las estaciones…",
   "prep.health.disabled": "Deshabilitada",
   "prep.today_column": "Hoy",

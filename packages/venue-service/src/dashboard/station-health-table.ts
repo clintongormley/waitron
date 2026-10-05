@@ -22,6 +22,19 @@ export class StationHealthTable extends LitElement {
         display: block;
         min-width: 0;
       }
+      wt-data-table::part(station-grip) {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+        border: 0;
+        border-radius: var(--wt-radius-md);
+        background: transparent;
+        color: var(--wt-color-text);
+        cursor: var(--reorder-drag-cursor, grab);
+        touch-action: none;
+      }
       wt-data-table::part(today) {
         display: flex;
         flex-direction: column;
@@ -63,6 +76,7 @@ export class StationHealthTable extends LitElement {
   ];
   @property({ attribute: false }) snapshot?: StationHealthSnapshot;
   @property({ attribute: false }) today: Readonly<Record<string, string | TemplateResult>> = {};
+  @property({ attribute: false }) actions: Readonly<Record<string, TemplateResult>> = {};
   @property({ attribute: false }) stations: readonly PrepStation[] = [];
   @state() private selection?: { stationId: string; population: Population };
 
@@ -102,7 +116,10 @@ export class StationHealthTable extends LitElement {
     const screens =
       this.snapshot?.outputsDown.screensDark.filter((problem) => problem.stationId === row.id) ??
       [];
-    return html`<span part=${station?.active === false ? "disabled" : "name"}>${row.name}</span>
+    return html`${this.actions[row.id] ?? nothing}<span
+        part=${station?.active === false ? "disabled" : "name"}
+        >${row.name}</span
+      >
       ${station?.isDefault ? html`<span part="badge">${t("prep.default")}</span>` : nothing}
       ${station?.active === false ? html`<span part="badge">${t("prep.health.disabled")}</span>` : nothing}
       ${printers.map((problem) => html`<p part="problem">${t("prep.printer_down").replace("{printer}", problem.printerName).replace("{time}", this.#time(problem.since))}</p>`)}

@@ -321,3 +321,32 @@ This adds context to the specified Open until / Opens at wording without a new s
 Task 4 remains partial: station row menus/reorder and routing-only card replacement are next.
 Tasks 5–7 still need Tickets/Watchers/Settings cell editors and venue-default UI; Task 8 whole-branch
 review, current-head CI and landing remain. The page is not authorised to ship at this checkpoint.
+
+
+## 2026-10-05 implementation checkpoint: station row actions and ordering
+
+Stations now adds Rename, Make default and confirmed Disable/Enable controls in each Name cell,
+retaining its seven data columns. The name-only form validates locally, distinguishes a duplicate
+name from a general request refusal, permits retry and closes after the write succeeds before
+refreshing. Existing Routing controls remain during the remaining tab handover.
+
+Pointer and Arrow-key moves update active station order; release persists one complete set through
+`PUT /management-api/stations/order`. Its transaction validates membership, completeness and
+uniqueness before updating display positions. Disabled station rows are outside the set. Keyboard
+moves restore the handle's focus and announce the position; disconnect releases drag listeners and
+the shared cursor. A refused request resets the optimistic order and displays its action message.
+
+The new order test seeds two extra active stations before reversing the list and compares a
+separately read disabled row before/after. The original new test used an active-only list to inspect
+disabled rows, so its empty comparison was replaced before this checkpoint. A new red/green HTTP
+case establishes `includeDisabled=true`; only the Prep page opts in, and existing active-only list
+assertions remain. The client's route expectation is intentionally changed under Task 4's retained
+row requirement. Its standalone browser fixture now registers the dashboard's grip and kebab SVG
+paths, which `apps/dashboard/src/main.ts` registers in the application.
+
+Focused verification: server management/kitchen 126 tests; browser Prep screen/client 197 tests,
+with the preceding five-file health/screen/client/axe run passing 284 tests before the retained-read
+and icon-fixture refinements. Eight EN/ES, light/dark, phone/desktop menu/rename checks pass and their
+sixteen captures were inspected. Unchanged root guards passed 75 tests. Disposable set-validation
+removal accepted an empty incomplete set with 204 instead of 400 while the positive reorder still
+passed. Task 4's routing-only replacement and Tasks 5–8 remain; the full branch is not ready to ship.

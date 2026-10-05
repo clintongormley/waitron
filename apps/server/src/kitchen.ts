@@ -111,8 +111,11 @@ export async function createStation(
   }
 }
 
-/** The venue's ACTIVE stations, by `display_order` then `name`. */
-export async function listStations(tx: Transaction, cfg: TillConfig): Promise<Station[]> {
+export async function listStations(
+  tx: Transaction,
+  cfg: TillConfig,
+  includeDisabled = false,
+): Promise<Station[]> {
   const defaults = await getKitchenTimingDefaults(tx, cfg);
   const stations = await tx
     .select({
@@ -128,7 +131,12 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
     })
     .from(kitchenStations)
     .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
-    .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
+    .where(
+      and(
+        eq(kitchenStations.locationId, cfg.locationId),
+        includeDisabled ? undefined : eq(kitchenStations.active, true),
+      ),
+    )
     .orderBy(kitchenStations.displayOrder, kitchenStations.name);
   return stations.map((station) => ({
     ...station,
@@ -136,6 +144,25 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
     overdueAfterMinutes: station.overdueAfterMinutes ?? defaults.overdueAfterMinutes,
     forgottenAfterMinutes: station.forgottenAfterMinutes ?? defaults.forgottenAfterMinutes,
   }));
+}
+
+export async function reorderStations(
+  tx: Transaction,
+  cfg: TillConfig,
+  ids: unknown,
+): Promise<void> {
+  const stations = (await listStations(tx, cfg)).filter((station) => station.active);
+  if (
+    !Array.isArray(ids) ||
+    ids.length !== stations.length ||
+    new Set(ids).size !== ids.length ||
+    ids.some((id) => typeof id !== "string" || !stations.some((station) => station.id === id))
+  ) {
+    throw new AppError("management.request_invalid", { field: "ids" });
+  }
+  for (const [displayOrder, id] of ids.entries()) {
+    await tx.update(kitchenStations).set({ displayOrder }).where(eq(kitchenStations.id, id));
+  }
 }
 
 export async function updateStation(

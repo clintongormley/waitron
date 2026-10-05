@@ -108,7 +108,7 @@ export class PrepStationsApi {
     const [routing, stations, categories, zones, products, printers, devices, watchers] =
       await Promise.all([
         this.#read<RoutingModel>("/management-api/venue-service/routing"),
-        this.#read<PrepStation[]>("/management-api/stations"),
+        this.#read<PrepStation[]>("/management-api/stations?includeDisabled=true"),
         this.#read<PrepStationsView["categories"]>("/management-api/categories"),
         this.#read<PrepStationsView["zones"]>("/management-api/zones"),
         this.#read<ListedProduct[]>("/management-api/products"),
@@ -185,6 +185,9 @@ export class PrepStationsApi {
     input: Partial<StationInput & Pick<PrepStation, "showsRestOfOrder">>,
   ): Promise<void> {
     return this.request(`/management-api/stations/${id}`, "PATCH", input);
+  }
+  reorderStations(ids: readonly string[]): Promise<void> {
+    return this.request("/management-api/stations/order", "PUT", { ids });
   }
   deactivateStation(id: string): Promise<void> {
     return this.request(`/management-api/stations/${id}`, "DELETE");

@@ -27,7 +27,7 @@ it("loads the routing and station context, including each station printer assign
       defaultStationId: null,
       stations: [],
     },
-    "/management-api/stations": [{ id: "bar", name: "Bar" }],
+    "/management-api/stations?includeDisabled=true": [{ id: "bar", name: "Bar" }],
     "/management-api/categories": [],
     "/management-api/zones": [],
     "/management-api/products": [],
@@ -433,5 +433,14 @@ it("reads station health passively and preserves summary and drilldown data", as
   expect(request.mock.calls).toEqual([
     ["/management-api/stations/health", "GET", undefined, { passive: true }],
     ["/management-api/stations/health", "GET", undefined, { passive: true }],
+  ]);
+});
+
+it("writes a complete station order as one active request even from a background client", async () => {
+  const request = vi.fn(async () => undefined);
+  const client = new PrepStationsApi(request as DashboardRequest).background;
+  await client.reorderStations(["bar", "kitchen"]);
+  expect(request.mock.calls).toEqual([
+    ["/management-api/stations/order", "PUT", { ids: ["bar", "kitchen"] }],
   ]);
 });
