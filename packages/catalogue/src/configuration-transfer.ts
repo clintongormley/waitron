@@ -5,16 +5,27 @@ import "./errors.js";
 
 type Rows = readonly Record<string, unknown>[];
 
-function isActive(value: unknown): boolean {
-  return value === true || value === 1;
+/** A row's `name`, refused unless it is text, so the comparison never guesses how the engine would
+ * store another value. */
+function nameOf(row: Record<string, unknown>, table: string): string {
+  if (typeof row.name !== "string")
+    throw new AppError("setup.request_invalid", { field: `${table}.name` });
+  return row.name;
+}
+
+/** Whether a product row will be stored Active. The export writes the flag as 0 or 1; a row without
+ * it takes the column's default, Active. Any other value is refused rather than guessed at. */
+function isActive(row: Record<string, unknown>): boolean {
+  if (row.active === undefined) return true;
+  if (row.active !== 0 && row.active !== 1)
+    throw new AppError("setup.request_invalid", { field: "products.active" });
+  return row.active === 1;
 }
 
 /** The first name two of `names` share, ignoring case and surrounding spaces. An import replaces
  * every stored category and product, so each imported row counts as changed. */
-function sharedName(names: readonly unknown[]): string | undefined {
-  return firstNewClash(
-    names.filter((name) => typeof name === "string").map((name) => ({ name, changed: true })),
-  )?.name.trim();
+function sharedName(names: readonly string[]): string | undefined {
+  return firstNewClash(names.map((name) => ({ name, changed: true })))?.name.trim();
 }
 
 /**
@@ -26,22 +37,30 @@ export function validateCatalogueConfiguration(tables: Readonly<Record<string, R
   const parentOf = new Map(
     (tables.category_details ?? []).map((row) => [row.category_id, row.parent_id ?? null]),
   );
-  const byParent = new Map<unknown, unknown[]>();
+  const byParent = new Map<unknown, string[]>();
   for (const category of tables.categories ?? []) {
     const parent = parentOf.get(category.id) ?? null;
-    byParent.set(parent, [...(byParent.get(parent) ?? []), category.name]);
+    const name = nameOf(category, "categories");
+    const names = byParent.get(parent);
+    if (names === undefined) byParent.set(parent, [name]);
+    else names.push(name);
   }
   for (const names of byParent.values()) {
     const name = sharedName(names);
     if (name !== undefined) throw new AppError("category.name_taken", { field: "name", name });
   }
 
-  const products = tables.products ?? [];
-  const activeIds = new Set(products.filter((row) => isActive(row.active)).map((row) => row.id));
+  const products = (tables.products ?? []).map((row) => ({
+    name: nameOf(row, "products"),
+    active: isActive(row),
+    id: row.id,
+    parentId: row.parent_id,
+  }));
+  const activeIds = new Set(products.filter((row) => row.active).map((row) => row.id));
   const counted = products.filter(
     (row) =>
-      isActive(row.active) &&
-      (row.parent_id === null || row.parent_id === undefined || activeIds.has(row.parent_id)),
+      row.active &&
+      (row.parentId === null || row.parentId === undefined || activeIds.has(row.parentId)),
   );
   const name = sharedName(counted.map((row) => row.name));
   if (name !== undefined) throw new AppError("product.name_taken", { field: "name", name });

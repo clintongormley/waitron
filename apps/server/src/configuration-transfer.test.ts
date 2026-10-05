@@ -1632,3 +1632,81 @@ it("refuses a bundle holding duplicate names whole, at staging and at import", a
   `);
   expect(persisted.rows[0]!.count).toBe(0);
 });
+
+it("counts an exported product with no Active flag as Active, as the column stores it", async () => {
+  const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Flagless" });
+    await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: null,
+      name: "Agua",
+      pricingUnit: "each",
+      unitPrice: "1.00",
+      vatClass: "general",
+    });
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const clean = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-05T12:00:00Z"),
+    versions,
+  );
+  const exported = clean.tables.products!.find((row) => row.name === "Agua")!;
+  expect(exported.active).toBe(1);
+  const flagless = { ...exported };
+  delete flagless.active;
+  const withProduct: ConfigurationBundle = {
+    ...clean,
+    tables: {
+      ...clean.tables,
+      products: [
+        ...clean.tables.products!.filter((row) => row !== exported),
+        flagless,
+        { ...flagless, id: "copy", name: "AGUA " },
+      ],
+    },
+  };
+  const withTextFlag: ConfigurationBundle = {
+    ...clean,
+    tables: {
+      ...clean.tables,
+      products: [
+        ...clean.tables.products!.filter((row) => row !== exported),
+        { ...exported, active: "1" },
+      ],
+    },
+  };
+
+  expect(() => validateConfigurationBundle(withProduct, ALL_MODULES, versions)).toThrowError(
+    expect.objectContaining({
+      code: "product.name_taken",
+      params: { field: "name", name: "AGUA" },
+    }),
+  );
+  expect(() => validateConfigurationBundle(withTextFlag, ALL_MODULES, versions)).toThrowError(
+    expect.objectContaining({
+      code: "setup.request_invalid",
+      params: { field: "products.active" },
+    }),
+  );
+
+  const target = venue("B75319864");
+  await expect(
+    applyVenue(planVenue(target, ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, withProduct, result, ALL_MODULES, versions),
+    }),
+  ).rejects.toMatchObject({ code: "product.name_taken" });
+  const persisted = await targetSuite.db.execute<{ count: number }>(sql`
+    select count(*) as count from tenants where tax_id = ${target.taxId}
+  `);
+  expect(persisted.rows[0]!.count).toBe(0);
+});

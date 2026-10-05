@@ -67,16 +67,41 @@ describe("validateCatalogueConfiguration: product names", () => {
     ).toThrowError(refusal("product.name_taken", "café solo"));
   });
 
-  it("reads an Active flag written as a boolean as well as 1", () => {
+  it("counts a product or variant with no Active flag as Active, as the column's default does", () => {
     expect(() =>
       validateCatalogueConfiguration({
         products: [
-          { id: "p1", name: "Agua", active: true, parent_id: null },
-          { id: "p2", name: "agua", active: 1, parent_id: null },
+          { id: "p1", name: "Agua", parent_id: null },
+          { id: "p2", name: "agua", parent_id: null },
         ],
       }),
     ).toThrowError(refusal("product.name_taken", "agua"));
+    expect(() =>
+      validateCatalogueConfiguration({
+        products: [
+          { id: "p1", name: "Café", parent_id: null },
+          { id: "v1", name: "Café Solo", parent_id: "p1" },
+          { id: "p2", name: "café solo", active: 1, parent_id: null },
+        ],
+      }),
+    ).toThrowError(refusal("product.name_taken", "café solo"));
   });
+
+  it.each([true, false, "1", "0", null, 2])(
+    "refuses a product whose Active flag is %j, which no export writes",
+    (active) => {
+      expect(() =>
+        validateCatalogueConfiguration({
+          products: [{ id: "p1", name: "Agua", active, parent_id: null }],
+        }),
+      ).toThrowError(
+        expect.objectContaining({
+          code: "setup.request_invalid",
+          params: { field: "products.active" },
+        }),
+      );
+    },
+  );
 
   it("does not count an Inactive product, nor a variant of one, nor an Inactive variant", () => {
     expect(() =>
@@ -84,7 +109,7 @@ describe("validateCatalogueConfiguration: product names", () => {
         products: [
           { id: "p1", name: "Agua", active: 1, parent_id: null },
           { id: "p2", name: "Agua", active: 0, parent_id: null },
-          { id: "p3", name: "Zumo", active: false, parent_id: null },
+          { id: "p3", name: "Zumo", active: 0, parent_id: null },
           { id: "v1", name: "Agua", active: 1, parent_id: "p3" },
           { id: "p4", name: "Vino", active: 1, parent_id: null },
           { id: "v2", name: "Agua", active: 0, parent_id: "p4" },
@@ -102,19 +127,41 @@ describe("validateCatalogueConfiguration: product names", () => {
     ).not.toThrow();
   });
 
-  it("leaves a name that is not text, and a bundle without the tables, to the other checks", () => {
+  it.each([7, null, undefined])("refuses a category or product whose name is %j", (name) => {
+    const row = name === undefined ? {} : { name };
+    expect(() =>
+      validateCatalogueConfiguration({ categories: [{ id: "c1", ...row }] }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "categories.name" },
+      }),
+    );
     expect(() =>
       validateCatalogueConfiguration({
-        categories: [
-          { id: "c1", name: 7 },
-          { id: "c2", name: 7 },
-        ],
-        products: [
-          { id: "p1", name: null, active: 1, parent_id: null },
-          { id: "p2", name: null, active: 1, parent_id: null },
-        ],
+        products: [{ id: "p1", ...row, active: 0, parent_id: null }],
       }),
-    ).not.toThrow();
+    ).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "products.name" },
+      }),
+    );
+  });
+
+  it("accepts a bundle without the tables", () => {
     expect(() => validateCatalogueConfiguration({})).not.toThrow();
+  });
+});
+
+describe("validateCatalogueConfiguration: many siblings", () => {
+  it("judges a hundred thousand categories under one parent", () => {
+    const categories = Array.from({ length: 100_000 }, (_, index) => ({
+      id: `c${index}`,
+      name: `Category ${index}`,
+    }));
+    const started = performance.now();
+    expect(() => validateCatalogueConfiguration({ categories })).not.toThrow();
+    expect(performance.now() - started).toBeLessThan(2_000);
   });
 });
