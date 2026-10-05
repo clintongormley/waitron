@@ -1,5 +1,10 @@
 # The dashboard's Orders screen — design
 
+> **Update, 2026-10-05 (A261 step 2):** The earlier description below of automatic receipt
+> printing records the location-wide setting at the time of this design. The
+> [Departments and zones plan](../plans/2026-10-04-departments-and-zones.md) moves that choice to a
+> department with an optional zone override. A sale without a zone defaults to automatic printing.
+
 > **Update, 2026-10-02 (B27c):** Find a bill on tills and handhelds replaces the counter's
 > read-only Left without paying list and its GET route. Earlier descriptions of the list record
 > the starting design.

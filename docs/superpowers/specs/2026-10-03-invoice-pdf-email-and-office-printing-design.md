@@ -1,5 +1,10 @@
 # Full invoices by email as a PDF, and on an office printer (A231d)
 
+> **Update, 2026-10-05 (A261 step 2):** The receipt-printing setting described under
+> **What is already there** records the location-wide setting at the time of this design. The
+> [Departments and zones plan](../plans/2026-10-04-departments-and-zones.md) moves that choice to a
+> department with an optional zone override; a sale without a zone defaults to automatic printing.
+
 **Status:** amended proposal for owner approval, 2026-10-03. The owner approved decisions 1–5 of the first version, changed decision 6, and answered the second version's decisions 7–9 (see [Owner decisions](#owner-decisions-2026-10-03)); this third version carries those answers and compares Debian's own printing system with drawing pages ourselves ([below](#debians-printing-system-cups-instead-of-drawing-pages-ourselves)). Nothing here is built. The build is queued only after the owner approves this version, and it follows the A231 build, which it depends on.
 
 ## What this adds, and what it builds on
