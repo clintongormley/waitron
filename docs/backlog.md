@@ -3398,7 +3398,7 @@ editor checks its whole save at once, so variants may swap names. The demo seed'
 reporting category is now "Lunch mains"; both menus still call their section "Mains", and a seed
 test checks both rules on a fresh demo. Stored data is not renamed: a venue that already holds
 duplicates keeps them until someone renames one.
-A configuration import now holds a bundle to the same two rules (W72a, 2026-10-05): a bundle with
+A configuration import now holds a bundle to the same two rules (W72a, #1230, 2026-10-05): a bundle with
 two categories in one place, or two Active products or variants, sharing a name is refused whole,
 nothing written, when setup opens the export and again when it is imported
 (`validateCatalogueConfiguration`, `packages/catalogue/src/configuration-transfer.ts`, run by
