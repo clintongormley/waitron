@@ -74,12 +74,8 @@ import type {
   TranslationGapReason,
 } from "@waitron/catalogue/src/content-translation-report-types.js";
 export type { LanguageTranslationGaps, TranslationGap, TranslationGapKind, TranslationGapReason };
-import type {
-  MenuPriceRow,
-  MenuPriceVariant,
-  MenuVariant,
-} from "@waitron/catalogue/src/menu-types.js";
-export type { MenuPriceRow, MenuPriceVariant, MenuVariant };
+import type { MenuPriceRow, MenuPriceVariant } from "@waitron/catalogue/src/menu-types.js";
+export type { MenuPriceRow, MenuPriceVariant };
 import type {
   DocumentMember,
   FrozenOffer,
@@ -1889,18 +1885,6 @@ export class DashboardApi {
       `/management-api/catalogues/${menuId}/items/${menuItemId}`,
       "PATCH",
       input,
-    );
-  }
-
-  setMenuVariants(
-    menuId: string,
-    menuItemId: string,
-    variants: MenuVariant[],
-  ): Promise<MenuVariant[]> {
-    return this.#request<MenuVariant[]>(
-      `/management-api/catalogues/${menuId}/items/${menuItemId}/variants`,
-      "PUT",
-      { variants },
     );
   }
 

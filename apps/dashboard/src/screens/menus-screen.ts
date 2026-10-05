@@ -26,7 +26,7 @@ import type { StructureAddAction } from "../widgets/menu-structure-table.js";
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import "../widgets/home-layout-editor.js";
-import type { OfferSave } from "../widgets/menu-prices-table.js";
+import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
 import "../widgets/section-details-form.js";
 import { textField } from "../widgets/form-fields.js";
@@ -111,6 +111,18 @@ function publishedStatus(number: number, hash: string, before: MenuStatus | null
 
 function refusal(error: unknown): Record<string, string> {
   return { [fieldOf(error)]: codeMessage(codeOf(error)) };
+}
+
+/** Whether a refusal is about the price typed, so it belongs under that field, as
+ * `namesTheName` in `course-list.ts` decides for a course's name. */
+function namesThePrice(error: unknown, save: PriceSave): boolean {
+  const code = codeOf(error);
+  const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
+  return (
+    (code === "product.variant_invalid" && field === "price") ||
+    (code === "management.request_invalid" && (field === "grossPrice" || field === "price")) ||
+    (code === "product.variant_not_found" && save.variantId !== null)
+  );
 }
 
 /** A form's one message at its bottom: every message not under a field `shown` names, then the
@@ -454,9 +466,10 @@ export class MenusScreen extends LitElement {
   /** Null until the open menu's prices are first read. */
   @state() private prices: MenuPriceRow[] | null = null;
   @state() private pricesError = false;
-  @state() private editingOffer: string | null = null;
-  @state() private savingOffer = false;
-  @state() private offerRefusal: { field: string; message: string } | null = null;
+  /** The prices table's row keys with a save queued or out. */
+  @state() private savingPrices: ReadonlySet<string> = new Set();
+  @state() private priceRefusals: Readonly<Record<string, string>> = {};
+  @state() private priceOutcome: PriceOutcome | null = null;
 
   /** Every menu's publication state, followed while the list is shown; null until read. */
   @state() private statuses: Record<string, MenuStatus> | null = null;
@@ -604,6 +617,9 @@ export class MenusScreen extends LitElement {
   #tileProducts: { id: string; name: string }[] = [];
   #tileSections: { id: string; internalName: string }[] = [];
   readonly #writes = new ListWriteQueue();
+  readonly #priceWrites = new ListWriteQueue();
+  /** Per row key, the price saves queued or out. */
+  readonly #pendingPrices = new Map<string, number>();
   /** Per list, the current batch of moves: those made since the list last had none unanswered,
    * until one is refused. `out` counts the unanswered; `answered` holds the orders answered by
    * moves that were not shown because another write to the list waited behind them. */
@@ -924,14 +940,12 @@ export class MenusScreen extends LitElement {
     if (view !== "preview") this.#releasePreview();
     else if (this.menuId !== null && this.#previewFor !== this.menuId)
       void this.#watchPreview(this.menuId);
-    // The window lives in the Prices panel, which the tabs hide; left open, its modal dialog would
-    // block the page. A save still out reports a refusal beside the list instead (`#saveOffer`).
     if (view !== "home") this.#releaseHome();
     else if (this.menuId !== null && this.#homeFor !== this.menuId)
       void this.#watchHome(this.menuId);
     if (view !== "prices") {
-      this.editingOffer = null;
-      this.offerRefusal = null;
+      this.priceRefusals = {};
+      this.priceOutcome = null;
       this.#releasePrices();
     } else if (this.menuId !== null && this.#pricesFor !== this.menuId)
       void this.#watchPrices(this.menuId);
@@ -963,8 +977,8 @@ export class MenusScreen extends LitElement {
     this.structure = null;
     this.structureError = false;
     this.memberError = null;
-    this.editingOffer = null;
-    this.offerRefusal = null;
+    this.priceRefusals = {};
+    this.priceOutcome = null;
     this.publishResult = null;
     this.#releasePrices();
     this.#releasePreview();
@@ -1508,63 +1522,48 @@ export class MenusScreen extends LitElement {
 
   // ── Prices ───────────────────────────────────────────────────────────────────────────────────
 
-  /** A PATCH for the menu item when its price changed, then a PUT of its variants when
-   * one of them did. A refusal keeps the window open, unless it has been closed meanwhile (by
-   * another menu or tab), when it is named beside the list instead. */
-  async #saveOffer(save: OfferSave): Promise<void> {
+  #countPending(key: string, by: 1 | -1): void {
+    const left = (this.#pendingPrices.get(key) ?? 0) + by;
+    if (left === 0) this.#pendingPrices.delete(key);
+    else this.#pendingPrices.set(key, left);
+    this.savingPrices = new Set(this.#pendingPrices.keys());
+  }
+
+  /** One field per request, in the order made; each field stays editable meanwhile. A refusal is
+   * said in the tab's status line, and under the field when it names the price; once the menu,
+   * the tab or the row has gone, it is named beside the list instead. */
+  #savePrice(save: PriceSave): void {
     const menuId = this.menuId;
-    if (menuId === null || this.savingOffer) return;
-    this.offerRefusal = null;
-    if (save.item === null && save.variants === null) {
-      this.editingOffer = null;
-      return;
-    }
-    this.savingOffer = true;
-    const refused = (field: string, inWindow: string, elsewhere: string): void => {
-      this.savingOffer = false;
-      if (this.menuId === menuId && this.editingOffer === save.menuItemId)
-        this.offerRefusal = { field, message: inWindow };
-      else this.memberError = elsewhere;
-    };
-    /** Nothing of this save was written. */
-    const notSaved = (error: unknown, field: string): void => {
-      const reason = codeMessage(codeOf(error));
-      refused(
-        field,
-        reason,
-        t("menus.change_not_saved").replace("{name}", save.name).replace("{reason}", reason),
-      );
-    };
-    const reread = async (): Promise<void> => {
+    if (menuId === null) return;
+    this.priceRefusals = without(this.priceRefusals, [save.key]);
+    this.priceOutcome = null;
+    this.#countPending(save.key, 1);
+    this.#priceWrites.run(save.key, async () => {
+      try {
+        if (save.variantId === null)
+          await this.api.updateMenuItem(menuId, save.menuItemId, { grossPrice: save.price });
+        else
+          await this.api.setMenuVariantPrice(menuId, save.menuItemId, save.variantId, save.price);
+      } catch (error) {
+        const reason = codeMessage(codeOf(error));
+        const shown =
+          this.menuId === menuId &&
+          this.view === "prices" &&
+          (this.prices ?? []).some(({ menuItemId }) => menuItemId === save.menuItemId);
+        if (shown) {
+          if (namesThePrice(error, save))
+            this.priceRefusals = { ...this.priceRefusals, [save.key]: reason };
+          this.priceOutcome = { kind: "refused", save, reason };
+        } else
+          this.memberError = t("menus.change_not_saved")
+            .replace("{name}", save.name)
+            .replace("{reason}", reason);
+        this.#countPending(save.key, -1);
+        return;
+      }
       if (this.menuId === menuId && this.view === "prices") await this.#watchPrices(menuId);
-    };
-    if (save.item !== null)
-      try {
-        await this.api.updateMenuItem(menuId, save.menuItemId, save.item);
-      } catch (error) {
-        notSaved(error, fieldOf(error));
-        return;
-      }
-    if (save.variants !== null)
-      try {
-        await this.api.setMenuVariants(menuId, save.menuItemId, save.variants);
-      } catch (error) {
-        if (save.item === null) {
-          notSaved(error, "_form");
-          return;
-        }
-        const partly = t("menu_prices.variants_not_saved")
-          .replace("{name}", save.name)
-          .replace("{reason}", codeMessage(codeOf(error)));
-        refused("_form", partly, partly);
-        // The menu price was saved, so the list behind the window is read again.
-        await reread();
-        return;
-      }
-    this.savingOffer = false;
-    if (this.menuId !== menuId) return;
-    this.editingOffer = null;
-    await reread();
+      this.#countPending(save.key, -1);
+    });
   }
 
   // ── Rendering ────────────────────────────────────────────────────────────────────────────────
@@ -1992,24 +1991,12 @@ export class MenusScreen extends LitElement {
         .categories=${this.categories}
         .products=${this.products}
         menuName=${this.#menuName()}
-        .editing=${this.editingOffer}
-        .busy=${this.savingOffer}
-        .refusal=${this.offerRefusal}
-        @wt-offer-edit=${(event: CustomEvent<{ menuItemId: string }>) => {
+        .saving=${this.savingPrices}
+        .refusals=${this.priceRefusals}
+        .outcome=${this.priceOutcome}
+        @wt-price-save=${(event: CustomEvent<PriceSave>) => {
           event.stopPropagation();
-          // One window at a time while a save is out, so its outcome lands in the window it came
-          // from, or beside the list once that window has closed.
-          if (this.savingOffer) return;
-          this.offerRefusal = null;
-          this.editingOffer = event.detail.menuItemId;
-        }}
-        @wt-offer-save=${(event: CustomEvent<OfferSave>) => {
-          event.stopPropagation();
-          void this.#saveOffer(event.detail);
-        }}
-        @wt-offer-cancel=${(event: Event) => {
-          event.stopPropagation();
-          this.editingOffer = null;
+          this.#savePrice(event.detail);
         }}
       ></dashboard-menu-prices-table>
       ${

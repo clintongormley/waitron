@@ -126,25 +126,43 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it.each(["mi-burger", "mi-lemonade"])("accessible settings window for %s", async (editing) => {
-    const { host } = await mount(theme, { editing });
+  it("accessible fields, one refused and one saving", async () => {
+    const { el, host } = await mount(theme, {
+      refusals: { "mi-lemonade": "Refused" },
+      saving: new Set(["mi-burger"]),
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = table.shadowRoot!;
+    root
+      .querySelector<HTMLButtonElement>('tr[data-row-key="mi-lemonade"] button.tree-toggle')!
+      .click();
+    await table.updateComplete;
+    const field = (key: string) =>
+      root.querySelector<HTMLElementTagNameMap["wt-price-input"]>(
+        `wt-price-input[data-row="${key}"]`,
+      )!;
+    expect(field("mi-lemonade").error).toBe("Refused");
+    expect(root.querySelector('tr[data-row-key="mi-burger"] [part~="saving"]')).not.toBeNull();
+    expect(field("mi-lemonade:v-small")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
-  it("accessible settings window refusing a malformed price", async () => {
-    const { el, host } = await mount(theme, { editing: "mi-lemonade" });
-    const modal = el.shadowRoot!.querySelector("wt-modal")!;
-    modal
-      .querySelector('[name="grossPrice"]')!
-      .dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value: "-1" }, bubbles: true, composed: true }),
-      );
+  it("accessible field refusing a malformed price", async () => {
+    const { el, host } = await mount(theme, {});
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const field = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-price-input"]>(
+      'wt-price-input[data-row="mi-lemonade"]',
+    )!;
+    field.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "-1" }, bubbles: true, composed: true }),
+    );
     await el.updateComplete;
-    modal.querySelector<HTMLElement>('[data-test="offer-save"]')!.click();
+    field
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
     await el.updateComplete;
-    expect(
-      modal.querySelector<HTMLElementTagNameMap["wt-price-input"]>('[name="grossPrice"]')!.error,
-    ).toBe(t("editor.price_invalid"));
+    await table.updateComplete;
+    expect(field.error).toBe(t("editor.price_invalid"));
     await expectNoA11yViolations(host);
   });
 });

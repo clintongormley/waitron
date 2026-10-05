@@ -1,19 +1,13 @@
 import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import type {
-  CategorySummary,
-  SectionDetails,
-  MenuPriceRow,
-  MenuVariant,
-  Product,
-} from "../api/client.js";
+import type { CategorySummary, SectionDetails, MenuPriceRow, Product } from "../api/client.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { MenuPricesTable, type OfferSave } from "./menu-prices-table.js";
+import { MenuPricesTable, type PriceSave } from "./menu-prices-table.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => {
@@ -210,17 +204,6 @@ function options(el: MenuPricesTable, filter: string): string[] {
   return select.options.map((option) => option.label);
 }
 
-function modal(el: MenuPricesTable) {
-  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>("wt-modal")!;
-}
-
-function field<T extends HTMLElement = HTMLElementTagNameMap["wt-input"]>(
-  el: MenuPricesTable,
-  name: string,
-): T {
-  return modal(el).querySelector<T>(`[name="${name}"]`)!;
-}
-
 function override(el: MenuPricesTable, rowKey: string) {
   return table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-price-input"]>(
     `wt-price-input[data-row="${rowKey}"]`,
@@ -239,29 +222,30 @@ async function sortBy(el: MenuPricesTable, key: string): Promise<void> {
   await table(el).updateComplete;
 }
 
-async function type(el: MenuPricesTable, name: string, value: string): Promise<void> {
-  field(el, name).dispatchEvent(
+async function typeIn(el: MenuPricesTable, key: string, value: string) {
+  override(el, key).dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
 }
 
-async function click(el: MenuPricesTable, testId: string): Promise<void> {
-  modal(el).querySelector<HTMLElement>(`[data-test="${testId}"]`)!.click();
+async function press(el: MenuPricesTable, key: string, name: "Enter" | "Escape") {
+  override(el, key)
+    .shadowRoot!.querySelector("input")!
+    .dispatchEvent(
+      new KeyboardEvent("keydown", { key: name, bubbles: true, composed: true, cancelable: true }),
+    );
   await el.updateComplete;
 }
 
-async function bottomOf(el: MenuPricesTable): Promise<string> {
-  const actions = modal(el).querySelector("wt-form-actions")!;
-  return text(await formMessageOf(actions));
+async function leave(el: MenuPricesTable, key: string) {
+  override(el, key).dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true }));
+  await el.updateComplete;
 }
 
-const saveOf = (el: MenuPricesTable): HTMLElement =>
-  modal(el).querySelector<HTMLElement>('[data-test="offer-save"]')!;
-
-function saves(el: MenuPricesTable) {
-  const heard = vi.fn<(detail: OfferSave) => void>();
-  el.addEventListener("wt-offer-save", (event) => heard((event as CustomEvent<OfferSave>).detail));
+function priceSaves(el: MenuPricesTable) {
+  const heard = vi.fn<(detail: PriceSave) => void>();
+  el.addEventListener("wt-price-save", (event) => heard((event as CustomEvent<PriceSave>).detail));
   return heard;
 }
 
@@ -293,21 +277,29 @@ it.each([
 );
 
 it.each([
-  { locale: "en-GB", price: "€3.00" },
-  { locale: "es-ES", price: "3,00\u00a0€" },
+  { locale: "en-GB", sign: "€", range: "€3.00 – €3.75" },
+  { locale: "es-ES", sign: "€", range: "3,00\u00a0€ – 3,75\u00a0€" },
 ])(
-  "edits the menu price and each variant's in price fields showing the euro sign where $locale writes it, and names the product price in the hint the same way",
-  async ({ locale, price }) => {
+  "gives every row's field, a size's too, the locale $locale, drawing the euro sign in it, and names the range in the hint the way $locale writes it",
+  async ({ locale, sign, range }) => {
     setLocale(locale);
     try {
-      const el = await mount({ editing: "mi-lemonade" });
-      for (const name of ["grossPrice", "variants.0.price", "variants.1.price"]) {
-        const input = field<HTMLElement & { locale: string }>(el, name);
-        expect(input.tagName, name).toBe("WT-PRICE-INPUT");
-        expect(input.locale, name).toBe(locale);
+      const el = await mount();
+      toggleOf(el, "mi-lemonade")!.click();
+      await table(el).updateComplete;
+      for (const key of [
+        "mi-burger",
+        "mi-lemonade",
+        "mi-lemonade:v-small",
+        "mi-lemonade:v-large",
+        "mi-lager",
+      ]) {
+        const input = override(el, key);
+        expect(input.locale, key).toBe(locale);
+        expect(input.shadowRoot!.querySelector('[part~="currency"]')!.textContent, key).toBe(sign);
       }
-      const hint = field(el, "grossPrice").shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
-      expect(hint.textContent).toBe(t("menu_prices.override_help").replace("{price}", price));
+      const hint = override(el, "mi-lemonade").shadowRoot!.querySelector("[data-hint]")!;
+      expect(hint.textContent).toBe(t("menu_prices.override_help_range").replace("{range}", range));
     } finally {
       setLocale("es-ES");
     }
@@ -544,32 +536,6 @@ it("sorts by name and by where a product first appears", async () => {
   expect(shown(el)).toEqual(["mi-lager", "mi-lemonade", "mi-burger"]);
 });
 
-it("asks to open a product's settings when its name is pressed", async () => {
-  const el = await mount();
-  const heard = vi.fn();
-  el.addEventListener("wt-offer-edit", (event) => heard((event as CustomEvent).detail));
-  table(el).shadowRoot.querySelector<HTMLElement>('[data-test="edit-mi-lemonade"]')!.click();
-  expect(heard).toHaveBeenCalledWith({ menuItemId: "mi-lemonade" });
-});
-
-it("offers no product's settings while a save is out", async () => {
-  const el = await mount({ busy: true });
-  const heard = vi.fn();
-  el.addEventListener("wt-offer-edit", heard);
-  const name = table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(
-    '[data-test="edit-mi-lemonade"]',
-  )!;
-  expect(name.disabled).toBe(true);
-  name.click();
-  expect(heard).not.toHaveBeenCalled();
-  el.busy = false;
-  await el.updateComplete;
-  await table(el).updateComplete;
-  expect(name.disabled).toBe(false);
-  name.click();
-  expect(heard).toHaveBeenCalledOnce();
-});
-
 it("passes the loading, failed and empty states to the table", async () => {
   const el = await mount({ loading: true });
   expect(text(table(el).shadowRoot.querySelector("[role=status]"))).toBe(t("menu_prices.loading"));
@@ -605,100 +571,118 @@ it.each(["es-ES", "en"])(
   },
 );
 
-it("edits the menu price, with the product price as the empty field's placeholder, and each variant's", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  expect(modal(el).open).toBe(true);
-  expect(modal(el).heading).toBe(
-    t("menu_prices.edit_heading").replace("{name}", "Lemonade").replace("{menu}", "Lunch Menu"),
-  );
-  expect(field(el, "grossPrice").value).toBe("2.50");
-  expect(field(el, "grossPrice").placeholder).toBe("3.00");
+it("edits each row's price in its own field, a size following the price typed for its product, and each Enter sends that field alone", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  const keys = ["mi-lemonade", "mi-lemonade:v-small", "mi-lemonade:v-large"];
+  expect(keys.map((key) => override(el, key).value)).toEqual(["2.50", "", "3.75"]);
+  expect(keys.map((key) => override(el, key).placeholder)).toEqual(["3.00 – 3.75", "2.50", "3.40"]);
   // Each price falls back to another when left empty, so none is required or marked as required.
-  for (const name of ["grossPrice", "variants.0.price", "variants.1.price"]) {
-    expect(field(el, name).required, name).toBe(false);
-    expect(field(el, name).shadowRoot!.querySelector("[data-required]"), name).toBeNull();
+  for (const key of keys) {
+    expect(override(el, key).required, key).toBe(false);
+    expect(override(el, key).shadowRoot!.querySelector("[data-required]"), key).toBeNull();
   }
-  const legends = [...modal(el).querySelectorAll("fieldset legend")].map(text);
-  expect(legends).toEqual(["Small", "Large"]);
-  expect(field(el, "variants.0.price").value).toBe("");
-  // A variant with no price of its own sells at this menu's price for the product.
-  expect(field(el, "variants.0.price").placeholder).toBe("2.50");
-  expect(field(el, "variants.1.price").value).toBe("3.75");
-  expect(field(el, "variants.1.price").placeholder).toBe("3.40");
-
-  await type(el, "grossPrice", "2.80");
-  expect(field(el, "variants.0.price").placeholder).toBe("2.80");
-  await type(el, "variants.0.price", " 1.90 ");
-  await type(el, "variants.1.price", "");
-  const heard = saves(el);
-  await click(el, "offer-save");
-  expect(heard).toHaveBeenCalledExactlyOnceWith({
-    menuItemId: "mi-lemonade",
-    name: "Lemonade",
-    item: { grossPrice: "2.80" },
-    variants: [
-      { variantId: "v-small", price: "1.90" },
-      { variantId: "v-large", price: null },
-    ] satisfies MenuVariant[],
-  });
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-lemonade", "2.80");
+  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("2.80");
+  await press(el, "mi-lemonade", "Enter");
+  await typeIn(el, "mi-lemonade:v-small", " 1.90 ");
+  await press(el, "mi-lemonade:v-small", "Enter");
+  await typeIn(el, "mi-lemonade:v-large", "");
+  await press(el, "mi-lemonade:v-large", "Enter");
+  expect(heard.mock.calls).toEqual([
+    [
+      {
+        key: "mi-lemonade",
+        menuItemId: "mi-lemonade",
+        variantId: null,
+        name: "Lemonade",
+        price: "2.80",
+        previous: "2.50",
+      },
+    ],
+    [
+      {
+        key: "mi-lemonade:v-small",
+        menuItemId: "mi-lemonade",
+        variantId: "v-small",
+        name: "Lemonade — Small",
+        price: "1.90",
+        previous: null,
+      },
+    ],
+    [
+      {
+        key: "mi-lemonade:v-large",
+        menuItemId: "mi-lemonade",
+        variantId: "v-large",
+        name: "Lemonade — Large",
+        price: null,
+        previous: "3.75",
+      },
+    ],
+  ] satisfies [PriceSave][]);
 });
 
-it("shows the product price as an empty menu price's placeholder and in its hint, and sends no variants for a product without them", async () => {
-  const el = await mount({ editing: "mi-burger" });
-  expect(field(el, "grossPrice").value).toBe("");
-  expect(field(el, "grossPrice").placeholder).toBe("12.00");
-  const help = field(el, "grossPrice").shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
+it("shows the inherited price as a blank field's placeholder and in its hint, read before the euro sign, and Enter sends that field", async () => {
+  const el = await mount();
+  const input = override(el, "mi-burger");
+  expect(input.value).toBe("");
+  expect(input.placeholder).toBe("12.00");
+  const help = input.shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
   expect(text(help)).toBe(t("menu_prices.override_help").replace("{price}", eur("12.00")));
   // Read first, then the euro sign the field draws.
-  const sign = field(el, "grossPrice").shadowRoot!.querySelector<HTMLElement>(
-    '[part~="currency"]',
-  )!;
-  expect(
-    field(el, "grossPrice").shadowRoot!.querySelector("input")!.getAttribute("aria-describedby"),
-  ).toBe(`${help.id} ${sign.id}`);
-  expect(modal(el).querySelector("fieldset")).toBeNull();
-  expect(modal(el).querySelector('[data-test="use-product-price"]')).toBeNull();
-  await type(el, "grossPrice", "11.00");
-  const heard = saves(el);
-  await click(el, "offer-save");
+  const sign = input.shadowRoot!.querySelector<HTMLElement>('[part~="currency"]')!;
+  expect(input.shadowRoot!.querySelector("input")!.getAttribute("aria-describedby")).toBe(
+    `${help.id} ${sign.id}`,
+  );
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-burger", "11.00");
+  await press(el, "mi-burger", "Enter");
   expect(heard).toHaveBeenCalledExactlyOnceWith({
+    key: "mi-burger",
     menuItemId: "mi-burger",
+    variantId: null,
     name: "Burger",
-    item: { grossPrice: "11.00" },
-    variants: null,
+    price: "11.00",
+    previous: null,
   });
 });
 
-it("asks for nothing to be written when nothing was changed, reading an empty price as no price of the menu's own", async () => {
-  const el = await mount({ editing: "mi-burger" });
-  const heard = saves(el);
-  await click(el, "offer-save");
-  expect(heard).toHaveBeenCalledExactlyOnceWith({
-    menuItemId: "mi-burger",
-    name: "Burger",
-    item: null,
-    variants: null,
-  });
+it("sends nothing for Enter on a field nobody changed, reading an emptied field as no price of the menu's own", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  await press(el, "mi-burger", "Enter");
+  await leave(el, "mi-burger");
+  await typeIn(el, "mi-burger", "  ");
+  await press(el, "mi-burger", "Enter");
+  await leave(el, "mi-burger");
+  expect(heard).not.toHaveBeenCalled();
 });
 
-it("compares the settings by value: the same amount written differently, and variants read back in another order, are no change", async () => {
+it("compares by amount, so 2.5 typed over 2.50 sends nothing, and keeps each size's typed text on that size when the sizes are read back in another order", async () => {
   const reversed = { ...lemonade, variants: [...lemonade.variants].reverse() };
-  const el = await mount({ editing: "mi-lemonade", rows: [burger, reversed, lager] });
-  await type(el, "grossPrice", "2.5");
+  const el = await mount({ rows: [burger, reversed, lager] });
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-lemonade", "2.5");
+  await press(el, "mi-lemonade", "Enter");
+  expect(heard).not.toHaveBeenCalled();
+  await typeIn(el, "mi-lemonade:v-large", "4.00");
   el.rows = [burger, lemonade, lager];
   await el.updateComplete;
-  const heard = saves(el);
-  await click(el, "offer-save");
-  expect(heard).toHaveBeenCalledExactlyOnceWith({
-    menuItemId: "mi-lemonade",
-    name: "Lemonade",
-    item: null,
-    variants: null,
-  });
+  await table(el).updateComplete;
+  expect(override(el, "mi-lemonade:v-small").value).toBe("");
+  expect(override(el, "mi-lemonade:v-large").value).toBe("4.00");
 });
 
-it("compares with the settings the window opened with, so a change read in meanwhile is not written back", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
+it("sends only the field committed, with the price stored when it was sent, whatever else was read in meanwhile", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  await typeIn(el, "mi-lemonade", "2.70");
   el.rows = [
     burger,
     {
@@ -712,318 +696,556 @@ it("compares with the settings the window opened with, so a change read in meanw
     lager,
   ];
   await el.updateComplete;
-  const heard = saves(el);
-  await click(el, "offer-save");
+  await table(el).updateComplete;
+  const heard = priceSaves(el);
+  await press(el, "mi-lemonade", "Enter");
   expect(heard).toHaveBeenCalledExactlyOnceWith({
+    key: "mi-lemonade",
     menuItemId: "mi-lemonade",
+    variantId: null,
     name: "Lemonade",
-    item: null,
-    variants: null,
+    price: "2.70",
+    previous: "2.60",
   });
+  expect(override(el, "mi-lemonade:v-small").value).toBe("1.00");
 });
 
-it("asks for the menu item alone when only the price changed on a product with variants", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  await type(el, "grossPrice", "2.60");
-  const heard = saves(el);
-  await click(el, "offer-save");
+it("sends the product's field alone when only its price changed on a product with sizes", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-lemonade", "2.60");
+  await press(el, "mi-lemonade", "Enter");
   expect(heard).toHaveBeenCalledExactlyOnceWith({
+    key: "mi-lemonade",
     menuItemId: "mi-lemonade",
+    variantId: null,
     name: "Lemonade",
-    item: { grossPrice: "2.60" },
-    variants: null,
+    price: "2.60",
+    previous: "2.50",
   });
 });
 
-it("asks for the variants alone when only a variant's price changed", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  await type(el, "variants.0.price", "1.20");
-  const heard = saves(el);
-  await click(el, "offer-save");
-  const save = heard.mock.calls[0]![0];
-  expect(save.item).toBeNull();
-  expect(save.variants).toEqual([
-    { variantId: "v-small", price: "1.20" },
-    { variantId: "v-large", price: "3.75" },
-  ]);
-});
-
-it("neither shows nor sends an Inactive size in the window", async () => {
-  const el = await mount({
-    editing: "mi-lemonade",
-    rows: [
-      burger,
-      {
-        ...lemonade,
-        variants: [
-          { variantId: "v-small", price: null, active: true },
-          { variantId: "v-large", price: "3.75", active: false },
-        ],
-      },
-      lager,
-    ],
-  });
-  expect([...modal(el).querySelectorAll("fieldset legend")].map(text)).toEqual(["Small"]);
-  expect(field(el, "variants.1.price")).toBeNull();
-  await type(el, "variants.0.price", "1.20");
-  const heard = saves(el);
-  await click(el, "offer-save");
+it("sends a size's field alone when only that size's price changed", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-lemonade:v-small", "1.20");
+  await press(el, "mi-lemonade:v-small", "Enter");
   expect(heard).toHaveBeenCalledExactlyOnceWith({
+    key: "mi-lemonade:v-small",
     menuItemId: "mi-lemonade",
-    name: "Lemonade",
-    item: null,
-    variants: [{ variantId: "v-small", price: "1.20" }],
+    variantId: "v-small",
+    name: "Lemonade — Small",
+    price: "1.20",
+    previous: null,
   });
 });
 
-it("'Use product price' empties the menu price, so saving clears it", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  await click(el, "use-product-price");
-  expect(field(el, "grossPrice").value).toBe("");
-  expect(field(el, "variants.0.price").placeholder).toBe("3.00");
-  expect(modal(el).querySelector('[data-test="use-product-price"]')).toBeNull();
-  const heard = saves(el);
-  await click(el, "offer-save");
-  expect(heard.mock.calls[0]![0].item).toEqual({ grossPrice: null });
+it("emptying a field and pressing Enter clears the menu's price, with no button for it", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  await typeIn(el, "mi-lemonade", "");
+  expect(override(el, "mi-lemonade").value).toBe("");
+  // Emptied, the product's field inherits again, and the small follows that.
+  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("3.00");
+  expect(table(el).shadowRoot.querySelector('[data-test="use-product-price"]')).toBeNull();
+  const heard = priceSaves(el);
+  await press(el, "mi-lemonade", "Enter");
+  expect(heard).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ key: "mi-lemonade", price: null, previous: "2.50" }),
+  );
 });
 
 it.each(["-1", "2.555", "abc", "007"])(
-  "refuses the menu price %s beside the field and in the bottom message, sending nothing",
+  "refuses the price %s beside the field, sending nothing and keeping the text, until it is fixed",
   async (price) => {
-    const el = await mount({ editing: "mi-lemonade" });
-    await type(el, "grossPrice", price);
-    // An unreadable menu price is no placeholder for a variant.
-    expect(field(el, "variants.0.price").placeholder).toBe("3.00");
-    const heard = saves(el);
-    await click(el, "offer-save");
+    const el = await mount();
+    toggleOf(el, "mi-lemonade")!.click();
+    await table(el).updateComplete;
+    await typeIn(el, "mi-lemonade", price);
+    // An unreadable product price is no draft, so the small keeps the saved price as its hint.
+    expect(override(el, "mi-lemonade:v-small").placeholder).toBe("2.50");
+    const heard = priceSaves(el);
+    await press(el, "mi-lemonade", "Enter");
+    await leave(el, "mi-lemonade");
     expect(heard).not.toHaveBeenCalled();
-    expect(field(el, "grossPrice").error).toBe(t("editor.price_invalid"));
-    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-    expect(field(el, "grossPrice").value).toBe(price);
-    await type(el, "grossPrice", "2.00");
-    expect(field(el, "grossPrice").error).toBe("");
+    expect(override(el, "mi-lemonade").error).toBe(t("editor.price_invalid"));
+    expect(override(el, "mi-lemonade").value).toBe(price);
+    // A field of its own, so there is no form with a message at its bottom.
+    expect(el.shadowRoot!.querySelector("wt-form-actions")).toBeNull();
+    await typeIn(el, "mi-lemonade", "2.00");
+    expect(override(el, "mi-lemonade").error).toBe("");
   },
 );
 
-it("refuses a variant's malformed price beside that variant's field", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  await type(el, "variants.1.price", "-3");
-  const heard = saves(el);
-  await click(el, "offer-save");
+it("refuses a size's malformed price beside that size's field alone", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  await typeIn(el, "mi-lemonade:v-large", "-3");
+  const heard = priceSaves(el);
+  await press(el, "mi-lemonade:v-large", "Enter");
   expect(heard).not.toHaveBeenCalled();
-  expect(field(el, "variants.1.price").error).toBe(t("editor.price_invalid"));
-  expect(field(el, "variants.0.price").error).toBe("");
-  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(override(el, "mi-lemonade:v-large").error).toBe(t("editor.price_invalid"));
+  expect(override(el, "mi-lemonade:v-small").error).toBe("");
+  expect(override(el, "mi-lemonade").error).toBe("");
 });
 
-it("shows a refusal naming the menu price beside it, with the generic sentence in the bottom message and Save working", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  el.refusal = { field: "grossPrice", message: "Refused here" };
+it("shows a refusal the host passes for a field under that field, which stays editable", async () => {
+  const el = await mount();
+  el.refusals = { "mi-lemonade": "Refused here" };
   await el.updateComplete;
-  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
-  expect(field(el, "grossPrice").error).toBe("Refused here");
+  await table(el).updateComplete;
+  expect(override(el, "mi-lemonade").error).toBe("Refused here");
+  expect(override(el, "mi-lemonade").disabled).toBe(false);
+  expect(override(el, "mi-lemonade").value).toBe("2.50");
 });
 
-it.each(["_form", "variants", "variants.1", "price", "variantId"])(
-  "shows a refusal naming %s in the bottom message alone, leaving Save working",
+it.each(["mi-burger", "mi-lemonade", "mi-lemonade:v-small", "mi-lemonade:v-large", "mi-lager"])(
+  "shows a refusal passed for %s under that field and no other",
   async (refused) => {
-    const el = await mount({ editing: "mi-lemonade" });
-    el.refusal = { field: refused, message: "Refused" };
+    const el = await mount();
+    toggleOf(el, "mi-lemonade")!.click();
+    await table(el).updateComplete;
+    el.refusals = { [refused]: "Refused" };
     await el.updateComplete;
-    expect(await bottomOf(el)).toBe("Refused");
-    expect(saveOf(el).hasAttribute("disabled")).toBe(false);
-    const errors = [
-      ...modal(el).querySelectorAll<HTMLElementTagNameMap["wt-price-input"]>("wt-price-input"),
-    ]
-      .map((input) => input.error)
-      .filter(Boolean);
-    expect(errors).toEqual([]);
+    await table(el).updateComplete;
+    const keys = [
+      "mi-burger",
+      "mi-lemonade",
+      "mi-lemonade:v-small",
+      "mi-lemonade:v-large",
+      "mi-lager",
+    ];
+    expect(keys.map((key) => override(el, key).error)).toEqual(
+      keys.map((key) => (key === refused ? "Refused" : "")),
+    );
   },
 );
 
-it("says nothing about errors before the first submission, and Save works", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  await type(el, "grossPrice", "abc");
-  expect(field(el, "grossPrice").error).toBe("");
-  expect(await bottomOf(el)).toBe("");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+it("says nothing about errors while a price is typed, before Enter or leaving the field", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-lemonade", "abc");
+  expect(override(el, "mi-lemonade").error).toBe("");
+  expect(heard).not.toHaveBeenCalled();
 });
 
-it("on an invalid submission focuses the first invalid field and disables Save", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  await type(el, "variants.1.price", "-3");
-  await click(el, "offer-save");
+it("keeps focus in a field whose Enter fails its check, with no Save button to disable", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  const input = override(el, "mi-lemonade:v-large");
+  input.focus();
+  await typeIn(el, "mi-lemonade:v-large", "-3");
+  await press(el, "mi-lemonade:v-large", "Enter");
   await new Promise((resolve) => setTimeout(resolve));
-  const price = field(el, "variants.1.price");
-  expect(price.shadowRoot!.activeElement).toBe(price.shadowRoot!.querySelector("input"));
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(input.error).toBe(t("editor.price_invalid"));
+  expect(input.shadowRoot!.activeElement).toBe(input.shadowRoot!.querySelector("input"));
+  expect(el.shadowRoot!.querySelector('[data-test="offer-save"]')).toBeNull();
+  expect(table(el).shadowRoot.querySelector('[data-test="offer-save"]')).toBeNull();
 });
 
-it("re-checks every change after a failed submission, and Save works again once all are fixed", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  await type(el, "grossPrice", "-1");
-  await click(el, "offer-save");
-
-  await type(el, "grossPrice", "2.00");
-  expect(field(el, "grossPrice").error).toBe("");
-  expect(await bottomOf(el)).toBe("");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
-
-  await type(el, "variants.0.price", "x");
-  expect(field(el, "variants.0.price").error).toBe(t("editor.price_invalid"));
-  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
-
-  await type(el, "variants.0.price", "");
-  expect(field(el, "variants.0.price").error).toBe("");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+it("re-checks every change after a failed Enter: the error goes when the price is fixed and comes back when it is broken again", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  await typeIn(el, "mi-lemonade", "-1");
+  await press(el, "mi-lemonade", "Enter");
+  expect(override(el, "mi-lemonade").error).toBe(t("editor.price_invalid"));
+  await typeIn(el, "mi-lemonade", "2.00");
+  expect(override(el, "mi-lemonade").error).toBe("");
+  await typeIn(el, "mi-lemonade", "x");
+  expect(override(el, "mi-lemonade").error).toBe(t("editor.price_invalid"));
+  await typeIn(el, "mi-lemonade", "");
+  expect(override(el, "mi-lemonade").error).toBe("");
+  // Another field is not checked before its own Enter.
+  await typeIn(el, "mi-lemonade:v-small", "x");
+  expect(override(el, "mi-lemonade:v-small").error).toBe("");
 });
 
-it("clears a refusal naming the menu price when that field changes, with Save working throughout", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  el.refusal = { field: "grossPrice", message: "Refused here" };
+it("hides a refusal once its field changes, and keeps it while another field changes", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  el.refusals = { "mi-lemonade": "Refused here" };
   await el.updateComplete;
-  await type(el, "variants.0.price", "1.00");
-  expect(field(el, "grossPrice").error).toBe("Refused here");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
-
-  await type(el, "grossPrice", "2.70");
-  expect(field(el, "grossPrice").error).toBe("");
-  expect(await bottomOf(el)).toBe("");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+  await typeIn(el, "mi-lemonade:v-small", "1.00");
+  expect(override(el, "mi-lemonade").error).toBe("Refused here");
+  await typeIn(el, "mi-lemonade", "2.70");
+  expect(override(el, "mi-lemonade").error).toBe("");
 });
 
-it("focuses the menu price when a refusal naming it arrives", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  el.refusal = { field: "grossPrice", message: "Refused here" };
+it("shows a hidden field's refusal again only when the host refuses that field anew", async () => {
+  const el = await mount();
+  el.refusals = { "mi-lemonade": "Refused here" };
+  await el.updateComplete;
+  await typeIn(el, "mi-lemonade", "2.70");
+  expect(override(el, "mi-lemonade").error).toBe("");
+  // Another field's refusal arriving leaves this one hidden.
+  el.refusals = { "mi-lemonade": "Refused here", "mi-burger": "Refused there" };
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(override(el, "mi-lemonade").error).toBe("");
+  expect(override(el, "mi-burger").error).toBe("Refused there");
+  el.refusals = { "mi-lemonade": "Refused again", "mi-burger": "Refused there" };
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(override(el, "mi-lemonade").error).toBe("Refused again");
+});
+
+it("moves focus to a size's field when a refusal naming it arrives, from another row's field", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  override(el, "mi-burger").focus();
+  el.refusals = { "mi-lemonade:v-small": "Refused here" };
   await el.updateComplete;
   await new Promise((resolve) => setTimeout(resolve));
-  const price = field(el, "grossPrice");
-  expect(price.shadowRoot!.activeElement).toBe(price.shadowRoot!.querySelector("input"));
+  const refused = override(el, "mi-lemonade:v-small");
+  expect(refused.shadowRoot!.activeElement).toBe(refused.shadowRoot!.querySelector("input"));
 });
 
-it("drops a refusal that names no field when Save is pressed again", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  el.refusal = { field: "_form", message: "Refused" };
-  await el.updateComplete;
-  await type(el, "grossPrice", "2.70");
-  expect(await bottomOf(el)).toBe("Refused");
-  const heard = saves(el);
-  await click(el, "offer-save");
-  expect(heard).toHaveBeenCalledOnce();
-  expect(await bottomOf(el)).toBe("");
+it("opens nothing and leaves focus for a refusal naming a size its collapsed product hides, which the status line still says", async () => {
+  setLocale("en-GB");
+  try {
+    const el = await mount();
+    const other = override(el, "mi-lager");
+    other.focus();
+    const save = {
+      key: "mi-lemonade:v-small",
+      menuItemId: "mi-lemonade",
+      variantId: "v-small",
+      name: "Lemonade — Small",
+      price: "1.90",
+      previous: null,
+    };
+    el.refusals = { "mi-lemonade:v-small": "Refused here" };
+    el.outcome = { kind: "refused", save, reason: "Refused here" };
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(row(el, "mi-lemonade:v-small")).toBeNull();
+    expect(other.matches(":focus-within")).toBe(true);
+    expect(text(el.shadowRoot!.querySelector('[data-test="price-outcome"]'))).toBe(
+      "Your change to Lemonade — Small was not saved. Refused here",
+    );
+  } finally {
+    setLocale("es-ES");
+  }
 });
 
-it("starts again when reopened: no messages and Save working", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  await type(el, "grossPrice", "-1");
-  await click(el, "offer-save");
-  el.editing = null;
-  await el.updateComplete;
-  el.editing = "mi-lemonade";
-  await el.updateComplete;
-  expect(field(el, "grossPrice").error).toBe("");
-  expect(await bottomOf(el)).toBe("");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+it("starts again on Escape: no check message, and the stored price back in the field", async () => {
+  const el = await mount();
+  await typeIn(el, "mi-lemonade", "-1");
+  await press(el, "mi-lemonade", "Enter");
+  expect(override(el, "mi-lemonade").error).toBe(t("editor.price_invalid"));
+  await press(el, "mi-lemonade", "Escape");
+  expect(override(el, "mi-lemonade").error).toBe("");
+  expect(override(el, "mi-lemonade").value).toBe("2.50");
+  // Checked again only after the next Enter.
+  await typeIn(el, "mi-lemonade", "x");
+  expect(override(el, "mi-lemonade").error).toBe("");
 });
 
-it("keeps what was typed when the rows are read again while the settings are open", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  await type(el, "grossPrice", "2.90");
+it("keeps what was typed when the rows are read again", async () => {
+  const el = await mount();
+  await typeIn(el, "mi-lemonade", "2.90");
   el.rows = [burger, { ...lemonade, override: "2.60" }, lager];
   await el.updateComplete;
-  expect(field(el, "grossPrice").value).toBe("2.90");
+  await table(el).updateComplete;
+  expect(override(el, "mi-lemonade").value).toBe("2.90");
 });
 
-it("starts from the product's stored settings each time they are opened", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  await type(el, "grossPrice", "2.90");
-  el.editing = null;
+it("shows a stored price read again while the field holds nothing typed", async () => {
+  const el = await mount();
+  await typeIn(el, "mi-lemonade", "2.90");
+  await press(el, "mi-lemonade", "Escape");
+  el.rows = [burger, { ...lemonade, override: "2.60" }, lager];
   await el.updateComplete;
-  el.editing = "mi-lemonade";
-  await el.updateComplete;
-  expect(field(el, "grossPrice").value).toBe("2.50");
+  await table(el).updateComplete;
+  expect(override(el, "mi-lemonade").value).toBe("2.60");
 });
 
-it("waits for the product's row before showing its settings", async () => {
-  const el = await mount({ editing: "mi-lemonade", rows: [] });
-  expect(modal(el).open).toBe(false);
-  el.rows = [lemonade];
-  await el.updateComplete;
-  expect(modal(el).open).toBe(true);
-  expect(field(el, "grossPrice").value).toBe("2.50");
+it("names a size the product list does not hold as missing, in its row and its field's label", async () => {
+  const el = await mount({ products: [] });
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  expect(visibleText(cell(el, "name", "mi-lemonade:v-large"))).toBe(t("members.missing"));
+  expect(override(el, "mi-lemonade:v-large").label).toBe(
+    t("menu_prices.override_label").replace("{name}", `Lemonade — ${t("members.missing")}`),
+  );
+  expect(override(el, "mi-lemonade:v-large").placeholder).toBe("3.40");
 });
 
-it("names a variant the product list does not hold as missing", async () => {
-  const el = await mount({ editing: "mi-lemonade", products: [] });
-  const legends = [...modal(el).querySelectorAll("fieldset legend")].map(text);
-  expect(legends).toEqual([t("members.missing"), t("members.missing")]);
-  expect(field(el, "variants.1.price").placeholder).toBe("3.40");
-});
-
-it("asks to close on Cancel, and holds both buttons while a save is out", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  const heard = vi.fn();
-  el.addEventListener("wt-offer-cancel", heard);
-  await click(el, "offer-cancel");
-  expect(heard).toHaveBeenCalledOnce();
-  el.busy = true;
+it("keeps the sent text on Escape while that field's save is out, and sends nothing more on leaving", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-burger", "11.00");
+  await press(el, "mi-burger", "Enter");
+  el.saving = new Set(["mi-burger"]);
   await el.updateComplete;
-  const save = modal(el).querySelector<HTMLElementTagNameMap["wt-button"]>(
-    '[data-test="offer-save"]',
-  )!;
-  expect(save.disabled).toBe(true);
-  const saved = saves(el);
-  save.click();
-  expect(saved).not.toHaveBeenCalled();
-  modal(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+  await typeIn(el, "mi-burger", "11.50");
+  await press(el, "mi-burger", "Escape");
+  expect(override(el, "mi-burger").value).toBe("11.00");
+  await leave(el, "mi-burger");
   expect(heard).toHaveBeenCalledOnce();
 });
 
-it("stops the Save and Cancel clicks that ask, so nothing past the widget hears them", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
+it("stops the Resolve clicks that ask, so nothing past the widget hears them", async () => {
+  const el = await mount({ rows: [clashRow(lager)] });
   const clicks: Event[] = [];
   el.addEventListener("click", (event) => clicks.push(event));
-  const heard = saves(el);
-  const cancels = vi.fn();
-  el.addEventListener("wt-offer-cancel", cancels);
-  await click(el, "offer-save");
-  await click(el, "offer-cancel");
-  expect(heard).toHaveBeenCalledOnce();
-  expect(cancels).toHaveBeenCalledOnce();
+  const heard = priceSaves(el);
+  const actions = row(el, "mi-lager")!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+    "wt-row-actions",
+  )!;
+  await actions.updateComplete;
+  for (const button of actions.querySelectorAll<HTMLElement>("wt-button")) {
+    actions.show();
+    button.click();
+  }
+  await el.updateComplete;
+  expect(heard).toHaveBeenCalledTimes(2);
   expect(clicks).toEqual([]);
 });
 
-it("keeps the window open on Escape while a save is out", async () => {
-  const el = await mount({ editing: "mi-lemonade", busy: true });
-  const escape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
-  field(el, "grossPrice").dispatchEvent(escape);
-  expect(escape.defaultPrevented).toBe(true);
-  el.busy = false;
+it("saves a field on Enter typed from the keyboard", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  const input = override(el, "mi-burger").shadowRoot!.querySelector("input")!;
+  await userEvent.fill(input, "11.00");
+  await userEvent.keyboard("{Enter}");
   await el.updateComplete;
-  const again = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
-  field(el, "grossPrice").dispatchEvent(again);
-  expect(again.defaultPrevented).toBe(false);
-});
-
-it("asks to close when the window is dismissed", async () => {
-  const el = await mount({ editing: "mi-lemonade" });
-  const heard = vi.fn();
-  el.addEventListener("wt-offer-cancel", heard);
-  modal(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
-  expect(heard).toHaveBeenCalledOnce();
-});
-
-it("saves on Enter in the menu price", async () => {
-  const el = await mount({ editing: "mi-burger" });
-  const heard = saves(el);
-  const input = field(el, "grossPrice").shadowRoot!.querySelector("input")!;
-  input.dispatchEvent(
-    new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+  expect(heard).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ key: "mi-burger", price: "11.00" }),
   );
+});
+
+it("sends one save for Enter followed by leaving the field", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-burger", "11.00");
+  await press(el, "mi-burger", "Enter");
+  el.saving = new Set(["mi-burger"]);
   await el.updateComplete;
+  await leave(el, "mi-burger");
+  expect(heard).toHaveBeenCalledExactlyOnceWith({
+    key: "mi-burger",
+    menuItemId: "mi-burger",
+    variantId: null,
+    name: "Burger",
+    price: "11.00",
+    previous: null,
+  });
+});
+
+it("refuses a decimal comma beside the field and sends nothing", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-burger", "2,50");
+  await press(el, "mi-burger", "Enter");
+  expect(heard).not.toHaveBeenCalled();
+  expect(override(el, "mi-burger").error).toBe(t("editor.price_invalid"));
+  expect(override(el, "mi-burger").value).toBe("2,50");
+});
+
+it("keeps the sent price in the field while its save is out, whatever a re-read says, and lets it go once saved", async () => {
+  const el = await mount();
+  await typeIn(el, "mi-burger", "11.00");
+  await press(el, "mi-burger", "Enter");
+  el.saving = new Set(["mi-burger"]);
+  el.rows = [burger, lemonade, lager]; // a live re-read from before the write landed
+  await el.updateComplete;
+  expect(override(el, "mi-burger").value).toBe("11.00");
+  el.rows = [{ ...burger, override: "11.00" }, lemonade, lager];
+  el.saving = new Set();
+  await el.updateComplete;
+  expect(override(el, "mi-burger").value).toBe("11.00");
+  el.rows = [{ ...burger, override: "10.00" }, lemonade, lager]; // a later change from elsewhere
+  await el.updateComplete;
+  expect(override(el, "mi-burger").value).toBe("10.00");
+});
+
+it("saves a size's field alone, and a size following its product hints the product's typed price", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  await typeIn(el, "mi-lemonade", "2.80");
+  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("2.80");
+  await typeIn(el, "mi-lemonade", "");
+  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("3.00");
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-lemonade:v-small", "1.90");
+  await press(el, "mi-lemonade:v-small", "Enter");
+  expect(heard).toHaveBeenCalledExactlyOnceWith({
+    key: "mi-lemonade:v-small",
+    menuItemId: "mi-lemonade",
+    variantId: "v-small",
+    name: "Lemonade — Small",
+    price: "1.90",
+    previous: null,
+  });
+});
+
+it("names the price typed for a product in a following size's tooltip as in its placeholder, and the inherited one once emptied", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  const tip = () =>
+    cell(el, "override", "mi-lemonade:v-small")
+      .querySelector("wt-help-tooltip")!
+      .textContent!.trim();
+  await typeIn(el, "mi-lemonade", "2.80");
+  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("2.80");
+  expect(tip()).toBe(
+    "Sigue el precio de Lemonade en esta carta. Esta carta fija 2,80 €. Sin él: 3,00 €, el precio propio del producto.",
+  );
+  await typeIn(el, "mi-lemonade", "");
+  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("3.00");
+  expect(tip()).toBe("Sigue el precio de Lemonade en esta carta. El precio propio del producto.");
+});
+
+it("puts a refusal under the field whose save it answers, and nowhere else, and moves focus to it", async () => {
+  const el = await mount();
+  const other = override(el, "mi-lager");
+  other.focus();
+  el.refusals = { "mi-burger": "Refused here" };
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve));
+  const refused = override(el, "mi-burger");
+  expect(refused.error).toBe("Refused here");
+  expect(other.error).toBe("");
+  expect(refused.shadowRoot!.activeElement).toBe(refused.shadowRoot!.querySelector("input"));
+});
+
+it("says a refusal in the status line, and moves no focus for one that names no field", async () => {
+  setLocale("en-GB");
+  try {
+    const el = await mount();
+    const other = override(el, "mi-lager");
+    other.focus();
+    const save = {
+      key: "mi-burger",
+      menuItemId: "mi-burger",
+      variantId: null,
+      name: "Burger",
+      price: "11.00",
+      previous: null,
+    };
+    el.outcome = { kind: "refused", save, reason: "The server could not be reached." };
+    await el.updateComplete;
+    const line = el.shadowRoot!.querySelector('[data-test="price-outcome"]')!;
+    expect(line.getAttribute("role")).toBe("status");
+    expect(text(line)).toBe(
+      "Your change to Burger was not saved. The server could not be reached.",
+    );
+    expect(override(el, "mi-burger").error).toBe("");
+    expect(other.matches(":focus-within")).toBe(true);
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
+it("keeps an empty status line after the table, held in view at the bottom while the rows scroll", async () => {
+  const el = await mount();
+  const line = el.shadowRoot!.querySelector<HTMLElement>('[data-test="price-outcome"]')!;
+  expect(line.getAttribute("role")).toBe("status");
+  expect(text(line)).toBe("");
+  expect(table(el).compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const box = getComputedStyle(line.parentElement!);
+  expect([box.position, box.bottom]).toEqual(["sticky", "0px"]);
+});
+
+it("does not resend a refused price on leaving the field unchanged, and resends it on Enter", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-burger", "11.00");
+  await press(el, "mi-burger", "Enter");
+  el.saving = new Set(["mi-burger"]);
+  await el.updateComplete;
+  el.saving = new Set();
+  el.refusals = { "mi-burger": "Refused here" };
+  await el.updateComplete;
+  await leave(el, "mi-burger");
   expect(heard).toHaveBeenCalledOnce();
+  await press(el, "mi-burger", "Enter");
+  expect(heard).toHaveBeenCalledTimes(2);
+  await typeIn(el, "mi-burger", "11.50");
+  await leave(el, "mi-burger");
+  expect(heard).toHaveBeenCalledTimes(3);
+});
+
+it("keeps the sent price after a refusal that names no field, and does not resend it on leaving the field unchanged", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-burger", "11.00");
+  await press(el, "mi-burger", "Enter");
+  const save = heard.mock.calls[0]![0];
+  el.saving = new Set(["mi-burger"]);
+  await el.updateComplete;
+  el.saving = new Set();
+  el.outcome = { kind: "refused", save, reason: "The server could not be reached." };
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(override(el, "mi-burger").value).toBe("11.00");
+  expect(override(el, "mi-burger").error).toBe("");
+  await leave(el, "mi-burger");
+  expect(heard).toHaveBeenCalledOnce();
+  await press(el, "mi-burger", "Enter");
+  expect(heard).toHaveBeenCalledTimes(2);
+});
+
+it("treats an unfinished product price as no change for its sizes' hints", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  await typeIn(el, "mi-lemonade", "2.");
+  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("2.50");
+});
+
+it("restores the stored price on Escape, and sends nothing", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-lemonade", "9.99");
+  expect(override(el, "mi-lemonade").value).toBe("9.99");
+  await press(el, "mi-lemonade", "Escape");
+  expect(override(el, "mi-lemonade").value).toBe("2.50");
+  await leave(el, "mi-lemonade");
+  expect(heard).not.toHaveBeenCalled();
+});
+
+it("draws a product's name as plain text, with no window behind it", async () => {
+  const el = await mount();
+  expect(cell(el, "name", "mi-lemonade").querySelector("wt-button")).toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect(visibleText(cell(el, "name", "mi-lemonade"))).toBe(
+    `Lemonade ${t("menu_prices.has_variants")}`,
+  );
+});
+
+it("keeps every field editable while a save is out, the saving one marked", async () => {
+  const el = await mount({ saving: new Set(["mi-burger"]) });
+  expect(override(el, "mi-burger").disabled).toBe(false);
+  expect(override(el, "mi-lager").disabled).toBe(false);
+  expect(text(cell(el, "override", "mi-burger").querySelector("[part~=saving]"))).toBe(
+    t("menu_prices.saving"),
+  );
+  expect(cell(el, "override", "mi-lager").querySelector("[part~=saving]")).toBeNull();
+});
+
+it("'Set a price…' in Resolve focuses the row's field", async () => {
+  const el = await mount({ rows: [clashRow(lager)] });
+  const actions = row(el, "mi-lager")!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+    "wt-row-actions",
+  )!;
+  await actions.updateComplete;
+  actions.show();
+  [...actions.querySelectorAll<HTMLElement>("wt-button")].at(-1)!.click();
+  await el.updateComplete;
+  const input = override(el, "mi-lager");
+  expect(input.shadowRoot!.activeElement).toBe(input.shadowRoot!.querySelector("input"));
 });
 
 describe("variants", () => {
@@ -1225,9 +1447,10 @@ describe("variants", () => {
     expect(fields.map((field) => field.placeholder)).toEqual(["6.00", "13.00", "14.00"]);
     expect(cells("placements")).toEqual(["", "", ""]);
     expect(cells("category")).toEqual(["", "", ""]);
-    // The name is plain text; only the product's name opens the settings.
+    // Both names are plain text: no window opens behind either.
     expect(cell(el, "name", "mi-wine:v-glass").querySelector("wt-button")).toBeNull();
-    expect(cell(el, "name", "mi-wine").querySelector('[data-test="edit-mi-wine"]')).not.toBeNull();
+    expect(cell(el, "name", "mi-wine").querySelector("wt-button")).toBeNull();
+    expect(text(cell(el, "name", "mi-wine").querySelector("[part~=name]"))).toBe("Wine");
     expect(visibleText(cell(el, "name", "mi-wine"))).toBe(`Wine ${t("menu_prices.has_variants")}`);
   });
 
@@ -1240,7 +1463,7 @@ describe("variants", () => {
       words.selectNodeContents(node);
       return words.getBoundingClientRect().left;
     };
-    const product = start(cell(el, "name", "mi-wine").querySelector("wt-button")!);
+    const product = start(cell(el, "name", "mi-wine").querySelector("[part~=name]")!);
     const variant = start(
       cell(el, "name", "mi-wine:v-glass").querySelector("[part~=variant-name]")!,
     );
@@ -1525,21 +1748,37 @@ describe("variants", () => {
   );
 });
 
-it("a price-only save sends the menu price and each variant's price, and nothing else", async () => {
-  const el = await mount({ editing: lemonade.menuItemId, rows: [lemonade] });
-  await type(el, "grossPrice", "2.60");
-  await type(el, "variants.0.price", "1.20");
-  const heard = saves(el);
-  await click(el, "offer-save");
-  expect(heard).toHaveBeenCalledExactlyOnceWith({
-    menuItemId: lemonade.menuItemId,
-    name: lemonade.name,
-    item: { grossPrice: "2.60" },
-    variants: [
-      { variantId: "v-small", price: "1.20" },
-      { variantId: "v-large", price: "3.75" },
+it("sends the product's field and a size's field as two saves, one field each, on leaving each", async () => {
+  const el = await mount({ rows: [lemonade] });
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-lemonade", "2.60");
+  await leave(el, "mi-lemonade");
+  await typeIn(el, "mi-lemonade:v-small", "1.20");
+  await leave(el, "mi-lemonade:v-small");
+  expect(heard.mock.calls).toEqual([
+    [
+      {
+        key: "mi-lemonade",
+        menuItemId: "mi-lemonade",
+        variantId: null,
+        name: "Lemonade",
+        price: "2.60",
+        previous: "2.50",
+      },
     ],
-  });
+    [
+      {
+        key: "mi-lemonade:v-small",
+        menuItemId: "mi-lemonade",
+        variantId: "v-small",
+        name: "Lemonade — Small",
+        price: "1.20",
+        previous: null,
+      },
+    ],
+  ]);
 });
 
 const drinksSource = {
@@ -1783,25 +2022,28 @@ it("puts one where-from tooltip on a row, explaining what a blank field inherits
   }
 });
 it.each([false, true])(
-  "resolves a product clash without clearing variants (%s)",
+  "resolves a product clash by sending the product's field alone, naming no size (%s)",
   async (withVariants) => {
     setLocale("en-GB");
     try {
       const source = withVariants ? lemonade : lager;
       const el = await mount({ rows: [clashRow(source)] });
-      const heard = saves(el);
+      const heard = priceSaves(el);
       const option = [...table(el).shadowRoot.querySelectorAll<HTMLElement>("wt-button")].find(
         (node) => text(node) === "Use €3.50 (Drinks)",
       );
       expect(option).toBeDefined();
       option!.click();
+      // The product's own field alone: no size is named, so none is cleared.
       expect(heard.mock.calls).toEqual([
         [
           {
+            key: source.menuItemId,
             menuItemId: source.menuItemId,
+            variantId: null,
             name: source.name,
-            item: { grossPrice: "3.50" },
-            variants: withVariants ? null : [],
+            price: "3.50",
+            previous: source.override,
           },
         ],
       ]);
@@ -1836,17 +2078,13 @@ it("uses the server's variant price and fallback even when the catalogue differs
   await table(el).updateComplete;
   expect(override(el, "mi-lemonade:v-small").placeholder).toBe("8.00");
 });
-it("resolves one variant clash while preserving every sibling override", async () => {
+it("resolves one size's clash by sending that size's field alone, leaving every sibling's price unsent", async () => {
   setLocale("en-GB");
   try {
     const el = await mount({ rows: [variantClashRow()] });
-    table(el)
-      .shadowRoot.querySelector<HTMLButtonElement>(
-        'tr[data-row-key="mi-lemonade"] button.tree-toggle',
-      )!
-      .click();
+    toggleOf(el, "mi-lemonade")!.click();
     await table(el).updateComplete;
-    const heard = saves(el);
+    const heard = priceSaves(el);
     const option = [
       ...row(el, "mi-lemonade:v-small")!.querySelectorAll<HTMLElement>("wt-button"),
     ].find((node) => text(node) === "Use €3.50 (Drinks)");
@@ -1855,13 +2093,12 @@ it("resolves one variant clash while preserving every sibling override", async (
     expect(heard.mock.calls).toEqual([
       [
         {
+          key: "mi-lemonade:v-small",
           menuItemId: "mi-lemonade",
-          name: "Lemonade",
-          item: null,
-          variants: [
-            { variantId: "v-small", price: "3.50" },
-            { variantId: "v-large", price: "3.75" },
-          ],
+          variantId: "v-small",
+          name: "Lemonade — Small",
+          price: "3.50",
+          previous: null,
         },
       ],
     ]);
@@ -1870,7 +2107,10 @@ it("resolves one variant clash while preserving every sibling override", async (
   }
 });
 
-it("resolves an Active size's clash without sending an Inactive sibling, which the save refuses", async () => {
+it.each([
+  ["an Active size beside an Inactive sibling", "v-large"],
+  ["an Inactive size", "v-small"],
+])("resolves the clash of %s by sending that size's field alone", async (_case, inactive) => {
   setLocale("en-GB");
   try {
     const source = variantClashRow();
@@ -1879,22 +2119,24 @@ it("resolves an Active size's clash without sending an Inactive sibling, which t
         {
           ...source,
           variants: source.variants.map((v) =>
-            v.variantId === "v-large" ? { ...v, active: false } : v,
+            v.variantId === inactive ? { ...v, active: false } : v,
           ),
         },
       ],
     });
     toggleOf(el, "mi-lemonade")!.click();
     await table(el).updateComplete;
-    const heard = saves(el);
+    const heard = priceSaves(el);
     [...row(el, "mi-lemonade:v-small")!.querySelectorAll<HTMLElement>("wt-button")]
       .find((node) => text(node) === "Use €3.50 (Drinks)")!
       .click();
     expect(heard).toHaveBeenCalledExactlyOnceWith({
+      key: "mi-lemonade:v-small",
       menuItemId: "mi-lemonade",
-      name: "Lemonade",
-      item: null,
-      variants: [{ variantId: "v-small", price: "3.50" }],
+      variantId: "v-small",
+      name: "Lemonade — Small",
+      price: "3.50",
+      previous: null,
     });
   } finally {
     setLocale("es-ES");
@@ -2202,25 +2444,42 @@ describe("without a switch of the menu's own", () => {
     expect(choosable).not.toContain("active");
   });
 
-  it("edits only prices: no field for the product's or a variant's switch, and a price-only save sends prices alone", async () => {
-    const el = await mount({ editing: "mi-lemonade" });
-    expect(modal(el).querySelector('[name="offered"]')).toBeNull();
+  it("edits only prices: no row holds a switch or a chooser, and a commit sends a price alone", async () => {
+    const el = await mount();
+    toggleOf(el, "mi-lemonade")!.click();
+    await table(el).updateComplete;
+    const body = table(el).shadowRoot.querySelector("tbody")!;
+    expect(body.querySelector('[name="offered"]')).toBeNull();
     for (const id of ["v-small", "v-large"])
-      expect(modal(el).querySelector(`[name="offered-${id}"]`), id).toBeNull();
-    expect(modal(el).querySelector("wt-combobox")).toBeNull();
-    await type(el, "grossPrice", "2.80");
-    await type(el, "variants.1.price", "4.00");
-    const heard = saves(el);
-    await click(el, "offer-save");
-    expect(heard).toHaveBeenCalledExactlyOnceWith({
-      menuItemId: "mi-lemonade",
-      name: "Lemonade",
-      item: { grossPrice: "2.80" },
-      variants: [
-        { variantId: "v-small", price: null },
-        { variantId: "v-large", price: "4.00" },
+      expect(body.querySelector(`[name="offered-${id}"]`), id).toBeNull();
+    expect(body.querySelector("wt-combobox")).toBeNull();
+    const heard = priceSaves(el);
+    await typeIn(el, "mi-lemonade", "2.80");
+    await press(el, "mi-lemonade", "Enter");
+    await typeIn(el, "mi-lemonade:v-large", "4.00");
+    await press(el, "mi-lemonade:v-large", "Enter");
+    expect(heard.mock.calls).toEqual([
+      [
+        {
+          key: "mi-lemonade",
+          menuItemId: "mi-lemonade",
+          variantId: null,
+          name: "Lemonade",
+          price: "2.80",
+          previous: "2.50",
+        },
       ],
-    });
+      [
+        {
+          key: "mi-lemonade:v-large",
+          menuItemId: "mi-lemonade",
+          variantId: "v-large",
+          name: "Lemonade — Large",
+          price: "4.00",
+          previous: "3.75",
+        },
+      ],
+    ]);
   });
 
   it("counts a size's own price toward the product's inherited range", async () => {
