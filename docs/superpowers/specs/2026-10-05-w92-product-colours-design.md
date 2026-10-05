@@ -187,6 +187,9 @@ the rename checks are back to their text on `main`.)_
      says "A field's hint is its placeholder, not a line under it" (`docs/developers/design-system.md:1394`).
      A variant's editor shows no colour group. `colorField` gains two optional settings,
      the no-colour label and the inherited colour; the section form passes neither and is unchanged.
+     (2026-10-05, finish-branch review: the two settings became one optional `categoryColor`,
+     `ColorFieldOptions` in `apps/dashboard/src/widgets/color-field.ts`; the section form does not
+     pass it.)
    - **Menu Structure.** Each product row gets a swatch of its effective colour; on an editable row
      it opens `dashboard-product-color-form`, which edits the product's global colour and says
      "Changes this product's colour on every menu that uses it." Each section row gets a swatch of
@@ -207,7 +210,9 @@ the rename checks are back to their text on `main`.)_
    W70 size the section form uses, so the 24-swatch palette lays out as in that form. A refused colour
    is shown under the chooser with the sentence the product editor already gives a refused field,
    `editor.field_rejected` (`apps/dashboard/src/screens/catalogue-screen.ts:537-548`); the chooser
-   only produces valid values, so only another caller reaches it.
+   only produces valid values, so only another caller reaches it. (2026-10-05, Task 10: the category
+   colour chooser, `apps/dashboard/src/widgets/category-color-form.ts`, is `size="compact"` and
+   holds no Name field; a category's name is edited inline.)
 
 ## Data flow
 

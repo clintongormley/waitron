@@ -42,8 +42,9 @@ item W92 quoted in it. Read the spec's Decisions before any task.
   Spanish a menu is "carta" and a colour "color".
 - Forms: design-system.md → Forms. Required Name marked; a refusal under its field; one message at
   the end of the dialog body; inputs named `category-name`, `category-color`, `product-color`.
-  Dialogs are `wt-modal size="standard"`. No explanatory line under a field: "A field's hint is its
-  placeholder, not a line under it" (`docs/developers/design-system.md:1394`).
+  Dialogs are `wt-modal size="standard"` (2026-10-05, Task 10: the category colour chooser,
+  `apps/dashboard/src/widgets/category-color-form.ts`, is `size="compact"`). No explanatory line under a field: "A field's
+  hint is its placeholder, not a line under it" (`docs/developers/design-system.md:1394`).
 - Colours other than the stored data colour read `--wt-*` tokens. The till's two local custom
   properties are `--tile-fill` and `--tile-ink` (not `--wt-*`).
 - Focused runs only (CLAUDE.md §2); CI owns package suites. Read the `Tests` count, never a pipe's
@@ -56,7 +57,10 @@ item W92 quoted in it. Read the spec's Decisions before any task.
 
 1. **Editing a category must not undo a move.** A category dragged elsewhere while its Edit dialog
    is open stays where it was dropped: the dialog sends `name` and `color`, never `parentId`. Pinned
-   in Task 5.
+   in Task 5. (2026-10-05, Task 10 replaced the Edit dialog: a row's colour square sends `{ color }`
+   alone, and the rename box sends `{ name }`, plus `color` only when its own square changed it;
+   neither sends `parentId`. Pinned in `apps/dashboard/src/widgets/catalogue-browser.test.ts`, "keeps
+   a move made while a category's colour chooser is open" and "a rename sends the name only".)
 2. **A swatch inside a tree row is its own control.** Clicking it opens the colour editor and does
    not open, close or start dragging the row. Pinned in Tasks 5 and 7.
 3. **A painted tile's small labels stay readable.** The price, "Section" and "Sold out" labels are
@@ -541,6 +545,9 @@ function tilePaint(color: string | null | undefined): string | undefined {
 
 ### Task 5: Products tree — Edit replaces Rename, with a colour swatch
 
+(2026-10-05, Task 10 superseded this task's Edit dialog: a category is named inline again, with a
+colour square that opens a small swatch chooser.)
+
 (2026-10-05, finish-branch review: `colorField`'s `noneLabel` and `inherited` options became one
 `categoryColor` option.)
 
@@ -684,8 +691,11 @@ place of `noneLabel` and `inherited`.)
 
 ### Task 7: Menu Structure — product and section swatches
 
-(2026-10-05, finish-branch review: `wt-product-color` carries `{ productId, categoryColor }`, and
-`dashboard-product-color-form`'s `inherited` property is called `categoryColor`.)
+(2026-10-05, finish-branch review: `dashboard-product-color-form`'s `inherited` property is called
+`categoryColor`. A first review made `wt-product-color` carry `{ productId, categoryColor }`; the
+second put it back to `{ productId }`, and the Menus screen looks the product and its category's
+colour up from its latest data each time it draws the dialog, so a refresh while the dialog is open
+shows the current colour.)
 
 **Files:**
 - Create: `apps/dashboard/src/widgets/product-color-form.ts` (`dashboard-product-color-form`), `product-color-form.test.ts`, `product-color-form.a11y.test.ts`
@@ -737,7 +747,8 @@ place of `noneLabel` and `inherited`.)
   with `wa-wt reset demo waitron-feat-product-colours`, re-enrol the till, and record why in the
   ledger and PR). Light and dark, at 1280 px and 390 px:
   - Products tree: swatches beside categories, the row menu's Edit, the Edit dialog (name, chooser,
-    a refused duplicate name under Name).
+    a refused duplicate name under Name). (2026-10-05, Task 10: these are now the row menu's
+    Rename, the inline name box with its colour square, and the small colour chooser.)
   - Product editor: the colour group, "Use category colour" with and without an inherited colour.
   - Menu Structure: product and section swatches, the product colour dialog and its sentence, a
     read-only included row.
@@ -758,7 +769,8 @@ place of `noneLabel` and `inherited`.)
   `readableTextColor`, labels on a painted tile take that ink); drop "no screen passes `wt-lozenge`
   one today"; one line on the swatch-button/`color-swatch` parts in table cells.
 - [ ] `docs/developers/product-categories.md:5-6` and `:358-361`: a category has an optional colour,
-  set from Edit or its swatch; stored in `category_details.color`.
+  set from Edit or its swatch; stored in `category_details.color`. (2026-10-05, Task 10: set from
+  the row's colour square or the name box's square.)
 - [ ] `docs/superpowers/specs/2026-09-30-catalogue-menus-routing-design.md`: a dated note under each
   of `:25`, `:51` and `:514`: "Superseded 2026-10-05 by W92
   (`docs/superpowers/specs/2026-10-05-w92-product-colours-design.md`): a category has an optional
@@ -900,11 +912,19 @@ behaviour.
 | 1 | `packages/media/src/image-references.test.ts:116` (`:120`) | `category_details` columns are `category_id, parent_id`; title says "no image or colour column" | columns `category_id, color, parent_id`; title "gives category_details no image column and no trigger naming it"; the trigger check unchanged | R1 |
 | 2 | `packages/catalogue/src/variant-fallback.test.ts:709` (`:713-729`) | `INHERITED_KEYS` is the fourteen keys | the same plus `color` | R2 |
 | 2 | `…variant-fallback.test.ts:542` (`:566`; fixture `:119-125`, `:145-168`) | category and pricing unit are the entries a variant cannot set | `color` joins them; the fixture gives parent `#256bb1`, Wine 175 `#b12525` so the "different on each side" guarantee holds | R2 |
-| 5 | `apps/dashboard/src/widgets/category-form.test.ts:82` (`:89`; line numbers at d9cca52ea) | `management.request_invalid` with `field: "color"` is a refusal no field of the form shows, so it goes to the bottom message (`_form`) | removed from that list; the new case "puts a refused colour under the colour chooser…" expects `{ color: t("editor.field_rejected") }` for it, and for `category.invalid` `field: "color"` | Decision 9: a refused colour shows under the colour chooser (since Task 10, the category colour chooser's) |
+| 4 | `apps/till/src/widgets/menu-browser.a11y.test.ts:117` (fixture `:53-61`, `:68`, `:94-95`; line numbers at b259b3df8) | the fixture holds no coloured section or product | a section painted `#b12525` and products Blue `#256bb1` and Pink `#edabab` join the menu's structure, which the home view draws, so the home case's axe scan, light and dark, meets painted product and section tiles; the states and assertions are unchanged | the scan covers painted tiles (Task 4) |
+| 5 | `apps/dashboard/src/widgets/category-form.test.ts:97` (line numbers at b259b3df8; on `main` the case is `:82` and the removed entry `:89`) | `management.request_invalid` with `field: "color"` is a refusal no field of the form shows, so it goes to the bottom message (`_form`) | removed from that list; the new case "puts a refused colour under the colour chooser…" expects `{ color: t("editor.field_rejected") }` for it, and for `category.invalid` `field: "color"` | Decision 9: a refused colour shows under the colour chooser (since Task 10, the category colour chooser's) |
 | 6 | `apps/dashboard/src/widgets/product-editor.test.ts:676` (`:684-695`) | the editor's sections, in order: categories, name, available, ordering, kitchen, descriptors, nutrition, price, variants, modifiers | the same with `color` between `name` and `available`; still the whole list, in order | R4: the colour chooser is a new section, drawn after Name (Task 6 Step 2) |
-| finish-branch | `apps/dashboard/src/widgets/color-field.test.ts:185` (`:190`) and `:199` (`:207`) (53d79bad5) | the no-colour choice's accessible name is `"Use category colour"`, the label the test host passed as `noneLabel` | `t("editor.color_use_category")`; the host passes `categoryColor` instead of `noneLabel` and `inherited` | review simplification: one `categoryColor` option replaced `noneLabel` and `inherited`, so the label now comes from the field itself; the same check |
-| finish-branch | `apps/dashboard/src/widgets/menu-structure-table.test.ts:1322` (`:1334`, `:1344`) (dc3346abf) | the swatch's `wt-product-color` detail is `{ productId: "p-lemonade" }` | `{ productId: "p-lemonade", categoryColor: "#256bb1" }` | the event now carries the category colour, so the Menus screen no longer keeps its own map of categories |
-| finish-branch | `packages/catalogue/src/operations.test.ts:2130`, `:2139`, `:2158`, `:2167` (89da89e8a; in `product-colors.test.ts` until 765b2e3e4) | the four cases call the catalogue's `setProductColor(tx, id, color)` | they call `updateProduct(tx, id, { color })`; their assertions are unchanged; two new cases, `:2191` and `:2211`, pin a patch carrying a category and a colour | review fix: `updateProduct` writes the category and the colour in one update, and `setProductColor` and `product-colors.ts`, with no caller left outside their tests, were deleted |
-| finish-branch | `packages/catalogue/src/menu-document.test.ts:385` (548095779; then in `product-colors.test.ts`) | the case reads colours with `readEffectiveColors(tx, ids)` | with a local helper that maps `readDishFacts(tx, ids)` to each id's `color`; the two `toEqual` assertions are unchanged; a new case, now `:401`, pins the `select` calls | review fix: `readEffectiveColors` was folded into `readDishFacts`, so a menu reads each batch of products once |
-| finish-branch | `packages/catalogue/src/product-colors.test.ts` (765b2e3e4) | every case sits in that file | the cases sit in `operations.test.ts`, `describe("a product's own colour")` (`:2089`), and `menu-document.test.ts`, `describe("readDishFacts")` (`:350`); the file is deleted; assertions unchanged except the batch case (`menu-document.test.ts:401`): two ids and 2 `select` calls before, `BATCH_SIZE + 1` ids and 3 after | the file was named after a deleted source file; the batch case now crosses a batch boundary, so it can tell a read per batch from one read in total |
 | 10 | `apps/dashboard/src/widgets/catalogue-browser.a11y.test.ts:94` (`:110-111`; the `renders %s accessibly` cases; line numbers at Task 10's commit) | the fixture's two categories carry no colour | Drinks is `#b12525` and Beer `color: null`, so every state's axe scan, the open name box included, sees a painted and an empty square; the states and assertions are unchanged | the scan covers the tree's colour squares (Task 10, a11y) |
+
+### Checks rewritten within the branch (main never had them)
+
+Each check below was added by this branch and later rewritten by the finish-branch review; `main`
+(970eb9ec6) has none of them, so they are not changes against `main`. Line numbers at b259b3df8.
+
+| Task | file:line | Before | After | Why |
+| --- | --- | --- | --- | --- |
+| finish-branch | `apps/dashboard/src/widgets/color-field.test.ts:200` (`:205`) and `:214` (`:222`) | the no-colour choice's accessible name is `"Use category colour"`, the label the test host passed as `noneLabel` | `t("editor.color_use_category")`; the host passes `categoryColor` instead of `noneLabel` and `inherited` | review simplification: one `categoryColor` option replaced `noneLabel` and `inherited`, so the label now comes from the field itself; the same check |
+| finish-branch | `packages/catalogue/src/operations.test.ts:2130`, `:2139`, `:2158`, `:2167` (until the review, in `product-colors.test.ts`) | the four cases call the catalogue's `setProductColor(tx, id, color)` | they call `updateProduct(tx, id, { color })`; their assertions are unchanged; two new cases, `:2191` and `:2211`, pin a patch carrying a category and a colour | review fix: `updateProduct` writes the category and the colour in one update, and `setProductColor` and `product-colors.ts`, with no caller left outside their tests, were deleted |
+| finish-branch | `packages/catalogue/src/menu-document.test.ts:385` (for a time in `product-colors.test.ts`) | the case reads colours with `readEffectiveColors(tx, ids)` | with a local helper that maps `readDishFacts(tx, ids)` to each id's `color`; the two `toEqual` assertions are unchanged; a new case, now `:401`, pins the `select` calls | review fix: `readEffectiveColors` was folded into `readDishFacts`, so a menu reads each batch of products once |
+| finish-branch | `packages/catalogue/src/product-colors.test.ts` | every case sits in that file | the cases sit in `operations.test.ts`, `describe("a product's own colour")` (`:2089`), and `menu-document.test.ts`, `describe("readDishFacts")` (`:350`); the file is deleted; assertions unchanged except the batch case (`menu-document.test.ts:401`): two ids and 2 `select` calls before, `BATCH_SIZE + 1` ids and 3 after | the file was named after a deleted source file; the batch case now crosses a batch boundary, so it can tell a read per batch from one read in total |

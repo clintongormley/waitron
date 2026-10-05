@@ -3000,7 +3000,8 @@ describe("mountCatalogueApi — products", () => {
   });
 
   it("PATCH /management-api/products/:id naming no stored product → authorization.not_permitted 403", async () => {
-    // The refusal is the pre-read's alone: `updateProduct` reports nothing when no row matches.
+    // The refusal is the pre-read's alone: for a patch naming no category or colour,
+    // `updateProduct` reports nothing when no row matches.
     const res = await send(
       mountApp(),
       "PATCH",
