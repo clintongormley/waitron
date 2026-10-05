@@ -14,6 +14,7 @@ import type { ProductPresentation } from "./product-presentation.js";
 import type { MenuOffer, MenuVariant, MenuVariantWrite } from "./menu-types.js";
 export type { MenuVariant, MenuVariantWrite } from "./menu-types.js";
 import { INHERITED_KEYS, productWithId } from "./variant-fallback.js";
+import { assertFamilyNamesFree } from "./product-names.js";
 import "./errors.js";
 import type { ProductVariant, ProductVariantInput } from "./product-types.js";
 export type { ProductVariant, ProductVariantInput } from "./product-types.js";
@@ -161,12 +162,14 @@ export async function setProductVariants(
   );
 }
 
-/** {@link setProductVariants} with the venue's content languages already read. */
+/** {@link setProductVariants} with the venue's content languages already read. `namesChecked` is
+ * `ProductWriteOptions`' (`operations.ts`). */
 export async function writeProductVariants(
   tx: Transaction,
   productId: string,
   inputs: readonly VariantWrite[],
   config: ContentLanguages,
+  { namesChecked = false }: { namesChecked?: boolean } = {},
 ): Promise<ProductVariant[]> {
   const seen = new Set<string>();
   const checked: (VariantWrite & { cents: number | null })[] = [];
@@ -203,6 +206,7 @@ export async function writeProductVariants(
   const firstActive = normalized.findIndex((input) => input.active);
   if (firstActive !== -1)
     await assertNotOfferedAsExtra(tx, productId, `variants.${firstActive}.active`);
+  if (!namesChecked) await assertFamilyNamesFree(tx, productId, {}, normalized);
   for (const [index, input] of normalized.entries()) {
     const values = {
       name: input.name,

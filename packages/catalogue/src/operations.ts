@@ -39,6 +39,7 @@ import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
 import { assertNotOfferedAsExtra, menuVariantsOfItems } from "./variants.js";
+import { assertFamilyNamesFree, assertUpdatedNamesFree } from "./product-names.js";
 import {
   assignProductUnit,
   clearProductUnit,
@@ -969,7 +970,21 @@ export async function applyDietDerivation(
   );
 }
 
-export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {
+/**
+ * How a product write treats the unique-name rule (`assertProductNamesFree`). `namesChecked` is set
+ * only by `saveProductEditor`, which has already checked every name its whole save leaves before
+ * writing anything; a write checked row by row would refuse a save that swaps names within one
+ * product and its variants.
+ */
+export interface ProductWriteOptions {
+  namesChecked?: boolean;
+}
+
+export async function createProduct(
+  tx: Transaction,
+  input: CreateProductInput,
+  options: ProductWriteOptions = {},
+): Promise<Product> {
   if (input.unitId === undefined && input.pricingUnit === undefined) {
     throw new AppError("product.invalid", { field: "unitId" });
   }
@@ -1012,6 +1027,8 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
     image: input.image ?? null,
   };
   if (input.categoryId !== null) await readCategory(tx, input.categoryId);
+  if (!options.namesChecked)
+    await assertFamilyNamesFree(tx, null, { name: input.name, active: values.active }, []);
   const [row] = await tx.insert(products).values(values).returning({ id: products.id });
   if (selectedUnit !== null) await assignProductUnit(tx, row!.id, selectedUnit.id);
   const [created] = await tx
@@ -1100,6 +1117,7 @@ export async function updateProduct(
   tx: Transaction,
   id: string,
   patch: UpdateProductInput,
+  options: ProductWriteOptions = {},
 ): Promise<void> {
   if (patch.active === true) {
     const [row] = await tx
@@ -1108,6 +1126,8 @@ export async function updateProduct(
       .where(eq(products.id, id));
     if (row?.parentId != null) await assertNotOfferedAsExtra(tx, row.parentId, "active");
   }
+  if (!options.namesChecked && (patch.name !== undefined || patch.active !== undefined))
+    await assertUpdatedNamesFree(tx, id, { name: patch.name, active: patch.active });
   // `allergens` and `dietOverride` are the staff overlays, not the published columns.
   const {
     allergens,

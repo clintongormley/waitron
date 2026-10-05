@@ -265,7 +265,13 @@ describe("the missing-translations report", () => {
     await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const menu = await venue(tx);
-      const ids = [(await bread(tx, menu.id)).id, (await bread(tx, menu.id)).id];
+      // Two Active products share a staff name only as data written before the unique-name rule,
+      // so the first is renamed aside past the product paths while the second is made.
+      const first = (await bread(tx, menu.id)).id;
+      await tx.update(products).set({ name: "aside" }).where(eq(products.id, first));
+      const second = (await bread(tx, menu.id)).id;
+      await tx.update(products).set({ name: "STAFF Pan" }).where(eq(products.id, first));
+      const ids = [first, second];
       expect((await report(tx))("ca").map((gap) => gap.id)).toEqual([...ids].sort());
     });
   });

@@ -9,6 +9,7 @@ import { readProductModifiers, writeProductModifiers } from "./product-modifiers
 import { productUnits } from "./schema/units.js";
 import { priceOrNull } from "./offer-price.js";
 import { productWithId } from "./variant-fallback.js";
+import { assertFamilyNamesFree } from "./product-names.js";
 import { listProductVariants, writeProductVariants } from "./variants.js";
 import { parseProductEditorInput } from "./product-editor-input.js";
 export { parseProductEditorInput, type ProductEditorInput } from "./product-editor-input.js";
@@ -145,42 +146,61 @@ export async function saveProductEditor(
       .where(eq(catalogues.id, catalogueId));
     if (!catalogue) throw new AppError("catalogue.not_found", { catalogueId });
   }
+  // A variant's own save changes one row, which `updateProduct` checks. A product's save is checked
+  // here, whole, before anything is written, and the writes below skip their own row-by-row check.
+  const namesChecked = !isVariant;
+  if (namesChecked)
+    await assertFamilyNamesFree(
+      tx,
+      productId,
+      { name: value.name, active: value.active },
+      value.variants,
+    );
   if (productId === null) {
-    const created = await createProduct(tx, {
-      catalogueId,
-      categoryId: null,
-      name: value.name,
-      customerName: value.customerName,
-      description: value.description,
-      kitchenName: value.kitchenName,
-      unitId: value.unitId,
-      // The parser refuses a blank on a product with no parent, which every created one is.
-      unitPrice: value.unitPrice!,
-      vatClass: value.vatClass!,
-      active: value.active,
-      available: value.available,
-      ordering: value.ordering,
-      ...(value.image === null ? {} : { image: value.image }),
-      ...(value.allergens === null ? {} : { allergens: value.allergens }),
-      dietaryDeclarations: value.dietaryDeclarations!,
-    });
+    const created = await createProduct(
+      tx,
+      {
+        catalogueId,
+        categoryId: null,
+        name: value.name,
+        customerName: value.customerName,
+        description: value.description,
+        kitchenName: value.kitchenName,
+        unitId: value.unitId,
+        // The parser refuses a blank on a product with no parent, which every created one is.
+        unitPrice: value.unitPrice!,
+        vatClass: value.vatClass!,
+        active: value.active,
+        available: value.available,
+        ordering: value.ordering,
+        ...(value.image === null ? {} : { image: value.image }),
+        ...(value.allergens === null ? {} : { allergens: value.allergens }),
+        dietaryDeclarations: value.dietaryDeclarations!,
+      },
+      { namesChecked },
+    );
     productId = created.id;
   } else {
-    await updateProduct(tx, productId, {
-      name: value.name,
-      customerName: value.customerName,
-      description: value.description,
-      kitchenName: value.kitchenName,
-      unitId: value.unitId,
-      unitPrice: value.unitPrice,
-      vatClass: value.vatClass,
-      active: value.active,
-      available: value.available,
-      ordering: value.ordering,
-      image: value.image,
-      allergens: value.allergens,
-      dietaryDeclarations: value.dietaryDeclarations,
-    });
+    await updateProduct(
+      tx,
+      productId,
+      {
+        name: value.name,
+        customerName: value.customerName,
+        description: value.description,
+        kitchenName: value.kitchenName,
+        unitId: value.unitId,
+        unitPrice: value.unitPrice,
+        vatClass: value.vatClass,
+        active: value.active,
+        available: value.available,
+        ordering: value.ordering,
+        image: value.image,
+        allergens: value.allergens,
+        dietaryDeclarations: value.dietaryDeclarations,
+      },
+      { namesChecked },
+    );
   }
   if (isVariant) {
     // A variant's category is always its parent's, so it stores none.
@@ -190,7 +210,7 @@ export async function saveProductEditor(
       .where(eq(products.id, productId));
   } else {
     await setMainReportingCategory(tx, productId, value.primaryCategoryId);
-    await writeProductVariants(tx, productId, value.variants, config);
+    await writeProductVariants(tx, productId, value.variants, config, { namesChecked });
     await writeProductModifiers(tx, productId, value.modifiers);
   }
   return readProductEditor(tx, productId);
