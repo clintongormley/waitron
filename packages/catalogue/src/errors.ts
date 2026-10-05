@@ -8,8 +8,8 @@ import type { MemberRef } from "./section-types.js";
 declare module "@waitron/shared" {
   interface ErrorParams {
     "category.not_found": { categoryId: string };
-    /** A category's name is blank once trimmed. */
-    "category.invalid": { field: "name" };
+    /** A category's name is blank once trimmed, or its colour is not lowercase `#rrggbb` or null. */
+    "category.invalid": { field: "name" | "color" };
     "category.parent_cycle": Record<string, never>;
     /** Another category with the same parent already has this name, ignoring case and surrounding
      * whitespace. `field` beside the siblings' `{ name }` lets the dashboard place it, as

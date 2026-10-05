@@ -147,6 +147,11 @@ function categoryInput(body: Record<string, unknown>, creating: boolean): Partia
     result.name = body.name;
   }
   if (body.parentId !== undefined) result.parentId = nullOrUuid(body.parentId, "parentId");
+  if (body.color !== undefined) {
+    if (body.color !== null && typeof body.color !== "string")
+      throw new AppError("management.request_invalid", { field: "color" });
+    result.color = body.color;
+  }
   return result;
 }
 

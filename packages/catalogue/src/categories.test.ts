@@ -47,6 +47,7 @@ describe("category authoring", () => {
       id: food.id,
       name: "Food",
       parentId: null,
+      color: null,
     });
     expect(await app((tx) => setMainReportingCategory(tx, product.id, food.id))).toEqual({
       primaryCategoryId: food.id,
@@ -150,6 +151,57 @@ describe("category authoring", () => {
       writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr", "en"] }),
     );
   });
+  it("stores a category's colour on create and returns it from every read", async () => {
+    const { app, food } = await fixture();
+    const red = await app((tx) =>
+      createCategory(tx, { name: "Starters", parentId: food.id, color: "#b12525" }),
+    );
+    expect(red).toEqual({ id: red.id, name: "Starters", parentId: food.id, color: "#b12525" });
+    expect(await app((tx) => readCategory(tx, red.id))).toEqual(red);
+    expect((await app((tx) => listCategories(tx))).find((c) => c.id === red.id)).toEqual(red);
+  });
+  it("changes, keeps and clears a category's colour, leaving its name and parent", async () => {
+    const { app, food } = await fixture();
+    const child = await app((tx) =>
+      createCategory(tx, { name: "Starters", parentId: food.id, color: "#b12525" }),
+    );
+    expect(await app((tx) => updateCategory(tx, child.id, { color: "#256bb1" }))).toEqual({
+      id: child.id,
+      name: "Starters",
+      parentId: food.id,
+      color: "#256bb1",
+    });
+    expect(await app((tx) => updateCategory(tx, child.id, { name: "X" }))).toEqual({
+      id: child.id,
+      name: "X",
+      parentId: food.id,
+      color: "#256bb1",
+    });
+    expect(await app((tx) => updateCategory(tx, child.id, { color: null }))).toEqual({
+      id: child.id,
+      name: "X",
+      parentId: food.id,
+      color: null,
+    });
+    expect(await app((tx) => readCategory(tx, child.id))).toMatchObject({ color: null });
+  });
+  it.each(["#B12525", "red", 5])(
+    "refuses the colour %j as category.invalid on color, on create and on update",
+    async (color) => {
+      const { app, food } = await fixture();
+      await app((tx) => updateCategory(tx, food.id, { color: "#b12525" }));
+      const bad = color as unknown as string;
+      await expect(
+        app((tx) => createCategory(tx, { name: "Starters", color: bad })),
+      ).rejects.toMatchObject({ code: "category.invalid", params: { field: "color" } });
+      await expect(app((tx) => updateCategory(tx, food.id, { color: bad }))).rejects.toMatchObject({
+        code: "category.invalid",
+        params: { field: "color" },
+      });
+      expect(await app((tx) => readCategory(tx, food.id))).toMatchObject({ color: "#b12525" });
+      expect((await app((tx) => listCategories(tx))).map((c) => c.name)).not.toContain("Starters");
+    },
+  );
 });
 
 it("updateProduct's categoryId sets the main category, with no membership coupling", async () => {

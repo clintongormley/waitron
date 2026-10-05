@@ -4610,6 +4610,7 @@ it("authors a hierarchy and requires a session to read it", async () => {
     id: category.id,
     name: "Food",
     parentId: null,
+    color: null,
   });
   const cycle = await send(app, "PATCH", path, { body: { parentId: category.id } });
   expect(cycle.status).toBe(409);
@@ -4627,6 +4628,28 @@ it("authors a hierarchy and requires a session to read it", async () => {
   });
   expect(response.status).toBe(201);
   expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
+});
+
+it("creates a category holding its colour, and refuses a colour of the wrong type or spelling", async () => {
+  const app = mountApp("en-GB");
+  const created = await send(app, "POST", "/management-api/categories", {
+    body: { name: "Food", color: "#b12525" },
+  });
+  expect(created.status).toBe(201);
+  const category = (await created.json()) as { id: string };
+  expect(category).toEqual({ id: category.id, name: "Food", parentId: null, color: "#b12525" });
+  const path = `/management-api/categories/${category.id}`;
+  const wrongType = await send(app, "PATCH", path, { body: { color: 5 } });
+  expect(wrongType.status).toBe(400);
+  expect(await wrongType.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field: "color" } },
+  });
+  const wrongSpelling = await send(app, "PATCH", path, { body: { color: "#ZZZZZZ" } });
+  expect(wrongSpelling.status).toBe(400);
+  expect(await wrongSpelling.json()).toMatchObject({
+    error: { code: "category.invalid", params: { field: "color" } },
+  });
+  expect(await (await send(app, "GET", path)).json()).toMatchObject({ color: "#b12525" });
 });
 
 // A negative CATALOGUE price is never a valid one (owner ruling, 2026-09-21) — the scope matters,

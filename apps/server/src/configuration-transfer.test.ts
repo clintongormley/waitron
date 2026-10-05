@@ -610,6 +610,47 @@ describe("configuration transfer database path", () => {
     );
     expect(firstLive.rows).toEqual([{ invoice_number: 1, first_record: 1, previous_hash: null }]);
   });
+
+  it("carries a category's colour and a product's own colour", async () => {
+    const source = await applyVenue(planVenue(venue("B66778899"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await withTransaction(suite.db, async (tx) => {
+      const category = await createCategory(tx, { name: "Postres", color: "#b12525" });
+      const menu = await createCatalogue(tx, { name: "Colour menu" });
+      const product = await createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: category.id,
+        name: "Flan",
+        pricingUnit: "each",
+        unitPrice: "4",
+        vatClass: "general",
+      });
+      await tx.execute(sql`update products set color = '#256bb1' where id = ${product.id}`);
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-05T12:00:00Z"),
+      versions,
+    );
+    await applyVenue(planVenue(venue("B99887766"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+    const imported = await targetSuite.db.execute<{ category: string; product: string }>(sql`
+      select d.color as category, p.color as product
+      from products p
+      join category_details d on d.category_id = p.category_id
+      where p.name = 'Flan'
+    `);
+    expect(imported.rows).toEqual([{ category: "#b12525", product: "#256bb1" }]);
+  });
 });
 
 it("transfers the extras and options lists, remaps their ids and preserves menu prices", async () => {
