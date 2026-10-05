@@ -229,6 +229,19 @@ describe("the exact time", () => {
     expect(tip.matches(":popover-open")).toBe(true);
   });
 
+  test("closes when focus moves to the next control", async () => {
+    const el = await shown(MINUTE);
+    const { button, tip } = parts(el);
+    const next = document.createElement("button");
+    next.textContent = "Next";
+    host.append(next);
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+    await userEvent.keyboard("{Tab}");
+    expect(document.activeElement).toBe(next);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
+  });
+
   test("lets an Escape through once it is closed", async () => {
     const el = await shown(MINUTE);
     const { button, tip } = parts(el);
@@ -360,6 +373,15 @@ describe("as the clock moves on", () => {
     expect(words(el)).toBe("now");
     // Nothing is left to count once the window has gone.
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("wakes just after a deadline passes a whole minute, never at once", async () => {
+    const wakes = vi.spyOn(globalThis, "setTimeout");
+    // Exactly a minute ahead reads "in 1 minute"; it changes the moment less than that is left.
+    await shown(-MINUTE);
+    expect(wakes).toHaveBeenLastCalledWith(expect.any(Function), 1);
+    await shown(-(MINUTE + 20 * SECOND));
+    expect(wakes).toHaveBeenLastCalledWith(expect.any(Function), 20 * SECOND);
   });
 
   test("leaves no timer behind once it is taken off the page, and starts one when put back", async () => {
