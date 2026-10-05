@@ -522,7 +522,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           );
         };
         // An unpaired printer is switched off and its waiting jobs ended before the claim, so this
-        // pull hands out none of them and a later Add again does not print them; one another box
+        // pull hands out none of them and a later Enable does not print them; one another box
         // can still print to is left alone.
         if (unpaired.length > 0) {
           const elsewhere = printableElsewhere();

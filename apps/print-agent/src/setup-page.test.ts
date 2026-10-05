@@ -289,7 +289,7 @@ describe("createSetupApp — rendering", () => {
         "192.168.20.5",
       )
     ).text();
-    expect(html).toContain("denied or revoked");
+    expect(html).toContain("This agent was denied or disabled.");
     expect(html).toContain("Save the server address");
     expect(html).toContain("approve the new join");
     expect(html).not.toContain("restart");

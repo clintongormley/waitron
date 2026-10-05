@@ -3958,7 +3958,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       const id = await queueUnpair(app, agentId, token, mac);
       await pull(app, token, { bluetoothOutcomes: [{ id, ok: true }] });
 
-      // What the dashboard's Add again sends, then the calibration wizard's first print.
+      // What the dashboard's Enable sends, then the calibration wizard's first print.
       const reactivated = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
         cookie: managerCookie,
         body: { active: true },

@@ -412,7 +412,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await openDiscovery(el);
     expect(q(el, "[data-test=register-SN-1]")).toBeTruthy();
     expect(q(el, "[data-test=discovered-row-SN-2]")).not.toBeNull();
-    expect(q(el, "[data-test=register-SN-2]")!.textContent).toContain(t("printers.add_again"));
+    expect(q(el, "[data-test=register-SN-2]")!.textContent).toContain("Habilitar");
     expect(q(el, "[data-test=printer-last-seen-p3]")).toBeNull();
     expect(q(el, "[data-test='page-printer-10.0.0.56:9100']")).not.toBeNull();
     expect(q(el, "[data-test=new-transport]")).toBeNull();

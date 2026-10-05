@@ -11,7 +11,7 @@ import {
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type {
   DashboardApi,
   DeviceProfile,
@@ -340,7 +340,7 @@ describe("devices-screen", () => {
     expect(deepText(el, "[data-test=device-last-seen-d2]")).toBe(
       t("devices.last_seen_never", "es-ES"),
     );
-    expect(deepText(el, "[data-test=device-status-d2]")).toBe(t("devices.status_revoked", "es-ES"));
+    expect(deepText(el, "[data-test=device-status-d2]")).toBe("Deshabilitado");
   });
 
   it("leaves the profile empty for a device whose profile is not in the loaded set, and follows a refresh", async () => {
@@ -653,7 +653,7 @@ describe("the device table", () => {
     );
   });
 
-  it("a removed device's row opens nothing, and it has no Edit or Remove", async () => {
+  it("a disabled device's row opens nothing, and it has no Edit or Disable", async () => {
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
       api: stubApi(),
     });
@@ -670,7 +670,7 @@ describe("the device table", () => {
     expect(dq(el.shadowRoot!, "[data-test=remove-d2]")).toBeNull();
   });
 
-  it("an active device's menu, named for it, offers Edit and Remove", async () => {
+  it("an active device's menu, named for it, offers Edit and Disable", async () => {
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
       api: stubApi(),
     });
@@ -680,17 +680,38 @@ describe("the device table", () => {
     expect(menu.label).toBe(`${t("devices.actions")}: Pantalla Cocina`);
     const items = [...menu.querySelectorAll("wt-button")];
     expect(items.map((b) => b.getAttribute("data-test"))).toEqual(["edit-device-d1", "remove-d1"]);
-    expect(items.map((b) => b.textContent?.trim())).toEqual([
-      t("action.edit"),
-      t("devices.remove"),
-    ]);
-    // Remove's first press only arms it, so the menu stays open for the second.
+    expect(items.map((b) => b.textContent?.trim())).toEqual([t("action.edit"), "Deshabilitar"]);
+    // Disable's first press only arms it, so the menu stays open for the second.
     expect(items[1]!.hasAttribute("data-keep-open")).toBe(true);
     (items[0] as HTMLElement).click();
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull());
   });
 
-  it("removes only on the confirming second press, then reloads the list", async () => {
+  it("words Disable, its confirmation and the disabled status in English and Spanish", async () => {
+    const before = currentLocale();
+    try {
+      for (const [locale, disable, confirm, disabled] of [
+        ["en", "Disable", "Disable this device?", "Disabled"],
+        ["es-ES", "Deshabilitar", "¿Deshabilitar este dispositivo?", "Deshabilitado"],
+      ] as const) {
+        setLocale(locale);
+        const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+          api: stubApi(),
+        });
+        await flush(el);
+        expect(deepText(el, "[data-test=device-status-d2]")).toBe(disabled);
+        expect(deepText(el, "[data-test=remove-d1]")).toBe(disable);
+        dq(el.shadowRoot!, "[data-test=remove-d1]")!.click();
+        await flush(el);
+        expect(deepText(el, "[data-test=remove-d1]")).toBe(confirm);
+        cleanupWidgets();
+      }
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it("disables only on the confirming second press, then reloads the list", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
@@ -698,7 +719,7 @@ describe("the device table", () => {
     dq(el.shadowRoot!, "[data-test=remove-d1]")!.click();
     await flush(el);
     expect(api.revokeDevice).not.toHaveBeenCalled();
-    expect(deepText(el, "[data-test=remove-d1]")).toBe(t("devices.remove_confirm", "es-ES"));
+    expect(deepText(el, "[data-test=remove-d1]")).toBe("¿Deshabilitar este dispositivo?");
     expect(dq(el.shadowRoot!, "[data-test=remove-d1]")!.getAttribute("data-armed")).toBe("true");
 
     dq(el.shadowRoot!, "[data-test=remove-d1]")!.click();
@@ -707,7 +728,7 @@ describe("the device table", () => {
     expect(api.listDevices).toHaveBeenCalledTimes(2);
   });
 
-  it("shows an error and keeps the list when a remove is rejected", async () => {
+  it("shows an error and keeps the list when a disable is rejected", async () => {
     const api = stubApi({ revokeDevice: vi.fn().mockRejectedValue({ code: "device.not_found" }) });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
@@ -902,7 +923,7 @@ describe("the Edit dialog", () => {
     // The device keeps the switched-off printer it holds; it cannot newly choose one.
     expect(receipt.options).toEqual([
       { value: "", label: t("devices.no_printer") },
-      { value: "pr3", label: `Barra (${t("printers.status_inactive")})` },
+      { value: "pr3", label: "Barra (Deshabilitada)" },
       { value: "pr1", label: "Cocina" },
       { value: "pr2", label: "Terraza" },
     ]);
@@ -1576,7 +1597,7 @@ describe("the Edit dialog", () => {
     await vi.waitFor(() =>
       expect(field(el, "edit-receipt-printer").options).toContainEqual({
         value: "pr2",
-        label: `Terraza (${t("printers.status_inactive")})`,
+        label: "Terraza (Deshabilitada)",
       }),
     );
     await save(el);

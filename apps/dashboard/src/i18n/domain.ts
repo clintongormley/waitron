@@ -224,5 +224,5 @@ export function vatKindName(value: string, locale: string = currentLocale()): st
 
 /** A printer's name, marked when it is switched off. */
 export function printerLabel(printer: Pick<Printer, "name" | "active">): string {
-  return printer.active ? printer.name : `${printer.name} (${t("printers.status_inactive")})`;
+  return printer.active ? printer.name : `${printer.name} (${t("printers.status_disabled")})`;
 }
