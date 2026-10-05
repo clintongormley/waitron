@@ -1,5 +1,5 @@
 import { DashboardQueries } from "../api/query-controller.js";
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
@@ -271,9 +271,9 @@ export class DevicesScreen extends LitElement {
 
   @property({ attribute: false }) panels: readonly CardProviderPanel[] = CARD_PROVIDER_PANELS;
   /**
-   * Whether the session holds `payments.manage`. When false Edit never draws or reads the card
-   * reader. When true the reader is read, and a refusal still hides it, because the session's
-   * permissions can change while the page is open.
+   * Whether the session holds `payments.manage`. While false Edit neither draws nor saves the card
+   * reader; turned back on, it shows from the next Edit. A refusal of the read still hides the
+   * reader, because the server may know of a change before this flag does.
    */
   @property({ attribute: false }) canManageReaders = true;
 
@@ -406,6 +406,14 @@ export class DevicesScreen extends LitElement {
   /** A read's failure never replaces an action's message. */
   #showReadError(error: unknown): void {
     if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
+  }
+
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("canManageReaders") && !this.canManageReaders) {
+      this.readerState = "hidden";
+      this.readerReadError = null;
+      this.editRefusal = clearedRefusal(this.editRefusal, "reader");
+    }
   }
 
   override updated(): void {
@@ -831,13 +839,13 @@ export class DevicesScreen extends LitElement {
         this.api.getDeviceReader(deviceId),
         this.api.listReaders(),
       ]);
-      if (epoch !== this.#editEpoch) return;
+      if (epoch !== this.#editEpoch || this.readerState !== "loading") return;
       this.readers = readers.filter((reader) => reader.active);
       this.#storedReaderId = readerId;
       this.chosenReaderId = readerId ?? "";
       this.readerState = "ready";
     } catch (error) {
-      if (epoch !== this.#editEpoch) return;
+      if (epoch !== this.#editEpoch || this.readerState !== "loading") return;
       const code = codeOf(error);
       if (code === "authorization.not_permitted") this.readerState = "hidden";
       else {

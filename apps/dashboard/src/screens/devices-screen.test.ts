@@ -1351,7 +1351,7 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-reader").error).toBe("");
   });
 
-  it("without payments.manage the reader field is absent, and nothing else is refused", async () => {
+  it("not told up front, a reader read the server refuses for want of payments.manage drops the reader field, and nothing else is refused", async () => {
     const notPermitted = { code: "authorization.not_permitted" };
     const api = editApi({
       getDeviceReader: vi.fn().mockRejectedValue(notPermitted),
@@ -1408,6 +1408,50 @@ describe("the Edit dialog", () => {
     await flush(el);
     expect(field(el, "edit-reader").disabled).toBe(false);
     expect(field(el, "edit-reader").value).toBe("r2");
+  });
+
+  it("losing payments.manage while Edit is open removes the reader field and Save leaves the reader alone", async () => {
+    const api = editApi();
+    const el = await openEdit(api);
+    await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+    await flush(el);
+    el.canManageReaders = false;
+    await flush(el);
+    expect(q(el, "[data-test=edit-reader]")).toBeNull();
+    await save(el);
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(api.updateDevice).toHaveBeenCalledTimes(1);
+    expect(api.setDeviceReader).not.toHaveBeenCalled();
+  });
+
+  it("a reader read still pending when payments.manage is lost does not bring the field back", async () => {
+    let answer!: (value: { readerId: string | null }) => void;
+    const api = editApi({
+      getDeviceReader: vi.fn().mockReturnValue(new Promise((resolve) => (answer = resolve))),
+    });
+    const el = await openEdit(api);
+    expect(field(el, "edit-reader").disabled).toBe(true);
+    el.canManageReaders = false;
+    await flush(el);
+    answer({ readerId: "r2" });
+    await flush(el);
+    expect(q(el, "[data-test=edit-reader]")).toBeNull();
+  });
+
+  it("regaining payments.manage while Edit is open does not draw the reader until Edit is opened again", async () => {
+    let answer!: (value: { readerId: string | null }) => void;
+    const api = editApi({
+      getDeviceReader: vi.fn().mockReturnValue(new Promise((resolve) => (answer = resolve))),
+    });
+    const el = await openEdit(api);
+    el.canManageReaders = false;
+    await flush(el);
+    el.canManageReaders = true;
+    await flush(el);
+    answer({ readerId: "r2" });
+    await flush(el);
+    expect(q(el, "[data-test=edit-reader]")).toBeNull();
+    expect(api.getDeviceReader).toHaveBeenCalledTimes(1);
   });
 
   it("preselects no reader when the device has none", async () => {
