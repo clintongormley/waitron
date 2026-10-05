@@ -5443,12 +5443,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   opens with Shows empty, so even a rename asks for a new one; whether to let it keep a switched-off
   one is the owner's call. (6) done by W105a (#1244): printers and devices both say Disable/Deshabilitar,
   status Disabled, and printers' Add again is now Enable; card readers followed in W110 (#1255): Disable/Deshabilitar,
-  Enable/Habilitar, Disabled/Deshabilitado, and their Add again/Volver a añadir is now Enable/Habilitar. (7) a
-  kitchen screen's Edit dialog hides Made here but still sends its stored made-here stations that
-  are switched on in the screen's station list; that list re-reads when kitchen stations change, so
-  one switched off while the dialog is open refuses the save — at the bottom of the dialog, with
-  "That station no longer exists" — only if the save is sent before that re-read lands, or while
-  live updates are down. (8) done by W105c (#1251): deleting a profile ignores disabled devices (owner
+  Enable/Habilitar, Disabled/Deshabilitado, and their Add again/Volver a añadir is now Enable/Habilitar. (7) done by W105e (2026-10-05): a
+  kitchen screen's Edit dialog hides Made here and its save leaves `madeHereStationIds` out, and the
+  device edit route leaves a device's made-here stations as they are when the field is absent; an
+  explicit null or a non-list is still refused `management.request_invalid`
+  (`apps/server/src/device-api.ts`). A made-here station switched off while the dialog is open no
+  longer refuses a kitchen screen's save. (8) done by W105c (#1251): deleting a profile ignores disabled devices (owner
   decision 2026-10-05). A profile only disabled devices hold is RETIRED, not deleted, because
   `devices.device_profile_id` is NOT NULL, and the rebuild that changing it needs fails once a row
   in a table keying into `devices` with RESTRICT names a device (fiscal records among them;
@@ -5469,10 +5469,15 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `returning.profileRetired` in the device join list (`returningDevicesOf`,
   `apps/server/src/join-requests.ts`). The device join list's live updates now name
   `device_profiles` too (`joinRequests`, `apps/dashboard/src/api/live-queries.ts`, pinned in its
-  test), so a profile deleted while a returning device's request is showing re-reads the list. (9) a device holding a printer its unchanged profile no longer lists
-  opens with that field empty, and Save keeps the old printer without saying so. (10) for a manager
-  without `payments.manage` the card reader field is drawn greyed while it loads and then disappears,
-  so the layout jumps. Review suggestions #1235 did not take, listed in its description: the edit
+  test), so a profile deleted while a returning device's request is showing re-reads the list. (9) done by W105e (2026-10-05): while the profile is unchanged, a printer the device
+  holds that its profile no longer lists is offered and chosen, marked "Name (not on this profile)"
+  / "Nombre (no está en este perfil)" (`devices.printer_not_on_profile_mark`; a switched-off one
+  also reads "(Disabled)"), and Save keeps it; a changed profile no longer offers it
+  (`#printerOptions`, `apps/dashboard/src/screens/devices-screen.ts`). Before the dashboard's
+  printer list has been read, nothing extra is offered and Save still keeps the held printer. (10) done by W105e (2026-10-05): the dashboard tells the
+  Devices screen whether the session holds `payments.manage` (`canManageReaders`, from the "who am I"
+  read in `apps/dashboard/src/dashboard-app.ts`); without it Edit never draws the card reader field
+  nor asks about readers. With it the reader is read as before, and a refusal still hides the field. Review suggestions #1235 did not take, listed in its description: the edit
   route checks permission before the device id where revoke checks the id first; its body is the
   whole device rather than only the fields named; it can write the device row up to three times;
   `rowClickable` and `rowActivation` could be one option; a save fetches the list twice; Edit and
