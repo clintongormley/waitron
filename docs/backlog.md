@@ -5314,7 +5314,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b DONE (#1248, main ccbe2b41e); W105c DONE (#1251, main 58c65558b); W105f DONE (#1253, main 44ff56380); W105g DONE (#1254, main 969c96972). W104–W106, W105b, W105c and W105f DONE; the open points each left are listed below.**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b DONE (#1248, main ccbe2b41e); W105c DONE (#1251, main 58c65558b); W105f DONE (#1253, main 44ff56380); W105g DONE (#1254, main 969c96972); W105h DONE (#1258, main efa4ecb1b). W104–W106, W105b, W105c and W105f DONE; the open points each left are listed below.**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
@@ -5425,7 +5425,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   lists are let go (`deleteDeviceProfile`, `packages/layouts/src/device-profile-store.ts`). A
   profile an active device holds is still refused `device_profile.in_use`. A returning device whose
   profile was retired opens Enable with Profile empty; Enable with the old profile is refused
-  `device_profile.not_found`. Done by W105h: the Devices table reads "Profile deleted" / "Perfil
+  `device_profile.not_found`. Done by W105h (#1258): the Devices table reads "Profile deleted" / "Perfil
   eliminado", muted, for a device on a retired profile, from `profileRetired` on each row of
   `GET /management-api/devices`; and a configuration export leaves a retired profile behind
   (`leaveBehindWhenSet: "retired_at"`, `packages/db/src/configuration-transfer.ts`) together with
