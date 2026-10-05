@@ -770,7 +770,8 @@ the left of the action row and Edit at the right, with "Use image" still on its 
 in the picker. The photo is a button marked "Preview" that opens a larger copy beside a list of every
 product, variant, menu section and published menu using it, each a link there; on a phone the photo
 sits above the list. The preview closes with Close, Escape or a click outside it, and focus goes back
-to the thumbnail. `wt-dialog` has no option to close on a backdrop click and was left unchanged, so
+to the thumbnail. `wt-dialog` has no option to close on a backdrop click (it sets `closedby` only to
+`closerequest` or `none`) and was left unchanged, so
 the library closes the preview itself when a click reaches the dialog element at a point outside the
 dialog's box.
 
