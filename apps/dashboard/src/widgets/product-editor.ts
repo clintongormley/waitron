@@ -788,8 +788,7 @@ export class ProductEditor extends LitElement {
   }
   /** The nested form's screen may hand focus back before this editor has drawn the control enabled
    * again, and a disabled control does not take focus; then it waits for that update. It gives up if
-   * another element has taken focus meanwhile, but not if focus merely dropped to the page: the shut
-   * form can still hold focus at the first try and lose it to the page. */
+   * focus has moved meanwhile, even to the page body. */
   private async focusOnceEnabled(find: () => HTMLElement | null | undefined): Promise<void> {
     const target = find();
     target?.focus();
@@ -797,7 +796,7 @@ export class ProductEditor extends LitElement {
     const before = deepActiveElement();
     await this.updateComplete;
     const now = deepActiveElement();
-    if (now === before || now === document.body) find()?.focus();
+    if (now === before) find()?.focus();
   }
   /** `restore` also makes an Inactive product Active again. Nothing else on the form changes
    * `active`, so a plain Save of an Inactive product keeps it Inactive. */

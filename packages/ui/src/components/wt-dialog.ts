@@ -9,6 +9,40 @@ import {
   WtFormActions,
 } from "./wt-form-actions.js";
 
+/** The focused element, looked for through every shadow root on the way down. */
+function deepActiveElement(): Element | null {
+  let focused = document.activeElement;
+  while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+  return focused;
+}
+
+function composedParent(node: Node): Node | null {
+  return node instanceof ShadowRoot ? node.host : node.parentNode;
+}
+
+/** Whether `node` is `ancestor` or sits inside it, across shadow-root boundaries. */
+function composedContains(ancestor: Node, node: Node | null): boolean {
+  for (let at = node; at; at = composedParent(at)) if (at === ancestor) return true;
+  return false;
+}
+
+function isTabbable(node: Node): node is HTMLElement {
+  return node instanceof HTMLElement && node.tabIndex >= 0 && !node.matches(":disabled");
+}
+
+/** The elements in `root`, and in the open shadow roots inside it, with a tabindex of 0 or above
+ * that are not disabled, in tree order and a host's shadow root first, leaving out `skip` and
+ * everything inside it. */
+function* tabbables(root: Node, skip: Set<Node>): Generator<HTMLElement> {
+  const shadow = root instanceof Element ? root.shadowRoot : null;
+  if (shadow && !skip.has(shadow)) yield* tabbables(shadow, skip);
+  for (const child of root.childNodes) {
+    if (skip.has(child)) continue;
+    if (isTabbable(child)) yield child;
+    yield* tabbables(child, skip);
+  }
+}
+
 @customElement("wt-dialog")
 export class WtDialog extends LitElement {
   static override styles = [
@@ -72,6 +106,14 @@ export class WtDialog extends LitElement {
    * browser without `closedby`, or a `close()` from outside — shows the dialog again. */
   @property({ type: Boolean }) dismissible = true;
 
+  /** Where focus goes on close when the browser leaves it on the page body or inside this closed
+   * dialog. Unset, or unable to take focus, focus goes to the first element found walking outward
+   * from what had it at opening. */
+  @property({ attribute: false }) opener: HTMLElement | null = null;
+
+  /** What had focus when the dialog opened, unless that was the page body. */
+  private returnTarget: Element | null = null;
+
   // Shadows the native ARIAMixin accessor so a caller's aria-label reaches the inner <dialog> when
   // there is no `heading` to name it.
   @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
@@ -125,8 +167,17 @@ export class WtDialog extends LitElement {
 
   override updated(changed: Map<string, unknown>): void {
     if (changed.has("open")) {
-      if (this.open && !this.dialog.open) this.dialog.showModal();
-      if (!this.open && this.dialog.open) this.dialog.close();
+      if (this.open && !this.dialog.open) {
+        const focused = deepActiveElement();
+        this.returnTarget = focused === document.body ? null : focused;
+        this.dialog.showModal();
+      }
+      if (!this.open && this.dialog.open) {
+        this.dialog.close();
+        // Now as well as on the close report a task later: a screen that hands focus back once
+        // this update completes must already see where focus will stay.
+        this.refocus();
+      }
     }
     // A footer row's message set while the dialog was shut could not be scrolled to then, so
     // opening does it.
@@ -143,8 +194,33 @@ export class WtDialog extends LitElement {
       this.dialog.showModal();
       return;
     }
+    // Before `wt-close`, so a listener that hands focus back itself acts after this and wins.
+    this.refocus();
+    this.returnTarget = null;
     this.open = false;
     this.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+  }
+
+  /** The browser hands focus back to what had it at opening; when it could not, focus is left on
+   * the page body or inside this closed dialog. */
+  private refocus(): void {
+    const focused = deepActiveElement();
+    if (focused !== document.body && !composedContains(this, focused)) return;
+    if (this.opener?.isConnected && this.takesFocus(this.opener)) return;
+    // A connected element's ancestors reach the document, so searching from it also covers
+    // everything near the dialog.
+    const skip = new Set<Node>([this]);
+    const from = this.returnTarget?.isConnected ? this.returnTarget : this;
+    for (let at = composedParent(from); at; at = composedParent(at)) {
+      for (const candidate of tabbables(at, skip)) if (this.takesFocus(candidate)) return;
+      if (!skip.has(at) && isTabbable(at) && this.takesFocus(at)) return;
+      skip.add(at);
+    }
+  }
+
+  private takesFocus(element: HTMLElement): boolean {
+    element.focus();
+    return composedContains(element, deepActiveElement());
   }
 
   private onCancel(event: Event): void {

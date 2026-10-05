@@ -407,7 +407,7 @@ test("uses a white surface and a soft shadow in the light theme", async () => {
   expect(style.boxShadow).not.toBe("none");
 });
 
-test("Escape closes the modal, emits wt-close and returns focus to its trigger", async () => {
+test("Escape closes the modal, emits wt-close and returns focus to what had it when it opened", async () => {
   const modal = await openModal();
   const initiallyClosed = new Promise<void>((resolve) =>
     modal.addEventListener("wt-close", () => resolve(), { once: true }),

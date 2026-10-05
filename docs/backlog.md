@@ -780,9 +780,9 @@ preview's height limit and is drawn centred with plain bands either side — whe
 is the owner's call; (2) a test title in `apps/till/src/screens/till-allergen-screen.test.ts` says its
 dialog closes on "escape/backdrop", but the shared dialog does not close on a click outside it — the
 title, not the behaviour, looks wrong (unchecked beyond the reviewer's reading); (3)
-`docs/developers/design-system.md` says a dialog returns focus to its trigger on close — the preview
-returns it itself, because with that line deleted its Close button and an outside click left focus on
-the page body.
+`docs/developers/design-system.md` said a dialog returns focus to its trigger on close — settled
+for that line: W71g (#1208) replaced it with the dialog's own rule; the preview keeps its own
+hand-back.
 
 **The folding section jumps about when it opens (A169, owner 2026-10-01) — DONE (#1026).** `wt-disclosure`
 (`packages/ui/src/components/wt-disclosure.ts`) now draws no border in either state, keeps its
@@ -1202,7 +1202,7 @@ while the drag handle, the Default radio and the row menu keep doing their own t
 list form (`extra-list-form.ts`) draws the same kind of table, but its rows have no editor.
 
 **Clicking an Extras or Options list's row opens its editor, in the product editor and on the
-Modifiers page (W71, owner 2026-10-04) — DONE (#1192; W71f #1198; W71h #1211).** In the product editor's Modifiers table
+Modifiers page (W71, owner 2026-10-04) — DONE (#1192; W71f #1198; W71g #1208; W71h #1211).** In the product editor's Modifiers table
 (`apps/dashboard/src/widgets/product-editor.ts`) a click on a list's name or the empty part of its
 row, or Enter or Space on it, does what Edit in the row's menu does (`wt-edit-related`), through a
 row-sized button named "Edit: <list> · <kind>", built as the variants table's is; the drag handle,
@@ -1221,17 +1221,28 @@ The unit form's Cancel and Escape cases failed — Add unit was still drawn disa
 hand-back ran, and after Escape focus was lost even when Add unit was opened with a real click — so
 `#returnChildFocus` now waits for the unit form as it does for the list forms. The Courses window
 passed unchanged; with its hand-back removed only the new cases failed, as opening it from the
-course box puts focus on the box first. Left OPEN from W71f's review, not acted on: (1)
-`docs/developers/design-system.md` (the `wt-modal` paragraph) says the native dialog "returns focus
+course box puts focus on the box first. From W71f's review: (1)
+`docs/developers/design-system.md` (the `wt-modal` paragraph) said the native dialog "returns focus
 to its trigger on close", while the W71f test comments and `product-editor.ts` rely on it going back
-to whatever had focus when the dialog opened; the line dates from #319 (2026-09-11, `git blame`) and
-neither reading has been tested — next step: a browser case that opens a dialog with focus away from
-its trigger and records where focus lands, then correct the sentence to what it shows. Settled by
-W71h, from the same review: (2) W71f's unit-form wait in `#returnChildFocus` worked only because the
+to whatever had focus when the dialog opened; the line dated from #319 (2026-09-11, `git blame`).
+Settled by W71g (owner 2026-10-05: keep the browser's rule, add an optional opener and a fallback;
+#1208): browser tests in `packages/ui/src/components/wt-dialog.test.ts` show that in Chromium focus
+goes back to whatever had it when the dialog opened. When the browser would leave focus on the page
+body or inside the closed dialog, `wt-dialog` (and `wt-modal`) now moves it to its new `opener`
+property if set and able to take focus, otherwise to the first element with tabindex 0 or above that
+is not disabled inside the closest enclosing element that holds one, or that enclosing element
+itself, then further out; when none takes focus, focus stays where the browser left it. It does so
+before sending `wt-close`, so a screen that hands focus back itself still has the last word.
+design-system.md says this. The Printers screen sets `opener` on its Add agent dialog to the tab's
+Add button and drops its own `#refocusAdd`; its edit-printer dialog (the calibration wizard since
+#1227) gets that button as `opener` only where it is on the page, when the wizard follows an add
+from the list, and opened from a printer's details page has none, so the fallback search applies. No
+other screen changed; screens that hand focus back themselves are listed in #1208. Settled by W71h,
+from the same review: (2) W71f's unit-form wait in `#returnChildFocus` worked only because the
 product editor happened to finish redrawing Add unit as enabled in the meantime (seen in Codex's
 timing log). The editor's `returnRelatedFocus` focuses the Add control, or an attached list's row
 button or menu, at once; when it is still drawn disabled, it waits for the editor's next update and
-focuses it then, unless focus has moved to another control meanwhile (`focusOnceEnabled`,
+focuses it then, unless focus has moved meanwhile (`focusOnceEnabled`,
 `apps/dashboard/src/widgets/product-editor.ts`). In `catalogue-screen.test.ts`, with the editor's
 update held back, the unit form's Cancel and Escape and an options list's Cancel and Escape opened
 from an attached row; in `product-editor.test.ts`, with the hand-back called before the editor's
