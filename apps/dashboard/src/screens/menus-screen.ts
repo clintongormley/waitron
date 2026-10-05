@@ -49,6 +49,7 @@ import type {
   SectionMember,
 } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
+import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -494,8 +495,8 @@ export class MenusScreen extends LitElement {
   @state() private creatingSection: ListTarget | null = null;
   @state() private editingSection: SectionDetails | null = null;
   @state() private deletingSection: SectionDetails | null = null;
-  /** The product whose own colour is being chosen, and the colour its category gives it. */
-  @state() private colouring: { product: Product; categoryColor: string | null } | null = null;
+  /** The id of the product whose own colour is being chosen. */
+  @state() private colouring: string | null = null;
   @state() private colorBusy = false;
   @state() private colorErrors: Record<string, string> = {};
   @state() private deleteSectionError = "";
@@ -672,6 +673,7 @@ export class MenusScreen extends LitElement {
       );
     }
     if (changed.has("products")) this.#addable = this.products.filter((product) => product.active);
+    if (changed.has("products") && this.#colouredProduct() === null) this.colouring = null;
     if (changed.has("structure") || changed.has("products")) {
       const products = new Map(
         this.products.filter((product) => product.active).map(({ id, name }) => [id, name]),
@@ -1998,13 +2000,9 @@ export class MenusScreen extends LitElement {
             this.sections.find((section) => section.id === event.detail.sectionId) ?? null;
           this.newSectionErrors = {};
         }}
-        @wt-product-color=${(
-          event: CustomEvent<{ productId: string; categoryColor: string | null }>,
-        ) => {
+        @wt-product-color=${(event: CustomEvent<{ productId: string }>) => {
           event.stopPropagation();
-          const { productId, categoryColor } = event.detail;
-          const product = this.products.find((each) => each.id === productId);
-          this.colouring = product === undefined ? null : { product, categoryColor };
+          this.colouring = event.detail.productId;
           this.colorErrors = {};
         }}
         @wt-member-delete=${(event: CustomEvent<{ sectionId: string; path: string[] }>) => {
@@ -2265,7 +2263,7 @@ export class MenusScreen extends LitElement {
   }
 
   async #saveProductColor(color: string | null): Promise<void> {
-    const product = this.colouring?.product;
+    const product = this.#colouredProduct();
     if (!product || this.colorBusy) return;
     this.colorBusy = true;
     try {
@@ -2281,14 +2279,25 @@ export class MenusScreen extends LitElement {
     }
   }
 
+  #colouredProduct(): Product | null {
+    return this.products.find((each) => each.id === this.colouring) ?? null;
+  }
+
   #renderProductColor() {
-    const product = this.colouring?.product ?? null;
+    const product = this.#colouredProduct();
+    const inherited =
+      product === null
+        ? null
+        : categoryColor(
+            product.categoryId,
+            new Map(this.categories.map((each) => [each.id, each])),
+          );
     return html`<dashboard-product-color-form
       .open=${product !== null}
       .busy=${this.colorBusy}
       .name=${product?.name ?? ""}
       .color=${product?.color ?? null}
-      .categoryColor=${this.colouring?.categoryColor ?? null}
+      .categoryColor=${inherited}
       .errors=${this.colorErrors}
       @wt-submit=${(event: CustomEvent<{ color: string | null }>) => {
         event.stopPropagation();

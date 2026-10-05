@@ -1331,9 +1331,7 @@ describe("colour swatches", () => {
     );
     await userEvent.click(swatch);
     await settle(el);
-    expect(sent).toEqual([
-      ["wt-product-color", { productId: "p-lemonade", categoryColor: "#256bb1" }],
-    ]);
+    expect(sent).toEqual([["wt-product-color", { productId: "p-lemonade" }]]);
     expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("true");
 
     pointer(swatch, "pointerdown");
@@ -1341,9 +1339,7 @@ describe("colour swatches", () => {
     pointer(swatch, "pointerup", nameAt(el, "m-fav"));
     await settle(el);
     expect(ghost(el)).toBeNull();
-    expect(sent).toEqual([
-      ["wt-product-color", { productId: "p-lemonade", categoryColor: "#256bb1" }],
-    ]);
+    expect(sent).toEqual([["wt-product-color", { productId: "p-lemonade" }]]);
   });
 
   it("paints a section's own colour, and its swatch asks for the section's Edit without opening or closing it", async () => {

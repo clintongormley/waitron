@@ -7109,6 +7109,56 @@ describe("colour swatches on the Structure tab", () => {
     expect(form.open).toBe(true);
   });
 
+  it("shows the category's new colour when it changes while the dialog is open, keeping the choice made there", async () => {
+    const live = new LiveData();
+    const client = api({
+      liveData: live,
+      listCategories: vi.fn().mockResolvedValue(paintedCategories()),
+      setProductColor: vi.fn().mockResolvedValue(undefined),
+    });
+    const el = await openLemonade(client);
+    const form = colorForm(el);
+    inColorForm(el, '[data-color="#b12525"]').click();
+    await form.updateComplete;
+
+    client.listCategories.mockResolvedValue(
+      categories.map((each) => (each.id === "c-drinks" ? { ...each, color: "#2e8b57" } : each)),
+    );
+    live.invalidate([{ type: "categories" }]);
+
+    await vi.waitFor(() =>
+      expect(inColorForm(el, "#product-color-none-value").textContent).toBe("#2e8b57"),
+    );
+    expect(form.open).toBe(true);
+    expect(inColorForm(el, '[data-color="#b12525"]').getAttribute("aria-checked")).toBe("true");
+
+    inColorForm(el, '[data-color=""]').click();
+    await form.updateComplete;
+    inColorForm(el, '[data-test="save"]').click();
+    await vi.waitFor(() => expect(form.open).toBe(false));
+    expect(client.setProductColor.mock.calls).toEqual([["p-lemonade", null]]);
+  });
+
+  it("closes the dialog when its product leaves the library, and does not reopen it when the product comes back", async () => {
+    const live = new LiveData();
+    const client = api({ liveData: live, setProductColor: vi.fn() });
+    const el = await openLemonade(client);
+    client.listLibraryProducts.mockResolvedValue(
+      products.filter((each) => each.id !== "p-lemonade"),
+    );
+    live.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(colorForm(el).open).toBe(false));
+
+    client.listLibraryProducts.mockResolvedValue(products);
+    live.invalidate([{ type: "products" }]);
+    await vi.waitFor(() =>
+      expect(structure(el).products.some((each) => each.id === "p-lemonade")).toBe(true),
+    );
+    await el.updateComplete;
+    expect(colorForm(el).open).toBe(false);
+    expect(writeCalls(client)).toEqual([]);
+  });
+
   it("closes the dialog on Cancel, writing nothing", async () => {
     const client = api({ setProductColor: vi.fn() });
     const el = await openLemonade(client);

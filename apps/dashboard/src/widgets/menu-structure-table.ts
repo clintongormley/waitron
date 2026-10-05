@@ -656,9 +656,8 @@ export class MenuStructureTable extends LitElement {
     } else {
       const productId = node.ref.productId;
       const product = this.#productById.get(productId);
-      const inherited = categoryColor(product?.categoryId ?? null, this.#categoryById);
-      color = product?.color ?? inherited;
-      send = () => this.#send("wt-product-color", { productId, categoryColor: inherited });
+      color = product?.color ?? categoryColor(product?.categoryId ?? null, this.#categoryById);
+      send = () => this.#send("wt-product-color", { productId });
       editable = !row.readOnly && product !== undefined;
     }
     const chip = swatchChip(color);
