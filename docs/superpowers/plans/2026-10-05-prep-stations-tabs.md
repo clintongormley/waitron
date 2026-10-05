@@ -554,3 +554,33 @@ station pair. Campaign-local test and deletion-control logs record the verificat
 
 Routing-only cleanup, supervisor page loading and Task 8 whole-branch review/hook/current-head
 CI/landing remain. This checkpoint does not mark the branch ready to ship.
+
+
+## Supervisor overview checkpoint — 2026-10-05
+
+The dashboard now accepts a module screen's optional read permission and passes its read-only
+state to the screen, following the settings-panel contract. Prep stations uses `venue.view` for
+Stations health and drilldowns, retaining `venue_service.manage` for configuration. Its overview
+client reads station metadata and a separate station-overview venue-service route; it requests no
+printer, device, watcher or catalogue management lists. Existing routing and write permissions
+remain in place. A saved configuration link and switching an open screen into read-only mode select Stations;
+configuration tabs, creation, row actions, reordering and Today writes are absent for viewers.
+
+New route, metadata, client, screen and shell cases failed before implementation. The final focused
+commands passed 66 venue-service route tests, 109 server tests, 312 dashboard shell tests and 350
+Prep browser tests, including eight EN/ES, light/dark, phone/desktop keyboard, axe and viewport
+cases. Sixteen page/drilldown captures were inspected. Three unchanged root guards passed 37
+cases; four affected package typechecks and focused lint passed. In a frozen-installed complete
+disposable copy, removing the overview authorization made the staff refusal fail while the
+supervisor case passed; removing the readonly row-action gate made the hidden-menu check fail
+while two manager cases passed; removing the shell read-access branch made the supervisor nav
+check fail while the manager tester case passed. Restoring each gate passed its selected cases. A strengthened overview case includes a nondefault
+station with scheduled status: removing its readonly Today gate exposes a closure button and fails
+that case, while the two manager Today cases pass; restoring it passes all three cases.
+
+The existing Prep placement check gains `readPermission: "venue.view"` under Tasks 3–4's approved
+supervisor read access. Its request fixture now supplies a complete empty health snapshot rather
+than an array; all existing behavior assertions remain. The first broader browser run passed its
+341 assertions but exited with that fixture's unhandled error; it was not a green run. New visual
+harness waits and screenshot paths were corrected before the final passing run. This is a subtask
+checkpoint: Routing-only cleanup and Task 8 whole-branch review/hook/CI/landing remain open.

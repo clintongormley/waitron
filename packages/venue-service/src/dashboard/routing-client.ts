@@ -99,14 +99,46 @@ export class PrepStationsApi {
     private readonly request: DashboardRequest,
     readonly liveData?: LiveData,
     private readonly passive = false,
+    private readonly readOnly = false,
   ) {}
   get background() {
-    return new PrepStationsApi(this.request, this.liveData, true);
+    return new PrepStationsApi(this.request, this.liveData, true, this.readOnly);
+  }
+  get overview() {
+    return new PrepStationsApi(this.request, this.liveData, this.passive, true);
   }
   #read<T>(path: string): Promise<T> {
     return this.request<T>(path, "GET", undefined, { passive: this.passive });
   }
   async load(): Promise<PrepStationsView> {
+    if (this.readOnly) {
+      const [overview, stations] = await Promise.all([
+        this.#read<
+          Pick<
+            RoutingModel,
+            "stations" | "defaultStationId" | "stationTimes" | "todayEnds" | "clockReadable"
+          >
+        >("/management-api/venue-service/stations/overview"),
+        this.#read<PrepStation[]>("/management-api/stations?includeDisabled=true"),
+      ]);
+      return {
+        routing: {
+          ...overview,
+          claims: [],
+          exceptions: [],
+          unassigned: { folders: [], products: [] },
+        },
+        stations,
+        categories: [],
+        zones: [],
+        products: [],
+        testProducts: [],
+        printers: [],
+        stationPrinters: [],
+        devices: [],
+        watchers: [],
+      };
+    }
     const [routing, stations, categories, zones, products, printers, devices, watchers] =
       await Promise.all([
         this.#read<RoutingModel>("/management-api/venue-service/routing"),

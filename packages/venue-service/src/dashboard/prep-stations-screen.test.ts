@@ -4829,3 +4829,77 @@ it("Watchers keeps a conflict while another selected printer still serves a stat
   ]);
   expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["next", "old"]);
 });
+
+it("keeps supervisor numbers and drilldowns live without exposing any configuration controls", async () => {
+  const liveData = new LiveData();
+  const read = vi.fn().mockResolvedValue({
+    ...healthSnapshot,
+    stations: [
+      healthSnapshot.stations[0]!,
+      { ...healthSnapshot.stations[0]!, id: "upstairs", name: "Upstairs bar" },
+    ],
+  });
+  const a = api({
+    liveData,
+    load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
+    readStationHealth: read,
+  });
+  const host = document.createElement("div");
+  applyTokens(host);
+  document.body.append(host);
+  hosts.push(host);
+  const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
+  el.api = a;
+  el.readOnly = true;
+  host.append(el);
+  await settle(el);
+  expect(q(el, '[data-test="new-station"]')).toBeNull();
+  expect(q(el, '[data-test="new-watcher"]')).toBeNull();
+  expect(q(el, '[data-test="interim-station-hours"]')).toBeNull();
+  const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+  await tabs.updateComplete;
+  expect(tabs.shadowRoot!.querySelectorAll('[role="tab"]')).toHaveLength(1);
+  const summary = healthSummary(el)!;
+  expect(summary.textContent).toContain("Upstairs bar");
+  expect(summary.textContent).toContain("Open now");
+  expect(summary.querySelector("wt-row-actions")).toBeNull();
+  expect(summary.querySelector('[data-test="close-today-upstairs"]')).toBeNull();
+  expect(summary.querySelector("[data-station-id]")).toBeNull();
+  summary.querySelector<HTMLElement>('[data-test="waiting-bar"]')!.click();
+  await settle(el);
+  const health = el.shadowRoot!.querySelector("prep-station-health-table")!;
+  await health.updateComplete;
+  await vi.waitFor(() =>
+    expect(
+      health.shadowRoot!.querySelector('[data-test="health-details"]')?.shadowRoot?.textContent,
+    ).toContain("KITCHEN SOUP"),
+  );
+  read.mockResolvedValue({
+    ...healthSnapshot,
+    stations: [{ ...healthSnapshot.stations[0]!, waiting: 0, items: [] }],
+  });
+  liveData.invalidate([{ type: "ticket_items", id: "soup" }]);
+  await vi.waitFor(() =>
+    expect(healthSummary(el)!.querySelector('[data-test="waiting-bar"]')!.textContent!.trim()).toBe(
+      "0",
+    ),
+  );
+  expect(a.updateStation).not.toHaveBeenCalled();
+});
+
+it("moves a configuration panel back to the overview when the screen becomes read-only", async () => {
+  history.replaceState(null, "", "/manage/prep-stations/view/settings/test/bread");
+  const a = api({ readStationHealth: vi.fn().mockResolvedValue(healthSnapshot) });
+  const el = await mount(a);
+  expect(el.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-tabs")!.value).toBe(
+    "settings",
+  );
+  el.readOnly = true;
+  await settle(el);
+  expect(el.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-tabs")!.value).toBe(
+    "stations",
+  );
+  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  expect(q(el, '[data-test="settings-table"]')).toBeNull();
+  expect(q(el, '[data-test="new-station"]')).toBeNull();
+});

@@ -411,3 +411,35 @@ describe("station health", () => {
     expect(await response.json()).toMatchObject({ error: { code: "management_session.required" } });
   });
 });
+
+it("lets supervisors load station metadata without granting station writes", async () => {
+  const f = await setup();
+  await suite.db.insert(persons).values({
+    displayName: "Supervisor",
+    email: "overview@example.test",
+    role: "supervisor",
+    pinHash: hashPin("1234"),
+    passwordHash: hashPassword("Password123"),
+  });
+  const cookie = await f.login("overview@example.test", "Password123");
+  const response = await f.app.request("/management-api/stations?includeDisabled=true", {
+    headers: { cookie },
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual([
+    expect.objectContaining({
+      id: f.station.id,
+      name: f.station.name,
+      active: true,
+      isDefault: true,
+    }),
+  ]);
+  const write = await f.app.request(`/management-api/stations/${f.station.id}`, {
+    method: "PATCH",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ name: "Denied" }),
+  });
+  expect(write.status).toBe(403);
+  expect(await write.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+  expect((await f.app.request("/management-api/stations")).status).toBe(401);
+});

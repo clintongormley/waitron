@@ -6373,7 +6373,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   clearing it inherits the default. Local checks enforce whole positive minutes and effective order,
   focus the invalid cell and disable Save after an invalid submission. Server refusals keep the
   draft retryable. Live defaults refresh inherited values while retaining drafts and action errors.
-  Routing-only card replacement and supervisor page-loading permissions remain open. Venue settings › Kitchen now reads and
+  Supervisors can now open the live Stations overview and its read-only drilldowns. The page
+  loads only station metadata and current status, without printer, device or catalogue management
+  reads; configuration tabs and actions are absent. Saved configuration links return to Stations.
+  Routing-only card replacement remains open. Venue settings › Kitchen now reads and
   replaces the venue-wide late flags. Its required whole-minute fields validate every invalid
   value and their order, naming a station when the server refuses the effective result. A refusal
   retains a retryable draft; live reads update saved values without replacing it. Supervisors see

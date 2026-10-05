@@ -1174,7 +1174,11 @@ export class DashboardApp extends LitElement {
           screen,
           handle: contributed.create(ctx),
         });
-        if (this.#sessionPermissions.includes(screen.requiresPermission)) {
+        if (
+          this.#sessionPermissions.includes(screen.requiresPermission) ||
+          (screen.readPermission !== undefined &&
+            this.#sessionPermissions.includes(screen.readPermission))
+        ) {
           const group = this.#navGroups.get(screen.group) ?? [];
           group.push(screen);
           this.#navGroups.set(screen.group, group);
@@ -1534,7 +1538,12 @@ export class DashboardApp extends LitElement {
     if (item && this.#mayOpen(item)) return item.screen;
     if (requested !== null) {
       const active = this.#activeScreens.get(requested);
-      if (active && this.#sessionPermissions.includes(active.screen.requiresPermission))
+      if (
+        active &&
+        (this.#sessionPermissions.includes(active.screen.requiresPermission) ||
+          (active.screen.readPermission !== undefined &&
+            this.#sessionPermissions.includes(active.screen.readPermission)))
+      )
         return requested;
     }
     return "overview";
@@ -1797,7 +1806,8 @@ export class DashboardApp extends LitElement {
    */
   #renderScreen(): TemplateResult {
     const mod = this.#activeScreens.get(this.screen);
-    if (mod) return mod.handle.render();
+    if (mod)
+      return mod.handle.render(!this.#sessionPermissions.includes(mod.screen.requiresPermission));
     switch (this.screen) {
       case "my-schedule":
         return html`<dashboard-my-schedule-screen

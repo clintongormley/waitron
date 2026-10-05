@@ -3516,6 +3516,62 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
 });
 
 describe("dashboard URL navigation", () => {
+  it("opens the live Prep overview for venue viewers through a saved configuration-tab link", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/view/settings");
+    const reads: string[] = [];
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          personId: "p1",
+          role: "supervisor",
+          locale: "en-GB",
+          venueLocale: "en-GB",
+          sessionDefault: "en-GB",
+          permissions: ["venue.view"],
+          modules: ["venue-service"],
+          venueName: "Venue",
+        }),
+      }),
+      request: async (path) => {
+        reads.push(path);
+        if (path === "/management-api/venue-service/stations/overview")
+          return {
+            stations: [],
+            defaultStationId: null,
+            stationTimes: [],
+            todayEnds: { timeOfDay: "06:00", tomorrow: true },
+            clockReadable: true,
+          } as never;
+        if (path === "/management-api/stations?includeDisabled=true") return [] as never;
+        if (path === "/management-api/stations/health")
+          return {
+            capturedAt: "2026-10-05T12:00:00Z",
+            stations: [],
+            outputsDown: { printersDown: [], screensDark: [] },
+          } as never;
+        if (path === "/management-api/stations/outputs-down")
+          return { printersDown: [], screensDark: [] } as never;
+        return [] as never;
+      },
+    });
+    await flush(el);
+    expect(navItem(el, "prep-stations")).not.toBeNull();
+    const screen = el.shadowRoot!.querySelector("dashboard-prep-stations-screen")!;
+    expect(screen).not.toBeNull();
+    await vi.waitFor(() => expect(screen.shadowRoot!.querySelector("wt-tabs")).not.toBeNull());
+    expect(screen.shadowRoot!.querySelector('[data-test="new-station"]')).toBeNull();
+    expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+    expect(reads).toContain("/management-api/venue-service/stations/overview");
+    for (const path of [
+      "/management-api/venue-service/routing",
+      "/management-api/printers",
+      "/management-api/devices",
+      "/management-api/watchers",
+      "/management-api/products",
+    ])
+      expect(reads).not.toContain(path);
+  });
+
   it("preserves a prep station tester product when the dashboard restores the screen", async () => {
     history.replaceState(null, "", "/manage/prep-stations/test/lager");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {

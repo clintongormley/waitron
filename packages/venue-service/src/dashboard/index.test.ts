@@ -150,7 +150,13 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
                   defaultStationId: null,
                   stations: [],
                 }
-              : [],
+              : path === "/management-api/stations/health"
+                ? {
+                    capturedAt: "2026-10-05T12:00:00Z",
+                    stations: [],
+                    outputsDown: { printersDown: [], screensDark: [] },
+                  }
+                : [],
           ),
       } as Response),
     );
@@ -162,6 +168,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       group: "operations",
       order: 30,
       requiresPermission: "venue_service.manage",
+      readPermission: "venue.view",
     });
     const handle = prep.create({
       request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),

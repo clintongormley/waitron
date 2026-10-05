@@ -1849,7 +1849,7 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
       const includeDisabled = c.req.query("includeDisabled") === "true";
-      const stations = await withVenueAuth(deps, sessionId, (tx) =>
+      const stations = await withVenueReadAuth(deps, sessionId, (tx) =>
         listStations(tx, cfg, includeDisabled),
       );
       return c.json(stations);
