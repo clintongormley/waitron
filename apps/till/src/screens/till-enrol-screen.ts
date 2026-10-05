@@ -12,7 +12,8 @@ import { languageChooserStyles } from "../widgets/language-chooser-styles.js";
 const POLL_MS = 2_000;
 
 /**
- * The device front door's JOIN screen, for a FRESH (unenrolled) browser; the dev chooser embeds it too.
+ * The device front door's JOIN screen, for a browser whose device the server refuses; the dev chooser
+ * embeds it too.
  * It asks only for a name: the profile and the binding are chosen by an admin in the dashboard's accept
  * dialog, so this screen reads no catalogue.
  *

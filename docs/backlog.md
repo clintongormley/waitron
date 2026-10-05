@@ -5520,8 +5520,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   created and approved a new device, but `GET /api/device/me` kept answering `device.unauthorized`
   because in dev mode the server reads the header instead of the device cookie
   (`apps/server/src/device-session.ts`). Now a dev tab whose remembered device is refused
-  `device.unauthorized` forgets it and shows the picker; outside dev mode the browser still gets the
-  join screen, and any other failure keeps the remembered device (`#boot`, `apps/till/src/till-app.ts`).
+  `device.unauthorized` forgets it and shows the picker. If the picker's device list then fails to
+  load, the tab shows the join screen instead, and a join from it no longer sends the forgotten id.
+  Outside dev mode the browser still gets the join screen, and any other failure keeps the
+  remembered device (`#boot`, `apps/till/src/till-app.ts`).
 - **A low-battery alert (A272, idea, 2026-10-04) — OPEN.** A268 shows each device's battery on the
   Devices list; nothing alerts when a handheld runs low.
 
