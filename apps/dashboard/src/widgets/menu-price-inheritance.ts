@@ -68,11 +68,15 @@ export function variantInherited(
   return single(variantInheritedFrom(row, variantId, parent).setting);
 }
 
-/** An Active size's own price clashes, which a price for the product would not settle. */
-export function sizeClash(row: MenuPriceRow): boolean {
+/** The product's price, as its field reads now, is decided, and an Active size's own price
+ * clashes, which a price for the product would not settle. */
+export function sizeClash(row: MenuPriceRow, parent: ParentPrice = undefined): boolean {
   return (
-    row.combined.price.state === "decided" &&
-    row.variants.some((v) => v.active && sizeSetting(row, v.variantId).state === "clash")
+    parentSetting(row, parent).state === "decided" &&
+    row.variants.some((v) => {
+      const setting = sizeSetting(row, v.variantId);
+      return v.active && setting.state === "clash" && setting.level === "size";
+    })
   );
 }
 

@@ -2077,6 +2077,89 @@ it.each([
   },
 );
 
+const clashMarker = (el: MenuPricesTable, key: string) =>
+  text(cell(el, "override", key).querySelector("[part~=clash]"));
+
+it("drops a product's Clash once this menu's saved price decides it, and shows it again when the field is emptied", async () => {
+  const resolved: MenuPriceRow = {
+    ...lager,
+    override: "2.20",
+    combined: {
+      ...lager.combined,
+      price: { state: "decided", value: "2.20", source: { kind: "own" }, otherwise: clashPrice },
+    } as MenuPriceRow["combined"],
+  };
+  const el = await mount({ rows: [resolved] });
+  expect(override(el, "mi-lager").value).toBe("2.20");
+  expect(clashMarker(el, "mi-lager")).toBe("");
+  expect(row(el, "mi-lager")!.querySelector("wt-row-actions")).toBeNull();
+  await typeIn(el, "mi-lager", "");
+  await table(el).updateComplete;
+  expect(clashMarker(el, "mi-lager")).toBe(t("menu_prices.clash"));
+  expect(override(el, "mi-lager").placeholder).toBe(t("menu_prices.clash_placeholder"));
+});
+
+it("drops a product's Clash while a price is typed for it, and not for text that is no price", async () => {
+  const el = await mount({ rows: [clashRow(lager)] });
+  expect(clashMarker(el, "mi-lager")).toBe(t("menu_prices.clash"));
+  await typeIn(el, "mi-lager", "2.20");
+  await table(el).updateComplete;
+  expect(clashMarker(el, "mi-lager")).toBe("");
+  await typeIn(el, "mi-lager", "2,20");
+  await table(el).updateComplete;
+  expect(clashMarker(el, "mi-lager")).toBe(t("menu_prices.clash"));
+});
+
+it("drops a size's Clash once this menu's saved price decides it, and shows it again when the field is emptied", async () => {
+  const source = variantClashRow();
+  const resolved = {
+    ...source,
+    combined: {
+      ...source.combined,
+      variants: source.combined.variants.map((v, at) =>
+        at === 0
+          ? {
+              ...v,
+              price: {
+                state: "decided",
+                value: "3.20",
+                source: { kind: "own" },
+                otherwise: clashPrice,
+                level: "size",
+              },
+            }
+          : v,
+      ),
+    },
+    variants: source.variants.map((v) => (v.variantId === "v-small" ? { ...v, price: "3.20" } : v)),
+  } as MenuPriceRow;
+  const el = await mount({ rows: [resolved] });
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  expect(clashMarker(el, "mi-lemonade:v-small")).toBe("");
+  expect(clashMarker(el, "mi-lemonade")).toBe("");
+  await typeIn(el, "mi-lemonade:v-small", "");
+  await table(el).updateComplete;
+  expect(clashMarker(el, "mi-lemonade:v-small")).toBe(t("menu_prices.clash"));
+});
+
+it("turns a clashing product's Clash into its size's once a price is typed for the product", async () => {
+  const el = await mount({
+    rows: [
+      {
+        ...variantClashRow(),
+        override: null,
+        combined: { ...variantClashRow().combined, price: clashPrice },
+      },
+    ],
+  });
+  expect(clashMarker(el, "mi-lemonade")).toBe(t("menu_prices.clash"));
+  await typeIn(el, "mi-lemonade", "2.80");
+  await table(el).updateComplete;
+  expect(clashMarker(el, "mi-lemonade")).toBe(t("menu_prices.size_clash"));
+  expect(override(el, "mi-lemonade").placeholder).toBe("—");
+});
+
 /** Runs `body` with the test frame at a desktop width, where the whole table fits the window. */
 async function atDesktopWidth(body: () => Promise<void>): Promise<void> {
   const width = window.innerWidth,

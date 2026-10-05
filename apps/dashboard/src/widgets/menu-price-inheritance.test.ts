@@ -424,6 +424,16 @@ describe("sizeClash", () => {
   it("is false when no size clashes", () => {
     expect(sizeClash(lemonade)).toBe(false);
   });
+
+  it("counts a price typed for a clashing product as deciding it, past an emptied one", () => {
+    const drinks = { price: "3.50", variants: { "v-large": "3.90" } };
+    const row = lemonadeOn({}, drinks);
+    expect(sizeClash(row)).toBe(false);
+    expect(sizeClash(row, "2.80")).toBe(true);
+    expect(sizeClash(row, null)).toBe(false);
+    expect(sizeClash(lemonadeOn({ price: "2.80" }, drinks))).toBe(true);
+    expect(sizeClash(lemonadeOn({ price: "2.80" }, drinks), null)).toBe(false);
+  });
 });
 
 describe("withoutOwn", () => {
