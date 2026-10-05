@@ -1,6 +1,7 @@
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
+  assertKitchenTimingPresent,
   kitchenStations,
   kitchenStationTiming,
   kitchenTimingDefaults,
@@ -39,6 +40,7 @@ export async function computeOverdueOrders(
   tx: Transaction,
   input: OverdueOrdersInput,
 ): Promise<OverdueOrder[]> {
+  await assertKitchenTimingPresent(tx);
   // Read ONCE, so every row in this run is aged and classified against the SAME instant.
   const nowMs = Date.now();
   const rows = await tx

@@ -3,6 +3,7 @@ import { kitchenPresentationName } from "@waitron/catalogue";
 import {
   devices,
   diningTables,
+  assertKitchenTimingPresent,
   kitchenStations,
   kitchenStationTiming,
   kitchenTimingDefaults,
@@ -91,6 +92,7 @@ export async function readStationHealth(
   cfg: Pick<TillConfig, "locationId">,
   now: Date,
 ): Promise<StationHealthSnapshot> {
+  await assertKitchenTimingPresent(tx);
   const stations = await tx
     .select({
       id: kitchenStations.id,

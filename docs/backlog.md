@@ -6390,8 +6390,14 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Rename, ordering and Settings cells retain their separate write paths; station creation retains
   its form. Rename refuses a draft whose station disappeared during a live refresh. Stations gets
   its output problems from the health snapshot, with warning text wrapped within the shared name
-  width so it does not stretch the table into a single long line. Whole-branch review, rebase,
-  push-hook validation, current-head CI and landing remain.
+  width so it does not stretch the table into a single long line. The 2026-10-05 Claude run-it review
+  reproduced missing-default kitchen reads returning empty results; the readers now refuse
+  `station.timing_missing` instead. Seven consumer regression cases and the defaults-readiness
+  guard cover this refusal; no migration backfill or old-value conversion was added. The old
+  numeric columns carry a retirement note. Review notes retained for future cleanup: the overview
+  API object still exposes write methods (server routes remain the permission boundary), and
+  station reordering repeats an active filter after an active-only read. No write-permission
+  defect was reported. Push-hook validation, current-head CI and landing remain.
   Venue settings › Kitchen now reads and
   replaces the venue-wide late flags. Its required whole-minute fields validate every invalid
   value and their order, naming a station when the server refuses the effective result. A refusal

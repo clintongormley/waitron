@@ -1,16 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { kitchenStations, ticketItems, workingOrders } from "@waitron/db";
+import { kitchenStations, kitchenTimingDefaults, ticketItems, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { computeOverdueOrders } from "@waitron/reporting";
 import { createStation, deactivateStation, updateStation } from "./kitchen.js";
-import { setKitchenTimingDefaults } from "./kitchen-timing.js";
+import { getKitchenTimingDefaults, setKitchenTimingDefaults } from "./kitchen-timing.js";
 import { readBillSignals } from "./table-signals.js";
 import { floorRow, inTx, order, seat, setupPartyVenue } from "./testing/party-venue.js";
 import { serveLine } from "./testing/serve-line.js";
 import { routeProductTo } from "./testing/zone-offers.js";
-import { listExpoQueue, listStationQueue } from "./working-order.js";
+import { listExpoQueue, listStationQueue, listTablesWithState } from "./working-order.js";
+
+import { readStationHealth } from "./station-health.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -226,4 +228,41 @@ describe("effective kitchen timing across consumers", () => {
       expect(await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).toEqual([]);
     });
   });
+});
+
+// Omitting a defaults guard must refuse rather than turn an incomplete venue into a quiet kitchen.
+describe("missing kitchen timing defaults", () => {
+  it.each(["defaults", "health", "station", "pass", "tables", "signals", "report"] as const)(
+    "refuses the %s read with a named configuration error",
+    async (reader) => {
+      const v = await setupPartyVenue(suite.db);
+      const { tabId } = await seat(v, await v.table("Missing defaults"));
+      await order(v, tabId, "Burger");
+      const [station] = await suite.db.select({ id: kitchenStations.id }).from(kitchenStations);
+      await inTx(v, (tx) => tx.delete(kitchenTimingDefaults));
+      await expect(
+        inTx(v, async (tx) => {
+          switch (reader) {
+            case "defaults":
+              return getKitchenTimingDefaults(tx, v.cfg);
+            case "health":
+              return readStationHealth(tx, v.cfg, new Date());
+            case "station":
+              return listStationQueue(tx, station!.id);
+            case "pass":
+              return listExpoQueue(tx, v.cfg);
+            case "tables":
+              return listTablesWithState(tx, v.cfg);
+            case "signals":
+              return readBillSignals(tx, [tabId], Date.now());
+            case "report":
+              return computeOverdueOrders(tx, { nodeId: v.cfg.nodeId });
+          }
+        }),
+      ).rejects.toMatchObject({
+        code: "station.timing_missing",
+        params: { locationId: v.cfg.locationId },
+      });
+    },
+  );
 });

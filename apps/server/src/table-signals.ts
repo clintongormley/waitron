@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { parentJoin, parentProducts, staffPresentationName } from "@waitron/catalogue";
 import {
+  assertKitchenTimingPresent,
   kitchenStations,
   kitchenStationTiming,
   kitchenTimingDefaults,
@@ -39,6 +40,7 @@ async function readKitchenLines(
   billIds: readonly string[],
 ): Promise<KitchenLine[]> {
   if (billIds.length === 0) return [];
+  await assertKitchenTimingPresent(tx);
   const dish = alias(workingOrderLines, "signal_dish");
   const rows = await tx
     .select({

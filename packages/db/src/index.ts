@@ -25,6 +25,7 @@ export type {
   VenueLock,
 } from "./client.js";
 export { runMigrations } from "./migrate.js";
+export { assertKitchenTimingPresent } from "./kitchen-timing-readiness.js";
 export { tableExists } from "./table-exists.js";
 export type { MigrationOptions } from "./migrate.js";
 export { claimRows } from "./job-claim.js";

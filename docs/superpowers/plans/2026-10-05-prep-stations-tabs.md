@@ -679,3 +679,32 @@ Tasks 1–7 are implemented. Task 8 remains: whole-branch prose/consumer audit, 
 any migration regeneration, required focused/schema/fiscal evidence, one Claude run-it review,
 normal push hook, current-head CI and authorised landing. Earlier partial-checkpoint descriptions
 above record their date's tree; this checkpoint describes the current Routing handover.
+
+
+## 2026-10-05 whole-branch review checkpoint
+
+The core journal collision was regenerated from main as `0102_kitchen_timing_inheritance.sql`,
+which creates the two timing tables without rebuilding stations. The initial rebase retained the
+landed Disable/Enable wording and moved its exact EN/ES check to Stations. Later clean rebases
+retained receipt and category-path work; the latter's two overlapping consumer files passed 185 tests.
+
+The Claude run-it seat took 603 seconds on captured head `b75d68a36` and base `30eeacc2c`, with
+an independent frozen-installed checkout. It ran eleven commands, including three deleted-guard
+controls and real Chromium. Its missing-default probe returned empty health and a bare Error.
+Seven new consumer cases then failed before the fix. Kitchen/pass/floor/signal/reporting reads now
+check that each existing location has timing defaults before their joins; missing configuration
+refuses `station.timing_missing`. The defaults read uses that same code. There is no backfill or
+old-value conversion: the approved reset remains the installation procedure. The retained parent
+columns now name their replacement at the declaration.
+
+The corrected consumer and health suites passed 22 tests; db readiness/storage/upgrade passed four;
+working-order/floor/watchers/tabs passed 367; overdue reporting passed 16. Root error/module guards
+passed 2,071 tests, and db/server/reporting types and focused lint exited zero. Removing the new
+shared readiness guard in the disposable copy failed six missing-default cases while eight
+positive/default-refusal controls passed. The restored run is recorded separately in campaign
+artifacts. These are focused results; the push hook, current-head CI and landing remain.
+
+The overview client's methods remain present; server permissions, rather than that render flag,
+authorize writes. The redundant active filter in reordering is left for later cleanup. The review's
+read-only transition concern is checked against the existing exact opening/closing boundary cases;
+no scheduling behavior was changed in this checkpoint.

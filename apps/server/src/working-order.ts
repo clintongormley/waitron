@@ -70,6 +70,7 @@ import {
   invoiceSeries,
   isUniqueViolation,
   kitchenCourses,
+  assertKitchenTimingPresent,
   kitchenStations,
   kitchenStationTiming,
   kitchenTimingDefaults,
@@ -6282,6 +6283,7 @@ export async function listStationQueue(
   tx: Transaction,
   stationId: string,
 ): Promise<StationQueueGroup[]> {
+  await assertKitchenTimingPresent(tx);
   const rows = await tx
     .select({
       itemId: ticketItems.id,
@@ -6533,6 +6535,7 @@ export async function readPassBoard(
   locationId: string,
   scope: SQL,
 ): Promise<ExpoOrder[]> {
+  await assertKitchenTimingPresent(tx);
   const rows = await tx
     .select({
       itemId: ticketItems.id,
@@ -6822,6 +6825,7 @@ export async function listTablesWithState(
   locationId?: string,
   now: Date = new Date(),
 ): Promise<TableState[]> {
+  await assertKitchenTimingPresent(tx);
   const loc = locationId ?? cfg.locationId;
   const result = await tx.execute<{
     id: string;

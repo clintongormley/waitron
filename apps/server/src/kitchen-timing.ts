@@ -95,7 +95,8 @@ export async function getKitchenTimingDefaults(
     })
     .from(kitchenTimingDefaults)
     .where(eq(kitchenTimingDefaults.locationId, cfg.locationId));
-  if (defaults === undefined) throw new Error("Venue has no kitchen timing defaults");
+  if (defaults === undefined)
+    throw new AppError("station.timing_missing", { locationId: cfg.locationId });
   return defaults;
 }
 
