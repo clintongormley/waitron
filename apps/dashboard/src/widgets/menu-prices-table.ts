@@ -230,6 +230,24 @@ export class MenuPricesTable extends LitElement {
       this.hiddenRefusals = new Set([...this.hiddenRefusals].filter((key) => key !== refused));
     }
     if (changed.has("saving")) this.#settle(changed.get("saving") ?? new Set());
+    if (changed.has("refusals") || changed.has("outcome"))
+      this.#unrefuse(
+        changed.has("refusals") ? (changed.get("refusals") ?? {}) : this.refusals,
+        changed.has("outcome") ? (changed.get("outcome") ?? null) : this.outcome,
+      );
+  }
+
+  /** A refused price nothing says was refused any longer would read as stored and be sent again
+   * on leaving, so its field goes back to the stored price, unless it was changed since. */
+  #unrefuse(refusals: MenuPricesTable["refusals"], outcome: PriceOutcome | null): void {
+    const before = Object.keys(refusals);
+    if (outcome?.kind === "refused") before.push(outcome.save.key);
+    for (const key of before) {
+      if (this.#refused(key) || this.saving.has(key) || !this.drafts.has(key)) continue;
+      if (this.drafts.get(key) !== this.#sent.get(key)) continue;
+      this.#forget(key);
+      this.hiddenRefusals = new Set([...this.hiddenRefusals].filter((hidden) => hidden !== key));
+    }
   }
 
   /** A save answered without a refusal leaves its field to the re-read that followed it, unless

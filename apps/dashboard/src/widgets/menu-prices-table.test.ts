@@ -1197,6 +1197,64 @@ it("keeps the sent price after a refusal that names no field, and does not resen
   expect(heard).toHaveBeenCalledTimes(2);
 });
 
+it("puts the stored price back once nothing says its sent price was refused under the field, and leaving it then sends nothing", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-burger", "11.00");
+  await press(el, "mi-burger", "Enter");
+  el.saving = new Set(["mi-burger"]);
+  await el.updateComplete;
+  el.saving = new Set();
+  el.refusals = { "mi-burger": "Refused here" };
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(override(el, "mi-burger").value).toBe("11.00");
+  el.refusals = {};
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(override(el, "mi-burger").value).toBe("");
+  expect(override(el, "mi-burger").error).toBe("");
+  await leave(el, "mi-burger");
+  expect(heard).toHaveBeenCalledOnce();
+});
+
+it("puts the stored price back once the status line stops saying its sent price was refused", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-lemonade", "2.90");
+  await press(el, "mi-lemonade", "Enter");
+  const save = heard.mock.calls[0]![0];
+  el.saving = new Set(["mi-lemonade"]);
+  await el.updateComplete;
+  el.saving = new Set();
+  el.outcome = { kind: "refused", save, reason: "The server could not be reached." };
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(override(el, "mi-lemonade").value).toBe("2.90");
+  el.outcome = null;
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(override(el, "mi-lemonade").value).toBe("2.50");
+  await leave(el, "mi-lemonade");
+  expect(heard).toHaveBeenCalledOnce();
+});
+
+it("keeps a price changed since its refusal once nothing says it was refused", async () => {
+  const el = await mount();
+  await typeIn(el, "mi-burger", "11.00");
+  await press(el, "mi-burger", "Enter");
+  el.saving = new Set(["mi-burger"]);
+  await el.updateComplete;
+  el.saving = new Set();
+  el.refusals = { "mi-burger": "Refused here" };
+  await el.updateComplete;
+  await typeIn(el, "mi-burger", "11.50");
+  el.refusals = {};
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(override(el, "mi-burger").value).toBe("11.50");
+});
+
 it("treats an unfinished product price as no change for its sizes' hints", async () => {
   const el = await mount();
   toggleOf(el, "mi-lemonade")!.click();

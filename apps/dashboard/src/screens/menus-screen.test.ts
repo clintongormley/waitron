@@ -4002,11 +4002,26 @@ it("refuses a malformed price in its field without sending anything", async () =
 
 it("sends a second change to a field whose save is out once the first is answered, keeping the field marked saving until both are", async () => {
   const pending = deferred<void>();
+  let written: string | null = null;
   const client = api({
     updateMenuItem: vi
       .fn()
-      .mockImplementationOnce(() => pending.promise)
-      .mockResolvedValue(undefined),
+      .mockImplementationOnce(
+        async (_menu: string, _item: string, body: { grossPrice: string }) => {
+          await pending.promise;
+          written = body.grossPrice;
+        },
+      )
+      .mockImplementation(async (_menu: string, _item: string, body: { grossPrice: string }) => {
+        written = body.grossPrice;
+      }),
+    getMenuPrices: vi.fn(async (id: string) =>
+      id === "menu-lunch"
+        ? lunchPrices().map((row) =>
+            row.menuItemId === "mi-burger" ? { ...row, override: written } : row,
+          )
+        : [],
+    ),
   });
   const el = await mountPrices(client);
   await commitPrice(el, "mi-burger", "11.00");
@@ -4020,6 +4035,9 @@ it("sends a second change to a field whose save is out once the first is answere
     { grossPrice: "11.50" },
   ]);
   await vi.waitFor(() => expect(prices(el).saving.size).toBe(0));
+  expect(prices(el).rows.find((row) => row.menuItemId === "mi-burger")!.override).toBe("11.50");
+  await prices(el).updateComplete;
+  expect(priceField(el, "mi-burger").value).toBe("11.50");
 });
 
 it("a save that succeeded but could not then be reloaded is a load failure, not a refused save", async () => {
@@ -4278,6 +4296,48 @@ it("says a connection failure in the status line, under no field", async () => {
   expect(priceField(el, "mi-burger").error).toBe("");
   expect(priceField(el, "mi-burger").value).toBe("11.00");
   expect(q(el, '[data-test="member-error"]')).toBeNull();
+});
+
+it("shows the stored price again after a refused save once the tab is left and opened again, and leaving the field writes nothing", async () => {
+  const client = api({ updateMenuItem: vi.fn().mockRejectedValue({ code: "connection.failed" }) });
+  const el = await mountPrices(client);
+  await commitPrice(el, "mi-burger", "11.00");
+  await vi.waitFor(() => expect(prices(el).outcome).not.toBeNull());
+  expect(priceField(el, "mi-burger").value).toBe("11.00");
+  await chooseTab(el, "structure");
+  await chooseTab(el, "prices");
+  await vi.waitFor(() => expect(prices(el).rows.length).toBe(3));
+  await prices(el).updateComplete;
+  expect(prices(el).outcome).toBeNull();
+  expect(priceField(el, "mi-burger").value).toBe("");
+  priceField(el, "mi-burger").dispatchEvent(
+    new FocusEvent("focusout", { bubbles: true, composed: true }),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(client.updateMenuItem).toHaveBeenCalledOnce();
+});
+
+it("keeps the sent price in the field, marked saving, until the re-read after its write has answered", async () => {
+  const client = api();
+  const el = await mountPrices(client);
+  const reread = deferred<MenuPriceRow[]>();
+  client.getMenuPrices.mockImplementation(() => reread.promise);
+  await commitPrice(el, "mi-burger", "11.00");
+  await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(client.getMenuPrices).toHaveBeenLastCalledWith("menu-lunch"));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await prices(el).updateComplete;
+  expect([...prices(el).saving]).toEqual(["mi-burger"]);
+  expect(priceField(el, "mi-burger").value).toBe("11.00");
+  reread.resolve(
+    lunchPrices().map((row) =>
+      row.menuItemId === "mi-burger" ? { ...row, override: "11.00" } : row,
+    ),
+  );
+  await vi.waitFor(() => expect(prices(el).saving.size).toBe(0));
+  await prices(el).updateComplete;
+  expect(prices(el).rows.find((row) => row.menuItemId === "mi-burger")!.override).toBe("11.00");
+  expect(priceField(el, "mi-burger").value).toBe("11.00");
 });
 
 it("clears a refusal from the status line, and from under its field, once that field is sent again", async () => {
