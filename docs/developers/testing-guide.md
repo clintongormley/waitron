@@ -902,7 +902,10 @@ message.
 A host's `checked` property can report the expected value while its inner checkbox remains visibly
 wrong. The printer follow-up review reproduced that split by preserving the emitted change while
 suppressing the host update; the old assertion passed and the inner-input assertion failed.
-Pointer: `apps/dashboard/src/screens/printing-rules-screen.test.ts` (`switchChecked`).
+The original receipt used `switchChecked` in the Printing rules suite. A261 step 3 moves those
+assignments to Tickets (2026-10-05); its current check reads the multi-select's rendered `aria-selected` options
+in `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`, “Tickets retains station
+printer memberships independently for each station”, rather than relying on the host values alone.
 
 ## A reopened polling dialog owns a new in-flight gate.
 

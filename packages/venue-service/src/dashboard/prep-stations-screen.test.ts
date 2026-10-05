@@ -3863,3 +3863,115 @@ it.each([
   await combo.updateComplete;
   expect(combo.shadowRoot!.querySelector(".empty")!.textContent).toContain(empty);
 });
+
+it("Tickets retains station printer memberships independently for each station", async () => {
+  setLocale("en");
+  const { el, a, table } = await mountTickets();
+  expect(ticketQ(table, '[data-test="edit-printers-bar"]')!.textContent).toContain("Old printer");
+  expect(ticketQ(table, '[data-test="edit-printers-upstairs"]')!.textContent).toContain("None");
+  for (const [stationId, ids, label] of [
+    ["bar", ["old"], "Bar: Printed on"],
+    ["upstairs", [], "Upstairs bar: Printed on"],
+  ] as const) {
+    ticketQ(table, `[data-test="edit-printers-${stationId}"]`)!.click();
+    await settle(el);
+    const combo = ticketQ(table, `[data-test="station-printers-${stationId}"]`) as WtCombobox;
+    expect(combo.values).toEqual(ids);
+    expect(combo.getAttribute("name")).toBe("printerIds");
+    expect(combo.label).toBe(label);
+    await combo.updateComplete;
+    combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
+    await combo.updateComplete;
+    expect(combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.name).toBe("printerIds");
+    const options = [...combo.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
+    const old = options.find((o) => o.textContent?.includes("Old printer"))!;
+    const next = options.find((o) => o.textContent?.includes("Next printer"))!;
+    expect(old.getAttribute("aria-selected")).toBe(stationId === "bar" ? "true" : "false");
+    expect(next.getAttribute("aria-selected")).toBe("false");
+    combo.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!.click();
+    ticketQ(table, `[data-test="cancel-printers-${stationId}"]`)!.click();
+    await settle(el);
+  }
+  expect(a.setStationPrinters).not.toHaveBeenCalled();
+});
+
+it.each([true, false])(
+  "Tickets persists a printer membership change and reflects its stored selection (attach=%s)",
+  async (attach) => {
+    setLocale("en");
+    let stored = [...ticketView.stationPrinters];
+    const load = vi.fn(async () => ({ ...ticketView, stationPrinters: stored }));
+    const save = vi.fn(async (stationId: string, ids: string[]) => {
+      stored = [
+        ...stored.filter((row) => row.stationId !== stationId),
+        ...ids.map((printerId) => ({ stationId, printerId })),
+      ];
+    });
+    const { el, table } = await mountTickets({ load, setStationPrinters: save });
+    ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
+    await settle(el);
+    const combo = ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox;
+    combo.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { values: attach ? ["old", "next"] : [] } }),
+    );
+    await settle(el);
+    ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+    await vi.waitFor(() =>
+      expect(save).toHaveBeenCalledExactlyOnceWith("bar", attach ? ["old", "next"] : []),
+    );
+    await settle(el);
+    const cell = ticketQ(table, '[data-test="edit-printers-bar"]')!;
+    expect(cell.textContent?.trim()).toBe(attach ? "Old printer, Next printer" : "None");
+    expect(load).toHaveBeenCalledTimes(2);
+    cell.click();
+    await settle(el);
+    expect((ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox).values).toEqual(
+      attach ? ["old", "next"] : [],
+    );
+  },
+);
+
+it("Tickets keeps the stored membership and editable draft after a station refusal", async () => {
+  setLocale("en");
+  const { el, a, table } = await mountTickets({
+    setStationPrinters: vi.fn().mockRejectedValue({ code: "station.not_found" }),
+  });
+  ticketQ(table, '[data-test="edit-printers-bar"]')!.click();
+  await settle(el);
+  ticketQ(table, '[data-test="station-printers-bar"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { values: ["next"] } }),
+  );
+  await settle(el);
+  ticketQ(table, '[data-test="save-printers-bar"]')!.click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.textContent).toContain(
+      "This station is disabled. Choose an active station.",
+    ),
+  );
+  expect(el.shadowRoot!.textContent).not.toContain("station.not_found");
+  expect((ticketQ(table, '[data-test="station-printers-bar"]') as WtCombobox).values).toEqual([
+    "next",
+  ]);
+  expect(a.load).toHaveBeenCalledTimes(1);
+  ticketQ(table, '[data-test="cancel-printers-bar"]')!.click();
+  await settle(el);
+  expect(ticketQ(table, '[data-test="edit-printers-bar"]')!.textContent?.trim()).toBe(
+    "Old printer",
+  );
+});
+
+it.each([
+  ["en", "No results"],
+  ["es", "Sin resultados"],
+] as const)(
+  "Tickets shows its localised empty state and no printer action with no stations (%s)",
+  async (locale, message) => {
+    setLocale(locale);
+    const { a, table } = await mountTickets({
+      load: vi.fn().mockResolvedValue({ ...ticketView, stations: [], stationPrinters: [] }),
+    });
+    expect(table.shadowRoot!.textContent).toContain(message);
+    expect(ticketQ(table, '[data-test^="edit-printers-"]')).toBeNull();
+    expect(a.setStationPrinters).not.toHaveBeenCalled();
+  },
+);

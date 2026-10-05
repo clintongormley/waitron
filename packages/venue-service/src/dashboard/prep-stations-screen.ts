@@ -1710,6 +1710,7 @@ export class PrepStationsScreen extends LitElement {
     ];
     return html`<wt-data-table
       data-test="tickets-table"
+      .emptyMessage=${t("venue.combobox_no_results")}
       aria-label=${t("prep.tab.tickets")}
       .rows=${rows}
       .columns=${columns}

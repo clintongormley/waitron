@@ -6,7 +6,6 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-card.js";
-import "@waitron/ui/src/components/wt-switch.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { drawerPolicyName } from "../i18n/domain.js";
@@ -15,7 +14,6 @@ import type {
   DrawerOpenPolicy,
   LocationSummary,
   Printer,
-  Station,
   Watcher,
 } from "../api/client.js";
 
@@ -66,11 +64,6 @@ export class PrintingRulesScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
-      .stations {
-        display: grid;
-        gap: var(--wt-space-2);
-        margin-top: var(--wt-space-3);
-      }
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;
@@ -83,7 +76,6 @@ export class PrintingRulesScreen extends LitElement {
     },
   );
   @state() private printers: Printer[] = [];
-  @state() private stations: Station[] = [];
   @state() private watchers: Watcher[] = [];
   @state() private printerErrors: Record<string, string> = {};
   @state() private printerStations: Record<string, string[]> = {};
@@ -112,9 +104,6 @@ export class PrintingRulesScreen extends LitElement {
     });
   }
   async #load(): Promise<void> {
-    // Stations gate on venue.configure, locations on schedule.manage, and printers and each
-    // printer's stations on printer.manage. Today manager and admin hold all three
-    // (packages/identity/src/permissions.ts); revisit this fan-out if one is ever granted on its own.
     await Promise.all([
       this.#queries.watch("listPrinters", [], async (printers) => {
         this.printers = printers;
@@ -128,11 +117,13 @@ export class PrintingRulesScreen extends LitElement {
                 lists[index]!.map((item) => item.stationId),
               ]),
             );
+            this.printerErrors = Object.fromEntries(
+              Object.entries(this.printerErrors).filter(
+                ([id]) => (this.printerStations[id] ?? []).length > 0,
+              ),
+            );
           },
         );
-      }),
-      this.#queries.watch("listStations", [], (value) => {
-        this.stations = value;
       }),
       this.#queries.watch("listWatchers", [], (value) => {
         this.watchers = value;
@@ -151,9 +142,6 @@ export class PrintingRulesScreen extends LitElement {
       await action();
       written = true;
       await this.#load();
-      if (printerId && (this.printerStations[printerId] ?? []).length === 0) {
-        this.printerErrors = { ...this.printerErrors, [printerId]: "" };
-      }
     } catch (error) {
       const code = codeOf(error);
       if (printerId && code === "printer.makes_and_watches") {
@@ -202,38 +190,6 @@ export class PrintingRulesScreen extends LitElement {
             }}
           ></wt-combobox>
         </div>
-        <div class="stations" role="group" aria-label=${t("printers.stations_title")}>
-          <strong>${t("printers.stations_title")}</strong>
-          ${
-            this.stations.length === 0
-              ? html`<p class="empty" data-test="no-stations-${printer.id}">
-                  ${t("printers.no_stations")}
-                </p>`
-              : this.stations.map(
-                  (station) => html`
-                    <wt-switch
-                      label=${station.name}
-                      name="stationIds"
-                      aria-label=${station.name}
-                      data-test="station-toggle-${printer.id}-${station.id}"
-                      .checked=${live((this.printerStations[printer.id] ?? []).includes(station.id))}
-                      .disabled=${this.saving || printer.watcherId !== null}
-                      @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                        const checked = event.detail.checked;
-                        void this.#mutate(
-                          () =>
-                            checked
-                              ? this.api.attachPrinterToStation(station.id, printer.id)
-                              : this.api.detachPrinterFromStation(station.id, printer.id),
-                          printer.id,
-                        );
-                      }}
-                    ></wt-switch>
-                  `,
-                )
-          }
-        </div>
-        ${printer.watcherId !== null ? html`<p>${t("printers.watcher_station_disabled")}</p>` : nothing}
         ${this.printerErrors[printer.id] ? html`<p class="error" role="alert">${t("printers.watcher_conflict")}</p>` : nothing}
       </wt-card>
     </li>`;

@@ -373,3 +373,34 @@ one watcher copy per operation, document jobs and no drawer pulse. Printing rule
 its assignment controls at this checkpoint. Complete their planned handover with equally strict
 moved behavior checks, and complete Routing, Watchers, Settings, defaults and supervisor loading,
 before the full Task 8 finish/land workflow. No existing behavioral assertion changed here.
+
+
+## Task 5 Printing rules handover checkpoint — 2026-10-05T20:13:24.940649+02:00
+
+Station printer assignments now have one editor, Prep stations Tickets. Printing rules keeps its
+watcher picker and drawer controls until Tasks 6 and A261 step 8 retire those respective controls.
+Its watcher refusal points to Tickets, and a live mapping snapshot clears that printer's conflict
+only once it has no station mappings. The unrelated page action-error recovery check remains.
+Tickets also supplies a localized empty message to its shared table.
+
+The station membership, attach/detach, refusal, empty-state and native-control checks moved to
+Tickets with exact saved-set and refreshed-selection assertions. Printing rules instead requires
+its old station controls absent while preserving its watcher/drawer assertions. The approved Task 5
+handover is the authority for these changed checks; their before/after file locations are retained
+in the campaign FYI for the final PR. The shared management verbs and printing code are unchanged
+in this checkpoint's diff.
+
+Observed failures: two handover cases before implementation, two wording cases before guidance
+changes, and the Spanish empty-state case before the table received its localized message. The
+three focused Prep stations browser files passed 288 tests; after strengthening the native-name
+and option assertions, all six moved cases passed again. Printing rules passed 36 tests including
+eight EN/ES light/dark phone/desktop accessibility cases. All eight captured refusal layouts were
+inspected. The three station-printer/fire/reprint consumer files passed 51 tests; three unchanged
+root guards passed 41 tests. In a frozen-installed disposable checkout, deleting conflict clearing
+failed its case while the unrelated save-error case passed; restoring it passed both. Removing
+saved selection initialization failed the moved membership case while Cancel passed; restoring it
+passed both. The disposable checkout was removed after byte-comparing its restored changed files.
+
+Task 5's handover is implemented. Task 4 still needs its routing-only replacement; Watchers,
+Settings, venue defaults UI, supervisor page-loading and the full Task 8 review/push/CI/land gates
+remain. This checkpoint does not make the branch ready to ship.

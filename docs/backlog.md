@@ -6337,6 +6337,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   selections, current kitchen screens and following watchers, with links to Devices and Watchers.
   Its multi-select saves a complete printer set in one request; a refused set retains its draft and
   previous mappings. Disabled printers can be removed from retained assignments but not added.
+  Printing rules no longer edits station assignments; its watcher and drawer controls remain until
+  their respective build steps. A watcher-printer conflict clears when the final station mapping is
+  removed in Tickets, and its guidance points there in EN/ES. Tickets localises its empty state.
   Settings is still empty; legacy station settings/output links remain in Routing, and Watchers
   still uses cards. Stations now offers confirmed Open/Close for today and
   Back to the schedule actions, with retry after a write refusal. Default and unscheduled stations
