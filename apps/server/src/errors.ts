@@ -757,7 +757,9 @@ declare module "@waitron/shared" {
     "device.join_revoked": Record<string, never>;
     /**
      * No pending join request with that id — never existed, already accepted or denied, or lapsed.
-     * One code for all: the admin's recovery is the same, and the joiner must knock again.
+     * The admin's recovery is the same in each case, and the joiner must knock again. Not one code
+     * for all on the device accept route: there a well-formed id naming no pending request, which
+     * this login holds no live claim on, answers `join_request.unclaimed` instead.
      */
     "join_request.not_found": Record<string, never>;
     /**
@@ -767,9 +769,10 @@ declare module "@waitron/shared" {
     "join_request.claimed": Record<string, never>;
     /**
      * The device approval route found no live claim of this login's on that id: this login never
-     * matched the number, another login did, the id names no pending device request, or the match
-     * ended with the hold it was made under — which ends the request too, so the device must ask
-     * again. NO params.
+     * matched the number, another login did, the id is a well-formed one naming no pending request (a
+     * malformed id, or a print agent's pending request, answers `join_request.not_found` first), or the
+     * match ended with the hold it was made under — which ends the request too, so the device must
+     * ask again. NO params.
      */
     "join_request.unclaimed": Record<string, never>;
     /**

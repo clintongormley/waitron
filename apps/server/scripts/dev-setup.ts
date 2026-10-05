@@ -461,10 +461,8 @@ async function main(): Promise<void> {
   console.log("    Mostrador (till) · Camarero 1 (handheld) · Pantalla Cocina (kitchen display)");
   console.log("    Pantalla Pase (watcher display)");
   console.log("");
-  console.log(
-    `  Or knock from a FRESH browser at http://localhost:${tillPort} — a manager then switches on`,
-  );
-  console.log("  pairing mode in the dashboard and matches the number the till shows.");
+  console.log(`  Or knock from a FRESH browser at http://localhost:${tillPort} — a manager then`);
+  console.log("  opens Add a device in the dashboard and matches the number the till shows.");
   const salesDays = resolveSalesDays();
   if (!result.reused) {
     console.log(

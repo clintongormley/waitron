@@ -119,7 +119,7 @@ function statusCard(status: AgentStatus & { phase: Exclude<AgentPhase, "unconfig
     }
     case "pairing_closed":
       return `<h1>Waitron print agent</h1>
-<p>Ask the manager to switch on pairing mode in the dashboard, then wait — this agent keeps asking.</p>`;
+<p>Ask the manager to open Add a print agent on the Printers page of the dashboard, then wait — this agent keeps asking.</p>`;
     case "running": {
       const lastJob =
         status.lastJobAt !== undefined

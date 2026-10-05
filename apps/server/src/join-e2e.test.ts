@@ -267,8 +267,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
 
 describe("a claim whose hold lapsed is forgotten only once its request's deletion commits", () => {
   /** Claim a knocked device's request under hold A, then let A lapse while hold B keeps the window
-   *  open. B is taken on the holder, not through a route, so no route discards before the step under
-   *  test. */
+   *  open. */
   async function lapsedClaim() {
     const venue = await setupVenue(suite.db);
     let offset = 0;

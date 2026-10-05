@@ -351,8 +351,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   // card reader paths (the counter's card collect and the bill pay dialog) show
   // `card_reader.not_set_up` themselves.
   "device.pairing_closed": {
-    en: "New devices aren't being accepted right now. Ask a manager to switch on “Allow new devices”.",
-    es: "Ahora mismo no se aceptan dispositivos nuevos. Pide a un responsable que active «Permitir dispositivos nuevos».",
+    en: "New devices aren't being accepted right now. Ask a manager to open Add a device in the dashboard.",
+    es: "Ahora mismo no se aceptan dispositivos nuevos. Pide a un responsable que abra «Añadir un dispositivo» en el panel.",
   },
   "device.unauthorized": {
     en: "This device isn't set up — ask to join this venue",

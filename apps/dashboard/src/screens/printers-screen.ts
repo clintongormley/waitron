@@ -581,7 +581,9 @@ export class PrintersScreen extends LitElement {
   @state() private holdStatus: PairingHoldStatus = "idle";
   /** The taken hold's lapse, shown before the live read of the window next answers. */
   @state() private takenUntil: string | null = null;
-  /** The refusal that ended the hold; it stays the dialog's message until the hold is retaken. */
+  /** The refusal that failed the hold, kept while the hold's status is `failed`. It becomes the
+   *  dialog's message when the hold fails and again whenever an agent scan starts; other actions
+   *  replace that message. */
   #holdErrorKey: string | null = null;
   readonly #hold = new PairingHold(
     () => this.api,
