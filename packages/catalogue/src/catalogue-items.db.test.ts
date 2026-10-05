@@ -246,6 +246,78 @@ describe("deleteCatalogueItems", () => {
   });
 });
 
+describe("deleteCatalogueItems with the counts the person was shown", () => {
+  const shownFor = async (ids: string[]) =>
+    (await app((tx) => summariseFolders(tx, ids))).map(
+      ({ id, folders, activeProducts, routes }) => ({ id, folders, activeProducts, routes }),
+    );
+  const addProduct = (tx: Transaction, categoryId: string) =>
+    createCatalogue(tx, { name: "Later" }).then((menu) =>
+      createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId,
+        name: "Stout",
+        pricingUnit: "each",
+        unitPrice: "3",
+        vatClass: "general",
+      }),
+    );
+
+  it.each([
+    ["an active product added to a subcategory", (tx: Transaction) => addProduct(tx, b)],
+    ["a subcategory added", (tx: Transaction) => createCategory(tx, { name: "Ale", parentId: b })],
+  ])("refuses with old counts after %s, and deletes nothing", async (_change, change) => {
+    const shown = await shownFor([d]);
+    await app(change);
+    let error: unknown;
+    try {
+      await app((tx) =>
+        deleteCatalogueItems(tx, { productIds: [burger], categoryIds: [d] }, "delete", shown),
+      );
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toMatchObject({
+      code: "category.contents_changed",
+      params: { categoryId: d },
+    });
+    expect((await app((tx) => readCategory(tx, d))).id).toBe(d);
+    expect((await app((tx) => readCategory(tx, b))).parentId).toBe(d);
+    for (const id of [cola, lager, burger]) expect((await product(id)).active).toBe(true);
+  });
+
+  it("names the first selected category whose counts differ", async () => {
+    const shown = await shownFor([f, b]);
+    await app((tx) => addProduct(tx, b));
+    await expect(
+      app((tx) =>
+        deleteCatalogueItems(tx, { productIds: [], categoryIds: [f, b] }, "delete", shown),
+      ),
+    ).rejects.toMatchObject({ code: "category.contents_changed", params: { categoryId: b } });
+    expect(await app(listCategories)).toHaveLength(3);
+  });
+
+  it("deletes when the counts shown still hold", async () => {
+    const shown = await shownFor([d]);
+    await app((tx) =>
+      deleteCatalogueItems(tx, { productIds: [], categoryIds: [d] }, "delete", shown),
+    );
+    expect((await app(listCategories)).map((row) => row.id)).toEqual([f]);
+    for (const id of [cola, lager]) expect((await product(id)).active).toBe(false);
+  });
+
+  it("refuses a shown list that leaves out a selected category, and deletes nothing", async () => {
+    const shown = await shownFor([d]);
+    await expect(
+      app((tx) =>
+        deleteCatalogueItems(tx, { productIds: [], categoryIds: [d, f] }, "delete", shown),
+      ),
+    ).rejects.toMatchObject({ code: "category.contents_changed", params: { categoryId: f } });
+    expect(await app(listCategories)).toHaveLength(3);
+    for (const id of [cola, lager, burger]) expect((await product(id)).active).toBe(true);
+  });
+});
+
 describe("summariseFolders", () => {
   it("counts descendants and active or inactive top-level products in request order", async () => {
     await app((tx) => deactivateProduct(tx, lager));

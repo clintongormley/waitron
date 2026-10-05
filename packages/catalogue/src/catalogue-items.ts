@@ -23,6 +23,8 @@ export interface FolderSummary {
   activeProducts: number;
   routes: number;
 }
+/** The counts a person was shown for one selected category before confirming its deletion. */
+export type ShownFolderCounts = Pick<FolderSummary, "id" | "folders" | "activeProducts" | "routes">;
 
 /** The folder tree, read once: each folder's parent, depth and whole subtree. */
 class FolderTree {
@@ -122,8 +124,10 @@ export async function deleteCatalogueItems(
   tx: Transaction,
   selection: CatalogueSelection,
   contents: FolderContents,
+  shown?: readonly ShownFolderCounts[],
 ): Promise<void> {
   const tree = await readTree(tx, selection);
+  if (shown !== undefined) await assertContentsAsShown(tx, tree, selection.categoryIds, shown);
   if (contents === "move_up") await assertMovedUpNamesFree(tx, tree, selection.categoryIds);
   for (const id of selection.productIds) await deactivateProduct(tx, id);
   if (contents === "move_up") {
@@ -174,6 +178,25 @@ async function assertMovedUpNamesFree(
   );
 }
 
+async function assertContentsAsShown(
+  tx: Transaction,
+  tree: FolderTree,
+  categoryIds: readonly string[],
+  shown: readonly ShownFolderCounts[],
+): Promise<void> {
+  const byId = new Map(shown.map((counts) => [counts.id, counts]));
+  for (const summary of await summarise(tx, tree, categoryIds)) {
+    const seen = byId.get(summary.id);
+    if (
+      seen === undefined ||
+      seen.folders !== summary.folders ||
+      seen.activeProducts !== summary.activeProducts ||
+      seen.routes !== summary.routes
+    )
+      throw new AppError("category.contents_changed", { categoryId: summary.id });
+  }
+}
+
 /** Deletes one category, moving its products and the categories under it up to its parent. */
 export async function deleteCategory(tx: Transaction, id: string): Promise<void> {
   await deleteCatalogueItems(tx, { productIds: [], categoryIds: [id] }, "move_up");
@@ -200,6 +223,14 @@ export async function summariseFolders(
 ): Promise<FolderSummary[]> {
   const tree = new FolderTree(await listCategories(tx));
   for (const id of categoryIds) tree.require(id);
+  return summarise(tx, tree, categoryIds);
+}
+
+async function summarise(
+  tx: Transaction,
+  tree: FolderTree,
+  categoryIds: readonly string[],
+): Promise<FolderSummary[]> {
   const claimsPresent = await tableExists(tx, "station_claims");
   const exceptionsPresent = await tableExists(tx, "route_exceptions");
   const summaries: FolderSummary[] = [];
