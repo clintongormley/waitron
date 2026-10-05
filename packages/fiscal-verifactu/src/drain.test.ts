@@ -1305,6 +1305,55 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
     ]);
     expect((await chainRows()).map((row) => row.estado)).toEqual(["detenido", "detenido"]);
   });
+
+  it("does not send a successor past a cancellation held for its original", async () => {
+    const sale = await sell();
+    const raw = await suite.db.execute<Record<string, unknown>>(sql`
+      select * from registros_facturacion
+      where node_id = ${venue.nodeId} and tipo_registro = 'alta'
+    `);
+    const original = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
+    await aeat.client().submit(
+      {
+        ObligadoEmision: {
+          NombreRazon: original.NombreRazonEmisor,
+          NIF: original.IDFactura.IDEmisorFactura,
+        },
+      },
+      [{ RegistroAlta: { ...original, Huella: "D".repeat(64) } }],
+    );
+    await voidSale(sale.saleId);
+    await sell();
+
+    const result = await drain(drainDeps(staticResolver(aeat.client())), firstPass);
+
+    expect(result.skipped).toEqual([]);
+    expect(result.recordsSubmitted).toBe(1);
+    expect(aeat.stored()).toEqual([
+      expect.objectContaining({ estado: "Correcto", huella: "D".repeat(64) }),
+    ]);
+  });
+
+  it("makes a later cancellation visible when its original was rejected", async () => {
+    const sale = await sell();
+    const raw = await suite.db.execute<Record<string, unknown>>(sql`
+      select * from registros_facturacion
+      where node_id = ${venue.nodeId} and tipo_registro = 'alta'
+    `);
+    const original = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
+    const key = `${original.IDFactura.IDEmisorFactura}|${original.IDFactura.NumSerieFactura}|${original.IDFactura.FechaExpedicionFactura}`;
+    aeat.reject(key, 1100, "Original refused");
+    const first = await drain(drainDeps(staticResolver(aeat.client())), firstPass);
+    expect(first.recordsHalted).toBe(1);
+    await voidSale(sale.saleId);
+
+    const second = await drain(drainDeps(staticResolver(aeat.client())), secondPass);
+
+    expect(second.recordsSubmitted).toBe(0);
+    expect(second.recordsHalted).toBe(1);
+    expect((await chainRows()).map((row) => row.estado)).toEqual(["rechazado", "detenido"]);
+    expect(await incidentCodes()).toHaveLength(1);
+  });
 });
 
 /**

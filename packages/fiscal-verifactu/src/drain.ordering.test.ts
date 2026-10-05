@@ -6,7 +6,7 @@ import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroAlta } from "@waitron/verifactu";
 import type { VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedPendingEnvios, seedSecondChain } from "../test/drain-fixtures.js";
+import { appendPendingAlta, seedPendingEnvios, seedSecondChain } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { DEFAULT_SKIP_RETRY_MS, RECUPERACION_ENVIANDO_MS, drain } from "./drain.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
@@ -94,6 +94,38 @@ describe("drain chain ordering", () => {
       select estado from envios where registro_id = ${seeded.registroIds[0]}
     `);
     expect(state.rows[0]?.estado).toBe("detenido");
+  });
+
+  it("keeps the warning state when a duplicate confirms an accepted-with-errors record", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1, futureDated: true });
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const deps = {
+      db: suite.db,
+      resolveClient: staticResolver(aeat.client()),
+      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      environment: "production" as const,
+    };
+    const first = await drain(deps, NOW);
+    expect(first.recordsAccepted).toBe(1);
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(sql`
+        update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
+        where registro_id = ${seeded.registroIds[0]}
+      `),
+    );
+
+    const retry = await drain(deps, new Date("2026-07-21T00:02:00Z"));
+
+    expect(retry.recordsAccepted).toBe(1);
+    const state = await suite.db.execute<{ estado: string }>(sql`
+      select estado from envios where registro_id = ${seeded.registroIds[0]}
+    `);
+    expect(state.rows[0]?.estado).toBe("aceptado_con_errores");
+    const incidents = await suite.db.execute<{ code: string }>(sql`
+      select code from incidents where code = 'fiscal.aceptado_con_errores'
+    `);
+    expect(incidents.rows).toHaveLength(1);
+    expect(retry.incidentsRaised).toBe(1);
   });
 
   it("does not claim a matching fingerprint filed under another installation", async () => {
@@ -329,6 +361,57 @@ describe("drain chain ordering", () => {
     expect(state.rows[0]?.estado).toBe("pendiente");
   });
 
+  it("bounds a lookup whose pagination key changes forever", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const real = aeat.client();
+    const deps = {
+      db: suite.db,
+      resolveClient: staticResolver(real),
+      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      environment: "production" as const,
+    };
+    await drain(deps, NOW);
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(sql`
+        update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
+        where registro_id = ${seeded.registroIds[0]}
+      `),
+    );
+    let lookups = 0;
+    const endlessPages: VerifactuClient = {
+      submit: (...args) => real.submit(...args),
+      consultar: async (...args) => {
+        lookups += 1;
+        if (lookups > 10) throw new Error("lookup exceeded its page budget");
+        const response = await real.consultar(...args);
+        return {
+          ...response,
+          registros: [],
+          IndicadorPaginacion: "S",
+          ClavePaginacion: {
+            IDEmisorFactura: seeded.nif,
+            NumSerieFactura: `page-${lookups}`,
+            FechaExpedicionFactura: "20-07-2026",
+          },
+        };
+      },
+    };
+
+    const retry = await drain(
+      { ...deps, resolveClient: staticResolver(endlessPages) },
+      new Date("2026-07-21T00:02:00Z"),
+    );
+
+    expect(lookups).toBeLessThanOrEqual(10);
+    expect(retry.recordsAccepted).toBe(0);
+    expect(retry.recordsHalted).toBe(0);
+    const state = await suite.db.execute<{ estado: string }>(sql`
+      select estado from envios where registro_id = ${seeded.registroIds[0]}
+    `);
+    expect(state.rows[0]?.estado).toBe("pendiente");
+  });
+
   it("does not submit a due successor before its earlier retry, and wakes when the retry is due", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     await withTransaction(suite.db, (tx) =>
@@ -455,10 +538,44 @@ describe("drain chain ordering", () => {
     const retry = await drain(deps, new Date("2026-07-21T00:02:00Z"));
 
     expect(retry.recordsSubmitted).toBe(0);
+    expect(retry.nextDueAt).toEqual(new Date("2026-07-21T00:07:00Z"));
     const state = await suite.db.execute<{ estado: string }>(sql`
       select estado from envios where registro_id = ${cancellationId}
     `);
     expect(state.rows[0]?.estado).toBe("pendiente");
     expect(aeat.stored().find((row) => row.key === first.facturaKeys[0])?.estado).toBe("Correcto");
+  });
+
+  it("holds a successor created after its predecessor was halted for a conflicting fingerprint", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const raw = await suite.db.execute<Record<string, unknown>>(sql`
+      select * from registros_facturacion where id = ${seeded.registroIds[0]}
+    `);
+    const ours = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    await aeat
+      .client()
+      .submit({ ObligadoEmision: { NombreRazon: seeded.legalName, NIF: seeded.nif } }, [
+        { RegistroAlta: { ...ours, Huella: "D".repeat(64) } },
+      ]);
+    const deps = {
+      db: suite.db,
+      resolveClient: staticResolver(aeat.client()),
+      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      environment: "production" as const,
+    };
+    const first = await drain(deps, NOW);
+    expect(first.recordsHalted).toBe(1);
+    const successor = await appendPendingAlta(suite.db, seeded, 2);
+
+    const retry = await drain(deps, new Date("2026-07-21T00:02:00Z"));
+
+    expect(retry.recordsSubmitted).toBe(0);
+    expect(retry.recordsHalted).toBe(1);
+    expect(aeat.stored().map((row) => row.key)).toEqual([seeded.facturaKeys[0]]);
+    const state = await suite.db.execute<{ estado: string }>(sql`
+      select estado from envios where registro_id = ${successor.registroId}
+    `);
+    expect(state.rows[0]?.estado).toBe("detenido");
   });
 });

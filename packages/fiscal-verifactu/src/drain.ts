@@ -44,6 +44,7 @@ export const RECUPERACION_ENVIANDO_MS = 5 * 60_000;
  * `@waitron/scheduler`'s `DEFAULTS.skipRetryMs`, so editing this constant changes nothing deployed.
  */
 export const DEFAULT_SKIP_RETRY_MS = 5 * 60 * 1000;
+const MAX_CONSULTA_PAGES = 10;
 
 /** The first retry's wait, and the per-attempt doubling unit `backoffMs` scales from. */
 export const BACKOFF_BASE_MS = 60_000;
@@ -128,7 +129,7 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
     result.tenantsWithWork += 1;
     try {
       const client = await deps.resolveClient();
-      await drainDue(deps.db, client, deps.environment, now, result, maxPorEnvio);
+      await drainDue(deps.db, client, deps.environment, now, result, maxPorEnvio, deps.skipRetryMs);
     } catch (error) {
       // Contained: reported in `skipped` rather than thrown, so the host still schedules a retry.
       result.skipped.push({ errorCode: codeOf(error) });
@@ -167,6 +168,7 @@ async function drainDue(
   now: Date,
   result: DrainResult,
   maxPorEnvio: number,
+  skipRetryMs: number,
 ): Promise<void> {
   // Commits before anything else in this pass reads `envios`, so a recovered row is an ordinary
   // `pendiente` row to the later transactions.
@@ -205,10 +207,10 @@ async function drainDue(
       if (claimed.sendable.length > 0 || claimed.rawCount === 0) break;
     }
     const batch = claimed.sendable;
-    // No row could be claimed: due work may be waiting for an earlier record's retry.
+    // Due work can wait for an earlier retry or an unresolved original invoice.
     if (batch.length === 0) {
       const next = await withTransaction(db, (tx) => nextClaimOpportunity(tx, now));
-      bumpNextDue(result, next);
+      bumpNextDue(result, next ?? new Date(now.getTime() + skipRetryMs));
       if (result.batchesSent === 0) return;
       break;
     }
@@ -394,14 +396,25 @@ async function claimBatch(
           and original.id_emisor_factura = r.id_emisor_factura
           and original.num_serie_factura = r.num_serie_factura
           and original.fecha_expedicion_factura = r.fecha_expedicion_factura
-          and original_envio.estado in ('aceptado', 'aceptado_con_errores')
+          and original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')
       ))
       and not exists (
         select 1 from envios earlier
         join registros_facturacion prior on prior.id = earlier.registro_id
         where prior.sif_id = r.sif_id and prior.secuencia < r.secuencia
           and (earlier.estado = 'enviando'
-            or (earlier.estado = 'pendiente' and earlier.proximo_intento_en > ${now.toISOString()}))
+            or (earlier.estado = 'pendiente' and (
+              earlier.proximo_intento_en > ${now.toISOString()}
+              or (prior.tipo_registro = 'anulacion' and not exists (
+                select 1 from registros_facturacion prior_original
+                join envios prior_original_envio on prior_original_envio.registro_id = prior_original.id
+                where prior_original.tipo_registro = 'alta'
+                  and prior_original.sif_id = prior.sif_id
+                  and prior_original.id_emisor_factura = prior.id_emisor_factura
+                  and prior_original.num_serie_factura = prior.num_serie_factura
+                  and prior_original.fecha_expedicion_factura = prior.fecha_expedicion_factura
+                  and prior_original_envio.estado in ('aceptado', 'aceptado_con_errores', 'rechazado', 'detenido')
+              )))))
       )
     order by r.sif_id, r.secuencia
     limit ${maxPorEnvio}`)
@@ -546,6 +559,7 @@ interface ResolvedLine {
   linea: RespuestaLinea;
   efectivo: EstadoEfectivo;
   lookup: Lookup | null;
+  duplicateAcceptedWithErrors: boolean;
 }
 
 /**
@@ -575,7 +589,14 @@ async function resolveLines(
     const routeBCovers =
       efectivo === "duplicate_unknown" ||
       (efectivo === "duplicate_annulled" && row.tipo_registro === "anulacion");
-    lines.push({ row, linea, efectivo, lookup: routeBCovers ? await lookUp(client, row) : null });
+    lines.push({
+      row,
+      linea,
+      efectivo,
+      lookup: routeBCovers ? await lookUp(client, row) : null,
+      duplicateAcceptedWithErrors:
+        linea.CodigoErrorRegistro === 3000 && resolved === "accepted_with_errors",
+    });
   }
   return lines;
 }
@@ -616,7 +637,7 @@ async function persistResponse(
  * successor ids this call halts. */
 async function applyOutcome(
   tx: Transaction,
-  { row, linea, efectivo, lookup }: ResolvedLine,
+  { row, linea, efectivo, lookup, duplicateAcceptedWithErrors }: ResolvedLine,
   csv: string | null,
   now: Date,
   result: DrainResult,
@@ -672,7 +693,18 @@ async function applyOutcome(
       return;
     // duplicate_annulled / duplicate_unknown — error 3000; see `handleDuplicate`.
     default:
-      await handleDuplicate(tx, row, linea, efectivo, lookup, csv, now, result, halted);
+      await handleDuplicate(
+        tx,
+        row,
+        linea,
+        efectivo,
+        lookup,
+        duplicateAcceptedWithErrors,
+        csv,
+        now,
+        result,
+        halted,
+      );
   }
 }
 
@@ -804,7 +836,8 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | n
   const fecha = toAeatDate(row.fecha_expedicion_factura);
   let page: RespuestaConsulta["ClavePaginacion"];
   const seenPages = new Set<string>();
-  while (true) {
+  // Rotating page keys must not keep a claimed record inside one network pass forever.
+  for (let pagesRead = 0; pagesRead < MAX_CONSULTA_PAGES; pagesRead += 1) {
     const respuesta: RespuestaConsulta = await client.consultar(
       { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } },
       {
@@ -844,6 +877,7 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | n
     seenPages.add(key);
     page = next;
   }
+  return null;
 }
 
 /**
@@ -873,6 +907,7 @@ async function handleDuplicate(
   linea: RespuestaLinea,
   efectivo: EstadoEfectivo,
   lookup: Lookup | null,
+  duplicateAcceptedWithErrors: boolean,
   csv: string | null,
   now: Date,
   result: DrainResult,
@@ -882,7 +917,27 @@ async function handleDuplicate(
   if (lookup !== null) {
     if ("failed" in lookup) throw lookup.failed;
     if (lookup.matched) {
-      await setEstado(tx, row.id, "aceptado", now, { csv, confirmadoEn: now });
+      await setEstado(
+        tx,
+        row.id,
+        duplicateAcceptedWithErrors ? "aceptado_con_errores" : "aceptado",
+        now,
+        { csv, confirmadoEn: now },
+      );
+      if (duplicateAcceptedWithErrors) {
+        await raiseIncident(
+          tx,
+          row,
+          "warning",
+          new AppError("fiscal.aceptado_con_errores", {
+            registroId: row.id,
+            codigo: linea.CodigoErrorRegistro ?? null,
+            mensaje: linea.DescripcionErrorRegistro ?? null,
+          }),
+          now,
+          result,
+        );
+      }
       result.recordsAccepted += 1;
       return;
     }
