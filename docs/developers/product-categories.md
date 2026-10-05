@@ -132,11 +132,11 @@ and any other key in the body answers the same code naming that key. A malformed
 
 `GET /management-api/catalogues/:id/prices` gives one row per product reached by the working
 structure, Active or Inactive, including sold-out products. An inactive menu gives no rows. Each row is
-`{ menuItemId, productId, name, categoryId, placements, productPrice, override, effectivePrice, combined, active, variants }`,
+`{ menuItemId, productId, name, categoryId, placements, override, effectivePrice, combined, active, variants }`,
 with `active` the product's own Active state.
-`productPrice` is the product's own price; `override` is this menu's saved price, which may be
-null. `combined` explains the resulting price, including each variant's. Each setting is either
-decided, with its `value`, `source` and `otherwise`, or a clash with its `candidates`. A source
+`override` is this menu's saved price, which may be null. `combined` explains the resulting price,
+including each variant's. Each setting is either decided, with its `value`, `source` and
+`otherwise`, or a clash with its `candidates`. A source
 identifies this menu's decision, the product, a parent, or an included menu and that menu's source.
 The scalar `effectivePrice` does not explain a clash: read `combined.price` before showing a price
 as decided.

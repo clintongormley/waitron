@@ -798,7 +798,6 @@ describe("DashboardApi routes", () => {
       name: "Lemonade",
       categoryId: null,
       placements: [[]],
-      productPrice: "3.00",
       override: null,
       effectivePrice: "3.00",
       active: true,

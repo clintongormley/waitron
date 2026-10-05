@@ -206,7 +206,6 @@ function api(state: State): DashboardApi {
         name: "Lager",
         categoryId: null,
         placements: [["s-drinks"]],
-        productPrice: "2.00",
         override: "1.80",
         effectivePrice: "1.80",
         active: true,

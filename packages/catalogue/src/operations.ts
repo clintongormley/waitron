@@ -555,7 +555,7 @@ function offerPrices(row: { grossPrice: number | null; productPrice: number | nu
     parentMenuPrice: override,
     parentPrice: productPrice,
   });
-  return { override, productPrice, unitPrice };
+  return { override, unitPrice };
 }
 
 async function offersOn(
@@ -700,14 +700,13 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
     .filter((row) => combinedByProduct.has(row.productId))
     .map((row) => {
       const combinedOffer = combinedByProduct.get(row.productId)!;
-      const { override, productPrice } = offerPrices(row);
+      const { override } = offerPrices(row);
       return {
         menuItemId: row.id,
         productId: row.productId,
         name: row.name,
         categoryId: row.categoryId,
         placements: combinedOffer.placements,
-        productPrice,
         override,
         effectivePrice: combinedOffer.unitPrice,
         combined: combinedOffer.combined,

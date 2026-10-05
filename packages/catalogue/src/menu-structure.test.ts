@@ -707,7 +707,6 @@ describe("a menu's prices", () => {
         name: "Lemonade (staff)",
         categoryId: null,
         placements: [[f.favourites], [f.drinks]],
-        productPrice: "3.00",
         override: null,
         effectivePrice: "3.00",
         active: true,
@@ -719,7 +718,6 @@ describe("a menu's prices", () => {
         name: "Water (staff)",
         categoryId: null,
         placements: [[]],
-        productPrice: "2.00",
         override: null,
         effectivePrice: "2.00",
         active: true,
@@ -745,15 +743,35 @@ describe("a menu's prices", () => {
     });
     const rows = await app((tx) => menuPrices(tx, f.lunch));
     expect(
-      rows.map(({ productId, productPrice, override, effectivePrice }) => ({
+      rows.map(({ productId, override, effectivePrice, combined }) => ({
         productId,
-        productPrice,
         override,
         effectivePrice,
+        price: combined.price,
       })),
     ).toEqual([
-      { productId: f.lemonade, productPrice: "3.40", override: "3.00", effectivePrice: "3.00" },
-      { productId: f.water, productPrice: "2.20", override: null, effectivePrice: "2.20" },
+      {
+        productId: f.lemonade,
+        override: "3.00",
+        effectivePrice: "3.00",
+        price: {
+          state: "decided",
+          value: "3.00",
+          source: { kind: "own" },
+          otherwise: {
+            state: "decided",
+            value: "3.40",
+            source: { kind: "product" },
+            otherwise: null,
+          },
+        },
+      },
+      {
+        productId: f.water,
+        override: null,
+        effectivePrice: "2.20",
+        price: { state: "decided", value: "2.20", source: { kind: "product" }, otherwise: null },
+      },
     ]);
   });
 

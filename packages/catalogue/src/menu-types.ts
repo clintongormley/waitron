@@ -107,7 +107,6 @@ export interface MenuPriceRow {
   /** Each path of section ids from the menu's root to a list holding the product; `[]` is the top
    * level. */
   placements: string[][];
-  productPrice: string;
   /** The price this menu sets, or null when it sets none. */
   override: string | null;
   effectivePrice: string;

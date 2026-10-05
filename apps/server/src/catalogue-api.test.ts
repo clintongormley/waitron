@@ -4250,7 +4250,6 @@ describe("a menu's prices", () => {
         name,
         categoryId: null,
         placements: [[]],
-        productPrice: "1.00",
         override: "1.40",
         effectivePrice: "1.40",
         active: true,
@@ -4262,7 +4261,7 @@ describe("a menu's prices", () => {
       (await send(app, "PATCH", `${items}/${itemId}`, { body: { grossPrice: null } })).status,
     ).toBe(204);
     expect(await (await send(app, "GET", path)).json()).toMatchObject([
-      { menuItemId: itemId, productPrice: "1.00", override: null, effectivePrice: "1.00" },
+      { menuItemId: itemId, override: null, effectivePrice: "1.00" },
     ]);
 
     const unknown = await send(
