@@ -764,7 +764,7 @@ its longer side, turned upright, stripped of its metadata and stored as WebP at 
   "fills the Custom square right up to its border while a palette colour is chosen"). **Next action:** try
   the first in Safari or Playwright's WebKit, and the second by hand in Chromium.
 
-**Image library: Delete left, Edit right, and a preview showing where an image is used — DONE (W78,
+**Image library: Delete left, Edit right, and a preview showing where an image is used — DONE (W78, #1215,
 owner 2026-10-04).** On each card (`packages/media/src/dashboard/image-library.ts`) Delete now sits at
 the left of the action row and Edit at the right, with "Use image" still on its own line above them
 in the picker. The photo is a button marked "Preview" that opens a larger copy beside a list of every
@@ -774,6 +774,14 @@ to the thumbnail. `wt-dialog` has no option to close on a backdrop click (it set
 `closerequest` or `none`) and was left unchanged, so
 the library closes the preview itself when a click reaches the dialog element at a point outside the
 dialog's box.
+Left OPEN by #1215's review, not acted on: (1) a portrait photo on a laptop-width screen reaches the
+preview's height limit and is drawn centred with plain bands either side — whether that is acceptable
+is the owner's call; (2) a test title in `apps/till/src/screens/till-allergen-screen.test.ts` says its
+dialog closes on "escape/backdrop", but the shared dialog does not close on a click outside it — the
+title, not the behaviour, looks wrong (unchecked beyond the reviewer's reading); (3)
+`docs/developers/design-system.md` says a dialog returns focus to its trigger on close — the preview
+returns it itself, because with that line deleted its Close button and an outside click left focus on
+the page body.
 
 **The folding section jumps about when it opens (A169, owner 2026-10-01) — DONE (#1026).** `wt-disclosure`
 (`packages/ui/src/components/wt-disclosure.ts`) now draws no border in either state, keeps its
