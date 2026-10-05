@@ -29,8 +29,8 @@ export async function setProductColor(
   await tx.update(products).set({ color, updatedAt: now() }).where(eq(products.id, product.id));
 }
 
-/** Each product's effective colour: two reads (the products in batches, and the category tree once)
- * however many products. */
+/** Each product's effective colour: one read of the category tree, then one read of the products per
+ * batch. */
 export async function readEffectiveColors(
   tx: Transaction,
   productIds: readonly string[],
