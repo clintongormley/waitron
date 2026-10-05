@@ -201,20 +201,20 @@ async function assertProductsExist(tx: Transaction, input: ExtraListInput): Prom
 
 type SavedItem = { productId: string; portion: number };
 
-/** `savedById` holds this list's saved rows for the ids the body sends. */
-async function assertPortionPrecision(
+const ONE_PORTION = decimalToThousandths(decimal("1"));
+
+/**
+ * Checks each item's portion and returns the thousandths to store for it, in the body's order. An
+ * item sent without one stores one when its product is Each, keeps the portion saved under its id
+ * when the list holds it for the same product, and is refused otherwise. `savedById` holds this
+ * list's saved rows for the ids the body sends.
+ */
+async function itemPortions(
   tx: Transaction,
   savedById: ReadonlyMap<string, SavedItem>,
   input: ExtraListInput,
-): Promise<void> {
-  const savedFor = (item: ExtraListInput["items"][number]) =>
-    item.id === undefined ? undefined : savedById.get(item.id);
-  // New means the list holds no row for the item's product under its id, not that no id was sent:
-  // the dashboard's editor sends one for every row it adds.
-  const isNew = (item: ExtraListInput["items"][number]) =>
-    savedFor(item)?.productId !== item.productId;
-  const named = input.items.filter((item) => item.portion !== undefined || isNew(item));
-  if (named.length === 0) return;
+): Promise<number[]> {
+  if (input.items.length === 0) return [];
   const rows = await tx
     .select({
       id: products.id,
@@ -229,25 +229,25 @@ async function assertPortionPrecision(
     .where(
       inArray(
         products.id,
-        named.map((item) => item.productId),
+        input.items.map((item) => item.productId),
       ),
     );
   const unitByProduct = new Map(rows.map((row) => [row.id, row]));
-  for (const [index, item] of input.items.entries()) {
+  return input.items.map((item, index) => {
     const unit = unitByProduct.get(item.productId);
     const precision = unit?.precision ?? 0;
     const each = unit?.unitId === null || unit?.seedKey === "each";
-    const saved = savedFor(item);
+    const saved = item.id === undefined ? undefined : savedById.get(item.id);
+    // Held means the list holds a row for the item's product under its id, not that an id was sent:
+    // the dashboard's editor sends one for every row it adds.
+    const held = saved?.productId === item.productId;
     if (item.portion === undefined) {
-      if (isNew(item) && !each)
-        throw new AppError("extras.invalid", { field: `items.${index}.portion` });
-      continue;
+      if (each) return ONE_PORTION;
+      if (!held) throw new AppError("extras.invalid", { field: `items.${index}.portion` });
+      return saved.portion;
     }
-    if (
-      saved?.productId === item.productId &&
-      saved.portion === decimalToThousandths(decimal(item.portion))
-    )
-      continue;
+    const portion = decimalToThousandths(decimal(item.portion));
+    if (held && saved.portion === portion) return portion;
     try {
       if (each && item.portion !== "1.000") throw new Error("Each portion must be one");
       assertQuantityPrecision(item.portion, precision, {
@@ -256,7 +256,8 @@ async function assertPortionPrecision(
     } catch {
       throw new AppError("extras.invalid", { field: `items.${index}.portion` });
     }
-  }
+    return portion;
+  });
 }
 
 /** The till never offers a product with an Active variant as an extra, so a list may not name one. */
@@ -310,7 +311,7 @@ async function writeItems(
     throw new AppError("extras.invalid", { field: `items.${at}.id` });
   }
   // After the foreign-id refusal, so every row handed to the portion check is this list's.
-  await assertPortionPrecision(tx, new Map(existing.map((row) => [row.id, row])), input);
+  const portions = await itemPortions(tx, new Map(existing.map((row) => [row.id, row])), input);
   // The list now starts from nothing, so no row the body keeps can collide with a row it replaces.
   await tx.delete(extraListItems).where(eq(extraListItems.listId, extraListId));
   for (const [sort, item] of input.items.entries()) {
@@ -325,7 +326,7 @@ async function writeItems(
         maxQuantity: item.maxQuantity,
         preselected: item.preselected,
         price: item.price === null ? null : stringToCents(item.price),
-        portion: decimalToThousandths(decimal(item.portion ?? "1")),
+        portion: portions[sort]!,
         sort,
       })
       .onConflictDoNothing({ target: extraListItems.id })

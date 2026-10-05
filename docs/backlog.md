@@ -1316,7 +1316,24 @@ portion, read back `1.000`, because `assertPortionPrecision` does not refuse suc
 different-product change, with an ml item saved at `30`, read back `1.000`. The dashboard's Extras
 editor was not checked for whether it always resends the saved portion. Next step, if the owner
 wants it: refuse such an item when its product is not Each, or keep the portion saved under that id,
-which is for the same product.
+which is for the same product. _2026-10-05: the owner chose to keep it; done by W75d, below._
+
+**A held Extras item sent without a portion keeps its saved portion (W75d, owner 2026-10-05) — DONE
+(#1221).** The owner chose "Keep saved portion" for W75c's open point. `itemPortions`
+(`packages/catalogue/src/extras.ts`, which replaces `assertPortionPrecision`) now decides the portion
+each item stores: an item sent without one stores one when its product is Each, keeps the portion
+saved under its id when the list holds that id for the same product, and is refused as before when
+it is new. Each is checked first, so an item saved at `0.050` whose product has since become Each
+stores one, as the Extras editor intends when it sends no portion for an Each product. A portion sent
+explicitly still replaces the saved one, and an explicit `null` is still refused on
+`items.<n>.portion` (by `parseExtraListInput`), leaving the saved portion in place. Tests in
+`packages/catalogue/src/extras.test.ts`: a held kg item at `0.050` and a held ml item at `30`, the
+second also moved to another position, keep theirs; an explicit portion replaces; an explicit null
+is refused; a held Each item stays at one; and the item whose product became Each. The dashboard's
+Extras editor already sent the saved portion back: a throwaway case in its browser suite resaved a
+list with only its name changed and it sent `30.000` for a saved ml item and `0.050` for a saved kg
+item, and no portion for an Each item. So the lost portion was reachable through the API, not
+through the editor.
 
 **A folded Customer-facing names section shows every language's name, inherited ones in italic
 (W77, owner 2026-10-04) — DONE (#1197).** The owner, on an Extras list: _"missing the summary of the values
@@ -1883,7 +1900,9 @@ W53 changes the filed display surfaces.
   product's portion is one and the form asks for none; _2026-10-04 (W75): the list editor now asks
   for a portion for EVERY unit but Each, so whole grams, millilitres and a venue's own units too;
   the server still accepts a new item of a whole unit with no hardware link (ml, say) without one,
-  and stores 1._ _2026-10-05 (W75c): the server now refuses that too._
+  and stores 1._ _2026-10-05 (W75c): the server now refuses that too. (W75d): an item the list
+  already holds under its id for the same product, sent again without a portion, keeps its saved
+  one unless its product is Each._
 - each pick adds one portion: three picks of 50 g are 150 g, and a dish × 2 doubles that, as the
   count does today;
 - the item's **Price is per portion**: blank, it is the portion × the product's unit price (50 g ×
