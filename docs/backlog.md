@@ -3432,6 +3432,22 @@ boundary's default 400. `image.invalid_metadata` and `content.language_invalid` 
 the 400 they already got, which is what the media routes give them (`packages/media/src/routes.ts`).
 Setup's live-source screen keys its sentence on the code, not the status, so it still shows the
 could-not-open sentence for each.
+Since W72c (2026-10-05) an export leaves out each print agent's `node_id`, as it already left out
+its token, host and last-seen time (`CORE_CONFIGURATION_TRANSFER`,
+`packages/db/src/configuration-transfer.ts`). Before, an imported agent kept the exporting venue's
+node id (a run of an export and import read the source venue's node id on the imported row), and the
+Printers screen labels any agent with a node "On this box" (`apps/dashboard/src/screens/printers-screen.ts`,
+read, not run). It now arrives with no node, like an agent a person enrolled; the importing box's
+own agent still enrols as a new row beside it, as it did before (read, not run), because a new venue
+gets a new node id. Giving the imported row the importing box's node was ruled out by a run:
+self-enrolment found that row inactive and refused it with `device.join_revoked`. An export made
+before this change that lists a print agent carries `node_id`, so setup refuses it with
+`setup.request_invalid` naming `print_agents.node_id`; export it again.
+Still open, for the owner, and older than W72c: the export still carries each agent's `setup_url`
+and `setup_port`, and the Printers screen links an agent's host cell to its `setup_url`
+(`apps/dashboard/src/screens/printers-screen.ts`), so an imported agent that had reported one, which
+arrives inactive and is shown once the status filter includes revoked agents, would link to the
+exporting machine's setup page (read, not run).
 Still open, for the owner: in the dashboard's category editor, at 390 px the category name box cuts
 its duplicate-name refusal off against the pinned Actions column, as it already did for
 `category.invalid` (compared in `~/waitron-campaign/w72-shots/`, local screenshots); the same cause

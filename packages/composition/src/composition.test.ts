@@ -141,7 +141,7 @@ describe("ALL_MODULES configuration transfer contribution", () => {
       "needs_clearing_since",
     );
     expect(tables.find((table) => table.name === "print_agents")?.omit).toEqual(
-      expect.arrayContaining(["token_hash", "last_seen_at"]),
+      expect.arrayContaining(["token_hash", "last_seen_at", "host", "node_id"]),
     );
     expect(tables.find((table) => table.name === "printers")?.omit).toContain("poll_token_hash");
   });
