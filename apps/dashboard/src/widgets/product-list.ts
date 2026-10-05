@@ -15,7 +15,7 @@ import {
   productStatusName,
   vatClassName,
 } from "../i18n/domain.js";
-import { categoryPath, categoryWithDescendants } from "./category-form.js";
+import { categoryPathSearchText, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import {
@@ -323,6 +323,7 @@ export class ProductList extends LitElement {
   #emptyChecked = false;
   #rowByKey = new Map<string, ListRow>();
   #counts = new Map<string | null, { categories: number; products: number }>();
+  #categorySearchTexts: ReadonlyMap<string, string> = new Map();
   #dragged: string[] = [];
   #pointerDrag: { pointerId: number; key: string; x: number; y: number; active: boolean } | null =
     null;
@@ -569,6 +570,13 @@ export class ProductList extends LitElement {
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("categories") || changed.has("products")) this.#counts = this.#count();
+    if (changed.has("categories"))
+      this.#categorySearchTexts = new Map(
+        this.categories.map((category) => [
+          category.id,
+          categoryPathSearchText(category, this.categories),
+        ]),
+      );
     if (changed.has("nameDraft")) {
       const draft = this.nameDraft;
       this.#nameSent = false;
@@ -806,10 +814,9 @@ export class ProductList extends LitElement {
     return parts.join(", ");
   }
 
-  #category(id: string | null): string {
+  #categorySearchText(id: string | null): string {
     if (id === null) return "";
-    const category = this.categories.find((candidate) => candidate.id === id);
-    return category ? categoryPath(category, this.categories) : t("editor.missing_choice");
+    return this.#categorySearchTexts.get(id) ?? t("editor.missing_choice");
   }
 
   #modifierNames(product: Product): string {
@@ -911,7 +918,7 @@ export class ProductList extends LitElement {
           [
             product.name,
             ...product.variants.map(({ name }) => name),
-            this.#category(product.primaryCategoryId),
+            this.#categorySearchText(product.primaryCategoryId),
           ].join(" "),
         cell: ({ product, variant }, { ancestorOnly }) =>
           variant
@@ -1253,7 +1260,7 @@ export class ProductList extends LitElement {
                 : row.kind === "root" || row.kind === "draft"
                   ? ""
                   : column.key === "name"
-                    ? `${row.folder.name} ${this.#category(row.folder.parentId)}`
+                    ? `${row.folder.name} ${this.#categorySearchText(row.folder.parentId)}`
                     : "",
           }
         : {}),

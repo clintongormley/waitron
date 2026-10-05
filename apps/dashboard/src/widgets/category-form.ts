@@ -2,6 +2,8 @@ import type { CategorySummary } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
+export const PATH_SEPARATOR = " › ";
+
 /** The category, then each category above it, stopping at a parent the list lacks or a loop. */
 export function categoryAncestors(
   category: CategorySummary,
@@ -21,12 +23,23 @@ export function categoryAncestors(
 export function categoryPath(
   category: CategorySummary,
   categories: readonly CategorySummary[],
-  separator = " / ",
+  separator = PATH_SEPARATOR,
 ): string {
   return categoryAncestors(category, categories)
     .map(({ name }) => name)
     .reverse()
     .join(separator);
+}
+
+/** The path spelled with each separator a person might type, one spelling per line so a term
+ * typed into a one-line search box cannot run from the end of one spelling into the next. */
+export function categoryPathSearchText(
+  category: CategorySummary,
+  categories: readonly CategorySummary[],
+): string {
+  return [PATH_SEPARATOR, " / ", " > "]
+    .map((separator) => categoryPath(category, categories, separator))
+    .join("\n");
 }
 
 /** The collation `wt-data-table` sorts text with, so a picker or list and the tables agree. */

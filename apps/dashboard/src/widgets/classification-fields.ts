@@ -5,8 +5,6 @@ import { byLabel, categoryPath } from "./category-form.js";
 import { t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 
-export const PATH_SEPARATOR = " › ";
-
 /** A category's whole path, as the product editor shows it; `missing` for an id the list lacks. */
 export function categoryPathText(
   id: string,
@@ -14,7 +12,7 @@ export function categoryPathText(
   missing: string,
 ): string {
   const category = categories.find((candidate) => candidate.id === id);
-  return category ? categoryPath(category, categories, PATH_SEPARATOR) : missing;
+  return category ? categoryPath(category, categories) : missing;
 }
 
 /** Every category depth-first, siblings sorted by name. A category whose parent the
@@ -35,7 +33,7 @@ export function categoryTree(categories: readonly CategorySummary[]): ComboboxOp
       value: category.id,
       label: category.name,
       depth,
-      valueLabel: categoryPath(category, categories, PATH_SEPARATOR),
+      valueLabel: categoryPath(category, categories),
     });
     for (const child of childrenOf(category.id)) visit(child, depth + 1);
   };

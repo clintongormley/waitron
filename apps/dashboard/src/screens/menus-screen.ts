@@ -20,6 +20,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import { PATH_SEPARATOR } from "../widgets/category-form.js";
 import { memberName } from "../widgets/member-list-editor.js";
 import "../widgets/menu-structure-table.js";
 import type { StructureAddAction } from "../widgets/menu-structure-table.js";
@@ -692,11 +693,11 @@ export class MenusScreen extends LitElement {
           if (node.ref.kind === "product") {
             const name = products.get(node.ref.productId);
             if (name !== undefined && !foundProducts.has(node.ref.productId))
-              foundProducts.set(node.ref.productId, [...path, name].join(" › "));
+              foundProducts.set(node.ref.productId, [...path, name].join(PATH_SEPARATOR));
           } else {
             const next = [...path, node.internalName ?? ""];
             if (!foundSections.has(node.ref.sectionId))
-              foundSections.set(node.ref.sectionId, next.join(" › "));
+              foundSections.set(node.ref.sectionId, next.join(PATH_SEPARATOR));
             visit(node.children ?? [], next);
           }
         }
