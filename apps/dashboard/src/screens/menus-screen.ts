@@ -1566,6 +1566,10 @@ export class MenusScreen extends LitElement {
         this.#countPending(save.key, -1);
         return;
       }
+      // Saves are answered in the order made, so a refusal under this field came from an earlier
+      // save, and the field now holds a price that was stored.
+      if (save.key in this.priceRefusals)
+        this.priceRefusals = without(this.priceRefusals, [save.key]);
       if (this.menuId === menuId && this.view === "prices") {
         await this.#watchPrices(menuId);
         const shown = this.menuId === menuId && this.view === "prices" && !this.pricesError;

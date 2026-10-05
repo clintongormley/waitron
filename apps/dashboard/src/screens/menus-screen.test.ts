@@ -4496,6 +4496,60 @@ it.each([
   },
 );
 
+it("takes an earlier save's refusal from under its field once a later save of that field succeeds, still saying it in the status line", async () => {
+  const refused = deferred<void>();
+  let written: string | null = null;
+  const holds = [refused];
+  const client = api({
+    updateMenuItem: vi.fn(async (_menu: string, _item: string, body: { grossPrice: string }) => {
+      await holds.shift()?.promise;
+      written = body.grossPrice;
+    }),
+    getMenuPrices: vi.fn(async (id: string) =>
+      id === "menu-lunch"
+        ? lunchPrices().map((row) =>
+            row.menuItemId === "mi-burger" ? { ...row, override: written } : row,
+          )
+        : [],
+    ),
+  });
+  const el = await mountPrices(client);
+  await commitPrice(el, "mi-burger", "11.00");
+  await commitPrice(el, "mi-burger", "11.50");
+  const reason = codeMessage("management.request_invalid");
+  refused.reject({ code: "management.request_invalid", params: { field: "grossPrice" } });
+  await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(prices(el).saving.size).toBe(0));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(written).toBe("11.50");
+  expect(prices(el).refusals).toEqual({});
+  await prices(el).updateComplete;
+  expect(priceField(el, "mi-burger").value).toBe("11.50");
+  expect(priceField(el, "mi-burger").error).toBe("");
+  expect(prices(el).outcome).toEqual({ kind: "refused", save: burgerSave, reason });
+});
+
+it("keeps a refusal under its field when a later save of another field succeeds", async () => {
+  const refused = deferred<void>();
+  const holds = [refused];
+  const client = api({
+    updateMenuItem: vi.fn(async () => {
+      await holds.shift()?.promise;
+    }),
+  });
+  const el = await mountPrices(client);
+  await commitPrice(el, "mi-burger", "11.00");
+  await commitPrice(el, "mi-lager", "5.00");
+  refused.reject({ code: "management.request_invalid", params: { field: "grossPrice" } });
+  await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(prices(el).saving.size).toBe(0));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const reason = codeMessage("management.request_invalid");
+  expect(prices(el).refusals).toEqual({ "mi-burger": reason });
+  await prices(el).updateComplete;
+  expect(priceField(el, "mi-burger").error).toBe(reason);
+});
+
 it("clears a refusal from the status line, and from under its field, once that field is sent again", async () => {
   const again = deferred<void>();
   const client = api({
