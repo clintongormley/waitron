@@ -1677,6 +1677,17 @@ describe("mountCatalogueApi — products", () => {
     expect(
       (await send(app, "PATCH", path, { body: { price: "9.90" }, cookie: staffCookie })).status,
     ).toBe(403);
+    const otherMenuId = await createCatalogueVia(app, "Other size prices");
+    const elsewhere = await send(
+      app,
+      "PATCH",
+      `/management-api/catalogues/${otherMenuId}/items/${itemId}/variants/${second}`,
+      { body: { price: "9.90" } },
+    );
+    expect(elsewhere.status).toBe(404);
+    expect(await elsewhere.json()).toMatchObject({
+      error: { code: "menu_item.not_found", params: { menuItemId: itemId } },
+    });
     expect(await read()).toEqual([
       { variantId: first, price: "4.10" },
       { variantId: second, price: "2.20" },
