@@ -8078,13 +8078,13 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   `person.mark_inactive`); and a generic `action.deactivate` ("Deactivate") exists beside
   `action.disable`. Products settle on **Active / Inactive**, kept separate from **Available** (sold
   out for now). **Next action:** pick the one pair, and the one action verb, for every screen whose
-  record is switched off rather than deleted — deciding first whether a revoked printer or a disabled
+  record is switched off rather than deleted — deciding first whether a disabled printer or a disabled
   login is really the same state as an inactive product — then change the English and Spanish
   strings together and record the rule in `docs/developers/design-system.md`. String keys are not
   renamed on the way (only their text). W105a (2026-10-05) already moved printers, print agents
   and devices to **Disable / Deshabilitar**, status **Disabled** (Deshabilitada for a printer,
   Deshabilitado for an agent or a device), and printers and print agents to **Enable / Habilitar**
-  (devices get Enable in W105b); it renamed their keys as an exception its own spec asked for,
+  (devices get Enable in a later campaign item, W105b); it renamed their keys as an exception its own spec asked for,
   because the old keys no longer said what they show; card
   readers and staff still say Desactivar. Left open by W105a: a printer's Active status reads the
   masculine "Activo" beside "Deshabilitada", because `printers.status_active` is shared with print

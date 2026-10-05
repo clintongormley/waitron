@@ -1882,7 +1882,7 @@ describe("printers-screen", () => {
     expect(banner).toContain(codeMessage("agent.not_found", "es-ES"));
   });
 
-  // ── Agents: provenance + allow-again ─────────────────────────────────────────────────────────────
+  // ── Agents: provenance + enable ──────────────────────────────────────────────────────────────────
 
   it("marks a self-enrolled agent (node id present) and not a manually-enrolled one", async () => {
     const api = stubApi();

@@ -569,7 +569,7 @@ export class PrintersScreen extends LitElement {
 
   @state() private armedRevokeId: string | null = null;
 
-  // Separate from `armedRevokeId`, so arming one agent's re-allow does not disarm another's revoke.
+  // Separate from `armedRevokeId`, so arming one agent's Enable does not disarm another's Disable.
   @state() private armedAllowId: string | null = null;
 
   // Pairing is venue-wide; challenges stay cached because each request's numbers are fixed.
