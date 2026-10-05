@@ -2824,12 +2824,12 @@ separates development from production-enablement gates: prevention and evidence 
 proceed while adviser answers are pending; disputed remedies retain explicit gates. It includes
 an allocation-contract checkpoint, live AEAT probes, offline recovery, corrective workflows and
 a separately owned Cloud registry workstream. The owner approved the revised plan on 2026-10-04;
-it replaces the 2026-10-03 task list while W41s remains the backlog item. **Next action:** review
-the proposed allocation and recovery contract in the revised design's §9, then record any narrow
-H2 scope exception before its dependent identity work. Independent queue items may proceed under
-the plan. Task 2's ordered filing and duplicate-evidence changes were implemented on a separate
-branch on 2026-10-05 and await owner review; the live AEAT probes remain outstanding. The following
-paragraph records the 2026-10-03 state;
+it replaces the 2026-10-03 task list while W41s remains the backlog item. The owner approved
+the allocation and recovery contract in §9 and granted W41s-4 a narrow H2 scope exception on
+2026-10-05. Task 2's ordered filing and duplicate-evidence changes landed as [#1213](https://github.com/clintongormley/waitron/pull/1213)
+on 2026-10-05. **Next action:** complete the live AEAT probes in W41s-1 and record their evidence;
+the dependent submission-outcomes task still needs those results. Independent queue items may
+proceed under the plan. The following paragraph records the 2026-10-03 state;
 its old next action and allocation assumptions are superseded by this update.
 
 The owner asked (2026-10-03, on W21's review) how a chain AEAT disagrees with can happen, how to
