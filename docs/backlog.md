@@ -3402,8 +3402,8 @@ since ids are random UUIDs, but nothing prevents it; the fix is to rewrite only 
 declares as references. Not fixed in W72.
 
 **Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
-owner 2026-10-04).** The bulk Move dialog's Destination list showed categories in the order the
-server lists them, by creation time and then id (`listCategories`,
+owner 2026-10-04; since 2026-10-05 a tree, W82a, see the last paragraph).** The bulk Move
+dialog's Destination list showed categories in the order the server lists them, by creation time and then id (`listCategories`,
 `packages/catalogue/src/categories.ts`).
 It now sorts them by the full path it shows ("Dinner / Mains"), with `byLabel`
 (`apps/dashboard/src/widgets/category-form.ts`, the comparison the tables sort text with), so
@@ -3431,8 +3431,9 @@ category tree (`categoryTree`, `apps/dashboard/src/widgets/classification-fields
 category's children indented under it and each level in label order, so "Menu (old)" follows
 "Menu" and its children; a chosen destination and a search show the full path, joined with " › "
 as the product editor does. The search box takes the translated "Search" and "No results"
-(checked in English and Spanish in `apps/dashboard/src/widgets/catalogue-browser.test.ts`). Two
-sibling categories with the same name are left as they are (owner: "leave it"): they still show
+(checked in English and Spanish in `apps/dashboard/src/widgets/catalogue-browser.test.ts`; the
+English text is also `wt-combobox`'s own default, so the Spanish case is the one that proves
+it). Two sibling categories with the same name are left as they are (owner: "leave it"): they still show
 as two identical entries, in the tree and in a search.
 
 **Sales: the category report names each category by its full path — DONE (W73, #1212, owner 2026-10-04: "we should
