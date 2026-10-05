@@ -4650,8 +4650,14 @@ describe("printer layout settings", () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await openPrinter(el);
-    q(el, "[data-test=calibrate-printer]")!.click();
+    await selectTab(el, "printers");
+    q(el, "[data-test=printer-row-p1]")!.click();
+    await flush(el);
+    q(el, "[data-test=printer-section-calibration]")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    await flush(el);
+    q(el, "[data-test=calibrate-printer-details]")!.click();
     await flush(el);
     expect(q(el, "[data-test=calibration-step-1]")!.checkVisibility()).toBe(true);
     await chooseOption(el, "printer-paper-width", "58mm");
@@ -4743,14 +4749,21 @@ describe("printer setup refinements", () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await openPrinter(el);
-    q(el, "[data-test=calibrate-printer]")!.click();
+    await selectTab(el, "printers");
+    q(el, "[data-test=printer-row-p1]")!.click();
+    await flush(el);
+    q(el, "[data-test=printer-section-calibration]")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    await flush(el);
+    q(el, "[data-test=calibrate-printer-details]")!.click();
     await flush(el);
     await chooseOption(el, "printer-paper-width", "58mm");
     q(el, "[data-test=cancel-edit-printer]")!.click();
     await flush(el);
     expect(api.updatePrinter).not.toHaveBeenCalled();
-    await openPrinter(el);
+    q(el, "[data-test=calibrate-printer-details]")!.click();
+    await flush(el);
     expect((q(el, '[name="printer-paper-width"]') as Dropdown).value).toBe("80mm");
   });
 });
