@@ -1307,10 +1307,13 @@ Where the two differ, and why:
 - The price table moves focus to the field a refusal names, even when the person has moved on to
   another row, opening a size's product first if it is folded shut (`#focusField`). The course list
   marks the field and moves focus nowhere (`#commit`).
-- The course list shows any other refusal as an alert under the list. The price table says every
-  outcome in a status line that stays in view at the bottom of the tab while the rows scroll (a
-  refusal, including one already shown under its field, or what was saved, with an Undo that writes
-  the previous value back), because a save made far down the list must still be seen. A refusal
+- The course list shows any other refusal as an alert under the list. The price table says each
+  refusal, including one already shown under its field, in a status line that stays in view at the
+  bottom of the tab while the rows scroll, because a save made far down the list must still be seen.
+  It says a success there only for the last save made, once the prices have been read again after
+  it and the tab still shows them, and only when the status line is not showing a refusal, with an
+  Undo that writes the previous value back; an earlier save is not said, so an Undo never reaches
+  past a later write (`#savePrice`, `apps/dashboard/src/screens/menus-screen.ts`). A refusal
   that arrives after the person has left the menu or the tab, or after its row has left the list,
   is said in the Menus screen's own message above the tabs or the menus list instead
   (`memberError`, `apps/dashboard/src/screens/menus-screen.ts`).

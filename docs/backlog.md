@@ -3224,8 +3224,10 @@ whose only clash is in one of its sizes shows "—" and says that a variant's so
 that variant's price should be set); with an override, it shows that price. Enter or leaving the
 field saves it, Escape puts the stored price back, and emptying it gives the inheritance back. A
 refusal about the price also goes under its field and takes focus there; a status line that stays in
-view says what each save did — refused, or saved, with Undo. The window behind the product name, and
-the Before this menu, Menu price, Effective price, Price on this menu and From columns, are gone.
+view says each refusal while its row is shown and, once the prices are read again after the last
+save made, what that save stored, with Undo — unless the status line is then showing a refusal. The
+window behind the product name, and the Before this menu, Menu price, Effective price, Price on this
+menu and From columns, are gone.
 Main category starts shown and keeps its filter; the table keeps its column choices under a new key
 (`waitron.menus.price-overrides.table`), so a choice saved for the old columns is not read (as W87
 did for the Menus list). A Status column says Active or Inactive and links to the product's page;

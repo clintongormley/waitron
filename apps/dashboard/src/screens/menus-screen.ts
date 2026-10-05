@@ -613,7 +613,7 @@ export class MenusScreen extends LitElement {
   readonly #priceWrites = new ListWriteQueue();
   #priceSavesMade = 0;
   /** Fields whose save was stored while a later save waited behind it. They stay marked saving
-   * until the re-read after the last save, which carries their prices too. */
+   * until the last save made ends, after the re-read that carries their prices when one runs. */
   readonly #pricesUnread = new Set<string>();
   /** Per list, the current batch of moves: those made since the list last had none unanswered,
    * until one is refused. `out` counts the unanswered; `answered` holds the orders answered by

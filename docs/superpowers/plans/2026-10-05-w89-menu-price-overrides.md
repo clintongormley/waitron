@@ -216,6 +216,13 @@ runs `scripts/migrations-match-schema.test.ts` as the check.
 answers 400 (`packages/server-kit/src/error-boundary.ts:33`), so the new route's
 `product.variant_not_found` answers 400, as the PUT's does today.
 
+Changed after review (2026-10-05): the single-size route answers 404 for an unknown size; the
+column memory key is `waitron.menus.price-overrides.table`; the size-clash note says 'variant';
+'its product is inactive' is lower case; `menuPriceVariantsOfItems` was folded into
+`menuVariantsOfItems(…, includeInactive)`; `sizeClash` takes the product field's current value;
+`productPrice` was dropped from `MenuPriceRow`; a refused size under a collapsed product opens it
+and takes focus.
+
 ---
 
 ## Global constraints
@@ -1956,7 +1963,7 @@ existing check.
 | 4 | `…:1376` | Menu price column: `13.00`, "Variant overrides" ×2, "None" | override cells' text: `""`, note, note, `""` | R1 |
 | 4 | `…:1386`, `:1397` | `menu-price` filter and "None" cells | `override` filter; unmarked rows are those with no value and no note: cider, burger | R1 |
 | 4 | `…:1441` | "10.00" (the bottle's price before this menu) finds the bottle | "7.00" finds `["mi-wine", "mi-wine:v-glass"]`, "700" nothing, "13.00" `["mi-wine"]` | R1 |
-| 4 | `…:1466` | chooser offers six columns, Price on this menu hidden, its choice stored under `waitron.menus.prices:columns` | chooser offers placements, category, status, all shown; headers `name, placements, category, status, override, ""`; a choice stored under the old key `waitron.menus.prices:columns` hiding category is not read (category shown); hiding category stores `{ category: false }` under `waitron.menus.price-overrides:columns`, a remount keeps it hidden, Restore defaults shows it | R1, D7 |
+| 4 | `…:1466` | chooser offers six columns, Price on this menu hidden, its choice stored under `waitron.menus.prices:columns` | chooser offers placements, category, status, all shown; headers `name, placements, category, status, override, ""`; a choice stored under the old key `waitron.menus.prices:columns` hiding category is not read (category shown); hiding category stores `{ category: false }` under `waitron.menus.price-overrides.table:columns` (`waitron.menus.price-overrides:columns` until the review fix wave; `:1925` at `203925020`), a remount keeps it hidden, Restore defaults shows it | R1, D7 |
 | 4 | `…:1511`, `:1530`, `:1564`, `:1579`, `:1598`, `:1606`, `:1634`, `:1643`, `:1661` | the Price on this menu column: muted no-menu-price text, struck "was" price, sort | **DELETE** — the column goes; the hint and placeholder cases of Task 3 and Task 4's field case cover what a row inherits and shows | R1 |
 | 4 | `…:1714` | three tooltips per row, the charged one explained | one tooltip, "Where Burger's inherited price comes from", reading "The product's own price." | R1 |
 | 4 | `…:1764` | the small's Before and Effective cells `8.00` | the small's placeholder `8.00` | R2 |
@@ -2032,6 +2039,15 @@ existing check.
 | 6 | `…menu-prices-table.a11y.test.ts` (Task 6's case, `:150`) | the status line is not empty | it reads the saved sentence, "Guardado el precio propio de Burger: 11,00 €." | Changed check (fix round 1, minor) |
 | 7 | `…menu-prices-table.test.ts` (new, `:2105` at Task 7's commit), en-GB and es-ES | — | at 1280 px with a size-clash row, a clash row and a saving row: the table's scroll box does not scroll sideways; every field's right edge lines up with Burger's; "Saving…" and each Clash note sit under the field, within the field and its "?" | Added check (Task 7's look: the size-clash sentence widened the column, and in Spanish at 1280 px the table scrolled sideways) |
 | 7 | `…menu-prices-table.test.ts` (new, `:2140` at Task 7's commit) | — | a mid-list field scrolled into view (`block: "end"`) stops above the sticky status line, the field's `scroll-margin-block-end` is at least the line's height, and where the line crosses the pinned Resolve column the line is on top | Added check (Task 7's look: the status line covered the edited field, and at 390 px the Resolve column clipped Undo) |
+| Review | `apps/server/src/catalogue-api.test.ts:1667` (in `:1605` at `203925020`) | an unknown size named in the single-size PATCH route's address answers 400 | answers 404, the same `product.variant_not_found` body | Review: the sibling routes answer 404 for an id named in the address |
+| Review | `packages/catalogue/src/menu-structure.test.ts:710`, `:722` (in `:685` at `203925020`) | expected rows carry `productPrice` | `productPrice` removed from the expected rows | Review: the field is dropped from `MenuPriceRow`, which nothing read |
+| Review | `…menu-structure.test.ts:745`–`773` (in `:729` at `203925020`) | `productPrice: "3.40"` for lemonade, `"2.20"` for water | each row's `combined.price`: lemonade decided at its own 3.00, otherwise the product's 3.40; water decided at the product's 2.20 | Review: `productPrice` dropped from `MenuPriceRow` |
+| Review | `apps/server/src/catalogue-api.test.ts:4253`, `:4264` (in `:4203` at `203925020`) | exact-match checks include `productPrice: "1.00"` | the same checks without `productPrice` | Review: `productPrice` dropped from `MenuPriceRow` |
+| Review | `apps/server/scripts/demo-seed/seed-catalogue.test.ts:68` (in `:54` at `203925020`) | `read.price?.productPrice` is `"2.80"` | `read.ownPriceCents`, read from the `products` table's `unit_price`, is 280 | Review: `productPrice` dropped from `MenuPriceRow` |
+| Review | `apps/dashboard/src/widgets/menu-price-inheritance.test.ts:327` | "past a size's own price over a clash, stays a clash whatever the product's field holds": `variantInherited(sizeOwnOverClash, "v-small", "2.80")` is `CLASH` | "…over its product's clash, follows the price typed for the product": the same call is `range("2.80")`; `undefined` and `null` still `CLASH` | Review: a size past its own price follows its product, so a price typed for the product decides it; the "stays a clash" promise moved to `:339`, for a clash at the size's own level |
+| Review | `apps/dashboard/src/widgets/menu-prices-table.test.ts:900` | "opens nothing and leaves focus for a refusal naming a size its collapsed product hides" | "opens a collapsed product to show and focus its size's field when a refusal naming that size arrives" | Review: D10, a refusal naming the price moves focus to its field |
+| Review | `…menu-prices-table.test.ts:2120` (in the `it.each` at `:2119`) | en-GB "A size's sources disagree — set that size's price" | "A variant's sources disagree — set that variant's price" | Review: the sibling strings say "variant" |
+| Review | `…menu-prices-table.test.ts:2395` (in `:2373`) | "Inactive its product is Inactive" | "Inactive its product is inactive" | Review: the sibling strings write "inactive" in lower case mid-sentence |
 
 ---
 
