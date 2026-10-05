@@ -627,7 +627,7 @@ export class CatalogueBrowser extends LitElement {
           event.stopPropagation();
           this.search = "";
           this.nameError = "";
-          this.nameDraft = { kind: "create", parentId: event.detail.parentId };
+          this.nameDraft = { parentId: event.detail.parentId };
         }}
         .categories=${this.categories}
         .products=${this.products}

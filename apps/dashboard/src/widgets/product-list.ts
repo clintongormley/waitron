@@ -58,7 +58,7 @@ const folderIcon = html`<span part="folder-frame"
 export const HOVER_OPEN_MS = 600;
 const DRAFT_KEY = "draft:new";
 
-export type CategoryNameDraft = { kind: "create"; parentId: string | null };
+export type CategoryNameDraft = { parentId: string | null };
 
 type RootRow = { kind: "root"; key: typeof ROOT_KEY; parentKey: null };
 type CategoryRow = { kind: "folder"; key: string; parentKey: string; folder: CategorySummary };

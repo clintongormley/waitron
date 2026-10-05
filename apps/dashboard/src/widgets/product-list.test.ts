@@ -1588,7 +1588,7 @@ describe("the product list at phone width", () => {
         setLocale(locale);
         await page.viewport(390, 844);
         const { el, root } = await mountTree();
-        el.nameDraft = { kind: "create", parentId };
+        el.nameDraft = { parentId };
         el.nameError = codeMessage(code);
         await el.updateComplete;
         await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
@@ -1683,7 +1683,7 @@ describe("the product list at phone width", () => {
     (locale) =>
       onPhone(locale, 430, async () => {
         const { el, root } = await mountTree();
-        await openWithRefusal(el, { kind: "create", parentId: null });
+        await openWithRefusal(el, { parentId: null });
         await page.viewport(390, 844);
         expectInView(await nameBoxEdges(root));
       }),
@@ -1694,7 +1694,7 @@ describe("the product list at phone width", () => {
     (locale) =>
       onPhone(locale, 390, async () => {
         const { el, root } = await mountBoundedTree();
-        await openWithRefusal(el, { kind: "create", parentId: null });
+        await openWithRefusal(el, { parentId: null });
         const before = await nameBoxEdges(root);
         el.selecting = true;
         await el.updateComplete;
@@ -1723,7 +1723,7 @@ describe("the product list at phone width", () => {
           expect(scroll.scrollLeft).toBe(172);
         };
         if (scrolled === "before") scrollSideways();
-        el.nameDraft = { kind: "create", parentId: null };
+        el.nameDraft = { parentId: null };
         await el.updateComplete;
         await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
         if (scrolled === "after") scrollSideways();
@@ -1738,7 +1738,7 @@ describe("the product list at phone width", () => {
     (locale) =>
       onPhone(locale, 430, async () => {
         const { el, root } = await mountTree();
-        await openWithRefusal(el, { kind: "create", parentId: null });
+        await openWithRefusal(el, { parentId: null });
         const host = el.parentElement!;
         el.remove();
         host.append(el);
@@ -1755,7 +1755,7 @@ describe("the product list at phone width", () => {
     ({ locale, parentId }) =>
       onPhone(locale, 390, async () => {
         const { el, root } = await mountTree();
-        await openWithRefusal(el, { kind: "create", parentId });
+        await openWithRefusal(el, { parentId });
         expectInView(await nameBoxEdges(root));
       }),
   );
@@ -1809,7 +1809,7 @@ describe("the product list at phone width", () => {
     ({ locale, parentId }) =>
       onPhone(locale, 390, async () => {
         const { el, root } = await mountNarrowTree();
-        await openWithRefusal(el, { kind: "create", parentId });
+        await openWithRefusal(el, { parentId });
         expectOwnLine(await nameBoxLine(root));
       }),
   );
@@ -1819,7 +1819,7 @@ describe("the product list at phone width", () => {
     (locale) =>
       onPhone(locale, 1280, async () => {
         const { el, table, root } = await mountTree();
-        await openWithRefusal(el, { kind: "create", parentId: "d" });
+        await openWithRefusal(el, { parentId: "d" });
         expect(table.hasAttribute("narrow")).toBe(false);
         await page.viewport(390, 844);
         await vi.waitFor(async () => expectOwnLine(await nameBoxLine(root)));
@@ -1831,7 +1831,7 @@ describe("the product list at phone width", () => {
     (locale) =>
       onPhone(locale, 1280, async () => {
         const { el, root } = await mountTree();
-        await openWithRefusal(el, { kind: "create", parentId: "d" });
+        await openWithRefusal(el, { parentId: "d" });
         const line = await nameBoxLine(root);
         expect(line.box.top).toBeLessThan(line.grip.bottom);
         expect(line.box.bottom).toBeGreaterThan(line.grip.top);
@@ -2487,7 +2487,7 @@ describe("the product list as a tree", () => {
 
   it("puts a new category's name box inside the category it is added to, opened, holding the cursor", async () => {
     const { el, root } = await mountTree();
-    el.nameDraft = { kind: "create", parentId: "d" };
+    el.nameDraft = { parentId: "d" };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     expect(rowKeys(root)).toEqual([
@@ -2508,7 +2508,7 @@ describe("the product list as a tree", () => {
 
   it("lines a new category's folder icon up with its sibling categories' icons", async () => {
     const { el, root } = await mountTree();
-    el.nameDraft = { kind: "create", parentId: null };
+    el.nameDraft = { parentId: null };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     const iconLeft = (key: string) =>
@@ -2522,7 +2522,7 @@ describe("the product list as a tree", () => {
   it("draws large folder icons on root, nested and new category rows and on a category drag", async () => {
     const { el, root } = await mountTree();
     await openRow(el, "folder:d");
-    el.nameDraft = { kind: "create", parentId: "d" };
+    el.nameDraft = { parentId: "d" };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     for (const key of [ROOT_KEY, "folder:d", "folder:b", "draft:new"]) {
@@ -2556,7 +2556,7 @@ describe("the product list as a tree", () => {
     const start = async (parentId: string | null) => {
       el.nameDraft = null;
       await el.updateComplete;
-      el.nameDraft = { kind: "create", parentId };
+      el.nameDraft = { parentId };
       await el.updateComplete;
       await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     };
@@ -2575,7 +2575,7 @@ describe("the product list as a tree", () => {
     const { el, root } = await mountTree();
     const sent: unknown[] = [];
     el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
-    el.nameDraft = { kind: "create", parentId: null };
+    el.nameDraft = { parentId: null };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     await userEvent.keyboard("Juice{Enter}{Enter}");
@@ -2610,13 +2610,13 @@ describe("the product list as a tree", () => {
     const sent: unknown[] = [];
     el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
     el.addEventListener("name-cancel", () => sent.push("cancel"));
-    el.nameDraft = { kind: "create", parentId: null };
+    el.nameDraft = { parentId: null };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     await userEvent.keyboard("   {Enter}");
     el.nameDraft = null;
     await el.updateComplete;
-    el.nameDraft = { kind: "create", parentId: "d" };
+    el.nameDraft = { parentId: "d" };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     await userEvent.keyboard("Juice{Enter}{Escape}{Tab}");
@@ -2628,10 +2628,10 @@ describe("the product list as a tree", () => {
     const sent: unknown[] = [];
     el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
     el.addEventListener("name-cancel", () => sent.push("cancel"));
-    el.nameDraft = { kind: "create", parentId: null };
+    el.nameDraft = { parentId: null };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-    el.nameDraft = { kind: "create", parentId: "d" };
+    el.nameDraft = { parentId: "d" };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     expect(sent).toEqual([]);
