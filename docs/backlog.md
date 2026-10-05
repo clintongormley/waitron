@@ -7812,7 +7812,8 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
    four are in `apps/server/src/working-order.ts`: `handOver`, which `POST /api/orders/:id/collect`
    reaches through `handOverOrder`, selects and updates on `eq(workingOrders.id, id)`, using its
    `TillConfig` only to read a placed order's service mode, through `findOrderServiceContext`, which
-   filters by `cfg.locationId`, falling back to `cfg.orderFlow` when that finds none;
+   filters by `cfg.locationId`; without a stored context, the handover check uses the unscoped
+   `prepay` default;
    `cancelPlacedOrder` selects and updates the same way and uses `cfg` only to stamp the amendment's
    till and node and, for an order whose invoice was issued, to give the credit note its node and
    series (its till is the requesting device's); `readLockedLines` takes no `cfg` at all, nor does `priceStoredOrder`, which calls
