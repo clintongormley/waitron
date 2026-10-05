@@ -122,7 +122,7 @@ async function nameBox(el: CatalogueBrowser) {
   )!;
 }
 
-it("marks only folders without an active own or inherited routing claim and clears the mark when claimed", async () => {
+it("marks only categories whose own or inherited claim reaches no station, and clears the mark when claimed", async () => {
   setLocale("en-GB");
   const routing = {
     stationTimes: [],
@@ -144,17 +144,13 @@ it("marks only folders without an active own or inherited routing claim and clea
     ],
   };
   const el = await mountBrowser({ routing });
-  const marker = async (id: string) =>
-    (await tableOf(el)).shadowRoot!.querySelector(
-      `tr[data-row-key="folder:${id}"] [data-test="unrouted-folder"]`,
-    );
-  expect(await marker("d")).toBeNull();
-  expect(await marker("f")).not.toBeNull();
-  expect((await marker("f"))?.getAttribute("title")).toBe(
+  expect(await unroutedMarker(el, "folder:d")).toBeNull();
+  expect(await unroutedMarker(el, "folder:f")).not.toBeNull();
+  expect((await unroutedMarker(el, "folder:f"))?.getAttribute("title")).toBe(
     "No kitchen routing rule covers this category",
   );
   await toggleCategory(el, "d");
-  expect(await marker("b")).toBeNull();
+  expect(await unroutedMarker(el, "folder:b")).toBeNull();
   el.routing = {
     ...routing,
     claims: [
@@ -163,7 +159,7 @@ it("marks only folders without an active own or inherited routing claim and clea
     ],
   };
   await el.updateComplete;
-  expect(await marker("f")).toBeNull();
+  expect(await unroutedMarker(el, "folder:f")).toBeNull();
   el.routing = {
     ...routing,
     stations: routing.stations.map((station) =>
@@ -171,11 +167,11 @@ it("marks only folders without an active own or inherited routing claim and clea
     ),
   };
   await el.updateComplete;
-  expect(await marker("d")).not.toBeNull();
-  expect(await marker("b")).not.toBeNull();
+  expect(await unroutedMarker(el, "folder:d")).not.toBeNull();
+  expect(await unroutedMarker(el, "folder:b")).not.toBeNull();
   setLocale("es");
   await el.updateComplete;
-  expect((await marker("b"))?.getAttribute("title")).toBe(
+  expect((await unroutedMarker(el, "folder:b"))?.getAttribute("title")).toBe(
     "Ninguna regla de envío a cocina cubre esta categoría",
   );
 });
@@ -204,13 +200,8 @@ it("does not mark a folder covered by a global folder exception", async () => {
       stations: [{ id: "kitchen", name: "Kitchen", active: true }],
     },
   });
-  const root = (await tableOf(el)).shadowRoot!;
-  expect(
-    root.querySelector('tr[data-row-key="folder:f"] [data-test="unrouted-folder"]'),
-  ).toBeNull();
-  expect(
-    root.querySelector('tr[data-row-key="folder:d"] [data-test="unrouted-folder"]'),
-  ).not.toBeNull();
+  expect(await unroutedMarker(el, "folder:f")).toBeNull();
+  expect(await unroutedMarker(el, "folder:d")).not.toBeNull();
 });
 /** The Made at cell of a row, found by its column heading. */
 async function madeAtText(el: CatalogueBrowser, key: string) {
@@ -221,6 +212,12 @@ async function madeAtText(el: CatalogueBrowser, key: string) {
   expect(index).toBeGreaterThanOrEqual(0);
   const row = root.querySelector(`tr[data-row-key="${key}"]`)!;
   return [...row.querySelectorAll("td")][index]!.textContent!.replace(/\s+/g, " ").trim();
+}
+/** The red asterisk on a category's row, or null when the row has none. */
+async function unroutedMarker(el: CatalogueBrowser, key: string) {
+  return (await tableOf(el)).shadowRoot!.querySelector(
+    `tr[data-row-key="${key}"] [data-test="unrouted-folder"]`,
+  );
 }
 const routingWith = (overrides: Partial<RoutingModel> = {}): RoutingModel => ({
   stationTimes: [],
@@ -278,10 +275,6 @@ it("works the route out again when the products or the categories change", async
 });
 
 it("decides the asterisk as Made at does, following a switched-off station's fallback", async () => {
-  const marker = async (el: CatalogueBrowser, id: string) =>
-    (await tableOf(el)).shadowRoot!.querySelector(
-      `tr[data-row-key="folder:${id}"] [data-test="unrouted-folder"]`,
-    );
   const barOff = (fallbackStationId: string | null) =>
     routingWith({
       stations: [
@@ -303,13 +296,13 @@ it("decides the asterisk as Made at does, following a switched-off station's fal
   const el = await mountBrowser({ routing: barOff("terrace") });
   await toggleCategory(el, "d");
   expect(await madeAtText(el, "folder:d")).toBe("Terrace set on this category");
-  expect(await marker(el, "d")).toBeNull();
+  expect(await unroutedMarker(el, "folder:d")).toBeNull();
   expect(await madeAtText(el, "folder:b")).toBe("Terrace from Drinks");
-  expect(await marker(el, "b")).toBeNull();
-  expect(await marker(el, "f")).not.toBeNull();
+  expect(await unroutedMarker(el, "folder:b")).toBeNull();
+  expect(await unroutedMarker(el, "folder:f")).not.toBeNull();
   el.routing = barOff(null);
-  expect(await marker(el, "d")).not.toBeNull();
-  expect(await marker(el, "b")).not.toBeNull();
+  expect(await unroutedMarker(el, "folder:d")).not.toBeNull();
+  expect(await unroutedMarker(el, "folder:b")).not.toBeNull();
 });
 
 it("leaves categories blank while routing loads, and says so when its read failed", async () => {
