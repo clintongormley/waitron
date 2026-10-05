@@ -41,6 +41,11 @@ const en = {
   "image.inactive": "Inactive product",
   "image.published_menu": "Published menu",
   "image.retry": "Try again",
+  "image.preview_open": "Preview",
+  "image.uses": "Where it is used",
+  "image.no_uses": "Not used anywhere yet.",
+  "image.uses_loading": "Looking up where it is used…",
+  "image.uses_error": "Could not look up where this image is used.",
 } as const;
 const es: Record<keyof typeof en, string> = {
   "nav.images": "Biblioteca de imágenes",
@@ -84,6 +89,11 @@ const es: Record<keyof typeof en, string> = {
   "image.inactive": "Producto inactivo",
   "image.published_menu": "Carta publicada",
   "image.retry": "Reintentar",
+  "image.preview_open": "Vista previa",
+  "image.uses": "Dónde se usa",
+  "image.no_uses": "Todavía no se usa en ningún sitio.",
+  "image.uses_loading": "Buscando dónde se usa…",
+  "image.uses_error": "No se pudo consultar dónde se usa esta imagen.",
 };
 export const MEDIA_STRINGS = { en, es };
 registerCatalogue(MEDIA_STRINGS);

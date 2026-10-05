@@ -1848,7 +1848,9 @@ otherwise a screen reader's "list all buttons" navigation can't tell them apart.
 appears once on the screen doesn't need one, matching the sitewide bare "Edit"/"Remove" convention.
 
 Right-align a card's footer actions (`justify-content: flex-end`) — the same "primary action
-bottom-right" rule `wt-form-actions` already applies to forms sitewide (see "Forms" above).
+bottom-right" rule `wt-form-actions` already applies to forms sitewide (see "Forms" above). One owner-approved exception (W78, 2026-10-04): the image library's cards
+(`packages/media/src/dashboard/image-library.ts`) put Delete at the left and Edit at the right
+(`justify-content: space-between`), so the destructive action does not sit beside the everyday one.
 
 ### Spacing rhythm
 

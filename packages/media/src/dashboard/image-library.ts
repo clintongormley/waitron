@@ -99,6 +99,9 @@ export class ImageLibrary extends LitElement {
         border-radius: var(--wt-radius-md);
         padding: var(--wt-space-3);
       }
+      .actions {
+        justify-content: space-between;
+      }
       .actions .use {
         flex-basis: 100%;
       }
@@ -107,6 +110,84 @@ export class ImageLibrary extends LitElement {
         aspect-ratio: 4/3;
         object-fit: contain;
         background: var(--wt-color-surface);
+      }
+      .thumb {
+        position: relative;
+        display: block;
+        width: 100%;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: var(--wt-radius-md);
+        background: none;
+        color: inherit;
+        font: inherit;
+        cursor: zoom-in;
+      }
+      .thumb img {
+        display: block;
+        border-radius: var(--wt-radius-md);
+      }
+      .thumb:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+      .thumb:hover {
+        border-color: var(--wt-color-primary);
+      }
+      .chip {
+        position: absolute;
+        inset-block-end: var(--wt-space-2);
+        inset-inline-end: var(--wt-space-2);
+        padding: var(--wt-space-1) var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text);
+        font-size: var(--wt-font-size-sm);
+      }
+      .thumb:hover .chip,
+      .thumb:focus-visible .chip {
+        border-color: var(--wt-color-primary);
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+      }
+      /* Side by side, the photo taking the larger share, wherever the dialog has room for both
+         bases; one above the other where it has not. Driven by the dialog's width, not the
+         viewport's. */
+      .viewer {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-4);
+        align-items: flex-start;
+      }
+      .viewer img {
+        flex: 3 1 calc(var(--wt-tap-min) * 7);
+        min-width: 0;
+        height: auto;
+        max-height: 60dvh;
+        object-fit: contain;
+        background: var(--wt-color-surface);
+        border-radius: var(--wt-radius-md);
+      }
+      .uses {
+        flex: 2 1 calc(var(--wt-tap-min) * 5);
+        min-width: 0;
+      }
+      .uses h3 {
+        margin: 0 0 var(--wt-space-2);
+        font-size: var(--wt-font-size-md);
+      }
+      .uses ul {
+        margin: 0;
+        padding-inline-start: var(--wt-space-5);
+      }
+      .uses a {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--wt-tap-min);
+      }
+      .uses p {
+        margin: 0;
       }
       h2 {
         font-size: var(--wt-font-size-md);
@@ -146,6 +227,7 @@ export class ImageLibrary extends LitElement {
       }
       a {
         color: var(--wt-color-primary);
+        overflow-wrap: anywhere;
       }
     `,
   ];
@@ -170,8 +252,14 @@ export class ImageLibrary extends LitElement {
   @state() private duplicateImage: LibraryImage | null = null;
   @state() private deletion: { image: LibraryImage; uses: ImageUsage[] } | null = null;
   @state() private deleteError = false;
+  @state() private viewing: {
+    image: LibraryImage;
+    uses: ImageUsage[] | null;
+    failed: boolean;
+  } | null = null;
   @state() private busy = false;
   #deleteGeneration = 0;
+  #viewGeneration = 0;
   #searchTimer?: ReturnType<typeof setTimeout>;
   #unsubscribeLocale?: () => void;
   readonly #queries = new QueryController(
@@ -199,6 +287,8 @@ export class ImageLibrary extends LitElement {
   }
   override disconnectedCallback(): void {
     this.#deleteGeneration++;
+    this.#viewGeneration++;
+    this.viewing = null;
     clearTimeout(this.#searchTimer);
     this.#unsubscribeLocale?.();
     this.#setPreview(null);
@@ -357,6 +447,87 @@ export class ImageLibrary extends LitElement {
     } catch {
       if (this.isConnected && generation === this.#deleteGeneration) this.deleteError = true;
     }
+  }
+  async #view(image: LibraryImage): Promise<void> {
+    const generation = ++this.#viewGeneration;
+    this.viewing = { image, uses: null, failed: false };
+    try {
+      const { uses } = await this.api.getImage(image.id);
+      if (generation === this.#viewGeneration) this.viewing = { image, uses, failed: false };
+    } catch {
+      if (generation === this.#viewGeneration) this.viewing = { image, uses: null, failed: true };
+    }
+  }
+  /** Closing by Close or a backdrop click leaves focus on the page body, so it is put back on the
+   * thumbnail here. */
+  async #closeViewer(id: string): Promise<void> {
+    this.#viewGeneration++;
+    this.viewing = null;
+    await this.updateComplete;
+    this.shadowRoot!.querySelector<HTMLElement>(`[data-test="preview-${CSS.escape(id)}"]`)?.focus();
+  }
+  /** `wt-dialog` has no close on a backdrop click (it sets `closedby` only to `closerequest` or
+   * `none`), so it is caught here: such a click reaches the `<dialog>` itself, at a point outside
+   * the dialog's box. */
+  #closeOnBackdrop(event: MouseEvent, id: string): void {
+    const target = event.composedPath()[0];
+    if (!(target instanceof HTMLDialogElement)) return;
+    const box = target.getBoundingClientRect();
+    if (
+      event.clientX < box.left ||
+      event.clientX > box.right ||
+      event.clientY < box.top ||
+      event.clientY > box.bottom
+    )
+      void this.#closeViewer(id);
+  }
+  #renderViewer() {
+    const viewing = this.viewing;
+    if (viewing === null) return nothing;
+    const name = this.#text(viewing.image.names);
+    return html`<wt-modal
+      open
+      data-test="image-preview"
+      heading=${name}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        void this.#closeViewer(viewing.image.id);
+      }}
+      @click=${(event: MouseEvent) => this.#closeOnBackdrop(event, viewing.image.id)}
+    >
+      <div class="viewer">
+        <img src=${`/media/${encodeURIComponent(viewing.image.filename)}`} alt=${name} />
+        <section class="uses">
+          <h3 id="uses-heading">${t("image.uses")}</h3>
+          ${
+            viewing.failed
+              ? html`<p role="alert" class="error">${t("image.uses_error")}</p>
+                  <wt-button
+                    data-test="retry-uses"
+                    variant="secondary"
+                    @click=${() => void this.#view(viewing.image)}
+                    >${t("image.retry")}</wt-button
+                  >`
+              : viewing.uses === null
+                ? html`<p role="status">${t("image.uses_loading")}</p>`
+                : viewing.uses.length === 0
+                  ? html`<p data-test="no-uses">${t("image.no_uses")}</p>`
+                  : html`<ul aria-labelledby="uses-heading">
+                      ${viewing.uses.map((use) => html`<li>${this.#usage(use)}</li>`)}
+                    </ul>`
+          }
+        </section>
+      </div>
+      <wt-form-actions slot="footer"
+        ><wt-button
+          slot="cancel"
+          data-test="close-preview"
+          variant="secondary"
+          @click=${() => void this.#closeViewer(viewing.image.id)}
+          >${t("image.close")}</wt-button
+        ></wt-form-actions
+      >
+    </wt-modal>`;
   }
   async #delete(): Promise<void> {
     const deletion = this.deletion;
@@ -567,7 +738,19 @@ export class ImageLibrary extends LitElement {
         ${this.images.map((image) => {
           const name = this.#text(image.names);
           return html`<article data-image=${image.id}>
-            <img src=${`/media/${encodeURIComponent(image.filename)}`} alt=${name} loading="lazy" />
+            <button
+              type="button"
+              class="thumb"
+              data-test=${`preview-${image.id}`}
+              aria-label=${`${t("image.preview_open")}: ${name}`}
+              @click=${() => void this.#view(image)}
+            >
+              <img
+                src=${`/media/${encodeURIComponent(image.filename)}`}
+                alt=${name}
+                loading="lazy"
+              /><span class="chip">${t("image.preview_open")}</span>
+            </button>
             <h2>${name}</h2>
             <time datetime=${image.createdAt}
               >${new Date(image.createdAt).toLocaleDateString(currentLocale())}</time
@@ -575,17 +758,17 @@ export class ImageLibrary extends LitElement {
             <div class="actions">
               ${this.picker ? html`<wt-button class="use" data-test=${`select-${image.id}`} aria-label=${`${t("image.select")}: ${name}`} @click=${() => this.dispatchEvent(new CustomEvent("select-image", { detail: image, bubbles: true, composed: true }))}>${t("image.select")}</wt-button>` : nothing}
               <wt-button
-                data-test=${`edit-${image.id}`}
-                variant="secondary"
-                aria-label=${`${t("action.edit")}: ${name}`}
-                @click=${() => this.#edit(image)}
-                >${t("action.edit")}</wt-button
-              ><wt-button
                 data-test=${`delete-${image.id}`}
                 variant="secondary"
                 aria-label=${`${t("image.delete")}: ${name}`}
                 @click=${() => void this.#inspectDeletion(image)}
                 >${t("image.delete")}</wt-button
+              ><wt-button
+                data-test=${`edit-${image.id}`}
+                variant="secondary"
+                aria-label=${`${t("action.edit")}: ${name}`}
+                @click=${() => this.#edit(image)}
+                >${t("action.edit")}</wt-button
               >
             </div>
           </article>`;
@@ -614,7 +797,7 @@ export class ImageLibrary extends LitElement {
           >${t("image.next")}</wt-button
         >
       </nav>
-      ${this.#renderEditor()}
+      ${this.#renderEditor()} ${this.#renderViewer()}
       ${
         this.deletion
           ? html`<wt-modal
