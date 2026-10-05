@@ -1570,13 +1570,20 @@ deleted the right category; the dashboard was at fault. Fixed:
   `apps/dashboard/src/widgets/catalogue-browser.ts`), nothing is deleted and the dialog shows the
   new counts with a message saying so.
 - The server now makes the same comparison inside the delete's own transaction, before anything is
-  written (W74a). The dashboard sends the counts it read before deleting (the ones its dialog
+  written (W74a, #1217). The dashboard sends the counts it read before deleting (the ones its dialog
   showed, when it asked) with every delete that names a category, and when they no longer match the
   server deletes nothing and refuses with `category.contents_changed` (409); the dashboard then
   reads the contents again and shows the new counts with the refusal's own message. Before this, a
   change between the dashboard's second read and the delete was not seen.
 
 Still open from W74:
+- **An empty category's no-dialog delete does not see an inactive product added meanwhile**
+  (raised in #1217's review, not reproduced in a test): an empty category is deleted without the
+  dialog, and the server compares active products only, so one that gains only an inactive product
+  between the read and the delete is still deleted, the product moving up.
+- **A category holding only routing rules is deleted without the dialog** (raised in #1217's
+  review): the no-dialog path checks subcategories and products only, so its rules go unannounced.
+  The check dates from commit `5ffa5c633c` (2026-10-01).
 - **A product's row menu stays open after Delete, Edit or Restore** on the Products list: `#emit`
   in `apps/dashboard/src/widgets/product-list.ts` stops the click the same way the category Delete
   did. Seen for Delete in a throwaway browser test (menu still open after the click); Edit and
