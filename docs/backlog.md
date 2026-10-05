@@ -1205,16 +1205,17 @@ course box puts focus on the box first. Left OPEN from W71f's review, not acted 
 to its trigger on close", while the W71f test comments and `product-editor.ts` rely on it going back
 to whatever had focus when the dialog opened; the line dates from #319 (2026-09-11, `git blame`) and
 neither reading has been tested — next step: a browser case that opens a dialog with focus away from
-its trigger and records where focus lands, then correct the sentence to what it shows. (2) The unit
-form's wait in `#returnChildFocus` works because the product editor finishes redrawing Add unit as
-enabled in the meantime (seen in Codex's timing log); the code does not wait for the editor itself,
-and nobody has tested whether that order is guaranteed. W71h settled (2): the editor's
-`returnRelatedFocus` still focuses an Add control at once, and when that control is still drawn
-disabled it waits for the editor's next update and focuses it then (`focusOnceEnabled`,
-`apps/dashboard/src/widgets/product-editor.ts`). A case in `catalogue-screen.test.ts` holds the
-editor's update back until after the unit form's Cancel, checks Add unit is still disabled, then
-releases it and sees focus land on Add unit; without the wait it fails. The course box and an
-attached list's row are focused at once, as before, with no such wait.
+its trigger and records where focus lands, then correct the sentence to what it shows. Settled
+from the same review: (2) W71f's unit-form wait in `#returnChildFocus` worked only because the
+product editor happened to finish redrawing Add unit as enabled in the meantime (seen in Codex's
+timing log); W71h settled it. The editor's `returnRelatedFocus` focuses the Add control, or an
+attached list's row, at once; when it is still drawn disabled, it waits for the editor's next update
+and focuses it then, unless focus has moved to another control meanwhile (`focusOnceEnabled`,
+`apps/dashboard/src/widgets/product-editor.ts`). Cases that hold the editor's update back — in
+`catalogue-screen.test.ts` the unit form's Cancel and Escape, in `product-editor.test.ts` the
+Modifiers control, an attached row's button, and focus moved to another field during the wait — each
+failed with its part of the fix removed. The course box is still focused once with no wait, because
+the editor never draws it disabled.
 
 **The Extras editor shows Portion beside Price, and a fixed 1 for a product sold by the unit
 (W75, owner 2026-10-04) — DONE (#1194).** In `apps/dashboard/src/widgets/extra-list-form.ts` Portion is a
