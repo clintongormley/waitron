@@ -3410,7 +3410,7 @@ export class PrintersScreen extends LitElement {
         aria-label=${t("printers.discovered_title")}
         .columns=${columns}
         .rows=${[...rows, ...lost]}
-        .rowKey=${(d: DiscoveredPrinter) => this.#deviceKey(d)}
+        .rowKey=${(d: DiscoveredPrinter) => `${d.agentId}|${this.#deviceKey(d)}`}
         .emptyMessage=${this.scanning ? "" : t("printers.no_discovered")}
       ></wt-data-table>
       <wt-form-actions

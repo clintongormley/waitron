@@ -2604,6 +2604,43 @@ describe("printers-screen", () => {
     expect(q(el, "[data-test=discovered-registered-SN-1]")).toBeNull();
   });
 
+  it("keeps one agent's row for a printer two agents see when the other agent's report drops", async () => {
+    const seenOnBoth = (agentId: string, agentName: string): DiscoveredPrinter => ({
+      ...discoveredNetwork[0]!,
+      agentId,
+      agentName,
+    });
+    const both = [seenOnBoth("a1", "Cocina agent"), seenOnBoth("a2", "Barra agent")];
+    const passive = vi.fn().mockResolvedValue(both);
+    const api = stubApi({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue(both),
+      background: stubApi({ listDiscoveredPrinters: passive }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      const table = q(el, "[data-test=discovered-table]")!;
+      const rows = () => [...table.shadowRoot!.querySelectorAll<HTMLElement>("tbody tr")];
+      // Fails if the row key leaves out the agent: both rows share one key.
+      expect(new Set(rows().map((row) => row.dataset.rowKey)).size).toBe(2);
+      const barra = rows().find((row) => row.textContent!.includes("Barra agent"))!;
+
+      passive.mockResolvedValue([both[1]]);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+
+      // Fails if the row is told apart only by its position: the drawn row that was the first
+      // agent's would be handed to the second, and the second's own row removed.
+      expect(rows()).toHaveLength(1);
+      expect(rows()[0]).toBe(barra);
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
   it("shows the empty discovery message after scanning finishes", async () => {
     vi.useFakeTimers();
     try {
