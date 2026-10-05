@@ -5929,6 +5929,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   implemented. Build waits for step 3. Review choices cover unset versus Closed/all-day hours,
   overnight and clock-change rules, manual override expiry, whole-venue closure and palette,
   single-department display, read permissions and the proposed pre-live schedule reset.
+  [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) is written for
+  owner review; national/regional data, owner-entered town holidays and holiday-aware special-date
+  naming are not implemented. Build waits for Hours approval and landing. Review choices cover
+  confirmed town/territorial scope, retained entries after geography changes, incomplete-year
+  notices, label/naming rules, permissions and three additive venue-service tables. The consolidated
+  2027 BOE list was not located by the plan's dated search; recheck it before the build rather than
+  extrapolating dates or treating a regional publication as nationwide coverage.
   [Step 1, PR #1166](https://github.com/clintongormley/waitron/pull/1166) gathers Receipts,
   Tables and Kitchen settings into tabs; supervisors can read Tables and Kitchen, while writes
   remain manager-only (owner amendment, 2026-10-04).
