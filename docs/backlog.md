@@ -3432,7 +3432,7 @@ boundary's default 400. `image.invalid_metadata` and `content.language_invalid` 
 the 400 they already got, which is what the media routes give them (`packages/media/src/routes.ts`).
 Setup's live-source screen keys its sentence on the code, not the status, so it still shows the
 could-not-open sentence for each.
-Since W72c (2026-10-05) an export leaves out each print agent's `node_id`, as it already left out
+Since W72c (#1237, 2026-10-05) an export leaves out each print agent's `node_id`, as it already left out
 its token, host and last-seen time (`CORE_CONFIGURATION_TRANSFER`,
 `packages/db/src/configuration-transfer.ts`). Before, an imported agent kept the exporting venue's
 node id (a run of an export and import read the source venue's node id on the imported row), and the
