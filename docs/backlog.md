@@ -8547,10 +8547,9 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   switch-off; a kitchen course's **Remove** is the same kind of action: it sets `active: false` and
   keeps the row, and no screen lists it or brings it back (`deactivateCourse`; `listCourses` returns
   active courses only, `apps/server/src/kitchen.ts`). Both keep
-  "Remove" until the owner decides which they are. (c) On the products list a
-  disabled product's own row offers Disable again rather than Enable (a disabled variant's row does
-  offer Enable); Enable for a product is only in its editor (`apps/dashboard/src/widgets/product-list.ts`,
-  the actions column). (d) Departments, zones, floor tables and adjustment reasons can be disabled
+  "Remove" until the owner decides which they are. (c) Done by W110c: a disabled product's own
+  row on the products list offers Enable, not Disable, through the editor's own save; a bulk
+  selection of products that are all disabled already offers no Disable (no bulk Enable exists). (d) Departments, zones, floor tables and adjustment reasons can be disabled
   but no screen offers Enable for them. (e) a test gap, reported by W110's review and not
   re-checked: `#fallbackReason` (`packages/venue-service/src/dashboard/prep-stations-screen.ts`)
   turns the server's `switched_off` reason into `prep.test_disabled` for both of its callers, and

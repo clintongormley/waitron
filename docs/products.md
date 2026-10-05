@@ -126,8 +126,8 @@ in the editor to change it.
 Each variant's row shows its own name, the price it sells at, its status and its
 row menu. If a variant's VAT differs
 from its product's, the list notes it under the variant's price. A variant's row menu offers
-**Disable** or **Enable** there too, and a disabled variant is listed once you change the
-**Status** filter from **Active**.
+**Disable** or **Enable** there too, as a product's own row does: **Enable** once it is disabled.
+A disabled variant is listed once you change the **Status** filter from **Active**.
 
 A variant follows its product onto every menu the product is on, including a variant you add later.
 On the menu you can give it a price of its own, or let it follow the menus it comes from. A price
