@@ -6362,8 +6362,14 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   ordering saved as one validated active-station set. Rename submits only the name and closes before
   refresh; refusal retains an editable draft. The Prep page explicitly reads retained station
   metadata so disabled health rows can show their state and Enable action; ordinary station lists
-  remain active-only. Routing-only card replacement, Watchers/Settings cell editors,
-  venue-defaults UI, supervisor page-loading permissions and printing handover remain open.
+  remain active-only. Routing-only card replacement, Settings cell editors,
+  and supervisor page-loading permissions remain open. Venue settings › Kitchen now reads and
+  replaces the venue-wide late flags. Its required whole-minute fields validate every invalid
+  value and their order, naming a station when the server refuses the effective result. A refusal
+  retains a retryable draft; live reads update saved values without replacing it. Supervisors see
+  the saved defaults without edit controls. Enter saves, Cancel/Escape discards, and a successful
+  write closes the form before a separate refresh. The saved, invalid and station-refusal states
+  have English/Spanish, light/dark, phone/desktop browser checks and inspected captures.
   The generated station-parent rebuild failed the populated upgrade with a foreign-key refusal;
   the ongoing build uses the plan’s storage-redesign option. Approved decisions
   cover what live counts include, ready-but-unserved work, interim station hours, inactive display

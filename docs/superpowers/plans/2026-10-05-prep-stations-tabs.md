@@ -480,3 +480,31 @@ used a synthetic click on an offscreen table cell; the browser's real click scro
 view, and the retained viewport bounds pass. No production geometry change followed that probe.
 Tasks 4 (Routing cleanup), 7 (Settings/defaults/supervisor page loading) and 8 (whole-branch review,
 current-head CI and landing) remain. This checkpoint does not authorize shipping a partial page.
+
+
+## 2026-10-05 implementation checkpoint: Venue settings Kitchen late flags
+
+The Kitchen panel now loads venue defaults through its own shared dashboard query and edits all
+three values in one form. Every invalid field is marked after a submission; only the form's own
+checks or an in-flight write disable Save. A refused effective station order names the station
+under the returned field and remains retryable. Saved snapshots and drafts are separate: a live
+read changes the saved values without erasing a typed value or a save refusal. A successful write
+closes before its refresh, so a failed refresh reports a read failure. Cancel/Escape discards;
+Enter saves. Supervisors see saved values without a way to edit them. The query subscribes to
+`kitchen_timing_defaults` and its background GET is passive.
+
+The new client and browser assertions failed before the methods and form were added. Focused
+browser suites retain the existing Kitchen, Venue settings, client and live-query assertions.
+The shell's Kitchen fixtures add the new default-read/write methods without changing existing
+checks. Saved, locally invalid and station-refused states passed axe and viewport checks in
+English and Spanish, light and dark, at measured widths 390 and 1280; their captures were inspected.
+The initial capture showed the Edit button stretched across the panel; a geometry assertion failed,
+then passed after the button was allowed to fit its label.
+
+In a frozen-installed complete disposable candidate, deleting the local validation sent invalid
+writes; overwriting an open draft on a live read replaced its typed value; including a server
+refusal in Save's disabled condition prevented a retry. Each focused control failed with that
+change and passed after restoration, alongside its valid-save or Cancel positive control.
+The campaign ledger retains the literal commands and counts. This is a Task 7 subtask checkpoint;
+station Settings, Routing-only cleanup, supervisor Prep-page loading, whole-branch review and
+current-head CI remain before finishing or landing. The approved reset requirement remains.

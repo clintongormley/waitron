@@ -47,6 +47,12 @@ function stubApi(
     createCourse: vi.fn().mockResolvedValue({ id: "c9" }),
     updateCourse: vi.fn().mockResolvedValue(undefined),
     deactivateCourse: vi.fn().mockResolvedValue(undefined),
+    getKitchenTimingDefaults: vi.fn().mockResolvedValue({
+      warmAfterMinutes: 5,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+    }),
+    setKitchenTimingDefaults: vi.fn().mockResolvedValue(undefined),
     getFireControl: vi.fn().mockResolvedValue({ mode: fireControl }),
     setFireControl: vi.fn().mockResolvedValue(undefined),
     ...overrides,

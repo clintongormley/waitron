@@ -3176,3 +3176,41 @@ describe("the card readers' outside-provider reads", () => {
     expect(out.settled).toEqual({ error: { code: "connection.timed_out" } });
   });
 });
+
+it("reads and replaces venue kitchen timing defaults with passive background reads", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(
+    jsonResponse({
+      warmAfterMinutes: 3,
+      overdueAfterMinutes: 7,
+      forgottenAfterMinutes: 12,
+    }),
+  );
+  const api = new DashboardApi("", fetchImpl);
+  expect(await api.getKitchenTimingDefaults()).toEqual({
+    warmAfterMinutes: 3,
+    overdueAfterMinutes: 7,
+    forgottenAfterMinutes: 12,
+  });
+  expect(fetchImpl).toHaveBeenNthCalledWith(
+    1,
+    "/management-api/kitchen-timing-defaults",
+    expect.objectContaining({ method: "GET" }),
+  );
+  await api.background.getKitchenTimingDefaults();
+  expect(fetchImpl.mock.calls[1]![0]).toBe("/management-api/kitchen-timing-defaults");
+  expect(fetchImpl.mock.calls[1]![1]!.method).toBe("GET");
+  expect(new Headers(fetchImpl.mock.calls[1]![1]!.headers).get("x-waitron-live")).toBe("1");
+  await api.setKitchenTimingDefaults({
+    warmAfterMinutes: 4,
+    overdueAfterMinutes: 8,
+    forgottenAfterMinutes: 16,
+  });
+  expect(fetchImpl).toHaveBeenNthCalledWith(
+    3,
+    "/management-api/kitchen-timing-defaults",
+    expect.objectContaining({
+      method: "PUT",
+      body: '{"warmAfterMinutes":4,"overdueAfterMinutes":8,"forgottenAfterMinutes":16}',
+    }),
+  );
+});
