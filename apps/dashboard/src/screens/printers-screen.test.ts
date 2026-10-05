@@ -1356,7 +1356,9 @@ describe("printers-screen", () => {
     await filterAgents(el, "all");
 
     expect(text(el, "[data-test=agent-name-a1]")).toBe("Cocina agent");
-    expect(text(el, "[data-test=agent-status-a1]")).toBe(t("printers.status_active", "es-ES"));
+    expect(text(el, "[data-test=agent-status-a1]")).toBe(
+      t("printers.agent_status_active", "es-ES"),
+    );
     expect(text(el, "[data-test=agent-last-seen-a1]")).toBe("2026-08-25 14:30");
     // A disabled, never-authenticated agent.
     expect(text(el, "[data-test=agent-status-a2]")).toBe("Deshabilitado");
@@ -1791,7 +1793,7 @@ describe("printers-screen", () => {
     expect(q(el, "[data-test=revoke-agent-a2]")).toBeNull();
   });
 
-  it("words disabling and enabling a printer and a print agent in English and Spanish", async () => {
+  it("words the status, disabling and enabling of a printer and a print agent in English and Spanish", async () => {
     const before = currentLocale();
     try {
       for (const w of [
@@ -1799,7 +1801,9 @@ describe("printers-screen", () => {
           locale: "en",
           disable: "Disable",
           enable: "Enable",
+          printerActive: "Active",
           printerDisabled: "Disabled",
+          agentActive: "Active",
           agentDisabled: "Disabled",
           agentDisableConfirm: "Disable this print agent?",
           agentEnableConfirm: "Enable this print agent?",
@@ -1809,7 +1813,9 @@ describe("printers-screen", () => {
           locale: "es-ES",
           disable: "Deshabilitar",
           enable: "Habilitar",
+          printerActive: "Activa",
           printerDisabled: "Deshabilitada",
+          agentActive: "Activo",
           agentDisabled: "Deshabilitado",
           agentDisableConfirm: "¿Deshabilitar este agente de impresión?",
           agentEnableConfirm: "¿Habilitar este agente de impresión?",
@@ -1822,6 +1828,7 @@ describe("printers-screen", () => {
         });
         await flush(el);
         await filterAgents(el, "all");
+        expect(text(el, "[data-test=agent-status-a1]")).toBe(w.agentActive);
         expect(text(el, "[data-test=agent-status-a2]")).toBe(w.agentDisabled);
         expect(text(el, "[data-test=revoke-agent-a1]")).toBe(w.disable);
         q(el, "[data-test=revoke-agent-a1]")!.click();
@@ -1840,6 +1847,7 @@ describe("printers-screen", () => {
           [...table.shadowRoot!.querySelectorAll(`tr[data-row-key="${id}"] td`)].map((cell) =>
             cell.textContent?.trim(),
           );
+        expect(statusOf("p1")).toContain(w.printerActive);
         expect(statusOf("p2")).toContain(w.printerDisabled);
 
         await openDiscovery(el);

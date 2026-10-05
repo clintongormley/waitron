@@ -1748,7 +1748,7 @@ export class PrintersScreen extends LitElement {
         label: t("printers.status"),
         cell: (a) =>
           html`<span data-test=${`agent-status-${a.id}`}
-            >${a.active ? t("printers.status_active") : t("printers.agent_status_disabled")}</span
+            >${a.active ? t("printers.agent_status_active") : t("printers.agent_status_disabled")}</span
           >`,
         filter: {
           label: t("printers.status"),
@@ -1756,7 +1756,7 @@ export class PrintersScreen extends LitElement {
           initial: "active",
           value: (a) => (a.active ? "active" : "disabled"),
           options: [
-            { value: "active", label: t("printers.status_active") },
+            { value: "active", label: t("printers.agent_status_active") },
             { value: "disabled", label: t("printers.agent_status_disabled") },
           ],
         },
