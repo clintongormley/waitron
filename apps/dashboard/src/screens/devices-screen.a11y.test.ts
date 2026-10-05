@@ -390,7 +390,13 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
         label: "Tablet",
         createdAt: "2026-09-08T10:04:00.000Z",
         pairingBy: null,
-        returning: { name: "Pase", profileId: "dp3", stationId: "s1", watcherId: null },
+        returning: {
+          name: "Pase",
+          profileId: "dp3",
+          stationId: "s1",
+          watcherId: null,
+          profileRetired: false,
+        },
       };
       const { el, host } = await mountWidget<DevicesScreen>(
         "dashboard-devices-screen",

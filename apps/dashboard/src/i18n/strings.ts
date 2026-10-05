@@ -912,6 +912,8 @@ export const en = {
   "devices.enable": "Enable",
   "devices.enable_title": "Enable {name}",
   "devices.enable_hint": "Disabled device. Enabling it restores its settings.",
+  "devices.enable_hint_profile_deleted":
+    "Disabled device. Its profile was deleted: choose one to enable it.",
   "devices.enabled": "Enabled {name}",
   "devices.asked_again": "{name} asked again with new numbers.",
   "devices.name": "Name",
@@ -3072,6 +3074,8 @@ export const es: Record<StringKey, string> = {
   "devices.enable": "Habilitar",
   "devices.enable_title": "Habilitar {name}",
   "devices.enable_hint": "Dispositivo deshabilitado. Al habilitarlo se restauran sus ajustes.",
+  "devices.enable_hint_profile_deleted":
+    "Dispositivo deshabilitado. Su perfil se eliminó: elige uno para habilitarlo.",
   "devices.enabled": "{name} habilitado",
   "devices.asked_again": "{name} ha vuelto a solicitar el alta con números nuevos.",
   "devices.name": "Nombre",

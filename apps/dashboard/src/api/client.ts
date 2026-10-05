@@ -582,6 +582,8 @@ export interface ReturningDetails {
   profileId: string;
   stationId: string | null;
   watcherId: string | null;
+  /** Its profile was deleted, so Enable must be given another. */
+  profileRetired: boolean;
 }
 
 /** `deviceAddress` is the address the server advertises to the venue's devices, not this tab's. */

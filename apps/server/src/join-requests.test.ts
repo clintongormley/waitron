@@ -34,7 +34,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { verifySecretAsync } from "@waitron/identity";
-import { setProfilePrinterLists } from "@waitron/layouts";
+import { deleteDeviceProfile, setProfilePrinterLists } from "@waitron/layouts";
 import { authenticateAgent } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -1009,6 +1009,31 @@ describe("a returning disabled device", () => {
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, made.joinId));
     const disabled = await withTransaction(suite.db, (tx) => returningDevicesOf(tx, [made.joinId]));
     expect([...disabled.keys()]).toEqual([made.joinId]);
+  });
+
+  it("says whether the returning device's profile was retired", async () => {
+    const venue = await setupVenue(suite.db);
+    const profileId = await seedProfile("till");
+    const deviceId = await disabledDevice(venue, profileId);
+    await withTransaction(suite.db, async (tx) =>
+      createJoinRequest(tx, venue.cfg, {
+        kind: "device",
+        label: "Tablet",
+        returning: { deviceId, tokenHash: await storedHash(deviceId) },
+      }),
+    );
+    const live = await withTransaction(suite.db, (tx) => returningDevicesOf(tx, [deviceId]));
+    expect(live.get(deviceId)?.profileRetired).toBe(false);
+
+    // Only a disabled device holds the profile, so deleting it retires the row.
+    await withTransaction(suite.db, (tx) =>
+      deleteDeviceProfile(tx, {
+        managementSessionId: venue.managerCookie.split("=")[1]!,
+        id: profileId,
+      }),
+    );
+    const retired = await withTransaction(suite.db, (tx) => returningDevicesOf(tx, [deviceId]));
+    expect(retired.get(deviceId)?.profileRetired).toBe(true);
   });
 
   it("stores the new request's token on the disabled row, so the browser holding it is still proven after a deny", async () => {

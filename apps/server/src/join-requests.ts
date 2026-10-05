@@ -4,6 +4,7 @@ import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import {
   type Database,
   type Transaction,
+  deviceProfiles,
   devices,
   joinRequests,
   nowIso,
@@ -241,6 +242,8 @@ export interface ReturningDetails {
   profileId: string;
   stationId: string | null;
   watcherId: string | null;
+  /** The profile was deleted while only disabled devices held it, so Pair cannot reuse it. */
+  profileRetired: boolean;
 }
 
 /**
@@ -259,10 +262,17 @@ export async function returningDevicesOf(
       profileId: devices.deviceProfileId,
       stationId: devices.stationId,
       watcherId: devices.watcherId,
+      retiredAt: deviceProfiles.retiredAt,
     })
     .from(devices)
+    .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
     .where(and(inArray(devices.id, [...ids]), eq(devices.active, false)));
-  return new Map(rows.map(({ id, ...details }) => [id, details]));
+  return new Map(
+    rows.map(({ id, retiredAt, ...details }) => [
+      id,
+      { ...details, profileRetired: retiredAt !== null },
+    ]),
+  );
 }
 
 /** The pending list the dashboard renders. The return type deliberately has NO number field: the list

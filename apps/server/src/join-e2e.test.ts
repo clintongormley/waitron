@@ -620,7 +620,13 @@ describe("a disabled device comes back as the same device", () => {
         label: "Tablet",
         createdAt: expect.any(String),
         pairingBy: null,
-        returning: { name: "Bar till", profileId, stationId: null, watcherId: null },
+        returning: {
+          name: "Bar till",
+          profileId,
+          stationId: null,
+          watcherId: null,
+          profileRetired: false,
+        },
       },
     ]);
     const pending = await send(app, "GET", "/api/device/join/status", { cookie: back.jar });
@@ -1169,6 +1175,19 @@ describe("a disabled device comes back as the same device", () => {
     );
     expect(retried.status).toBe(200);
     expect(await deviceRow(deviceId)).toMatchObject({ active: true, deviceProfileId: live });
+  });
+
+  it("lists a returning device whose profile was deleted as on a retired profile", async () => {
+    const { venue, app, profileId, deviceId, jar } = await disabledTill();
+    expect((await deleteProfile(venue, profileId)).status).toBe(204);
+    await joined(await knockWith(app, "Bar till", jar));
+
+    const [listed] = (await listJoinRequests(app, venue)) as {
+      id: string;
+      returning: { profileId: string; profileRetired: boolean } | null;
+    }[];
+    expect(listed!.id).toBe(deviceId);
+    expect(listed!.returning).toMatchObject({ profileId, profileRetired: true });
   });
 
   it("a returning device whose profile was deleted is enabled on a live profile, with that profile's first usable printers", async () => {

@@ -1118,7 +1118,11 @@ export class DevicesScreen extends LitElement {
           html`<span data-test=${`waiting-row-${request.id}`}>${waitingName(request)}</span>${
               request.returning
                 ? html`<span part="returning-hint" data-test=${`returning-hint-${request.id}`}
-                    >${t("devices.enable_hint")}</span
+                    >${t(
+                      request.returning.profileRetired
+                        ? "devices.enable_hint_profile_deleted"
+                        : "devices.enable_hint",
+                    )}</span
                   >`
                 : nothing
             }`,
