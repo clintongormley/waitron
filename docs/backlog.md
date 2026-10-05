@@ -3329,11 +3329,16 @@ Left open:
 - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
   during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
   its final head.
-- **Done (W92a, 2026-10-05) — a sold-out painted till tile stays readable.** It kept the usual 50%
+- **Done (W92a, #1259, 2026-10-05) — a sold-out painted till tile stays readable.** It kept the usual 50%
   disabled fade, so its labels read at about 2.2:1 to 3.5:1 contrast (measured by the first of the
   final Codex reviews). Every sold-out till tile, painted or not, is now a grey tile at full
   strength with its labels at 4.5:1 or more in both themes, and a painted one keeps its colour as a
   stripe ([products.md](developers/products.md), _Colour_).
+- W92a's look is the owner's to judge (#1259's "Looks for the owner to judge"; screenshots in lane
+  B's `w92a-shots/`): a pale colour's stripe is faint on the light grey (about 1.35:1 for
+  `#edabab`) and a dark one's on the dark grey (about 2.11:1 for `#256bb1`); the dark theme's grey
+  reads slightly lifted from the page; the text sits about 4px off-centre on a striped tile; and the
+  stripe is 8px where the apps' other colour stripes are 4px.
 - The category colour chooser (`category-color-form.ts`) and the product colour dialog
   (`product-color-form.ts`) share most of their code; a review suggested one component. Kept as two
   in W92 because the plan modelled one on the other.
