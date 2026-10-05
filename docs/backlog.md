@@ -1319,7 +1319,7 @@ wants it: refuse such an item when its product is not Each, or keep the portion 
 which is for the same product. _2026-10-05: the owner chose to keep it; done by W75d, below._
 
 **A held Extras item sent without a portion keeps its saved portion (W75d, owner 2026-10-05) — DONE
-(#TBD).** The owner chose "Keep saved portion" for W75c's open point. `itemPortions`
+(#1221).** The owner chose "Keep saved portion" for W75c's open point. `itemPortions`
 (`packages/catalogue/src/extras.ts`, which replaces `assertPortionPrecision`) now decides the portion
 each item stores: an item sent without one stores one when its product is Each, keeps the portion
 saved under its id when the list holds that id for the same product, and is refused as before when
