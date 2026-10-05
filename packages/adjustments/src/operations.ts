@@ -192,6 +192,22 @@ export async function deactivateAdjustmentReason(tx: Transaction, reasonId: stri
   if (row === undefined) throw new AppError("adjustment_reason.not_found", { reasonId });
 }
 
+/** Keeps its position, so no two reasons come to share one. Refused while an active reason holds
+ * its name, which the partial unique index would otherwise refuse with no domain code. */
+export async function reactivateAdjustmentReason(
+  tx: Transaction,
+  reasonId: string,
+): Promise<AdjustmentReason> {
+  const existing = await findReason(tx, reasonId);
+  await assertNameFree(tx, existing.name, reasonId);
+  const [row] = await tx
+    .update(adjustmentReasons)
+    .set({ active: true })
+    .where(eq(adjustmentReasons.id, reasonId))
+    .returning();
+  return toReason(row!);
+}
+
 /**
  * Puts the active reasons in the order given, then the inactive ones after them in the order they
  * already had, so no two reasons share a position. `ids` must name every active reason exactly

@@ -201,7 +201,8 @@ export class AdjustmentReasonsScreen extends LitElement {
   @property({ attribute: false }) api!: AdjustmentsApi;
   @state() private reasons?: AdjustmentReason[];
   @state() private loadError?: string;
-  @state() private orderError?: string;
+  /** A refusal of a row action that saved at once: a move or an Enable. */
+  @state() private actionError?: string;
   @state() private editor?: Editor;
   @state() private draft?: Draft;
   /** Save has been pressed since the editor opened, so the fields are checked on every change. */
@@ -321,17 +322,17 @@ export class AdjustmentReasonsScreen extends LitElement {
     const from = ids.indexOf(reason.id);
     [ids[from], ids[from + step]] = [ids[from + step]!, ids[from]!];
     this.busy = true;
-    this.orderError = undefined;
+    this.actionError = undefined;
     try {
       await this.api.reorderReasons(ids);
     } catch {
-      this.orderError = t("adjustments.reorder_error");
+      this.actionError = t("adjustments.reorder_error");
     } finally {
       this.busy = false;
     }
     // Also after a refusal: the route refuses a stale list whole, so a retry needs the current one.
     await this.#load();
-    if (this.orderError) return;
+    if (this.actionError) return;
     await this.updateComplete;
     // Rows are drawn by position, so the pressed button now belongs to another reason.
     const table = this.renderRoot.querySelector("wt-data-table");
@@ -347,6 +348,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #open(editor: Editor, opener: HTMLElement): void {
     this.#opener = opener;
     this.editor = editor;
+    this.actionError = undefined;
     this.#restart();
     if (editor.kind === "reason") {
       const reason = editor.reason;
@@ -471,27 +473,47 @@ export class AdjustmentReasonsScreen extends LitElement {
     await after?.();
   }
 
-  /** The Active filter drops the row, so focus goes to the row now in its place, or to Add reason. */
-  #deactivate(reason: AdjustmentReason): void {
+  /** The status filter can drop the row, so focus goes to the row now in its place, or to Add
+   * reason. Read before the write, while the row is still shown. */
+  #refocusFrom(reason: AdjustmentReason): () => Promise<void> {
     const rows = () => [
       ...(this.renderRoot
         .querySelector("wt-data-table")
         ?.shadowRoot?.querySelectorAll<HTMLElement>("tbody tr[data-row-key]") ?? []),
     ];
     const index = rows().findIndex((row) => row.dataset.rowKey === reason.id);
-    void this.#write(
-      () => this.api.deactivateReason(reason.id),
-      async () => {
-        await this.updateComplete;
-        await this.renderRoot.querySelector("wt-data-table")?.updateComplete;
-        const remaining = rows();
-        const row = remaining[Math.min(index, remaining.length - 1)];
-        (
-          row?.querySelector<HTMLElement>("wt-row-actions") ??
-          this.renderRoot.querySelector<HTMLElement>('[data-test="add-reason"]')
-        )?.focus();
-      },
-    );
+    return async () => {
+      await this.updateComplete;
+      await this.renderRoot.querySelector("wt-data-table")?.updateComplete;
+      const remaining = rows();
+      const row = remaining[Math.min(index, remaining.length - 1)];
+      (
+        row?.querySelector<HTMLElement>("wt-row-actions") ??
+        this.renderRoot.querySelector<HTMLElement>('[data-test="add-reason"]')
+      )?.focus();
+    };
+  }
+
+  #deactivate(reason: AdjustmentReason): void {
+    void this.#write(() => this.api.deactivateReason(reason.id), this.#refocusFrom(reason));
+  }
+
+  /** Not destructive, so it acts at once with no confirmation, as a move does. */
+  async #enable(reason: AdjustmentReason): Promise<void> {
+    if (this.busy) return;
+    const refocus = this.#refocusFrom(reason);
+    this.busy = true;
+    this.actionError = undefined;
+    try {
+      await this.api.reactivateReason(reason.id);
+    } catch (error) {
+      this.actionError = codeMessage(codeOf(error));
+      return;
+    } finally {
+      this.busy = false;
+    }
+    await this.#load();
+    await refocus();
   }
 
   #save(): void {
@@ -677,7 +699,7 @@ export class AdjustmentReasonsScreen extends LitElement {
           ? item(`deactivate-${reason.id}`, t("adjustments.disable"), (opener) =>
               this.#open({ kind: "deactivate", reason }, opener),
             )
-          : nothing
+          : item(`enable-${reason.id}`, t("adjustments.enable"), () => void this.#enable(reason))
       }
     </wt-row-actions>`;
   }
@@ -940,7 +962,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   override render() {
-    const alert = this.loadError ?? this.orderError;
+    const alert = this.loadError ?? this.actionError;
     return html`<p class="intro">${t("adjustments.intro")}</p>
       ${alert ? html`<p class="alert" role="alert" data-test="page-alert">${alert}</p>` : nothing}
       <div class="toolbar">${this.#renderAdd()}</div>

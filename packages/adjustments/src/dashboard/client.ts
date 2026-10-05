@@ -140,6 +140,10 @@ export class AdjustmentsApi {
     return this.request(`/management-api/adjustments/reasons/${reasonId}`, "DELETE");
   }
 
+  reactivateReason(reasonId: string): Promise<AdjustmentReason> {
+    return this.request(`/management-api/adjustments/reasons/${reasonId}/reactivate`, "POST");
+  }
+
   /** `ids` is every active reason, once each, in the new order. */
   reorderReasons(ids: readonly string[]): Promise<void> {
     return this.request("/management-api/adjustments/reason-order", "PUT", { ids });

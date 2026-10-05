@@ -201,7 +201,7 @@ export class VenueServiceApi {
     return this.request("/management-api/venue-service/zones", "POST", input);
   }
 
-  updateZone(zoneId: string, patch: { name: string }): Promise<void> {
+  updateZone(zoneId: string, patch: { name: string } | { active: true }): Promise<void> {
     return this.request(`/management-api/zones/${zoneId}`, "PATCH", patch);
   }
 

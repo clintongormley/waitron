@@ -125,6 +125,33 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
     await expectNoA11yViolations(host);
   });
 
+  test("a disabled reason's open row menu, offering Enable", async () => {
+    const el = await screen(theme);
+    const filter = deep(el, 'wt-combobox[data-filter="status"]') as HTMLElement;
+    await chooseOption(filter, "inactive");
+    await settle(el);
+    const enable = deep(el, '[data-test="enable-o"]');
+    enable
+      .closest("wt-row-actions")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    await settle(el);
+    expect(enable.checkVisibility()).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
+  test("the list after a refused Enable", async () => {
+    const el = await screen(theme, {
+      reactivateReason: vi.fn().mockRejectedValue({ code: "adjustment_reason.name_taken" }),
+    });
+    const filter = deep(el, 'wt-combobox[data-filter="status"]') as HTMLElement;
+    await chooseOption(filter, "inactive");
+    await settle(el);
+    await press(el, "enable-o");
+    expect(deep(el, '[data-test="page-alert"]').textContent).toContain("already has this name");
+    await expectNoA11yViolations(host);
+  });
+
   test("the list that could not be loaded", async () => {
     await screen(theme, { listReasons: vi.fn().mockRejectedValue({ code: "x" }) });
     await expectNoA11yViolations(host);
