@@ -1,6 +1,6 @@
 import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { CategorySummary, SectionDetails, MenuPriceRow, Product } from "../api/client.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
@@ -2088,6 +2088,94 @@ it.each([
     }
   },
 );
+
+/** Runs `body` with the test frame at a desktop width, where the whole table fits the window. */
+async function atDesktopWidth(body: () => Promise<void>): Promise<void> {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 800);
+  try {
+    expect(window.innerWidth).toBe(1280);
+    await body();
+  } finally {
+    await page.viewport(width, height);
+  }
+}
+
+it.each(["en-GB", "es-ES"])(
+  "puts a row's notes under its field, so no note widens the column and every field lines up (%s)",
+  async (locale) => {
+    setLocale(locale);
+    try {
+      await atDesktopWidth(async () => {
+        const el = await mount({
+          rows: [burger, variantClashRow(), clashRow(lager)],
+          saving: new Set(["mi-burger"]),
+        });
+        const box = table(el).shadowRoot.querySelector<HTMLElement>(".scroll")!;
+        expect(box.scrollWidth).toBeLessThanOrEqual(box.clientWidth);
+        const right = (key: string) => override(el, key).getBoundingClientRect().right;
+        expect(right("mi-lemonade")).toBeCloseTo(right("mi-burger"), 0);
+        expect(right("mi-lager")).toBeCloseTo(right("mi-burger"), 0);
+        for (const [key, part] of [
+          ["mi-burger", "saving"],
+          ["mi-lemonade", "clash"],
+          ["mi-lager", "clash"],
+        ] as const) {
+          const note = cell(el, "override", key).querySelector<HTMLElement>(`[part~=${part}]`)!;
+          const field = override(el, key).getBoundingClientRect();
+          const tip = cell(el, "override", key).querySelector("wt-help-tooltip")!;
+          const under = note.getBoundingClientRect();
+          expect(under.top, key).toBeGreaterThanOrEqual(field.bottom);
+          expect(under.left, key).toBeGreaterThanOrEqual(field.left - 0.5);
+          expect(under.right, key).toBeLessThanOrEqual(tip.getBoundingClientRect().right + 0.5);
+        }
+      });
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+it("keeps a field scrolled into view clear of the status line, which paints above the pinned Resolve column", async () => {
+  const rows = Array.from({ length: 30 }, (_, at) => ({
+    ...burger,
+    menuItemId: `mi-burger-${at}`,
+    name: `Burger ${at}`,
+  }));
+  // Lager is in the middle, so scrolling to it leaves rows under the status line.
+  const el = await mount({ rows: [...rows.slice(0, 15), clashRow(lager), ...rows.slice(15)] });
+  const host = el.parentElement!;
+  host.style.blockSize = "400px";
+  host.style.overflow = "auto";
+  el.outcome = { kind: "saved", save: burgerSaved };
+  await el.updateComplete;
+  const line = el.shadowRoot!.querySelector<HTMLElement>(".outcome")!;
+  const field = override(el, "mi-lager");
+  field.scrollIntoView({ block: "end" });
+  expect(host.scrollTop).toBeGreaterThan(0);
+  expect(host.scrollTop).toBeLessThan(host.scrollHeight - host.clientHeight);
+  expect(field.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    line.getBoundingClientRect().top + 0.5,
+  );
+  expect(parseFloat(getComputedStyle(field).scrollMarginBlockEnd)).toBeGreaterThanOrEqual(
+    line.getBoundingClientRect().height,
+  );
+  // Where the status line crosses the pinned Resolve column, the line is on top.
+  const pinned = table(el).shadowRoot.querySelector<HTMLElement>('th[data-pinned="end"]')!;
+  const spot = line.getBoundingClientRect();
+  const x = pinned.getBoundingClientRect().left + 4;
+  const y = spot.top + spot.height / 2;
+  let hit: Element | null = document.elementFromPoint(x, y);
+  while (hit?.shadowRoot) {
+    const inner = hit.shadowRoot.elementFromPoint(x, y);
+    if (!inner || inner === hit) break;
+    hit = inner;
+  }
+  let node: Node | null = hit;
+  while (node && node !== line) node = node.parentNode ?? (node as ShadowRoot).host ?? null;
+  expect(node, hit?.outerHTML.slice(0, 80)).toBe(line);
+});
 
 it("keeps an Inactive size's clash on its own row, off its product's", async () => {
   const row = variantClashRow();

@@ -113,18 +113,33 @@ export class MenuPricesTable extends LitElement {
         overflow-wrap: anywhere;
       }
       wt-data-table::part(price-cell) {
-        display: inline-flex;
-        flex-wrap: wrap;
+        display: inline-grid;
+        grid-template-columns: auto auto;
         align-items: center;
-        justify-content: flex-end;
         gap: var(--wt-space-1);
+      }
+      /* Contained, so a note wraps inside the field and its "?" rather than widening the column. */
+      wt-data-table::part(price-notes) {
+        grid-column: 1 / -1;
+        contain: inline-size;
+        text-align: end;
+      }
+      wt-data-table::part(saving),
+      wt-data-table::part(clash),
+      wt-data-table::part(price-note) {
+        display: block;
+      }
+      wt-data-table::part(price-note) {
+        font-size: var(--wt-font-size-sm);
       }
       /* Wide enough that a range placeholder shows whole rather than clipped into one price. Its
          positioned box holds the field's hidden hint, which otherwise escapes the table's scroller
-         and widens the page. */
+         and widens the page. Its end margin is the status line's height, which is sticky at the
+         bottom and would otherwise cover a field scrolled into view under it. */
       wt-data-table::part(override-field) {
         position: relative;
         --wt-price-field-width: var(--wt-price-range-field-width);
+        scroll-margin-block-end: calc(var(--wt-tap-min) + 2 * var(--wt-space-2));
       }
       wt-data-table::part(status-link) {
         display: inline-flex;
@@ -159,9 +174,11 @@ export class MenuPricesTable extends LitElement {
         padding-inline: var(--wt-space-4);
         font-size: var(--wt-font-size-sm);
       }
+      /* Above wt-data-table's pinned column, which is layered at 2. */
       .outcome {
         position: sticky;
         bottom: 0;
+        z-index: 3;
         display: flex;
         flex-wrap: wrap;
         align-items: center;
@@ -481,19 +498,25 @@ export class MenuPricesTable extends LitElement {
         @keydown=${(event: KeyboardEvent) => this.#onKeydown(event, line)}
         @focusout=${() => this.#commit(line, "leave")}
       ></wt-price-input
-      >${
-        this.saving.has(key)
-          ? html`<span part="muted saving">${t("menu_prices.saving")}</span>`
-          : nothing
-      }${this.#tip(line)}${
-        clash === null
-          ? nothing
-          : html`<span part="clash"
-              >${t(clash === "size" ? "menu_prices.size_clash" : "menu_prices.clash")}</span
+      >${this.#tip(line)}${
+        this.saving.has(key) || clash !== null || sizesSetOne
+          ? html`<span part="price-notes"
+              >${
+                this.saving.has(key)
+                  ? html`<span part="muted saving">${t("menu_prices.saving")}</span>`
+                  : nothing
+              }${
+                clash === null
+                  ? nothing
+                  : html`<span part="clash"
+                      >${t(clash === "size" ? "menu_prices.size_clash" : "menu_prices.clash")}</span
+                    >`
+              }${
+                sizesSetOne
+                  ? html`<span part="muted price-note">${t("menu_prices.variant_overrides")}</span>`
+                  : nothing
+              }</span
             >`
-      }${
-        sizesSetOne
-          ? html`<span part="note muted">${t("menu_prices.variant_overrides")}</span>`
           : nothing
       }</span
     >`;
