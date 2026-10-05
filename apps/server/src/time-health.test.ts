@@ -144,3 +144,22 @@ describe("the till clock comparison", () => {
     expect(await sale.json()).toMatchObject({ total: "3.00" });
   });
 });
+
+it("reports the absolute alert difference for a server behind the authority", async () => {
+  const { createAuthorityClockStatus, authorityClockAlertSource } =
+    await import("./time-health.js");
+  const monitor = createAuthorityClockStatus();
+  monitor.observe({
+    authorityTimestamp: "2026-10-05T12:00:00Z",
+    sentAt: new Date("2026-10-05T11:58:00Z"),
+    receivedAt: new Date("2026-10-05T11:58:01Z"),
+  });
+  expect(monitor.read()).toEqual({
+    state: "warning",
+    driftSeconds: -119,
+    measuredAt: "2026-10-05T11:58:01.000Z",
+  });
+  expect(await authorityClockAlertSource(monitor.read).read({} as never)).toMatchObject([
+    { params: { seconds: 119 } },
+  ]);
+});

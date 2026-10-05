@@ -459,3 +459,30 @@ it("reports the parsed authority timestamp and preserves submission when its obs
     await resolver.closeAll();
   }
 });
+
+it("preserves a failed submission when its diagnostic observer throws", async () => {
+  await provision("sello");
+  const observations: (string | null)[] = [];
+  const resolver = aeatClientResolver({
+    db: suite.db,
+    ring,
+    endpointFor: () => "https://example.test/soap",
+    fetchFor: () => ({
+      fetch: async () => new Response("authority unavailable", { status: 502 }),
+      close: async () => {},
+    }),
+    observeAuthorityTime: ({ authorityTimestamp }) => {
+      observations.push(authorityTimestamp);
+      throw new Error("diagnostic unavailable");
+    },
+  });
+  try {
+    const client = await resolver.resolve();
+    await expect(client.submit(anyCabecera(), [anyRegistro()])).rejects.toMatchObject({
+      status: 502,
+    });
+    expect(observations).toEqual([null]);
+  } finally {
+    await resolver.closeAll();
+  }
+});

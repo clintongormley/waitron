@@ -117,7 +117,7 @@ export function authorityClockAlertSource(read: () => AuthorityClockStatus): Ale
             {
               key: "fiscal.clock_drift",
               code: "fiscal.clock_drift",
-              params: { seconds: status.driftSeconds },
+              params: { seconds: Math.abs(status.driftSeconds) },
               severity: "warning",
               since: status.measuredAt,
             },

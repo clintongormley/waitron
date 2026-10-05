@@ -109,9 +109,12 @@ move a stamp that is already there: `stampDeployment` refuses a different value 
 `deployment.already_stamped`, and provision and `waitron-provision venue` let it propagate; adopt
 reads the stamp first and throws that code itself, before its first write.
 
-A database nobody has stamped reads `deployment` as `null` and **boots normally, with this check
-inert**, exactly as if the check did not exist. Only a database stamped for the OTHER environment
-refuses.
+An unstamped database still permits an empty setup. On a production start, the enabled fiscal
+module also reads its retained history before migrations. Veri\*Factu refuses a record generated
+for preproduction or with no recorded environment, using `deployment.environment_mismatch`.
+This prevents you from promoting test invoices into a production series. Production-only history
+passes this probe. Run `pnpm --filter @waitron/server exec vitest run src/deployment-guard.test.ts`
+for the empty-setup, both history controls and the real boot refusal that preserves the rows.
 
 ## Provisioning a venue
 
