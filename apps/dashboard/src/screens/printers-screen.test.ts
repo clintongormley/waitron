@@ -5589,17 +5589,43 @@ describe("printers-screen printer editor edges", () => {
   });
 
   it("refuses a port outside 1 to 65535", async () => {
-    const { el, api } = await mountEditing("p1");
-    typeField(el, "[data-test=printer-port-p1]", "70000");
-    await el.updateComplete;
-
-    q(el, "[data-test=save-printer-p1]")!.click();
+    history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=printer-section-connection]")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    await flush(el);
+    q(el, "[data-test=edit-printer-connection]")!.click();
+    await flush(el);
+    typeField(el, '[name="printer-detail-port"]', "70000");
+    q(el, "[data-test=save-printer-connection]")!.click();
     await flush(el);
 
     expect(api.updatePrinter).not.toHaveBeenCalled();
-    expect((q(el, "[data-test=printer-port-p1]") as unknown as { error: string }).error).toBe(
+    expect((q(el, '[name="printer-detail-port"]') as unknown as { error: string }).error).toBe(
       t("printers.port_invalid"),
     );
+  });
+
+  it("refuses exponent notation in a network port on printer details", async () => {
+    history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=printer-section-connection]")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    await flush(el);
+    q(el, "[data-test=edit-printer-connection]")!.click();
+    await flush(el);
+    typeField(el, '[name="printer-detail-port"]', "1e2");
+    await flush(el);
+
+    expect(errorOf(el, '[name="printer-detail-port"]')).toBe(t("printers.port_invalid"));
+    expect(isDisabled(el, "[data-test=save-printer-connection]")).toBe(true);
+    expect(api.updatePrinter).not.toHaveBeenCalled();
   });
 
   it.each([

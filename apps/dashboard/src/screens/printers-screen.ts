@@ -2103,10 +2103,7 @@ export class PrintersScreen extends LitElement {
     if (draft?.id !== printer.id || draft.saving) return;
     const host = draft.host.trim();
     const port = draft.port.trim();
-    if (
-      !host ||
-      (port && (!Number.isInteger(Number(port)) || Number(port) < 1 || Number(port) > 65535))
-    ) {
+    if (!host || (port && (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535))) {
       this.detailConnection = {
         ...draft,
         error: t(!host ? "printers.host_required" : "printers.port_invalid"),
@@ -2137,7 +2134,7 @@ export class PrintersScreen extends LitElement {
     return {
       host: draft.host.trim() ? "" : t("printers.host_required"),
       port:
-        port && (!Number.isInteger(Number(port)) || Number(port) < 1 || Number(port) > 65535)
+        port && (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)
           ? t("printers.port_invalid")
           : "",
     };
