@@ -88,6 +88,15 @@ describe("AdjustmentsApi", () => {
     });
   });
 
+  it("reactivates a reason with a POST to its reactivate path, answering the reason", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(reason));
+    expect(await api(fetchImpl).reactivateReason("r1")).toEqual(reason);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/adjustments/reasons/r1/reactivate", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
   it("sends the whole active order to the reorder route", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     await api(fetchImpl).reorderReasons(["r2", "r1"]);

@@ -100,6 +100,7 @@ function fakeApi(overrides: Partial<Record<keyof AdjustmentsApi, unknown>> = {})
     createReason: vi.fn().mockResolvedValue({ ...complaint, id: "n" }),
     updateReason: vi.fn().mockResolvedValue(complaint),
     deactivateReason: vi.fn().mockResolvedValue(undefined),
+    reactivateReason: vi.fn().mockResolvedValue({ ...retired, active: true }),
     reorderReasons: vi.fn().mockResolvedValue(undefined),
     getSettings: vi.fn().mockResolvedValue({ maxBillDiscountBp: null }),
     saveSettings: vi.fn(async (settings: unknown) => settings),
@@ -1320,6 +1321,132 @@ describe("disabling", () => {
     expect(modal(el)).not.toBeNull();
     expect(await bottom(el)).toBe("Something went wrong, try again");
     expect(button(el, "confirm-deactivate").disabled).toBe(false);
+  });
+});
+
+describe("enabling", () => {
+  const disabledOnly = async (el: AdjustmentReasonsScreen) => {
+    await chooseOption(
+      table(el).shadowRoot!.querySelector<HTMLElement & { value: string }>(
+        'wt-combobox[data-filter="status"]',
+      )!,
+      "inactive",
+    );
+    await settle(el);
+  };
+  const showAll = async (el: AdjustmentReasonsScreen) => {
+    await chooseOption(
+      table(el).shadowRoot!.querySelector<HTMLElement & { value: string }>(
+        'wt-combobox[data-filter="status"]',
+      )!,
+      "",
+    );
+    await settle(el);
+  };
+
+  it.each([
+    { locale: "en", action: "Enable" },
+    { locale: "es", action: "Habilitar" },
+  ])(
+    "in $locale, offers Enable and not Disable on a disabled reason, and Enable on no active one",
+    async ({ locale, action }) => {
+      setLocale(locale);
+      const el = await mount(fakeApi());
+      await showAll(el);
+      expect(find(el, '[data-test="enable-o"]')!.textContent!.trim()).toBe(action);
+      expect(find(el, '[data-test="deactivate-o"]')).toBeNull();
+      for (const id of ["e", "c", "d"]) {
+        expect(find(el, `[data-test="enable-${id}"]`), id).toBeNull();
+        expect(find(el, `[data-test="deactivate-${id}"]`), id).not.toBeNull();
+      }
+    },
+  );
+
+  it.each([
+    { locale: "en", status: "Active" },
+    { locale: "es", status: "Activo" },
+  ])(
+    "in $locale, enables at once with no confirmation, then reloads the reason as $status",
+    async ({ locale, status }) => {
+      setLocale(locale);
+      const api = fakeApi({
+        listReasons: vi
+          .fn()
+          .mockResolvedValueOnce(reasons)
+          .mockResolvedValue([entryError, complaint, employee, { ...retired, active: true }]),
+      });
+      const el = await mount(api);
+      await showAll(el);
+      await press(el, "enable-o");
+      expect(api.reactivateReason).toHaveBeenCalledExactlyOnceWith("o");
+      expect(modal(el)).toBeNull();
+      expect(api.listReasons).toHaveBeenCalledTimes(2);
+      expect(alert(el)).toBe("");
+      const cells = [...table(el).shadowRoot!.querySelectorAll('tr[data-row-key="o"] td')].map(
+        (cell) => cell.textContent!.trim(),
+      );
+      expect(cells).toContain(status);
+      expect(find(el, '[data-test="deactivate-o"]')).not.toBeNull();
+      expect(find(el, '[data-test="enable-o"]')).toBeNull();
+    },
+  );
+
+  it("moves focus to Add reason when the Disabled filter has no reason left to show", async () => {
+    const api = fakeApi({
+      listReasons: vi
+        .fn()
+        .mockResolvedValueOnce(reasons)
+        .mockResolvedValue([entryError, complaint, employee, { ...retired, active: true }]),
+    });
+    const el = await mount(api);
+    await disabledOnly(el);
+    await press(el, "enable-o");
+    expect(rowKeys(el)).toEqual([]);
+    const add = el.shadowRoot!.querySelector('[data-test="add-reason"]');
+    expect(el.shadowRoot!.activeElement).toBe(add);
+  });
+
+  it.each([
+    { locale: "en", message: "Another active reason already has this name" },
+    { locale: "es", message: "Ya hay otro motivo activo con este nombre" },
+  ])(
+    "in $locale, says at the top of the screen that an active reason holds the name, and leaves it disabled",
+    async ({ locale, message }) => {
+      setLocale(locale);
+      const api = fakeApi({
+        reactivateReason: vi.fn().mockRejectedValue({
+          code: "adjustment_reason.name_taken",
+          params: { name: "Old promotion" },
+        }),
+      });
+      const el = await mount(api);
+      await disabledOnly(el);
+      await press(el, "enable-o");
+      expect(api.reactivateReason).toHaveBeenCalledExactlyOnceWith("o");
+      expect(alert(el)).toBe(message);
+      expect(el.shadowRoot!.querySelector('[data-test="page-alert"]')!.getAttribute("role")).toBe(
+        "alert",
+      );
+      expect(modal(el)).toBeNull();
+      expect(api.listReasons).toHaveBeenCalledTimes(1);
+      expect(rowKeys(el)).toEqual(["o"]);
+      expect(find(el, '[data-test="enable-o"]')).not.toBeNull();
+    },
+  );
+
+  it("clears the refusal once a later Enable succeeds", async () => {
+    const api = fakeApi({
+      reactivateReason: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockResolvedValue({ ...retired, active: true }),
+    });
+    const el = await mount(api);
+    await disabledOnly(el);
+    await press(el, "enable-o");
+    expect(alert(el)).toBe("Something went wrong, try again");
+    await press(el, "enable-o");
+    expect(alert(el)).toBe("");
   });
 });
 
