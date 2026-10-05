@@ -5244,7 +5244,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b DONE (#1248, main ccbe2b41e); W105c DONE (#1251, main 58c65558b). W104–W106, W105b and W105c DONE; the open points each left are listed below.**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b DONE (#1248, main ccbe2b41e); W105c DONE (#1251, main 58c65558b); W105f DONE (#1253, main 44ff56380). W104–W106, W105b, W105c and W105f DONE; the open points each left are listed below.**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
@@ -5298,7 +5298,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   previous one (accepting it included, once the device is later disabled), is not forced later.
   It must first prove the token the previous ask issued, a scrypt check, so sharing a millisecond is
   unlikely, but nothing in the code rules it out.
-  **W105f (done):** Disable ends every shift session open on the device in the same transaction
+  **W105f (done, #1253):** Disable ends every shift session open on the device in the same transaction
   (`POST /management-api/devices/:id/revoke`, the only path that disables a device), so a signed-in
   person's next request is refused `session.required` straight away; other devices' sessions are
   untouched. The till's sign-in checks the PIN outside any transaction, so inside the transaction
@@ -5309,7 +5309,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   (`apps/server/src/join-e2e.test.ts`; with that check removed both cases fail). The refusal of a
   session on a disabled device (`device.unauthorized`) stays, and Enable still ends the device's
   sessions, as a second line for a device turned off outside the Disable route (with that call
-  removed, the join e2e case turning a device off directly fails).
+  removed, the join e2e case turning a device off directly fails). Open point: sign-in refuses a
+  kitchen screen by the profile it read before the PIN check, so a till moved onto a kitchen-screen
+  profile during that check could still open a session (older than W105f).
   **W106 (done, #1240):** `devices` gains three empty-by-default columns: the battery level,
   whether it is charging and when that was reported (core `0099`). A paired device sends both to
   `PUT /api/device/battery`, which refuses a level outside 0 to 100 and stores at most one report a
