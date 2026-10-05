@@ -3,10 +3,17 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { authorizeManager, withPassiveManagementRead, type Permission } from "@waitron/identity";
+import {
+  authorizeManager,
+  hashSessionToken,
+  persons,
+  withPassiveManagementRead,
+  type Permission,
+} from "@waitron/identity";
 import {
   createErrorBoundary,
   readJsonBody,
@@ -14,11 +21,14 @@ import {
   requireManagementSession,
   requireString,
 } from "@waitron/server-kit";
+import { requireDeviceName } from "./device.js";
 import {
   acceptDeviceJoinRequest,
   acceptPrintAgentJoinRequest,
   challengeFor,
+  checkDeviceJoinNumber,
   denyJoinRequest,
+  discardLapsedDeviceRequests,
   joinRequestKind,
   listPendingJoinRequests,
   type JoinRequestKind,
@@ -41,8 +51,9 @@ export interface JoinApiDeps {
  * `device-api.ts` gives them, so a code answered by both surfaces has one status everywhere.
  */
 const STATUS: Record<string, ContentfulStatusCode> = {
-  // Unknown, already decided, or (on the accept route) an agent's ask — all fold
-  // here, because the caller's recovery is identical and none of them may confirm the others.
+  // Unknown, already decided, or (on a per-surface route) the other kind's ask. On the device accept
+  // route a device id this login holds no live claim on answers `join_request.unclaimed` instead,
+  // whether or not the request still exists.
   "join_request.not_found": 404,
   "device.join_mismatch": 400,
   "device.station_required": 400,
@@ -57,6 +68,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "authorization.not_permitted": 403,
   "management.request_invalid": 400,
   "device.pairing_hold_lapsed": 409,
+  "join_request.claimed": 409,
+  "join_request.unclaimed": 409,
 };
 
 const run = createErrorBoundary(STATUS, "join.failed");
@@ -86,19 +99,29 @@ function optionalBodyUuid(v: unknown, field: string): string | null {
 
 /**
  * List, challenge and deny are shared across kinds and take their permission from the row's kind.
- * Only accept is per-surface, because that is where the kinds differ in what an approved request
- * becomes; each accept refuses the OTHER kind 404 via the predicate riding its consuming delete.
+ * Check and accept are per-surface, because that is where the kinds differ in how a request is
+ * approved and what it becomes; each refuses the OTHER kind's ask 404.
  */
 export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
-  const gated = <T>(
+  // Both gates discard the device requests a shut window or an ended claim strands, and drop those
+  // claims only once the transaction has committed.
+  const gated = async <T>(
     sessionId: string,
     permission: Permission,
-    fn: (tx: Transaction) => Promise<T>,
-  ): Promise<T> =>
-    withTransaction(deps.db, async (tx) => {
-      await authorizeManager(tx, { managementSessionId: sessionId, permission });
-      return fn(tx);
+    fn: (tx: Transaction, personId: string) => Promise<T>,
+  ): Promise<T> => {
+    let dropped: string[] = [];
+    const result = await withTransaction(deps.db, async (tx) => {
+      dropped = await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
+      const { authorizedBy } = await authorizeManager(tx, {
+        managementSessionId: sessionId,
+        permission,
+      });
+      return fn(tx, authorizedBy);
     });
+    for (const id of dropped) deps.pairingMode.dropClaim(id);
+    return result;
+  };
 
   /**
    * A caller holding neither permission gets 403 whether or not the row exists: a MISSING row still
@@ -106,12 +129,14 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
    * Otherwise the 403-vs-404 split tells an unauthorised caller which ids are live. A malformed id
    * takes the same path as an unknown one.
    */
-  const gatedByRowKind = <T>(
+  const gatedByRowKind = async <T>(
     sessionId: string,
     id: string,
     fn: (tx: Transaction) => Promise<T>,
-  ): Promise<T> =>
-    withTransaction(deps.db, async (tx) => {
+  ): Promise<T> => {
+    let dropped: string[] = [];
+    const result = await withTransaction(deps.db, async (tx) => {
+      dropped = await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
       const kind = isUuid(id) ? await joinRequestKind(tx, deps.cfg, id) : undefined;
       await authorizeManager(tx, {
         managementSessionId: sessionId,
@@ -120,6 +145,9 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       if (kind === undefined) throw new AppError("join_request.not_found", {});
       return fn(tx);
     });
+    for (const id of dropped) deps.pairingMode.dropClaim(id);
+    return result;
+  };
 
   // The window routes are gated on `device.manage` ALONE. That excludes nobody only because
   // `device.manage` and `printer.manage` are held by the same roles
@@ -168,9 +196,13 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const holdId = c.req.param("holdId");
-      await gated(sessionId, "device.manage", async () => {
+      // The gate discards before its callback, while this hold is still live, so the requests its
+      // release strands are discarded here, after it.
+      const dropped = await gated(sessionId, "device.manage", async (tx) => {
         deps.pairingMode.release(holdId);
+        return discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
       });
+      for (const id of dropped) deps.pairingMode.dropClaim(id);
       return c.body(null, 204);
     }),
   );
@@ -180,10 +212,22 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const kind = requireKind(c.req.query("kind"));
+      const rows = await gated(sessionId, PERMISSION_FOR[kind], (tx) =>
+        listPendingJoinRequests(tx, deps.cfg, kind),
+      );
+      if (kind === "print_agent") return c.json(rows);
+      const sessionKey = hashSessionToken(sessionId);
       return c.json(
-        await gated(sessionId, PERMISSION_FOR[kind], (tx) =>
-          listPendingJoinRequests(tx, deps.cfg, kind),
-        ),
+        rows.map((row) => {
+          const claim = deps.pairingMode.claimOf(row.id);
+          return {
+            ...row,
+            pairingBy:
+              claim === undefined
+                ? null
+                : { name: claim.personName, mine: claim.sessionKey === sessionKey },
+          };
+        }),
       );
     }),
   );
@@ -202,12 +246,54 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = c.req.param("id");
-      await gatedByRowKind(sessionId, id, (tx) => denyJoinRequest(tx, deps.cfg, id));
+      const sessionKey = hashSessionToken(sessionId);
+      await gatedByRowKind(sessionId, id, (tx) => {
+        const claim = deps.pairingMode.claimOf(id);
+        if (claim !== undefined && claim.sessionKey !== sessionKey)
+          throw new AppError("join_request.claimed", {});
+        return denyJoinRequest(tx, deps.cfg, id);
+      });
+      deps.pairingMode.dropClaim(id);
       return c.body(null, 204);
     }),
   );
 
-  // ── Approve a DEVICE's ask (device.manage) ──────────────────────────────────────────────────────
+  // ── Check the number a manager tapped against a DEVICE's ask (device.manage) ─────────────────
+  app.post("/management-api/device-join-requests/:id/check", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const sessionKey = hashSessionToken(sessionId);
+      const id = c.req.param("id");
+      // Parsed out here and screened inside the gate, for the accept route's reasons.
+      const body = await readJsonBody<{ choice?: unknown; holdId?: unknown }>(c);
+      const result = await gated(sessionId, "device.manage", async (tx, personId) => {
+        // Any string, not a two-digit screen: a value that is not the row's number must delete it.
+        const choice = requireString(body.choice, "choice");
+        const holdId = requireString(body.holdId, "holdId");
+        if (!isUuid(id)) throw new AppError("join_request.not_found", {});
+        const claim = deps.pairingMode.claimOf(id);
+        if (claim !== undefined && claim.sessionKey !== sessionKey)
+          throw new AppError("join_request.claimed", {});
+        if (!deps.pairingMode.hasHold(holdId)) throw new AppError("device.pairing_hold_lapsed", {});
+        const checked = await checkDeviceJoinNumber(tx, deps.cfg, id, choice);
+        if (checked.ok) {
+          const [person] = await tx
+            .select({ name: persons.displayName })
+            .from(persons)
+            .where(eq(persons.id, personId));
+          // Claimed inside the transaction, so no other check can run between the match and the
+          // claim: the write queue runs one transaction at a time (`packages/store/src/write-queue.ts`).
+          deps.pairingMode.claim(id, { holdId, sessionKey, personName: person!.name });
+        }
+        return checked;
+      });
+      // Thrown after the transaction, so the deletion of a mismatched request commits.
+      if (!result.ok) throw new AppError("device.join_mismatch", {});
+      return c.body(null, 204);
+    }),
+  );
+
+  // ── Approve a DEVICE's ask this login has checked (device.manage) ───────────────────────────────
   app.post("/management-api/device-join-requests/:id/accept", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -217,33 +303,31 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       // `authorizeManager` refuses an unauthorised caller 403 before saying anything about its id or
       // body.
       const body = await readJsonBody<{
-        choice?: unknown;
+        name?: unknown;
         profileId?: unknown;
         stationId?: unknown;
         watcherId?: unknown;
       }>(c);
-      const result = await gated(sessionId, "device.manage", (tx) => {
-        // Any string, not a two-digit screen: a value that is not the row's number must DENY.
-        const choice = requireString(body.choice, "choice");
+      const accepted = await gated(sessionId, "device.manage", async (tx) => {
+        const label = requireDeviceName(body.name);
         const profileId = requireBodyUuid(body.profileId, "profileId");
         const stationId = optionalBodyUuid(body.stationId, "stationId");
         const watcherId = optionalBodyUuid(body.watcherId, "watcherId");
         if (!isUuid(id)) throw new AppError("join_request.not_found", {});
+        // Before the claim, so a print agent's ask answers 404, as on the check route.
+        if ((await joinRequestKind(tx, deps.cfg, id)) === "print_agent")
+          throw new AppError("join_request.not_found", {});
+        if (deps.pairingMode.claimOf(id)?.sessionKey !== hashSessionToken(sessionId))
+          throw new AppError("join_request.unclaimed", {});
         return acceptDeviceJoinRequest(tx, deps.cfg, id, {
-          choice,
+          label,
           profileId,
           stationId,
           watcherId,
         });
       });
-      // THE MISMATCH IS THROWN AFTER THE TRANSACTION, NEVER INSIDE IT: thrown inside, it would roll
-      // the consuming delete back and turn a wrong tap into an unlimited retry. The verb returns the
-      // mismatch as a RESULT for this reason; the route commits it, then answers.
-      if (!result.ok) throw new AppError("device.join_mismatch", {});
-      return c.json(
-        { deviceId: result.deviceId, name: result.name, formFactor: result.formFactor },
-        200,
-      );
+      deps.pairingMode.dropClaim(id);
+      return c.json(accepted, 200);
     }),
   );
 

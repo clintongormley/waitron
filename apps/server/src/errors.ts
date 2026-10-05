@@ -729,8 +729,8 @@ declare module "@waitron/shared" {
      */
     "device.pairing_closed": Record<string, never>;
     /**
-     * A renewal named a hold on the join window this server does not hold: it lapsed, was released,
-     * or was taken before a restart. NO params.
+     * A renewal or a number check named a hold on the join window this server does not hold: it
+     * lapsed, was released, or was taken before a restart. NO params.
      */
     "device.pairing_hold_lapsed": Record<string, never>;
     /**
@@ -760,6 +760,16 @@ declare module "@waitron/shared" {
      * One code for all: the admin's recovery is the same, and the joiner must knock again.
      */
     "join_request.not_found": Record<string, never>;
+    /**
+     * Another login matched this device request's number first and holds it while its Add dialog
+     * stays open. NO params: the dashboard's list already names who is pairing it.
+     */
+    "join_request.claimed": Record<string, never>;
+    /**
+     * An approval of a device request this login has not matched the number of, or whose match ended
+     * with the hold it was made under. The manager taps the number again. NO params.
+     */
+    "join_request.unclaimed": Record<string, never>;
     /**
      * A self-signed server certificate was asked for with an empty `hostnames` list. The minter
      * refuses before generating a key.

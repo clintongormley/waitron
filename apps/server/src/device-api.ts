@@ -21,7 +21,12 @@ import { requireManagementSession } from "@waitron/server-kit";
 import { readDeviceCookie, requireDevice, setDeviceCookie } from "./device-session.js";
 import { requireDeviceBinding } from "./device.js";
 import { requestCfg } from "./request-config.js";
-import { acceptDeviceJoinRequest, createJoinRequest, readJoinStatus } from "./join-requests.js";
+import {
+  acceptDeviceJoinRequest,
+  createJoinRequest,
+  discardLapsedDeviceRequests,
+  readJoinStatus,
+} from "./join-requests.js";
 import type { PairingMode } from "./pairing-mode.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { requireBodyUuid, requireNullableBodyUuid, requireString } from "@waitron/server-kit";
@@ -139,7 +144,10 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       }
       const body = await readJsonBody<{ name?: unknown }>(c);
       const name = requireString(body.name, "name");
+      let dropped: string[] = [];
       const made = await withTransaction(deps.db, async (tx) => {
+        // Before the cap is counted, so requests a shut window stranded do not hold places in it.
+        dropped = await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
         const request = await createJoinRequest(tx, deps.cfg, { kind: "device", label: name });
         if (auto) {
           // Accept in the SAME transaction, so a later throw (no till profile, or a taken device
@@ -150,12 +158,13 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           );
           if (till === undefined) throw new AppError("device_profile.not_found", {});
           await acceptDeviceJoinRequest(tx, deps.cfg, request.joinId, {
-            choice: request.verificationNumber,
+            label: name,
             profileId: till.id,
           });
         }
         return request;
       });
+      for (const id of dropped) deps.pairingMode.dropClaim(id);
       // The cookie's SELECTOR is the join request's id, which accept carries onto the devices row — so
       // this cookie is set once and never re-issued. Until then it names no device, so `requireDevice`
       // finds nothing and every other device route answers `device.unauthorized`: the token is inert by
@@ -182,7 +191,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // The selector goes into a by-id comparison that refuses nothing and would match nothing, so
       // this screen is what turns a non-uuid into a clean refusal.
       if (!isUuid(joinId)) throw new AppError("device.unauthorized", {});
-      const status = await readJoinStatus(deps.db, deps.cfg, joinId, token);
+      const status = await readJoinStatus(deps.db, deps.cfg, joinId, token, deps.pairingMode);
       return c.json({ status }, 200);
     }),
   );

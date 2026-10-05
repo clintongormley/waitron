@@ -12,6 +12,13 @@ import type { TillConfig } from "./till-config.js";
 /** A device's kind is DERIVED from its profile's form factor via {@link kindOfFormFactor}. */
 export type { DeviceKind };
 
+/** A device's name as a manager typed it: trimmed and never blank. Uniqueness is the index's. */
+export function requireDeviceName(value: unknown): string {
+  const name = typeof value === "string" ? value.trim() : "";
+  if (name === "") throw new AppError("management.request_invalid", { field: "name" });
+  return name;
+}
+
 /**
  * Refuse a reassign to a profile that names no row as `device.binding_invalid` naming the input
  * FIELD (`deviceProfileId`, the assign-device-profile route).

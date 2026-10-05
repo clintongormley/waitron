@@ -265,8 +265,8 @@ async function seedProfile(
 }
 
 /**
- * Knock on `app` with an OPEN window, then accept the request directly on `suite.db` with its own
- * number — the two halves of production enrolment, the first through the real route (so the cookie
+ * Knock on `app` with an OPEN window, then accept the request directly on `suite.db` under the
+ * name it knocked with — the two halves of production enrolment, the first through the real route (so the cookie
  * under test is the one the route set) and the second through the verb, because the accept route is
  * `join-api.ts`'s. Returns the joiner's cookie jar and the id the accept carried onto the `devices` row.
  */
@@ -278,15 +278,14 @@ async function knockAndAccept(
   windows.get(app)!.open();
   const res = await send(app, "POST", "/api/device/join", { body: { name: input.name } });
   expect(res.status).toBe(200);
-  const knock = (await res.json()) as { joinId: string; verificationNumber: string };
+  const knock = (await res.json()) as { joinId: string };
   const accepted = await withTransaction(suite.db, async (tx) => {
     return acceptDeviceJoinRequest(tx, venue.cfg, knock.joinId, {
-      choice: knock.verificationNumber,
+      label: input.name,
       profileId: input.profileId,
       stationId: input.stationId ?? null,
     });
   });
-  if (!accepted.ok) throw new Error("device-api.test: the fixture's own number mismatched");
   return {
     deviceId: accepted.deviceId,
     jar: deviceCookieFrom(res),
@@ -478,6 +477,28 @@ describe("POST /api/device/join", () => {
       "device.join_full",
     );
   });
+
+  it("does not count requests a shut window stranded against the cap", async () => {
+    const venue = await setupVenue(suite.db);
+    let offset = 0;
+    const mode = createPairingMode({ now: () => Date.now() + offset });
+    const app = mountApp(venue.cfg, undefined, mode);
+    const first = mode.open();
+    for (let i = 0; i < PENDING_CAP; i++) {
+      const ok = await send(app, "POST", "/api/device/join", { body: { name: `Caja ${i}` } });
+      expect(ok.status).toBe(200);
+    }
+    // Shut and reopened on the holder alone, so only the knock itself can discard the old ten.
+    mode.release(first.holdId);
+    offset += 1_000;
+    mode.open();
+    const res = await send(app, "POST", "/api/device/join", { body: { name: "Caja nueva" } });
+    expect(res.status).toBe(200);
+    const { rows } = await suite.db.execute<{ label: string }>(
+      sql`select label from join_requests `,
+    );
+    expect(rows).toEqual([{ label: "Caja nueva" }]);
+  });
 });
 
 describe("devMode auto-accept", () => {
@@ -542,10 +563,7 @@ describe("GET /api/device/join/status", () => {
     const knock = await send(app, "POST", "/api/device/join", { body: { name: "Caja nueva" } });
     expect(knock.status).toBe(200);
     const jar = deviceCookieFrom(knock);
-    const { joinId, verificationNumber } = (await knock.json()) as {
-      joinId: string;
-      verificationNumber: string;
-    };
+    const { joinId } = (await knock.json()) as { joinId: string };
 
     const pending = await send(app, "GET", "/api/device/join/status", { cookie: jar });
     expect(pending.status).toBe(200);
@@ -554,7 +572,7 @@ describe("GET /api/device/join/status", () => {
     const profileId = await seedProfile("till");
     await withTransaction(suite.db, async (tx) => {
       return acceptDeviceJoinRequest(tx, venue.cfg, joinId, {
-        choice: verificationNumber,
+        label: "Caja nueva",
         profileId,
       });
     });
@@ -570,6 +588,25 @@ describe("GET /api/device/join/status", () => {
     const me = await send(app, "GET", "/api/device/me", { cookie: jar });
     expect(me.status).toBe(200);
     expect((await me.json()) as { deviceId: string }).toMatchObject({ deviceId: joinId });
+  });
+
+  it("is not_approved once the window has shut", async () => {
+    const venue = await setupVenue(suite.db);
+    const mode = createPairingMode();
+    const { holdId } = mode.open();
+    const app = mountApp(venue.cfg, undefined, mode);
+    const knock = await send(app, "POST", "/api/device/join", { body: { name: "Caja nueva" } });
+    const jar = deviceCookieFrom(knock);
+    const pending = await send(app, "GET", "/api/device/join/status", { cookie: jar });
+    expect(await pending.json()).toEqual({ status: "pending" });
+    mode.release(holdId);
+    const shut = await send(app, "GET", "/api/device/join/status", { cookie: jar });
+    expect(shut.status).toBe(200);
+    expect(await shut.json()).toEqual({ status: "not_approved" });
+    const { rows } = await suite.db.execute<{ n: number }>(
+      sql`select count(*) as n from join_requests `,
+    );
+    expect(rows[0]!.n).toBe(0);
   });
 
   it("is not_approved after a deny, and for a cookie that names nothing", async () => {

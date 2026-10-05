@@ -10,6 +10,7 @@ import {
   acceptDeviceJoinRequest,
   acceptPrintAgentJoinRequest,
   challengeFor,
+  checkDeviceJoinNumber,
   createJoinRequest,
   denyJoinRequest,
   joinRequestKind,
@@ -17,8 +18,8 @@ import {
   readAgentJoinStatus,
   readJoinStatus,
   selfEnrolNodeAgent,
-  type AcceptResult,
 } from "./join-requests.js";
+import { createPairingMode, type PairingMode } from "./pairing-mode.js";
 import {
   deviceProfiles,
   devices,
@@ -75,6 +76,16 @@ function writeOnNextTurn(order: string[]): Promise<void> {
   });
 }
 
+/** A window opened now. A device request made AFTER this call reads as pending; one made before it
+ * is discarded by the next status read. */
+function openWindow(now?: () => number): PairingMode {
+  const window = createPairingMode(now === undefined ? {} : { now });
+  window.open();
+  return window;
+}
+
+type Accepted = Awaited<ReturnType<typeof acceptDeviceJoinRequest>>;
+
 async function codeOf(fn: () => Promise<unknown>): Promise<string | undefined> {
   try {
     await fn();
@@ -110,6 +121,7 @@ describe("pending joins belong to the node that received them", () => {
   it("tells another node's poller not_approved, and reads no kind for it", async () => {
     const venue = await setupVenue(suite.db);
     const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const window = openWindow();
     const device = await asApp((tx) =>
       createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" }),
     );
@@ -117,8 +129,10 @@ describe("pending joins belong to the node that received them", () => {
       createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "kitchen-pi" }),
     );
 
-    expect(await readJoinStatus(suite.db, venue.cfg, device.joinId, device.token)).toBe("pending");
-    expect(await readJoinStatus(suite.db, otherNode, device.joinId, device.token)).toBe(
+    expect(await readJoinStatus(suite.db, venue.cfg, device.joinId, device.token, window)).toBe(
+      "pending",
+    );
+    expect(await readJoinStatus(suite.db, otherNode, device.joinId, device.token, window)).toBe(
       "not_approved",
     );
     expect(await readAgentJoinStatus(suite.db, venue.cfg, agent.joinId, agent.token)).toBe(
@@ -145,10 +159,7 @@ describe("pending joins belong to the node that received them", () => {
     expect(
       await codeOf(() =>
         asApp((tx) =>
-          acceptDeviceJoinRequest(tx, otherNode, device.joinId, {
-            choice: device.verificationNumber,
-            profileId,
-          }),
+          acceptDeviceJoinRequest(tx, otherNode, device.joinId, { label: "Bar till", profileId }),
         ),
       ),
     ).toBe("join_request.not_found");
@@ -444,19 +455,21 @@ describe("createJoinRequest — serialization of number allocation and the cap o
 describe("readJoinStatus", () => {
   it("is pending for a live request with the right token", async () => {
     const venue = await setupVenue(suite.db);
+    const window = openWindow();
     const made = await withTransaction(suite.db, async (tx) => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
     });
-    const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token);
+    const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token, window);
     expect(status).toBe("pending");
   });
 
   it("is not_approved for a wrong token on a live request", async () => {
     const venue = await setupVenue(suite.db);
+    const window = openWindow();
     const made = await withTransaction(suite.db, async (tx) => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
     });
-    const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, "wrong-token");
+    const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, "wrong-token", window);
     expect(status).toBe("not_approved");
   });
 
@@ -467,12 +480,15 @@ describe("readJoinStatus", () => {
       venue.cfg,
       "00000000-0000-4000-8000-000000000000",
       "irrelevant-token",
+      openWindow(),
     );
     expect(status).toBe("not_approved");
   });
 
   it("is not_approved once the request has lapsed", async () => {
     const venue = await setupVenue(suite.db);
+    // Opened before the back-dated request, so only the fifteen-minute limit can end it.
+    const window = openWindow(() => Date.now() - JOIN_TTL_MS - 120_000);
     const made = await withTransaction(suite.db, async (tx) => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
     });
@@ -481,17 +497,18 @@ describe("readJoinStatus", () => {
     await suite.db.execute(
       sql`update join_requests set created_at = ${lapsed} where id = ${made.joinId}`,
     );
-    const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token);
+    const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token, window);
     expect(status).toBe("not_approved");
   });
   it("lets another writer commit while it derives the key", async () => {
     const venue = await setupVenue(suite.db);
+    const window = openWindow();
     const made = await asApp((tx) =>
       createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" }),
     );
     const order: string[] = [];
-    const read = readJoinStatus(suite.db, venue.cfg, made.joinId, made.token).then((status) =>
-      order.push(status),
+    const read = readJoinStatus(suite.db, venue.cfg, made.joinId, made.token, window).then(
+      (status) => order.push(status),
     );
     await Promise.all([read, writeOnNextTurn(order)]);
     expect(order).toEqual(["writer", "pending"]);
@@ -592,13 +609,13 @@ describe("acceptDeviceJoinRequest", () => {
     const { made, accepted } = await withTransaction(suite.db, async (tx) => {
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
       const accepted = await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
-        choice: made.verificationNumber,
+        label: "Barra 1",
         profileId,
       });
       return { made, accepted };
     });
-    const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token);
-    expect(accepted).toMatchObject({ ok: true, deviceId: made.joinId, formFactor: "till" });
+    const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token, openWindow());
+    expect(accepted).toEqual({ deviceId: made.joinId, name: "Barra 1", formFactor: "till" });
     expect(status).toBe("approved");
   });
 
@@ -622,12 +639,8 @@ describe("acceptDeviceJoinRequest", () => {
         paymentSlipPrinterIds: [p3!.id],
       });
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
-      return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
-        choice: made.verificationNumber,
-        profileId,
-      });
+      return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { label: "Bar till", profileId });
     });
-    if (!accepted.ok) throw new Error("expected accept to succeed");
     const [row] = await suite.db
       .select({
         receiptPrinterId: devices.receiptPrinterId,
@@ -641,6 +654,7 @@ describe("acceptDeviceJoinRequest", () => {
   it("rolls the consumption back when the device insert fails", async () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("till");
+    const window = openWindow();
     const made = await withTransaction(suite.db, async (tx) => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Blocked till" });
     });
@@ -657,7 +671,7 @@ describe("acceptDeviceJoinRequest", () => {
     await expect(
       withTransaction(suite.db, async (tx) => {
         return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
-          choice: made.verificationNumber,
+          label: "Blocked till",
           profileId,
         });
       }),
@@ -666,33 +680,9 @@ describe("acceptDeviceJoinRequest", () => {
     // comment) — a genuine retry must still find the request PENDING, not gone, once the blocker
     // device row (a fixture artefact, not a real collision) is cleared.
     await suite.db.execute(sql`delete from devices where id = ${made.joinId}`);
-    expect(await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token)).toBe("pending");
-  });
-
-  it("DENIES on a wrong choice, and the deny SURVIVES THE TRANSACTION", async () => {
-    const venue = await setupVenue(suite.db);
-    const profileId = await seedProfile("till");
-    // Two SEPARATE withTransaction blocks on purpose. A single block that catches the rejection inside
-    // itself never commits or rolls anything back, so it would pass against code that throws from
-    // inside the transaction and loses the DELETE — the defect this test exists to catch.
-    const made = await withTransaction(suite.db, async (tx) => {
-      return createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
-    });
-    const wrong = made.verificationNumber === "00" ? "01" : "00";
-    const refused = await withTransaction(suite.db, async (tx) => {
-      return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { choice: wrong, profileId });
-    });
-    expect(refused).toEqual({ ok: false, reason: "mismatch" });
-    // Gone AFTER the transaction committed — this is what makes one-in-three an acceptable guess rate.
-    await withTransaction(suite.db, async (tx) => {
-      await expect(
-        acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
-          choice: made.verificationNumber,
-          profileId,
-        }),
-      ).rejects.toMatchObject({ code: "join_request.not_found" });
-    });
-    expect(await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token)).toBe("not_approved");
+    expect(await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token, window)).toBe(
+      "pending",
+    );
   });
 
   it("refuses a print_agent request — a device accept cannot turn an agent's ask into a device", async () => {
@@ -704,10 +694,7 @@ describe("acceptDeviceJoinRequest", () => {
         label: "Kitchen box",
       });
       await expect(
-        acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
-          choice: made.verificationNumber,
-          profileId,
-        }),
+        acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { label: "Kitchen box", profileId }),
       ).rejects.toMatchObject({ code: "join_request.not_found" });
     });
   });
@@ -722,10 +709,10 @@ describe("acceptDeviceJoinRequest", () => {
     });
 
     // The write queue runs the two one after the other, so the second reads the request GONE.
-    const attempt = (db: Database): Promise<AcceptResult> =>
+    const attempt = (db: Database): Promise<Accepted> =>
       withTransaction(db, async (tx) => {
         return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
-          choice: made.verificationNumber,
+          label: "Racer",
           profileId,
           stationId: venue.defaultStationId,
         });
@@ -733,12 +720,12 @@ describe("acceptDeviceJoinRequest", () => {
 
     const outcomes = await Promise.allSettled([attempt(suite.db), attempt(suite.db)]);
     const winner = outcomes.find(
-      (o): o is PromiseFulfilledResult<AcceptResult> => o.status === "fulfilled",
+      (o): o is PromiseFulfilledResult<Accepted> => o.status === "fulfilled",
     );
     const loser = outcomes.find((o): o is PromiseRejectedResult => o.status === "rejected");
     expect(winner).toBeDefined();
     expect(loser).toBeDefined();
-    expect(winner!.value).toMatchObject({ ok: true });
+    expect(winner!.value).toMatchObject({ deviceId: made.joinId });
     // The loser must see the clean domain code, never a raw primary-key violation on `devices`.
     expect(loser!.reason).toMatchObject({ code: "join_request.not_found" });
 
@@ -758,22 +745,22 @@ describe("acceptDeviceJoinRequest", () => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Till racer" });
     });
 
-    const attempt = (db: Database): Promise<AcceptResult> =>
+    const attempt = (db: Database): Promise<Accepted> =>
       withTransaction(db, async (tx) => {
         return acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
-          choice: made.verificationNumber,
+          label: "Till racer",
           profileId,
         });
       });
 
     const outcomes = await Promise.allSettled([attempt(suite.db), attempt(suite.db)]);
     const winner = outcomes.find(
-      (o): o is PromiseFulfilledResult<AcceptResult> => o.status === "fulfilled",
+      (o): o is PromiseFulfilledResult<Accepted> => o.status === "fulfilled",
     );
     const loser = outcomes.find((o): o is PromiseRejectedResult => o.status === "rejected");
     expect(winner).toBeDefined();
     expect(loser).toBeDefined();
-    expect(winner!.value).toMatchObject({ ok: true });
+    expect(winner!.value).toMatchObject({ deviceId: made.joinId });
     expect(loser!.reason).toMatchObject({ code: "join_request.not_found" });
 
     const { rows: deviceRows } = await suite.db.execute<{ n: number }>(sql`
@@ -784,16 +771,78 @@ describe("acceptDeviceJoinRequest", () => {
   });
 });
 
+describe("checkDeviceJoinNumber", () => {
+  it("DENIES on a wrong choice, and the deny SURVIVES THE TRANSACTION", async () => {
+    const venue = await setupVenue(suite.db);
+    const profileId = await seedProfile("till");
+    const window = openWindow();
+    // Two SEPARATE withTransaction blocks on purpose. A single block that catches the rejection inside
+    // itself never commits or rolls anything back, so it would pass against code that throws from
+    // inside the transaction and loses the DELETE — the defect this test exists to catch.
+    const made = await withTransaction(suite.db, async (tx) => {
+      return createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
+    });
+    const wrong = made.verificationNumber === "00" ? "01" : "00";
+    const refused = await withTransaction(suite.db, async (tx) => {
+      return checkDeviceJoinNumber(tx, venue.cfg, made.joinId, wrong);
+    });
+    expect(refused).toEqual({ ok: false });
+    // Gone AFTER the transaction committed — this is what makes one-in-three an acceptable guess rate.
+    await withTransaction(suite.db, async (tx) => {
+      await expect(
+        checkDeviceJoinNumber(tx, venue.cfg, made.joinId, made.verificationNumber),
+      ).rejects.toMatchObject({ code: "join_request.not_found" });
+      await expect(
+        acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { label: "d", profileId }),
+      ).rejects.toMatchObject({ code: "join_request.not_found" });
+    });
+    expect(await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token, window)).toBe(
+      "not_approved",
+    );
+  });
+
+  it("a right choice answers ok and leaves the request pending", async () => {
+    const venue = await setupVenue(suite.db);
+    const window = openWindow();
+    const made = await asApp((tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" }),
+    );
+    expect(
+      await asApp((tx) =>
+        checkDeviceJoinNumber(tx, venue.cfg, made.joinId, made.verificationNumber),
+      ),
+    ).toEqual({ ok: true });
+    expect(await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token, window)).toBe(
+      "pending",
+    );
+  });
+
+  it("refuses a print agent's request, which survives a wrong choice", async () => {
+    const venue = await setupVenue(suite.db);
+    const made = await asApp((tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "a" }),
+    );
+    const wrong = made.verificationNumber === "00" ? "01" : "00";
+    expect(
+      await codeOf(() => asApp((tx) => checkDeviceJoinNumber(tx, venue.cfg, made.joinId, wrong))),
+    ).toBe("join_request.not_found");
+    expect(await readAgentJoinStatus(suite.db, venue.cfg, made.joinId, made.token)).toBe("pending");
+  });
+});
+
 describe("denyJoinRequest", () => {
   it("deletes the request, and the joiner reads not_approved", async () => {
     const venue = await setupVenue(suite.db);
+    const window = openWindow();
     const made = await withTransaction(suite.db, async (tx) => {
       return createJoinRequest(tx, venue.cfg, { kind: "device", label: "d" });
     });
     await withTransaction(suite.db, async (tx) => {
       await denyJoinRequest(tx, venue.cfg, made.joinId);
     });
-    expect(await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token)).toBe("not_approved");
+    expect(await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token, window)).toBe(
+      "not_approved",
+    );
   });
 
   it("throws join_request.not_found for an unknown id", async () => {

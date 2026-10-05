@@ -40,14 +40,12 @@ const suite = useVenueDb({
 it("join approval binds a kitchen screen to its watcher and rejects a second target", async () => {
   const venue = await setupVenue(suite.db);
   const app = new Hono();
+  // Opened before the request is made, so the gate keeps it.
+  const pairingMode = createPairingMode();
+  const { holdId } = pairingMode.open();
   mountJoinApi(
     app,
-    {
-      db: suite.db,
-      cfg: venue.cfg,
-      pairingMode: createPairingMode(),
-      deviceAddress: "https://waitron.local",
-    },
+    { db: suite.db, cfg: venue.cfg, pairingMode, deviceAddress: "https://waitron.local" },
     () => {},
   );
   const [profile] = await suite.db
@@ -67,15 +65,15 @@ it("join approval binds a kitchen screen to its watcher and rejects a second tar
   const made = await withTransaction(suite.db, (tx) =>
     createJoinRequest(tx, venue.cfg, { kind: "device", label: "Pass screen" }),
   );
-  const path = `/management-api/device-join-requests/${made.joinId}/accept`;
-  const send = (body: unknown) =>
-    app.request(path, {
+  const send = (verb: "check" | "accept", body: unknown) =>
+    app.request(`/management-api/device-join-requests/${made.joinId}/${verb}`, {
       method: "POST",
       headers: { cookie: venue.managerCookie, "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-  const both = await send({
-    choice: made.verificationNumber,
+  expect((await send("check", { choice: made.verificationNumber, holdId })).status).toBe(204);
+  const both = await send("accept", {
+    name: "Pass screen",
     profileId: profile!.id,
     stationId: venue.defaultStationId,
     watcherId: watcher.id,
@@ -84,8 +82,8 @@ it("join approval binds a kitchen screen to its watcher and rejects a second tar
   expect(await both.json()).toMatchObject({
     error: { code: "management.request_invalid", params: { field: "watcherId" } },
   });
-  const accepted = await send({
-    choice: made.verificationNumber,
+  const accepted = await send("accept", {
+    name: "Pass screen",
     profileId: profile!.id,
     watcherId: watcher.id,
   });
