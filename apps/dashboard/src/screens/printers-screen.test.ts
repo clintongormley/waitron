@@ -5550,14 +5550,6 @@ describe("printers-screen printer editor edges", () => {
     history.replaceState(null, "", "/");
   });
 
-  async function mountEditing(id = "p1", overrides: Partial<DashboardApi> = {}) {
-    const api = stubApi(overrides);
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-    await flush(el);
-    await openPrinter(el, id);
-    return { el, api };
-  }
-
   it("keeps a late change from a closed name editor out of the next printer's draft", async () => {
     history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
     const api = stubApi();
@@ -5651,18 +5643,28 @@ describe("printers-screen printer editor edges", () => {
     ],
     ["cloud_poll", { ...printers[1]!, pollId: null }, "printers.poll_required"],
   ] as const)(
-    "refuses to save a %s printer with no device identity",
+    "refuses to calibrate a %s printer with no device identity",
     async (_transport, row, message) => {
-      const { el, api } = await mountEditing(row.id, {
+      history.replaceState(null, "", `/manage/printers/view/printers/printer/${row.id}`);
+      const api = stubApi({
         listPrinters: vi.fn().mockResolvedValue([row as Printer]),
       });
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+      await flush(el);
+      q(el, "[data-test=printer-section-calibration]")!
+        .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+        .click();
+      await flush(el);
+      q(el, "[data-test=calibrate-printer-details]")!.click();
+      await flush(el);
 
-      q(el, `[data-test=save-printer-${row.id}]`)!.click();
+      q(el, "[data-test=calibration-next]")!.click();
       await flush(el);
 
       expect(api.updatePrinter).not.toHaveBeenCalled();
       expect(await bottomOf(el, "[data-test=edit-printer-modal] wt-form-actions")).toBe(t(message));
-      expect(isDisabled(el, `[data-test=save-printer-${row.id}]`)).toBe(false);
+      expect(q(el, "[data-test=calibration-step-2]")!.checkVisibility()).toBe(false);
+      expect(isDisabled(el, "[data-test=calibration-next]")).toBe(false);
     },
   );
 
