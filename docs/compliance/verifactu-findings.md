@@ -1131,10 +1131,35 @@ an operator configuration choice, not a code defect; flagged for the asesor, not
 
 ---
 
+## 16. AEAT test-service observations for conflict recovery (added 2026-10-05, W41s-1)
+
+The adviser questions need the protocol results beside the proposed remedies. The
+[saved evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json) and
+[dated receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1)
+record eight synthetic runs in AEAT's preproduction environment. The results below are observations
+of the TEST system, not legal answers. Q33–Q41 remain for the asesor.
+
+| Sent in the probe | AEAT's parsed reply | Question and limit |
+| --- | --- | --- |
+| A 1,000-record batch with `RechazoPrevio=S` without `Subsanacion=S` on its first record | First `Incorrecto`, code `1161`; all 999 linked successors `Correcto`. All 1,000 control records `Correcto`. | Q37: later submission is distinct from resolving the refusal. Two linked successors also received `Correcto` in the three-record same-batch and later-batch probes. |
+| A credit naming and chaining to the original refused with `1161` | Credit `Correcto`; control original and credit also `Correcto`. | Q37/Q40: protocol acceptance does not choose a legal remedy. |
+| The same invoice identity with a changed total (`1.21` → `2.42`) and different sent hash | Original `Correcto`; second record `Incorrecto`, code `3000`, “Registro de facturación duplicado.” | Q35/Q38: this did not test unchanged lines and amounts with only a different generation or chain, or establish one real sale. |
+| Two first records with distinct invoice identities and installation names under software ID `WT` | Both `Correcto`. | Q33/Q34/Q41: the first installation was created by the probe, not restored from a backup. No surviving old-chain continuation or fencing was tested. |
+| An ordinary original and cancellation; a separate cancellation with `SinRegistroPrevio=S` for an identity never submitted as an alta in that run | All three `Correcto`. | Q39/Q40(c): the absent identity was not a rejected original from another run. No phantom-sale investigation or cancellation of a colliding invoice was tested. |
+| A record-level issuer name `Nombre incorrecto para prueba`, with the configured name retained in the authenticated header | Mismatch and correct-name control both `Correcto`. | Q37: no wrong header name or taxpayer identity was tested. |
+
+The evidence retains logged request projections and parsed replies, not raw SOAP bytes. Stored
+duplicate fingerprints and targeted `SistemaInformatico` lookup results remain unverified. W41s-1
+also did not test number reuse on different dates (Q36) or recovery of missing invoices (Q41).
+You can use these observations to frame the adviser questions; they do not settle the remedies.
+
+---
+
 ## Sources
 
 | Source | Type |
 | --- | --- |
+| [W41s-1 saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json), 2026-10-05 | synthetic AEAT preproduction observations — request projections and parsed replies, not raw SOAP bytes; limits in §16 |
 | BOE-A-2023-24840 — RD 1007/2023 (RRSIF), arts. 8, 12, 14, 15, 16 | primary |
 | BOE-A-2024-22138 — Orden HAC/1177/2024, arts. 2, 7, 13, 16, 20, 21 | primary |
 | AEAT sede FAQs — sistemas-verifactu, trazabilidad, capacidad-remisión, huella-hash | primary |

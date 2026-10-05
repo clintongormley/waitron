@@ -1929,6 +1929,16 @@ being asked about the justification and evidence, not to validate an allocation 
 without claiming that they satisfy every legal obligation. The owner approved conditional
 automatic conflict recovery as described above; declared restores are administrator-led.
 
+**Observed in AEAT's preproduction environment, 2026-10-05 (W41s-1; added 2026-10-05).**
+Two first records with distinct invoice identities and installation names under software ID
+`WT` each received `EstadoRegistro: "Correcto"` (run 37286364837). AEAT's test service accepted
+both. The first installation was created by the probe, not restored from a backup. No collision
+switch, allocation-history check or fencing of an old machine was tested. This is a test-system
+observation, not a legal answer; (a)–(c) remain for the asesor.
+
+Source: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json)
+and [dated receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1).
+
 This records a question; no enquiry has been sent.
 
 ---
@@ -1960,6 +1970,18 @@ already covered by the findings, §2.
 **Proposed default:** send surviving original records unchanged, in generation order within
 each chain. D5 remains conditional on the adviser answer and live probes; this is not a claim
 that an untested link will be accepted.
+
+**Observed in AEAT's preproduction environment, 2026-10-05 (W41s-1; added 2026-10-05).**
+The fresh-installation probe received `EstadoRegistro: "Correcto"` for each of its two first
+records (run 37286364837). The later-batch probe received `CodigoErrorRegistro: 1161` for its
+first test record, then `EstadoRegistro: "Correcto"` for both linked successors in a separate
+submission (run 37283909983). Neither probe continued a surviving old chain after an installation
+switch, or linked to an original AEAT held with different contents. Old-chain continuation and
+fencing remain unverified. These are test-system observations, not a legal answer; D5 and this
+question remain for the asesor.
+
+Source: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json)
+and [dated receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1).
 
 This records a question; no enquiry has been sent.
 
@@ -2002,6 +2024,18 @@ still to be agreed.
 can still cancel or credit it at the till, but that record is kept back, never sent (Q40; design
 decision D4).
 
+**Observed in AEAT's preproduction environment, 2026-10-05 (W41s-1; added 2026-10-05).**
+The original received `EstadoRegistro: "Correcto"`; a second record with the same invoice
+identity, total changed from `1.21` to `2.42` and a different sent hash received
+`EstadoRegistro: "Incorrecto"`, `CodigoErrorRegistro: 3000`, and “Registro de facturación
+duplicado.” (run 37286361433). This observes rejection of changed contents under the same
+identity, not a remedy for two real sales. The stored original fingerprint and a targeted
+`SistemaInformatico` lookup were not captured. This is a test-system observation, not a legal
+answer; (a) and (b) remain for the asesor.
+
+Source: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json)
+and [dated receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1).
+
 This records a question; no enquiry has been sent.
 
 ---
@@ -2021,6 +2055,16 @@ expose the reuse. None is assumed to provide a complete history after an offline
 
 **Proposed default:** make no additional filing automatically; list the invoice for the adviser.
 The prevention design retires series whose continuation cannot be established after a restore.
+
+**Observed in AEAT's preproduction environment, 2026-10-05 (W41s-1; added 2026-10-05).**
+W41s-1 did not send the same invoice number on two different issue dates. The duplicate probe
+changed the total under the same invoice identity; its `CodigoErrorRegistro: 3000` does not
+establish the different-date outcome in this question. Number reuse across dates and its remedy
+remain unverified by these probes. This test-system evidence is not a legal answer; the question
+remains for the asesor.
+
+Source: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json)
+and [dated receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1).
 
 This records a question; no enquiry has been sent.
 
@@ -2066,6 +2110,27 @@ unresolved, and require an explicit corrective action. D2 proposes continuing la
 after a definitive rejection, conditional on the live test. An unknown outcome remains a
 different case. No automated choice of legal remedy is approved by this question.
 
+**Observed in AEAT's preproduction environment, 2026-10-05 (W41s-1; added 2026-10-05).**
+In the 1,000-record test batch, the first record received `EstadoRegistro: "Incorrecto"` and
+`CodigoErrorRegistro: 1161`; all 999 linked successors received `EstadoRegistro: "Correcto"`.
+All 1,000 control records received `Correcto` (run 37283910284). In the three-record same-batch
+probe, the test envelope was `ParcialmenteCorrecto` while both successors were `Correcto`
+(run 37283677375). In a separate later submission, both successors of a refused first record
+were also `Correcto` (run 37283909983). The rejection was triggered by `RechazoPrevio=S` without
+`Subsanacion=S`, not by a future date or a wrong registered name.
+
+A credit naming and chaining to an original refused with 1161 received `EstadoRegistro:
+"Correcto"`; the control original and credit were also `Correcto` (run 37286368370). A separate
+record carrying `Nombre incorrecto para prueba` also received `Correcto`, as did its correct-name
+control; the authenticated request header retained the configured name (run 37286371546).
+That observation does not establish rejection of a wrong header name or taxpayer identity.
+Raw SOAP bytes were not retained; the evidence contains request projections and parsed replies.
+These are test-system observations, not legal answers or resolution of the refused invoice;
+(a)–(c) remain for the asesor.
+
+Source: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json)
+and [dated receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1).
+
 This records a question; no enquiry has been sent.
 
 ---
@@ -2099,6 +2164,17 @@ remains a conflict requiring investigation.
 automatic replacement or statement that the AEAT record represents the local sale. Record the
 investigation and its evidence. If that evidence is inconclusive, keep the conflict unresolved.
 
+**Observed in AEAT's preproduction environment, 2026-10-05 (W41s-1; added 2026-10-05).**
+The changed-duplicate probe received `CodigoErrorRegistro: 3000` for the second record after
+changing its total from `1.21` to `2.42` and its sent hash (run 37286361433). Unlike this question,
+it did not keep the same lines and amount while changing only generation or chaining fields.
+It did not establish one real sale, retrieve the stored original fingerprint, or perform a
+targeted `SistemaInformatico` lookup. You cannot use this result to classify a duplicate as the
+same sale. This is a test-system observation, not a legal answer; (a)–(c) remain for the asesor.
+
+Source: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json)
+and [dated receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1).
+
 This records a question; no enquiry has been sent.
 
 ---
@@ -2131,6 +2207,16 @@ SIF than the one that issued the invoice is settled (findings §13), so it is no
 
 **Default until answered:** nothing is filed; the record is listed for the adviser. Cancelling it
 later is a step a person confirms, never automatic.
+
+**Observed in AEAT's preproduction environment, 2026-10-05 (W41s-1; added 2026-10-05).**
+An ordinary original and its cancellation each received `EstadoRegistro: "Correcto"`
+(run 37286358223). This was synthetic protocol data, not an investigation establishing that an
+AEAT-held sale never happened. The separate absent-original cancellation in that run belongs to
+Q40(c), not to this question's AEAT-held original. This is a test-system observation, not a legal
+answer; the evidence and remedy in (a)–(c) remain for the asesor.
+
+Source: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json)
+and [dated receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1).
 
 This records a question; no enquiry has been sent.
 
@@ -2175,6 +2261,19 @@ to (a) and (b). For an absent rejected original, remove the blanket instruction 
 a refusal. Select the remedy on the facts, generate the appropriate new record and preserve any
 earlier record unchanged. The precise operator workflow remains under design review.
 
+**Observed in AEAT's preproduction environment, 2026-10-05 (W41s-1; added 2026-10-05).**
+A cancellation carrying `SinRegistroPrevio: "S"` for an identity never submitted as an alta
+in that run received `EstadoRegistro: "Correcto"` (run 37286358223). The ordinary original and
+its ordinary cancellation also received `Correcto`. The absent identity was not the refused
+predecessor from the other runs. A credit naming and chaining to an original refused with 1161
+was separately accepted (run 37286368370; Q37). These observations distinguish technical
+acceptance from the choice of remedy. No cancellation of Q35's colliding invoice was tested.
+Raw SOAP bytes were not captured. These are test-system observations, not legal answers;
+(a)–(c), including when to cancel an absent original, remain for the asesor.
+
+Source: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json)
+and [dated receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1).
+
 This records a question; no enquiry has been sent.
 
 ---
@@ -2211,6 +2310,16 @@ investigation. Do not invent fiscal contents, hashes or links, treat missing sal
 or present new numbering as resolution of the historical loss. The adviser must specify the
 remedy for each evidence case.
 
+**Observed in AEAT's preproduction environment, 2026-10-05 (W41s-1; added 2026-10-05).**
+The fresh-installation probe received `EstadoRegistro: "Correcto"` for two first records with
+distinct identities (run 37286364837). It did not lose or recover issued invoices, reconstruct
+missing contents or retrieve a targeted `SistemaInformatico` lookup. New-installation acceptance
+does not establish how to recover the missing history in this question. This is a test-system
+observation, not a legal answer; (a)–(d) remain for the asesor.
+
+Source: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json)
+and [dated receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1).
+
 This records a question; no enquiry has been sent.
 
 ### Sources checked for the 2026-10-04 revision
@@ -2222,6 +2331,7 @@ claims were checked in primary sources; live-service acceptance remains a separa
 | --- | --- | --- |
 | [AEAT service specification v1.0.3, §9.2.3, p. 71](https://sede.agenciatributaria.gob.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/Veri-Factu_Descripcion_SWeb.pdf#page=71) | “por haber sido rechazado el registro de alta” | Q40(c): cancellation without a prior registered original is documented, provided cancellation is appropriate; original rejection alone does not decide the remedy. |
 | [AEAT developer FAQ v1.3, §17, pp. 35–37](https://sede.agenciatributaria.gob.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/FAQs-Desarrolladores.pdf#page=35) | “La operativa descrita debería ofrecerla el SIF” | Q37: the product design needs a corrective workflow. Which remedy fits each scenario remains the question. |
+| [W41s-1 saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json), checked 2026-10-05; [dated receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1) | `EstadoRegistro: "Correcto"`, `EstadoRegistro: "Incorrecto"`, codes `1161` and `3000` | Synthetic AEAT preproduction observations beside Q33–Q41. Parsed projections, not raw SOAP bytes; no stored duplicate fingerprint, targeted `SistemaInformatico` lookup, old-chain continuation or fencing. Legal answers remain open. |
 
 ---
 
