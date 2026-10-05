@@ -3255,6 +3255,50 @@ whether its clash comes from its product by matching the two clashes, which can 
 rare setup where they match exactly — telling them apart needs the prices read to say which level
 a clash came from.
 
+**A product has one colour everywhere, taken from its category unless it has its own — DONE (W92,
+2026-10-05).** A category can have a colour, set from its Edit dialog in the Products tree, which
+replaces Rename and holds the name and the shared colour chooser; a swatch after the category's
+name and count opens the same dialog. A product can have a colour of its own, set from the product
+editor's chooser after Name, whose "Use category colour" choice shows the colour it would take
+instead, or from the product's swatch in a menu's Structure tree, whose dialog says the change
+applies on every menu using the product. A product's colour is its own, else its main category's,
+else the nearest coloured category above that, else none. A variant always takes its parent's: the
+editor clears a variant's colour, and the server refuses a variant body carrying one. A section's
+swatch in the Structure tree opens the section's existing form, and a section's colour still
+paints only its own tile. Each published offer records its product's colour, so a colour edit is a
+change to publish: the menu reads as changed, its Preview tab names the change "colour", and the
+tills show it once the menu is published. On the till, a coloured product or section tile fills
+with its colour and its labels turn black or white, whichever reads better; a sold-out painted tile
+keeps the usual fade. The swatches sit after the name, not before it, so names at one depth stay
+lined up (W84). The Home page tab's tile preview stays uncoloured; W93 replaces that tab. How it
+works: [products.md](developers/products.md), _Colour_, and
+[product-categories.md](developers/product-categories.md).
+**Upgrading:** two migrations, core `0100_product_color.sql` and catalogue
+`0025_category_color.sql`, each add one nullable column (`products.color`,
+`category_details.color`) with no table rebuild, so a venue migrates in place with no reset.
+Republish every menu after upgrading: a version published before W92 carries no colours, so its
+tiles stay plain, and a menu with products on it reads as changed until it is published again
+(the document format number is unchanged, so such a version is still sold from). Export a configuration bundle again
+after upgrading: one exported before W92 records older schema versions for core and catalogue,
+which the import refuses (`validateConfigurationBundle`,
+`apps/server/src/configuration-transfer.ts`; read, not run). The test checks this change rewrote
+are listed in the PR's "Changed test checks" and in the plan
+(`docs/superpowers/plans/2026-10-05-w92-product-colours.md`).
+Left open:
+- In the Structure tree, closing the section form opened from a section's swatch puts focus on the
+  row's ⋮ menu, while the product colour dialog puts it back on the swatch. Neither is pinned by a
+  test, and the two should agree.
+- At 390 px the Structure tree clips a long name under the pinned Actions column, so a long name's
+  swatch needs a sideways scroll to reach. The names clip with the swatches removed too (measured
+  on the W92 branch, not on `main`).
+- `scripts/errors-reachable.test.ts` still passed with the errors import deleted from
+  `packages/catalogue/src/product-colors.ts`, so for that file the guard is weaker than its name.
+- A case in `apps/dashboard/src/screens/catalogue-screen.test.ts` (near line 2135, added by #1087
+  before W92) prints "[Unhandled rejection] Error: marker" in passing runs; the noise should go.
+- Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
+  during the branch's work, and the cause was not found; the PR's dashboard CI shard is the evidence
+  that they pass.
+
 **A Products drag does not notice when a refresh removes what it is dragging or where it is going —
 DONE (W88a, #1228, 2026-10-05).** Found by W88's pre-merge review. The Products tree
 (`apps/dashboard/src/widgets/product-list.ts`) now checks a drag against the rows the list holds
@@ -3454,7 +3498,8 @@ by the owner the same day as two items:
   selection turned on. Not covered: while a category is being renamed, its count and
   asterisk follow the name box and are not capped _(2026-10-05: since W72g only at desktop width;
   at phone width they sit on the line above the box and wrap in what the grip and folder icon leave
-  of the room before the pinned column)_. Open point for the owner: at 390 px in the demo
+  of the room before the pinned column; moot since W92, 2026-10-05: a category is renamed in its
+  Edit dialog, and the name box is only for a new category)_. Open point for the owner: at 390 px in the demo
   venue a name gets about 46 px, so most words break part-way ("Croqu" / "etas"); giving names
   more room at phone width (for example narrower leading slots) is asked in the campaign's
   questions file. Wrapping was chosen over an ellipsis because a phone cannot show a cut name's
@@ -3574,7 +3619,10 @@ after the change, renaming a top-level category and one a level down that were a
 with a search typed and the duplicate-name refusal shown, the box measured 146 to 163 px on its own
 line under the grip (local screenshots in `~/waitron-campaign/w72g-shots/`). Pinned by the "on
 their own line" cases, the 1280-to-390 px case and the 1280 px "beside the grip and folder icon"
-cases in `apps/dashboard/src/widgets/product-list.test.ts`; desktop width is unchanged. W72g left
+cases in `apps/dashboard/src/widgets/product-list.test.ts`; desktop width is unchanged
+_(2026-10-05: since W92 a category is renamed in its Edit dialog, so only a new category's box opens
+in the tree; the rename cases are gone and the 1280-to-390 px and 1280 px cases open a new
+category's box)_. W72g left
 Chromium logging "ResizeObserver loop completed with undelivered notifications" when the table
 crossed 440 px while a name box was open. Fixed in W72h (#1247, 2026-10-05, the owner's choice):
 `wt-data-table` now sets `narrow` a frame after its resize observer reports the new width

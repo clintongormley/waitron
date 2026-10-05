@@ -185,11 +185,16 @@ and the muted colour on the disabled fill. Two more cases there hold that the
 `prefers-color-scheme` blocks give the five tokens the same values as the explicit `data-theme`
 ones.
 
-A user-chosen data colour is the one deliberate exception to "no hex, no hardcoded chrome" (no
-screen passes `wt-lozenge` one today: categories, its first user, lost their colour on 2026-09-30):
-`wt-lozenge` fills its background with that colour directly and computes
-black or white text for contrast, because the label still carries the meaning and the colour is
-never the only signal. This is a different idiom from the one the floor plan and service statuses
+A user-chosen data colour is the one deliberate exception to "no hex, no hardcoded chrome": the
+colour a person gave a category, a product or a menu section is painted as it is, never mapped to a
+token. Its users are the colour chooser's palette (`apps/dashboard/src/widgets/color-field.ts`), the
+category swatches in the Products tree, the product and section swatches in a menu's Structure tree,
+and the till's product and section tiles (`apps/till/src/widgets/menu-browser.ts`). A painted till
+tile takes black or white for its labels and its icon, whichever `readableTextColor`
+(`packages/ui/src/category-color.ts`) picks for that colour, because the label still carries the
+meaning and the colour is never the only signal. `wt-lozenge` takes a colour the same way, filling
+its background and computing black or white text, though no screen passes it one. This is a
+different idiom from the one the floor plan and service statuses
 already use for a data colour — a neutral chip with the colour shown only as a border and a dot —
 which was tried for categories and declined: a pale colour nearly disappears as a border in the
 theme where it's already pale (light colours in light mode, dark colours in dark mode). Reach for
@@ -638,7 +643,11 @@ categories screen's muted ancestor row points `--wt-color-text` at `--wt-color-t
 inheritance. For a property whose token is a shared scale value it would be wrong to redefine
 (its padding or weight), or one it reads no token for (an underline), put
 `exportparts="button: <name>"` on the `wt-button` and style `wt-data-table::part(<name>)`, as
-`apps/dashboard/src/screens/modifiers-screen.ts` does for its Used by count. Cost: the categories
+`apps/dashboard/src/screens/modifiers-screen.ts` does for its Used by count. The tree swatches
+follow this: the Products tree and the Structure tree mark them `part="swatch-button"` (or
+`part="swatch-box"` where the swatch opens nothing) around `part="color-swatch"`, and both take
+the rules from one shared block, `swatchPartStyles` (`apps/dashboard/src/widgets/swatch-styles.ts`).
+Cost: the categories
 screen's colour swatches, thumbnail boxes and ancestor-row muting
 never rendered at all in the browser, through a full review and a green suite — DOM-presence tests
 cannot see it, so assert a computed width or colour when you add a styled cell.
@@ -883,16 +892,15 @@ slot — on a product row, the product's photo, or its empty placeholder frame w
 `--wt-space-3` and the name. So on those rows names step in by the table's indent per level whether
 the row is a category or a product, and the Name heading sits over the All products name. A
 variant's row draws no grip and no photo slot; its name is indented to start under its product's
-name. Each name, with what follows it on its row (a category's count and the asterisk that marks a
-category with no active station, a product's variant count), takes only the room between its own
-start and the row's pinned Actions cell, measured as if the table were unscrolled, and wraps inside
-it, a single long word included; a name that fits stays on one line (`#fitNames`,
-`apps/dashboard/src/widgets/product-list.ts`). The one exception, while the table does not carry
-`narrow`: while a category is being renamed, its count and asterisk follow the name box and are not
-capped. At phone width (while the table carries `narrow`) the name box of a category being renamed
-or added goes on a line of its own under the grip instead, taking the room from the grip's start to
-the pinned cell; the grip, the folder icon and a renamed category's count and asterisk stay on the
-line above, and the count and asterisk wrap in what the grip and icon leave of that room.
+name. Each name, with what follows it on its row (a category's count, the asterisk that marks a
+category with no active station and the swatch of its colour; a product's variant count), takes
+only the room between its own start and the row's pinned Actions cell, measured as if the table
+were unscrolled, and wraps inside it, a single long word included; a name that fits stays on one
+line (`#fitNames`, `apps/dashboard/src/widgets/product-list.ts`). The box that names a new category
+takes the same room. At phone width (while the table carries `narrow`) that box goes on a line of
+its own under the grip space instead, taking the room from the grip space's start to the pinned
+cell, with the grip space and folder icon on the line above. A category's swatch sits after its
+name and count rather than before the name, so names at one depth still start at one place.
 
 Use `wt-modal` for an add or edit form. Its fields stop at `--wt-form-max-width` (see "Structure"
 above). Give it a `size` chosen by its content:

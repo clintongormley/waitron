@@ -265,6 +265,49 @@ what a switched-off menu owns; the default-change check above still counts all o
 disabled variant, which it skips too. Image names (the media module's contribution) are checked on
 a change of default but are not in the list.
 
+## Colour
+
+A colour helps staff find a dish on a busy till, so a product has one colour, the same on every
+menu and in every section that holds it. Nothing stores a colour on a menu's placement of a product
+or on its Price overrides tab.
+
+That colour is worked out in order. It is the product's own colour (`products.color`) if it has
+one. Otherwise it is its main category's colour, or, when that category has none, the colour of the
+nearest category above it that does (`category_details.color`). Otherwise it has none, and each
+screen draws its usual neutral look. The rule lives in one place, `effectiveColor` and
+`categoryColor` in `packages/catalogue/src/color-inheritance.ts`, which the server and the
+dashboard both call. So colouring a category colours every product under it, at any depth, that
+has no colour of its own and no coloured category nearer to it.
+
+You set a product's own colour in two places. The product editor has a colour chooser after Name;
+its first choice, "Use category colour", shows the colour the product would take from its category
+(following a category you change in the editor before saving), or says "Its category has no
+colour." Choosing it saves no colour of the product's own. In a menu's Structure tree, a product's
+swatch opens a "Colour of …" dialog that says the change applies on every menu that uses the
+product; it sends `PATCH /management-api/products/:id` with `{ "color": … }`. A stored colour is
+always lowercase `#rrggbb`. Anything else, an empty string included, is refused as
+`product.invalid` with `field: "color"`; at the PATCH route a value that is neither a string nor
+null is refused first, as `management.request_invalid`. A category's colour is set from its Edit
+dialog ([product-categories.md](product-categories.md)).
+
+**A colour reaches a till only when a menu is published.** Publishing records each offer's colour
+in the menu's version, as it does the photo and description (`freezeOffer`,
+`packages/catalogue/src/menu-document.ts`). Anything that changes the colour a product works out
+to, whether its own colour, a category's colour or a category moved under a coloured one, changes
+the menu's working copy: the menu reads as changed and its Preview tab names the change "colour".
+The version on sale keeps the old colour until you publish. A version published before colours
+existed carries none: it is still sold from, its products draw the plain tile, and its menu reads as
+changed until it is published again.
+
+A menu section has a colour of its own, set in the section form. It paints the section's own tile
+and nothing else: the products inside the section keep their own colours.
+
+On the till (`apps/till/src/widgets/menu-browser.ts`), a product tile and a section tile with a
+colour fill with it, and their labels, and a section tile's folder icon, switch to black or white,
+whichever reads better on that colour (`readableTextColor`, `packages/ui/src/category-color.ts`). A
+tile with no colour, or with a value that is not a lowercase `#rrggbb` colour, keeps the plain look. A
+sold-out painted tile keeps the same fade a sold-out plain tile has.
+
 ## Variants
 
 A variant is a `products` row whose `parent_id` names its parent product — "Wine 125" and
@@ -300,6 +343,16 @@ No migration clears the units variants stored before this rule: that carries the
 decision above over to units, which the owner has yet to confirm. Unit management ignores such a
 row: `productsUsingUnit` lists products with no parent only, reassigning a unit's products skips a
 variant, and `deleteUnit` deletes those rows before the unit (`packages/catalogue/src/units.ts`).
+
+Its colour is always its parent's too (W92), whatever its own `color` column holds:
+`effectiveProductColumns.color` reads the parent's for a variant, and `readProductEditor` returns
+`color: null` for one. A variant's page shows no colour chooser; the editor save refuses a variant
+body carrying a colour (`product.invalid`, field `color`) and writes the variant's column back to
+null. `setProductColor` (`packages/catalogue/src/product-colors.ts`) answers a variant's id with
+`product.not_found`, and `PATCH /management-api/products/:id` answers a variant's id exactly as it
+answers an unknown one, because its ownership check runs first (`authorization.not_permitted`,
+403). A published offer carries one colour, its product's; its variants carry none.
+
 Its extras and options
 lists are always its parent's. Its Name, customer-facing name and kitchen name are never inherited: a blank customer or
 kitchen name falls back to the variant's own staff name (_The three names_, above).
