@@ -503,6 +503,13 @@ export class PrintersScreen extends LitElement {
     error: string | null;
   } | null = null;
   @state() private discardDetailNameArmed = false;
+  @state() private detailConnection: {
+    id: string;
+    host: string;
+    port: string;
+    saving: boolean;
+    error: string | null;
+  } | null = null;
   @state() private connectionOpen = false;
   @state() private calibrationOpen = false;
   @state() private testingDrawer = false;
@@ -2034,7 +2041,47 @@ export class PrintersScreen extends LitElement {
     this.calibrationOpen = false;
     this.detailActiveError = null;
     this.detailName = null;
+    this.detailConnection = null;
     this.discardDetailNameArmed = false;
+  }
+
+  async #saveDetailConnection(printer: Printer): Promise<void> {
+    const draft = this.detailConnection;
+    if (draft?.id !== printer.id || draft.saving) return;
+    const host = draft.host.trim();
+    const port = draft.port.trim();
+    if (
+      !host ||
+      (port && (!Number.isInteger(Number(port)) || Number(port) < 1 || Number(port) > 65535))
+    ) {
+      this.detailConnection = {
+        ...draft,
+        error: t(!host ? "printers.host_required" : "printers.port_invalid"),
+      };
+      return;
+    }
+    this.detailConnection = { ...draft, saving: true, error: null };
+    try {
+      await this.api.updatePrinter(printer.id, { host, port: port ? Number(port) : null });
+    } catch (error) {
+      this.detailConnection = { ...draft, saving: false, error: codeMessage(codeOf(error)) };
+      return;
+    }
+    this.detailConnection = null;
+    await this.#load();
+  }
+
+  #detailConnectionErrors(): { host: string; port: string } {
+    const draft = this.detailConnection;
+    if (!draft) return { host: "", port: "" };
+    const port = draft.port.trim();
+    return {
+      host: draft.host.trim() ? "" : t("printers.host_required"),
+      port:
+        port && (!Number.isInteger(Number(port)) || Number(port) < 1 || Number(port) > 65535)
+          ? t("printers.port_invalid")
+          : "",
+    };
   }
 
   async #saveDetailName(printer: Printer): Promise<void> {
@@ -2229,7 +2276,82 @@ export class PrintersScreen extends LitElement {
             ${p.host ? field(t("printers.address"), `${p.host}${p.port === null ? "" : `:${p.port}`}`) : nothing}
             ${p.localKey ? field(t("printers.local_key"), p.localKey) : nothing}
             ${p.pollId ? field(t("printers.poll_id"), p.pollId) : nothing}
-          </dl></wt-disclosure
+          </dl>
+          ${
+            p.transport === "network_tcp"
+              ? this.detailConnection?.id === p.id
+                ? html`<div class="form-fields">
+                    <wt-input
+                      name="printer-detail-host"
+                      label=${t("printers.host")}
+                      .value=${this.detailConnection.host}
+                      .invalid=${!!this.#detailConnectionErrors().host}
+                      .error=${this.#detailConnectionErrors().host}
+                      required
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                        if (this.detailConnection?.id === p.id)
+                          this.detailConnection = {
+                            ...this.detailConnection,
+                            host: event.detail.value,
+                            error: null,
+                          };
+                      }}
+                    ></wt-input>
+                    <wt-input
+                      name="printer-detail-port"
+                      label=${t("printers.port")}
+                      type="number"
+                      .value=${this.detailConnection.port}
+                      .invalid=${!!this.#detailConnectionErrors().port}
+                      .error=${this.#detailConnectionErrors().port}
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                        if (this.detailConnection?.id === p.id)
+                          this.detailConnection = {
+                            ...this.detailConnection,
+                            port: event.detail.value,
+                            error: null,
+                          };
+                      }}
+                    ></wt-input>
+                    ${this.detailConnection.error ? html`<p role="alert">${this.detailConnection.error}</p>` : nothing}
+                    ${
+                      this.#detailConnectionErrors().host || this.#detailConnectionErrors().port
+                        ? html`<p role="alert">${t("form.fix_fields")}</p>`
+                        : nothing
+                    }
+                    <wt-form-actions>
+                      <wt-button
+                        data-test="cancel-printer-connection"
+                        ?disabled=${this.detailConnection.saving}
+                        @click=${() => {
+                          this.detailConnection = null;
+                        }}
+                        >${t("action.cancel")}</wt-button
+                      >
+                      <wt-button
+                        variant="primary"
+                        data-test="save-printer-connection"
+                        ?disabled=${this.detailConnection.saving || !!this.#detailConnectionErrors().host || !!this.#detailConnectionErrors().port}
+                        @click=${() => void this.#saveDetailConnection(p)}
+                        >${t("action.save")}</wt-button
+                      >
+                    </wt-form-actions>
+                  </div>`
+                : html`<wt-button
+                    data-test="edit-printer-connection"
+                    @click=${() => {
+                      this.detailConnection = {
+                        id: p.id,
+                        host: p.host ?? "",
+                        port: p.port === null ? "" : String(p.port),
+                        saving: false,
+                        error: null,
+                      };
+                    }}
+                    >${t("action.edit")}</wt-button
+                  >`
+              : nothing
+          }</wt-disclosure
         >
         <wt-disclosure
           data-test="printer-section-calibration"

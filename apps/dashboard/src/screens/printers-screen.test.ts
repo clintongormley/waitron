@@ -3662,6 +3662,80 @@ it("asks before discarding an edited printer name", async () => {
   expect(q(el, '[name="printer-detail-name"]')).toBeNull();
 });
 
+it("saves network connection edits from printer details", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  let stored = { ...printers[0]! };
+  const api = stubApi({
+    listPrinters: vi.fn().mockImplementation(async () => [stored]),
+    updatePrinter: vi.fn().mockImplementation(async (_id, patch) => {
+      stored = { ...stored, ...patch };
+    }),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=printer-section-connection]")!
+    .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+    .click();
+  await flush(el);
+  q(el, "[data-test=edit-printer-connection]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-host"]', "10.0.0.88");
+  typeField(el, '[name="printer-detail-port"]', "9101");
+  q(el, "[data-test=save-printer-connection]")!.click();
+  await vi.waitFor(() =>
+    expect(api.updatePrinter).toHaveBeenCalledWith("p1", { host: "10.0.0.88", port: 9101 }),
+  );
+  await flush(el);
+  expect(text(el, "[data-test=printer-section-connection]")).toContain("10.0.0.88:9101");
+});
+
+it("marks an invalid network port beside the field and keeps Save disabled", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const api = stubApi();
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=printer-section-connection]")!
+    .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+    .click();
+  await flush(el);
+  q(el, "[data-test=edit-printer-connection]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-port"]', "65536");
+  await flush(el);
+  expect((q(el, '[name="printer-detail-port"]') as import("@waitron/ui").WtInput).error).toBe(
+    t("printers.port_invalid"),
+  );
+  expect(q(el, "[data-test=save-printer-connection]")!.hasAttribute("disabled")).toBe(true);
+  expect(api.updatePrinter).not.toHaveBeenCalled();
+});
+
+it("keeps a refused network connection edit available to retry", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const api = stubApi({
+    updatePrinter: vi.fn().mockRejectedValueOnce({ code: "connection.failed" }),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=printer-section-connection]")!
+    .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+    .click();
+  await flush(el);
+  q(el, "[data-test=edit-printer-connection]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-host"]', "10.0.0.88");
+  q(el, "[data-test=save-printer-connection]")!.click();
+  await vi.waitFor(() =>
+    expect(text(el, '[data-test="printer-section-connection"]')).toContain(
+      codeMessage("connection.failed"),
+    ),
+  );
+  expect((q(el, '[name="printer-detail-host"]') as import("@waitron/ui").WtInput).value).toBe(
+    "10.0.0.88",
+  );
+  q(el, "[data-test=save-printer-connection]")!.click();
+  await vi.waitFor(() => expect(api.updatePrinter).toHaveBeenCalledTimes(2));
+});
+
 it("shows the saved drawer independently of the profiles offering it, and the delivering agent without discovery", async () => {
   const api = stubApi({
     listPrinters: vi.fn().mockResolvedValue([
