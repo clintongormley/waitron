@@ -167,12 +167,30 @@ export function toDeviceBinding(
   };
 }
 
+/** {@link readDeviceProof}'s binding alone. */
+export async function tryReadDevice(
+  deps: { db: Database; devMode?: boolean },
+  c: Context,
+): Promise<DeviceBinding | null> {
+  return (await readDeviceProof(deps, c))?.device ?? null;
+}
+
 /**
- * Reads and authenticates the request's device, returning the binding or `null` at EVERY miss — a
- * missing or malformed cookie, an unknown or revoked device, or a token that does not verify — so
- * `requireDevice`'s `device.unauthorized` confirms neither a device's existence nor its revocation
- * state. The id selects the row because scrypt is per-row-salted; the token validates it. Only a
- * cookie read that verifies writes (the `last_seen_at` sighting), and only when a sighting is due.
+ * What authenticating a request's device proved: its binding, and the stored token hash the cookie
+ * verified against — `null` for the dev header, which carries no token.
+ */
+export interface DeviceProof {
+  device: DeviceBinding;
+  tokenHash: string | null;
+}
+
+/**
+ * Reads and authenticates the request's device, returning its {@link DeviceProof} or `null` at
+ * EVERY miss — a missing or malformed cookie, an unknown or revoked device, or a token that does
+ * not verify — so `requireDevice`'s `device.unauthorized` confirms neither a device's existence
+ * nor its revocation state. The id selects the row because scrypt is per-row-salted; the token
+ * validates it. Only a cookie read that verifies writes (the `last_seen_at` sighting), and only
+ * when a sighting is due.
  *
  * The authenticating reads and the token check run outside `withTransaction`, which is the venue's
  * write lock, so scrypt never holds up a sale; a read issued while another caller's write is open
@@ -180,10 +198,10 @@ export function toDeviceBinding(
  * row inside its transaction first, so a revocation or a new token committed while this call
  * waited for the lock refuses the request, and a new binding is what it returns.
  */
-export async function tryReadDevice(
+async function readDeviceProof(
   deps: { db: Database; devMode?: boolean },
   c: Context,
-): Promise<DeviceBinding | null> {
+): Promise<DeviceProof | null> {
   // The dev header WINS over the cookie and does not fall back to it: an override naming a bad
   // device is a clean miss, not a silent switch to the cookie's identity.
   if (deps.devMode === true) {
@@ -195,7 +213,7 @@ export async function tryReadDevice(
         .from(devices)
         .innerJoin(deviceProfiles, deviceProfileJoin)
         .where(and(eq(devices.id, override), eq(devices.active, true)));
-      return row === undefined ? null : toDeviceBinding(override, row);
+      return row === undefined ? null : { device: toDeviceBinding(override, row), tokenHash: null };
     }
   }
 
@@ -250,7 +268,7 @@ export async function tryReadDevice(
     }
     row = locked;
   }
-  return toDeviceBinding(deviceId, row);
+  return { device: toDeviceBinding(deviceId, row), tokenHash: row.tokenHash };
 }
 
 // At most one sighting write a minute: it is checked on every authenticated request, and the
@@ -293,15 +311,40 @@ export async function recordSighting(
     );
 }
 
-/** Throwing wrapper over {@link tryReadDevice}: every miss becomes the SAME
+/** Throwing wrapper over {@link requireDeviceProof}: every miss becomes the SAME
  * `device.unauthorized`. */
 export async function requireDevice(
   deps: { db: Database; devMode?: boolean },
   c: Context,
 ): Promise<DeviceBinding> {
-  const device = await tryReadDevice(deps, c);
-  if (device === null) throw new AppError("device.unauthorized", {});
-  return device;
+  return (await requireDeviceProof(deps, c)).device;
+}
+
+/** {@link requireDevice}, keeping the proof for {@link assertDeviceStillProven}. */
+export async function requireDeviceProof(
+  deps: { db: Database; devMode?: boolean },
+  c: Context,
+): Promise<DeviceProof> {
+  const proof = await readDeviceProof(deps, c);
+  if (proof === null) throw new AppError("device.unauthorized", {});
+  return proof;
+}
+
+/**
+ * Refuses `device.unauthorized`, as {@link requireDevice} refuses a miss, unless the device is
+ * still active and still holds the token hash `proof` verified: a device disabled and enabled again
+ * since holds a new one. A dev-header proof has no hash, so only `active` is checked again. Call it
+ * inside the transaction that writes on the device's behalf, so the check and those writes share
+ * the venue's write lock.
+ */
+export async function assertDeviceStillProven(tx: Transaction, proof: DeviceProof): Promise<void> {
+  const [row] = await tx
+    .select({ tokenHash: devices.tokenHash })
+    .from(devices)
+    .where(and(eq(devices.id, proof.device.deviceId), eq(devices.active, true)));
+  if (row === undefined || (proof.tokenHash !== null && row.tokenHash !== proof.tokenHash)) {
+    throw new AppError("device.unauthorized", {});
+  }
 }
 
 /**

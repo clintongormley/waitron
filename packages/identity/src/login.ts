@@ -52,8 +52,7 @@ export async function loginWithPin(
   };
 }
 
-/** End every shift session still open on a device, so none opened before it was disabled works
- * again once it is enabled. */
+/** End every shift session still open on a device. */
 export async function endDeviceSessions(tx: Transaction, deviceId: string): Promise<void> {
   await tx
     .update(sessions)

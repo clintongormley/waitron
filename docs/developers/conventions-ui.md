@@ -163,8 +163,10 @@ till gets a profile of its own.
   `open-cash-drawer` ("Open cash drawer" in the profile editor). A handheld whose profile has it
   opens the drawer like a till; a till whose profile lacks it opens none.
 - **The Open drawer button** (`POST /api/drawer/open`, `apps/server/src/till-api.ts`) needs a
-  signed-in session, and a session always belongs to a device: a deactivated device answers
-  `device.unauthorized` (`requireSession`, `apps/server/src/till-session.ts`). A profile without
+  signed-in session, and a session always belongs to a device. Disabling a device ends its
+  sessions, so they answer `session.required`; a session left open on a device turned off outside
+  the Disable route answers `device.unauthorized` (`requireSession`,
+  `apps/server/src/till-session.ts`). A profile without
   `open-cash-drawer` is refused `device.forbidden_action` (`assertDeviceCapability`,
   `apps/server/src/device-session.ts`); under the `gated` drawer policy the operator needs
   `cash.drawer` or the PIN of someone holding it; then the device's current receipt printer must
@@ -429,7 +431,16 @@ Outside dev mode it still needs an open Add a device dialog and the number check
 default till profile and the name the browser sent rather than its own (`apps/server/src/device-api.ts`).
 The knock gives the disabled
 row the new request's token, so the old cookie stops working and the same browser can knock as
-itself again after a deny or a lapse; enabling ends any shift session left open on the device. A
+itself again after a deny or a lapse. Disabling ends every shift session open on the device in the
+same transaction. The till's sign-in checks the PIN before the transaction that opens the session,
+so inside that transaction it checks the device again: still active, and still holding the token
+hash the cookie was verified against, or it is refused `device.unauthorized` and no session opens
+(`assertDeviceStillProven`, `apps/server/src/device-session.ts`). A Disable, or a Disable and then
+an Enable, landing while the PIN is checked therefore leaves no session open
+(`apps/server/src/join-e2e.test.ts`, "a sign-in that Disable overtook is refused, and opens no
+session" and "a sign-in that Disable and then Enable both overtook is refused, and opens no
+session"). Enabling still ends any session open on the device, a second
+line for a device turned off outside the Disable route. A
 knock whose proof another knock or Pair overtook is refused `device.join_stale` with no new cookie,
 so the browser keeps the one it has. Cancel and the number check name the ask by its `createdAt` as
 well as its id, and a replacing knock always gets a later `createdAt`, so a dialog still showing the

@@ -6,7 +6,7 @@ import { desc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { deviceProfiles, devices, ticketItems, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { authorizeManager, type Permission } from "@waitron/identity";
+import { authorizeManager, endDeviceSessions, type Permission } from "@waitron/identity";
 import {
   chooseDevicePrinter,
   kindOfFormFactor,
@@ -467,14 +467,15 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // A malformed id names no device, exactly as an absent one does.
       if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
       // Revoke flips `active = false`, NEVER a hard DELETE: a device is a durable identity.
-      const updated = await gated(sessionId, (tx) =>
-        tx
+      await gated(sessionId, async (tx) => {
+        const updated = await tx
           .update(devices)
           .set({ active: false })
           .where(ownDeviceById(id))
-          .returning({ id: devices.id }),
-      );
-      if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
+          .returning({ id: devices.id });
+        if (updated.length === 0) throw new AppError("device.not_found", { deviceId: id });
+        await endDeviceSessions(tx, id);
+      });
       return c.body(null, 204);
     }),
   );

@@ -5,7 +5,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   deviceMadeHereStations,
@@ -21,8 +21,10 @@ import {
   hashSessionToken,
   loginWithPin,
   persons,
+  sessions,
   startManagementSession,
 } from "@waitron/identity";
+import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { cardReaders, deviceCardReaders } from "@waitron/payments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -30,6 +32,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mountDeviceApi } from "./device-api.js";
 import { mountJoinApi } from "./join-api.js";
 import { mountManagementApi } from "./management-api.js";
+import { mountTillApi } from "./till-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { createPairingMode, type PairingMode } from "./pairing-mode.js";
 import type { TillConfig } from "./till-config.js";
@@ -37,9 +40,15 @@ import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
 
-/** Runs after an ask has proved a disabled device and before its transaction opens: where a race
- * with another ask, or with Pair, lands. A no-op unless a case sets it. */
-const between = vi.hoisted(() => ({ proofAndTransaction: async (): Promise<void> => {} }));
+/** Hooks a case sets to land a race at a fixed point; each is a no-op unless a case sets it. */
+const between = vi.hoisted(() => ({
+  /** After an ask has proved a disabled device, before its transaction opens: where a race with
+   * another ask, or with Pair, lands. */
+  proofAndTransaction: async (): Promise<void> => {},
+  /** After the till sign-in checks its PIN, before the transaction that opens the session: where a
+   * Disable that overtakes a sign-in lands. */
+  pinCheckAndSignIn: async (): Promise<void> => {},
+}));
 vi.mock("./join-requests.js", async (importOriginal) => {
   const real = await importOriginal<typeof import("./join-requests.js")>();
   return {
@@ -51,8 +60,20 @@ vi.mock("./join-requests.js", async (importOriginal) => {
     },
   };
 });
+vi.mock("@waitron/identity", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@waitron/identity")>();
+  return {
+    ...real,
+    checkPin: async (...args: Parameters<typeof real.checkPin>) => {
+      const checked = await real.checkPin(...args);
+      await between.pinCheckAndSignIn();
+      return checked;
+    },
+  };
+});
 afterEach(() => {
   between.proofAndTransaction = async () => {};
+  between.pinCheckAndSignIn = async () => {};
 });
 
 const suite = useVenueDb({
@@ -517,6 +538,58 @@ describe("a disabled device comes back as the same device", () => {
     );
   }
 
+  /** A staff member with PIN 4321, signed in on each device given: one session cookie per device. */
+  async function signedInOn(deviceIds: string[]): Promise<string[]> {
+    const [person] = await suite.db
+      .insert(persons)
+      .values({ displayName: `Camarera ${randomUUID()}`, pinHash: hashPin("4321"), role: "staff" })
+      .returning({ id: persons.id });
+    const cookies: string[] = [];
+    for (const deviceId of deviceIds) {
+      const session = await withTransaction(suite.db, (tx) =>
+        loginWithPin(tx, { deviceId, personId: person!.id, pin: "4321" }),
+      );
+      cookies.push(`waitron_till_session=${session.token}`);
+    }
+    return cookies;
+  }
+
+  /** Read straight from the table: the rows a cookie could still sign in with. */
+  async function openSessionsOn(deviceId: string): Promise<number> {
+    const rows = await suite.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(and(eq(sessions.deviceId, deviceId), isNull(sessions.endedAt)));
+    return rows.length;
+  }
+
+  async function sessionRead(app: Hono, cookie: string): Promise<Response> {
+    return send(app, "PUT", "/api/device/printers", { cookie, body: {} });
+  }
+
+  /** {@link mountBoth} plus the till's routes, so a sign-in goes through `POST /api/session`. */
+  function mountWithSignIn(venue: Venue): Hono {
+    const app = mountBoth(venue.cfg);
+    mountTillApi(
+      app,
+      {
+        db: suite.db,
+        // Neither is reached: signing in files nothing and reads no clock.
+        backend: {} as FiscalBackend,
+        clock: {} as TrustedClock,
+        cfg: venue.cfg,
+        secureCookies: false,
+        venueLocale: "es-ES",
+      },
+      noopLog,
+    );
+    return app;
+  }
+
+  async function signIn(app: Hono, jar: string, personId: string): Promise<Response> {
+    return send(app, "POST", "/api/session", { cookie: jar, body: { personId, pin: "4321" } });
+  }
+
   it("knocks as itself, is listed as returning, and Pair enables the same row with its settings", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountBoth(venue.cfg);
@@ -614,6 +687,114 @@ describe("a disabled device comes back as the same device", () => {
     });
     expect(after.status).toBe(401);
     expect((await errorOf(after)).code).toBe("session.required");
+  });
+
+  it("Disable ends every shift session open on the device at once, and no other device's", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountBoth(venue.cfg);
+    const profileId = await seedProfile("till");
+    const holdId = await openWindow(app, venue);
+    const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
+    const other = await addDevice(app, venue, holdId, "Terrace till", profileId);
+    const [first, second, elsewhere] = await signedInOn([deviceId, deviceId, other.deviceId]);
+    expect((await sessionRead(app, first!)).status).toBe(200);
+    expect(await openSessionsOn(deviceId)).toBe(2);
+
+    await disable(app, venue, deviceId);
+
+    expect(await openSessionsOn(deviceId)).toBe(0);
+    expect(await openSessionsOn(other.deviceId)).toBe(1);
+    for (const cookie of [first!, second!]) {
+      const refused = await sessionRead(app, cookie);
+      expect(refused.status).toBe(401);
+      // Signed out, not merely on a disabled device.
+      expect((await errorOf(refused)).code).toBe("session.required");
+    }
+    expect((await sessionRead(app, elsewhere!)).status).toBe(200);
+
+    const back = await joined(await knockWith(app, "Bar till", jar));
+    expect((await pair(app, venue, holdId, back, { name: "Bar till", profileId })).status).toBe(
+      200,
+    );
+    expect(await openSessionsOn(deviceId)).toBe(0);
+    const afterEnable = await sessionRead(app, first!);
+    expect(afterEnable.status).toBe(401);
+    expect((await errorOf(afterEnable)).code).toBe("session.required");
+  });
+
+  it("Enable ends a session left open on a device turned off outside the Disable route", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountBoth(venue.cfg);
+    const profileId = await seedProfile("till");
+    const holdId = await openWindow(app, venue);
+    const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
+    const [cookie] = await signedInOn([deviceId]);
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+    expect(await openSessionsOn(deviceId)).toBe(1);
+
+    const back = await joined(await knockWith(app, "Bar till", jar));
+    expect((await pair(app, venue, holdId, back, { name: "Bar till", profileId })).status).toBe(
+      200,
+    );
+    expect(await openSessionsOn(deviceId)).toBe(0);
+    const afterEnable = await sessionRead(app, cookie!);
+    expect(afterEnable.status).toBe(401);
+    expect((await errorOf(afterEnable)).code).toBe("session.required");
+  });
+
+  it("a sign-in that Disable overtook is refused, and opens no session", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountWithSignIn(venue);
+    const profileId = await seedProfile("till");
+    const holdId = await openWindow(app, venue);
+    const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
+    const [person] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Camarera", pinHash: hashPin("4321"), role: "staff" })
+      .returning({ id: persons.id });
+    between.pinCheckAndSignIn = async () => {
+      between.pinCheckAndSignIn = async () => {};
+      await disable(app, venue, deviceId);
+    };
+
+    const late = await signIn(app, jar, person!.id);
+    expect(late.status).toBe(401);
+    expect((await errorOf(late)).code).toBe("device.unauthorized");
+    expect(late.headers.get("set-cookie")).toBeNull();
+    expect(await openSessionsOn(deviceId)).toBe(0);
+  });
+
+  it("a sign-in that Disable and then Enable both overtook is refused, and opens no session", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountWithSignIn(venue);
+    const profileId = await seedProfile("till");
+    const holdId = await openWindow(app, venue);
+    const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
+    const [person] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Camarera", pinHash: hashPin("4321"), role: "staff" })
+      .returning({ id: persons.id });
+    let enabledJar = "";
+    between.pinCheckAndSignIn = async () => {
+      between.pinCheckAndSignIn = async () => {};
+      await disable(app, venue, deviceId);
+      const back = await joined(await knockWith(app, "Bar till", jar));
+      expect((await pair(app, venue, holdId, back, { name: "Bar till", profileId })).status).toBe(
+        200,
+      );
+      enabledJar = back.jar;
+    };
+
+    const late = await signIn(app, jar, person!.id);
+    expect(enabledJar).not.toBe("");
+    expect(late.status).toBe(401);
+    expect((await errorOf(late)).code).toBe("device.unauthorized");
+    expect(await openSessionsOn(deviceId)).toBe(0);
+
+    const fresh = await signIn(app, enabledJar, person!.id);
+    expect(fresh.status).toBe(200);
+    expect(await openSessionsOn(deviceId)).toBe(1);
+    expect((await sessionRead(app, deviceCookieFrom(fresh))).status).toBe(200);
   });
 
   it("a browser with no device cookie still joins as a new device", async () => {

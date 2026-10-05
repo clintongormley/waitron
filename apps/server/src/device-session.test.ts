@@ -37,16 +37,18 @@ import {
   DEV_DEVICE_HEADER,
   DEVICE_COOKIE,
   assertDeviceCapability,
+  assertDeviceStillProven,
   assertTakesCash,
   clearDeviceCookie,
   cookieDomainFor,
   readDeviceCookie,
   requireDevice,
+  requireDeviceProof,
   setDeviceCookie,
   tryReadDevice,
   VERIFIED_TOKENS_LIMIT,
 } from "./device-session.js";
-import type { DeviceBinding } from "./device-session.js";
+import type { DeviceBinding, DeviceProof } from "./device-session.js";
 import "./errors.js";
 
 /**
@@ -530,6 +532,77 @@ describe("tryReadDevice (venue database)", () => {
       expect(await probeTry(bad)).toBeNull();
     }
     expect(await probeTry(null)).toBeNull(); // absent cookie
+  });
+});
+
+describe("requireDeviceProof and assertDeviceStillProven (venue database)", () => {
+  async function proofFor(headers: Record<string, string>, devMode = false): Promise<DeviceProof> {
+    const app = new Hono();
+    app.get("/probe", async (c) => c.json(await requireDeviceProof({ db: suite.db, devMode }, c)));
+    const res = await app.request("/probe", { headers });
+    expect(res.status).toBe(200);
+    return (await res.json()) as DeviceProof;
+  }
+
+  async function stillProven(proof: DeviceProof): Promise<string> {
+    try {
+      await withTransaction(suite.db, (tx) => assertDeviceStillProven(tx, proof));
+      return "proven";
+    } catch (err) {
+      return isAppError(err) ? err.code : String(err);
+    }
+  }
+
+  async function storedHash(deviceId: string): Promise<string> {
+    const [row] = await suite.db
+      .select({ tokenHash: devices.tokenHash })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    return row!.tokenHash;
+  }
+
+  it("keeps the stored hash the cookie verified against, and refuses once the device is revoked", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    const proof = await proofFor({ cookie: `${DEVICE_COOKIE}=${deviceId}.${token}` });
+    expect(proof.device.deviceId).toBe(deviceId);
+    expect(proof.tokenHash).toBe(await storedHash(deviceId));
+    expect(await stillProven(proof)).toBe("proven");
+
+    await revoke(deviceId);
+    expect(await stillProven(proof)).toBe("device.unauthorized");
+  });
+
+  it("refuses an active device whose token changed after the proof", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    const proof = await proofFor({ cookie: `${DEVICE_COOKIE}=${deviceId}.${token}` });
+    await suite.db
+      .update(devices)
+      .set({ tokenHash: hashSecret("a-newer-token") })
+      .where(eq(devices.id, deviceId));
+    expect(await stillProven(proof)).toBe("device.unauthorized");
+  });
+
+  it("a dev-header proof carries no hash and is checked again for active alone", async () => {
+    const { deviceBId } = await enrolDevDevices();
+    const proof = await proofFor({ [DEV_DEVICE_HEADER]: deviceBId }, true);
+    expect(proof.tokenHash).toBeNull();
+    await suite.db
+      .update(devices)
+      .set({ tokenHash: hashSecret("a-newer-token") })
+      .where(eq(devices.id, deviceBId));
+    expect(await stillProven(proof)).toBe("proven");
+
+    await revoke(deviceBId);
+    expect(await stillProven(proof)).toBe("device.unauthorized");
+  });
+
+  it("requireDeviceProof refuses a wrong token with device.unauthorized", async () => {
+    const { deviceId } = await enrolDeviceFixture();
+    const { res, thrown } = await runProbe(`${deviceId}.not-the-real-token`, async (deps, c) =>
+      c.json(await requireDeviceProof(deps, c)),
+    );
+    expect(res.status).toBe(500);
+    expect(isAppError(thrown) ? thrown.code : thrown).toBe("device.unauthorized");
   });
 });
 
