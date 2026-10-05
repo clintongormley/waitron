@@ -6,6 +6,7 @@ import { createCategory } from "./categories.js";
 import { createCatalogue, createProduct, updateProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { listProductVariants, setProductVariants, type VariantWrite } from "./variants.js";
+import { assertFamilyNamesFree } from "./product-names.js";
 
 /** An Active product's or Active variant's staff name is unique across the whole venue. */
 const suite = useCatalogueDb();
@@ -130,6 +131,25 @@ describe("update", () => {
     await expect(
       app((tx) => updateProduct(tx, small!.id, { name: "lemonade" })),
     ).rejects.toMatchObject(taken("name", "lemonade"));
+  });
+});
+
+describe("rows the rule leaves to the write", () => {
+  it("lets a variant of an Inactive product be renamed onto a taken name", async () => {
+    const lemonade = await make("Lemonade");
+    const [small] = await variants(lemonade, [variant("Small")]);
+    await app((tx) => updateProduct(tx, lemonade, { active: false }));
+    await app((tx) => updateProduct(tx, small!.id, { name: "Cola" }));
+  });
+  it("leaves an id that names no row to the write, as before", async () => {
+    await app((tx) => updateProduct(tx, crypto.randomUUID(), { name: "Cola" }));
+    await app((tx) => assertFamilyNamesFree(tx, crypto.randomUUID(), { name: "Cola" }));
+  });
+  it("keeps a variant sent by id without its Active switch as it was", async () => {
+    const lemonade = await make("Lemonade");
+    const [inactive] = await variants(lemonade, [variant("Cola", { active: false })]);
+    await variants(lemonade, [variant("Cola", { id: inactive!.id })]);
+    expect((await app((tx) => listProductVariants(tx, lemonade)))[0]!.active).toBe(false);
   });
 });
 
