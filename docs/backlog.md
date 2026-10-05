@@ -1244,10 +1244,10 @@ one side or the other"_. In the shared `packages/ui/src/components/wt-switch.ts`
 knob, in the gap between the switch and its label, or just above the label did nothing before:
 the knob is drawn over the hidden checkbox, and the gap belonged to no part. The switch and its label
 now sit in one inner field that hands such a click to the checkbox, so it flips once, sends one
-`wt-change`, and the page sees one click. A switch stretched wider than its label by its container
-(the Extras editor's Active is 576 px wide at desktop, its label ends about 100 px in) does not flip
-from the empty space past the label. Space, the focus ring, the accessible name and a disabled switch
-are unchanged. Tests: real Chromium clicks in `packages/ui/src/components/wt-switch.test.ts`; the
+`wt-change`, and a listener above the switch in the bubbling phase sees one click. A switch stretched
+wider than its label by its container (the Extras editor's Active is 576 px wide at desktop, its
+label ends about 100 px in) does not flip from the empty space past the label. Space, the focus ring,
+the accessible name and a disabled switch are unchanged. Tests: real Chromium clicks in `packages/ui/src/components/wt-switch.test.ts`; the
 Extras editor's Active and Preselected were clicked the same way at 1280 and 390 px wide in both
 themes by a probe that was not kept.
 

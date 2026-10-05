@@ -45,8 +45,8 @@ export class WtSwitch extends LitElement {
         content: "\\200b" / "";
       }
 
-      /* The native input covers the control so it stays the hit target and keeps keyboard and
-         assistive-technology behaviour. It fills .control exactly (inset: 0) rather than
+      /* The native input covers the control and keeps keyboard and assistive-technology
+         behaviour. It fills .control exactly (inset: 0) rather than
          carrying its own min-height/min-width — the minimum tap target comes from .control
          (and :host) above, so the input can never stretch past its container and steal clicks
          from whatever is stacked next to or below the switch. */
@@ -119,9 +119,8 @@ export class WtSwitch extends LitElement {
 
   @query("input") private input!: HTMLInputElement;
 
-  /** A click on the field outside the input and its label (the gap, the thumb drawn over the
-   * input, the space around the label) is handed to the input, and the original click goes no
-   * further, so the page sees the one click the input makes. */
+  /** The original click is stopped once handed to the input, so a listener above the switch in
+   * the bubbling phase sees one click. A disabled switch is left alone. */
   private onFieldClick(event: MouseEvent): void {
     if (this.disabled) return;
     const target = event.composedPath()[0];

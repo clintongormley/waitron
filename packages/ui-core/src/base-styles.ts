@@ -30,10 +30,9 @@ export const baseStyles = css`
  * `button:disabled { ${disabledStyles} }`, rather than re-spelling the declarations (and the
  * --wt-opacity-disabled token they read) in each component.
  *
- * wt-switch does NOT use this fragment: its opacity and cursor live on two different selectors
- * (`:host([disabled])` and `input:disabled`), because the native `<input>` is an invisible
- * (`opacity: 0`) hit-target layer, not the visible control — applying this fragment's opacity
- * declaration there would make that invisible input visible whenever disabled. It still reads
+ * wt-switch does NOT use this fragment: its opacity is on the host, because the native `<input>`
+ * is an invisible (`opacity: 0`) layer, not the visible control — applying this fragment's
+ * opacity declaration there would make that invisible input visible whenever disabled. It still reads
  * `var(--wt-opacity-disabled)` directly for its half of the treatment.
  * wt-number-stepper also leaves this fragment off its buttons: only the symbol fades, so its
  * disabled cursor is set separately.
