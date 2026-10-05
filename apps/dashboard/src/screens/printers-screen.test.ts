@@ -5156,7 +5156,7 @@ describe("printers-screen pairing renewal and stale scan edges", () => {
 
       expect(api.renewPairingHold).toHaveBeenCalledOnce();
       expect(q(el, "[data-test=pairing-until]")).toBeNull();
-      expect(q(el, "[data-test=hold-lapsed]")).toBeNull();
+      expect(q(el, "[data-test=hold-restart]")).not.toBeNull();
       expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe(
         codeMessage("management_session.expired"),
       );
@@ -5164,6 +5164,72 @@ describe("printers-screen pairing renewal and stale scan edges", () => {
       el.remove();
       vi.useRealTimers();
     }
+  });
+
+  it("a failed take can be retried and its message survives Scan", async () => {
+    const api = stubApi({
+      takePairingHold: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue({ holdId: "h2", openUntil: OPEN.openUntil }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      q(el, "[data-test=open-add-agent]")!.click();
+      await flush(el);
+      const notice = q(el, "[data-test=new-agent-modal] [data-test=hold-lapsed]")!;
+      expect(notice.textContent).toContain(t("pairing.hold_lapsed"));
+      expect(q(el, "[data-test=hold-restart]")).not.toBeNull();
+      expect(q(el, "[data-test=pairing-until]")).toBeNull();
+      expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe(
+        codeMessage("connection.failed"),
+      );
+
+      await vi.advanceTimersByTimeAsync(AGENT_SCAN_LISTEN_MS + SCAN_POLL_MS);
+      await flush(el);
+      const reads = vi.mocked(api.joinRequests).mock.calls.length;
+      q(el, "[data-test=scan-agents]")!.click();
+      await flush(el);
+      expect(api.joinRequests).toHaveBeenCalledTimes(reads + 1);
+      expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe(
+        codeMessage("connection.failed"),
+      );
+      expect(q(el, "[data-test=hold-lapsed]")).not.toBeNull();
+
+      q(el, "[data-test=hold-restart]")!.click();
+      await flush(el);
+      expect(api.takePairingHold).toHaveBeenCalledTimes(2);
+      expect(q(el, "[data-test=hold-lapsed]")).toBeNull();
+      expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe("");
+      expect(text(el, "[data-test=pairing-until]")).toBe(
+        t("printers.pairing_open_until").replace("{time}", "2026-09-08 10:20"),
+      );
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    [
+      "the window's read, when it lapses later than the taken hold",
+      "2026-09-08T10:23:00.000Z",
+      "10:23",
+    ],
+    ["the taken hold's, when the window's read is older", "2026-09-08T10:18:00.000Z", "10:20"],
+  ])("shows the later deadline while the dialog holds the window: %s", async (_, read, shown) => {
+    const api = stubApi({
+      pairingMode: vi.fn().mockResolvedValue({ ...OPEN, openUntil: read }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=pairing-until]")).toBe(
+      t("printers.pairing_open_until").replace("{time}", `2026-09-08 ${shown}`),
+    );
   });
 
   it("opens the window and shows its lapse time before the first pairing read has arrived", async () => {

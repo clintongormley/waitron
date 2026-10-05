@@ -25,6 +25,7 @@ import "@waitron/ui/src/components/wt-spinner.js";
 import "@waitron/ui/src/components/wt-notice.js";
 import "../widgets/row-actions.js";
 import "../widgets/print-job-preview.js";
+import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { dashboardPath } from "../navigation.js";
@@ -159,6 +160,7 @@ export const DISCOVERY_RENEW_MS = 60_000;
 export class PrintersScreen extends LitElement {
   static override styles = [
     baseStyles,
+    holdNoticeStyles,
     css`
       :host {
         display: block;
@@ -166,14 +168,6 @@ export class PrintersScreen extends LitElement {
       wt-data-table::part(printer-meta) {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-      }
-      .hold-lapsed {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2);
-        margin: var(--wt-space-2) 0;
-        color: var(--wt-color-danger);
       }
       wt-data-table::part(printer-name) {
         text-align: start;
@@ -585,14 +579,19 @@ export class PrintersScreen extends LitElement {
   #agentReadInFlight = false;
   #agentEpoch = 0;
   @state() private holdStatus: PairingHoldStatus = "idle";
+  /** The taken hold's lapse, shown before the live read of the window next answers. */
+  @state() private takenUntil: string | null = null;
+  /** The refusal that ended the hold; it stays the dialog's message until the hold is retaken. */
+  #holdErrorKey: string | null = null;
   readonly #hold = new PairingHold(
     () => this.api,
     (status, code, openUntil) => {
+      const previous = this.#holdErrorKey;
       this.holdStatus = status;
-      if (code !== null && status === "failed") this.errorKey = code;
-      // Shown at once, before the live read of the window next answers.
-      if (openUntil !== null)
-        this.pairing = { deviceAddress: "", ...this.pairing, open: true, openUntil };
+      this.takenUntil = status === "held" ? openUntil : null;
+      this.#holdErrorKey = status === "failed" ? code : null;
+      if (this.#holdErrorKey !== null) this.errorKey = this.#holdErrorKey;
+      else if (previous !== null && this.errorKey === previous) this.errorKey = null;
     },
   );
   // `#scanUntil` is wall-clock because a throttled background tab stretches the ticks;
@@ -765,7 +764,6 @@ export class PrintersScreen extends LitElement {
     this.addingAgent = false;
     this.#agentEpoch++;
     this.#agentReadInFlight = false;
-    this.pairing = { deviceAddress: "", ...this.pairing, open: false, openUntil: null };
     this.openRequestId = null;
     clearInterval(this.#agentTimer);
     this.#agentTimer = undefined;
@@ -775,7 +773,7 @@ export class PrintersScreen extends LitElement {
 
   async #scanAgents(): Promise<void> {
     if (this.scanningAgents) return;
-    this.errorKey = null;
+    this.errorKey = this.#holdErrorKey;
     this.scanningAgents = true;
     this.#agentScanUntil = Date.now() + AGENT_SCAN_LISTEN_MS;
     await this.#agentTick();
@@ -1606,19 +1604,18 @@ export class PrintersScreen extends LitElement {
     </dashboard-row-actions>`;
   }
 
+  /** Only while this dialog holds the window: the later of its own hold's lapse and the window's. */
   #renderPairing(): TemplateResult {
+    const read = this.pairing?.open ? this.pairing.openUntil : null;
+    const until =
+      this.holdStatus !== "held"
+        ? null
+        : read !== null && (this.takenUntil === null || read > this.takenUntil)
+          ? read
+          : this.takenUntil;
     return html`<p class="hint" data-test="pairing-panel">${t("printers.pairing_hint")}</p>
-      ${this.pairing?.open && this.holdStatus !== "lapsed" && this.holdStatus !== "failed" ? html`<p data-test="pairing-until">${t("printers.pairing_open_until").replace("{time}", this.#timestamp(this.pairing.openUntil))}</p>` : nothing}
-      ${
-        this.holdStatus === "lapsed"
-          ? html`<p role="status" class="hold-lapsed" data-test="hold-lapsed">
-              ${t("pairing.hold_lapsed")}
-              <wt-button size="sm" data-test="hold-restart" @click=${() => void this.#hold.start()}
-                >${t("pairing.hold_restart")}</wt-button
-              >
-            </p>`
-          : nothing
-      }`;
+      ${until !== null ? html`<p data-test="pairing-until">${t("printers.pairing_open_until").replace("{time}", this.#timestamp(until))}</p>` : nothing}
+      ${holdNotice(this.holdStatus, () => void this.#hold.start())}`;
   }
 
   /** No join number is shown or fetched for the row (design §1.2 rule 1). */
