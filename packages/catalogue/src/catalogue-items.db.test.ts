@@ -263,9 +263,9 @@ describe("deleteCatalogueItems with the counts the person was shown", () => {
       }),
     );
 
-  it.each([
-    ["an active product added to a subcategory", (tx: Transaction) => addProduct(tx, b)],
-    ["a subcategory added", (tx: Transaction) => createCategory(tx, { name: "Ale", parentId: b })],
+  it.each<[string, (tx: Transaction) => Promise<unknown>]>([
+    ["an active product added to a subcategory", (tx) => addProduct(tx, b)],
+    ["a subcategory added", (tx) => createCategory(tx, { name: "Ale", parentId: b })],
   ])("refuses with old counts after %s, and deletes nothing", async (_change, change) => {
     const shown = await shownFor([d]);
     await app(change);
