@@ -2667,6 +2667,19 @@ describe("the product list as a tree", () => {
     expect(popup.matches(":popover-open")).toBe(false);
   });
 
+  it("draws a category colour that is not lowercase #rrggbb as none, so it never reaches the style", async () => {
+    const { root } = await mountTree({
+      categories: [{ ...drinks, color: "#256bb1;position:fixed;inset:0" }, beer, food],
+    });
+    const chip = root.querySelector<HTMLElement>(
+      'tr[data-row-key="folder:d"] [data-test="color-d"] [part~="color-swatch"]',
+    )!;
+    expect(getComputedStyle(chip).position).toBe("static");
+    expect(getComputedStyle(chip).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(chip.hasAttribute("style")).toBe(false);
+    expect(chip.getAttribute("part")).toBe("color-swatch empty");
+  });
+
   it("draws a swatch beside a category's name in its colour, outlined when it has none, and its click sends edit-folder without opening or closing the row", async () => {
     const { el, root, table } = await mountTree({
       categories: [{ ...drinks, color: "#b12525" }, beer, food],

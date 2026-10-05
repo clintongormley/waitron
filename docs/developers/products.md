@@ -314,7 +314,10 @@ On the till (`apps/till/src/widgets/menu-browser.ts`), a product tile and a sect
 colour fill with it, and their labels, and a section tile's folder icon, switch to black or white,
 whichever reads better on that colour (`readableTextColor`, `packages/ui/src/category-color.ts`). A
 tile with no colour, or with a value that is not a lowercase `#rrggbb` colour, keeps the plain look. A
-sold-out painted tile keeps the same fade a sold-out plain tile has.
+sold-out painted tile keeps the same fade a sold-out plain tile has. The dashboard does the same
+with such a value: the swatches in the Products tree and a menu's Structure tree draw it as no
+colour, and the colour chooser's "Use category colour" choice says the category has none
+(`apps/dashboard/src/widgets/color-field.ts`).
 
 ## Variants
 

@@ -1,5 +1,5 @@
 import { css, html, nothing, type TemplateResult } from "lit";
-import { CATEGORY_PALETTE } from "@waitron/ui";
+import { CATEGORY_PALETTE, isHexColor } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 
 const PALETTE_GROUP_SIZE = CATEGORY_PALETTE.length / 2;
@@ -151,7 +151,12 @@ export interface ColorFieldOptions {
  * HTML, `input type=color`), so it cannot join the radio group.
  */
 export function colorField(options: ColorFieldOptions): TemplateResult {
-  const { color, busy, error, name, errorId, change, noneLabel, inherited } = options;
+  const { color, busy, error, name, errorId, change, noneLabel } = options;
+  // Checked, because the chip paints it into a style attribute; anything else reads as no colour.
+  const inherited =
+    typeof options.inherited === "string" && !isHexColor(options.inherited)
+      ? null
+      : options.inherited;
   const labelId = `${name}-none-label`;
   const fallback =
     inherited === undefined

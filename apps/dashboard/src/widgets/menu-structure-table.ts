@@ -1,7 +1,13 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { baseStyles, reorder, type DataTableColumn, type WtDataTable } from "@waitron/ui";
+import {
+  baseStyles,
+  isHexColor,
+  reorder,
+  type DataTableColumn,
+  type WtDataTable,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-icon.js";
@@ -664,9 +670,11 @@ export class MenuStructureTable extends LitElement {
       send = () => this.#send("wt-product-color", { productId });
       editable = !row.readOnly && product !== undefined;
     }
+    // Checked, because the value lands in a style attribute.
+    const painted = color !== null && isHexColor(color);
     const chip = html`<span
-      part=${color ? "color-swatch" : "color-swatch empty"}
-      style=${color ? `background:${color}` : nothing}
+      part=${painted ? "color-swatch" : "color-swatch empty"}
+      style=${painted ? `background:${color}` : nothing}
     ></span>`;
     if (!editable)
       return html`<span part="swatch-box" data-test=${`color-${key}`} aria-hidden="true"

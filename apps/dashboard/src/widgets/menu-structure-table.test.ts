@@ -1290,6 +1290,25 @@ describe("colour swatches", () => {
     );
   });
 
+  it("draws a colour that is not lowercase #rrggbb as none, so it never reaches the style", async () => {
+    const malformed = "#256bb1;position:fixed;inset:0";
+    const el = await mountColoured({
+      products: coloured.map((item) =>
+        item.id === "p-burger" ? { ...item, color: malformed } : item,
+      ),
+      nodes: lunchNodes().map((node) =>
+        node.memberId === "m-drinks" ? { ...node, color: malformed } : node,
+      ),
+    });
+    for (const key of ["m-burger", "m-drinks"]) {
+      const chip = chipOf(el, key);
+      expect(getComputedStyle(chip).position, key).toBe("static");
+      expect(getComputedStyle(chip).backgroundColor, key).toBe("rgba(0, 0, 0, 0)");
+      expect(chip.hasAttribute("style"), key).toBe(false);
+      expect(chip.getAttribute("part"), key).toBe("color-swatch empty");
+    }
+  });
+
   it("draws a swatch after the row's name", async () => {
     const el = await mountColoured();
     for (const key of ["m-burger", "m-drinks"]) {

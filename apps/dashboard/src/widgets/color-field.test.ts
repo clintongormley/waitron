@@ -224,6 +224,16 @@ it("says inside the no-colour choice, as its description, that the category has 
   expect(fieldLines(el)).toEqual(plainLines);
 });
 
+it("says the category has no colour when the colour it would take is not lowercase #rrggbb", async () => {
+  const { el } = await mount(null, undefined, {
+    noneLabel: "Use category colour",
+    inherited: "#256bb1;position:fixed;inset:0",
+  });
+  const none = noneButton(el);
+  expect(none.querySelector(".chip")).toBeNull();
+  expect(none.querySelector(".note")!.textContent!.trim()).toBe(t("editor.color_category_none"));
+});
+
 it("keeps a two-line no-colour choice's text clear of its border", async () => {
   const { el } = await mount(null, undefined, {
     noneLabel: "Use category colour",
