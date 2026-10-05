@@ -3235,7 +3235,7 @@ Unit button sits against the Price heading with no gap. Needs the owner to say w
 wants an item.
 
 **Catalogue: no two categories with one parent, and no two Active products, share a name — DONE
-(W72, owner 2026-10-05).** A category's name is now refused when another category with the same
+(W72, #1214, owner 2026-10-05).** A category's name is now refused when another category with the same
 parent (or another top-level category) already has it, on create, rename, move, the bulk move and
 a delete that moves the contents up. An Active product's staff name is refused when another Active
 product or Active variant anywhere in the venue has it, whatever its menu or category, on create,
@@ -3269,6 +3269,13 @@ checking their names (it derives only `name_key`; the rows are written by
 holding duplicates still brings them in. At 390 px the category name box cuts its refusal off
 against the pinned Actions column, as it already did for `category.invalid` (compared in
 `~/waitron-campaign/w72-shots/`, local screenshots); the same cause as the phone-width entry above.
+Also open, found in W72's review and older than it: a configuration import replaces ANY text value
+that equals one of the bundle's ids with the new id, in every column, not only id columns
+(`importConfigurationTables`, `apps/server/src/configuration-transfer.ts`, the `idMap.has(value)`
+line; `git blame` dates it to `fabdb224d1`, 2026-09-10). So a product or category whose name is
+spelled exactly like an id in the bundle arrives renamed to a random id. Unlikely with real names,
+since ids are random UUIDs, but nothing prevents it; the fix is to rewrite only the columns a table
+declares as references. Not fixed in W72.
 
 **Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
 owner 2026-10-04).** The bulk Move dialog's Destination list showed categories in the order the
