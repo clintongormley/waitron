@@ -252,3 +252,27 @@ these are component observations, not a completed Prep stations page review. Tas
 five URL-backed tabs, the final Today cells/buttons, station row menus/reorder and interim hours
 placement. The health table is temporarily mounted above the existing screen; do not land this
 checkpoint as the completed step. Tasks 5–8 and the final review/CI/landing gates remain.
+
+
+## 2026-10-05 implementation checkpoint: tab navigation
+
+The five subject tabs have stable `view` path keys. A bare page defaults to Stations; a legacy
+product-tester link defaults to Routing. Invalid keys are replaced with Stations, and browser
+Back restores the chosen panel and tester selection. Both the page controller and dashboard's
+shared path configuration preserve the tab and tester. Nested tab events do not change the page's
+selection. New station and New watcher sit in the strip's action slot; interim station hours and
+its existing editor are outside the panels. Categories replace folders in visible wording, and
+retained stations/watchers use Disable/Enable in English and Spanish.
+
+This is a navigation checkpoint, not the completed screen: Tickets and Settings are still empty
+panels, the routing cards retain legacy station settings/output links, and Watchers retains its
+cards. Task 4's Today actions/row menus/reordering and Tasks 5–7's assignments/settings editors
+remain before Task 8 review, CI and landing. No empty panel or partial page is authorised to ship.
+
+The hours assertion now checks the same overnight wording in the interim hours section; the
+existing dashboard tester-link assertion checks the canonical Routing path with its product
+retained. Wording checks retain their previous assertion strength with the approved category and
+Disable/Enable text. The timed-tester accessibility fixture selects Routing before measuring its
+controls; it retains every size, position, answer and accessibility assertion. The dashboard
+fixture supplies the complete station-health response. The build PR must name these changes
+alongside the earlier Task 1 changes.

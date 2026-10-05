@@ -1,5 +1,6 @@
 import { page } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
+import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens, type WtCombobox, type WtInput } from "@waitron/ui";
@@ -221,7 +222,7 @@ it("creates, edits and confirms removal of a watcher", async () => {
   expect(a.updateWatcher).toHaveBeenCalledWith("pass", expect.any(Object));
   q(el, '[data-test="remove-watcher-pass"]')!.click();
   await settle(el);
-  expect(q(el, '[data-test="remove-watcher-modal"]')?.textContent).toContain("Remove Pass?");
+  expect(q(el, '[data-test="remove-watcher-modal"]')?.textContent).toContain("Disable Pass?");
   q(el, '[data-test="confirm-remove-watcher"]')!.click();
   await settle(el);
   expect(a.removeWatcher).toHaveBeenCalledWith("pass");
@@ -537,7 +538,7 @@ it.each(["en", "es"])(
     expect(answer).toContain(
       locale === "en"
         ? "Closed claims Food › Sides"
-        : "Closed tiene asignada la carpeta Food › Sides",
+        : "Closed tiene asignada la categoría Food › Sides",
     );
     expect(answer).toContain(locale === "en" ? "follows the dish" : "sigue al plato");
     expect(answer).toContain(
@@ -1311,7 +1312,7 @@ it("refuses an exception without a subject or zone beside What", async () => {
   q(el, '[data-test="save-exception"]')!.click();
   await settle(el);
   expect(q(el, '[data-field-error="condition"]')?.textContent).toContain(
-    "Choose a folder or product, a service zone, or both",
+    "Choose a category or product, a service zone, or both",
   );
   expect(a.createException).not.toHaveBeenCalled();
 });
@@ -1508,7 +1509,7 @@ it("puts the server's condition refusal beside What", async () => {
   q(el, '[data-test="confirm-routing"]')!.click();
   await settle(el);
   expect(q(el, '[data-field-error="condition"]')?.textContent).toContain(
-    "Choose a folder or product",
+    "Choose a category or product",
   );
 });
 it("shows Everything and Any service zone as the form defaults", async () => {
@@ -1676,7 +1677,7 @@ it("shows a refused preview without opening confirmation or writing an exception
   q(el, '[data-test="save-exception"]')!.click();
   await settle(el);
   expect(q(el, '[data-field-error="condition"]')?.textContent).toContain(
-    "Choose a folder or product",
+    "Choose a category or product",
   );
   expect(q(el, '[data-test="routing-preview"]')).toBeNull();
   expect(a.createException).not.toHaveBeenCalled();
@@ -2283,7 +2284,7 @@ it("saves the whole hours list and places a server row refusal beside that row",
       .mockRejectedValue({ code: "station.invalid", params: { field: "hours.0" } }),
   });
   const el = await mount(a);
-  expect(q(el, '[data-test="station-upstairs"]')!.textContent).toContain(
+  expect(q(el, '[data-test="interim-station-hours"]')!.textContent).toContain(
     "Friday 22:00–02:00 (next day)",
   );
   q(el, '[data-test="edit-hours-upstairs"]')!.click();
@@ -2820,3 +2821,205 @@ it("a health snapshot ahead of routing metadata leaves Today blank until the sta
   expect(row).toBeTruthy();
   expect(row!.querySelectorAll("td")[1]?.textContent?.trim()).toBe("");
 });
+
+it("opens the default Stations tab and places create actions beside the tabs", async () => {
+  setLocale("en");
+  history.replaceState(null, "", "/manage/prep-stations");
+  const el = await mount(api());
+  const tabs = el.shadowRoot!.querySelector("wt-tabs");
+  expect(tabs, "the page owns a tab strip").not.toBeNull();
+  await tabs!.updateComplete;
+  expect(tabs!.items).toEqual([
+    { key: "stations", label: "Stations" },
+    { key: "routing", label: "Routing" },
+    { key: "tickets", label: "Tickets" },
+    { key: "watchers", label: "Watchers" },
+    { key: "settings", label: "Settings" },
+  ]);
+  expect(tabs!.value).toBe("stations");
+  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  expect(q(el, '[data-test="new-station"]')!.closest('[slot="actions"]')).not.toBeNull();
+  expect(q(el, '[data-test="new-watcher"]')!.closest('[slot="actions"]')).not.toBeNull();
+  expect(el.shadowRoot!.querySelectorAll('[data-test="new-watcher"]')).toHaveLength(1);
+  q(el, '[data-test="new-watcher"]')!.click();
+  await settle(el);
+  expect(el.shadowRoot!.querySelector("watcher-form")).not.toBeNull();
+});
+
+it.each(["tickets", "watchers", "settings"])(
+  "opens the %s deep link and selects Routing with its tester retained",
+  async (tab) => {
+    history.replaceState(null, "", `/manage/prep-stations/view/${tab}/test/bread`);
+    const el = await mount(api());
+    const tabs = el.shadowRoot!.querySelector("wt-tabs");
+    expect(tabs, "the page owns a tab strip").not.toBeNull();
+    await tabs!.updateComplete;
+    expect(tabs!.value).toBe(tab);
+    tabs!.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="routing"]')!.click();
+    await settle(el);
+    expect(location.pathname).toBe("/manage/prep-stations/view/routing/test/bread");
+    expect(q(el, '[data-test="test-product"]')!.closest('[slot="routing"]')).not.toBeNull();
+    expect((q(el, '[data-test="test-product"]') as WtCombobox).value).toBe("bread");
+    expect(q(el, '[data-test="claim-bar"]')!.closest('[slot="routing"]')).not.toBeNull();
+    expect(q(el, '[data-test="add-exception"]')!.closest('[slot="routing"]')).not.toBeNull();
+  },
+);
+
+it("keeps old tester links visible and restores panels on Back without adding history entries", async () => {
+  history.replaceState(null, "", "/manage/prep-stations/test/bread");
+  const count = history.length;
+  const el = await mount(api());
+  const tabs = el.shadowRoot!.querySelector("wt-tabs");
+  expect(tabs, "the page owns a tab strip").not.toBeNull();
+  await tabs!.updateComplete;
+  expect(tabs!.value).toBe("routing");
+  expect(location.pathname).toBe("/manage/prep-stations/view/routing/test/bread");
+  expect(history.length).toBe(count);
+  history.replaceState(null, "", "/manage/prep-stations/view/watchers");
+  dispatchEvent(new PopStateEvent("popstate"));
+  await settle(el);
+  expect(tabs!.value).toBe("watchers");
+  expect((q(el, '[data-test="test-product"]') as WtCombobox).value).toBe("");
+  expect(history.length).toBe(count);
+});
+
+it("replaces invalid tabs with Stations and ignores nested tab changes", async () => {
+  history.replaceState(null, "", "/manage/prep-stations/view/missing");
+  const count = history.length;
+  const el = await mount(api());
+  const tabs = el.shadowRoot!.querySelector("wt-tabs");
+  expect(tabs, "the page owns a tab strip").not.toBeNull();
+  await tabs!.updateComplete;
+  expect(tabs!.value).toBe("stations");
+  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+  expect(history.length).toBe(count);
+  q(el, '[slot="routing"]')!.dispatchEvent(
+    new CustomEvent("wt-tab-change", {
+      detail: { value: "settings" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await settle(el);
+  expect(tabs!.value).toBe("stations");
+  expect(location.pathname).toBe("/manage/prep-stations/view/stations");
+});
+
+it("keeps interim station hours outside every tab and opens the existing editor", async () => {
+  const el = await mount(
+    api({ load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })) }),
+  );
+  const action = q(el, '[data-test="edit-hours-upstairs"]')!;
+  expect(action.closest("wt-tabs")).toBeNull();
+  expect(action.closest('[data-test="interim-station-hours"]')).not.toBeNull();
+  action.click();
+  await settle(el);
+  expect(el.shadowRoot!.querySelector("station-hours-form")).not.toBeNull();
+});
+
+it.each([
+  {
+    locale: "en",
+    claim: "Claim a category",
+    field: "Category",
+    disable: "Disable",
+    enable: "Enable",
+  },
+  {
+    locale: "es",
+    claim: "Asignar una categoría",
+    field: "Categoría",
+    disable: "Deshabilitar",
+    enable: "Habilitar",
+  },
+])(
+  "uses category and Disable/Enable wording for retained stations and watchers ($locale)",
+  async ({ locale, claim, field, disable, enable }) => {
+    setLocale(locale);
+    const disabled = { ...upstairs, active: false };
+    const pass = {
+      id: "pass",
+      name: "Pass",
+      active: true,
+      displayOrder: 0,
+      everyStation: true,
+      stationIds: [],
+      everyZone: true,
+      zoneIds: [],
+      runsPass: true,
+      printerIds: [],
+    };
+    const el = await mount(
+      api({
+        load: vi
+          .fn()
+          .mockResolvedValue({ ...view, stations: [...view.stations, disabled], watchers: [pass] }),
+      }),
+    );
+    expect(q(el, '[data-test="claim-bar"]')!.textContent!.trim()).toBe(claim);
+    expect(q(el, '[data-test="switch-off-bar"]')!.textContent!.trim()).toBe(disable);
+    expect(q(el, '[data-test="switch-on-upstairs"]')!.textContent!.trim()).toBe(enable);
+    expect(q(el, '[data-test="remove-watcher-pass"]')!.textContent!.trim()).toBe(disable);
+    q(el, '[data-test="claim-bar"]')!.click();
+    await settle(el);
+    expect((q(el, '[data-test="claim-choice"]') as WtCombobox).label).toBe(field);
+  },
+);
+
+it.each([
+  { locale: "en", theme: "light", width: 390 },
+  { locale: "en", theme: "dark", width: 390 },
+  { locale: "es", theme: "light", width: 390 },
+  { locale: "es", theme: "dark", width: 390 },
+  { locale: "en", theme: "light", width: 1280 },
+  { locale: "en", theme: "dark", width: 1280 },
+  { locale: "es", theme: "light", width: 1280 },
+  { locale: "es", theme: "dark", width: 1280 },
+] as const)(
+  "keeps subject tabs accessible and inside the viewport ($locale/$theme/$width)",
+  async ({ locale, theme, width }) => {
+    const previous = {
+      width: window.innerWidth,
+      height: window.innerHeight,
+      bodyBackground: document.body.style.background,
+      canvasBackground: document.documentElement.style.background,
+    };
+    try {
+      await page.viewport(width, 900);
+      setLocale(locale);
+      history.replaceState(null, "", "/manage/prep-stations");
+      const el = await mount(
+        api({
+          load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
+          readStationHealth: vi.fn().mockResolvedValue(healthSnapshot),
+        }),
+        theme,
+      );
+      const themedHost = el.parentElement!;
+      themedHost.style.background = "var(--wt-color-bg)";
+      const canvas = getComputedStyle(themedHost).backgroundColor;
+      document.body.style.background = canvas;
+      document.documentElement.style.background = canvas;
+      const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+      await tabs.updateComplete;
+      for (const key of ["stations", "routing", "tickets", "watchers", "settings"]) {
+        const button = tabs.shadowRoot!.querySelector<HTMLButtonElement>(`[data-key="${key}"]`)!;
+        await page.elementLocator(button).click();
+        await settle(el);
+        await tabs.updateComplete;
+        expect(button.getAttribute("aria-selected")).toBe("true");
+        expect(tabs.shadowRoot!.querySelectorAll('[role="tabpanel"]:not([hidden])')).toHaveLength(
+          1,
+        );
+        expect(location.pathname).toBe(`/manage/prep-stations/view/${key}`);
+        expect(tabs.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+        expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+        await expectNoA11yViolations(el.parentElement!);
+      }
+    } finally {
+      document.body.style.background = previous.bodyBackground;
+      document.documentElement.style.background = previous.canvasBackground;
+      await page.viewport(previous.width, previous.height);
+    }
+  },
+);

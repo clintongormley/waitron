@@ -6324,8 +6324,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   cannot. The screen now observes the health read and refreshes elapsed values every fifteen
   seconds. A shared table renders live counts, per-band and state drilldowns, remaining quantities,
   Default/Disabled labels and separate printer/screen problems. Health refreshes retain open drafts;
-  read recovery waits for the failing read and preserves action refusals. Prep stations tabs,
-  the new Today controls, station row menus/reorder and printing handover remain open.
+  read recovery waits for the failing read and preserves action refusals. The five subject tabs now
+  have stable deep links, Back restoration and creation actions beside the strip; old tester links
+  open Routing, whose existing controls remain mounted. Interim station hours sit below the panels.
+  Category wording and Disable/Enable actions apply in both languages. Tickets and Settings are
+  still empty panels awaiting their controls; legacy station settings/output links remain in
+  Routing, and Watchers still uses cards. The new Today controls, station row menus/reorder,
+  Tickets/Watchers/Settings cell editors, venue-defaults UI and printing handover remain open.
   The generated station-parent rebuild failed the populated upgrade with a foreign-key refusal;
   the ongoing build uses the plan’s storage-redesign option. Approved decisions
   cover what live counts include, ready-but-unserved work, interim station hours, inactive display

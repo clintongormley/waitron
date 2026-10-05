@@ -381,6 +381,11 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
         await new Promise((resolve) => setTimeout(resolve, 0));
         await el.updateComplete;
         const root = el.shadowRoot!;
+        const tabs = root.querySelector("wt-tabs")!;
+        await tabs.updateComplete;
+        tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="routing"]')!.click();
+        await el.updateComplete;
+        await tabs.updateComplete;
         root
           .querySelector('[data-test="test-product"]')!
           .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "mojito" } }));

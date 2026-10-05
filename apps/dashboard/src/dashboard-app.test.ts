@@ -3534,12 +3534,18 @@ describe("dashboard URL navigation", () => {
               defaultStationId: null,
               stations: [],
             } as never)
-          : path.startsWith("/management-api/venue-service/routing/explain?")
-            ? ({ route: null, decidedBy: null, fallbacks: [], clockReadable: true } as never)
-            : stubRequest(path, method, body, options),
+          : path === "/management-api/stations/health"
+            ? ({
+                capturedAt: "2026-10-05T12:00:00Z",
+                stations: [],
+                outputsDown: { printersDown: [], screensDark: [] },
+              } as never)
+            : path.startsWith("/management-api/venue-service/routing/explain?")
+              ? ({ route: null, decidedBy: null, fallbacks: [], clockReadable: true } as never)
+              : stubRequest(path, method, body, options),
     });
     await flush(el);
-    expect(location.pathname).toBe("/manage/prep-stations/test/lager");
+    expect(location.pathname).toBe("/manage/prep-stations/view/routing/test/lager");
   });
   it.each([
     { modules: ["venue-service"], permissions: [] },

@@ -13,6 +13,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import "@waitron/ui/src/components/wt-card.js";
+import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -62,6 +63,9 @@ type Editor =
   | { kind: "claim"; stationId: string | null }
   | { kind: "exception"; id?: string }
   | { kind: "exception_delete"; id: string };
+const PREP_TABS = ["stations", "routing", "tickets", "watchers", "settings"] as const;
+type PrepTab = (typeof PREP_TABS)[number];
+
 const NO_PREPARATION = "no_preparation";
 const targetFor = (id: string): RouteTarget =>
   id === NO_PREPARATION ? { kind: "no_preparation" } : { kind: "station", stationId: id };
@@ -231,6 +235,7 @@ export class PrepStationsScreen extends LitElement {
   @state() private stationFieldError = "";
   private editingHours: readonly WeeklyInterval[] = [];
   @state() private hoursServerErrors: Record<number, string> = {};
+  @state() private tab: PrepTab = "stations";
   @state() private health?: StationHealthSnapshot;
   #healthTimer?: ReturnType<typeof setInterval>;
   @state() private outputsDown: OutputsDown = { printersDown: [], screensDark: [] };
@@ -241,9 +246,19 @@ export class PrepStationsScreen extends LitElement {
     () => {
       if (this.#url.read("dashboard") !== "prep-stations") return;
       this.testProduct = this.#url.read("test") ?? "";
+      const requested = this.#url.read("view");
+      this.tab =
+        PREP_TABS.find((tab) => tab === requested) ??
+        (requested === null && this.testProduct ? "routing" : "stations");
+      if (this.tab !== requested)
+        this.#url.write({ dashboard: "prep-stations", view: this.tab }, true);
       void this.#explain();
     },
-    { basePath: "/manage", primary: "dashboard", children: { "*": { test: "test" } } },
+    {
+      basePath: "/manage",
+      primary: "dashboard",
+      children: { "*": { view: "view", test: "test" } },
+    },
   );
   @state() private pending?: {
     change: RoutingChange;
@@ -1165,13 +1180,6 @@ export class PrepStationsScreen extends LitElement {
                 >
                 ${this.#times(s.id)?.today ? html`<wt-button variant="secondary" data-test=${`schedule-${s.id}`} @click=${() => this.#openStationAction({ kind: "today", stationId: s.id, state: null })}>${t("prep.back_to_schedule")}</wt-button>` : nothing}
               </div>
-              <p>${t("venue.hours")}: ${this.#hoursSummary(this.#times(s.id)?.hours ?? [])}</p>
-              <wt-button
-                variant="secondary"
-                data-test=${`edit-hours-${s.id}`}
-                @click=${() => this.#openStationAction({ kind: "hours", stationId: s.id })}
-                >${t("prep.edit_hours")}</wt-button
-              >
               <wt-combobox
                 data-test=${`fallback-${s.id}`}
                 name=${`fallback-${s.id}`}
@@ -1247,14 +1255,6 @@ export class PrepStationsScreen extends LitElement {
     return html`<section data-test="watchers-group">
       <div class="toolbar">
         <h2>${t("watchers.title")}</h2>
-        <wt-button
-          data-test="new-watcher"
-          @click=${() => {
-            this.watcherEditor = {};
-            this.watcherRefusal = undefined;
-          }}
-          >${t("watchers.new")}</wt-button
-        >
       </div>
       <div class="cards">
         ${ordered.map((watcher) => {
@@ -1761,70 +1761,117 @@ export class PrepStationsScreen extends LitElement {
     const inactive = view?.stations.filter((station) => !station.active) ?? [];
     return html`<div class="toolbar">
         <h1>${t("prep.title")}</h1>
-        <wt-button @click=${() => this.#openStation()} data-test="new-station"
-          >${t("prep.new_station")}</wt-button
-        >
       </div>
       ${
         view
-          ? html`<prep-station-health-table
-                .snapshot=${this.health}
-                .stations=${view.stations}
-                .today=${Object.fromEntries(
-                  view.stations.map((station) => {
-                    const status = this.#stationStatus(station);
-                    return [station.id, status === nothing ? "" : status];
-                  }),
-                )}
-              ></prep-station-health-table
-              >${this.#tester()}${this.#exceptions()}
-              <div class="cards">
-                ${active.map((s) => this.#stationCard(s))}<wt-card data-test="no-preparation"
-                  ><h2>${t("prep.no_preparation")}</h2>
-                  ${this.#chips(null)}<wt-button
-                    variant="secondary"
-                    data-test="claim-no-preparation"
+          ? html`<wt-tabs
+                label=${t("prep.title")}
+                .value=${this.tab}
+                .items=${PREP_TABS.map((key) => ({ key, label: t(`prep.tab.${key}`) }))}
+                @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
+                  if (event.target !== event.currentTarget) return;
+                  const tab = PREP_TABS.find((tab) => tab === event.detail.value);
+                  if (!tab) return;
+                  this.tab = tab;
+                  this.#url.write({ dashboard: "prep-stations", view: tab });
+                }}
+              >
+                <div slot="actions">
+                  <wt-button @click=${() => this.#openStation()} data-test="new-station"
+                    >${t("prep.new_station")}</wt-button
+                  >
+                  <wt-button
+                    data-test="new-watcher"
                     @click=${() => {
-                      this.editor = { kind: "claim", stationId: null };
+                      this.watcherEditor = {};
+                      this.watcherRefusal = undefined;
                     }}
-                    >${t("prep.claim_folder")}</wt-button
-                  ></wt-card
-                >${this.#unassigned()}
-              </div>
-              ${this.#watchers()}
-              ${
-                inactive.length
-                  ? html`<section>
-                      <h2>${t("prep.disabled")}</h2>
-                      ${inactive.map(
-                        (station) =>
-                          html`<wt-card data-test=${`inactive-${station.id}`}
-                            ><h3>${station.name}</h3>
-                            <p>
-                              ${this.#times(station.id)?.closedSendsTo ? format("prep.off_goes_to", { station: this.#stationName(this.#times(station.id)!.closedSendsTo!) }) : t("prep.off_asks")}
-                            </p>
-                            <p>
-                              ${this.#times(station.id)?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}
-                            </p>
-                            ${this.#warnings(station.id)}
-                            <div class="actions">
-                              <wt-button
-                                variant="secondary"
-                                data-test=${`change-fallback-${station.id}`}
-                                @click=${() => this.#openFallback(station.id, "fallback")}
-                                >${t("prep.change_fallback")}</wt-button
-                              ><wt-button
-                                data-test=${`switch-on-${station.id}`}
-                                @click=${() => this.#openStationAction({ kind: "switch_on", stationId: station.id })}
-                                >${t("prep.enable")}</wt-button
-                              >
-                            </div></wt-card
-                          >`,
-                      )}
-                    </section>`
-                  : nothing
-              }
-              ${off.length ? html`<p>${t("prep.disabled")}: ${off.map((c) => html`${this.#path(c.categoryId)} — ${this.#targetName(c.target)}. ${this.#times(c.target.kind === "station" ? c.target.stationId : "")?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}`)}</p>` : nothing}`
+                    >${t("watchers.new")}</wt-button
+                  >
+                </div>
+                <div slot="stations">
+                  <prep-station-health-table
+                    .snapshot=${this.health}
+                    .stations=${view.stations}
+                    .today=${Object.fromEntries(
+                      view.stations.map((station) => {
+                        const status = this.#stationStatus(station);
+                        return [station.id, status === nothing ? "" : status];
+                      }),
+                    )}
+                  ></prep-station-health-table>
+                </div>
+                <div slot="routing">
+                  ${this.#tester()}${this.#exceptions()}
+                  <div class="cards">
+                    ${active.map((s) => this.#stationCard(s))}<wt-card data-test="no-preparation"
+                      ><h2>${t("prep.no_preparation")}</h2>
+                      ${this.#chips(null)}<wt-button
+                        variant="secondary"
+                        data-test="claim-no-preparation"
+                        @click=${() => {
+                          this.editor = { kind: "claim", stationId: null };
+                        }}
+                        >${t("prep.claim_folder")}</wt-button
+                      ></wt-card
+                    >${this.#unassigned()}
+                  </div>
+                  ${
+                    inactive.length
+                      ? html`<section>
+                          <h2>${t("prep.disabled")}</h2>
+                          ${inactive.map(
+                            (station) =>
+                              html`<wt-card data-test=${`inactive-${station.id}`}
+                                ><h3>${station.name}</h3>
+                                <p>
+                                  ${this.#times(station.id)?.closedSendsTo ? format("prep.off_goes_to", { station: this.#stationName(this.#times(station.id)!.closedSendsTo!) }) : t("prep.off_asks")}
+                                </p>
+                                <p>
+                                  ${this.#times(station.id)?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}
+                                </p>
+                                ${this.#warnings(station.id)}
+                                <div class="actions">
+                                  <wt-button
+                                    variant="secondary"
+                                    data-test=${`change-fallback-${station.id}`}
+                                    @click=${() => this.#openFallback(station.id, "fallback")}
+                                    >${t("prep.change_fallback")}</wt-button
+                                  ><wt-button
+                                    data-test=${`switch-on-${station.id}`}
+                                    @click=${() => this.#openStationAction({ kind: "switch_on", stationId: station.id })}
+                                    >${t("prep.enable")}</wt-button
+                                  >
+                                </div></wt-card
+                              >`,
+                          )}
+                        </section>`
+                      : nothing
+                  }
+                  ${off.length ? html`<p>${t("prep.disabled")}: ${off.map((c) => html`${this.#path(c.categoryId)} — ${this.#targetName(c.target)}. ${this.#times(c.target.kind === "station" ? c.target.stationId : "")?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}`)}</p>` : nothing}
+                </div>
+                <div slot="tickets"></div>
+                <div slot="watchers">${this.#watchers()}</div>
+                <div slot="settings"></div>
+              </wt-tabs>
+              <section data-test="interim-station-hours">
+                <h2>${t("venue.hours")}</h2>
+                ${active
+                  .filter((station) => !station.isDefault)
+                  .map(
+                    (station) => html`
+                      <p>
+                        ${station.name}: ${this.#hoursSummary(this.#times(station.id)?.hours ?? [])}
+                      </p>
+                      <wt-button
+                        variant="secondary"
+                        data-test=${`edit-hours-${station.id}`}
+                        @click=${() => this.#openStationAction({ kind: "hours", stationId: station.id })}
+                        >${t("prep.edit_hours")}</wt-button
+                      >
+                    `,
+                  )}
+              </section>`
           : nothing
       }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}`;
   }
