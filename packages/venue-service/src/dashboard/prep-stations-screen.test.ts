@@ -5573,3 +5573,264 @@ it("Stations pointer drag ignores another pointer and outside rows, and a no-op 
   ).toEqual(["station-menu-bar", "station-menu-upstairs"]);
   expect(document.body.style.cursor).not.toBe("grabbing");
 });
+
+it("preserves unknown printer ids on both output surfaces", async () => {
+  const server = structuredClone(ticketView);
+  server.stationPrinters = [{ stationId: "bar", printerId: "missing-station-printer" }];
+  server.watchers[0]!.printerIds = ["missing-watcher-printer"];
+  const { table } = await mountTickets({ load: vi.fn().mockResolvedValue(server) });
+  expect(ticketQ(table, '[data-test="edit-printers-bar"]')!.textContent).toContain(
+    "missing-station-printer",
+  );
+  const { el } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(server) });
+  expect(q(el, '[data-test="edit-watcher-printers-pass"]')!.textContent).toContain(
+    "missing-watcher-printer",
+  );
+});
+
+it.each(["tickets", "settings", "stations"])(
+  "%s orders tied station positions by name and keeps disabled stations last",
+  async (tab) => {
+    const server = structuredClone(ticketView);
+    server.stations = [
+      { ...upstairs, id: "zulu", name: "Zulu", displayOrder: 1 },
+      { ...upstairs, id: "disabled", name: "A disabled", displayOrder: 0, active: false },
+      { ...view.stations[0]!, name: "Alpha", displayOrder: 1 },
+    ];
+    history.replaceState(null, "", `/manage/prep-stations/view/${tab}`);
+    const el = await mount(api({ load: vi.fn().mockResolvedValue(server) }));
+    await settle(el);
+    const table =
+      tab === "stations"
+        ? el
+            .shadowRoot!.querySelector("prep-station-health-table")!
+            .shadowRoot!.querySelector("wt-data-table")!
+        : el.shadowRoot!.querySelector(`[data-test="${tab}-table"]`)!;
+    await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+    const rows = [...table.shadowRoot!.querySelectorAll("tbody tr")];
+    expect(rows[0]!.textContent).toContain("Alpha");
+    expect(rows[1]!.textContent).toContain("Zulu");
+    if (tab !== "stations") expect(rows[2]!.textContent).toContain("A disabled (Disabled)");
+    else {
+      expect(rows).toHaveLength(3);
+      expect(rows[2]!.textContent).toContain("A disabled");
+    }
+  },
+);
+
+it("Watchers orders tied positions by name", async () => {
+  const server = structuredClone(ticketView);
+  server.watchers = [
+    { ...server.watchers[0]!, id: "zulu", name: "Zulu", displayOrder: 1 },
+    { ...server.watchers[0]!, id: "alpha", name: "Alpha", displayOrder: 1 },
+  ];
+  const { el } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(server) });
+  const table = el.shadowRoot!.querySelector('[data-test="watchers-table"]')!;
+  await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+  const rows = [...table.shadowRoot!.querySelectorAll("tbody tr")];
+  expect(rows[0]!.textContent).toContain("Alpha");
+  expect(rows[1]!.textContent).toContain("Zulu");
+});
+
+it("a missing watcher refusal keeps the printer draft retryable", async () => {
+  const save = vi.fn().mockRejectedValue({ code: "watcher.not_found" });
+  const { el } = await mountWatcherPrinters({ setWatcherPrinters: save });
+  const combo = await openWatcherPrinters(el);
+  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
+  await settle(el);
+  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
+  await settle(el);
+  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).values).toEqual(["next"]);
+  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).error).toBe("");
+  expect(q(el, '[data-test="watcher-printer-actions-pass"]')!.shadowRoot!.textContent).toContain(
+    "This watcher could not be found.",
+  );
+  expect(q(el, '[data-test="save-watcher-printers-pass"]')!.hasAttribute("disabled")).toBe(false);
+});
+
+it("describes extras with default, claim and exception decisions across fallback hops", async () => {
+  const a = api({
+    explain: vi.fn().mockResolvedValue({
+      route: { kind: "no_preparation" },
+      decidedBy: { kind: "default" },
+      fallbacks: [],
+      noReplacement: false,
+      stations: [{ id: "bar", name: "Bar", active: true }],
+      extrasWaitOnDish: false,
+      extras: [
+        {
+          productId: "unknown-default",
+          outcome: { kind: "made", stationId: "bar" },
+          decidedBy: null,
+          fallbacks: [],
+        },
+        {
+          productId: "unknown-claim",
+          outcome: { kind: "made", stationId: "bar" },
+          decidedBy: { kind: "claim", categoryId: "cocktails" },
+          fallbacks: [],
+        },
+        {
+          productId: "unknown-exception",
+          outcome: { kind: "made", stationId: "bar" },
+          decidedBy: { kind: "exception", exceptionId: "missing" },
+          fallbacks: [
+            { stationId: "closed", why: "out_of_hours" },
+            { stationId: "disabled", why: "switched_off" },
+          ],
+        },
+      ],
+    }),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
+  await settle(el);
+  const answer = q(el, '[data-test="test-answer"]')!.textContent!;
+  expect(answer).toContain(
+    "unknown-default: made at Bar, because nothing else matched, so the default station takes it",
+  );
+  expect(answer).toContain("unknown-claim: made at Bar, because Bar claims Drinks › Cocktails");
+  expect(answer).toContain("closed is closed outside its opening hours");
+  expect(answer).toContain("disabled is disabled, so its work goes to Bar.");
+  expect(answer).toContain("unknown-exception: made at Bar, because of the exception");
+});
+
+it.each(["cancel", "dismiss"])("%s abandons watcher removal without writing", async (how) => {
+  const remove = vi.fn();
+  const { el } = await mountWatcherPrinters({ removeWatcher: remove });
+  q(el, '[data-test="remove-watcher-pass"]')!.click();
+  await settle(el);
+  const modal = q(el, '[data-test="remove-watcher-modal"]')!;
+  expect(modal.textContent).toContain("Pass");
+  if (how === "dismiss") modal.dispatchEvent(new CustomEvent("wt-close"));
+  else modal.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+  await settle(el);
+  expect(q(el, '[data-test="remove-watcher-modal"]')).toBeNull();
+  expect(remove).not.toHaveBeenCalled();
+});
+
+it("failed watcher removal explains itself and retains confirmation for retry", async () => {
+  const remove = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "connection.failed" })
+    .mockResolvedValue(undefined);
+  const { el } = await mountWatcherPrinters({ removeWatcher: remove });
+  q(el, '[data-test="remove-watcher-pass"]')!.click();
+  await settle(el);
+  q(el, '[data-test="confirm-remove-watcher"]')!.click();
+  await settle(el);
+  expect(
+    q(el, '[data-test="remove-watcher-modal"]')!.querySelector('[role="alert"]')!.textContent,
+  ).toBe("The change could not be saved.");
+  expect(q(el, '[data-test="confirm-remove-watcher"]')!.hasAttribute("disabled")).toBe(false);
+  q(el, '[data-test="confirm-remove-watcher"]')!.click();
+  await settle(el);
+  expect(remove).toHaveBeenNthCalledWith(2, "pass");
+  expect(q(el, '[data-test="remove-watcher-modal"]')).toBeNull();
+});
+
+it.each(["cancel", "dismiss"])("%s abandons new watcher creation without writing", async (how) => {
+  const create = vi.fn();
+  const { el } = await mountWatcherPrinters({ createWatcher: create });
+  q(el, '[data-test="new-watcher"]')!.click();
+  await settle(el);
+  const modal = q(el, '[data-test="watcher-modal"]')!;
+  expect(modal).not.toBeNull();
+  if (how === "dismiss") modal.dispatchEvent(new CustomEvent("wt-close"));
+  else modal.querySelector("watcher-form")!.dispatchEvent(new CustomEvent("watcher-cancel"));
+  await settle(el);
+  expect(q(el, '[data-test="watcher-modal"]')).toBeNull();
+  expect(create).not.toHaveBeenCalled();
+});
+
+it("keeps an attempted watcher Rename invalid through whitespace until a name is supplied", async () => {
+  const save = vi.fn();
+  const { el } = await mountWatcherPrinters({ updateWatcher: save });
+  q(el, '[data-test="rename-watcher-pass"]')!.click();
+  await settle(el);
+  const input = q(el, '[data-test="watcher-rename-name"]') as WtInput;
+  input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "" } }));
+  await settle(el);
+  q(el, '[data-test="save-watcher-name"]')!.click();
+  await settle(el);
+  input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "   " } }));
+  await settle(el);
+  expect((q(el, '[data-test="watcher-rename-name"]') as WtInput).error).toBe(
+    "This field is required.",
+  );
+  expect(q(el, '[data-test="save-watcher-name"]')!.hasAttribute("disabled")).toBe(true);
+  expect(save).not.toHaveBeenCalled();
+  input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Expo" } }));
+  await settle(el);
+  expect((q(el, '[data-test="watcher-rename-name"]') as WtInput).error).toBe("");
+  expect(q(el, '[data-test="save-watcher-name"]')!.hasAttribute("disabled")).toBe(false);
+  q(el, '[data-test="save-watcher-name"]')!.click();
+  await settle(el);
+  expect(save).toHaveBeenCalledExactlyOnceWith("pass", {
+    name: "Expo",
+    everyStation: false,
+    stationIds: ["bar"],
+    everyZone: true,
+    zoneIds: [],
+    runsPass: true,
+    displayOrder: 0,
+  });
+  expect(q(el, '[data-test="watcher-rename-modal"]')).toBeNull();
+});
+
+it.each(["watcher.name_taken", "connection.failed"])(
+  "new watcher creation retains a retryable form after %s",
+  async (code) => {
+    const create = vi.fn().mockRejectedValueOnce({ code }).mockResolvedValue({ id: "new" });
+    const { el } = await mountWatcherPrinters({ createWatcher: create });
+    q(el, '[data-test="new-watcher"]')!.click();
+    await settle(el);
+    const form = q(el, '[data-test="watcher-modal"]')!.querySelector(
+      "watcher-form",
+    )! as HTMLElement & { updateComplete: Promise<boolean> };
+    await form.updateComplete;
+    form
+      .shadowRoot!.querySelector('[name="name"]')!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Runner" } }));
+    for (const name of ["everyStation", "everyZone"])
+      form
+        .shadowRoot!.querySelector(`[name="${name}"]`)!
+        .dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
+    await form.updateComplete;
+    form.shadowRoot!.querySelector<HTMLElement>('[data-test="save-watcher"]')!.click();
+    await settle(el);
+    await form.updateComplete;
+    expect(q(el, '[data-test="watcher-modal"]')).not.toBeNull();
+    const name = form.shadowRoot!.querySelector('[name="name"]') as WtInput;
+    expect(name.value).toBe("Runner");
+    expect(name.getAttribute("aria-invalid")).toBe(
+      code === "watcher.name_taken" ? "true" : "false",
+    );
+    if (code === "watcher.name_taken")
+      expect(form.shadowRoot!.querySelector('[data-field-error="name"]')!.textContent).toBe(
+        "A watcher already has this name.",
+      );
+    if (code === "connection.failed")
+      expect(form.shadowRoot!.querySelector('[data-test="watcher-error"]')!.textContent).toBe(
+        "The change could not be saved.",
+      );
+    expect(
+      form.shadowRoot!.querySelector('[data-test="save-watcher"]')!.hasAttribute("disabled"),
+    ).toBe(false);
+    name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Runner two" } }));
+    await form.updateComplete;
+    form.shadowRoot!.querySelector<HTMLElement>('[data-test="save-watcher"]')!.click();
+    await settle(el);
+    expect(create).toHaveBeenNthCalledWith(2, {
+      name: "Runner two",
+      everyStation: true,
+      stationIds: [],
+      everyZone: true,
+      zoneIds: [],
+      runsPass: false,
+    });
+    expect(q(el, '[data-test="watcher-modal"]')).toBeNull();
+  },
+);

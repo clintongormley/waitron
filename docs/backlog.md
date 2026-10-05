@@ -6324,6 +6324,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   CI exposed missing timing-default rows in direct server fixtures and incomplete provisioning
   cleanup; the fixtures now include the required rows, and cleanup removes timing children first.
   The Spanish reminder check now uses the approved Deshabilitado wording.
+  Additional browser checks cover retained printer IDs, tied station/watcher ordering, extra
+  routing explanations, retryable watcher refusals and dialog cancellation/invalid rename recovery.
   The schema foundation adds venue defaults and separate nullable station
   timing storage. Provisioning now creates 5/10/15 defaults, with a supervisor-readable defaults
   API whose writes refuse an invalid effective station order. Station creation and edits now write
