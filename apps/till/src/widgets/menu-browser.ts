@@ -186,7 +186,7 @@ export class TillMenuBrowser extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
-      /* Only background, border and ink: wt-button's hover and disabled feedback is its opacity. */
+      /* Only background, border and ink: wt-button's hover feedback is its opacity. */
       .tile[data-painted]::part(button) {
         background: var(--tile-fill);
         border-color: var(--tile-fill);
@@ -198,6 +198,24 @@ export class TillMenuBrowser extends LitElement {
       .tile[data-painted] .kind,
       .tile[data-painted] .sold-out,
       .tile[data-painted] wt-icon {
+        color: inherit;
+      }
+
+      /* In place of wt-button's disabled fade; the button stays disabled. A ::part() rule from
+         outside wt-button wins over wt-button's own. */
+      .tile[data-sold-out]::part(button) {
+        opacity: 1;
+        background: var(--wt-color-border);
+        border-color: var(--wt-color-border);
+        color: var(--wt-color-text);
+      }
+
+      .tile[data-sold-out][data-painted]::part(button) {
+        border-inline-start: var(--wt-space-2) solid var(--tile-fill);
+      }
+
+      .tile[data-sold-out] .price,
+      .tile[data-sold-out] .sold-out {
         color: inherit;
       }
 
@@ -369,6 +387,7 @@ export class TillMenuBrowser extends LitElement {
       data-kind="product"
       style=${paint ?? nothing}
       ?data-painted=${paint !== undefined}
+      ?data-sold-out=${!sellable}
       ?disabled=${!sellable}
       @click=${onTap}
     >

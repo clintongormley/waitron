@@ -66,7 +66,16 @@ const menu: TillZoneMenu = {
   isDefault: true,
   versionId: "v1",
   structure: {
-    members: [drinks, member("cafe"), member("jamon"), member("blue"), member("pink"), red],
+    members: [
+      drinks,
+      member("cafe"),
+      member("jamon"),
+      member("blue"),
+      member("pink"),
+      member("bluegone"),
+      member("pinkgone"),
+      red,
+    ],
   },
   homeLayouts: [
     {
@@ -93,6 +102,8 @@ const products = [
   { ...product("jamon", "Jamón"), pricingUnit: "weight" as const },
   { ...product("blue", "Blue"), color: "#256bb1" },
   { ...product("pink", "Pink"), color: "#edabab" },
+  { ...product("bluegone", "Blue gone", false), color: "#256bb1" },
+  { ...product("pinkgone", "Pink gone", false), color: "#edabab" },
 ];
 
 async function mount(theme: Theme) {
@@ -114,11 +125,13 @@ function button(el: TillMenuBrowser, name: string): HTMLElement {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (theme) => {
-  it("home, with a greyed, unavailable tile and a weighed product's tile, has no violations", async () => {
+  it("home, with a plain and two painted (dark and pale) sold-out tiles and a weighed product's tile, has no violations", async () => {
     const { el, host } = await mount(theme);
-    expect((button(el, "Burger") as HTMLElement & { disabled: boolean }).disabled).toBe(true);
     expect(button(el, "Jamón").querySelector(".price")!.textContent).toContain("/kg");
-    expect(button(el, "Burger").querySelector(".sold-out")!.textContent!.trim()).toBe("Sold out");
+    for (const name of ["Burger", "Blue gone", "Pink gone"]) {
+      expect((button(el, name) as HTMLElement & { disabled: boolean }).disabled).toBe(true);
+      expect(button(el, name).querySelector(".sold-out")!.textContent!.trim()).toBe("Sold out");
+    }
     await expectNoA11yViolations(host);
   });
 
