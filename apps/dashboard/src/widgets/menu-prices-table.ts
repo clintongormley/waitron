@@ -32,6 +32,7 @@ import type {
   Product,
 } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
+import { leftToBrowser } from "../navigation.js";
 import { byLabel, categoryAncestors, categoryPath } from "./category-form.js";
 import { priceSearchText, priceText } from "./form-fields.js";
 
@@ -461,8 +462,7 @@ export class MenuPricesTable extends LitElement {
   /** A product opens in the dashboard's own catalogue screen; a held modifier key keeps the
    * browser's own handling, such as opening a new tab. */
   #openProduct(event: MouseEvent, productId: string): void {
-    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
-      return;
+    if (leftToBrowser(event)) return;
     event.preventDefault();
     this.#emit("wt-edit-product", { productId });
   }

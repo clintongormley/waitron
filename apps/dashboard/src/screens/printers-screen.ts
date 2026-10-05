@@ -30,7 +30,7 @@ import "../widgets/print-job-preview.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
-import { dashboardPath } from "../navigation.js";
+import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import { formatIsoMinute } from "../date-utils.js";
@@ -2158,14 +2158,7 @@ export class PrintersScreen extends LitElement {
           data-test="all-printers-link"
           href=${`${listUrl.pathname}${listUrl.search}`}
           @click=${(event: MouseEvent) => {
-            if (
-              event.button !== 0 ||
-              event.metaKey ||
-              event.ctrlKey ||
-              event.shiftKey ||
-              event.altKey
-            )
-              return;
+            if (leftToBrowser(event)) return;
             event.preventDefault();
             if (this.detailName?.saving) return;
             if (this.detailConnection?.saving) return;

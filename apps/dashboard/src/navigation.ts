@@ -24,3 +24,9 @@ export const dashboardPath: UrlPathConfig = {
     "canvas-editor": { canvas: "canvas", "canvas-tab": "tab" },
   },
 };
+
+/** A held modifier key or another button keeps the browser's own handling of a link, such as
+ * opening a new tab. */
+export function leftToBrowser(event: MouseEvent): boolean {
+  return event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;
+}

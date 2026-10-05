@@ -48,7 +48,7 @@ import type {
   SectionMember,
 } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import { dashboardPath } from "../navigation.js";
+import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 
@@ -91,12 +91,6 @@ function statusLine(
 
 function previewAddress(menuId: string): string {
   return `/manage/menus/menu/${encodeURIComponent(menuId)}/view/preview`;
-}
-
-/** A held modifier key or another button keeps the browser's own handling of a link, such as
- * opening a new tab. */
-function leftToBrowser(event: MouseEvent): boolean {
-  return event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey;
 }
 
 /** The state a publish answered as version `number` left, shown until the next read replaces it.
