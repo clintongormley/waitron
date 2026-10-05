@@ -610,6 +610,116 @@ describe("configuration transfer database path", () => {
     );
     expect(firstLive.rows).toEqual([{ invoice_number: 1, first_record: 1, previous_hash: null }]);
   });
+
+  it("carries a category's colour and a product's own colour", async () => {
+    const source = await applyVenue(planVenue(venue("B66778899"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await withTransaction(suite.db, async (tx) => {
+      const category = await createCategory(tx, { name: "Postres", color: "#b12525" });
+      const menu = await createCatalogue(tx, { name: "Colour menu" });
+      const product = await createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: category.id,
+        name: "Flan",
+        pricingUnit: "each",
+        unitPrice: "4",
+        vatClass: "general",
+      });
+      await tx.execute(sql`update products set color = '#256bb1' where id = ${product.id}`);
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-05T12:00:00Z"),
+      versions,
+    );
+    await applyVenue(planVenue(venue("B99887766"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+    const imported = await targetSuite.db.execute<{ category: string; product: string }>(sql`
+      select d.color as category, p.color as product
+      from products p
+      join category_details d on d.category_id = p.category_id
+      where p.name = 'Flan'
+    `);
+    expect(imported.rows).toEqual([{ category: "#b12525", product: "#256bb1" }]);
+  });
+
+  it("refuses a bundle whose product, category or section colour is not lowercase #rrggbb", async () => {
+    const source = await applyVenue(planVenue(venue("B66778800"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await withTransaction(suite.db, async (tx) => {
+      const category = await createCategory(tx, { name: "Tartas", color: "#b12525" });
+      const menu = await createCatalogue(tx, { name: "Painted menu", color: "#aabbcc" });
+      const product = await createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: category.id,
+        name: "Tarta",
+        pricingUnit: "each",
+        unitPrice: "4",
+        vatClass: "general",
+      });
+      await tx.execute(sql`update products set color = '#256bb1' where id = ${product.id}`);
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const clean = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-05T12:00:00Z"),
+      versions,
+    );
+    const malformed = "#256bb1;position:fixed;inset:0";
+    const repaint = (table: string, from: string): ConfigurationBundle => {
+      expect(clean.tables[table]!.filter((row) => row.color === from)).toHaveLength(1);
+      return {
+        ...clean,
+        tables: {
+          ...clean.tables,
+          [table]: clean.tables[table]!.map((row) =>
+            row.color === from ? { ...row, color: malformed } : row,
+          ),
+        },
+      };
+    };
+    const bundles = {
+      products: repaint("products", "#256bb1"),
+      category_details: repaint("category_details", "#b12525"),
+      sections: repaint("sections", "#aabbcc"),
+    };
+
+    for (const [table, bundle] of Object.entries(bundles)) {
+      expect(() => validateConfigurationBundle(bundle, ALL_MODULES, versions)).toThrowError(
+        expect.objectContaining({
+          code: "setup.request_invalid",
+          params: { field: `${table}.color` },
+        }),
+      );
+    }
+
+    const target = venue("B66778811");
+    await expect(
+      applyVenue(planVenue(target, ALL_MODULES), {
+        db: targetSuite.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx, result) =>
+          importConfigurationTables(tx, bundles.products, result, ALL_MODULES, versions),
+      }),
+    ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "products.color" } });
+    const persisted = await targetSuite.db.execute<{ count: number }>(sql`
+      select count(*) as count from tenants where tax_id = ${target.taxId}
+    `);
+    expect(persisted.rows[0]!.count).toBe(0);
+  });
 });
 
 it("transfers the extras and options lists, remaps their ids and preserves menu prices", async () => {

@@ -27,6 +27,7 @@ import "@waitron/ui/src/components/wt-spinner.js";
 import { acceptsCatalogueDrop, type CategoryNameDraft, type ProductList } from "./product-list.js";
 import { folderMadeAt, isRouted, type FolderMadeAt } from "./folder-made-at.js";
 import { categoryTree, PATH_SEPARATOR } from "./classification-fields.js";
+import "./category-color-form.js";
 
 @customElement("dashboard-catalogue-browser")
 export class CatalogueBrowser extends LitElement {
@@ -111,6 +112,13 @@ export class CatalogueBrowser extends LitElement {
   @state() private search = "";
   @state() private nameDraft: CategoryNameDraft | null = null;
   @state() private nameError = "";
+  /** The colour chosen in the open name box; undefined until one is. */
+  @state() private nameColor: string | null | undefined = undefined;
+  /** Whose colour the chooser is open for: a category's row, or the name box. */
+  @state() private colorTarget:
+    { kind: "row"; category: CategorySummary } | { kind: "box" } | null = null;
+  @state() private colorBusy = false;
+  @state() private colorErrors: Record<string, string> = {};
 
   @state() private selecting = false;
   @state() private selected: string[] = [];
@@ -147,6 +155,7 @@ export class CatalogueBrowser extends LitElement {
   }
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("search")) this.selected = [];
+    if (changed.has("nameDraft")) this.nameColor = undefined;
     // Worked out once per change of its inputs, not on every redraw of the browser.
     if (changed.has("routing") || changed.has("categories") || changed.has("products"))
       this.#folderMadeAt = this.routing
@@ -554,10 +563,14 @@ export class CatalogueBrowser extends LitElement {
     if (!draft) return;
     this.nameError = "";
     const parentId = draft.kind === "create" ? draft.parentId : null;
+    const color = this.nameColor;
+    // Sent only when the box changed it, so a plain create or rename sends what it always did.
+    const current = this.#renamed(draft)?.color ?? null;
+    const colored = color !== undefined && color !== current ? { color } : {};
     try {
       if (draft.kind === "create")
-        await this.api.createCategory({ name: event.detail.name, parentId });
-      else await this.api.updateCategory(draft.categoryId, { name: event.detail.name });
+        await this.api.createCategory({ name: event.detail.name, parentId, ...colored });
+      else await this.api.updateCategory(draft.categoryId, { name: event.detail.name, ...colored });
       if (this.nameDraft === draft) this.nameDraft = null;
     } catch (error) {
       const message = Object.values(categoryRefusalErrors(error, parentId))[0]!;
@@ -565,7 +578,43 @@ export class CatalogueBrowser extends LitElement {
       else this.dropError = message;
     }
   }
+  #renamed(draft: CategoryNameDraft | null): CategorySummary | undefined {
+    return draft?.kind === "rename"
+      ? this.categories.find(({ id }) => id === draft.categoryId)
+      : undefined;
+  }
+  /** From a row the colour is sent alone, never a name or a parent, so a rename or a move made
+   * while the chooser was open is kept. */
+  async #chooseColor(color: string | null): Promise<void> {
+    const target = this.colorTarget;
+    if (!target) return;
+    if (target.kind === "box") {
+      this.nameColor = color;
+      this.colorTarget = null;
+      return;
+    }
+    if (this.colorBusy) return;
+    this.colorBusy = true;
+    this.colorErrors = {};
+    try {
+      await this.api.updateCategory(target.category.id, { color });
+      if (this.colorTarget === target) this.colorTarget = null;
+    } catch (error) {
+      this.colorErrors = categoryRefusalErrors(error, null);
+    } finally {
+      this.colorBusy = false;
+    }
+  }
+  #colorHeading(renamed: CategorySummary | undefined): string {
+    const target = this.colorTarget;
+    const name = target?.kind === "row" ? target.category.name : renamed?.name;
+    return name === undefined
+      ? t("folders.new_color_heading")
+      : t("folders.color_heading").replace("{name}", name);
+  }
   override render() {
+    const renamed = this.#renamed(this.nameDraft);
+    const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
     return html`<dashboard-product-list
         @drop-items=${(event: CustomEvent<{ keys: string[]; folderId: string | null }>) => {
           event.stopPropagation();
@@ -616,6 +665,20 @@ export class CatalogueBrowser extends LitElement {
           event.stopPropagation();
           this.nameError = "";
           this.nameDraft = { kind: "rename", categoryId: event.detail.folderId };
+        }}
+        @folder-color=${(event: CustomEvent<{ folderId: string }>) => {
+          event.stopPropagation();
+          const category = this.categories.find(({ id }) => id === event.detail.folderId);
+          if (!category) return;
+          this.colorErrors = {};
+          this.colorTarget = { kind: "row", category };
+        }}
+        .nameColor=${boxColor}
+        .choosingColor=${this.colorTarget?.kind === "box"}
+        @name-color=${(event: Event) => {
+          event.stopPropagation();
+          this.colorErrors = {};
+          this.colorTarget = { kind: "box" };
         }}
         @name-commit=${(event: CustomEvent<{ name: string }>) => void this.#saveName(event)}
         @name-cancel=${(event: Event) => {
@@ -697,9 +760,22 @@ export class CatalogueBrowser extends LitElement {
             : nothing
         }
       </dashboard-product-list>
-      ${this.#operationDialog()}${
-        this.dropError ? html`<p class="error" role="alert">${this.dropError}</p>` : nothing
-      }`;
+      ${this.#operationDialog()}<dashboard-category-color-form
+        .open=${this.colorTarget !== null}
+        .busy=${this.colorBusy}
+        heading=${this.colorTarget ? this.#colorHeading(renamed) : ""}
+        .color=${this.colorTarget?.kind === "row" ? this.colorTarget.category.color : boxColor}
+        .errors=${this.colorErrors}
+        @wt-choose=${(event: CustomEvent<{ color: string | null }>) => {
+          event.stopPropagation();
+          void this.#chooseColor(event.detail.color);
+        }}
+        @wt-cancel=${(event: Event) => {
+          event.stopPropagation();
+          this.colorTarget = null;
+        }}
+      ></dashboard-category-color-form
+      >${this.dropError ? html`<p class="error" role="alert">${this.dropError}</p>` : nothing}`;
   }
 }
 declare global {

@@ -3,6 +3,7 @@ import { tableExists, type Transaction } from "@waitron/db";
 import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { allTopLevelProducts } from "./categories.js";
+import { colorOrNull } from "./color-inheritance.js";
 import { findContentTranslationGap } from "./content-languages.js";
 import { sectionMembers, sections } from "./schema/sections.js";
 import {
@@ -69,10 +70,6 @@ async function namesOf(
   return names;
 }
 
-function isHexColor(value: unknown): value is string {
-  return typeof value === "string" && /^#[0-9a-f]{6}$/.test(value);
-}
-
 /** Does the media library hold this file? Never, where the media module is not installed. */
 async function mediaImageExists(tx: Transaction, filename: string): Promise<boolean> {
   if (!(await tableExists(tx, "media_images"))) return false;
@@ -84,9 +81,9 @@ async function mediaImageExists(tx: Transaction, filename: string): Promise<bool
 }
 
 function colorOf(value: unknown): string | null {
-  if (value === null) return null;
-  if (!isHexColor(value)) throw new AppError("menu_section.invalid", { field: "color" });
-  return value;
+  return colorOrNull(value, () => {
+    throw new AppError("menu_section.invalid", { field: "color" });
+  });
 }
 
 async function imageOf(tx: Transaction, value: unknown): Promise<string | null> {

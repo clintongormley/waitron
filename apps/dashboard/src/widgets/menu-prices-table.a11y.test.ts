@@ -16,7 +16,9 @@ const sections: SectionDetails[] = [
   { id: "s-drinks", internalName: "Drinks", names: {}, image: null, color: null, members: [] },
   { id: "s-beer", internalName: "Beer", names: {}, image: null, color: null, members: [] },
 ];
-const categories: CategorySummary[] = [{ id: "c-drinks", name: "Bebidas", parentId: null }];
+const categories: CategorySummary[] = [
+  { id: "c-drinks", name: "Bebidas", parentId: null, color: null },
+];
 const lemonade = {
   id: "p-lemonade",
   name: "Lemonade",

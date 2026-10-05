@@ -708,6 +708,13 @@
       "when": 1791215818860,
       "tag": "0100_device_profile_retired",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "6",
+      "when": 1791219599141,
+      "tag": "0101_product_color",
+      "breakpoints": true
     }
   ]
 }

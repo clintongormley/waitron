@@ -2,9 +2,10 @@
 
 To find products and keep each sale counted once, organise products into categories on the Products
 screen at `/manage/catalogue`. Each category is a reporting category with one internal name, shown
-on the Products screen as a row of its tree. It has no translations, image or colour. A product
-belongs to at most one category; one in none sits directly under **All products**. Labels and the
-separate Categories screen are retired.
+on the Products screen as a row of its tree. It has no translations or image, and it may have a
+colour, which every product under it takes unless the product has one of its own or a coloured
+category nearer to it ([products.md](products.md), _Colour_). A product belongs to at most one category; one
+in none sits directly under **All products**. Labels and the separate Categories screen are retired.
 
 The screen is one tree. Its first row, **All products**, holds every category and every product
 filed in none; each category opens in place, with its subcategories above its products. A click or
@@ -24,6 +25,20 @@ that share a name are refused when they move in together. Categories that alread
 are not refused when a save leaves them as they are. A product's category is
 `products.category_id`. When this is null, the product is Uncategorised, which is not a category
 row you can rename or delete.
+
+A category is named in the tree itself: Add category and a row's Rename open a box in place, which
+Enter or leaving the box saves, and Esc or a blank name cancels. A colour square sits after each
+category's name and count, an empty outline when it has no colour, and another inside the open box,
+at its end. Either square opens a small chooser (`apps/dashboard/src/widgets/category-color-form.ts`)
+holding the shared swatches, No colour and Custom. Choosing a swatch or No colour is the answer and
+closes it; Custom answers once the colour picker settles on a colour; Cancel and Esc change nothing.
+From a row's square the choice is saved at once, as the colour alone, never the name or the parent,
+so a rename or a move made while the chooser is open is kept; a refused colour stays in the chooser,
+under it. From the box's square nothing is saved: the box takes the colour, the cursor goes back to
+the box with its text as it was, and Enter saves the name with the colour, sending the colour only
+when one was chosen in that box and it differs from the category's current one. Esc or a blank name
+drops the chosen colour with the box. The box's square is not a Tab stop, so Tab still leaves the
+box and saves it; from the keyboard a category's colour is set from its row's square.
 
 A red asterisk beside a category means the route the Made at column shows for it reaches no
 active station, so it reads No replacement or Nowhere. That route is the category's baseline:
@@ -308,16 +323,22 @@ category, and a variant still storing a deleted category has it cleared.
 ## API
 
 These routes require a management session with `person.manage`, the catalogue write permission
-in `apps/server/src/catalogue-api.ts`. A category is `{ id, name, parentId }`, where `name` is a
-trimmed plain string and `parentId` is an ID or null. A blank name is `category.invalid` (400);
-a non-string name is `management.request_invalid` (400).
+in `apps/server/src/catalogue-api.ts`. A category is `{ id, name, parentId, color }`, where `name`
+is a trimmed plain string, `parentId` is an ID or null, and `color` is a lowercase `#rrggbb` or
+null. A blank name is `category.invalid` (400); a non-string name is `management.request_invalid`
+(400). A `color` that is neither a string nor null is `management.request_invalid` with
+`field: "color"`, and a string that is not lowercase `#rrggbb`, an empty one included, is
+`category.invalid` with `field: "color"`. A create without `color` stores none; an update without
+it keeps the current one; `null` clears it. A configuration import refuses a bundle holding a
+category colour that is neither null nor lowercase `#rrggbb`, as `setup.request_invalid` with
+`field: "category_details.color"`.
 
 | Route | Body or response |
 | --- | --- |
 | `GET /management-api/categories` | 200, category array |
-| `POST /management-api/categories` | `{ name, parentId? }`; 201, saved category |
+| `POST /management-api/categories` | `{ name, parentId?, color? }`; 201, saved category |
 | `GET /management-api/categories/:id` | 200, category |
-| `PATCH /management-api/categories/:id` | supplied name or parent fields; 200, saved category |
+| `PATCH /management-api/categories/:id` | supplied name, parent or colour fields; 200, saved category |
 | `POST /management-api/folders/move` | `{ productIds, categoryIds, to }`; 204 |
 | `POST /management-api/folders/delete` | `{ productIds, categoryIds, contents, shown }`; 204 |
 | `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes, ownRoutes }[]`; `products` includes disabled products, `activeProducts` leaves them out; `routes` counts the rules naming the category or any category below it, `ownRoutes` those naming the category itself |
@@ -363,8 +384,10 @@ sending the removed `categoryIds` or `labelIds`, is refused with `product.invali
 
 ## Storage and development reset
 
-`categories` in core holds the name; `category_details` in catalogue holds the parent. The label
-tables and category image/colour columns are dropped by the folder migrations. Catalogue drops
+`categories` in core holds the name; `category_details` in catalogue holds the parent and, since
+W92, the colour (`category_details.color`, added by catalogue `0025_category_color.sql`). The label
+tables and the category image and colour columns of the old schema were dropped by the folder
+migrations. Catalogue drops
 media's category-image triggers before dropping the column, and media drops them again after its
 baseline on a fresh database. The section-image triggers remain part of media's own migration set.
 

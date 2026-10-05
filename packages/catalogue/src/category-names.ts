@@ -6,9 +6,11 @@ import { firstNewClash, foldName } from "./name-uniqueness.js";
 import { categoryDetails } from "./schema/categories.js";
 import "./errors.js";
 
+type NamedCategory = Pick<Category, "id" | "name" | "parentId">;
+
 /** The categories directly under `parentId`; null is the root, which holds a category stored with
  * no details row too. */
-async function categoriesUnder(tx: Transaction, parentId: string | null): Promise<Category[]> {
+async function categoriesUnder(tx: Transaction, parentId: string | null): Promise<NamedCategory[]> {
   return tx
     .select({ id: categories.id, name: categories.name, parentId: categoryDetails.parentId })
     .from(categories)
@@ -28,8 +30,11 @@ async function categoriesUnder(tx: Transaction, parentId: string | null): Promis
  */
 export async function assertCategoryNamesFree(
   tx: Transaction,
-  placed: readonly Category[],
-  { snapshot, removed = [] }: { snapshot?: readonly Category[]; removed?: readonly string[] } = {},
+  placed: readonly NamedCategory[],
+  {
+    snapshot,
+    removed = [],
+  }: { snapshot?: readonly NamedCategory[]; removed?: readonly string[] } = {},
 ): Promise<void> {
   const leaving = new Set([...removed, ...placed.map((category) => category.id)]);
   const tree = snapshot && new Map(snapshot.map((folder) => [folder.id, folder]));

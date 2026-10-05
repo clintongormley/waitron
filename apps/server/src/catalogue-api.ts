@@ -147,6 +147,11 @@ function categoryInput(body: Record<string, unknown>, creating: boolean): Partia
     result.name = body.name;
   }
   if (body.parentId !== undefined) result.parentId = nullOrUuid(body.parentId, "parentId");
+  if (body.color !== undefined) {
+    if (body.color !== null && typeof body.color !== "string")
+      throw new AppError("management.request_invalid", { field: "color" });
+    result.color = body.color;
+  }
   return result;
 }
 
@@ -759,10 +764,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     return readProductEditor(tx, saved.id);
   };
 
-  /**
-   * Refuse a product patch naming no stored product, or naming a variant. This read is what refuses
-   * an unknown id at all: `updateProduct` reports nothing when no row matches.
-   */
   const assertOwned = async (tx: Transaction, id: string): Promise<void> => {
     const [row] = await tx
       .select({ id: products.id })
@@ -1404,6 +1405,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         allergens?: unknown;
         dietOverride?: unknown;
         image?: unknown;
+        color?: unknown;
         active?: unknown;
         available?: unknown;
         ordering?: unknown;
@@ -1459,6 +1461,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           throw new AppError("management.request_invalid", { field: "image" });
         }
         patch.image = body.image;
+      }
+      if (body.color !== undefined) {
+        if (typeof body.color !== "string" && body.color !== null) {
+          throw new AppError("management.request_invalid", { field: "color" });
+        }
+        patch.color = body.color;
       }
       if (body.active !== undefined) {
         if (typeof body.active !== "boolean") {

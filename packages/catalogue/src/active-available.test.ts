@@ -51,6 +51,7 @@ beforeEach(async () => {
       modifiers: [],
       allergens: null,
       dietaryDeclarations: [],
+      color: null,
     };
     productId = (await saveProductEditor(tx, null, menu.id, body, "en")).id;
     await addProductToMenu(tx, {

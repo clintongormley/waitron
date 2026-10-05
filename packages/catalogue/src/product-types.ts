@@ -128,6 +128,8 @@ export interface Product {
    * seeds its diet-override controls from THIS without double-counting the recipe-derived profile. */
   dietOverride: DietOverride | null;
   image: string | null;
+  /** Its own tile colour, or null when it takes its category's. */
+  color: string | null;
   /** Every variant, Inactive ones included, in variant order. */
   variants: ListedVariant[];
 }
@@ -167,6 +169,9 @@ export interface ProductEditorInput {
    * whose category is its parent's: a variant's save refuses any other value and clears a category
    * the variant still stores. */
   primaryCategoryId: string | null;
+  /** Its own tile colour; null takes its category's, and is the only value a variant's body may
+   * hold. */
+  color: string | null;
   /** The ordered extras and options lists to attach, replacing whatever the product carries today.
    * Empty on a variant, which offers its parent's. */
   modifiers: ProductModifierRef[];

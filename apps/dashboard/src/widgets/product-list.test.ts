@@ -55,9 +55,9 @@ function cellUnder(root: ShadowRoot, rowKey: string, header: string): HTMLElemen
   return [...row.querySelectorAll("td")][index]!;
 }
 
-const drinks = { id: "d", name: "Drinks", parentId: null };
-const beer = { id: "b", name: "Beer", parentId: "d" };
-const food = { id: "f", name: "Food", parentId: null };
+const drinks = { id: "d", name: "Drinks", parentId: null, color: null };
+const beer = { id: "b", name: "Beer", parentId: "d", color: null };
+const food = { id: "f", name: "Food", parentId: null, color: null };
 
 function treeProducts(): Product[] {
   return [
@@ -163,6 +163,7 @@ function product(
     dietOverride: null,
     manualAllergens: null,
     image: null,
+    color: null,
     ...rest,
   };
   return {
@@ -475,8 +476,8 @@ describe("product-list", () => {
         }),
       ],
       categories: [
-        { id: "reporting", name: "Comida", parentId: null },
-        { id: "seasonal", name: "Temporada", parentId: null },
+        { id: "reporting", name: "Comida", parentId: null, color: null },
+        { id: "seasonal", name: "Temporada", parentId: null, color: null },
       ],
       extraLists: [{ id: "ex-1", name: "Salsas" }],
       optionLists: [
@@ -888,8 +889,8 @@ describe("product-list", () => {
         }),
       ],
       categories: [
-        { id: "food", name: "Comida", parentId: null },
-        { id: "drinks", name: "Bebidas", parentId: null },
+        { id: "food", name: "Comida", parentId: null, color: null },
+        { id: "drinks", name: "Bebidas", parentId: null, color: null },
       ],
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -1872,6 +1873,7 @@ describe("the product list at phone width", () => {
     id: "long",
     name: "Embutidos ibéricos y quesos curados de la casa",
     parentId: null,
+    color: null,
   };
   const longProduct = () =>
     product({
@@ -1886,7 +1888,9 @@ describe("the product list at phone width", () => {
       ],
     });
   const singleWords = () => ({
-    categories: [{ id: "long", name: "Embutidosibéricosyquesoscuradosdelacasa", parentId: null }],
+    categories: [
+      { id: "long", name: "Embutidosibéricosyquesoscuradosdelacasa", parentId: null, color: null },
+    ],
     products: [
       product({
         id: "croquetas",
@@ -2013,6 +2017,29 @@ describe("the product list at phone width", () => {
   );
 
   it.each(["en-GB", "es-ES"])(
+    "keeps a long category's swatch, after its wrapped name, before the pinned actions at 390 px (%s)",
+    (locale) =>
+      onPhone(locale, 390, async () => {
+        const { root } = await mountLong();
+        const row = root.querySelector('tr[data-row-key="folder:long"]')!;
+        const swatch = row
+          .querySelector<HTMLElement>('[data-test="color-long"]')!
+          .getBoundingClientRect();
+        const start = root.querySelector(".scroll")!.getBoundingClientRect().left;
+        const pinned = row.querySelector('td[data-pinned="end"]')!.getBoundingClientRect().left;
+        expect(root.querySelector<HTMLElement>(".scroll")!.scrollLeft).toBe(0);
+        expect(swatch.left).toBeGreaterThanOrEqual(start);
+        expect(swatch.right).toBeLessThanOrEqual(pinned);
+        const name = (await nameTexts(root)).find(
+          ({ key, text }) => key === "folder:long" && text === longCategory.name,
+        )!;
+        expect(name.lines).toBeGreaterThan(1);
+        expect(name.right).toBeLessThanOrEqual(pinned);
+        expect(swatch.top).toBeGreaterThanOrEqual(name.top);
+      }),
+  );
+
+  it.each(["en-GB", "es-ES"])(
     "wraps a single long word inside the room before the pinned actions at 390 px (%s)",
     (locale) =>
       onPhone(locale, 390, async () => {
@@ -2120,7 +2147,7 @@ describe("the product list at phone width", () => {
     (locale) =>
       onPhone(locale, 1280, async () => {
         const { el, root } = await mountLong({
-          categories: [{ id: "long", name: "Embutidos", parentId: null }],
+          categories: [{ id: "long", name: "Embutidos", parentId: null, color: null }],
           products: [
             product({
               id: "croquetas",
@@ -2459,7 +2486,7 @@ describe("the product list as a tree", () => {
         setLocale(locale);
         await page.viewport(390, 844);
         const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-          categories: [drinks, beer, { id: "k", name: "Kegs", parentId: "b" }],
+          categories: [drinks, beer, { id: "k", name: "Kegs", parentId: "b", color: null }],
           products: [
             product({
               id: "keg",
@@ -2666,6 +2693,264 @@ describe("the product list as a tree", () => {
     expect(popup.matches(":popover-open")).toBe(false);
   });
 
+  it("draws a category colour that is not lowercase #rrggbb as none, so it never reaches the style", async () => {
+    const { root } = await mountTree({
+      categories: [{ ...drinks, color: "#256bb1;position:fixed;inset:0" }, beer, food],
+    });
+    const chip = root.querySelector<HTMLElement>(
+      'tr[data-row-key="folder:d"] [data-test="color-d"] [part~="color-swatch"]',
+    )!;
+    expect(getComputedStyle(chip).position).toBe("static");
+    expect(getComputedStyle(chip).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(chip.hasAttribute("style")).toBe(false);
+    expect(chip.getAttribute("part")).toBe("color-swatch empty");
+  });
+
+  it("draws a swatch beside a category's name in its colour, outlined when it has none, and its click sends folder-color without opening or closing the row", async () => {
+    const { el, root, table } = await mountTree({
+      categories: [{ ...drinks, color: "#b12525" }, beer, food],
+    });
+    const sent: unknown[] = [];
+    for (const name of ["folder-color", "category-toggle", "drag-items"])
+      el.addEventListener(name, (event) => sent.push([name, (event as CustomEvent).detail]));
+    const button = (id: string) =>
+      root.querySelector<HTMLButtonElement>(
+        `tr[data-row-key="folder:${id}"] [data-test="color-${id}"]`,
+      )!;
+    const chip = (id: string) => button(id).querySelector<HTMLElement>('[part~="color-swatch"]')!;
+    expect(button("d").getAttribute("part")).toBe("swatch-button");
+    expect(button("d").getAttribute("aria-label")).toBe(
+      t("folders.edit_color").replace("{name}", "Drinks"),
+    );
+    expect(chip("d").getAttribute("part")).toBe("color-swatch");
+    expect(getComputedStyle(chip("d")).backgroundColor).toBe("rgb(177, 37, 37)");
+    expect(chip("f").getAttribute("part")).toBe("color-swatch empty");
+    expect(getComputedStyle(chip("f")).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(getComputedStyle(chip("f")).borderTopWidth).toBe("1px");
+    // Drawn after the name and its count, so names at one depth still line up.
+    const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+    expect(button("d").getBoundingClientRect().left).toBeGreaterThanOrEqual(
+      row.querySelector('[data-test="count-d"]')!.getBoundingClientRect().right,
+    );
+
+    const expanded = () => row.getAttribute("aria-expanded");
+    expect(expanded()).toBe("false");
+    await userEvent.click(button("d"));
+    await table.updateComplete;
+    expect(expanded()).toBe("false");
+    expect(sent).toEqual([["folder-color", { folderId: "d" }]]);
+    await openRow(el, "folder:d");
+    expect(expanded()).toBe("true");
+    sent.length = 0;
+    await userEvent.click(button("d"));
+    await table.updateComplete;
+    expect(expanded()).toBe("true");
+    expect(sent).toEqual([["folder-color", { folderId: "d" }]]);
+
+    // Pressed and dragged, the swatch starts no drag.
+    const box = button("d").getBoundingClientRect();
+    button("d").dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        composed: true,
+        pointerId: 3,
+        clientX: box.x + 4,
+        clientY: box.y + 4,
+      }),
+    );
+    document.dispatchEvent(
+      new PointerEvent("pointermove", { pointerId: 3, clientX: box.x + 4, clientY: box.y + 80 }),
+    );
+    document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 3 }));
+    expect(sent).toEqual([["folder-color", { folderId: "d" }]]);
+  });
+
+  it.each([
+    ["en-GB", "Choose the colour"],
+    ["es-ES", "Elegir el color"],
+  ])(
+    "puts a colour square showing the box's colour inside the name box, for a new category and a rename (%s)",
+    async (locale, label) => {
+      const before = currentLocale();
+      onTestFinished(() => setLocale(before));
+      setLocale(locale);
+      const { el, root } = await mountTree({
+        categories: [{ ...drinks, color: "#b12525" }, beer, food],
+      });
+      const square = () => {
+        const box = root.querySelector('wt-input[name="category-name"]')!;
+        const button = box.querySelector<HTMLButtonElement>(
+          ':scope > [slot="end"][data-test="name-box-color"]',
+        )!;
+        return { button, chip: button.querySelector<HTMLElement>('[part~="color-swatch"]')! };
+      };
+      el.nameDraft = { kind: "create", parentId: "d" };
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+      expect(square().button.getAttribute("aria-label")).toBe(label);
+      expect(square().chip.getAttribute("part")).toBe("color-swatch empty");
+      el.nameColor = "#256bb1";
+      await el.updateComplete;
+      await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+      expect(getComputedStyle(square().chip).backgroundColor).toBe("rgb(37, 107, 177)");
+
+      el.nameDraft = { kind: "rename", categoryId: "d" };
+      el.nameColor = "#b12525";
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+      const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+      expect(row.querySelector('[data-test="name-box-color"]')).toBe(square().button);
+      expect(getComputedStyle(square().chip).backgroundColor).toBe("rgb(177, 37, 37)");
+      expect(row.querySelector('[data-test="color-d"]')).toBeNull();
+    },
+  );
+
+  it("keeps the name box open, saving nothing, while its colour square is used, and saves on Enter once focus is back", async () => {
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    onTestFinished(() => outside.remove());
+    const { el, root } = await mountTree();
+    const sent: unknown[] = [];
+    for (const name of ["name-commit", "name-cancel", "name-color"])
+      el.addEventListener(name, (event) => sent.push([name, (event as CustomEvent).detail]));
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    await userEvent.keyboard("Juice");
+    const box = root.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      'wt-input[name="category-name"]',
+    )!;
+    const square = box.querySelector<HTMLElement>('[data-test="name-box-color"]')!;
+    el.addEventListener("name-color", () => (el.choosingColor = true));
+    await userEvent.click(square);
+    expect(focusedName(el)).toBe("category-name");
+    // Stands in for the catalogue's chooser, which takes the cursor while it is open and hands it
+    // back to the input; that hand-back is pinned in catalogue-browser.test.ts.
+    outside.focus();
+    expect(sent).toEqual([["name-color", {}]]);
+    expect(root.querySelector('wt-input[name="category-name"]')).toBe(box);
+    el.choosingColor = false;
+    box.shadowRoot!.querySelector("input")!.focus();
+    expect(box.value).toBe("Juice");
+    await userEvent.keyboard("{Enter}");
+    expect(sent).toEqual([
+      ["name-color", {}],
+      ["name-commit", { name: "Juice" }],
+    ]);
+  });
+
+  it.each(["touch press cancelled by a scroll", "mouse press dragged off"])(
+    "still saves the name box on leaving it after a %s on its colour square",
+    async (press) => {
+      const outside = document.createElement("button");
+      document.body.append(outside);
+      onTestFinished(() => outside.remove());
+      const { el, root } = await mountTree();
+      const sent: unknown[] = [];
+      for (const name of ["name-commit", "name-cancel", "name-color"])
+        el.addEventListener(name, (event) => sent.push([name, (event as CustomEvent).detail]));
+      el.nameDraft = { kind: "create", parentId: null };
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+      await userEvent.keyboard("Juice");
+      const square = root.querySelector<HTMLElement>('[data-test="name-box-color"]')!;
+      const at = square.getBoundingClientRect();
+      const point = { bubbles: true, composed: true, clientX: at.x + 4, clientY: at.y + 4 };
+      if (press === "touch press cancelled by a scroll") {
+        square.dispatchEvent(
+          new PointerEvent("pointerdown", { ...point, pointerId: 7, pointerType: "touch" }),
+        );
+        square.dispatchEvent(
+          new PointerEvent("pointercancel", { ...point, pointerId: 7, pointerType: "touch" }),
+        );
+      } else {
+        square.dispatchEvent(
+          new PointerEvent("pointerdown", { ...point, pointerId: 8, pointerType: "mouse" }),
+        );
+        square.dispatchEvent(new MouseEvent("mousedown", point));
+        outside.dispatchEvent(
+          new PointerEvent("pointerup", { bubbles: true, pointerId: 8, pointerType: "mouse" }),
+        );
+        outside.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+      }
+      await userEvent.click(outside);
+      expect(sent).toEqual([["name-commit", { name: "Juice" }]]);
+    },
+  );
+
+  it("keeps the cursor in the name box while its colour square is pressed", async () => {
+    const { el, root } = await mountTree();
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    const square = root.querySelector<HTMLElement>('[data-test="name-box-color"]')!;
+    const press = new MouseEvent("mousedown", { bubbles: true, composed: true, cancelable: true });
+    square.dispatchEvent(press);
+    expect(press.defaultPrevented).toBe(true);
+  });
+
+  it("opens no colour chooser from the box once its name has been sent", async () => {
+    const { el, root } = await mountTree();
+    const sent: unknown[] = [];
+    for (const name of ["name-commit", "name-color"])
+      el.addEventListener(name, (event) => sent.push([name, (event as CustomEvent).detail]));
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    await userEvent.keyboard("Juice{Enter}");
+    await userEvent.click(root.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+    expect(sent).toEqual([["name-commit", { name: "Juice" }]]);
+    el.nameError = "That name is taken.";
+    await el.updateComplete;
+    await userEvent.click(root.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+    expect(sent).toEqual([
+      ["name-commit", { name: "Juice" }],
+      ["name-color", {}],
+    ]);
+  });
+
+  it("leaves the name box, and saves it, once focus has come back from its colour chooser", async () => {
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    onTestFinished(() => outside.remove());
+    const { el, root } = await mountTree();
+    const sent: unknown[] = [];
+    for (const name of ["name-commit", "name-cancel", "name-color"])
+      el.addEventListener(name, (event) => sent.push([name, (event as CustomEvent).detail]));
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    await userEvent.keyboard("Juice");
+    el.addEventListener("name-color", () => (el.choosingColor = true));
+    await userEvent.click(root.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+    outside.focus();
+    expect(sent).toEqual([["name-color", {}]]);
+    el.choosingColor = false;
+    root
+      .querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="category-name"]')!
+      .shadowRoot!.querySelector("input")!
+      .focus();
+    outside.focus();
+    expect(sent).toEqual([
+      ["name-color", {}],
+      ["name-commit", { name: "Juice" }],
+    ]);
+  });
+
+  it("leaves the box's colour square out of the Tab order, so Tab still leaves the box and saves it, and the row's square is a Tab stop", async () => {
+    const { el, root } = await mountTree();
+    const sent: unknown[] = [];
+    for (const name of ["name-commit", "name-cancel", "name-color"])
+      el.addEventListener(name, (event) => sent.push([name, (event as CustomEvent).detail]));
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    expect(root.querySelector<HTMLElement>('[data-test="name-box-color"]')!.tabIndex).toBe(-1);
+    expect(root.querySelector<HTMLElement>('[data-test="color-d"]')!.tabIndex).toBe(0);
+    await userEvent.keyboard("Juice{Tab}");
+    expect(sent).toEqual([["name-commit", { name: "Juice" }]]);
+  });
+
   it.each([
     ["Edit", "edit-small", "edit-product", "small"],
     ["Disable", "delete-small", "delete-product", "small"],
@@ -2812,7 +3097,7 @@ describe("a product's variants in the list", () => {
         loin(),
         product({ id: "chorizo", name: "Iberian chorizo", primaryCategoryId: "deli" }),
       ],
-      categories: [{ id: "deli", name: "Deli", parentId: null }],
+      categories: [{ id: "deli", name: "Deli", parentId: null, color: null }],
       madeAt: {
         thin: {
           stationId: "deli",
@@ -3101,8 +3386,8 @@ describe("the product list with sticky headings", () => {
 });
 
 describe("the Products tree's Name column", () => {
-  const deep = { id: "g", name: "Grill", parentId: "m" };
-  const meat = { id: "m", name: "Meat", parentId: "f" };
+  const deep = { id: "g", name: "Grill", parentId: "m", color: null };
+  const meat = { id: "m", name: "Meat", parentId: "f", color: null };
   const solomillo = () =>
     product({
       id: "loin",

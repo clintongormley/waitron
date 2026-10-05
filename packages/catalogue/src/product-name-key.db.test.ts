@@ -94,6 +94,7 @@ describe("the stored name key", () => {
       modifiers: [],
       allergens: null,
       dietaryDeclarations: [],
+      color: null,
     } satisfies ProductEditorInput;
     const saved = await app((tx) => saveProductEditor(tx, null, menu, input, "en"));
     expect(await keyOf(saved.id)).toBe("tortilla");

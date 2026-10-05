@@ -122,6 +122,7 @@ beforeEach(async () => {
         courseId: course!.id,
         dietDerivation: PARENT_DIET_DERIVATION,
         recipeDerivation: PARENT_RECIPE_DERIVATION,
+        color: "#256bb1",
       })
       .where(eq(products.id, parent.id));
     // Every inherited field null — dietary declarations as an EXPLICIT null, which is what makes
@@ -140,8 +141,8 @@ beforeEach(async () => {
       })
       .returning({ id: products.id });
     // Its own value for every inherited field, and its own names. Its category, unit row and
-    // pricing unit are ones a variant still holds from before it always took its parent's, which
-    // every read ignores.
+    // pricing unit are ones a variant still holds from before it always took its parent's, and its
+    // colour one no save writes; every read ignores all four.
     const [wine175] = await tx
       .insert(products)
       .values({
@@ -164,6 +165,7 @@ beforeEach(async () => {
         dietDerivation: W175_DIET_DERIVATION,
         dietOverride: W175_DIET_OVERRIDE,
         diet: W175_DIET,
+        color: "#b12525",
         variantOrder: 1,
       })
       .returning({ id: products.id });
@@ -539,7 +541,7 @@ describe("effectiveProductColumns, entry by entry", () => {
   // Every entry read straight, for the parent and both variants: Wine 125 has every field blank and
   // Wine 175 every field set, each different from the parent's. An entry with its two sides swapped
   // fails one of the two.
-  it("reads the parent's value for a blank field and the variant's own for a set one, except the category and pricing unit, always the parent's", async () => {
+  it("reads the parent's value for a blank field and the variant's own for a set one, except the category, pricing unit and colour, always the parent's", async () => {
     const raw = await run((tx) =>
       tx
         .select({ id: products.id, ...pickRaw() })
@@ -561,9 +563,10 @@ describe("effectiveProductColumns, entry by entry", () => {
       expect(parentRaw[key], key).not.toBeNull();
       expect(wine175Raw[key], key).not.toEqual(parentRaw[key]);
       expect(byId.get(f.wine125)![key], key).toEqual(parentRaw[key]);
-      // The category and the pricing unit are the entries a variant cannot set: its stored ones are
-      // ignored.
-      const own = key === "categoryId" || key === "pricingUnit" ? parentRaw[key] : wine175Raw[key];
+      // The category, the pricing unit and the colour are the entries a variant cannot set: its
+      // stored ones are ignored.
+      const parentsAlways = key === "categoryId" || key === "pricingUnit" || key === "color";
+      const own = parentsAlways ? parentRaw[key] : wine175Raw[key];
       expect(byId.get(f.wine175)![key], key).toEqual(own);
     }
   });
@@ -714,6 +717,7 @@ describe("INHERITED_KEYS", () => {
       [
         "allergens",
         "categoryId",
+        "color",
         "courseId",
         "description",
         "diet",

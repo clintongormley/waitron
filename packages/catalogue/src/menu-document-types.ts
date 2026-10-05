@@ -40,6 +40,9 @@ export type FrozenOffer = Omit<
     /** The dish's own photo and description, which `MenuOffer` does not carry. */
     image: string | null;
     description: Record<string, string> | null;
+    /** The product's effective colour (color-inheritance.ts), frozen when the version is built;
+     * null draws the neutral tile. Absent from a version published before it existed. */
+    color?: string | null;
     variants: FrozenOfferVariant[];
     placements: string[][];
     offeredModifiers: FrozenOfferedModifier[];
@@ -118,6 +121,9 @@ export type LiveOfferedModifier =
 export interface LiveOffer extends Omit<MenuOffer, "ordering" | "combined">, PublishedOrdering {
   available: boolean;
   image: string | null;
+  /** The product's effective colour (color-inheritance.ts), frozen when the version is built;
+   * null draws the neutral tile. Absent from a version published before it existed. */
+  color?: string | null;
   description: Record<string, string> | null;
   offeredModifiers: LiveOfferedModifier[];
 }
@@ -186,6 +192,7 @@ export type ProductChangeField =
   | "names"
   | "description"
   | "image"
+  | "color"
   | "unit"
   | "allergens"
   | "diet"

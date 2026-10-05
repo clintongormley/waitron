@@ -297,10 +297,12 @@ export interface CategorySummary {
   id: string;
   name: string;
   parentId: string | null;
+  color: string | null;
 }
 export interface CategoryInput {
   name: string;
   parentId?: string | null;
+  color?: string | null;
 }
 export interface CatalogueSelection {
   productIds: string[];
@@ -2051,6 +2053,10 @@ export class DashboardApi {
 
   updateProductEditor(id: string, input: ProductEditorInput): Promise<ProductEditorValue> {
     return this.#request<ProductEditorValue>(`/management-api/products/${id}/editor`, "PUT", input);
+  }
+
+  setProductColor(id: string, color: string | null): Promise<void> {
+    return this.#request<void>(`/management-api/products/${id}`, "PATCH", { color });
   }
 
   // ── Options lists and extras lists (`/management-api/modifiers/{options,extras}`) ───────────────

@@ -1,5 +1,6 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 import { CATEGORY_PALETTE } from "@waitron/ui";
+import { isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
 import { t } from "../i18n/t.js";
 
 const PALETTE_GROUP_SIZE = CATEGORY_PALETTE.length / 2;
@@ -53,14 +54,39 @@ export const colorFieldStyles = css`
     outline-offset: var(--wt-selected-ring-offset);
   }
   .swatch.none {
+    display: inline-grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    column-gap: var(--wt-space-2);
     width: auto;
-    padding: 0 var(--wt-space-2);
+    height: auto;
+    min-height: var(--wt-space-6);
+    padding: var(--wt-space-1) var(--wt-space-2);
     background: var(--wt-color-surface);
     color: var(--wt-color-text);
     font-size: var(--wt-font-size-sm);
+    text-align: start;
   }
+  .swatch.none > :not(.chip) {
+    grid-column: 1 / -1;
+  }
+  .swatch.none > .chip ~ :not(.chip) {
+    grid-column: 2;
+  }
+  .chip {
+    width: var(--wt-space-4);
+    height: var(--wt-space-4);
+    border: 1px solid var(--wt-color-border);
+    border-radius: var(--wt-radius-sm);
+  }
+  .note {
+    color: var(--wt-color-text-muted);
+    font-size: var(--wt-font-size-sm);
+  }
+  /* Row named: a host's own label rule may stack its labels' contents. */
   .custom {
     display: inline-flex;
+    flex-direction: row;
     align-items: center;
     gap: var(--wt-space-2);
     font-size: var(--wt-font-size-sm);
@@ -107,10 +133,17 @@ export const colorFieldStyles = css`
 export interface ColorFieldOptions {
   /** A hex colour, or null for none. */
   color: string | null;
+  /** Given, the no-colour choice reads "Use category colour" and shows the category's colour in a
+   * chip read as its description, or, for null, says as its second line that there is none. Absent,
+   * it reads "No colour" and says nothing more. */
+  categoryColor?: string | null;
   busy: boolean;
   error: string;
   /** The custom colour input's `name`. */
   name: string;
+  /** When the custom colour reaches `change`: on each `input` as the person picks (the default), or
+   * only on the input's `change`, once they settle on one. */
+  customEvent?: "input" | "change";
   errorId: string;
   change: (color: string | null) => void;
 }
@@ -121,7 +154,33 @@ export interface ColorFieldOptions {
  * HTML, `input type=color`), so it cannot join the radio group.
  */
 export function colorField(options: ColorFieldOptions): TemplateResult {
-  const { color, busy, error, name, errorId, change } = options;
+  const { color, busy, error, name, errorId, change, customEvent = "input" } = options;
+  // Checked, because the chip paints it into a style attribute; anything else reads as no colour.
+  const inherited =
+    options.categoryColor === undefined || isStoredColor(options.categoryColor)
+      ? options.categoryColor
+      : null;
+  const labelId = `${name}-none-label`;
+  const fallback =
+    inherited === undefined
+      ? null
+      : inherited !== null
+        ? {
+            id: `${name}-none-value`,
+            before: html`<span
+              class="chip"
+              aria-hidden="true"
+              style=${`background:${inherited}`}
+            ></span>`,
+            after: html`<span id=${`${name}-none-value`} hidden>${inherited}</span>`,
+          }
+        : {
+            id: `${name}-none-note`,
+            before: nothing,
+            after: html`<span class="note" id=${`${name}-none-note`}
+              >${t("editor.color_category_none")}</span
+            >`,
+          };
   const swatch = (value: string) =>
     html`<button
       type="button"
@@ -145,6 +204,8 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
         class="swatch none ${color === null ? "on" : ""}"
         role="radio"
         aria-checked=${color === null}
+        aria-labelledby=${labelId}
+        aria-describedby=${fallback?.id ?? nothing}
         data-color=""
         .disabled=${busy}
         @click=${(event: Event) => {
@@ -152,7 +213,9 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
           change(null);
         }}
       >
-        ${t("editor.color_none")}
+        ${fallback?.before ?? nothing}<span id=${labelId}
+          >${inherited === undefined ? t("editor.color_none") : t("editor.color_use_category")}</span
+        >${fallback?.after ?? nothing}
       </button>
       <div class="swatches">
         ${PALETTE_GROUPS.map(
@@ -177,6 +240,11 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
         .value=${color ?? "#000000"}
         .disabled=${busy}
         @input=${(event: Event) => {
+          event.stopPropagation();
+          if (customEvent === "input") change((event.target as HTMLInputElement).value);
+        }}
+        @change=${(event: Event) => {
+          if (customEvent !== "change") return;
           event.stopPropagation();
           change((event.target as HTMLInputElement).value);
         }}

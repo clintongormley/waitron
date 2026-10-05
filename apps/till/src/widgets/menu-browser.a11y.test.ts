@@ -49,12 +49,25 @@ const drinks: DocumentMember = {
   members: [member("cola"), member("burger"), beer],
 };
 
+// Painted in a stored colour, so the scan's contrast check reads each tile's labels on its colour.
+const red: DocumentMember = {
+  kind: "section",
+  sectionId: "sec-red",
+  internalName: "red-internal",
+  names: { en: "Red (EN)" },
+  image: null,
+  color: "#b12525",
+  members: [member("cafe")],
+};
+
 const menu: TillZoneMenu = {
   id: "menu-lunch",
   name: "Lunch",
   isDefault: true,
   versionId: "v1",
-  structure: { members: [drinks, member("cafe"), member("jamon")] },
+  structure: {
+    members: [drinks, member("cafe"), member("jamon"), member("blue"), member("pink"), red],
+  },
   homeLayouts: [
     {
       id: "lay-home",
@@ -78,6 +91,8 @@ const products = [
   product("burger", "Burger", false),
   // Sold by weight, so its tile's price reads per kilo.
   { ...product("jamon", "Jamón"), pricingUnit: "weight" as const },
+  { ...product("blue", "Blue"), color: "#256bb1" },
+  { ...product("pink", "Pink"), color: "#edabab" },
 ];
 
 async function mount(theme: Theme) {

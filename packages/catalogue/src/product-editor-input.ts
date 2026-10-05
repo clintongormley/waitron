@@ -1,5 +1,6 @@
 import { AppError, contentLanguageCode, decimal, isUuid, toScale } from "@waitron/shared";
 import { validateAllergens } from "./allergens.js";
+import { colorOrNull } from "./color-inheritance.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import { nonBlankTranslations } from "./product-presentation.js";
@@ -148,6 +149,9 @@ export function parseProductEditorInput(
   const primaryCategoryId = nullableId(body.primaryCategoryId, "primaryCategoryId");
   // A variant's category is always its parent's.
   if (isVariant && primaryCategoryId !== null) invalid("primaryCategoryId");
+  const color = colorOrNull(body.color ?? null, () => invalid("color"));
+  // A variant's colour is always its parent's.
+  if (isVariant && color !== null) invalid("color");
   const tax = inheritable(body.vatClass, "vatClass", isVariant, vatClass);
   if (!Array.isArray(body.variants)) invalid("variants");
   const listed = emptyOnVariant(body.variants, "variants", isVariant);
@@ -196,6 +200,7 @@ export function parseProductEditorInput(
     vatClass: tax,
     variants,
     primaryCategoryId,
+    color,
     modifiers: attachments,
     allergens,
     dietaryDeclarations: inheritable(

@@ -8,12 +8,13 @@ import { productUnits } from "./schema/units.js";
  * `docs/developers/products.md`, under _Variants_).
  *
  * A `products` row with a `parent_id` is a variant. Every field in the inherited set below that the
- * variant leaves NULL reads as its parent's value; one it sets reads as its own. The category and
- * the unit are the inherited fields a variant cannot override: each always reads as its parent's,
- * whatever the variant's own `category_id`, `pricing_unit` or `product_units` row holds. The three
- * names are never inherited — a blank customer or kitchen name falls back to the variant's OWN staff
- * name — nor is anything that says what the row is (`id`, `catalogue_id`, `parent_id`,
- * `variant_order`), whether it is sold (`active`, `available`, `ordering`), or when it was written.
+ * variant leaves NULL reads as its parent's value; one it sets reads as its own. The category, the
+ * unit and the colour are the inherited fields a variant cannot override: each always reads as its
+ * parent's, whatever the variant's own `category_id`, `pricing_unit`, `color` or `product_units` row
+ * holds. The three names are never inherited — a blank customer or kitchen name falls back to the
+ * variant's OWN staff name — nor is anything that says what the row is (`id`, `catalogue_id`,
+ * `parent_id`, `variant_order`), whether it is sold (`active`, `available`, `ordering`), or when it
+ * was written.
  *
  * The nullability of the four columns a variant may leave blank (`vat_class`, `pricing_unit`,
  * `unit_price`, `dietary_declarations`) stops here for reads that go through
@@ -103,6 +104,7 @@ export const effectiveProductColumns = {
   pricingUnit: parentsAlwaysOwned(products.pricingUnit, parentProducts.pricingUnit),
   unitPrice: owned(products.unitPrice, parentProducts.unitPrice),
   categoryId: parentsAlways(products.categoryId, parentProducts.categoryId),
+  color: parentsAlways(products.color, parentProducts.color),
   courseId: inherited(products.courseId, parentProducts.courseId),
   image: inherited(products.image, parentProducts.image),
   allergens: inherited(products.allergens, parentProducts.allergens),

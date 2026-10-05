@@ -42,16 +42,19 @@ const food: CategorySummary = {
   id: "food",
   name: "Comida",
   parentId: null,
+  color: null,
 };
 const tapas: CategorySummary = {
   id: "tapas",
   name: "Tapas",
   parentId: "food",
+  color: null,
 };
 const drinks: CategorySummary = {
   id: "drinks",
   name: "Bebidas",
   parentId: null,
+  color: null,
 };
 
 async function mount(template: TemplateResult): Promise<Combobox> {
@@ -87,6 +90,7 @@ it("orders numbered sibling categories by value, as the tables do", async () => 
     id,
     name: name,
     parentId: null,
+    color: null,
   });
   const combobox = await mount(
     fieldOf({ categories: [named("c10", "Cat 10"), named("c9", "Cat 9")] }),

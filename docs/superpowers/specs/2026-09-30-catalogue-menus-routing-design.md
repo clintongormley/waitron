@@ -23,6 +23,9 @@ Each names its file so it can be re-checked before building.
 
 - **Categories are for reporting and routing.** They are folders in the products screen. Each has
   one internal name, with no translations, no image and no colour. The Categories screen goes.
+  Superseded 2026-10-05 by W92
+  (`docs/superpowers/specs/2026-10-05-w92-product-colours-design.md`): a category has an optional
+  colour again, which products inherit.
 - **Folders also decide where things are made.** On one new screen, **Prep Stations**, each station
   claims folders. Ordered exceptions sit above the claims, and the venue's default station catches
   the rest.
@@ -49,6 +52,9 @@ what "Uncategorised" means today. Reports roll up along the tree, as now.
 
 - the translated name, which becomes one plain name;
 - the image and the colour;
+  Superseded 2026-10-05 by W92
+  (`docs/superpowers/specs/2026-10-05-w92-product-colours-design.md`): a category has an optional
+  colour again, which products inherit.
 - the kitchen station.
 
 Today's schema for reference: `categories` (`packages/db/src/schema/catalogue.ts:25`) holds a
@@ -140,6 +146,9 @@ A section has:
 There is no description until something shows one. The till does not yet show a section's image or
 colour (`apps/till/src/widgets/menu-browser.ts` shows a folder icon and the name), though the
 published menu carries both.
+Superseded 2026-10-05 for colour by W92
+(`docs/superpowers/specs/2026-10-05-w92-product-colours-design.md`): the till paints a section's
+colour on its tile.
 
 **Retired:** library sections (`sections.role = 'library'`, `packages/catalogue/src/schema/sections.ts`)
 and the Sections screen (`apps/dashboard/src/screens/sections-screen.ts`). A menu's sections are
@@ -512,6 +521,9 @@ folders. Slice 2 is independent of both.
 - The file-browser products screen: folder view, flat view, search, selection mode, "Move to…",
   drag and drop, the folder-delete choice, and variants.
 - Categories lose translations, image and colour.
+  Superseded 2026-10-05 by W92
+  (`docs/superpowers/specs/2026-10-05-w92-product-colours-design.md`): a category has an optional
+  colour again, which products inherit.
 - The Categories screen goes.
 - Labels are removed (§3).
 - The "Made at" column waits for slice 3.

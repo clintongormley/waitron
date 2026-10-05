@@ -45,6 +45,7 @@ const product: ProductEditorDraft = {
   vatClass: "reduced",
   variants: [],
   primaryCategoryId: null,
+  color: null,
   modifiers: [],
   allergens: null,
   dietaryDeclarations: [],
@@ -73,10 +74,10 @@ const large: EditorVariant = {
 // Named in the venue's own content language (the harness mounts a Spanish venue), so a chip shows
 // a real word rather than falling back to its id.
 const categories: CategorySummary[] = [
-  { id: "drinks", name: "Bebidas", parentId: null },
-  { id: "snacks", name: "Aperitivos", parentId: null },
+  { id: "drinks", name: "Bebidas", parentId: null, color: null },
+  { id: "snacks", name: "Aperitivos", parentId: null, color: null },
   // A category with no colour of its own: the reporting mark has to survive this one being chosen.
-  { id: "plates", name: "Platos", parentId: null },
+  { id: "plates", name: "Platos", parentId: null, color: null },
 ];
 const reduced = [{ id: "reduced" as const, rate: "10.00", label: "Reduced" }];
 
@@ -687,6 +688,7 @@ it("renders the sections in the designed order, with the price above the VAT rat
   ).toEqual([
     "categories",
     "name",
+    "color",
     "available",
     "ordering",
     "kitchen",
@@ -1994,17 +1996,176 @@ it("offers Uncategorised as the main category, and saves it as none", async () =
   expect(submit.mock.calls[0]![0].detail.value.primaryCategoryId).toBeNull();
 });
 
+// --- The colour ---
+
+// "wine" has no colour of its own and takes its parent's, so a chooser that read only the main
+// category's own colour would say "no colour" here.
+const colouredCategories: CategorySummary[] = [
+  { id: "drinks", name: "Bebidas", parentId: null, color: "#25b125" },
+  { id: "wine", name: "Vino", parentId: "drinks", color: null },
+  { id: "snacks", name: "Aperitivos", parentId: null, color: "#256bb1" },
+  { id: "plates", name: "Platos", parentId: null, color: null },
+];
+async function mountColoured(value: Partial<ProductEditorDraft> = {}) {
+  return (
+    await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: { ...product, primaryCategoryId: "wine", ...value },
+      locales: ["en"],
+      units: [unit],
+      taxChoices: reduced,
+      categories: colouredCategories,
+    })
+  ).el;
+}
+function useCategory(el: ProductEditor) {
+  return el.shadowRoot!.querySelector<HTMLButtonElement>('fieldset.color [data-color=""]')!;
+}
+function colourSwatch(el: ProductEditor, color: string) {
+  return el.shadowRoot!.querySelector<HTMLButtonElement>(`fieldset.color [data-color="${color}"]`)!;
+}
+function submittedValue(el: ProductEditor): ProductEditorDraft {
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit).toHaveBeenCalledOnce();
+  return submit.mock.calls[0]![0].detail.value;
+}
+
+it("puts the colour chooser after Name on a product of its own, its custom input named product-color", async () => {
+  const el = await mountColoured();
+  const group = el.shadowRoot!.querySelector("fieldset.color")!;
+  expect(group.querySelector('input[type="color"]')!.getAttribute("name")).toBe("product-color");
+  const name = el.shadowRoot!.querySelector('[data-section="name"]')!;
+  expect(name.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(name.contains(group)).toBe(false);
+  await expect
+    .element(page.elementLocator(useCategory(el)))
+    .toHaveAccessibleName(t("editor.color_use_category"));
+});
+
+it("draws the Custom colour input on the same line as its label, after the word", async () => {
+  const el = await mountColoured();
+  const label = el.shadowRoot!.querySelector<HTMLLabelElement>("fieldset.color label.custom")!;
+  const input = label.querySelector("input")!.getBoundingClientRect();
+  const words = document.createRange();
+  words.selectNodeContents(
+    [...label.childNodes].find(
+      (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
+    )!,
+  );
+  const text = words.getBoundingClientRect();
+  expect(input.left).toBeGreaterThanOrEqual(text.right);
+  expect(input.top).toBeLessThan(text.bottom);
+  expect(input.bottom).toBeGreaterThan(text.top);
+});
+
+it("describes Use category colour by the draft category's colour, and follows a category chosen since", async () => {
+  const el = await mountColoured();
+  const describes = (text: string) =>
+    expect.element(page.elementLocator(useCategory(el))).toHaveAccessibleDescription(text);
+  await describes("#25b125");
+  expect(getComputedStyle(useCategory(el).querySelector(".chip")!).backgroundColor).toBe(
+    "rgb(37, 177, 37)",
+  );
+  await pickIn(el, "primary", { value: "snacks" });
+  await describes("#256bb1");
+  await pickIn(el, "primary", { value: "plates" });
+  await describes(t("editor.color_category_none"));
+  const note = useCategory(el).querySelector(".note")!;
+  expect(note.textContent!.trim()).toBe(t("editor.color_category_none"));
+  expect(useCategory(el).querySelector(".chip")).toBeNull();
+  expect(note.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    el.shadowRoot!.querySelector("#product-color-none-label")!.getBoundingClientRect().bottom,
+  );
+  // A category recoloured while the editor is open arrives as a new list.
+  el.categories = colouredCategories.map((category) =>
+    category.id === "plates" ? { ...category, color: "#7a25b1" } : category,
+  );
+  await el.updateComplete;
+  await describes("#7a25b1");
+});
+
+it("saves a chosen swatch as the product's own colour", async () => {
+  const el = await mountColoured();
+  expect(useCategory(el).getAttribute("aria-checked")).toBe("true");
+  colourSwatch(el, "#b12525").click();
+  await el.updateComplete;
+  expect(colourSwatch(el, "#b12525").getAttribute("aria-checked")).toBe("true");
+  expect(submittedValue(el).color).toBe("#b12525");
+});
+
+it("opens with the product's own colour chosen, and Use category colour saves none", async () => {
+  const el = await mountColoured({ color: "#b12525" });
+  expect(colourSwatch(el, "#b12525").getAttribute("aria-checked")).toBe("true");
+  expect(useCategory(el).getAttribute("aria-checked")).toBe("false");
+  useCategory(el).click();
+  await el.updateComplete;
+  expect(useCategory(el).getAttribute("aria-checked")).toBe("true");
+  expect(submittedValue(el).color).toBeNull();
+});
+
+it("holds the colour chooser while a save is in flight", async () => {
+  const el = await mountColoured();
+  el.busy = true;
+  await el.updateComplete;
+  expect(useCategory(el).disabled).toBe(true);
+  expect(colourSwatch(el, "#b12525").disabled).toBe(true);
+});
+
+it("keeps the product's own colour through a category change, and Use category colour then takes the new category's", async () => {
+  const el = await mountColoured({ color: "#b12525" });
+  await pickIn(el, "primary", { value: "snacks" });
+  expect(colourSwatch(el, "#b12525").getAttribute("aria-checked")).toBe("true");
+  expect(submittedValue(el).color).toBe("#b12525");
+  // The screen's save cycle, which lets the form send again.
+  el.busy = true;
+  await el.updateComplete;
+  el.busy = false;
+  await el.updateComplete;
+  useCategory(el).click();
+  await el.updateComplete;
+  await expect.element(page.elementLocator(useCategory(el))).toHaveAccessibleDescription("#256bb1");
+  expect(submittedValue(el).color).toBeNull();
+});
+
+it("shows no colour chooser on a variant's page, and saves no colour of its own", async () => {
+  // A colour left stored on the variant: the server refuses a variant body that carries one.
+  const el = await mountVariant({ ...glass, color: "#b12525" });
+  expect(el.shadowRoot!.querySelector("fieldset.color")).toBeNull();
+  expect(el.shadowRoot!.querySelector('[name="product-color"]')).toBeNull();
+  expect(submittedValue(el).color).toBeNull();
+});
+
+it("shows a refused colour under the chooser, puts focus there, and drops it once a colour is chosen", async () => {
+  expect(productEditorField("color", "en")).toBe("product-color");
+  const el = await mountColoured();
+  el.fieldErrors = { [productEditorField("color", "en")!]: "That colour is refused" };
+  await el.updateComplete;
+  const message = () =>
+    el.shadowRoot!.querySelector("fieldset.color #product-color-error")!.textContent!.trim();
+  expect(message()).toBe("That colour is refused");
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  const custom = el.shadowRoot!.querySelector<HTMLInputElement>('input[name="product-color"]')!;
+  expect(custom.getAttribute("aria-invalid")).toBe("true");
+  await expect.poll(() => el.shadowRoot!.activeElement).toBe(custom);
+  colourSwatch(el, "#256bb1").click();
+  await el.updateComplete;
+  expect(message()).toBe("");
+  expect(await bottomOf(el)).toBe("");
+});
+
 // --- The category path ---
 
 // Listed out of order, with sibling names that sort differently by name and by id, so a tree read
 // in list order, or siblings sorted by id, fails.
 const tree: CategorySummary[] = [
-  { id: "c-plates", name: "Platos", parentId: null },
-  { id: "a-soft", name: "Refrescos", parentId: "drinks" },
-  { id: "cocktails", name: "Cócteles", parentId: "b-alcohol" },
-  { id: "drinks", name: "Bebidas", parentId: null },
-  { id: "b-alcohol", name: "Bebidas alcohólicas", parentId: "drinks" },
-  { id: "z-snacks", name: "Aperitivos", parentId: null },
+  { id: "c-plates", name: "Platos", parentId: null, color: null },
+  { id: "a-soft", name: "Refrescos", parentId: "drinks", color: null },
+  { id: "cocktails", name: "Cócteles", parentId: "b-alcohol", color: null },
+  { id: "drinks", name: "Bebidas", parentId: null, color: null },
+  { id: "b-alcohol", name: "Bebidas alcohólicas", parentId: "drinks", color: null },
+  { id: "z-snacks", name: "Aperitivos", parentId: null, color: null },
 ];
 const cocktailsPath = "Bebidas › Bebidas alcohólicas › Cócteles";
 
@@ -2084,8 +2245,8 @@ it("lists Uncategorised and then every category as a tree, each under its parent
 it("orders numbered sibling categories by value, as the category list does", async () => {
   const el = await mountCategorised();
   el.categories = [
-    { id: "c10", name: "Cat 10", parentId: null },
-    { id: "c9", name: "Cat 9", parentId: null },
+    { id: "c10", name: "Cat 10", parentId: null, color: null },
+    { id: "c9", name: "Cat 9", parentId: null, color: null },
   ];
   await el.updateComplete;
   expect((await categoryLink(el)).options.map((option) => option.label)).toEqual([
@@ -2451,6 +2612,7 @@ it("saves course with a new product, without a separate routing event", async ()
     vatClass: "general",
     variants: [],
     primaryCategoryId: null,
+    color: null,
     modifiers: [],
     allergens: null,
     dietaryDeclarations: [],

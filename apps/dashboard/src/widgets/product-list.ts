@@ -17,6 +17,7 @@ import {
 } from "../i18n/domain.js";
 import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
+import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import {
   holdPageCursor,
   pointerElementsAt,
@@ -110,6 +111,7 @@ export class ProductList extends LitElement {
   static override styles = [
     baseStyles,
     treeDragStyles,
+    swatchPartStyles,
     css`
       :host([sticky-header]) {
         display: flex;
@@ -306,6 +308,11 @@ export class ProductList extends LitElement {
   @property({ attribute: false }) nameDraft: CategoryNameDraft | null = null;
   /** The server's refusal of the name the box last sent, shown under the box. */
   @property() nameError = "";
+  /** The colour the box's square shows, which the box's name is saved with. */
+  @property({ attribute: false }) nameColor: string | null = null;
+  /** Whether the box's colour chooser is open: it takes the cursor without the person leaving the
+   * box. */
+  @property({ type: Boolean }) choosingColor = false;
   /** Whether the catalogue has loaded, so that an empty one is known to be empty. */
   @property({ type: Boolean }) loaded = false;
 
@@ -630,6 +637,8 @@ export class ProductList extends LitElement {
 
   #nameBox() {
     const draft = this.nameDraft;
+    // A press on the square keeps the cursor in the input. The square is no Tab stop, so Tab still
+    // leaves the box; the keyboard reaches a category's colour by its row's square.
     return html`<wt-input
       part="name-box"
       name="category-name"
@@ -653,11 +662,27 @@ export class ProductList extends LitElement {
       }}
       @focusout=${() => {
         // A box removed while it holds the cursor also loses it, after the next box's draft is set.
-        if (this.nameDraft !== draft || this.#nameSent) return;
+        if (this.nameDraft !== draft || this.#nameSent || this.choosingColor) return;
         if (this.#nameValue.trim() === "") this.#cancelName();
         else this.#commitName();
       }}
-    ></wt-input>`;
+      ><button
+        slot="end"
+        part="swatch-button"
+        type="button"
+        tabindex="-1"
+        data-test="name-box-color"
+        aria-label=${t("folders.choose_color")}
+        @mousedown=${(event: Event) => event.preventDefault()}
+        @click=${(event: Event) => {
+          event.stopPropagation();
+          if (this.#nameSent) return;
+          this.#send("name-color", {});
+        }}
+      >
+        ${swatchChip(this.nameColor)}
+      </button></wt-input
+    >`;
   }
 
   /** Re-measured a frame after the table resizes or updates, never inside the resize observer's
@@ -1158,7 +1183,20 @@ export class ProductList extends LitElement {
             >${folderIcon}${
               this.#renaming(folder.id)
                 ? html`${this.#nameBox()}<span part="name-after">${after}</span>`
-                : html`<span part="folder-name"><strong>${folder.name}</strong>${after}</span>`
+                : html`<span part="folder-name"
+                    ><strong>${folder.name}</strong>${after}<button
+                      part="swatch-button"
+                      type="button"
+                      data-test=${`color-${folder.id}`}
+                      aria-label=${t("folders.edit_color").replace("{name}", folder.name)}
+                      @click=${(event: Event) => {
+                        event.stopPropagation();
+                        this.#send("folder-color", { folderId: folder.id });
+                      }}
+                    >
+                      ${swatchChip(folder.color)}
+                    </button></span
+                  >`
             }</span
           >`;
         }

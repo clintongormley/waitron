@@ -24,6 +24,7 @@ const input: ProductEditorInput = {
   modifiers: [],
   allergens: null,
   dietaryDeclarations: [],
+  color: null,
 };
 const parse = (value: unknown) => parseProductEditorInput(value, { isVariant: false });
 const parseVariant = (value: unknown) => parseProductEditorInput(value, { isVariant: true });
@@ -229,6 +230,26 @@ it("refuses a main category on a variant, which always has its parent's", () => 
   expect(() => parseVariant({ ...inheriting, primaryCategoryId: categoryId })).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "primaryCategoryId" } }),
   );
+});
+it("takes a product's own colour, and reads an absent or null one as none", () => {
+  expect(parse({ ...input, color: "#b12525" })).toEqual({ ...input, color: "#b12525" });
+  expect(parse({ ...input, color: null })).toEqual({ ...input, color: null });
+  const withoutColor: Partial<ProductEditorInput> = { ...input };
+  delete withoutColor.color;
+  expect(parse(withoutColor)).toEqual({ ...input, color: null });
+});
+// An empty or blank colour is refused, never read as "no colour", as categories and sections
+// refuse it.
+it.each(["", "  ", "#B12525", "red", 5])("refuses the colour %j, naming the field", (color) => {
+  expect(() => parse({ ...input, color })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "color" } }),
+  );
+});
+it("refuses a colour on a variant, which always has its parent's, and takes a null one", () => {
+  expect(() => parseVariant({ ...inheriting, color: "#b12525" })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "color" } }),
+  );
+  expect(parseVariant({ ...inheriting, color: null })).toEqual({ ...inheriting, color: null });
 });
 it("normalizes optional text and prices without mutating caller or copied allergen text", () => {
   const original = {

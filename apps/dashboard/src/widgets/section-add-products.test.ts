@@ -18,6 +18,7 @@ const category = (id: string, name: string, parentId: string | null): CategorySu
   id,
   name,
   parentId,
+  color: null,
 });
 
 const categories = [

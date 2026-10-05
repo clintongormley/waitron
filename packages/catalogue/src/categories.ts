@@ -4,6 +4,7 @@ import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { assertCategoryNamesFree } from "./category-names.js";
 import { foldName } from "./name-uniqueness.js";
+import { colorOrNull } from "./color-inheritance.js";
 import { categoryDetails } from "./schema/categories.js";
 import { isTopLevelProduct, productWithId } from "./variant-fallback.js";
 import "./errors.js";
@@ -12,15 +13,18 @@ export interface Category {
   id: string;
   name: string;
   parentId: string | null;
+  color: string | null;
 }
 export interface CategoryInput {
   name: string;
   parentId?: string | null;
+  color?: string | null;
 }
 const columns = {
   id: categories.id,
   name: categories.name,
   parentId: categoryDetails.parentId,
+  color: categoryDetails.color,
 };
 
 /*
@@ -68,13 +72,21 @@ function categoryName(name: unknown): string {
   if (trimmed === "") throw new AppError("category.invalid", { field: "name" });
   return trimmed;
 }
+function categoryColorInput(value: unknown): string | null {
+  return colorOrNull(value, () => {
+    throw new AppError("category.invalid", { field: "color" });
+  });
+}
 export async function createCategory(tx: Transaction, input: CategoryInput): Promise<Category> {
   const name = categoryName(input.name);
+  const color = input.color === undefined ? null : categoryColorInput(input.color);
   const id = crypto.randomUUID();
   await validateParent(tx, id, input.parentId ?? null);
   await assertCategoryNamesFree(tx, [{ id, name, parentId: input.parentId ?? null }]);
   await tx.insert(categories).values({ id, name });
-  await tx.insert(categoryDetails).values({ categoryId: id, parentId: input.parentId ?? null });
+  await tx
+    .insert(categoryDetails)
+    .values({ categoryId: id, parentId: input.parentId ?? null, color });
   return readCategory(tx, id);
 }
 export async function updateCategory(
@@ -85,6 +97,7 @@ export async function updateCategory(
   const name = patch.name === undefined ? undefined : categoryName(patch.name);
   const current = await readCategory(tx, id);
   const parentId = patch.parentId === undefined ? current.parentId : patch.parentId;
+  const color = patch.color === undefined ? current.color : categoryColorInput(patch.color);
   await validateParent(tx, id, parentId);
   const finalName = name ?? current.name;
   if (parentId !== current.parentId || foldName(finalName) !== foldName(current.name))
@@ -95,8 +108,8 @@ export async function updateCategory(
     .where(eq(categories.id, id));
   await tx
     .insert(categoryDetails)
-    .values({ categoryId: id, parentId })
-    .onConflictDoUpdate({ target: categoryDetails.categoryId, set: { parentId } });
+    .values({ categoryId: id, parentId, color })
+    .onConflictDoUpdate({ target: categoryDetails.categoryId, set: { parentId, color } });
   return readCategory(tx, id);
 }
 /**

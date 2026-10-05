@@ -86,6 +86,9 @@ export const products = table(
     // bytes. Null just means "no picture" — unlike `allergens`' null, which is a PENDING state the
     // till surfaces.
     image: label("image"),
+    // Its own tile colour, lowercase #rrggbb; null takes its category's. A variant's own value is
+    // ignored: it reads its parent's.
+    color: label("color"),
     // Allergen declaration (EU 1169/2011 Annex II). NULL = not yet reviewed (a compliance gap the
     // till surfaces distinctly); {} = reviewed, contains none; else per-code presence + optional
     // specific-substance source.

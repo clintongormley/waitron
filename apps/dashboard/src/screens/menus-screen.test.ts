@@ -87,6 +87,7 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
     dietOverride: null,
     manualAllergens: null,
     image: null,
+    color: null,
     variants: [],
     ...overrides,
   };
@@ -101,9 +102,9 @@ const products: Product[] = [
 ];
 
 const categories: CategorySummary[] = [
-  { id: "c-drinks", name: "Bebidas", parentId: null },
-  { id: "c-beer", name: "Cerveza", parentId: "c-drinks" },
-  { id: "c-mains", name: "Principales", parentId: null },
+  { id: "c-drinks", name: "Bebidas", parentId: null, color: null },
+  { id: "c-beer", name: "Cerveza", parentId: "c-drinks", color: null },
+  { id: "c-mains", name: "Principales", parentId: null, color: null },
 ];
 
 const menus: CatalogueSummary[] = [
@@ -320,6 +321,7 @@ const WRITES = [
   "replaceHomeTile",
   "removeHomeTile",
   "moveHomeTile",
+  "setProductColor",
 ] as const;
 
 const PUBLISHED_AT = "2026-09-26T10:15:00.000Z";
@@ -540,6 +542,7 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
         ref: homeLayouts()[0]!.tiles.find((tile) => tile.memberId === id)!.ref,
       }));
     }),
+    setProductColor: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
   return client as unknown as DashboardApi & {
@@ -7040,5 +7043,247 @@ describe("after the server comes back", () => {
 
     await vi.waitFor(() => expect(q(el, '[data-test="home-load-error"]')).toBeNull());
     expect(q<HomeLayoutEditor>(el, "dashboard-home-layout-editor")?.layouts.length).toBe(2);
+  });
+});
+
+describe("colour swatches on the Structure tab", () => {
+  const paintedCategories = (): CategorySummary[] =>
+    categories.map((each) => (each.id === "c-drinks" ? { ...each, color: "#256bb1" } : each));
+  type ColorForm = HTMLElementTagNameMap["dashboard-product-color-form"];
+  const colorForm = (el: MenusScreen) => q<ColorForm>(el, "dashboard-product-color-form")!;
+  const inColorForm = <T extends Element = HTMLElement>(el: MenusScreen, selector: string) =>
+    colorForm(el).shadowRoot!.querySelector<T>(selector)!;
+
+  async function openLemonade(client: Api): Promise<MenusScreen> {
+    const el = await mountLunch(client);
+    await toggleRow(el, "m-drinks");
+    inStructure(el, `[data-test="${CSS.escape("color-m-drinks/m-lemonade")}"]`)!.click();
+    await el.updateComplete;
+    await vi.waitFor(() => expect(colorForm(el).open).toBe(true));
+    return el;
+  }
+
+  it("opens the product's colour dialog from its swatch, and Save sets its colour and closes it", async () => {
+    const client = api({
+      listCategories: vi.fn().mockResolvedValue(paintedCategories()),
+      setProductColor: vi.fn().mockResolvedValue(undefined),
+    });
+    const el = await openLemonade(client);
+    const form = colorForm(el);
+    expect(form.name).toBe("Lemonade");
+    expect(form.color).toBeNull();
+    expect(form.categoryColor).toBe("#256bb1");
+    expect(form.shadowRoot!.querySelector("wt-modal")!.heading).toBe(
+      t("product_color.heading").replace("{name}", "Lemonade"),
+    );
+    inColorForm(el, '[data-color="#b12525"]').click();
+    await form.updateComplete;
+    inColorForm(el, '[data-test="save"]').click();
+    await vi.waitFor(() => expect(form.open).toBe(false));
+    expect(client.setProductColor.mock.calls).toEqual([["p-lemonade", "#b12525"]]);
+    expect(writeCalls(client)).toEqual(["setProductColor"]);
+  });
+
+  it("keeps the dialog open with a refused colour under the chooser, and any other refusal at its end", async () => {
+    const client = api({
+      setProductColor: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "product.invalid", params: { field: "color" } })
+        .mockRejectedValueOnce({ code: "server.internal" }),
+    });
+    const el = await openLemonade(client);
+    const form = colorForm(el);
+    inColorForm(el, '[data-color="#b12525"]').click();
+    await form.updateComplete;
+    inColorForm(el, '[data-test="save"]').click();
+    await vi.waitFor(() => expect(form.errors).toEqual({ color: t("editor.field_rejected") }));
+    await form.updateComplete;
+    expect(form.open).toBe(true);
+    expect(form.busy).toBe(false);
+    expect(inColorForm(el, "#product-color-error").textContent!.trim()).toBe(
+      t("editor.field_rejected"),
+    );
+
+    inColorForm(el, '[data-test="save"]').click();
+    await vi.waitFor(() => expect(form.errors).toEqual({ _form: codeMessage("server.internal") }));
+    expect(form.open).toBe(true);
+  });
+
+  it("shows the category's new colour when it changes while the dialog is open, keeping the choice made there", async () => {
+    const live = new LiveData();
+    const client = api({
+      liveData: live,
+      listCategories: vi.fn().mockResolvedValue(paintedCategories()),
+      setProductColor: vi.fn().mockResolvedValue(undefined),
+    });
+    const el = await openLemonade(client);
+    const form = colorForm(el);
+    inColorForm(el, '[data-color="#b12525"]').click();
+    await form.updateComplete;
+
+    client.listCategories.mockResolvedValue(
+      categories.map((each) => (each.id === "c-drinks" ? { ...each, color: "#2e8b57" } : each)),
+    );
+    live.invalidate([{ type: "categories" }]);
+
+    await vi.waitFor(() =>
+      expect(inColorForm(el, "#product-color-none-value").textContent).toBe("#2e8b57"),
+    );
+    expect(form.open).toBe(true);
+    expect(inColorForm(el, '[data-color="#b12525"]').getAttribute("aria-checked")).toBe("true");
+
+    inColorForm(el, '[data-color=""]').click();
+    await form.updateComplete;
+    inColorForm(el, '[data-test="save"]').click();
+    await vi.waitFor(() => expect(form.open).toBe(false));
+    expect(client.setProductColor.mock.calls).toEqual([["p-lemonade", null]]);
+  });
+
+  it("closes the dialog when its product leaves the library, and does not reopen it when the product comes back", async () => {
+    const live = new LiveData();
+    const client = api({ liveData: live, setProductColor: vi.fn() });
+    const el = await openLemonade(client);
+    client.listLibraryProducts.mockResolvedValue(
+      products.filter((each) => each.id !== "p-lemonade"),
+    );
+    live.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(colorForm(el).open).toBe(false));
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menus.product_gone").replace("{name}", "Lemonade"),
+    );
+
+    client.listLibraryProducts.mockResolvedValue(products);
+    live.invalidate([{ type: "products" }]);
+    await vi.waitFor(() =>
+      expect(structure(el).products.some((each) => each.id === "p-lemonade")).toBe(true),
+    );
+    await el.updateComplete;
+    expect(colorForm(el).open).toBe(false);
+    expect(writeCalls(client)).toEqual([]);
+  });
+
+  it("keeps the dialog open while its save is out and its product leaves the library, shows a refusal there, and closes with the reason when saved again", async () => {
+    const live = new LiveData();
+    const saving = deferred<void>();
+    const client = api({ liveData: live, setProductColor: vi.fn(() => saving.promise) });
+    const el = await openLemonade(client);
+    const form = colorForm(el);
+    inColorForm(el, '[data-color="#b12525"]').click();
+    await form.updateComplete;
+    inColorForm(el, '[data-test="save"]').click();
+    await vi.waitFor(() => expect(client.setProductColor).toHaveBeenCalledOnce());
+
+    client.listLibraryProducts.mockResolvedValue(
+      products.filter((each) => each.id !== "p-lemonade"),
+    );
+    live.invalidate([{ type: "products" }]);
+    await vi.waitFor(() =>
+      expect(structure(el).products.some((each) => each.id === "p-lemonade")).toBe(false),
+    );
+    await el.updateComplete;
+    expect(form.open).toBe(true);
+    expect(form.name).toBe("Lemonade");
+
+    saving.reject({
+      code: "authorization.not_permitted",
+      params: { permission: "person.manage" },
+    });
+    await vi.waitFor(() =>
+      expect(form.errors).toEqual({ _form: codeMessage("authorization.not_permitted") }),
+    );
+    await el.updateComplete;
+    expect(form.open).toBe(true);
+    expect(form.busy).toBe(false);
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+
+    // Saved again, with its product gone, it closes and sends nothing.
+    inColorForm(el, '[data-test="save"]').click();
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(client.setProductColor).toHaveBeenCalledOnce();
+    expect(form.open).toBe(false);
+    expect(text(q(el, '[data-test="member-error"]'))).toBe(
+      t("menus.product_gone").replace("{name}", "Lemonade"),
+    );
+  });
+
+  it("closes the dialog on Cancel, writing nothing", async () => {
+    const client = api({ setProductColor: vi.fn() });
+    const el = await openLemonade(client);
+    inColorForm(el, '[data-test="cancel"]').click();
+    await vi.waitFor(() => expect(colorForm(el).open).toBe(false));
+    expect(writeCalls(client)).toEqual([]);
+  });
+
+  async function backToList(el: MenusScreen): Promise<void> {
+    history.pushState(null, "", "/manage/menus");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await vi.waitFor(() => expect(q(el, '[data-test="menus"]')).not.toBeNull());
+    await el.updateComplete;
+  }
+
+  it("closes the dialog without a message when the person goes back to the list, so opening a menu does not bring it back", async () => {
+    const client = api({ setProductColor: vi.fn() });
+    const el = await openLemonade(client);
+    await backToList(el);
+    await visit(el, LUNCH_PATH, "Lunch Menu");
+    expect(colorForm(el).open).toBe(false);
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+    expect(writeCalls(client)).toEqual([]);
+  });
+
+  it("says nothing on the list when the product of a dialog closed by going back leaves the library", async () => {
+    const live = new LiveData();
+    const client = api({ liveData: live, setProductColor: vi.fn() });
+    const el = await openLemonade(client);
+    await backToList(el);
+    const reads = client.listLibraryProducts.mock.calls.length;
+    client.listLibraryProducts.mockResolvedValue(
+      products.filter((each) => each.id !== "p-lemonade"),
+    );
+    live.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(client.listLibraryProducts.mock.calls.length).toBe(reads + 1));
+    await new Promise((resolve) => setTimeout(resolve));
+    await el.updateComplete;
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+  });
+
+  it("names the product beside the other menu and closes the dialog when its save is refused after the person went there", async () => {
+    const saving = deferred<void>();
+    const client = api({ setProductColor: vi.fn(() => saving.promise) });
+    const el = await openLemonade(client);
+    inColorForm(el, '[data-color="#b12525"]').click();
+    await colorForm(el).updateComplete;
+    inColorForm(el, '[data-test="save"]').click();
+    await vi.waitFor(() => expect(client.setProductColor).toHaveBeenCalledOnce());
+    await visit(el, DINNER_PATH, "Dinner Menu");
+
+    saving.reject({
+      code: "authorization.not_permitted",
+      params: { permission: "person.manage" },
+    });
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="member-error"]'))).toBe(
+        t("menus.change_not_saved")
+          .replace("{name}", "Lemonade")
+          .replace("{reason}", codeMessage("authorization.not_permitted")),
+      ),
+    );
+    await el.updateComplete;
+    expect(colorForm(el).open).toBe(false);
+    expect(colorForm(el).errors).toEqual({});
+  });
+
+  it("opens the section's own form from a section's swatch", async () => {
+    const el = await mountLunch();
+    await settleStructure(el);
+    inStructure(el, '[data-test="color-m-drinks"]')!.click();
+    await el.updateComplete;
+    const form = q<HTMLElementTagNameMap["dashboard-section-details-form"]>(
+      el,
+      '[data-test="section-form"]',
+    )!;
+    await vi.waitFor(() => expect(form.open).toBe(true));
+    expect(form.value?.id).toBe("s-drinks");
+    expect(form.getAttribute("heading")).toBe(t("menus.edit_section"));
   });
 });

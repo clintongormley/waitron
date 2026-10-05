@@ -3787,6 +3787,47 @@ describe("menuOfferToTillProduct", () => {
     expect(menuOfferToTillProduct(offer)).not.toHaveProperty("ordering");
   });
 
+  it("carries the offer's colour, null included, and nothing when the version carries none", () => {
+    const offer: TillMenuOffer = {
+      id: "offer-beer",
+      menuId: "menu-1",
+      productId: "beer",
+      grossPrice: null,
+      unitPrice: "3.00",
+      available: true,
+      image: null,
+      description: null,
+      menuName: "Carta",
+      placements: [[]],
+      name: "Beer",
+      customerName: null,
+      kitchenName: null,
+      unit: {
+        id: "unit-each",
+        name: { es: "unidad" },
+        abbreviation: { es: "ud" },
+        precision: 0,
+        hardwareUnit: null,
+      },
+      vatClass: "general",
+      category: null,
+      allergens: null,
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      courseId: null,
+      offeredModifiers: [],
+      variants: [],
+    };
+    expect(menuOfferToTillProduct({ ...offer, color: "#256bb1" })).toHaveProperty(
+      "color",
+      "#256bb1",
+    );
+    expect(menuOfferToTillProduct({ ...offer, color: null })).toHaveProperty("color", null);
+    expect(menuOfferToTillProduct(offer)).not.toHaveProperty("color");
+  });
+
   it("offers the picker only the extras items and option labels that can be sold now", () => {
     const item = (productId: string, available: boolean) => ({
       portion: "1",

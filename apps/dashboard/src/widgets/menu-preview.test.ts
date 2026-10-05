@@ -397,6 +397,25 @@ it("names a VAT change in Spanish", async () => {
 });
 
 it.each([
+  ["en", "Lemonade: colour — shared product"],
+  ["es-ES", "Lemonade: color — producto compartido"],
+])("names a change to a product's colour (%s)", async (locale, line) => {
+  setLocale(locale);
+  const el = await mount({
+    preview: preview([
+      {
+        kind: "product_changed",
+        productId: "p-lemonade",
+        name: "Lemonade",
+        fields: ["color"],
+        source: "shared_product",
+      },
+    ]),
+  });
+  expect(items(el, "changes")).toEqual([line]);
+});
+
+it.each([
   ["en", "Bacon: how it is sold — shared product"],
   ["es-ES", "Bacon: cómo se vende — producto compartido"],
 ])("names a change to who may order a product on its own (%s)", async (locale, line) => {

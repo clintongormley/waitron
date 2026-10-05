@@ -33,6 +33,7 @@ const product = (
   dietOverride: null,
   manualAllergens: null,
   image: null,
+  color: null,
   variants: [],
 });
 const PRODUCTS = [
@@ -106,8 +107,8 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
               ]),
           } as unknown as DashboardApi,
           categories: [
-            { id: "d", name: "Drinks", parentId: null },
-            { id: "b", name: "Beer", parentId: "d" },
+            { id: "d", name: "Drinks", parentId: null, color: "#b12525" },
+            { id: "b", name: "Beer", parentId: "d", color: null },
           ],
           routing: {
             stationTimes: [],
@@ -177,6 +178,51 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
     },
   );
 
+  it.each(["row", "box", "refused"] as const)(
+    "renders the colour chooser opened from a %s square accessibly",
+    async (from) => {
+      const { el, host } = await mountWidget<CatalogueBrowser>(
+        "dashboard-catalogue-browser",
+        {
+          products: PRODUCTS,
+          api: {
+            updateCategory: vi
+              .fn()
+              .mockRejectedValue({ code: "category.invalid", params: { field: "color" } }),
+          } as unknown as DashboardApi,
+          categories: [
+            { id: "d", name: "Drinks", parentId: null, color: "#b12525" },
+            { id: "b", name: "Beer", parentId: "d", color: null },
+          ],
+        },
+        theme,
+      );
+      const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+      await list.updateComplete;
+      const table = list.shadowRoot!.querySelector("wt-data-table")!;
+      await table.updateComplete;
+      if (from === "box") {
+        table.shadowRoot!.querySelector<HTMLElement>('[data-test="add-category-d"]')!.click();
+        await vi.waitFor(() =>
+          expect(table.shadowRoot!.activeElement?.getAttribute("name")).toBe("category-name"),
+        );
+        table.shadowRoot!.querySelector<HTMLElement>('[data-test="name-box-color"]')!.click();
+      } else table.shadowRoot!.querySelector<HTMLElement>('[data-test="color-d"]')!.click();
+      await el.updateComplete;
+      const form = el.shadowRoot!.querySelector("dashboard-category-color-form")!;
+      await form.updateComplete;
+      expect(form.open).toBe(true);
+      if (from === "refused") {
+        form.shadowRoot!.querySelector<HTMLElement>('[data-color="#256bb1"]')!.click();
+        await vi.waitFor(() =>
+          expect(form.shadowRoot!.querySelector("#category-color-error")!.textContent).not.toBe(""),
+        );
+      }
+      await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+      await expectNoA11yViolations(host);
+    },
+  );
+
   it.each([
     ["routed", false],
     ["unreadable", true],
@@ -187,9 +233,9 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
         products: PRODUCTS,
         api: {} as DashboardApi,
         categories: [
-          { id: "d", name: "Drinks", parentId: null },
-          { id: "b", name: "Beer", parentId: "d" },
-          { id: "f", name: "Food", parentId: null },
+          { id: "d", name: "Drinks", parentId: null, color: null },
+          { id: "b", name: "Beer", parentId: "d", color: null },
+          { id: "f", name: "Food", parentId: null, color: null },
         ],
         routingFailed: failed,
         routing: failed

@@ -2989,6 +2989,16 @@ pack marks the Canary tax territory unsupported.) Slice 3b's station opening hou
 when the zone cannot be read, as a last defence
 ([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), S8).
 
+**A configuration import does not check a table status's colour (A273, review of W92, 2026-10-05) —
+OPEN.** A save checks it (`STATUS_COLOR_RE`, `apps/server/src/tables.ts`), but the import copies
+`table_service_statuses` as a plain table (`packages/db/src/configuration-transfer.ts`) and core has
+no import check, so a bundle can store a colour such as `red;position:fixed`. The till puts that
+colour straight into a `style` attribute (`apps/till/src/screens/till-floor-screen.ts` and
+`till-table-order-screen.ts`). Read, not run. W92 closed the same gap for product, category and
+section colours (`validateCatalogueConfiguration`). **Wanted:** the import refuses a status colour
+the save would refuse. Status colours allow named colours such as `amber`, so a till-side guard
+cannot simply be `isHexColor`.
+
 **Remaining "?" buttons that should be hints (A237, owner 2026-10-03) — OPEN.** The rule — a short
 explanation is the field's hint, and the "?" button is only for one too long for a hint or a field
 that starts filled in — was applied to the setup wizard's first four screens only, and nothing
@@ -3254,6 +3264,55 @@ a clashing row while a price is typed but not yet saved; and a size with its own
 whether its clash comes from its product by matching the two clashes, which can be misread in a
 rare setup where they match exactly — telling them apart needs the prices read to say which level
 a clash came from.
+
+**A product has one colour everywhere, taken from its category unless it has its own — DONE (W92,
+2026-10-05).** A category can have a colour, set in the Products tree from a colour square
+after its name and count, or from the square inside the box that names a new category or renames
+one (a category is still named inline, the owner's choice of 2026-10-05). A square opens a small
+chooser with the shared swatches, No colour and Custom; choosing is the answer. From a row the
+colour saves at once, alone; from the box it saves with the name on Enter. The box's square is no
+Tab stop, so Tab still leaves the box and saves it as before; from the keyboard a category's colour
+is set from its row's square. A product can have a colour of its own, set from the product
+editor's chooser after Name, whose "Use category colour" choice shows the colour it would take
+instead, or from the product's swatch in a menu's Structure tree, whose dialog says the change
+applies on every menu using the product. A product's colour is its own, else its main category's,
+else the nearest coloured category above that, else none. A variant always takes its parent's: the
+editor clears a variant's colour, and the server refuses a variant body carrying one. A section's
+swatch in the Structure tree opens the section's existing form, and a section's colour still
+paints only its own tile. Each published offer records its product's colour, so a colour edit is a
+change to publish: the menu reads as changed, its Preview tab names the change "colour", and the
+tills show it once the menu is published. On the till, a coloured product or section tile fills
+with its colour and its labels turn black or white, whichever reads better; a sold-out painted tile
+keeps the usual fade. The swatches sit after the name, not before it, so names at one depth stay
+lined up (W84). The Home page tab's tile preview stays uncoloured
+([W92 spec](superpowers/specs/2026-10-05-w92-product-colours-design.md), Question 3 and
+Decision 8). How it works: [products.md](developers/products.md), _Colour_, and
+[product-categories.md](developers/product-categories.md).
+**Upgrading:** two migrations, core `0101_product_color.sql` and catalogue
+`0025_category_color.sql`, each add one nullable column (`products.color`,
+`category_details.color`) with no table rebuild, so a venue migrates in place with no reset.
+Republish every menu after upgrading: a version published before W92 carries no product colours,
+so its product tiles stay plain, and a menu with products on it reads as changed until it is
+published again (the document format number is unchanged, so such a version is still sold from).
+A section's colour was already in such a version, and the till now paints it on the section's
+tile. Export a configuration bundle again
+after upgrading: one exported before W92 records older schema versions for core and catalogue,
+which the import refuses (`validateConfigurationBundle`,
+`apps/server/src/configuration-transfer.ts`; read, not run). The test checks this change rewrote
+are listed in the PR's "Changed test checks" and in the plan
+(`docs/superpowers/plans/2026-10-05-w92-product-colours.md`).
+Left open:
+- In the Structure tree, closing the section form opened from a section's swatch puts focus on the
+  row's ⋮ menu, while the product colour dialog puts it back on the swatch. Neither is pinned by a
+  test, and the two should agree.
+- At 390 px the Structure tree clips a long name under the pinned Actions column, so a long name's
+  swatch needs a sideways scroll to reach. The names clip with the swatches removed too (measured
+  on the W92 branch, not on `main`).
+- A case in `apps/dashboard/src/screens/catalogue-screen.test.ts` (near line 2135, added by #1087
+  before W92) prints "[Unhandled rejection] Error: marker" in passing runs; the noise should go.
+- Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
+  during the branch's work, and the cause was not found; that they pass is to be confirmed by the
+  PR's dashboard CI shard.
 
 **A Products drag does not notice when a refresh removes what it is dragging or where it is going —
 DONE (W88a, #1228, 2026-10-05).** Found by W88's pre-merge review. The Products tree

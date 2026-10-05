@@ -1860,6 +1860,69 @@ describe("mountCatalogueApi — products", () => {
     };
   }
 
+  describe("a product's own colour, by PATCH", () => {
+    const listedColor = async (app: Hono, id: string) =>
+      (
+        (await (await send(app, "GET", "/management-api/products")).json()) as {
+          id: string;
+          color: string | null;
+        }[]
+      ).find((product) => product.id === id)!.color;
+    const storedColor = async (id: string) =>
+      (
+        await suite.db.execute<{ color: string | null }>(
+          sql`select color from products where id = ${id}`,
+        )
+      ).rows[0]!.color;
+
+    it("sets and clears it, and keeps it when its category is recoloured", async () => {
+      const app = mountApp("es-ES");
+      const { parentId, categoryId } = await parentWithVariant(app);
+      const path = `/management-api/products/${parentId}`;
+      expect((await send(app, "PATCH", path, { body: { color: "#256bb1" } })).status).toBe(204);
+      expect(await listedColor(app, parentId)).toBe("#256bb1");
+      const recoloured = await send(app, "PATCH", `/management-api/categories/${categoryId}`, {
+        body: { color: "#b12525" },
+      });
+      expect(recoloured.status).toBe(200);
+      expect(await listedColor(app, parentId)).toBe("#256bb1");
+      expect((await send(app, "PATCH", path, { body: { color: null } })).status).toBe(204);
+      expect(await listedColor(app, parentId)).toBeNull();
+    });
+
+    it("refuses a colour of the wrong type or spelling, leaving the stored one", async () => {
+      const app = mountApp("es-ES");
+      const { parentId } = await parentWithVariant(app);
+      const path = `/management-api/products/${parentId}`;
+      await send(app, "PATCH", path, { body: { color: "#256bb1" } });
+      const wrongType = await send(app, "PATCH", path, { body: { color: 1 } });
+      expect(wrongType.status).toBe(400);
+      expect(await wrongType.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "color" } },
+      });
+      const wrongSpelling = await send(app, "PATCH", path, { body: { color: "#B12525" } });
+      expect(wrongSpelling.status).toBe(400);
+      expect(await wrongSpelling.json()).toMatchObject({
+        error: { code: "product.invalid", params: { field: "color" } },
+      });
+      expect(await storedColor(parentId)).toBe("#256bb1");
+    });
+
+    it("answers a variant's id as an id that names no product, and stores nothing", async () => {
+      const app = mountApp("es-ES");
+      const { variantId } = await parentWithVariant(app);
+      const variant = await send(app, "PATCH", `/management-api/products/${variantId}`, {
+        body: { color: "#b12525" },
+      });
+      const unknown = await send(app, "PATCH", `/management-api/products/${crypto.randomUUID()}`, {
+        body: { color: "#b12525" },
+      });
+      expect(variant.status).toBe(unknown.status);
+      expect(await variant.json()).toEqual(await unknown.json());
+      expect(await storedColor(variantId)).toBeNull();
+    });
+  });
+
   it("reads a variant's own page: its own names, its blanks blank, its parent's values beside", async () => {
     const app = mountApp("es-ES");
     const { parentId, variantId, categoryId } = await parentWithVariant(app);
@@ -2937,7 +3000,8 @@ describe("mountCatalogueApi — products", () => {
   });
 
   it("PATCH /management-api/products/:id naming no stored product → authorization.not_permitted 403", async () => {
-    // The refusal is the pre-read's alone: `updateProduct` reports nothing when no row matches.
+    // The refusal is the pre-read's alone: for this price-only patch, `updateProduct` reports
+    // nothing when no row matches.
     const res = await send(
       mountApp(),
       "PATCH",
@@ -4610,6 +4674,7 @@ it("authors a hierarchy and requires a session to read it", async () => {
     id: category.id,
     name: "Food",
     parentId: null,
+    color: null,
   });
   const cycle = await send(app, "PATCH", path, { body: { parentId: category.id } });
   expect(cycle.status).toBe(409);
@@ -4627,6 +4692,28 @@ it("authors a hierarchy and requires a session to read it", async () => {
   });
   expect(response.status).toBe(201);
   expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
+});
+
+it("creates a category holding its colour, and refuses a colour of the wrong type or spelling", async () => {
+  const app = mountApp("en-GB");
+  const created = await send(app, "POST", "/management-api/categories", {
+    body: { name: "Food", color: "#b12525" },
+  });
+  expect(created.status).toBe(201);
+  const category = (await created.json()) as { id: string };
+  expect(category).toEqual({ id: category.id, name: "Food", parentId: null, color: "#b12525" });
+  const path = `/management-api/categories/${category.id}`;
+  const wrongType = await send(app, "PATCH", path, { body: { color: 5 } });
+  expect(wrongType.status).toBe(400);
+  expect(await wrongType.json()).toMatchObject({
+    error: { code: "management.request_invalid", params: { field: "color" } },
+  });
+  const wrongSpelling = await send(app, "PATCH", path, { body: { color: "#ZZZZZZ" } });
+  expect(wrongSpelling.status).toBe(400);
+  expect(await wrongSpelling.json()).toMatchObject({
+    error: { code: "category.invalid", params: { field: "color" } },
+  });
+  expect(await (await send(app, "GET", path)).json()).toMatchObject({ color: "#b12525" });
 });
 
 // A negative CATALOGUE price is never a valid one (owner ruling, 2026-09-21) — the scope matters,

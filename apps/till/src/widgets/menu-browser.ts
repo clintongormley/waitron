@@ -1,6 +1,12 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { ContentLanguageController, baseStyles, registerIcons } from "@waitron/ui";
+import {
+  ContentLanguageController,
+  baseStyles,
+  isHexColor,
+  readableTextColor,
+  registerIcons,
+} from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { TILL_COLUMNS } from "@waitron/catalogue/src/home-layout-columns.js";
 import type { DocumentMember, DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
@@ -60,6 +66,21 @@ function indexMenu(menu: TillZoneMenu, products: TillProduct[]): MenuIndex {
   };
   walk(menu.structure.members);
   return index;
+}
+
+const paints = new Map<string, string | undefined>();
+
+/** Custom properties for a tile painted in a stored colour, with black or white ink for contrast;
+ * undefined draws the neutral tile. Checked, because the value lands in a style attribute. Worked
+ * out once per colour, not on every render of every tile. */
+function tilePaint(color: string | null | undefined): string | undefined {
+  if (typeof color !== "string") return undefined;
+  if (!paints.has(color))
+    paints.set(
+      color,
+      isHexColor(color) ? `--tile-fill:${color};--tile-ink:${readableTextColor(color)}` : undefined,
+    );
+  return paints.get(color);
 }
 
 /** Case- and accent-blind, so "jamon" finds "Jamón". */
@@ -163,6 +184,21 @@ export class TillMenuBrowser extends LitElement {
       .empty {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+
+      /* Only background, border and ink: wt-button's hover and disabled feedback is its opacity. */
+      .tile[data-painted]::part(button) {
+        background: var(--tile-fill);
+        border-color: var(--tile-fill);
+        color: var(--tile-ink);
+      }
+
+      /* wt-icon sets its own text colour on its host, so it is named here as the labels are. */
+      .tile[data-painted] .price,
+      .tile[data-painted] .kind,
+      .tile[data-painted] .sold-out,
+      .tile[data-painted] wt-icon {
+        color: inherit;
       }
 
       .empty {
@@ -327,7 +363,15 @@ export class TillMenuBrowser extends LitElement {
   #productButton(product: TillProduct, onTap: () => void): TemplateResult {
     const price = `${formatMoney(product.unitPrice, currentLocale())}/${unitName(product)}`;
     const sellable = hasSomethingToSell(product);
-    return html`<wt-button class="tile" data-kind="product" ?disabled=${!sellable} @click=${onTap}>
+    const paint = tilePaint(product.color);
+    return html`<wt-button
+      class="tile"
+      data-kind="product"
+      style=${paint ?? nothing}
+      ?data-painted=${paint !== undefined}
+      ?disabled=${!sellable}
+      @click=${onTap}
+    >
       <span class="label">
         <span class="name">${productName(product)}</span>
         <span class="price">${price}</span>
@@ -337,7 +381,14 @@ export class TillMenuBrowser extends LitElement {
   }
 
   #sectionButton(section: SectionNode, onTap: () => void): TemplateResult {
-    return html`<wt-button class="tile" data-kind="section" @click=${onTap}>
+    const paint = tilePaint(section.color);
+    return html`<wt-button
+      class="tile"
+      data-kind="section"
+      style=${paint ?? nothing}
+      ?data-painted=${paint !== undefined}
+      @click=${onTap}
+    >
       <span class="label">
         <wt-icon name="menu-section"></wt-icon>
         <span class="name">${this.#sectionName(section)}</span>

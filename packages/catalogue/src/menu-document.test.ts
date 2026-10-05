@@ -1,8 +1,9 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { products, withTransaction, type Transaction } from "@waitron/db";
+import { seedTenant } from "@waitron/db/testing/seed.js";
 import { decimal } from "@waitron/shared";
-import { plantStoredCategory, useCatalogueDb } from "../test/fixtures.js";
+import { plantStoredCategory, seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import {
   menusFixture,
   NO_ICE,
@@ -16,10 +17,15 @@ import {
   buildMenuDocument,
   diffMenuDocuments,
   menuDocumentHash,
+  readDishFacts,
   type MenuDocument,
 } from "./menu-document.js";
+import { BATCH_SIZE } from "./batches.js";
 import * as vatRates from "./vat-rates.js";
+import { createCategory, updateCategory } from "./categories.js";
 import {
+  createCatalogue,
+  createProduct,
   deactivateProduct,
   updateMenuDetails,
   updateMenuItem,
@@ -289,6 +295,124 @@ describe("buildMenuDocument", () => {
       "Terrace",
     ]);
     expect(document.homeLayouts[0]!.id).toBe(home);
+  });
+});
+
+describe("each offer's colour", () => {
+  const offersOf = (document: MenuDocument, productId: string) =>
+    Object.values(document.offers).filter((offer) => offer.productId === productId);
+  const offerFor = async (menuId: string, productId: string) => {
+    const [offer, ...more] = offersOf(await build(menuId), productId);
+    expect(more).toEqual([]);
+    return offer!;
+  };
+
+  it("gives each offer its product's effective colour", async () => {
+    const f = await menusFixture(fx.db);
+    expect(await offerFor(f.lunch, f.lemonade)).toHaveProperty("color", null);
+    await app((tx) => updateCategory(tx, f.softDrinks, { color: "#256bb1" }));
+    expect(await offerFor(f.lunch, f.lemonade)).toHaveProperty("color", "#256bb1");
+    await app((tx) => updateProduct(tx, f.lemonade, { color: "#b12525" }));
+    const lemonade = await offerFor(f.lunch, f.lemonade);
+    expect(lemonade).toHaveProperty("color", "#b12525");
+    expect(lemonade.variants[0]).not.toHaveProperty("color");
+    await app(async (tx) => {
+      await updateCategory(tx, f.coldDrinks, { parentId: f.softDrinks });
+      const soups = await createCategory(tx, { name: "Soups", parentId: f.coldDrinks });
+      await updateProduct(tx, f.soup, { categoryId: soups.id });
+    });
+    expect(await offerFor(f.lunch, f.soup)).toHaveProperty("color", "#256bb1");
+  });
+
+  it("keeps a section's colour on the section only", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      await updateMenuDetails(tx, f.drinksMenu, { color: "#b12525" });
+      await updateProduct(tx, f.lemonade, { color: "#25b125" });
+    });
+    const document = await build(f.lunch);
+    expect(document.root.members[0]).toMatchObject({ sectionId: f.drinks, color: "#b12525" });
+    expect(offersOf(document, f.lemonade)).toMatchObject([{ color: "#25b125" }]);
+    expect(offersOf(document, f.lager)).toMatchObject([{ color: null }]);
+  });
+
+  it("gives a product placed twice the same colour on every menu", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      await addMember(tx, f.lunchRoot, product(f.lemonade));
+      await updateCategory(tx, f.softDrinks, { color: "#256bb1" });
+    });
+    expect(await offerFor(f.lunch, f.lemonade)).toHaveProperty("color", "#256bb1");
+    expect(await offerFor(f.dinner, f.lemonade)).toHaveProperty("color", "#256bb1");
+  });
+});
+
+describe("readDishFacts", () => {
+  let productId: string;
+  let variantId: string;
+  beforeEach(async () => {
+    await seedTenant(fx.db);
+    await seedLegacySellingUnits(fx.db);
+    ({ productId, variantId } = await app(async (tx) => {
+      const menu = await createCatalogue(tx, { name: "Menu" });
+      const product = await createProduct(tx, {
+        catalogueId: menu.id,
+        categoryId: null,
+        name: "Wine",
+        pricingUnit: "each",
+        unitPrice: "4",
+        vatClass: "general",
+      });
+      const [variant] = await setProductVariants(
+        tx,
+        product.id,
+        [
+          {
+            name: "Glass",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: null,
+            available: true,
+          },
+        ],
+        "en",
+      );
+      return { productId: product.id, variantId: variant!.id };
+    }));
+  });
+
+  it("reads each product's effective colour, a variant's as its parent's whatever its row holds", async () => {
+    const drinks = await app((tx) => createCategory(tx, { name: "Drinks", color: "#256bb1" }));
+    await app((tx) => updateProduct(tx, productId, { categoryId: drinks.id }));
+    await fx.db.update(products).set({ color: "#b12525" }).where(eq(products.id, variantId));
+    const unknown = crypto.randomUUID();
+    const effectiveColors = async (tx: Transaction, ids: string[]) =>
+      new Map([...(await readDishFacts(tx, ids))].map(([id, facts]) => [id, facts.color]));
+    expect(await app((tx) => effectiveColors(tx, [productId, variantId, unknown]))).toEqual(
+      new Map([
+        [productId, "#256bb1"],
+        [variantId, "#256bb1"],
+      ]),
+    );
+    expect(await app((tx) => effectiveColors(tx, []))).toEqual(new Map());
+  });
+
+  it("reads the category tree once and the products once per batch, with no separate colour read", async () => {
+    const ids = [
+      productId,
+      variantId,
+      ...Array.from({ length: BATCH_SIZE - 1 }, () => crypto.randomUUID()),
+    ];
+    await app(async (tx) => {
+      const reads = vi.spyOn(tx, "select");
+      try {
+        await readDishFacts(tx, ids);
+        expect(reads).toHaveBeenCalledTimes(3);
+      } finally {
+        reads.mockRestore();
+      }
+    });
   });
 });
 

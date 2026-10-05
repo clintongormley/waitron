@@ -6,7 +6,8 @@ import { readProductModifiers } from "./product-modifiers.js";
 import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
 import { AppError, centsToDecimal, stringToCents, type Decimal } from "@waitron/shared";
 import { catalogues, categories, locationCatalogues, locations, now, products } from "@waitron/db";
-import { readCategory, setMainReportingCategory } from "./categories.js";
+import { readCategory } from "./categories.js";
+import { colorOrNull } from "./color-inheritance.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
@@ -143,6 +144,9 @@ export interface UpdateProductInput {
   unitId?: string | null;
   pricingUnit?: PricingUnit;
   categoryId?: string | null;
+  /** `null` takes its category's colour. On a variant's id any value, null included, is refused
+   * `product.not_found`: a variant's colour is always its parent's. */
+  color?: string | null;
   /** `null` clears the declaration back to unreviewed. */
   allergens?: ProductAllergens | null;
   /** `null` clears the staff diet override; published `diet` reverts to the recipe-derived
@@ -172,6 +176,7 @@ const PRODUCT_BASE_COLUMNS = {
   id: products.id,
   catalogueId: products.catalogueId,
   categoryId: effective.categoryId,
+  color: effective.color,
   name: products.name,
   customerName: products.customerName,
   ordering: products.ordering,
@@ -202,6 +207,7 @@ interface RawProduct {
   id: string;
   catalogueId: string;
   categoryId: string | null;
+  color: string | null;
   name: string;
   customerName: Record<string, string> | null;
   ordering: ProductOrdering;
@@ -1139,12 +1145,29 @@ async function patchProduct(
     dietOverride,
     dietaryDeclarations,
     categoryId,
+    color,
     unitId,
     pricingUnit,
     unitPrice,
     ...rest
   } = patch;
-  if (categoryId !== undefined) await setMainReportingCategory(tx, id, categoryId);
+  const assertColor = () => {
+    if (color !== undefined)
+      colorOrNull(color, () => {
+        throw new AppError("product.invalid", { field: "color" });
+      });
+  };
+  // The refusal order is pinned by the "a product's own colour" cases in operations.test.ts.
+  if (categoryId === undefined) assertColor();
+  if (categoryId !== undefined || color !== undefined) {
+    const [product] = await tx
+      .select({ id: products.id })
+      .from(products)
+      .where(productWithId(id, "top-level"));
+    if (!product) throw new AppError("product.not_found", { productId: id });
+  }
+  if (categoryId != null) await readCategory(tx, categoryId);
+  if (categoryId !== undefined) assertColor();
   if (allergens != null) validateAllergens(allergens);
   if (dietOverride !== undefined) validateDietOverride(dietOverride);
   const directDietary =
@@ -1188,6 +1211,8 @@ async function patchProduct(
       ...(allergens !== undefined ? { manualAllergens: allergens } : {}),
       ...(dietOverride !== undefined ? { dietOverride } : {}),
       ...(directDietary === undefined ? {} : { dietaryDeclarations: directDietary }),
+      ...(categoryId === undefined ? {} : { categoryId }),
+      ...(color === undefined ? {} : { color }),
       updatedAt: now(),
     })
     .where(eq(products.id, id));

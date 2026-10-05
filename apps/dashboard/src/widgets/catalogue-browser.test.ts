@@ -24,6 +24,7 @@ export const folder = (id: string, name: string, parentId: string | null): Categ
   id,
   name,
   parentId,
+  color: null,
 });
 export const CATEGORIES = [
   folder("d", "Drinks", null),
@@ -58,6 +59,7 @@ const product = (
   dietOverride: null,
   manualAllergens: null,
   image: null,
+  color: null,
   variants: [],
 });
 export const PRODUCTS = [
@@ -1066,6 +1068,253 @@ it.each([
     expect(await rowKeys(el)).toContain("folder:d");
   },
 );
+/** The category colour chooser, once it shows. */
+async function colorChooser(el: CatalogueBrowser) {
+  await el.updateComplete;
+  const form = el.shadowRoot!.querySelector("dashboard-category-color-form")!;
+  await vi.waitFor(() => expect(form.open).toBe(true));
+  await form.updateComplete;
+  await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+  return form;
+}
+function chooserClosed(el: CatalogueBrowser) {
+  return !el.shadowRoot!.querySelector("dashboard-category-color-form")!.open;
+}
+async function choose(el: CatalogueBrowser, color: string) {
+  (await colorChooser(el))
+    .shadowRoot!.querySelector<HTMLElement>(`[data-color="${color}"]`)!
+    .click();
+  await el.updateComplete;
+}
+async function rowChip(el: CatalogueBrowser, id: string) {
+  return (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(
+    `[data-test="color-${id}"] [part~="color-swatch"]`,
+  )!;
+}
+async function boxChip(el: CatalogueBrowser) {
+  return (await tableOf(el)).shadowRoot!.querySelector<HTMLElement>(
+    '[data-test="name-box-color"] [part~="color-swatch"]',
+  )!;
+}
+
+it.each([
+  ["en-GB", "Colour of Drinks"],
+  ["es", "Color de Drinks"],
+] as const)(
+  "opens a category's colour chooser from its row's square, and a swatch sends the colour alone (%s)",
+  async (locale, heading) => {
+    setLocale(locale);
+    const el = await mountBrowser({
+      categories: [{ ...folder("d", "Drinks", null), color: "#b12525" }, ...CATEGORIES.slice(1)],
+    });
+    let finish!: (value: CategorySummary) => void;
+    vi.mocked(el.api.updateCategory).mockImplementationOnce(
+      () => new Promise((resolve) => (finish = resolve)),
+    );
+    await menuAction(el, "color-d");
+    const form = await colorChooser(el);
+    expect(form.shadowRoot!.querySelector("wt-modal")!.heading).toBe(heading);
+    expect(
+      form.shadowRoot!.querySelector('[data-color="#b12525"]')!.getAttribute("aria-checked"),
+    ).toBe("true");
+    await choose(el, "#256bb1");
+    expect(vi.mocked(el.api.updateCategory).mock.calls).toStrictEqual([
+      ["d", { color: "#256bb1" }],
+    ]);
+    await form.updateComplete;
+    expect(form.busy).toBe(true);
+    expect(chooserClosed(el)).toBe(false);
+    finish({ ...folder("d", "Drinks", null), color: "#256bb1" });
+    await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
+    el.categories = [{ ...folder("d", "Drinks", null), color: "#256bb1" }, ...CATEGORIES.slice(1)];
+    await el.updateComplete;
+    expect(getComputedStyle(await rowChip(el, "d")).backgroundColor).toBe("rgb(37, 107, 177)");
+  },
+);
+it("sends a null colour when No colour is chosen from a row's square", async () => {
+  const el = await mountBrowser({
+    categories: [{ ...folder("d", "Drinks", null), color: "#b12525" }, ...CATEGORIES.slice(1)],
+  });
+  await menuAction(el, "color-d");
+  await choose(el, "");
+  await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
+  expect(vi.mocked(el.api.updateCategory).mock.calls).toStrictEqual([["d", { color: null }]]);
+});
+it("keeps a refused colour in the chooser, under it, with the form's message at the end", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.updateCategory).mockRejectedValueOnce({
+    code: "category.invalid",
+    params: { field: "color" },
+  });
+  await menuAction(el, "color-f");
+  await choose(el, "#256bb1");
+  const form = await colorChooser(el);
+  await vi.waitFor(() =>
+    expect(form.shadowRoot!.querySelector("#category-color-error")!.textContent!.trim()).toBe(
+      en["editor.field_rejected"],
+    ),
+  );
+  expect(form.shadowRoot!.querySelector('[data-test="form-error"]')!.textContent!.trim()).toBe(
+    en["form.fix_fields"],
+  );
+  expect(form.busy).toBe(false);
+  expect(chooserClosed(el)).toBe(false);
+});
+it("sends nothing when a row's colour chooser is left with Esc or Cancel", async () => {
+  const el = await mountBrowser();
+  await menuAction(el, "color-d");
+  await colorChooser(el);
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
+  await menuAction(el, "color-d");
+  (await colorChooser(el)).shadowRoot!.querySelector<HTMLElement>('[data-test="cancel"]')!.click();
+  await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
+  expect(el.api.updateCategory).not.toHaveBeenCalled();
+});
+it("keeps a move made while a category's colour chooser is open: the colour goes alone", async () => {
+  const el = await mountBrowser();
+  await toggleCategory(el, "d");
+  await menuAction(el, "color-b");
+  await colorChooser(el);
+  // A drag under the open modal reaches no row, so the list's own drop event stands in for one.
+  el.shadowRoot!.querySelector("dashboard-product-list")!.dispatchEvent(
+    new CustomEvent("drop-items", {
+      detail: { keys: ["folder:b"], folderId: "f" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: [], categoryIds: ["b"] },
+      "f",
+    ),
+  );
+  el.categories = [
+    folder("d", "Drinks", null),
+    folder("b", "Beer", "f"),
+    folder("f", "Food", null),
+  ];
+  await choose(el, "#256bb1");
+  await vi.waitFor(() => expect(el.api.updateCategory).toHaveBeenCalledOnce());
+  expect(vi.mocked(el.api.updateCategory).mock.calls).toStrictEqual([["b", { color: "#256bb1" }]]);
+});
+it.each([
+  ["en-GB", "New category's colour"],
+  ["es", "Color de la categoría nueva"],
+] as const)(
+  "chooses a new category's colour from its box without saving, and Enter saves it with the name (%s)",
+  async (locale, heading) => {
+    setLocale(locale);
+    const el = await mountBrowser();
+    await menuAction(el, "add-category-d");
+    const box = await nameBox(el);
+    await userEvent.keyboard("Juice");
+    await userEvent.click(box.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+    const form = await colorChooser(el);
+    expect(form.shadowRoot!.querySelector("wt-modal")!.heading).toBe(heading);
+    expect(form.shadowRoot!.querySelector('[data-color=""]')!.getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    await choose(el, "#256bb1");
+    await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
+    expect(await nameBox(el)).toBe(box);
+    expect(box.value).toBe("Juice");
+    expect(getComputedStyle(await boxChip(el)).backgroundColor).toBe("rgb(37, 107, 177)");
+    expect(el.api.createCategory).not.toHaveBeenCalled();
+    expect(el.api.updateCategory).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(el.api.createCategory).toHaveBeenCalledOnce());
+    expect(vi.mocked(el.api.createCategory).mock.calls).toStrictEqual([
+      [{ name: "Juice", parentId: "d", color: "#256bb1" }],
+    ]);
+  },
+);
+it("hands the cursor back to a new category's box, its name kept, when its colour chooser is cancelled", async () => {
+  const el = await mountBrowser();
+  await menuAction(el, "add-category-d");
+  const box = await nameBox(el);
+  await userEvent.keyboard("Juice");
+  await userEvent.click(box.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+  await colorChooser(el);
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
+  expect(await nameBox(el)).toBe(box);
+  expect(box.value).toBe("Juice");
+  expect((await boxChip(el)).getAttribute("part")).toBe("color-swatch empty");
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(el.api.createCategory).toHaveBeenCalledOnce());
+  expect(vi.mocked(el.api.createCategory).mock.calls).toStrictEqual([
+    [{ name: "Juice", parentId: "d" }],
+  ]);
+});
+it("opens no colour chooser from a box whose name is already saving", async () => {
+  const el = await mountBrowser();
+  let finish!: (value: CategorySummary) => void;
+  vi.mocked(el.api.createCategory).mockImplementationOnce(
+    () => new Promise((resolve) => (finish = resolve)),
+  );
+  await menuAction(el, "add-category-d");
+  const box = await nameBox(el);
+  await userEvent.keyboard("Juice{Enter}");
+  await userEvent.click(box.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+  await el.updateComplete;
+  expect(chooserClosed(el)).toBe(true);
+  finish(folder("j", "Juice", "d"));
+  await vi.waitFor(async () => expect(await rowKeys(el)).not.toContain("draft:new"));
+  expect(vi.mocked(el.api.createCategory).mock.calls).toStrictEqual([
+    [{ name: "Juice", parentId: "d" }],
+  ]);
+  expect(el.api.updateCategory).not.toHaveBeenCalled();
+});
+it("drops a colour chosen in a box that is then left with Esc", async () => {
+  const el = await mountBrowser();
+  await menuAction(el, "add-category-d");
+  const box = await nameBox(el);
+  await userEvent.click(box.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+  await choose(el, "#256bb1");
+  await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
+  await nameBox(el);
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(async () => expect(await rowKeys(el)).not.toContain("draft:new"));
+  await menuAction(el, "add-category-d");
+  await nameBox(el);
+  expect((await boxChip(el)).getAttribute("part")).toBe("color-swatch empty");
+  await userEvent.keyboard("Juice{Enter}");
+  await vi.waitFor(() => expect(el.api.createCategory).toHaveBeenCalledOnce());
+  expect(vi.mocked(el.api.createCategory).mock.calls).toStrictEqual([
+    [{ name: "Juice", parentId: "d" }],
+  ]);
+});
+it("sends a rename's colour with its name only when the box changed it", async () => {
+  const el = await mountBrowser({
+    categories: [{ ...folder("d", "Drinks", null), color: "#b12525" }, ...CATEGORIES.slice(1)],
+  });
+  await menuAction(el, "rename-d");
+  let box = await nameBox(el);
+  expect(getComputedStyle(await boxChip(el)).backgroundColor).toBe("rgb(177, 37, 37)");
+  await userEvent.click(box.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+  const form = await colorChooser(el);
+  expect(form.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Colour of Drinks");
+  await choose(el, "#256bb1");
+  await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
+  await nameBox(el);
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(el.api.updateCategory).toHaveBeenCalledOnce());
+  await vi.waitFor(async () => expect(await rowKeys(el)).toContain("folder:d"));
+  await menuAction(el, "rename-d");
+  box = await nameBox(el);
+  await userEvent.click(box.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+  await choose(el, "#b12525");
+  await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
+  await nameBox(el);
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(el.api.updateCategory).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(el.api.updateCategory).mock.calls).toStrictEqual([
+    ["d", { name: "Drinks", color: "#256bb1" }],
+    ["d", { name: "Drinks" }],
+  ]);
+});
 it("Add category on All products makes a top-level category", async () => {
   const el = await mountBrowser({ categoryId: "gone" });
   await menuAction(el, "add-category-root");

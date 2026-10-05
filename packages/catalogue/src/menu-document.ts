@@ -3,6 +3,8 @@ import { eq, inArray, type SQL } from "drizzle-orm";
 import { catalogues, categories, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
+import { listCategories } from "./categories.js";
+import { effectiveColor } from "./color-inheritance.js";
 import { includedMenus } from "./menu-inclusion.js";
 import { clashesOf } from "./menu-combine.js";
 import type { CombinedOffer, MenuClash, ValueSource } from "./menu-combine-types.js";
@@ -125,7 +127,8 @@ export async function buildMenuDocuments(
     details.map((row) => row.menuId),
     { includeEveryModifierItem: true, graph: loaded },
   );
-  const dishFacts = await readDishFacts(tx, [...new Set(offers.map((offer) => offer.productId))]);
+  const offeredProducts = [...new Set(offers.map((offer) => offer.productId))];
+  const dishFacts = await readDishFacts(tx, offeredProducts);
   const extraImages = await readEffectiveImages(tx, [
     ...new Set(
       offers.flatMap((offer) =>
@@ -256,21 +259,39 @@ export async function buildMenuDocument(tx: Transaction, menuId: string): Promis
   return built;
 }
 
-/** The dish's own photo and description, which `MenuOffer` does not carry. */
-async function readDishFacts(
+interface DishFacts {
+  image: string | null;
+  description: Record<string, string> | null;
+  color: string | null;
+}
+
+/** The dish's own photo and description, which `MenuOffer` does not carry, and its effective colour
+ * (a variant's is its parent's): one read of the category tree, then one read of the products per
+ * batch. */
+export async function readDishFacts(
   tx: Transaction,
   productIds: readonly string[],
-): Promise<Map<string, { image: string | null; description: Record<string, string> | null }>> {
-  const facts = new Map<
-    string,
-    { image: string | null; description: Record<string, string> | null }
-  >();
+): Promise<Map<string, DishFacts>> {
+  const facts = new Map<string, DishFacts>();
+  if (productIds.length === 0) return facts;
+  const tree = new Map((await listCategories(tx)).map((category) => [category.id, category]));
   for (const batch of batches(productIds))
     for (const row of await tx
-      .select({ id: products.id, image: products.image, description: products.description })
+      .select({
+        id: products.id,
+        image: products.image,
+        description: products.description,
+        color: effectiveProductColumns.color,
+        categoryId: effectiveProductColumns.categoryId,
+      })
       .from(products)
+      .leftJoin(parentProducts, parentJoin)
       .where(inArray(products.id, batch)))
-      facts.set(row.id, { image: row.image, description: row.description });
+      facts.set(row.id, {
+        image: row.image,
+        description: row.description,
+        color: effectiveColor(row.color, row.categoryId, tree),
+      });
   return facts;
 }
 
@@ -301,13 +322,14 @@ function without<T extends object, K extends keyof T>(value: T, keys: readonly K
 
 function freezeOffer(
   offer: MenuOffer,
-  facts: { image: string | null; description: Record<string, string> | null },
+  facts: DishFacts,
   extraImages: ReadonlyMap<string, string | null>,
 ): FrozenOffer {
   return {
     ...without(offer, ["courseId", "category", "offeredModifiers", "variants", "combined"]),
     image: facts.image,
     description: facts.description,
+    color: facts.color,
     variants: offer.variants.map((variant) =>
       without(variant, ["available", "courseId", "category"]),
     ),
@@ -651,6 +673,7 @@ const PRODUCT_FIELD_ORDER: readonly ProductChangeField[] = [
   "names",
   "description",
   "image",
+  "color",
   "unit",
   "allergens",
   "diet",
@@ -721,6 +744,7 @@ function productFields(
   const included = new Map<string, { id: string; name: string }>();
   changedFacts(PRODUCT_FACTS, a, b, shared);
   if (!same(a.description, b.description)) shared.add("description");
+  if (!same(a.color, b.color)) shared.add("color");
   if (a.ordering !== b.ordering) shared.add("ordering");
   if (
     !same(

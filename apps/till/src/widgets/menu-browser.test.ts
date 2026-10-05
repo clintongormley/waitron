@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { setContentLanguages } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import type { DocumentMember, DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, type Theme } from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
@@ -75,8 +76,9 @@ function section(
   internalName: string,
   names: Record<string, string>,
   members: DocumentMember[],
+  color: string | null = null,
 ): DocumentMember {
-  return { kind: "section", sectionId: id, internalName, names, image: null, color: null, members };
+  return { kind: "section", sectionId: id, internalName, names, image: null, color, members };
 }
 
 // Every section's internal name and each of its customer names are different texts, so a reader of
@@ -832,6 +834,159 @@ describe("till-menu-browser", () => {
         { product: cola, quantity: "1" },
         { product: water, quantity: "1" },
       ]);
+    });
+  });
+
+  describe("tile colours", () => {
+    const blue = product("blue", "Blue", { color: "#256bb1" });
+    const pink = product("pink", "Pink", { color: "#edabab" });
+    const blueGone = product("bluegone", "Blue gone", { color: "#256bb1", available: false });
+    const pinkGone = product("pinkgone", "Pink gone", { color: "#edabab", available: false });
+    const unset = product("unset", "Unset", { color: null });
+    const bare = product("bare", "Bare");
+    const junk = product("junk", "Junk", { color: "not-a-colour" });
+    const plainGone = product("plaingone", "Plain gone", { available: false });
+    const inside = product("inside", "Inside");
+    const red = section(
+      "sec-red",
+      "red-internal",
+      { en: "Red (EN)" },
+      [member("inside")],
+      "#b12525",
+    );
+    const painted = [blue, pink, blueGone, pinkGone, unset, bare, junk, plainGone, inside];
+
+    const WHITE = "rgb(255, 255, 255)";
+    const BLACK = "rgb(0, 0, 0)";
+
+    async function mountPainted(theme: Theme): Promise<TillMenuBrowser> {
+      const { el } = await mountWidget<TillMenuBrowser>(
+        "till-menu-browser",
+        {
+          menu: lunch({
+            structure: {
+              members: [
+                ...[
+                  "blue",
+                  "pink",
+                  "bluegone",
+                  "pinkgone",
+                  "unset",
+                  "bare",
+                  "junk",
+                  "plaingone",
+                ].map(member),
+                red,
+              ],
+            },
+            homeLayouts: [{ id: "lay-home", name: "Home", tiles: [] }],
+          }),
+          products: painted,
+          store: new WorkingOrderStore(),
+        },
+        theme,
+      );
+      return el;
+    }
+
+    const inner = (tile: Button): HTMLButtonElement => tile.shadowRoot!.querySelector("button")!;
+    const background = (tile: Button): string => getComputedStyle(inner(tile)).backgroundColor;
+    const ink = (tile: Button, label: string): string =>
+      getComputedStyle(tile.querySelector(label)!).color;
+    const opacity = (tile: Button): number => Number(getComputedStyle(inner(tile)).opacity);
+
+    /** The computed value of `property: value` on an element beside the widget, so a neutral tile is
+     * compared with the theme's own tokens rather than with another tile. */
+    function token(el: TillMenuBrowser, property: "color" | "background-color", value: string) {
+      const probe = document.createElement("span");
+      probe.style.setProperty(property, value);
+      el.parentElement!.appendChild(probe);
+      const computed = getComputedStyle(probe).getPropertyValue(property);
+      probe.remove();
+      return computed;
+    }
+
+    describe.each(["light", "dark"] as const)("%s theme", (theme) => {
+      it("paints a dark product's tile with white labels, a sold-out tile's included", async () => {
+        const el = await mountPainted(theme);
+        for (const name of ["Blue", "Blue gone"]) {
+          const tile = entry(el, "structure", name);
+          expect(background(tile)).toBe("rgb(37, 107, 177)");
+          expect(ink(tile, ".name")).toBe(WHITE);
+          expect(ink(tile, ".price")).toBe(WHITE);
+        }
+        expect(ink(entry(el, "structure", "Blue gone"), ".sold-out")).toBe(WHITE);
+      });
+
+      it("paints a pale product's tile with black labels, a sold-out tile's included", async () => {
+        const el = await mountPainted(theme);
+        for (const name of ["Pink", "Pink gone"]) {
+          const tile = entry(el, "structure", name);
+          expect(background(tile)).toBe("rgb(237, 171, 171)");
+          expect(ink(tile, ".name")).toBe(BLACK);
+          expect(ink(tile, ".price")).toBe(BLACK);
+        }
+        expect(ink(entry(el, "structure", "Pink gone"), ".sold-out")).toBe(BLACK);
+      });
+
+      it("paints a coloured section's tile and its Section label", async () => {
+        const el = await mountPainted(theme);
+        const tile = entry(el, "structure", "Red (EN)");
+        expect(background(tile)).toBe("rgb(177, 37, 37)");
+        expect(ink(tile, ".name")).toBe(WHITE);
+        expect(ink(tile, ".kind")).toBe(WHITE);
+        const icon = tile.querySelector("wt-icon")!.shadowRoot!.querySelector("svg")!;
+        expect(getComputedStyle(icon).fill).toBe(WHITE);
+      });
+
+      it("draws a null, a missing and a malformed colour neutral", async () => {
+        const el = await mountPainted(theme);
+        const surface = token(el, "background-color", "var(--wt-color-surface)");
+        const muted = token(el, "color", "var(--wt-color-text-muted)");
+        const body = token(el, "color", "var(--wt-color-text)");
+        const tiles = ["Unset", "Bare", "Junk"].map((name) => entry(el, "structure", name));
+        for (const tile of tiles) {
+          expect(background(tile)).toBe(surface);
+          expect(background(tile)).toBe(background(tiles[1]!));
+          expect(ink(tile, ".name")).toBe(body);
+          expect(ink(tile, ".price")).toBe(muted);
+          expect(tile.hasAttribute("style")).toBe(false);
+        }
+        expect(muted).not.toBe(body);
+      });
+
+      it("does not paint an uncoloured product inside a coloured section", async () => {
+        const el = await mountPainted(theme);
+        const surface = token(el, "background-color", "var(--wt-color-surface)");
+        await tap(el, entry(el, "structure", "Red (EN)"));
+        const tile = entry(el, "section", "Inside");
+        expect(background(tile)).toBe(surface);
+        expect(tile.hasAttribute("style")).toBe(false);
+      });
+
+      // wt-button's feedback is opacity alone: a dip on hover and a fade when disabled. It has no
+      // pressed style of its own, so there is none here to keep.
+      it("keeps the hover dip on a painted tile", async () => {
+        const el = await mountPainted(theme);
+        await userEvent.hover(entry(el, "structure", "Bare"));
+        const neutral = opacity(entry(el, "structure", "Bare"));
+        await userEvent.hover(entry(el, "structure", "Blue"));
+        const blueHovered = opacity(entry(el, "structure", "Blue"));
+        expect(neutral).toBeLessThan(1);
+        expect(blueHovered).toBe(neutral);
+        expect(opacity(entry(el, "structure", "Bare"))).toBe(1);
+      });
+
+      it("keeps the sold-out fade on a painted tile, which still says Sold out", async () => {
+        const el = await mountPainted(theme);
+        const tile = entry(el, "structure", "Blue gone");
+        const neutral = entry(el, "structure", "Plain gone");
+        expect(opacity(neutral)).toBeLessThan(1);
+        expect(opacity(tile)).toBe(opacity(neutral));
+        expect(inner(tile).disabled).toBe(true);
+        expect(tile.querySelector(".sold-out")!.textContent!.trim()).toBe("Sold out");
+        expect(ink(tile, ".sold-out")).toBe(WHITE);
+      });
     });
   });
 

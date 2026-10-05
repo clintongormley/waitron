@@ -34,6 +34,7 @@ const products: Product[] = [
     dietOverride: null,
     manualAllergens: null,
     image: "abc123.webp",
+    color: null,
     variants: [],
   },
   {
@@ -59,6 +60,7 @@ const products: Product[] = [
     dietOverride: null,
     manualAllergens: {},
     image: null,
+    color: null,
     variants: [],
   },
   {
@@ -90,6 +92,7 @@ const products: Product[] = [
       milk: { presence: "contains" },
     },
     image: null,
+    color: null,
     variants: [],
   },
   {
@@ -115,6 +118,7 @@ const products: Product[] = [
     dietOverride: null,
     manualAllergens: {},
     image: null,
+    color: null,
     variants: [
       {
         id: "v1",
@@ -254,7 +258,7 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
       "dashboard-product-list",
       {
         products,
-        categories: [{ id: "cat-1", name: "Comida", parentId: null }],
+        categories: [{ id: "cat-1", name: "Comida", parentId: null, color: null }],
         canAddProduct: true,
       },
       theme,
@@ -269,10 +273,28 @@ describe.each(["light", "dark"] as const)("product-list a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  it("renders accessibly with a coloured and an uncoloured category's swatch", async () => {
+    const { el, host } = await mountWidget<ProductList>(
+      "dashboard-product-list",
+      {
+        products,
+        categories: [
+          { id: "cat-1", name: "Comida", parentId: null, color: "#b12525" },
+          { id: "cat-2", name: "Postres", parentId: null, color: null },
+        ],
+      },
+      theme,
+    );
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    expect(table.shadowRoot!.querySelectorAll('[part~="swatch-button"]')).toHaveLength(2);
+    await expectNoA11yViolations(host);
+  });
+
   it("renders accessibly mid-drag", async () => {
     const { el, host } = await mountWidget<ProductList>(
       "dashboard-product-list",
-      { products, categories: [{ id: "drinks", name: "Bebidas", parentId: null }] },
+      { products, categories: [{ id: "drinks", name: "Bebidas", parentId: null, color: null }] },
       theme,
     );
     const table = el.shadowRoot!.querySelector("wt-data-table")!;

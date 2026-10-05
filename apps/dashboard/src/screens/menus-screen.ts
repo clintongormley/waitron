@@ -29,6 +29,7 @@ import "../widgets/home-layout-editor.js";
 import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
 import "../widgets/section-details-form.js";
+import "../widgets/product-color-form.js";
 import { textField } from "../widgets/form-fields.js";
 import { fieldOf, ListWriteQueue } from "../widgets/section-writes.js";
 import type {
@@ -48,6 +49,7 @@ import type {
   SectionMember,
 } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
+import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -493,6 +495,10 @@ export class MenusScreen extends LitElement {
   @state() private creatingSection: ListTarget | null = null;
   @state() private editingSection: SectionDetails | null = null;
   @state() private deletingSection: SectionDetails | null = null;
+  /** The id of the product whose own colour is being chosen. */
+  @state() private colouring: string | null = null;
+  @state() private colorBusy = false;
+  @state() private colorErrors: Record<string, string> = {};
   @state() private deleteSectionError = "";
   @state() private includingMenu: ListTarget | null = null;
   #menuFormGeneration = 0;
@@ -602,6 +608,10 @@ export class MenusScreen extends LitElement {
   /** The products the add-products window's own list already holds, which it does not offer. */
   #pickerHeld: string[] = [];
   #addable: Product[] = [];
+  #categoryById = new Map<string, CategorySummary>();
+  /** The coloured product as last read, so the colour dialog still names it after the product has
+   * left the library, until the dialog closes. */
+  #colouredSeen: Product | null = null;
   /** The tree row whose ⋮ gets focus back once its window has closed and nothing is out. */
   #focusReturn: { menuId: string; key: string } | null = null;
   #windowShut = false;
@@ -667,6 +677,10 @@ export class MenusScreen extends LitElement {
       );
     }
     if (changed.has("products")) this.#addable = this.products.filter((product) => product.active);
+    if (changed.has("categories"))
+      this.#categoryById = new Map(this.categories.map((each) => [each.id, each]));
+    if (changed.has("colouring") || (changed.has("products") && this.colouring !== null))
+      this.#closeLostProduct();
     if (changed.has("structure") || changed.has("products")) {
       const products = new Map(
         this.products.filter((product) => product.active).map(({ id, name }) => [id, name]),
@@ -721,6 +735,25 @@ export class MenusScreen extends LitElement {
     this.includingMenu = null;
     if (target.menuId === this.menuId)
       this.memberError = t("menus.list_gone").replace("{name}", target.name);
+    return true;
+  }
+
+  /** Closes the colour dialog when its product has left the library, saying why, except while its
+   * save is out, so a refusal is shown in the dialog that names the product. Says whether it
+   * closed it. */
+  #closeLostProduct(): boolean {
+    if (this.#colouredSeen?.id !== this.colouring) this.#colouredSeen = null;
+    if (this.colouring === null) return false;
+    const product = this.products.find((each) => each.id === this.colouring);
+    if (product) {
+      this.#colouredSeen = product;
+      return false;
+    }
+    if (this.colorBusy) return false;
+    const lost = this.#colouredSeen;
+    this.colouring = null;
+    this.#colouredSeen = null;
+    if (lost) this.memberError = t("menus.product_gone").replace("{name}", lost.name);
     return true;
   }
 
@@ -972,6 +1005,10 @@ export class MenusScreen extends LitElement {
     this.structure = null;
     this.structureError = false;
     this.memberError = null;
+    if (!this.colorBusy) {
+      this.colouring = null;
+      this.colorErrors = {};
+    }
     this.priceRefusals = {};
     this.priceOutcome = null;
     this.publishResult = null;
@@ -1959,6 +1996,7 @@ export class MenusScreen extends LitElement {
       <dashboard-menu-structure-table
         .nodes=${structure.nodes}
         .products=${this.products}
+        .categories=${this.categories}
         .current=${this.path}
         .busy=${this.busy}
         menuName=${this.#menuName()}
@@ -1991,6 +2029,11 @@ export class MenusScreen extends LitElement {
           this.editingSection =
             this.sections.find((section) => section.id === event.detail.sectionId) ?? null;
           this.newSectionErrors = {};
+        }}
+        @wt-product-color=${(event: CustomEvent<{ productId: string }>) => {
+          event.stopPropagation();
+          this.colouring = event.detail.productId;
+          this.colorErrors = {};
         }}
         @wt-member-delete=${(event: CustomEvent<{ sectionId: string; path: string[] }>) => {
           event.stopPropagation();
@@ -2249,6 +2292,58 @@ export class MenusScreen extends LitElement {
     return html`<p class="status-line" data-test="menu-status">${words}</p>`;
   }
 
+  async #saveProductColor(color: string | null): Promise<void> {
+    if (this.colorBusy || this.#closeLostProduct()) return;
+    const product = this.#colouredProduct();
+    if (!product) return;
+    const menuId = this.menuId;
+    this.colorBusy = true;
+    try {
+      await this.api.setProductColor(product.id, color);
+      this.colouring = null;
+    } catch (error) {
+      if (menuId !== this.menuId) {
+        this.memberError = t("menus.change_not_saved")
+          .replace("{name}", product.name)
+          .replace("{reason}", codeMessage(codeOf(error)));
+        this.colouring = null;
+      } else
+        this.colorErrors =
+          fieldOf(error) === "color"
+            ? { color: t("editor.field_rejected") }
+            : { _form: codeMessage(codeOf(error)) };
+    } finally {
+      this.colorBusy = false;
+    }
+  }
+
+  #colouredProduct(): Product | null {
+    if (this.colouring === null) return null;
+    return this.products.find((each) => each.id === this.colouring) ?? this.#colouredSeen;
+  }
+
+  #renderProductColor() {
+    const product = this.#colouredProduct();
+    const inherited =
+      product === null ? null : categoryColor(product.categoryId, this.#categoryById);
+    return html`<dashboard-product-color-form
+      .open=${product !== null}
+      .busy=${this.colorBusy}
+      .name=${product?.name ?? ""}
+      .color=${product?.color ?? null}
+      .categoryColor=${inherited}
+      .errors=${this.colorErrors}
+      @wt-submit=${(event: CustomEvent<{ color: string | null }>) => {
+        event.stopPropagation();
+        void this.#saveProductColor(event.detail.color);
+      }}
+      @wt-cancel=${(event: Event) => {
+        event.stopPropagation();
+        this.colouring = null;
+      }}
+    ></dashboard-product-color-form>`;
+  }
+
   #renderNewSection() {
     return html`<dashboard-section-details-form
         data-test="section-form"
@@ -2452,8 +2547,8 @@ export class MenusScreen extends LitElement {
         <div slot="home" class="home">${this.#renderHome()}</div>
         <div slot="preview">${this.#renderPreview()}</div>
       </wt-tabs>
-      ${this.#renderNewSection()} ${this.#renderAddProducts()} ${this.#renderLayoutForm()}
-      ${this.#renderDeleteLayout()}`;
+      ${this.#renderNewSection()} ${this.#renderProductColor()} ${this.#renderAddProducts()}
+      ${this.#renderLayoutForm()} ${this.#renderDeleteLayout()}`;
   }
 
   override render() {

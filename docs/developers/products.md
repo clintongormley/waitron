@@ -53,8 +53,8 @@ holding two such Active rows with one name is refused whole (`validateCatalogueC
 `packages/catalogue/src/configuration-transfer.ts`), when setup opens the export and again when it
 is imported. It judges what the import will store: a product row with no `active` value counts as
 Active, the column's default; a product row whose `active` is not 0 or 1 (what an export writes),
-or a category or product row whose name is not text, is refused with `setup.request_invalid`
-naming the column.
+a category or product row whose name is not text, or a product, category or section colour that
+is neither null nor lowercase `#rrggbb`, is refused with `setup.request_invalid` naming the column.
 
 The three resolvers, one per audience:
 
@@ -265,6 +265,61 @@ what a switched-off menu owns; the default-change check above still counts all o
 disabled variant, which it skips too. Image names (the media module's contribution) are checked on
 a change of default but are not in the list.
 
+## Colour
+
+A colour helps staff find a dish on a busy till, so a product has one colour, the same on every
+menu and in every section that holds it. Nothing stores a colour on a menu's placement of a product
+or on its Price overrides tab.
+
+That colour is worked out in order. It is the product's own colour (`products.color`) if it has
+one. Otherwise it is its main category's colour, or, when that category has none, the colour of the
+nearest category above it that does (`category_details.color`). Otherwise it has none, and each
+screen draws its usual neutral look. The rule lives in one place, `effectiveColor` and
+`categoryColor` in `packages/catalogue/src/color-inheritance.ts`, which the server and the
+dashboard both call. So colouring a category colours every product under it, at any depth, that
+has no colour of its own and no coloured category nearer to it.
+
+You set a product's own colour in two places. The product editor has a colour chooser after Name;
+its first choice, "Use category colour", shows the colour the product would take from its category
+(following a category you change in the editor before saving), or says "Its category has no
+colour." Choosing it saves no colour of the product's own. In a menu's Structure tree, a product's
+swatch opens a "Colour of …" dialog that says the change applies on every menu that uses the
+product; it sends `PATCH /management-api/products/:id` with `{ "color": … }`. A colour is
+lowercase `#rrggbb`, or null for none. A save refuses anything else, an empty string included, as
+`product.invalid` with `field: "color"`; at the PATCH route a value that is neither a string nor
+null is refused first, as `management.request_invalid`. A configuration import refuses the whole
+bundle when a product's, a category's or a menu section's colour is anything else, as
+`setup.request_invalid` with `field` set to `products.color`, `category_details.color` or
+`sections.color` (`validateCatalogueConfiguration`,
+`packages/catalogue/src/configuration-transfer.ts`). A category's colour is set from the colour
+square after its name in the Products tree, or from the one in the box that names or renames it
+([product-categories.md](product-categories.md)).
+
+**A colour reaches a till only when a menu is published.** Publishing records each offer's colour
+in the menu's version, as it does the photo and description (`freezeOffer`,
+`packages/catalogue/src/menu-document.ts`). Changing a category's colour, or moving an uncoloured
+category under a coloured one, whether through `updateCategory` or the Products tree's Move
+(`moveCatalogueItems`), makes a published menu read as changed when it holds a product whose worked-out
+colour this changes (one with no colour of its own and no coloured category nearer to it), and the
+menu's Preview tab names the change "colour" for that product. The version on sale keeps the old colour until you
+publish (the "a category's colour" cases in `packages/catalogue/src/menu-publication.test.ts`). A
+product's own colour goes into the next version's offer in the same way
+(`packages/catalogue/src/menu-document.test.ts`), though no test reads a menu's status after one. A version published before colours
+existed carries no product colours: it is still sold from, its products draw the plain tile, and its menu reads as
+changed until it is published again.
+
+A menu section has a colour of its own, set in the section form. It paints the section's own tile
+and nothing else: the products inside the section keep their own colours.
+
+On the till (`apps/till/src/widgets/menu-browser.ts`), a product tile and a section tile with a
+colour fill with it, and their labels, and a section tile's folder icon, switch to black or white,
+whichever reads better on that colour (`readableTextColor`, `packages/ui/src/category-color.ts`). A
+tile with no colour, or with a value that is not a lowercase `#rrggbb` colour, keeps the plain look. A
+sold-out painted tile keeps the same fade a sold-out plain tile has. The dashboard does the same
+with such a value: the swatches in the Products tree and a menu's Structure tree draw it as no
+colour, and the colour chooser's "Use category colour" choice says the category has none
+(`apps/dashboard/src/widgets/color-field.ts`).
+
 ## Variants
 
 A variant is a `products` row whose `parent_id` names its parent product — "Wine 125" and
@@ -300,6 +355,16 @@ No migration clears the units variants stored before this rule: that carries the
 decision above over to units, which the owner has yet to confirm. Unit management ignores such a
 row: `productsUsingUnit` lists products with no parent only, reassigning a unit's products skips a
 variant, and `deleteUnit` deletes those rows before the unit (`packages/catalogue/src/units.ts`).
+
+Its colour is always its parent's too (W92), whatever its own `color` column holds:
+`effectiveProductColumns.color` reads the parent's for a variant, and `readProductEditor` returns
+`color: null` for one. A variant's page shows no colour chooser; the editor save refuses a variant
+body carrying a colour (`product.invalid`, field `color`) and writes the variant's column back to
+null. `updateProduct` (`packages/catalogue/src/operations.ts`) given a colour answers a variant's
+id with `product.not_found`, and `PATCH /management-api/products/:id` answers a variant's id exactly as it
+answers an unknown one, because its ownership check runs first (`authorization.not_permitted`,
+403). A published offer carries one colour, its product's; its variants carry none.
+
 Its extras and options
 lists are always its parent's. Its Name, customer-facing name and kitchen name are never inherited: a blank customer or
 kitchen name falls back to the variant's own staff name (_The three names_, above).
@@ -483,11 +548,14 @@ value for each of those fields in `inherited` — for allergens, the parent's pu
 while nothing on the parent has been reviewed or its recipe has an unreviewed ingredient), since
 that is what a blank reads as, while the variant's own allergens field holds only what staff set on
 the variant. Saving a blank keeps the field inheriting, and saving a value overrides it for that
-variant alone. The main category and the unit are the exceptions: the read gives a variant
-`primaryCategoryId: null` and `unitId: null`, the save refuses a non-null value of either with
-`product.invalid`, and the variant always takes its parent's (`readProductEditor` and
-`saveProductEditor`). The page shows the parent's unit beside the price as fixed text, with no unit
-button or dropdown (`renderPrice`, `apps/dashboard/src/widgets/product-editor.ts`). A variant's body may leave its price, tax rate and dietary declarations blank, which
+variant alone. The main category, the unit and the colour are the exceptions: the read gives a
+variant `primaryCategoryId: null`, `unitId: null` and `color: null`, and the save refuses a non-null
+value of any of them with `product.invalid`. The variant always takes its parent's category and
+unit, and the save stores no colour on it (`readProductEditor` and `saveProductEditor`, with the
+refusals in `parseProductEditorInput`, `packages/catalogue/src/product-editor-input.ts`). The page
+shows the parent's unit beside the price as fixed text, with no unit button or dropdown
+(`renderPrice`, `apps/dashboard/src/widgets/product-editor.ts`). A variant's body may leave its
+price, tax rate and dietary declarations blank, which
 a product with no parent may not; it carries no variants and no extras or options lists of its own;
 and its parent never changes, so a body naming a different `parentId` is refused
 (`saveProductEditor`, `packages/catalogue/src/product-editor.ts`).
@@ -524,12 +592,12 @@ fold leaves a blank base price, and a VAT class the form does not offer, off its
 Descriptors rows are cut after one and two lines, which can hide a later language's value, so
 opening the section is what shows every value. Top to bottom: the category path, Name, with the
 photo beside it as a small button that opens the image library (absent when the editor is given no
-`api`), Available, Standalone ordering (absent on a variant's page), ▸ Kitchen, ▸ Descriptors,
-▸ Nutritional info, Pricing (a ▸ fold once some variant is Active), Variants, Modifiers, then Cancel
-and Save. A disabled product's editor also shows a line saying so, under the category path, and
-offers Enable beside Save. Opened on a variant, the same form is the variant's own
-page: it has no Standalone ordering, Modifiers or Variants section, and each field the variant may
-leave blank to take the parent's value shows that value as its hint; the course, description,
+`api`), the colour chooser (absent on a variant's page), Available, Standalone ordering (absent on
+a variant's page), ▸ Kitchen, ▸ Descriptors, ▸ Nutritional info, Pricing (a ▸ fold once some
+variant is Active), Variants, Modifiers, then Cancel and Save. A disabled product's editor also
+shows a line saying so, under the category path, and offers Enable beside Save. Opened on a
+variant, the same form is the variant's own page: it has no colour chooser and no Standalone
+ordering, Modifiers or Variants section, and each field the variant may leave blank to take the parent's value shows that value as its hint; the course, description,
 allergens and dietary preferences also show it in italic on their folded section's closed line.
 
 The form's Modifiers section is one ordered list mixing extras lists and options lists, reordered by

@@ -34,7 +34,9 @@ const catalogues: CatalogueSummary[] = [
   { id: "cat-a", name: "Comida", active: true, version: 1 },
   { id: "cat-b", name: "Bebidas", active: true, version: 1 },
 ];
-const categories: CategorySummary[] = [{ id: "c1", name: "Entrantes", parentId: null }];
+const categories: CategorySummary[] = [
+  { id: "c1", name: "Entrantes", parentId: null, color: null },
+];
 const units: Unit[] = [
   { id: "u1", name: { es: "unidad" }, abbreviation: { es: "u" }, precision: 0 },
 ];
@@ -104,6 +106,7 @@ const products: Product[] = [
     dietOverride: null,
     manualAllergens: null,
     image: null,
+    color: null,
     variants: [],
   },
 ];
@@ -124,6 +127,7 @@ const value: ProductEditorValue = {
   vatClass: "reduced",
   variants: [],
   primaryCategoryId: "c1",
+  color: null,
   // One attachment the editor's Modifiers section shows, so the tests below can tell an unrelated
   // save carrying it back untouched from one that wipes it.
   modifiers: [{ kind: "options", id: "opt-list-1" }],
