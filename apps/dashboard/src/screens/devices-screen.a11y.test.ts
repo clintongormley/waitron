@@ -74,6 +74,7 @@ const devices: DeviceRow[] = [
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     enrolledAt: "2026-08-20T09:00:00.000Z",
     deviceProfileId: "dp1",
+    profileRetired: false,
     receiptPrinterId: "pr1",
     paymentSlipPrinterId: null,
     batteryLevel: null,
@@ -91,6 +92,7 @@ const devices: DeviceRow[] = [
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
     deviceProfileId: null,
+    profileRetired: false,
     receiptPrinterId: null,
     paymentSlipPrinterId: null,
     batteryLevel: null,
@@ -306,6 +308,31 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       expect(deep(el.shadowRoot!, "[data-test=device-battery-stale]")!.getAttribute("part")).toBe(
         "battery-stale",
       );
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
+
+  it.each([390, 1280])(
+    "renders a device whose profile was deleted accessibly, its Profile cell muted, at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const retired: DeviceRow = {
+        ...devices[1]!,
+        id: "retired",
+        deviceProfileId: "dp-retired",
+        profileRetired: true,
+      };
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        { api: stubApi({ listDevices: vi.fn().mockResolvedValue([devices[0]!, retired]) }) },
+        theme,
+      );
+      await flush(el);
+      expect(
+        deep(el.shadowRoot!, "[data-test=device-profile-retired] [part=profile-retired]"),
+      ).not.toBeNull();
       expect(el.scrollWidth).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.viewport(1280, 900);

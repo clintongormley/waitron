@@ -205,7 +205,8 @@ export class DevicesScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
       wt-data-table::part(being-paired),
-      wt-data-table::part(battery-stale) {
+      wt-data-table::part(battery-stale),
+      wt-data-table::part(profile-retired) {
         color: var(--wt-color-text-muted);
       }
       wt-data-table::part(battery-as-of),
@@ -1008,7 +1009,11 @@ export class DevicesScreen extends LitElement {
         sortValue: (d) => this.#profileName(d.deviceProfileId),
         cell: (d) =>
           html`<span data-test=${`device-profile-${d.id}`}
-            >${this.#profileName(d.deviceProfileId)}</span
+            >${
+              d.profileRetired
+                ? html`<span part="profile-retired">${t("devices.profile_retired")}</span>`
+                : this.#profileName(d.deviceProfileId)
+            }</span
           >`,
       },
       {

@@ -38,7 +38,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { decimal } from "@waitron/shared";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
-import { setProfilePrinterLists } from "@waitron/layouts";
+import { deleteDeviceProfile, setProfilePrinterLists } from "@waitron/layouts";
 import "./errors.js";
 import { createWatcher } from "./watchers.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -1086,6 +1086,29 @@ describe("Device management routes (device.manage)", () => {
       label: "Pantalla Cocina",
       active: true,
     });
+  });
+
+  it("GET /management-api/devices says whether each device's profile was retired", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const kept = await enrolTill(app, venue, "Caja viva");
+    const gone = await enrolTill(app, venue, "Caja retirada");
+    const revoke = await send(app, "POST", `/management-api/devices/${gone.deviceId}/revoke`, {
+      cookie: venue.managerCookie,
+    });
+    expect(revoke.status).toBe(204);
+    // Only a disabled device holds the profile, so deleting it retires the row.
+    await withTransaction(suite.db, (tx) =>
+      deleteDeviceProfile(tx, {
+        managementSessionId: venue.managerCookie.split("=")[1]!,
+        id: gone.profileId,
+      }),
+    );
+    const res = await send(app, "GET", "/management-api/devices", { cookie: venue.managerCookie });
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as { id: string; profileRetired: unknown }[];
+    expect(rows.find((r) => r.id === kept.deviceId)?.profileRetired).toBe(false);
+    expect(rows.find((r) => r.id === gone.deviceId)?.profileRetired).toBe(true);
   });
 
   it("revoke of an unknown / malformed device id → 404 device.not_found", async () => {
