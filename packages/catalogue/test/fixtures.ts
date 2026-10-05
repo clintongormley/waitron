@@ -20,6 +20,7 @@ import {
   createProduct,
 } from "../src/operations.js";
 import { CATALOGUE_MIGRATIONS } from "../src/migrations.js";
+import { nameColumns } from "../src/product-names.js";
 import { createUnit } from "../src/units.js";
 import { productUnits, units } from "../src/schema/units.js";
 import { categoryDetails } from "../src/schema/categories.js";
@@ -74,8 +75,8 @@ export async function plantStoredSiblingCategory(
 }
 
 /** Writes an Active product, or a variant of `parentId`, straight into its table, past every
- * product path: how a test sets up two Active rows that already share a staff name, as data
- * written before the unique-name rule existed. */
+ * product path, with the name columns a catalogue write sets: how a test sets up two Active rows
+ * that already share a staff name. */
 export async function plantStoredProduct(
   tx: Transaction,
   catalogueId: string,
@@ -86,7 +87,7 @@ export async function plantStoredProduct(
     .insert(products)
     .values({
       catalogueId,
-      name,
+      ...nameColumns(name),
       parentId,
       ...(parentId === null
         ? { pricingUnit: "each", unitPrice: 200, vatClass: "general", dietaryDeclarations: [] }

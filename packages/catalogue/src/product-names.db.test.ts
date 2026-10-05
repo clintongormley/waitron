@@ -96,6 +96,10 @@ describe("update", () => {
     const twin = await plantStoredProduct(suite.db, dinner, "cola");
     await app((tx) => updateProduct(tx, twin, { name: "cola", unitPrice: "3" }));
   });
+  it("does not refuse a new variant of a product whose name two Active products already shared", async () => {
+    await plantStoredProduct(suite.db, dinner, "cola");
+    await variants(cola, [variant("Small")]);
+  });
   it("refuses reactivating a product whose name became taken while it was Inactive", async () => {
     await app((tx) => updateProduct(tx, cola, { active: false }));
     await make("Cola");
