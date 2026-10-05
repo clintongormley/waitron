@@ -5558,28 +5558,42 @@ describe("printers-screen printer editor edges", () => {
     return { el, api };
   }
 
-  it("keeps a late change from a closed editor out of the next printer's draft", async () => {
-    const { el, api } = await mountEditing("p1");
-    const staleName = q(el, "[data-test=printer-name-p1]")!;
-    q(el, "[data-test=cancel-edit-printer]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
-    await openPrinter(el, "p3");
+  it("keeps a late change from a closed name editor out of the next printer's draft", async () => {
+    history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=edit-printer-name]")!.click();
+    await flush(el);
+    const staleName = q(el, '[name="printer-detail-name"]')!;
+    q(el, "[data-test=cancel-printer-name]")!.click();
+    await flush(el);
+    history.pushState(null, "", "/manage/printers/view/printers/printer/p3");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await flush(el);
+    q(el, "[data-test=edit-printer-name]")!.click();
+    await flush(el);
 
     staleName.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "Leaked" }, bubbles: true, composed: true }),
     );
-    q(el, "[data-test=save-printer-p3]")!.click();
+    q(el, "[data-test=save-printer-name]")!.click();
 
     await vi.waitFor(() =>
-      expect(api.updatePrinter).toHaveBeenCalledWith("p3", { name: "Barra USB", active: false }),
+      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", { name: "Barra USB" }),
     );
   });
 
-  it("does nothing when a Save from a closed printer editor is pressed", async () => {
-    const { el, api } = await mountEditing("p1");
-    const staleSave = q(el, "[data-test=save-printer-p1]")!;
-    q(el, "[data-test=cancel-edit-printer]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
+  it("does nothing when Save from a closed name editor is pressed", async () => {
+    history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=edit-printer-name]")!.click();
+    await flush(el);
+    const staleSave = q(el, "[data-test=save-printer-name]")!;
+    q(el, "[data-test=cancel-printer-name]")!.click();
+    await flush(el);
 
     staleSave.click();
     await flush(el);
@@ -5653,17 +5667,20 @@ describe("printers-screen printer editor edges", () => {
   );
 
   it("refuses a sample receipt while the printer has no name", async () => {
-    const { el, api } = await mountEditing("p1");
-    typeField(el, "[data-test=printer-name-p1]", "  ");
-    await el.updateComplete;
+    const api = stubApi({
+      listPrinters: vi.fn().mockResolvedValue([{ ...printers[0]!, name: "  " }]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openCalibration(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
 
     q(el, "[data-test=print-sample-receipt-p1]")!.click();
     await flush(el);
 
     expect(api.sampleReceipt).not.toHaveBeenCalled();
-    expect((q(el, "[data-test=printer-name-p1]") as unknown as { error: string }).error).toBe(
-      t("form.name_required"),
-    );
+    expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe(t("form.name_required"));
   });
 
   it("prints one sample receipt when the button is pressed twice", async () => {

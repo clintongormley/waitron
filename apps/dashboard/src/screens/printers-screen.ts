@@ -2887,9 +2887,9 @@ export class PrintersScreen extends LitElement {
       refusal(this.errorKey),
       refusal(this.testError),
       ...Object.entries(errors)
-        .filter(([key]) => !PRINTER_FIELDS.includes(key))
+        .filter(([key]) => this.calibrationStep > 0 || !PRINTER_FIELDS.includes(key))
         .map(([, message]) => message),
-      fieldInvalid ? t("form.fix_fields") : null,
+      fieldInvalid && this.calibrationStep === 0 ? t("form.fix_fields") : null,
     );
     const field = (key: "name" | "host" | "port", label: string, required = false) =>
       html`<wt-input
