@@ -34,7 +34,7 @@ const format = (key: Parameters<typeof t>[0], values: Record<string, string>) =>
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "invoice_first", "ticket_then_pay"];
 const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
-const VIEWS = ["status", "departments", "zones"] as const;
+const VIEWS = ["departments", "zones"] as const;
 type View = (typeof VIEWS)[number];
 type Editor =
   | { kind: "department"; row?: Department }
@@ -175,7 +175,7 @@ export class VenueOperationsScreen extends LitElement {
   @state() private collectionDrafts: Record<string, string> = {};
   @state() private receiptEditor?: string;
   @state() private receiptDrafts: Record<string, string> = {};
-  @state() private view: View = "status";
+  @state() private view: View = "departments";
   @state() private editor?: Editor;
   @state() private zoneId = "";
   #opener?: HTMLElement;
@@ -185,7 +185,7 @@ export class VenueOperationsScreen extends LitElement {
     () => {
       if (this.#url.read("dashboard") !== "venue-operations") return;
       const value = this.#url.read("view");
-      this.view = VIEWS.includes(value as View) ? (value as View) : "status";
+      this.view = VIEWS.includes(value as View) ? (value as View) : "departments";
       this.#url.write({ dashboard: "venue-operations", view: this.view }, true);
     },
     { basePath: "/manage", primary: "dashboard", children: { "*": { view: "view" } } },
@@ -1717,19 +1717,17 @@ export class VenueOperationsScreen extends LitElement {
       ${this.#pageAlert()}
       ${
         this.model
-          ? html`${this.#policyTree()}
+          ? html`${this.#policyTree()} ${this.#readiness()}
               <wt-tabs
                 label=${t("venue.title")}
                 .value=${this.view}
                 .items=${[
-                  { key: "status", label: t("venue.status") },
                   { key: "departments", label: t("venue.departments") },
                   { key: "zones", label: t("venue.zones") },
                 ]}
                 @wt-tab-change=${this.#selectView}
               >
                 ${this.#tabActions()}
-                <div slot="status">${this.#readiness()}</div>
                 <div slot="departments">${this.#departments()}</div>
                 <div slot="zones">${this.#zones()}</div>
               </wt-tabs>

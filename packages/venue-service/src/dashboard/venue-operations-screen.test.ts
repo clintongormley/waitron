@@ -214,6 +214,20 @@ describe("venue operations screen", () => {
     expect(tree.compareDocumentPosition(legacy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("shows venue readiness beneath the policy tree without a separate Status tab", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree");
+    const readiness = el.shadowRoot!.querySelector<HTMLElement>('[data-test="readiness"]')!;
+    const tabs = [
+      ...el.shadowRoot!.querySelector("wt-tabs")!.shadowRoot!.querySelectorAll('[role="tab"]'),
+    ];
+    expect(readiness.textContent).toContain("default prep station");
+    expect(tree.compareDocumentPosition(readiness) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tabs.map((tab) => tab.getAttribute("data-key"))).toEqual(["departments", "zones"]);
+  });
+
   it("opens a new department from the policy tree's top action", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
@@ -1651,7 +1665,7 @@ describe("venue operations screen", () => {
     expect(text).toContain("Terraza necesita una carta activa y publicada.");
   });
 });
-it("shows three tabs, read-only tables, and creates departments in a cancellable modal", async () => {
+it("keeps the interim lists and creates departments in a cancellable modal", async () => {
   const api = {
     load: vi.fn().mockResolvedValue(model),
     createDepartment: vi.fn(),
@@ -1659,7 +1673,7 @@ it("shows three tabs, read-only tables, and creates departments in a cancellable
   const el = await mount(api);
   expect(
     el.shadowRoot!.querySelector("wt-tabs")!.shadowRoot!.querySelectorAll('[role="tab"]'),
-  ).toHaveLength(3);
+  ).toHaveLength(2);
   expect(
     el.shadowRoot!.querySelector('[data-test="readiness"]')!.getBoundingClientRect().height,
   ).toBeGreaterThan(0);
@@ -1682,11 +1696,7 @@ it("offers no Menus tab: a menu's contents and prices are edited on the Menus sc
   const el = await mount({ load: vi.fn().mockResolvedValue(model) } as unknown as VenueServiceApi);
   const strip = el.shadowRoot!.querySelector("wt-tabs")!;
   const tabs = [...strip.shadowRoot!.querySelectorAll('[role="tab"]')];
-  expect(tabs.map((tab) => tab.getAttribute("data-key"))).toEqual([
-    "status",
-    "departments",
-    "zones",
-  ]);
+  expect(tabs.map((tab) => tab.getAttribute("data-key"))).toEqual(["departments", "zones"]);
   expect(tabs.map((tab) => tab.textContent!.trim())).not.toContain("Menus");
   expect(el.shadowRoot!.querySelector('[slot="menus"]')).toBeNull();
 });
