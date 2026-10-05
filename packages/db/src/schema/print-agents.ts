@@ -21,9 +21,9 @@ export const printAgents = table(
     host: label("host"),
     setupUrl: label("setup_url"),
     setupPort: smallCount("setup_port"),
-    // The node that enrolled this agent over loopback, or NULL when a human enrolled it. NO FK to
-    // `nodes`: the primary holds no `nodes` row for a mirror (mirror-bundle.ts), so a FK would
-    // reject a mirror's self-enrolment.
+    // The node that enrolled this agent over loopback, or NULL when a person enrolled it or it came
+    // in through a configuration import. NO FK to `nodes`: the primary holds no `nodes` row for a
+    // mirror (mirror-bundle.ts), so a FK would reject a mirror's self-enrolment.
     nodeId: id("node_id"),
     tokenHash: label("token_hash").notNull(),
     active: flag("active").notNull().default(true),
@@ -31,7 +31,7 @@ export const printAgents = table(
     enrolledAt: tsString("enrolled_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
-    // At most one self-enrolled agent per node; NULLs are distinct, so manual agents are unconstrained.
+    // At most one self-enrolled agent per node; NULLs are distinct, so agents with no node are unconstrained.
     unique("print_agents_tenant_node_key").on(t.nodeId),
   ],
 );

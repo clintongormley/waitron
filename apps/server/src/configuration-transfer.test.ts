@@ -69,7 +69,7 @@ import {
   saveAdjustmentSettings,
 } from "@waitron/adjustments";
 import { payments } from "@waitron/payments";
-import { decimal, nodeId, seriesId, deviceOrigin } from "@waitron/shared";
+import { decimal, locationId, nodeId, seriesId, deviceOrigin } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { systemClock } from "./till-backend.js";
@@ -82,6 +82,8 @@ import {
   type ConfigurationBundle,
 } from "./configuration-transfer.js";
 import { seedSessionDevice } from "./testing/session-device.js";
+import { selfEnrolNodeAgent } from "./join-requests.js";
+import type { TillConfig } from "./till-config.js";
 
 // TWO databases: a transfer exports from a prepared venue's database and imports into a fresh
 // production database, and each holds one tenant. `suite` holds the source venue, `targetSuite` the
@@ -1328,6 +1330,83 @@ it("leaves a table's clearing state behind", async () => {
   for (const row of rows) {
     expect(row).not.toHaveProperty("needs_clearing_since");
   }
+});
+
+it("leaves out a print agent's node, so the importing venue does not show it as on this box", async () => {
+  const configFor = (venue: {
+    nodeId: string;
+    seriesIds: string[];
+    locationId: string;
+  }): TillConfig => ({
+    nodeId: nodeId(venue.nodeId),
+    seriesId: seriesId(venue.seriesIds[0]!),
+    locationId: locationId(venue.locationId),
+    locale: "es-ES",
+    invoiceLocales: ["es-ES"],
+    tipsEnabled: false,
+    orderFlow: "prepay",
+    simplifiedInvoiceLimit: null,
+  });
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, (tx) =>
+    selfEnrolNodeAgent(tx, configFor(source), { nodeId: source.nodeId, name: "Source box" }),
+  );
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-05T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.print_agents).toHaveLength(1);
+  expect(transferred.tables.print_agents![0]).not.toHaveProperty("node_id");
+  const target = await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: async (tx, result) => {
+      await importConfigurationTables(
+        tx,
+        transferred,
+        { locationId: result.locationId },
+        ALL_MODULES,
+        versions,
+      );
+    },
+  });
+
+  const imported = await targetSuite.db
+    .select({ name: printAgents.name, nodeId: printAgents.nodeId, active: printAgents.active })
+    .from(printAgents);
+  expect(imported).toEqual([{ name: "Source box", nodeId: null, active: false }]);
+
+  // The box's own agent still enrols as a new row beside the imported one; had the imported row held
+  // this node, self-enrolment would find it inactive and refuse it as revoked.
+  await withTransaction(targetSuite.db, (tx) =>
+    selfEnrolNodeAgent(tx, configFor(target), { nodeId: target.nodeId, name: "Target box" }),
+  );
+  const enrolled = await targetSuite.db
+    .select({ name: printAgents.name, nodeId: printAgents.nodeId, active: printAgents.active })
+    .from(printAgents)
+    .where(eq(printAgents.nodeId, target.nodeId));
+  expect(enrolled).toEqual([{ name: "Target box", nodeId: target.nodeId, active: true }]);
+
+  const carryingNode: ConfigurationBundle = {
+    ...transferred,
+    tables: {
+      ...transferred.tables,
+      print_agents: [{ ...transferred.tables.print_agents![0], node_id: source.nodeId }],
+    },
+  };
+  expect(() => validateConfigurationBundle(carryingNode, ALL_MODULES, versions)).toThrowError(
+    expect.objectContaining({
+      code: "setup.request_invalid",
+      params: { field: "print_agents.node_id" },
+    }),
+  );
 });
 
 it("round-trips missing home slots alongside live tiles with fresh ids and unchanged positions", async () => {
