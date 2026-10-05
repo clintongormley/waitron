@@ -7184,9 +7184,12 @@ describe("colour swatches on the Structure tab", () => {
     expect(form.open).toBe(true);
     expect(form.name).toBe("Lemonade");
 
-    saving.reject({ code: "product.not_found" });
+    saving.reject({
+      code: "authorization.not_permitted",
+      params: { permission: "person.manage" },
+    });
     await vi.waitFor(() =>
-      expect(form.errors).toEqual({ _form: codeMessage("product.not_found") }),
+      expect(form.errors).toEqual({ _form: codeMessage("authorization.not_permitted") }),
     );
     await el.updateComplete;
     expect(form.open).toBe(true);
@@ -7209,6 +7212,65 @@ describe("colour swatches on the Structure tab", () => {
     inColorForm(el, '[data-test="cancel"]').click();
     await vi.waitFor(() => expect(colorForm(el).open).toBe(false));
     expect(writeCalls(client)).toEqual([]);
+  });
+
+  async function backToList(el: MenusScreen): Promise<void> {
+    history.pushState(null, "", "/manage/menus");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await vi.waitFor(() => expect(q(el, '[data-test="menus"]')).not.toBeNull());
+    await el.updateComplete;
+  }
+
+  it("closes the dialog without a message when the person goes back to the list, so opening a menu does not bring it back", async () => {
+    const client = api({ setProductColor: vi.fn() });
+    const el = await openLemonade(client);
+    await backToList(el);
+    await visit(el, LUNCH_PATH, "Lunch Menu");
+    expect(colorForm(el).open).toBe(false);
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+    expect(writeCalls(client)).toEqual([]);
+  });
+
+  it("says nothing on the list when the product of a dialog closed by going back leaves the library", async () => {
+    const live = new LiveData();
+    const client = api({ liveData: live, setProductColor: vi.fn() });
+    const el = await openLemonade(client);
+    await backToList(el);
+    const reads = client.listLibraryProducts.mock.calls.length;
+    client.listLibraryProducts.mockResolvedValue(
+      products.filter((each) => each.id !== "p-lemonade"),
+    );
+    live.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(client.listLibraryProducts.mock.calls.length).toBe(reads + 1));
+    await new Promise((resolve) => setTimeout(resolve));
+    await el.updateComplete;
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+  });
+
+  it("names the product beside the other menu and closes the dialog when its save is refused after the person went there", async () => {
+    const saving = deferred<void>();
+    const client = api({ setProductColor: vi.fn(() => saving.promise) });
+    const el = await openLemonade(client);
+    inColorForm(el, '[data-color="#b12525"]').click();
+    await colorForm(el).updateComplete;
+    inColorForm(el, '[data-test="save"]').click();
+    await vi.waitFor(() => expect(client.setProductColor).toHaveBeenCalledOnce());
+    await visit(el, DINNER_PATH, "Dinner Menu");
+
+    saving.reject({
+      code: "authorization.not_permitted",
+      params: { permission: "person.manage" },
+    });
+    await vi.waitFor(() =>
+      expect(text(q(el, '[data-test="member-error"]'))).toBe(
+        t("menus.change_not_saved")
+          .replace("{name}", "Lemonade")
+          .replace("{reason}", codeMessage("authorization.not_permitted")),
+      ),
+    );
+    await el.updateComplete;
+    expect(colorForm(el).open).toBe(false);
+    expect(colorForm(el).errors).toEqual({});
   });
 
   it("opens the section's own form from a section's swatch", async () => {

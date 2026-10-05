@@ -609,8 +609,8 @@ export class MenusScreen extends LitElement {
   #pickerHeld: string[] = [];
   #addable: Product[] = [];
   #categoryById = new Map<string, CategorySummary>();
-  /** The coloured product as last read, so the colour dialog still names it while its save is out
-   * after the product has left the library. */
+  /** The coloured product as last read, so the colour dialog still names it after the product has
+   * left the library, until the dialog closes. */
   #colouredSeen: Product | null = null;
   /** The tree row whose ⋮ gets focus back once its window has closed and nothing is out. */
   #focusReturn: { menuId: string; key: string } | null = null;
@@ -1005,6 +1005,10 @@ export class MenusScreen extends LitElement {
     this.structure = null;
     this.structureError = false;
     this.memberError = null;
+    if (!this.colorBusy) {
+      this.colouring = null;
+      this.colorErrors = {};
+    }
     this.priceRefusals = {};
     this.priceOutcome = null;
     this.publishResult = null;
@@ -2292,15 +2296,22 @@ export class MenusScreen extends LitElement {
     if (this.colorBusy || this.#closeLostProduct()) return;
     const product = this.#colouredProduct();
     if (!product) return;
+    const menuId = this.menuId;
     this.colorBusy = true;
     try {
       await this.api.setProductColor(product.id, color);
       this.colouring = null;
     } catch (error) {
-      this.colorErrors =
-        fieldOf(error) === "color"
-          ? { color: t("editor.field_rejected") }
-          : { _form: codeMessage(codeOf(error)) };
+      if (menuId !== this.menuId) {
+        this.memberError = t("menus.change_not_saved")
+          .replace("{name}", product.name)
+          .replace("{reason}", codeMessage(codeOf(error)));
+        this.colouring = null;
+      } else
+        this.colorErrors =
+          fieldOf(error) === "color"
+            ? { color: t("editor.field_rejected") }
+            : { _form: codeMessage(codeOf(error)) };
     } finally {
       this.colorBusy = false;
     }
