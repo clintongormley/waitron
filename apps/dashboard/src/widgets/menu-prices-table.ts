@@ -150,12 +150,16 @@ export class MenuPricesTable extends LitElement {
       }
       /* Wide enough that a range placeholder shows whole rather than clipped into one price. Its
          positioned box holds the field's hidden hint, which otherwise escapes the table's scroller
-         and widens the page. Its end margin is the status line's height, which is sticky at the
-         bottom and would otherwise cover a field scrolled into view under it. */
+         and widens the page. Its end margin is at least the status line's height, measured into
+         --outcome-height because a long sentence wraps the line onto more rows: the line is sticky
+         at the bottom and would otherwise cover a field scrolled into view under it. */
       wt-data-table::part(override-field) {
         position: relative;
         --wt-price-field-width: var(--wt-price-range-field-width);
-        scroll-margin-block-end: calc(var(--wt-tap-min) + 2 * var(--wt-space-2));
+        scroll-margin-block-end: max(
+          var(--wt-tap-min) + 2 * var(--wt-space-2),
+          var(--outcome-height, 0px)
+        );
       }
       wt-data-table::part(status-link) {
         display: inline-flex;
@@ -319,7 +323,45 @@ export class MenuPricesTable extends LitElement {
     if (drafts.size !== this.drafts.size) this.drafts = drafts;
   }
 
+  /** Watched, not only measured on each outcome, so a narrower window that wraps the line onto
+   * another row still keeps a field clear of it. */
+  readonly #outcomeSize = new ResizeObserver(() => this.#fitOutcome());
+  #outcomeFitted: Promise<void> = Promise.resolve();
+
+  #fitOutcome(): void {
+    const line = this.renderRoot.querySelector(".outcome")!;
+    this.style.setProperty("--outcome-height", `${line.getBoundingClientRect().height}px`);
+  }
+
+  /** Measured once its Undo has drawn its label, which decides whether the line wraps. */
+  async #fitOutcomeAfterUndo(): Promise<void> {
+    await this.renderRoot.querySelector<LitElement>('[data-test="price-undo"]')?.updateComplete;
+    this.#fitOutcome();
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.hasUpdated) this.#outcomeSize.observe(this.renderRoot.querySelector(".outcome")!);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#outcomeSize.disconnect();
+  }
+
+  protected override firstUpdated(): void {
+    this.#outcomeSize.observe(this.renderRoot.querySelector(".outcome")!);
+  }
+
+  /** Resolves once the status line's new height is measured too. */
+  protected override async getUpdateComplete(): Promise<boolean> {
+    const done = await super.getUpdateComplete();
+    await this.#outcomeFitted;
+    return done;
+  }
+
   protected override updated(changed: PropertyValues): void {
+    if (changed.has("outcome")) this.#outcomeFitted = this.#fitOutcomeAfterUndo();
     // The cells read these, and the table redraws only when its own properties change.
     if (
       ["invalid", "hiddenRefusals", "saving", "refusals"].some((name) => changed.has(name)) ||

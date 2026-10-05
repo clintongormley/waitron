@@ -2351,6 +2351,50 @@ it("keeps a field scrolled into view clear of the status line, which paints abov
   expect(node, hit?.outerHTML.slice(0, 80)).toBe(line);
 });
 
+it("keeps a field scrolled into view clear of a status line that wraps onto a second row", async () => {
+  const rows = Array.from({ length: 30 }, (_, at) => ({
+    ...burger,
+    menuItemId: `mi-burger-${at}`,
+    name: `Burger ${at}`,
+  }));
+  const el = await mount({ rows: [...rows.slice(0, 15), clashRow(lager), ...rows.slice(15)] });
+  const host = el.parentElement!;
+  host.style.blockSize = "400px";
+  host.style.overflow = "auto";
+  const name = "Burger ".repeat(12).trim();
+  el.outcome = { kind: "saved", save: { ...burgerSaved, name } };
+  await el.updateComplete;
+  const line = el.shadowRoot!.querySelector<HTMLElement>(".outcome")!;
+  const sentence = line.querySelector("p")!.getBoundingClientRect();
+  expect(undoButton(el)!.getBoundingClientRect().top).toBeGreaterThanOrEqual(sentence.bottom - 0.5);
+  const field = override(el, "mi-lager");
+  field.scrollIntoView({ block: "end" });
+  expect(host.scrollTop).toBeGreaterThan(0);
+  expect(host.scrollTop).toBeLessThan(host.scrollHeight - host.clientHeight);
+  expect(
+    field.getBoundingClientRect().bottom,
+    `line ${line.getBoundingClientRect().height}px, margin ${getComputedStyle(field).scrollMarginBlockEnd}`,
+  ).toBeLessThanOrEqual(line.getBoundingClientRect().top + 0.5);
+});
+
+it("widens a field's end margin when a narrower table wraps the status line, after being moved", async () => {
+  const el = await mount();
+  const host = el.parentElement!;
+  host.style.inlineSize = "1280px";
+  el.outcome = { kind: "saved", save: { ...burgerSaved, name: "Burger ".repeat(12).trim() } };
+  await el.updateComplete;
+  const line = el.shadowRoot!.querySelector<HTMLElement>(".outcome")!;
+  const oneRow = line.getBoundingClientRect().height;
+  host.remove();
+  document.body.append(host);
+  host.style.inlineSize = "414px";
+  expect(line.getBoundingClientRect().height).toBeGreaterThan(oneRow);
+  const margin = () => parseFloat(getComputedStyle(override(el, "mi-lager")).scrollMarginBlockEnd);
+  await vi.waitFor(() =>
+    expect(margin()).toBeGreaterThanOrEqual(line.getBoundingClientRect().height),
+  );
+});
+
 it("keeps an Inactive size's clash on its own row, off its product's", async () => {
   const row = variantClashRow();
   const el = await mount({
