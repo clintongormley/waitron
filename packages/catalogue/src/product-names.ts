@@ -1,9 +1,15 @@
-import { and, asc, eq, isNull, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, notInArray, or } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { firstNewClash, foldName } from "./name-uniqueness.js";
 import { parentJoin, parentProducts } from "./variant-fallback.js";
 import "./errors.js";
+
+/** The columns a write of a product's or variant's staff name sets: the name, and the folded key
+ * {@link assertProductNamesFree} looks rows up by. */
+export function nameColumns(name: string): { name: string; nameKey: string } {
+  return { name, nameKey: foldName(name) };
+}
 
 /** A stored product or variant, as the unique-name rule reads it. */
 export interface StoredName {
@@ -38,6 +44,8 @@ function nameChanged(
  * `family` is the set of rows the write decides, as it leaves them; `familyIds` every stored row in
  * that set, which are judged by `family` rather than by what they store now, so a save that swaps
  * names within the set passes. Only a clash involving a changed row is refused (`firstNewClash`).
+ * Other rows are found by their stored `name_key`, so one whose name has not been written since that
+ * column was added holds a null key and is not seen.
  */
 async function assertProductNamesFree(
   tx: Transaction,
@@ -46,20 +54,20 @@ async function assertProductNamesFree(
 ): Promise<void> {
   const entries = family.filter((row) => row.counted);
   if (!entries.some((row) => row.changed)) return;
-  const excluded = new Set(familyIds);
-  const counting = await tx
-    .select({ id: products.id, name: products.name })
+  const keys = [...new Set(entries.map((row) => foldName(row.name)))];
+  const holders = await tx
+    .select({ name: products.name })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
     .where(
       and(
+        inArray(products.nameKey, keys),
         eq(products.active, true),
         or(isNull(products.parentId), eq(parentProducts.active, true)),
+        familyIds.length === 0 ? undefined : notInArray(products.id, [...familyIds]),
       ),
     );
-  const others = counting
-    .filter((row) => !excluded.has(row.id))
-    .map((row) => ({ name: row.name, field: "", changed: false }));
+  const others = holders.map((row) => ({ name: row.name, field: "", changed: false }));
   const clash = firstNewClash([...others, ...entries]);
   if (clash)
     throw new AppError("product.name_taken", { field: clash.field, name: clash.name.trim() });

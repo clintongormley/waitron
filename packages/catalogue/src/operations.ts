@@ -39,7 +39,12 @@ import { productUnits, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
 import { assertNotOfferedAsExtra, menuVariantsOfItems } from "./variants.js";
-import { assertFamilyNamesFree, assertUpdatedNamesFree, readUpdatedName } from "./product-names.js";
+import {
+  assertFamilyNamesFree,
+  assertUpdatedNamesFree,
+  nameColumns,
+  readUpdatedName,
+} from "./product-names.js";
 import {
   assignProductUnit,
   clearProductUnit,
@@ -1015,7 +1020,7 @@ async function insertProduct(
   const values = {
     catalogueId: input.catalogueId,
     categoryId: input.categoryId,
-    name: input.name,
+    ...nameColumns(input.name),
     customerName: input.customerName ?? null,
     description: input.description ?? null,
     kitchenName: input.kitchenName?.trim() || null,
@@ -1189,6 +1194,7 @@ async function patchProduct(
     .update(products)
     .set({
       ...rest,
+      ...(rest.name === undefined ? {} : nameColumns(rest.name)),
       ...(unitPrice === undefined
         ? {}
         : { unitPrice: unitPrice === null ? null : stringToCents(unitPrice) }),

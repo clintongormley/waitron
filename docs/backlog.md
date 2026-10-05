@@ -3226,7 +3226,14 @@ its parent's too; a menu's own Active switch is not read. Names are compared ign
 (non-ASCII letters included) and surrounding spaces, in JavaScript, because this engine's
 `lower()` folds ASCII only (`foldName`, `packages/catalogue/src/name-uniqueness.ts`). The checks run
 inside the write's own transaction, which runs alone in the venue's write queue; there is no unique
-index and no migration. Refusals are `category.name_taken` and `product.name_taken`, both 409 with
+index. Each product row stores its folded staff name in `products.name_key` (core migration
+`0098_product_name_key.sql`: an added nullable column and a non-unique index), written beside `name`
+by every catalogue write that sets the name, and the product check looks other rows up by that key
+instead of reading and folding every Active name in the venue, which made each save cost more as
+the catalogue grew and seeding grow quadratically (a review finding). There is no backfill: a row
+whose name has not been written since the column was added keeps a null key, and the check does
+not see it until its name is next written (every product editor save writes it) or the venue is
+reset. Refusals are `category.name_taken` and `product.name_taken`, both 409 with
 `{ field, name }`, shown beside the Name field (or the variant row) in English and Spanish, the
 draft kept. Only a clash the write creates is refused, so rows that already shared a name do not
 block an unrelated save; a category that changes parent counts as new where it lands, so moving

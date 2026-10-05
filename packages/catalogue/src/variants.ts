@@ -14,7 +14,7 @@ import type { ProductPresentation } from "./product-presentation.js";
 import type { MenuOffer, MenuVariant, MenuVariantWrite } from "./menu-types.js";
 export type { MenuVariant, MenuVariantWrite } from "./menu-types.js";
 import { INHERITED_KEYS, productWithId } from "./variant-fallback.js";
-import { assertFamilyNamesFree } from "./product-names.js";
+import { assertFamilyNamesFree, nameColumns } from "./product-names.js";
 import "./errors.js";
 import type { ProductVariant, ProductVariantInput } from "./product-types.js";
 export type { ProductVariant, ProductVariantInput } from "./product-types.js";
@@ -229,7 +229,7 @@ async function writeProductVariants(
     );
   for (const [index, input] of normalized.entries()) {
     const values = {
-      name: input.name,
+      ...nameColumns(input.name),
       customerName: input.customerName,
       kitchenName: input.kitchenName,
       image: input.image,
