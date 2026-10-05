@@ -96,8 +96,8 @@ coordinate with it beyond building on its tree.
    so a variant's id answers `product.not_found` (`packages/catalogue/src/categories.ts:142-151`).
    Its effective colour is its parent's: the published offer carries one colour, and its frozen
    variants carry none. No variant is drawn as a tile today (the till offers them as choices in the
-   modifier picker). (2026-10-05, finish-branch review: `setProductColor` and `product-colors.ts`
-   were removed; `updateProduct` (`packages/catalogue/src/operations.ts`) writes the colour in its
+   modifier picker). (2026-10-05, finish-branch review: the catalogue's `setProductColor` and
+   `product-colors.ts` were removed; `updateProduct` (`packages/catalogue/src/operations.ts`) writes the colour in its
    one update and answers a variant's id `product.not_found`.)
 4. **Writes.** Categories: `CategoryInput` gains `color?: string | null`; create and the PATCH route
    take it (`apps/server/src/catalogue-api.ts:142-151`, `:1156-1162`); a value that is not a string
@@ -113,7 +113,7 @@ coordinate with it beyond building on its tree.
    so `ProductEditorValue` gain the product's own `color`. (2026-10-05, finish-branch review: the
    editor save writes the colour beside the main category
    (`packages/catalogue/src/product-editor.ts`), and the PATCH reaches `updateProduct`, which refuses
-   a bad value `product.invalid` `{ field: "color" }`; `setProductColor` was removed.)
+   a bad value `product.invalid` `{ field: "color" }`; the catalogue's `setProductColor` was removed.)
 5. **Published document.** Effective colour is resolved when a document is built: one batched read
    of every offered product's own colour and main category, one read of the category tree, then the
    pure rule (`readEffectiveColors`, no per-product query). `FrozenOffer` and `LiveOffer` gain an
