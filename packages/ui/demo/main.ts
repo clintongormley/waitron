@@ -15,6 +15,7 @@ import "../src/components/wt-price-input.js";
 import "../src/components/wt-number-stepper.js";
 import "../src/components/wt-spinner.js";
 import "../src/components/wt-switch.js";
+import "../src/components/wt-slider.js";
 import "../src/components/wt-tabs.js";
 import "../src/components/wt-row-actions.js";
 import "../src/components/wt-combobox.js";
@@ -92,6 +93,11 @@ const panel = (theme: "light" | "dark") => `
       <div class="row" style="margin-top:16px">
         <wt-switch label="Modo formación"></wt-switch>
         <wt-switch label="Activado" checked></wt-switch>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <wt-slider label="Columns" name="columns" min="2" max="6" value="4"></wt-slider>
+        <wt-slider label="Columns" min="6" max="10" value="6" disabled></wt-slider>
+        <wt-slider label="Columns" min="2" max="6" value="2" error="Pick a number from 2 to 6"></wt-slider>
       </div>
       <div class="row" style="margin-top:16px">
         <wt-combobox
