@@ -3,16 +3,185 @@ import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
+import type { RegistroAlta } from "@waitron/verifactu";
+import type { VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedPendingEnvios, seedSecondChain } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { DEFAULT_SKIP_RETRY_MS, RECUPERACION_ENVIANDO_MS, drain } from "./drain.js";
+import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
+import type { RegistroRow } from "./registro-row.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NOW = new Date("2026-07-21T00:01:00Z");
 const RETRY_AT = new Date("2026-07-21T00:03:00Z");
 
 describe("drain chain ordering", () => {
+  it("does not accept a Correcta duplicate whose stored fingerprint belongs to another record", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const raw = await suite.db.execute<Record<string, unknown>>(sql`
+      select * from registros_facturacion where id = ${seeded.registroIds[0]}
+    `);
+    const ours = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    await aeat
+      .client()
+      .submit({ ObligadoEmision: { NombreRazon: seeded.legalName, NIF: seeded.nif } }, [
+        { RegistroAlta: { ...ours, Huella: "D".repeat(64) } },
+      ]);
+
+    const result = await drain(
+      {
+        db: suite.db,
+        resolveClient: staticResolver(aeat.client()),
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+        environment: "production",
+      },
+      NOW,
+    );
+
+    expect(result.recordsAccepted).toBe(0);
+    expect(result.recordsHalted).toBe(1);
+    const stored = await suite.db.execute<{ estado: string }>(sql`
+      select estado from envios where registro_id = ${seeded.registroIds[0]}
+    `);
+    expect(stored.rows[0]?.estado).toBe("detenido");
+    expect(aeat.stored()[0]?.huella).toBe("D".repeat(64));
+  });
+
+  it("does not claim a matching fingerprint filed under another installation", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const raw = await suite.db.execute<Record<string, unknown>>(sql`
+      select * from registros_facturacion where id = ${seeded.registroIds[0]}
+    `);
+    const ours = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    await aeat
+      .client()
+      .submit({ ObligadoEmision: { NombreRazon: seeded.legalName, NIF: seeded.nif } }, [
+        {
+          RegistroAlta: {
+            ...ours,
+            SistemaInformatico: { ...ours.SistemaInformatico, NumeroInstalacion: "99999" },
+          },
+        },
+      ]);
+
+    const result = await drain(
+      {
+        db: suite.db,
+        resolveClient: staticResolver(aeat.client()),
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+        environment: "production",
+      },
+      NOW,
+    );
+
+    expect(result.recordsAccepted).toBe(0);
+    expect(result.recordsHalted).toBe(1);
+    const stored = await suite.db.execute<{ estado: string }>(sql`
+      select estado from envios where registro_id = ${seeded.registroIds[0]}
+    `);
+    expect(stored.rows[0]?.estado).toBe("detenido");
+  });
+
+  it("keeps a duplicate unresolved when lookup returns no matching invoice", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const first = await drain(
+      {
+        db: suite.db,
+        resolveClient: staticResolver(aeat.client()),
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+        environment: "production",
+      },
+      NOW,
+    );
+    expect(first.recordsAccepted).toBe(1);
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(sql`
+        update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
+        where registro_id = ${seeded.registroIds[0]}
+      `),
+    );
+    const real = aeat.client();
+    const noLookupRow: VerifactuClient = {
+      submit: (...args) => real.submit(...args),
+      consultar: async (...args) => ({ ...(await real.consultar(...args)), registros: [] }),
+    };
+
+    const result = await drain(
+      {
+        db: suite.db,
+        resolveClient: staticResolver(noLookupRow),
+        skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+        environment: "production",
+      },
+      new Date("2026-07-21T00:02:00Z"),
+    );
+
+    expect(result.recordsAccepted).toBe(0);
+    expect(result.recordsHalted).toBe(0);
+    const stored = await suite.db.execute<{ estado: string }>(sql`
+      select estado from envios where registro_id = ${seeded.registroIds[0]}
+    `);
+    expect(stored.rows[0]?.estado).toBe("pendiente");
+  });
+
+  it("follows a paged lookup before deciding whether the stored fingerprint matches", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const real = aeat.client();
+    const deps = {
+      db: suite.db,
+      resolveClient: staticResolver(real),
+      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      environment: "production" as const,
+    };
+    await drain(deps, NOW);
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(sql`
+        update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
+        where registro_id = ${seeded.registroIds[0]}
+      `),
+    );
+    const [nif, number, date] = seeded.facturaKeys[0]!.split("|");
+    const pageKey = {
+      IDEmisorFactura: nif!,
+      NumSerieFactura: number!,
+      FechaExpedicionFactura: date!,
+    };
+    let lookups = 0;
+    let secondPage: Awaited<ReturnType<VerifactuClient["consultar"]>> | undefined;
+    const paged: VerifactuClient = {
+      submit: (...args) => real.submit(...args),
+      consultar: async (cabecera, filtro) => {
+        lookups += 1;
+        if (lookups === 1) {
+          expect(filtro.ClavePaginacion).toBeUndefined();
+          secondPage = await real.consultar(cabecera, filtro);
+          return {
+            ...secondPage,
+            registros: [],
+            IndicadorPaginacion: "S",
+            ClavePaginacion: pageKey,
+          };
+        }
+        expect(filtro.ClavePaginacion).toEqual(pageKey);
+        return secondPage!;
+      },
+    };
+
+    const result = await drain(
+      { ...deps, resolveClient: staticResolver(paged) },
+      new Date("2026-07-21T00:02:00Z"),
+    );
+
+    expect(lookups).toBe(2);
+    expect(result.recordsAccepted).toBe(1);
+    expect(result.recordsHalted).toBe(0);
+  });
+
   it("does not submit a due successor before its earlier retry, and wakes when the retry is due", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     await withTransaction(suite.db, (tx) =>

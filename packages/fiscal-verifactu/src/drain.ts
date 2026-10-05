@@ -314,11 +314,8 @@ async function recoverStaleClaims(tx: Transaction, now: Date): Promise<void> {
  * no staleness gate, raising `incidencia` as `recoverStaleClaims` does. Sound only before this
  * process's first drain pass and while no other process files from this database, so the host
  * calls it before that pass, and again only if that attempt failed. A resend of a record the
- * previous run had filed meets AEAT's duplicate check (error 3000): when AEAT reports its stored
- * copy `Correcta` or `AceptadaConErrores`, `resolveEstadoEfectivo` reads that as an accept and
- * `applyOutcome` marks the row `aceptado`, or `aceptado_con_errores` with a warning
- * `fiscal.aceptado_con_errores` incident, without comparing fingerprints; only an annulled or
- * unstated copy reaches `handleDuplicate`.
+ * previous run had filed meets AEAT's duplicate check (error 3000); the drainer checks the stored
+ * fingerprint before treating that reply as confirmation of our record.
  */
 export async function resetInFlightClaims(db: Database, now: Date): Promise<void> {
   await withTransaction(db, (tx) => requeueClaims(tx, now, null));
@@ -387,6 +384,17 @@ async function claimBatch(
     join registros_facturacion r on r.id = e.registro_id
     where e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
       ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
+      -- A cancellation can alter the authority's row under this invoice key before our original's
+      -- duplicate reply reveals that the row belongs to someone else.
+      and (r.tipo_registro != 'anulacion' or exists (
+        select 1 from registros_facturacion original
+        join envios original_envio on original_envio.registro_id = original.id
+        where original.tipo_registro = 'alta'
+          and original.id_emisor_factura = r.id_emisor_factura
+          and original.num_serie_factura = r.num_serie_factura
+          and original.fecha_expedicion_factura = r.fecha_expedicion_factura
+          and original_envio.estado in ('aceptado', 'aceptado_con_errores')
+      ))
       and not exists (
         select 1 from envios earlier
         join registros_facturacion prior on prior.id = earlier.registro_id
@@ -528,10 +536,10 @@ function cabeceraFor(row: RegistroRow): Cabecera {
   return { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } };
 }
 
-/** Route B's answer for one line: whether AEAT holds our huella, or the lookup's failure. */
-type Lookup = { matched: boolean } | { failed: unknown };
+/** A missing fingerprint or invoice leaves the duplicate unresolved. */
+type Lookup = { matched: boolean | null } | { failed: unknown };
 
-/** A reply line matched to its claimed row. `lookup` is set exactly on the lines Route B covers. */
+/** A reply line matched to its claimed row. */
 interface ResolvedLine {
   row: DueRow;
   linea: RespuestaLinea;
@@ -557,7 +565,12 @@ async function resolveLines(
     // `recoverStaleClaims` or a restart requeues it.
     const row = linea.RefExterna !== undefined ? byId.get(linea.RefExterna) : undefined;
     if (row === undefined) continue;
-    const efectivo = resolveEstadoEfectivo(linea);
+    const resolved = resolveEstadoEfectivo(linea);
+    const efectivo =
+      linea.CodigoErrorRegistro === 3000 &&
+      (resolved === "accepted" || resolved === "accepted_with_errors")
+        ? "duplicate_unknown"
+        : resolved;
     const routeBCovers =
       efectivo === "duplicate_unknown" ||
       (efectivo === "duplicate_annulled" && row.tipo_registro === "anulacion");
@@ -658,16 +671,13 @@ async function applyOutcome(
       return;
     // duplicate_annulled / duplicate_unknown — error 3000; see `handleDuplicate`.
     default:
-      await handleDuplicate(tx, row, efectivo, lookup, csv, now, result, halted);
+      await handleDuplicate(tx, row, linea, efectivo, lookup, csv, now, result, halted);
   }
 }
 
 /**
- * A line whose own status `@waitron/verifactu` could not read: the reply does not say whether AEAT
- * stored the record, so it is neither accepted nor rejected here, and never looked up as a
- * duplicate, whose fingerprint comparison could halt a healthy chain. The row goes back to
- * `pendiente` on `backoffBatch`'s schedule; a resend AEAT already holds comes back as error 3000
- * with its stored state. The incident keeps the envío's CSV, which AEAT never returns again.
+ * An unreadable reply or a duplicate lookup with missing evidence stays pending for a later send.
+ * The incident keeps the envío's CSV, which AEAT never returns again.
  */
 async function awaitReadableAnswer(
   tx: Transaction,
@@ -781,28 +791,57 @@ async function raiseIncident(
 }
 
 /**
- * Route B (error 3000; `handleDuplicate` says which cases): a targeted consulta for this one record
- * resolves it. Only the `Huella` is compared:
- * it already summarises every hashed field.
+ * A targeted consulta compares the stored fingerprint and installation identity before a duplicate
+ * can confirm our record. An absent record, fingerprint or identity leaves the answer unresolved.
  *
  * `Ejercicio`/`Periodo` come from `fecha_expedicion_factura`: our records never carry a separate
  * `FechaOperacion`, so the operation month is the expedition month.
  */
-async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean> {
+async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | null> {
   const [ejercicio, periodo] = row.fecha_expedicion_factura.split("-");
-  const respuesta: RespuestaConsulta = await client.consultar(
-    { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } },
-    {
-      Ejercicio: ejercicio,
-      Periodo: periodo,
-      NumSerieFactura: row.num_serie_factura,
-      FechaExpedicionFactura: toAeatDate(row.fecha_expedicion_factura),
-    },
-  );
-  const stored = respuesta.registros.find(
-    (r) => r.IDFactura.NumSerieFactura === row.num_serie_factura,
-  );
-  return stored?.DatosRegistroFacturacion.Huella === row.huella;
+  const fecha = toAeatDate(row.fecha_expedicion_factura);
+  let page: RespuestaConsulta["ClavePaginacion"];
+  const seenPages = new Set<string>();
+  while (true) {
+    const respuesta: RespuestaConsulta = await client.consultar(
+      { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } },
+      {
+        Ejercicio: ejercicio,
+        Periodo: periodo,
+        NumSerieFactura: row.num_serie_factura,
+        FechaExpedicionFactura: fecha,
+        DatosAdicionalesRespuesta: { MostrarSistemaInformatico: "S" },
+        ...(page === undefined ? {} : { ClavePaginacion: page }),
+      },
+    );
+    const stored = respuesta.registros.find(
+      (r) =>
+        r.IDFactura.IDEmisorFactura === row.id_emisor_factura &&
+        r.IDFactura.NumSerieFactura === row.num_serie_factura &&
+        r.IDFactura.FechaExpedicionFactura === fecha,
+    );
+    const huella = stored?.DatosRegistroFacturacion.Huella;
+    if (huella !== undefined) {
+      const sistema = stored?.DatosRegistroFacturacion.SistemaInformatico;
+      if (typeof sistema !== "object" || sistema === null) return null;
+      const original = fromRegistroRow(row).SistemaInformatico;
+      return (
+        huella === row.huella &&
+        "NIF" in sistema &&
+        sistema.NIF === original.NIF &&
+        "IdSistemaInformatico" in sistema &&
+        sistema.IdSistemaInformatico === original.IdSistemaInformatico &&
+        "NumeroInstalacion" in sistema &&
+        sistema.NumeroInstalacion === original.NumeroInstalacion
+      );
+    }
+    const next = respuesta.ClavePaginacion;
+    if (respuesta.IndicadorPaginacion !== "S" || next === undefined) return null;
+    const key = JSON.stringify(next);
+    if (seenPages.has(key)) return null;
+    seenPages.add(key);
+    page = next;
+  }
 }
 
 /**
@@ -811,11 +850,9 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean> {
  *   - Route A (`duplicate_annulled` on an alta): AEAT's own copy of this identity is `Anulada`. This
  *     record can never become a confirmed accept under this identity, so it halts with
  *     `fiscal.duplicado_anulado` rather than retrying forever.
- *   - Route B (`duplicate_unknown`, or `duplicate_annulled` on an anulación): a consulta reads the
- *     record AEAT holds under this identity. A huella equal to the row's own means AEAT already
- *     holds OUR record, so it resolves to `aceptado`. A differing huella, or AEAT returning no record
- *     for it, halts: on an anulación with `fiscal.duplicado_anulado`, otherwise with
- *     `fiscal.huella_divergente`. An anulación belongs here because `Anulada` on a resent anulación
+ *   - Route B (all other duplicates): a consulta reads the record AEAT holds under this identity.
+ *     A matching fingerprint and installation confirm our record. A mismatch halts; missing
+ *     evidence leaves the row pending. An anulación belongs here because `Anulada` on a resent anulación
  *     is most likely AEAT holding that very anulación: the verifactu library's live preproduction
  *     check asserts that the final consulta "reports the invoice as `Anulado` with the cancellation
  *     record's hash" (`sources/README.md`; the "final cancelled-record consulta" stage in
@@ -831,6 +868,7 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean> {
 async function handleDuplicate(
   tx: Transaction,
   row: DueRow,
+  linea: RespuestaLinea,
   efectivo: EstadoEfectivo,
   lookup: Lookup | null,
   csv: string | null,
@@ -844,6 +882,10 @@ async function handleDuplicate(
     if (lookup.matched) {
       await setEstado(tx, row.id, "aceptado", now, { csv, confirmadoEn: now });
       result.recordsAccepted += 1;
+      return;
+    }
+    if (lookup.matched === null) {
+      await awaitReadableAnswer(tx, row, linea, csv, now, result);
       return;
     }
   }

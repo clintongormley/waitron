@@ -8,6 +8,7 @@ import { newId, nowIso, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { VerifactuBackend } from "./backend.js";
+import { decodeRegistroRow, fromRegistroRow, type RegistroRow } from "./registro-row.js";
 import {
   DEFAULT_SKIP_RETRY_MS,
   backoffMs,
@@ -135,13 +136,25 @@ describe("drain — happy path, an anulación row", () => {
     });
 
     // Both envíos default to the wall-clock insert time, so a minute past it has them due.
-    const result = await drain(
+    const first = await drain(
       drainDeps(staticResolver(aeat.client())),
       new Date(Date.now() + 60_000),
     );
 
-    expect(result.recordsSubmitted).toBe(2);
-    expect(result.recordsAccepted).toBe(2);
+    expect(first.recordsSubmitted).toBe(1);
+    expect(first.recordsAccepted).toBe(1);
+    const pending = await suite.db.execute<{ tipo_registro: string; estado: string }>(sql`
+      select r.tipo_registro, e.estado from envios e
+      join registros_facturacion r on r.id = e.registro_id
+      where r.node_id = ${nodeId} order by r.secuencia
+    `);
+    expect(pending.rows).toEqual([
+      { tipo_registro: "alta", estado: "aceptado" },
+      { tipo_registro: "anulacion", estado: "pendiente" },
+    ]);
+    const second = await drain(drainDeps(staticResolver(aeat.client())), first.nextDueAt!);
+    expect(second.recordsSubmitted).toBe(1);
+    expect(second.recordsAccepted).toBe(1);
 
     const rows = await withTransaction(suite.db, (tx) =>
       tx.execute<{ estado: string; csv: string | null }>(sql`
@@ -1197,11 +1210,16 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
         };
       },
     });
-    await drain(drainDeps(staticResolver(stripAnulacionStatus(aeat.client()))), firstPass);
+    const first = await drain(drainDeps(staticResolver(aeat.client())), firstPass);
+    expect((await chainRows()).map((r) => r.estado)).toEqual(["aceptado", "pendiente"]);
+    const unknown = await drain(
+      drainDeps(staticResolver(stripAnulacionStatus(aeat.client()))),
+      first.nextDueAt!,
+    );
     expect((await chainRows()).map((r) => r.estado)).toEqual(["aceptado", "pendiente"]);
 
     await sell();
-    const result = await drain(drainDeps(staticResolver(aeat.client())), secondPass);
+    const result = await drain(drainDeps(staticResolver(aeat.client())), unknown.nextDueAt!);
 
     expect((await chainRows()).map((r) => [r.tipo_registro, r.estado])).toEqual([
       ["alta", "aceptado"],
@@ -1259,6 +1277,33 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
     expect(result.recordsAccepted).toBe(0);
     expect(result.recordsHalted).toBe(2);
     expect(await incidentCodes()).toEqual(["fiscal.duplicado_anulado"]);
+  });
+
+  it("does not submit a cancellation while its original collides with a foreign invoice", async () => {
+    const sale = await sell();
+    const raw = await suite.db.execute<Record<string, unknown>>(sql`
+      select * from registros_facturacion
+      where node_id = ${venue.nodeId} and tipo_registro = 'alta'
+    `);
+    const original = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
+    await aeat.client().submit(
+      {
+        ObligadoEmision: {
+          NombreRazon: original.NombreRazonEmisor,
+          NIF: original.IDFactura.IDEmisorFactura,
+        },
+      },
+      [{ RegistroAlta: { ...original, Huella: "D".repeat(64) } }],
+    );
+    await voidSale(sale.saleId);
+
+    const result = await drain(drainDeps(staticResolver(aeat.client())), firstPass);
+
+    expect(result.recordsAccepted).toBe(0);
+    expect(aeat.stored()).toEqual([
+      expect.objectContaining({ estado: "Correcto", huella: "D".repeat(64) }),
+    ]);
+    expect((await chainRows()).map((row) => row.estado)).toEqual(["detenido", "detenido"]);
   });
 });
 
