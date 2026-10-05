@@ -1594,7 +1594,7 @@ deleted the right category; the dashboard was at fault. Fixed:
   closes the menu too (W74b, #1219). Those items stopped the click as the category Delete had, so
   the menu stayed open after each of them. Tested in the list itself, which sends exactly one
   request per choice; not tested through the whole Products screen that handles the requests.
-- The routing-rules warning counts only the rules the chosen option removes (W74c). Reproduced
+- The routing-rules warning counts only the rules the chosen option removes (W74c, #1220). Reproduced
   first in `apps/server/src/catalogue-api.full-manifest.test.ts`: with one rule on a category and
   two on its subcategory, the summary reported 3 and moving the contents up removed 1, the
   subcategory keeping both of its own. Each category's summary now also reports `ownRoutes`, the
@@ -1617,6 +1617,12 @@ Still open from W74:
   reported the device, while the server lists one entry per agent, so two agents that see the same
   network printer give two rows the same key. The table now draws both; anything that finds a row
   by its key would reach only the first.
+- **Under "Delete it too", the routing-rules warning says the rules "name these categories"**
+  (raised in #1220's review): the count also includes rules on subcategories the dialog does not
+  list. The wording predates #1220; changing it needs new English and Spanish text.
+- **The delete dialog stretches to nearly the full screen height**, with empty space below its
+  text, at 1280 and 390 wide (seen on the demo stack while checking #1220; not caused by it, and
+  not traced further). W70's modal sizes may cover it.
 
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE.** The
 owner, on two screenshots of the same three options, the Name column starting far to the right
