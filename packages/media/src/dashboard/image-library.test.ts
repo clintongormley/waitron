@@ -1,11 +1,12 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setContentLanguages } from "@waitron/ui";
+import { applyTokens } from "@waitron/ui/src/tokens/index.js";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage, setLocale, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import "./image-library.js";
 import type { ImageLibrary } from "./image-library.js";
-import { ImageApi, type LibraryImage } from "./client.js";
+import { ImageApi, type ImageUsage, type LibraryImage } from "./client.js";
 import { MEDIA_STRINGS } from "./strings.js";
 
 const image: LibraryImage = {
@@ -1504,4 +1505,327 @@ it("clears a failed load's message once the server answers again", async () => {
   liveData.refresh();
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-image=one]")).not.toBeNull());
   expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+});
+
+const thumbnail = (id = "one") =>
+  el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-test=preview-${id}]`)!;
+const viewer = () => el.shadowRoot!.querySelector<HTMLElement>("wt-modal[data-test=image-preview]");
+async function openedViewer(): Promise<HTMLElement> {
+  await vi.waitFor(() => expect(viewer()?.shadowRoot?.querySelector("dialog")?.open).toBe(true));
+  return viewer()!;
+}
+const usesShown = () =>
+  [...viewer()!.querySelectorAll(".uses li a")].map((link) => [
+    link.textContent,
+    link.getAttribute("href"),
+  ]);
+const everyKindOfUse: ImageUsage[] = [
+  { kind: "product", id: "toast", catalogueId: "menu", name: "Toast", active: true },
+  { kind: "product", id: "old", catalogueId: "menu", name: "Old toast", active: false },
+  {
+    kind: "variant",
+    id: "large",
+    productId: "toast",
+    catalogueId: "menu",
+    name: "Large toast",
+    active: true,
+  },
+  { kind: "section", id: "drinks", internalName: "Drinks (internal)", ownerMenuId: "drinks-menu" },
+  { kind: "menu_version", id: "v1", menuId: "lunch", menuName: "Lunch Menu", number: 3 },
+];
+
+for (const picker of [false, true]) {
+  it(`opens a preview when the thumbnail is clicked, without editing, deleting or choosing the image (${picker ? "picker" : "library"})`, async () => {
+    const client = await mount(api(), picker);
+    const selected = vi.fn();
+    el.addEventListener("select-image", selected);
+    await userEvent.click(el.shadowRoot!.querySelector("[data-image=one] img")!);
+    const modal = await openedViewer();
+    expect((modal as HTMLElement & { heading: string }).heading).toBe("Pan");
+    const shown = modal.querySelector<HTMLImageElement>("img")!;
+    expect(shown.alt).toBe("Pan");
+    expect(shown.getAttribute("src")).toBe("/media/one.jpg");
+    expect(client.getImage).toHaveBeenCalledWith("one");
+    expect(el.shadowRoot!.querySelectorAll("wt-modal")).toHaveLength(1);
+    expect(el.shadowRoot!.querySelector("wt-input[name=name-es]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).toBeNull();
+    expect(client.updateImage).not.toHaveBeenCalled();
+    expect(client.deleteImage).not.toHaveBeenCalled();
+    expect(selected).not.toHaveBeenCalled();
+  });
+}
+
+for (const locale of ["en-GB", "es-ES"]) {
+  it(`names the thumbnail's button as a preview of the image, and shows that it opens one (${locale})`, async () => {
+    setLocale(locale);
+    await mount();
+    const label = MEDIA_STRINGS[locale === "en-GB" ? "en" : "es"]["image.view"];
+    expect(thumbnail().getAttribute("aria-label")).toBe(`${label}: Pan`);
+    expect(thumbnail().textContent!.trim()).toBe(label);
+    expect(thumbnail().type).toBe("button");
+  });
+}
+
+it.each([
+  ["Enter", "{Enter}"],
+  ["Space", " "],
+])("opens the preview from the keyboard with %s on the thumbnail", async (_key, keys) => {
+  const client = await mount();
+  thumbnail().focus();
+  await userEvent.keyboard(keys);
+  await openedViewer();
+  expect(client.getImage).toHaveBeenCalledWith("one");
+  expect(client.updateImage).not.toHaveBeenCalled();
+});
+
+it("lists every place the image is used under a heading, each linked to the place itself", async () => {
+  const client = api();
+  client.getImage.mockResolvedValue({ image, uses: everyKindOfUse });
+  await mount(client);
+  thumbnail().click();
+  const modal = await openedViewer();
+  await vi.waitFor(() => expect(usesShown()).toHaveLength(5));
+  expect(usesShown()).toEqual([
+    ["Toast", "/manage/catalogue/product/toast"],
+    ["Old toast (Inactive product)", "/manage/catalogue/product/old"],
+    ["Large toast", "/manage/catalogue/product/large"],
+    ["Drinks (internal)", "/manage/menus/menu/drinks-menu/view/structure"],
+    ["Lunch Menu (Published menu)", "/manage/menus/menu/lunch"],
+  ]);
+  const list = modal.querySelector(".uses ul")!;
+  expect(el.shadowRoot!.getElementById(list.getAttribute("aria-labelledby")!)!.textContent).toBe(
+    "Where it is used",
+  );
+});
+
+it("says plainly when the image is not used anywhere", async () => {
+  await mount();
+  thumbnail().click();
+  const modal = await openedViewer();
+  await vi.waitFor(() =>
+    expect(modal.querySelector("[data-test=no-uses]")?.textContent).toBe("Not used anywhere yet."),
+  );
+  expect(modal.querySelector(".uses li")).toBeNull();
+});
+
+it("shows that the uses are being looked up until the answer arrives", async () => {
+  const client = api();
+  const lookup = deferred<{ image: LibraryImage; uses: ImageUsage[] }>();
+  client.getImage.mockReturnValueOnce(lookup.promise);
+  await mount(client);
+  thumbnail().click();
+  const modal = await openedViewer();
+  expect(modal.querySelector(".uses [role=status]")!.textContent).toBe(
+    "Looking up where it is used…",
+  );
+  expect(modal.querySelector("[data-test=no-uses]")).toBeNull();
+  lookup.resolve({ image, uses: everyKindOfUse.slice(0, 1) });
+  await vi.waitFor(() =>
+    expect(usesShown()).toEqual([["Toast", "/manage/catalogue/product/toast"]]),
+  );
+  expect(modal.querySelector(".uses [role=status]")).toBeNull();
+});
+
+it("reports a failed lookup in the preview and shows the uses after Try again", async () => {
+  const client = api();
+  client.getImage
+    .mockRejectedValueOnce({ code: "connection.failed" })
+    .mockResolvedValueOnce({ image, uses: everyKindOfUse.slice(0, 1) });
+  await mount(client);
+  thumbnail().click();
+  const modal = await openedViewer();
+  await vi.waitFor(() =>
+    expect(modal.querySelector(".uses [role=alert]")?.textContent).toContain(
+      "Could not look up where this image is used.",
+    ),
+  );
+  expect(usesShown()).toEqual([]);
+  modal.querySelector<HTMLElement>("[data-test=retry-uses]")!.click();
+  await vi.waitFor(() =>
+    expect(usesShown()).toEqual([["Toast", "/manage/catalogue/product/toast"]]),
+  );
+  expect(client.getImage).toHaveBeenCalledTimes(2);
+  expect(client.getImage).toHaveBeenLastCalledWith("one");
+  expect(modal.querySelector(".uses [role=alert]")).toBeNull();
+});
+
+/** The focused element, followed down through every open shadow root. */
+function deepActiveElement(): Element | null {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active;
+}
+/** Mounts inside a theme root, so the preview's dialog has its real size and a backdrop around it. */
+async function mountWithTokens(client = api()) {
+  const root = document.createElement("div");
+  document.body.append(root);
+  applyTokens(root);
+  onTestFinished(() => root.remove());
+  el = document.createElement("dashboard-image-library");
+  el.api = client as unknown as ImageApi;
+  root.append(el);
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-image=one]")).not.toBeNull());
+  return client;
+}
+const closePreview = () =>
+  viewer()!.querySelector<HTMLElement>("[data-test=close-preview]")!.click();
+async function previewClosed() {
+  await vi.waitFor(() => expect(viewer()).toBeNull());
+}
+
+it("shows the uses of the image opened last when an earlier image's lookup answers late", async () => {
+  const client = api();
+  const two = { ...image, id: "two", filename: "two.jpg", names: { es: "Tostada" } };
+  client.listImages.mockResolvedValue({ images: [image, two], total: 2 });
+  const first = deferred<{ image: LibraryImage; uses: ImageUsage[] }>();
+  client.getImage
+    .mockReturnValueOnce(first.promise)
+    .mockResolvedValueOnce({ image: two, uses: everyKindOfUse.slice(0, 1) });
+  await mount(client);
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("article")).toHaveLength(2));
+  thumbnail("one").click();
+  await openedViewer();
+  closePreview();
+  await previewClosed();
+  thumbnail("two").click();
+  await openedViewer();
+  await vi.waitFor(() =>
+    expect(usesShown()).toEqual([["Toast", "/manage/catalogue/product/toast"]]),
+  );
+  first.resolve({ image, uses: everyKindOfUse.slice(3, 4) });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await el.updateComplete;
+  expect((viewer() as HTMLElement & { heading: string }).heading).toBe("Tostada");
+  expect(viewer()!.querySelector<HTMLImageElement>("img")!.getAttribute("src")).toBe(
+    "/media/two.jpg",
+  );
+  expect(usesShown()).toEqual([["Toast", "/manage/catalogue/product/toast"]]);
+});
+
+it("does not reopen a closed preview when its lookup answers late, or fails late", async () => {
+  const client = api();
+  const answer = deferred<{ image: LibraryImage; uses: ImageUsage[] }>();
+  const failure = deferred<never>();
+  client.getImage.mockReturnValueOnce(answer.promise).mockReturnValueOnce(failure.promise);
+  await mount(client);
+  for (const settle of [
+    () => answer.resolve({ image, uses: everyKindOfUse }),
+    () => failure.reject(new Error("late")),
+  ]) {
+    thumbnail().click();
+    await openedViewer();
+    closePreview();
+    await previewClosed();
+    settle();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await el.updateComplete;
+    expect(viewer()).toBeNull();
+  }
+});
+
+it("drops a lookup that answers after the library is removed", async () => {
+  const client = api();
+  const answer = deferred<{ image: LibraryImage; uses: ImageUsage[] }>();
+  client.getImage.mockReturnValueOnce(answer.promise);
+  await mount(client);
+  thumbnail().click();
+  await openedViewer();
+  el.remove();
+  answer.resolve({ image, uses: everyKindOfUse });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  document.body.append(el);
+  await el.updateComplete;
+  expect(viewer()).toBeNull();
+});
+
+it.each([
+  ["the Close button", async () => closePreview()],
+  [
+    "Escape",
+    async () => {
+      viewer()!.querySelector<HTMLElement>("[data-test=close-preview]")!.focus();
+      await userEvent.keyboard("{Escape}");
+    },
+  ],
+  [
+    "a click on the backdrop outside the dialog",
+    async () => {
+      await userEvent.click(page.elementLocator(document.documentElement), {
+        position: { x: 2, y: 2 },
+        force: true,
+      });
+    },
+  ],
+])(
+  "closes the preview with %s and puts focus back on the image's thumbnail",
+  async (_how, close) => {
+    const client = api();
+    client.getImage.mockResolvedValue({ image, uses: everyKindOfUse.slice(0, 1) });
+    await mountWithTokens(client);
+    thumbnail().click();
+    await openedViewer();
+    await vi.waitFor(() => expect(usesShown()).toHaveLength(1));
+    await close();
+    await previewClosed();
+    await vi.waitFor(() => expect(deepActiveElement()).toBe(thumbnail()));
+    expect(client.updateImage).not.toHaveBeenCalled();
+    expect(client.deleteImage).not.toHaveBeenCalled();
+  },
+);
+
+it("keeps the preview open on a click inside the dialog, its own edge included", async () => {
+  await mountWithTokens();
+  thumbnail().click();
+  const modal = await openedViewer();
+  await vi.waitFor(() => expect(modal.querySelector("[data-test=no-uses]")).not.toBeNull());
+  await userEvent.click(modal.querySelector("img")!);
+  await userEvent.click(modal.querySelector("h3")!);
+  const dialog = modal.shadowRoot!.querySelector("dialog")!;
+  const box = dialog.getBoundingClientRect();
+  // A click on the dialog's own border reaches the <dialog> itself, as a backdrop click does, but
+  // inside its box. A real click half a pixel inside the dialog's left edge landed on its body
+  // instead, so this one is sent straight to the dialog.
+  dialog.dispatchEvent(
+    new MouseEvent("click", {
+      bubbles: true,
+      composed: true,
+      clientX: box.left + 0.5,
+      clientY: box.top + box.height / 2,
+    }),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(viewer()?.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+});
+
+it("keeps an enclosing picker open when the preview is closed with Escape", async () => {
+  await mount(api(), true);
+  const enclosingClose = vi.fn();
+  el.addEventListener("wt-close", enclosingClose);
+  thumbnail().click();
+  await openedViewer();
+  viewer()!.querySelector<HTMLElement>("[data-test=close-preview]")!.focus();
+  await userEvent.keyboard("{Escape}");
+  await previewClosed();
+  expect(enclosingClose).not.toHaveBeenCalled();
+});
+
+it("leaves Edit and Delete working as before once a preview has been opened and closed", async () => {
+  const client = await mount();
+  thumbnail().click();
+  await openedViewer();
+  closePreview();
+  await previewClosed();
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-input[name=name-es]")).not.toBeNull();
+  expect(viewer()).toBeNull();
+  click("wt-modal wt-button[slot=cancel]");
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull());
+  click("[data-test=delete-one]");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull(),
+  );
+  expect(viewer()).toBeNull();
+  click("[data-test=confirm-delete]");
+  await vi.waitFor(() => expect(client.deleteImage).toHaveBeenCalledWith("one"));
 });
