@@ -35,6 +35,44 @@ const parts = (el: WtRelativeTime) => ({
 });
 const words = (el: WtRelativeTime) => parts(el).time.textContent!.trim();
 
+/** A table whose rows scroll inside its own box, in its shadow root, each row's last cell a time. */
+async function timesInTable(): Promise<{ el: WtRelativeTime; scroll: HTMLElement }> {
+  const table = (await mount(
+    '<wt-data-table aria-label="Devices" sticky-header style="height: 240px"></wt-data-table>',
+  )) as HTMLElement & {
+    rows: unknown[];
+    columns: unknown[];
+    rowKey: (row: { id: string }) => string;
+    updateComplete: Promise<unknown>;
+  };
+  const { html } = await import("lit");
+  table.rowKey = (row) => row.id;
+  table.columns = [
+    { key: "name", label: "Name", cell: (row: { id: string }) => row.id },
+    {
+      key: "seen",
+      label: "Seen",
+      cell: () => html`<wt-relative-time datetime=${AT} locale="en-GB"></wt-relative-time>`,
+    },
+  ];
+  table.rows = Array.from({ length: 20 }, (_, index) => ({ id: `d${index}` }));
+  await table.updateComplete;
+  const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
+  const el = table.shadowRoot!.querySelector("wt-relative-time") as WtRelativeTime;
+  await el.updateComplete;
+  return { el, scroll };
+}
+
+/** Resolves once the box has told its listeners it scrolled. */
+function scrollBy(box: HTMLElement, top: number): Promise<unknown> {
+  const scrolled = new Promise((resolve) =>
+    box.addEventListener("scroll", resolve, { once: true }),
+  );
+  box.scrollTop += top;
+  return scrolled;
+}
+
 describe("the relative phrase", () => {
   test.each([
     ["no time at all", 0, "now", "ahora"],
@@ -242,6 +280,170 @@ describe("the exact time", () => {
     await userEvent.keyboard("{Tab}");
     expect(document.activeElement).toBe(next);
     await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
+  });
+
+  test("given a moment it cannot read while shown, lets the next Escape close an enclosing dialog", async () => {
+    const dialogHost = await mount(
+      `<wt-dialog open heading="Devices"><wt-relative-time datetime="${AT}" locale="en-GB"></wt-relative-time></wt-dialog>`,
+    );
+    await (dialogHost as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    const dialog = dialogHost.shadowRoot!.querySelector("dialog")!;
+    const el = dialogHost.querySelector("wt-relative-time") as WtRelativeTime;
+    await el.updateComplete;
+    await userEvent.click(parts(el).button);
+    await vi.waitFor(() => expect(parts(el).tip.matches(":popover-open")).toBe(true));
+
+    el.datetime = "not a time";
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("button")).toBeNull();
+
+    const errors: unknown[] = [];
+    const record = (event: ErrorEvent) => {
+      errors.push(event.error);
+      event.preventDefault();
+    };
+    window.addEventListener("error", record);
+    try {
+      await userEvent.keyboard("{Escape}");
+      await vi.waitFor(() => expect(dialog.matches(":modal")).toBe(false));
+    } finally {
+      window.removeEventListener("error", record);
+    }
+    expect(errors).toEqual([]);
+
+    // Readable again, it starts closed rather than remembering the box it lost.
+    el.datetime = AT;
+    await el.updateComplete;
+    expect(parts(el).tip.matches(":popover-open")).toBe(false);
+    expect(parts(el).button.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  test("closes when a container it sits in scrolls, so it never sits beside another row", async () => {
+    const box = await mount(
+      `<div style="height: 100px; overflow: auto"><div style="height: 40px"></div><wt-relative-time datetime="${AT}" locale="en-GB"></wt-relative-time><div style="height: 400px"></div></div>`,
+    );
+    const el = box.querySelector("wt-relative-time") as WtRelativeTime;
+    await el.updateComplete;
+    const { button, tip } = parts(el);
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+
+    const scrolled = new Promise((resolve) =>
+      box.addEventListener("scroll", resolve, { once: true }),
+    );
+    box.scrollTop = 30;
+    await scrolled;
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
+    await vi.waitFor(() => expect(button.getAttribute("aria-expanded")).toBe("false"));
+  });
+
+  test("closes when the table it sits in scrolls its rows inside its own box", async () => {
+    const { el, scroll } = await timesInTable();
+    const { button, tip } = parts(el);
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+    // Off the table, so a scroll brings no other row's time under the mouse to open in its place.
+    await commands.parkPointer();
+    expect(tip.matches(":popover-open")).toBe(true);
+    await scrollBy(scroll, 40);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
+  });
+
+  test("closes when a box around the table it sits in scrolls", async () => {
+    const { el } = await timesInTable();
+    const table = (el.getRootNode() as ShadowRoot).host;
+    const box = document.createElement("div");
+    box.style.cssText = "height: 120px; overflow: auto";
+    host.append(box);
+    box.append(table, Object.assign(document.createElement("div"), { style: "height: 400px" }));
+    await el.updateComplete;
+    const { button, tip } = parts(el);
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+    await commands.parkPointer();
+    await scrollBy(box, 40);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
+  });
+
+  test("closes when a dialog it is slotted into scrolls", async () => {
+    const dialogHost = await mount(
+      `<wt-dialog open heading="Devices"><wt-relative-time datetime="${AT}" locale="en-GB"></wt-relative-time><div style="height: ${innerHeight * 2}px"></div></wt-dialog>`,
+    );
+    await (dialogHost as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    const dialog = dialogHost.shadowRoot!.querySelector("dialog")!;
+    expect(dialog.scrollHeight).toBeGreaterThan(dialog.clientHeight);
+    const el = dialogHost.querySelector("wt-relative-time") as WtRelativeTime;
+    await el.updateComplete;
+    const { button, tip } = parts(el);
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+    await commands.parkPointer();
+    await scrollBy(dialog, 40);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
+  });
+
+  test("closes when the page scrolls", async () => {
+    const el = await shown(MINUTE);
+    const tall = document.createElement("div");
+    tall.style.height = `${innerHeight * 3}px`;
+    host.append(tall);
+    const { button, tip } = parts(el);
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+
+    const scrolled = new Promise((resolve) =>
+      window.addEventListener("scroll", resolve, { once: true }),
+    );
+    try {
+      scrollTo(0, 50);
+      await scrolled;
+      await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
+    } finally {
+      scrollTo(0, 0);
+    }
+  });
+
+  test("follows the phrase when the window is resized", async () => {
+    const el = await shown(MINUTE);
+    el.style.position = "fixed";
+    el.style.insetInlineStart = "50%";
+    el.style.insetBlockStart = "40%";
+    const { button, tip } = parts(el);
+    button.click();
+    el.style.insetInlineStart = "20%";
+    el.style.insetBlockStart = "10%";
+    window.dispatchEvent(new Event("resize"));
+    expect(tip.matches(":popover-open")).toBe(true);
+    const anchor = button.getBoundingClientRect();
+    const box = tip.getBoundingClientRect();
+    expect(box.left + box.width / 2).toBeCloseTo(anchor.left + anchor.width / 2, 0);
+    expect(box.top).toBeCloseTo(anchor.bottom, 0);
+  });
+
+  test("a scroll or a resize does nothing once it is closed, or once it is off the page", async () => {
+    const { el, scroll } = await timesInTable();
+    const { button, tip } = parts(el);
+    const hidden = vi.spyOn(tip, "hidePopover");
+    const untouched = async (step: string) => {
+      hidden.mockClear();
+      tip.style.left = "1px";
+      await scrollBy(scroll, 20);
+      window.dispatchEvent(new Event("resize"));
+      expect(hidden, step).not.toHaveBeenCalled();
+      expect(tip.style.left, step).toBe("1px");
+    };
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
+    await commands.parkPointer();
+    await untouched("closed");
+
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(true));
+    await commands.parkPointer();
+    el.remove();
+    await untouched("removed");
   });
 
   test("lets an Escape through once it is closed", async () => {
@@ -452,5 +654,21 @@ describe("paints from tokens", () => {
     const style = getComputedStyle(parts(el).button);
     expect(style.outlineColor).toBe("rgb(11, 12, 13)");
     expect(style.outlineWidth).toBe("3px");
+  });
+});
+
+describe("as a control on the page", () => {
+  test("hands focus given to it to the phrase", async () => {
+    const el = await shown(MINUTE);
+    el.focus();
+    expect(el.shadowRoot!.activeElement).toBe(parts(el).button);
+  });
+
+  test("tells its controllers when it leaves the page", async () => {
+    const el = await shown(MINUTE);
+    const gone = vi.fn();
+    el.addController({ hostDisconnected: gone });
+    el.remove();
+    expect(gone).toHaveBeenCalledOnce();
   });
 });

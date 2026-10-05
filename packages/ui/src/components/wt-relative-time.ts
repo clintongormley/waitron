@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
-import { uniqueId } from "../interactive.js";
+import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
 
 const UNITS = [
   ["day", 86_400_000],
@@ -17,10 +17,7 @@ interface Reading {
   changesIn: number | null;
 }
 
-/**
- * Whole units, rounded towards zero, so a deadline never reads later than it is and a report never
- * newer than it is.
- */
+/** Whole units, rounded towards zero, so a deadline never reads later than it is. */
 function read(
   at: number,
   now: number,
@@ -38,6 +35,7 @@ function read(
 
 @customElement("wt-relative-time")
 export class WtRelativeTime extends LitElement {
+  static override shadowRootOptions = delegatesFocusShadowRootOptions;
   static override styles = [
     baseStyles,
     css`
@@ -92,6 +90,7 @@ export class WtRelativeTime extends LitElement {
   #pinned = false;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #reading: Reading | null = null;
+  #scrollTargets: EventTarget[] = [];
 
   private readonly tipId = uniqueId("wt-relative-time");
 
@@ -126,6 +125,8 @@ export class WtRelativeTime extends LitElement {
     const at = Date.parse(this.datetime);
     if (Number.isNaN(at)) {
       this.#reading = null;
+      // Rendering is about to take the box away, and removing an open popover reports no toggle.
+      this.#hide();
       return;
     }
     const locale = this.locale || undefined;
@@ -165,6 +166,18 @@ export class WtRelativeTime extends LitElement {
     this.open = true;
     document.addEventListener("keydown", this.onDocumentKeydown, { capture: true });
     document.addEventListener("focusin", this.onDocumentFocusin, { capture: true });
+    // A scroll closes it rather than placing it again: words scrolled out of their container would
+    // leave a re-placed box held inside the window, beside some other row. An element's scroll does
+    // not bubble or leave its shadow root, so each ancestor in the flattened tree is listened on;
+    // the document hears the page.
+    this.#scrollTargets = [document];
+    for (let at = this.#flatParent(this); at !== null; at = this.#flatParent(at)) {
+      this.#scrollTargets.push(at);
+    }
+    for (const target of this.#scrollTargets) {
+      target.addEventListener("scroll", this.onScroll, { passive: true });
+    }
+    window.addEventListener("resize", this.onResize, { passive: true });
   }
 
   #hide(): void {
@@ -196,6 +209,10 @@ export class WtRelativeTime extends LitElement {
   #stopWatching(): void {
     document.removeEventListener("keydown", this.onDocumentKeydown, { capture: true });
     document.removeEventListener("focusin", this.onDocumentFocusin, { capture: true });
+    for (const target of this.#scrollTargets.splice(0)) {
+      target.removeEventListener("scroll", this.onScroll);
+    }
+    window.removeEventListener("resize", this.onResize);
   }
 
   /** Escape closes only this, never an enclosing dismissible dialog too (as wt-help-tooltip). */
@@ -204,7 +221,22 @@ export class WtRelativeTime extends LitElement {
     event.preventDefault();
     event.stopPropagation();
     this.#hide();
-    this.trigger.focus();
+    this.trigger?.focus();
+  };
+
+  #flatParent(at: Element): Element | null {
+    const parent = at.parentNode;
+    return (
+      at.assignedSlot ?? at.parentElement ?? (parent instanceof ShadowRoot ? parent.host : null)
+    );
+  }
+
+  private readonly onScroll = (): void => {
+    this.#hide();
+  };
+
+  private readonly onResize = (): void => {
+    this.#place();
   };
 
   private readonly onDocumentFocusin = (event: FocusEvent): void => {

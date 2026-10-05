@@ -35,8 +35,11 @@ describe.each(["light", "dark"] as const)("wt-relative-time a11y (%s theme)", (t
 
   test("the exact time shown", async () => {
     const el = await mountAt(theme);
-    el.shadowRoot!.querySelector("button")!.click();
+    const button = el.shadowRoot!.querySelector("button")!;
+    button.click();
     expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    await el.updateComplete;
+    expect(button.getAttribute("aria-expanded")).toBe("true");
     await expectNoA11yViolations(host);
   });
 

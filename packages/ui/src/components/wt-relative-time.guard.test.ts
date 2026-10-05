@@ -1,9 +1,11 @@
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, mount } from "../test-helpers.js";
 import type { WtRelativeTime } from "./wt-relative-time.js";
 import "./wt-relative-time.js";
 import "./wt-dialog.js";
+
+afterEach(cleanup);
 
 // Alone in its own file, as wt-help-tooltip.guard.test.ts is and for the same reason: user activation
 // is sticky, and once a real click or keypress sets it the browser's own Escape handling closes the
@@ -27,5 +29,4 @@ test("Escape on an exact time shown without a real click closes it and leaves an
   await vi.waitFor(() => expect(tip.matches(":popover-open")).toBe(false));
   expect(dialog.matches(":modal")).toBe(true);
   expect(el.shadowRoot!.activeElement).toBe(button);
-  cleanup();
 });
