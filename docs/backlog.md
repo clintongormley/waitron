@@ -1221,13 +1221,20 @@ The unit form's Cancel and Escape cases failed — Add unit was still drawn disa
 hand-back ran, and after Escape focus was lost even when Add unit was opened with a real click — so
 `#returnChildFocus` now waits for the unit form as it does for the list forms. The Courses window
 passed unchanged; with its hand-back removed only the new cases failed, as opening it from the
-course box puts focus on the box first. Left OPEN from W71f's review, not acted on: (1)
-`docs/developers/design-system.md` (the `wt-modal` paragraph) says the native dialog "returns focus
+course box puts focus on the box first. From W71f's review: (1)
+`docs/developers/design-system.md` (the `wt-modal` paragraph) said the native dialog "returns focus
 to its trigger on close", while the W71f test comments and `product-editor.ts` rely on it going back
-to whatever had focus when the dialog opened; the line dates from #319 (2026-09-11, `git blame`) and
-neither reading has been tested — next step: a browser case that opens a dialog with focus away from
-its trigger and records where focus lands, then correct the sentence to what it shows. Settled by
-W71h, from the same review: (2) W71f's unit-form wait in `#returnChildFocus` worked only because the
+to whatever had focus when the dialog opened; the line dated from #319 (2026-09-11, `git blame`).
+Settled by W71g (owner 2026-10-05: keep the browser's rule, add an optional opener and a fallback —
+PR number to be recorded here when it opens): browser tests in
+`packages/ui/src/components/wt-dialog.test.ts` show focus goes back to whatever had it when the
+dialog opened. When that element was removed or disabled meanwhile, `wt-dialog` (and `wt-modal`)
+now moves focus to its new `opener` property if set and still able to take focus, otherwise to the
+nearest element that can, and leaves it on the page body only when nothing outside the dialog can
+take it; it does so before sending `wt-close`, so a screen that hands focus back itself still has
+the last word. design-system.md says this. The Printers screen sets `opener` on its Add agent and
+edit-printer dialogs to the tab's Add button and drops its own `#refocusAdd`; no other screen
+changed. Settled by W71h, from the same review: (2) W71f's unit-form wait in `#returnChildFocus` worked only because the
 product editor happened to finish redrawing Add unit as enabled in the meantime (seen in Codex's
 timing log). The editor's `returnRelatedFocus` focuses the Add control, or an attached list's row
 button or menu, at once; when it is still drawn disabled, it waits for the editor's next update and
