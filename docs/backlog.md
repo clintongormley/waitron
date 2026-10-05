@@ -1643,7 +1643,7 @@ deleted the right category; the dashboard was at fault. Fixed:
   summed over every selected one; under "Delete it too", of every rule in the deleted subtrees, as
   before. The delete sends `ownRoutes` with the other counts it showed, and the dashboard's second
   read at Delete and the server both treat a change to it like a change to the others.
-- The Printers screen's discovered-device rows no longer share a key (W74d). Reproduced in a
+- The Printers screen's discovered-device rows no longer share a key (W74d, #1242). Reproduced in a
   browser test: with two agents reporting one network printer, both rows carried one key, and when
   a later scan read dropped the first agent's report, the table handed that agent's drawn row to
   the second agent and removed the second agent's own row. The discovered table's row key now
