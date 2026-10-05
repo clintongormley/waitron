@@ -4,6 +4,7 @@ import type {
   RouteTarget,
   RoutingDecision,
   StationStatus,
+  StationTransition,
   WeeklyInterval,
 } from "./routing.js";
 import type { ExtraMakerOutcome } from "@waitron/module";
@@ -11,6 +12,7 @@ import type { ExtraMakerOutcome } from "@waitron/module";
 export interface StationTimes {
   stationId: string;
   status: StationStatus;
+  nextTransition: StationTransition | null;
   hours: WeeklyInterval[];
   fallbackStationId: string | null;
   today: "open" | "closed" | null;

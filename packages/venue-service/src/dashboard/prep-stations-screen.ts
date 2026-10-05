@@ -1,5 +1,5 @@
 import { QueryController, codeOf } from "@waitron/dashboard-kit";
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
@@ -8,11 +8,15 @@ import {
   reorder,
   UrlStateController,
   type ReorderModel,
+  type DataTableColumn,
 } from "@waitron/ui";
+import { holdPageCursor, releasePageCursor } from "@waitron/ui/src/reorder-table.js";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
 import "@waitron/ui/src/components/wt-card.js";
+import "@waitron/ui/src/components/wt-data-table.js";
+import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -36,13 +40,14 @@ import type {
   PrepStationsApi,
   PrepStationsView,
   StationInput,
-  OutputsDown,
+  StationHealthSnapshot,
   WatcherInput,
 } from "./routing-client.js";
 import { watchersOfStation, watchersSeeing, type WatcherView } from "./watchers-seen.js";
 import { t } from "./strings.js";
 import "./station-hours-form.js";
-import "./watcher-form.js";
+import "./station-health-table.js";
+import { watcherInputErrors } from "./watcher-form.js";
 
 type StationAction =
   | { kind: "today"; stationId: string; state: "open" | "closed" | null }
@@ -56,10 +61,22 @@ const format = (key: Parameters<typeof t>[0], values: Record<string, string> = {
   );
 
 type Editor =
-  | { kind: "station"; id?: string }
+  | { kind: "station" }
   | { kind: "claim"; stationId: string | null }
   | { kind: "exception"; id?: string }
   | { kind: "exception_delete"; id: string };
+const PREP_TABS = ["stations", "routing", "tickets", "watchers", "settings"] as const;
+type PrepTab = (typeof PREP_TABS)[number];
+const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
+type TimingField = (typeof TIMING_FIELDS)[number];
+const TIMING_LABELS = {
+  warmAfterMinutes: "prep.warm",
+  overdueAfterMinutes: "prep.overdue",
+  forgottenAfterMinutes: "prep.forgotten",
+} as const;
+type WatcherCell = "follows" | "zones" | "pass";
+const EVERY_MEMBER = "__every__";
+
 const NO_PREPARATION = "no_preparation";
 const targetFor = (id: string): RouteTarget =>
   id === NO_PREPARATION ? { kind: "no_preparation" } : { kind: "station", stationId: id };
@@ -74,6 +91,34 @@ export class PrepStationsScreen extends LitElement {
       :host {
         display: block;
         min-width: 0;
+      }
+      wt-data-table::part(watcher-cell),
+      wt-data-table::part(printer-cell) {
+        display: grid;
+        gap: var(--wt-space-2);
+        max-width: calc(var(--wt-tap-min) * 5);
+        white-space: normal;
+      }
+      wt-data-table::part(cell-actions) {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+      wt-data-table::part(edit-printers) {
+        border: 0;
+        background: transparent;
+        color: var(--wt-color-primary-text);
+        font: inherit;
+        cursor: pointer;
+        min-height: var(--wt-tap-min);
+        padding: 0;
+        text-decoration: underline;
+      }
+      wt-data-table::part(inherited) {
+        --wt-color-text: var(--wt-color-text-muted);
+      }
+      wt-data-table::part(disabled-station) {
+        color: var(--wt-color-text-muted);
       }
       h1 {
         margin: 0;
@@ -184,9 +229,46 @@ export class PrepStationsScreen extends LitElement {
     `,
   ];
   @property({ attribute: false }) api!: PrepStationsApi;
+  @property({ type: Boolean }) readOnly = false;
   @state() private view?: PrepStationsView;
+  @state() private settingsEditor?: {
+    stationId: string;
+    field: "rest" | "fallback" | TimingField;
+    value: string;
+    fieldError: string;
+    error: string;
+    confirming: boolean;
+    attempted: boolean;
+  };
+  @state() private settingsBusy = false;
+  @state() private printerEditor?: { stationId: string; ids: string[]; error: string };
+  @state() private printerBusy = false;
+  @state() private watcherPrinterEditor?: {
+    watcherId: string;
+    ids: string[];
+    fieldError: string;
+    error: string;
+    conflictPrinterId?: string;
+  };
+  @state() private watcherPrinterBusy = false;
+  @state() private watcherCellEditor?: {
+    watcherId: string;
+    field: WatcherCell;
+    values: string[];
+    attempted: boolean;
+    fieldError: string;
+    error: string;
+  };
+  @state() private watcherCellBusy = false;
   @state() private editor?: Editor;
   @state() private watcherEditor?: { id?: string };
+  @state() private watcherRename?: {
+    id: string;
+    name: string;
+    attempted: boolean;
+    fieldError: string;
+    error: string;
+  };
   @state() private watcherRemoval?: WatcherView;
   @state() private watcherRefusal?: { code: string; params?: { field?: string } };
   @state() private watcherRemoveError = "";
@@ -204,8 +286,6 @@ export class PrepStationsScreen extends LitElement {
   @state() private claimError = "";
   @state() private claimField = "";
   @state() private busy = false;
-  @state() private stationSwitchBusy = new Map<string, boolean>();
-  @state() private stationSwitchError: Record<string, { field: boolean; message: string }> = {};
   @state() private exceptionOrder: string[] = [];
   @state() private exceptionDraft: ExceptionInput = {
     zoneId: null,
@@ -229,17 +309,42 @@ export class PrepStationsScreen extends LitElement {
   @state() private stationFieldError = "";
   private editingHours: readonly WeeklyInterval[] = [];
   @state() private hoursServerErrors: Record<number, string> = {};
-  @state() private outputsDown: OutputsDown = { printersDown: [], screensDark: [] };
-  #outputsTimer?: ReturnType<typeof setInterval>;
+  @state() private tab: PrepTab = "stations";
+  @state() private stationOrder?: string[];
+  @state() private stationAnnouncement = "";
+  #stationDrag?: { id: string; pointerId: number; changed: boolean };
+  @state() private rename?: {
+    id: string;
+    name: string;
+    error: string;
+    invalid: boolean;
+    fieldError: boolean;
+  };
+  @state() private health?: StationHealthSnapshot;
+  #healthTimer?: ReturnType<typeof setInterval>;
+  #routingTimer?: ReturnType<typeof setInterval>;
   #testRequest = 0;
   readonly #url = new UrlStateController(
     this,
     () => {
       if (this.#url.read("dashboard") !== "prep-stations") return;
-      this.testProduct = this.#url.read("test") ?? "";
+      this.testProduct = this.readOnly ? "" : (this.#url.read("test") ?? "");
+      const requested = this.#url.read("view");
+      this.tab =
+        (this.readOnly ? (["stations"] as const) : PREP_TABS).find((tab) => tab === requested) ??
+        (requested === null && this.testProduct ? "routing" : "stations");
+      if (this.tab !== requested)
+        this.#url.write(
+          { dashboard: "prep-stations", view: this.tab, ...(this.readOnly ? { test: null } : {}) },
+          true,
+        );
       void this.#explain();
     },
-    { basePath: "/manage", primary: "dashboard", children: { "*": { test: "test" } } },
+    {
+      basePath: "/manage",
+      primary: "dashboard",
+      children: { "*": { view: "view", test: "test" } },
+    },
   );
   @state() private pending?: {
     change: RoutingChange;
@@ -272,6 +377,9 @@ export class PrepStationsScreen extends LitElement {
     this,
     () => this.api.liveData,
     () => this.#showReadError(t("prep.load_error")),
+    () => {
+      if (this.#readErrorShown) this.#showError("");
+    },
   );
   #loaded = false;
   #showError(message: string, fromRead = false): void {
@@ -282,21 +390,45 @@ export class PrepStationsScreen extends LitElement {
   #showReadError(message: string): void {
     if (this.error === "" || this.#readErrorShown) this.#showError(message, true);
   }
+  protected override willUpdate(changed: PropertyValues<this>) {
+    if (changed.has("readOnly") && this.readOnly) {
+      this.tab = "stations";
+      this.testProduct = "";
+      if (this.#url.read("dashboard") === "prep-stations")
+        this.#url.write({ dashboard: "prep-stations", view: "stations", test: null }, true);
+    }
+  }
   override connectedCallback() {
     super.connectedCallback();
     void this.#load();
-    void this.#loadOutputs();
-    this.#outputsTimer = setInterval(() => void this.#loadOutputs(), 60_000);
+    void this.#loadHealth();
+    if (!this.api.liveData) {
+      this.#healthTimer = setInterval(() => void this.#loadHealth(), 15_000);
+      this.#routingTimer = setInterval(() => void this.#load(), 60_000);
+    }
   }
   override disconnectedCallback() {
-    if (this.#outputsTimer) clearInterval(this.#outputsTimer);
+    if (this.#healthTimer) clearInterval(this.#healthTimer);
+    if (this.#routingTimer) clearInterval(this.#routingTimer);
     super.disconnectedCallback();
+    this.#endStationDrag();
   }
-  async #loadOutputs() {
+  async #loadHealth() {
     try {
-      this.outputsDown = await this.api.listOutputsDown();
+      await this.#queries.watch(
+        "health",
+        {
+          key: "venue-service:station-health",
+          dependencies: QUERY_DEPENDENCIES.health.map((type) => ({ type })),
+          refreshMs: 15_000,
+          read: () => this.api.readStationHealth(),
+        },
+        (value) => {
+          this.health = value;
+        },
+      );
     } catch {
-      // The card's last observed output status remains until a later passive read succeeds.
+      this.#showReadError(t("prep.load_error"));
     }
   }
   async #load() {
@@ -317,10 +449,16 @@ export class PrepStationsScreen extends LitElement {
         },
         (value) => {
           this.view = value;
+          const editor = this.watcherPrinterEditor;
+          if (
+            editor?.conflictPrinterId &&
+            !value.stationPrinters.some((row) => editor.ids.includes(row.printerId))
+          ) {
+            this.watcherPrinterEditor = { ...editor, fieldError: "", conflictPrinterId: undefined };
+          }
           this.exceptionOrder = [...value.routing.exceptions]
             .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
             .map((e) => e.id);
-          if (this.#readErrorShown) this.#showError("");
           if (this.testProduct) void this.#explain();
         },
       );
@@ -451,23 +589,225 @@ export class PrepStationsScreen extends LitElement {
       field,
     );
   }
-  #openStation(station?: PrepStation) {
-    this.editor = { kind: "station", id: station?.id };
-    this.draft = station
-      ? {
-          name: station.name,
-          displayOrder: station.displayOrder,
-          warmAfterMinutes: station.warmAfterMinutes,
-          overdueAfterMinutes: station.overdueAfterMinutes,
-          forgottenAfterMinutes: station.forgottenAfterMinutes,
+  #activeStationOrder() {
+    return (
+      this.stationOrder ??
+      [...(this.view?.stations ?? [])]
+        .filter((station) => station.active)
+        .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name))
+        .map((station) => station.id)
+    );
+  }
+  #healthTable() {
+    return this.renderRoot
+      .querySelector("prep-station-health-table")
+      ?.shadowRoot?.querySelector("wt-data-table");
+  }
+  #moveStation(id: string, to: number) {
+    const previous = this.#activeStationOrder();
+    const next = reorder(previous, previous.indexOf(id), to);
+    if (next.join() === previous.join()) return false;
+    this.stationOrder = next;
+    this.stationAnnouncement = format("prep.station_reordered", {
+      name: this.#stationName(id),
+      index: String(to + 1),
+      total: String(next.length),
+    });
+    return true;
+  }
+  async #saveStationOrder(id: string) {
+    if (this.busy || !this.stationOrder) return;
+    const ids = [...this.stationOrder];
+    await this.#act(() => this.api.reorderStations(ids));
+    this.stationOrder = undefined;
+    await this.updateComplete;
+    const health = this.renderRoot.querySelector("prep-station-health-table");
+    if (health) await health.updateComplete;
+    const table = this.#healthTable();
+    if (table) await table.updateComplete;
+    table?.shadowRoot?.querySelector<HTMLElement>(`[data-test="drag-${id}"]`)?.focus();
+  }
+  #startStationDrag(event: PointerEvent, id: string) {
+    if (this.busy || this.#stationDrag || event.button !== 0) return;
+    event.preventDefault();
+    this.#stationDrag = { id, pointerId: event.pointerId, changed: false };
+    holdPageCursor();
+    document.addEventListener("pointermove", this.#moveStationDrag);
+    document.addEventListener("pointerup", this.#dropStationDrag);
+    document.addEventListener("pointercancel", this.#dropStationDrag);
+  }
+  readonly #moveStationDrag = (event: PointerEvent) => {
+    const drag = this.#stationDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const order = this.#activeStationOrder();
+    for (const row of this.#healthTable()?.shadowRoot?.querySelectorAll("tbody tr") ?? []) {
+      const bounds = row.getBoundingClientRect();
+      if (event.clientY < bounds.top || event.clientY >= bounds.bottom) continue;
+      const id = row.querySelector<HTMLElement>("[data-station-id]")?.dataset.stationId;
+      if (id && order.includes(id) && this.#moveStation(drag.id, order.indexOf(id)))
+        drag.changed = true;
+      break;
+    }
+  };
+  readonly #dropStationDrag = (event: PointerEvent) => {
+    const drag = this.#stationDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    this.#endStationDrag();
+    if (drag.changed) void this.#saveStationOrder(drag.id);
+  };
+  #endStationDrag() {
+    if (!this.#stationDrag) return;
+    this.#stationDrag = undefined;
+    releasePageCursor();
+    document.removeEventListener("pointermove", this.#moveStationDrag);
+    document.removeEventListener("pointerup", this.#dropStationDrag);
+    document.removeEventListener("pointercancel", this.#dropStationDrag);
+  }
+  #stationMenu(station: PrepStation) {
+    return html`${
+        station.active
+          ? html`<button
+              type="button"
+              part="station-grip"
+              data-test=${`drag-${station.id}`}
+              aria-label=${format("prep.reorder_station", { name: station.name })}
+              ?disabled=${this.busy}
+              @pointerdown=${(event: PointerEvent) => this.#startStationDrag(event, station.id)}
+              @keydown=${(event: KeyboardEvent) => {
+                const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+                if (!delta || this.busy) return;
+                event.preventDefault();
+                const order = this.#activeStationOrder();
+                if (this.#moveStation(station.id, order.indexOf(station.id) + delta))
+                  void this.#saveStationOrder(station.id);
+              }}
+            >
+              <wt-icon name="grip"></wt-icon>
+            </button>`
+          : nothing
+      }<wt-row-actions
+        data-station-id=${station.id}
+        data-test=${`station-menu-${station.id}`}
+        label=${format("prep.row_actions", { name: station.name })}
+      >
+        <wt-button
+          align="start"
+          data-test=${`rename-${station.id}`}
+          ?disabled=${this.busy}
+          @click=${() => {
+            this.rename = {
+              id: station.id,
+              name: station.name,
+              error: "",
+              invalid: false,
+              fieldError: false,
+            };
+          }}
+          >${t("venue.rename")}</wt-button
+        >
+        ${
+          station.active && !station.isDefault
+            ? html`<wt-button
+                align="start"
+                data-test=${`make-default-${station.id}`}
+                ?disabled=${this.busy}
+                @click=${() => void this.#act(() => this.api.setDefaultStation(station.id))}
+                >${t("prep.make_default")}</wt-button
+              >`
+            : nothing
         }
-      : {
-          name: "",
-          displayOrder: 0,
-          warmAfterMinutes: 5,
-          overdueAfterMinutes: 10,
-          forgottenAfterMinutes: 15,
-        };
+        <wt-button
+          align="start"
+          data-test=${`${station.active ? "disable" : "enable"}-${station.id}`}
+          ?disabled=${this.busy}
+          @click=${() => (station.active ? this.#openFallback(station.id, "switch_off") : this.#openStationAction({ kind: "switch_on", stationId: station.id }))}
+          >${t(station.active ? "prep.disable" : "prep.enable")}</wt-button
+        >
+      </wt-row-actions>`;
+  }
+  async #saveStationName() {
+    const draft = this.rename;
+    if (!draft || this.busy || !this.view?.stations.some((station) => station.id === draft.id))
+      return;
+    if (!draft.name.trim()) {
+      this.rename = { ...draft, error: t("prep.name_required"), invalid: true, fieldError: true };
+      return;
+    }
+    this.busy = true;
+    this.rename = { ...draft, error: "", invalid: false, fieldError: false };
+    try {
+      await this.api.updateStation(draft.id, { name: draft.name.trim() });
+    } catch (error) {
+      this.rename = {
+        ...draft,
+        error: t(codeOf(error) === "station.name_taken" ? "prep.name_taken" : "prep.save_error"),
+        invalid: false,
+        fieldError: codeOf(error) === "station.name_taken",
+      };
+      this.busy = false;
+      return;
+    }
+    this.rename = undefined;
+    await this.#load();
+    this.busy = false;
+  }
+  #renameDialog() {
+    const draft = this.rename;
+    if (!draft) return nothing;
+    return html`<wt-modal
+      open
+      size="compact"
+      data-test="station-rename"
+      heading=${t("venue.rename")}
+      @wt-close=${() => {
+        this.rename = undefined;
+      }}
+    >
+      <wt-input
+        name="stationName"
+        label=${t("prep.name")}
+        required
+        .value=${draft.name}
+        .error=${draft.fieldError ? draft.error : ""}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          this.rename = {
+            ...draft,
+            name: event.detail.value,
+            error: "",
+            invalid: false,
+            fieldError: false,
+          };
+        }}
+        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-station-name"]'))}
+      ></wt-input>
+      ${draft.error ? html`<p class="error" role="alert">${draft.invalid ? t("prep.fix_fields") : draft.error}</p>` : nothing}
+      <wt-form-actions slot="footer">
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          @click=${() => {
+            this.rename = undefined;
+          }}
+          >${t("prep.cancel")}</wt-button
+        >
+        <wt-button
+          data-test="save-station-name"
+          ?disabled=${this.busy || draft.invalid}
+          @click=${() => void this.#saveStationName()}
+          >${t("prep.save")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-modal>`;
+  }
+  #openStation() {
+    this.editor = { kind: "station" };
+    this.draft = {
+      name: "",
+      displayOrder: 0,
+      warmAfterMinutes: 5,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+    };
     this.fieldError = {};
     this.#showError("");
   }
@@ -496,14 +836,11 @@ export class PrepStationsScreen extends LitElement {
       this.#showError(t("prep.fix_fields"));
       return;
     }
-    const id = this.editor?.kind === "station" ? this.editor.id : undefined;
-    if (id && !this.view?.stations.some((station) => station.id === id)) return;
     if (this.busy) return;
     this.busy = true;
     this.#showError("");
     try {
-      if (id) await this.api.updateStation(id, d);
-      else await this.api.createStation(d);
+      await this.api.createStation(d);
       this.editor = undefined;
       await this.#load();
     } catch (e) {
@@ -511,30 +848,6 @@ export class PrepStationsScreen extends LitElement {
       else this.#showError(t("prep.save_error"));
     } finally {
       this.busy = false;
-    }
-  }
-  async #saveRestOfOrder(station: PrepStation, checked: boolean) {
-    if (this.stationSwitchBusy.has(station.id)) return;
-    this.stationSwitchBusy = new Map([...this.stationSwitchBusy, [station.id, checked]]);
-    const remaining = { ...this.stationSwitchError };
-    delete remaining[station.id];
-    this.stationSwitchError = remaining;
-    try {
-      await this.api.updateStation(station.id, { showsRestOfOrder: checked });
-      await this.#load();
-    } catch (error) {
-      const field = (error as { params?: { field?: unknown } } | undefined)?.params?.field;
-      this.stationSwitchError = {
-        ...this.stationSwitchError,
-        [station.id]: {
-          field: codeOf(error) === "management.request_invalid" && field === "showsRestOfOrder",
-          message: t("prep.save_error"),
-        },
-      };
-    } finally {
-      const busy = new Map(this.stationSwitchBusy);
-      busy.delete(station.id);
-      this.stationSwitchBusy = busy;
     }
   }
   #exceptionText(exception?: RouteException): string {
@@ -990,8 +1303,41 @@ export class PrepStationsScreen extends LitElement {
     if (row.status.why === "opened_by_hand") return format("prep.opened_by_hand", end);
     if (row.status.why === "closed_by_hand")
       return format("prep.closed_by_hand", { ...end, destination });
+    if (row.nextTransition) {
+      const next = row.nextTransition;
+      const day =
+        next.daysAhead === 0
+          ? ""
+          : next.daysAhead === 1
+            ? ` ${t("prep.tomorrow")}`
+            : ` ${format("prep.on_weekday", { day: t(`venue.day.${next.weekday}` as "venue.day.0") })}`;
+      return format(row.status.open ? "prep.open_until" : "prep.scheduled_opens", {
+        time: next.timeOfDay,
+        day,
+      });
+    }
     if (row.status.open) return t("prep.open_now");
     return format("prep.closed_hours", { destination });
+  }
+  #todayCell(station: PrepStation) {
+    const times = this.#times(station.id);
+    if (!times) return nothing;
+    if (!station.active) return t("prep.health.disabled");
+    if (!this.view?.routing.clockReadable) return t("prep.clock_unreadable");
+    if (station.isDefault || times.status.why === "no_hours") return t("prep.always_open");
+    if (this.readOnly) return this.#stationStatus(station);
+    const state = times.today ? null : times.status.open ? "closed" : "open";
+    const action = state === null ? "schedule" : state === "closed" ? "close-today" : "open-today";
+    return html`<div part="today">
+      <span>${this.#stationStatus(station)}</span>
+      <wt-button
+        variant="secondary"
+        data-test=${`${action}-${station.id}`}
+        ?disabled=${this.busy}
+        @click=${() => this.#openStationAction({ kind: "today", stationId: station.id, state })}
+        >${t(state === null ? "prep.back_to_schedule" : state === "closed" ? "prep.close_today" : "prep.open_today")}</wt-button
+      >
+    </div>`;
   }
   #hoursSummary(hours: readonly WeeklyInterval[]) {
     if (!hours.length) return t("prep.always_open");
@@ -1098,95 +1444,11 @@ export class PrepStationsScreen extends LitElement {
       this.busy = false;
     }
   }
-  #warnings(id: string) {
-    const printers = this.outputsDown.printersDown.filter((row) => row.stationId === id);
-    const screens = this.outputsDown.screensDark.filter((row) => row.stationId === id);
-    return html`<div class="station-warnings">
-      ${printers.map((row) => html`<p class="warning">${format("prep.printer_down", { printer: row.printerName, time: new Date(row.since).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false }) })}</p>`)}
-      ${screens.map((row) => html`<p class="warning">${row.lastSeenAt ? format("prep.screen_dark", { time: new Date(row.lastSeenAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false }) }) : t("prep.screen_never")}</p>`)}
-    </div>`;
-  }
   #stationCard(s: PrepStation) {
-    const watching = watchersOfStation(this.view?.watchers ?? [], s.id);
-    const printers = this.view?.stationPrinters
-      .filter((p) => p.stationId === s.id)
-      .map((p) => this.view!.printers.find((x) => x.id === p.printerId)?.name)
-      .filter(Boolean)
-      .join(", ");
-    const devices = this.view?.devices
-      .filter((d) => d.stationId === s.id && d.kind === "kds_station" && d.active)
-      .map((d) => d.label)
-      .join(", ");
     return html`<wt-card data-test=${`station-${s.id}`}
       ><h2>
         ${s.name} ${s.isDefault ? html`<span class="muted">${t("prep.default")}</span>` : nothing}
       </h2>
-      <div class="status">
-        <p data-test=${`status-${s.id}`}>${this.#stationStatus(s)}</p>
-        ${this.#warnings(s.id)}
-      </div>
-      ${
-        s.isDefault
-          ? nothing
-          : html`
-              <div class="actions">
-                <wt-button
-                  variant="secondary"
-                  data-test=${`${this.#times(s.id)?.status.open ? "close" : "open"}-today-${s.id}`}
-                  @click=${() => this.#openStationAction({ kind: "today", stationId: s.id, state: this.#times(s.id)?.status.open ? "closed" : "open" })}
-                  >${t(this.#times(s.id)?.status.open ? "prep.close_today" : "prep.open_today")}</wt-button
-                >
-                ${this.#times(s.id)?.today ? html`<wt-button variant="secondary" data-test=${`schedule-${s.id}`} @click=${() => this.#openStationAction({ kind: "today", stationId: s.id, state: null })}>${t("prep.back_to_schedule")}</wt-button>` : nothing}
-              </div>
-              <p>${t("venue.hours")}: ${this.#hoursSummary(this.#times(s.id)?.hours ?? [])}</p>
-              <wt-button
-                variant="secondary"
-                data-test=${`edit-hours-${s.id}`}
-                @click=${() => this.#openStationAction({ kind: "hours", stationId: s.id })}
-                >${t("prep.edit_hours")}</wt-button
-              >
-              <wt-combobox
-                data-test=${`fallback-${s.id}`}
-                name=${`fallback-${s.id}`}
-                label=${t("prep.when_closed")}
-                placeholder=${t("prep.no_replacement_choice")}
-                .searchPlaceholder=${t("prep.search_stations")}
-                .options=${this.#fallbackOptions(s.id)}
-                .value=${live(this.#times(s.id)?.fallbackStationId ?? "")}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#openStationAction({ kind: "fallback", stationId: s.id, choice: event.detail.value, confirming: true })}
-              ></wt-combobox>
-              <wt-button
-                variant="secondary"
-                data-test=${`change-fallback-${s.id}`}
-                @click=${() => this.#openFallback(s.id, "fallback")}
-                >${t("prep.change_fallback")}</wt-button
-              >
-            `
-      }
-      <p>
-        ${t("prep.thresholds").replace("{warm}", String(s.warmAfterMinutes)).replace("{overdue}", String(s.overdueAfterMinutes)).replace("{forgotten}", String(s.forgottenAfterMinutes))}
-      </p>
-      <p>
-        ${t("prep.printers")}: ${printers || t("prep.none")}
-        <a href="/manage/printing-rules">${t("prep.printing_rules")}</a>
-      </p>
-      <p>
-        ${t("prep.screens")}: ${devices || t("prep.none")}
-        <a href="/manage/devices">${t("prep.devices")}</a>
-      </p>
-      ${watching.length ? html`<p>${format("watchers.watched_by", { list: watching.map((watcher) => watcher.name).join(", ") })}</p>` : nothing}
-      <wt-switch
-        name="showsRestOfOrder"
-        label=${t("prep.shows_rest_of_order")}
-        .checked=${live(this.stationSwitchBusy.get(s.id) ?? s.showsRestOfOrder)}
-        .disabled=${this.stationSwitchBusy.has(s.id)}
-        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-          event.stopPropagation();
-          void this.#saveRestOfOrder(s, event.detail.checked);
-        }}
-      ></wt-switch>
-      ${this.stationSwitchError[s.id]?.field ? html`<p class="error" data-field-error="showsRestOfOrder" role="alert">${this.stationSwitchError[s.id]!.message}</p>` : nothing}
-      <p class="muted">${t("prep.shows_rest_of_order_hint")}</p>
       ${this.#chips(s.id)}
       <div class="actions">
         <wt-button
@@ -1197,100 +1459,1036 @@ export class PrepStationsScreen extends LitElement {
             this.#showError("");
           }}
           >${t("prep.claim_folder")}</wt-button
-        ><wt-button
-          data-test=${`edit-${s.id}`}
-          variant="secondary"
-          @click=${() => this.#openStation(s)}
-          >${t("prep.edit")}</wt-button
-        >${s.isDefault ? nothing : html`<wt-button data-test=${`default-${s.id}`} variant="secondary" @click=${() => void this.#act(() => this.api.setDefaultStation(s.id))}>${t("prep.make_default")}</wt-button>`}<wt-button
-          data-test=${`switch-off-${s.id}`}
-          variant="danger"
-          @click=${() => this.#openFallback(s.id, "switch_off")}
-          >${t("prep.disable")}</wt-button
         >
       </div>
-      ${this.stationSwitchError[s.id] && !this.stationSwitchError[s.id]!.field ? html`<p class="error" role="alert">${this.stationSwitchError[s.id]!.message}</p>` : nothing}</wt-card
-    >`;
+    </wt-card>`;
+  }
+  async #saveStationPrinters() {
+    const editor = this.printerEditor;
+    if (!editor || this.printerBusy) return;
+    this.printerBusy = true;
+    this.printerEditor = { ...editor, error: "" };
+    this.#showError("");
+    try {
+      await this.api.setStationPrinters(editor.stationId, editor.ids);
+    } catch (error) {
+      const code = codeOf(error);
+      if (
+        code === "printer.not_found" ||
+        code === "printer.makes_and_watches" ||
+        code === "management.request_invalid"
+      ) {
+        this.printerEditor = { ...editor, error: t("prep.tickets.printer_refused") };
+      } else {
+        this.#showError(
+          code === "station.not_found" ? t("prep.station_disabled") : t("prep.save_error"),
+        );
+      }
+      this.printerBusy = false;
+      return;
+    }
+    this.printerEditor = undefined;
+    this.printerBusy = false;
+    await this.#load();
+  }
+  #printerCell(station: PrepStation) {
+    const view = this.view!;
+    const selected = view.stationPrinters
+      .filter((row) => row.stationId === station.id)
+      .map((row) => row.printerId);
+    const names =
+      selected.map((id) => view.printers.find((row) => row.id === id)?.name ?? id).join(", ") ||
+      t("prep.none");
+    if (!station.active) return html`<span part="disabled-station">${names}</span>`;
+    const editor = this.printerEditor?.stationId === station.id ? this.printerEditor : undefined;
+    if (!editor)
+      return html`<button
+        type="button"
+        part="edit-printers"
+        data-test=${`edit-printers-${station.id}`}
+        aria-label=${`${station.name}: ${t("prep.tickets.printed_on")}`}
+        ?disabled=${this.printerBusy}
+        @click=${() => {
+          this.printerEditor = { stationId: station.id, ids: selected, error: "" };
+        }}
+      >
+        ${names}
+      </button>`;
+    const options = view.printers.map((printer) => {
+      const watcher = view.watchers.find(
+        (row) => row.printerIds.includes(printer.id) || row.id === printer.watcherId,
+      );
+      const disabled =
+        (printer.active === false || !!watcher || !!printer.watcherId) &&
+        !editor.ids.includes(printer.id);
+      return {
+        value: printer.id,
+        label: printer.name,
+        disabled,
+        description:
+          printer.active === false
+            ? t("prep.health.disabled")
+            : watcher || printer.watcherId
+              ? format("prep.tickets.watcher_printer", {
+                  name: watcher?.name ?? printer.watcherId!,
+                })
+              : undefined,
+      };
+    });
+    return html`<div part="printer-cell">
+      <wt-combobox
+        multiple
+        hide-label
+        name="printerIds"
+        data-test=${`station-printers-${station.id}`}
+        label=${`${station.name}: ${t("prep.tickets.printed_on")}`}
+        .options=${options}
+        .values=${editor.ids}
+        .disabled=${this.printerBusy}
+        .error=${editor.error}
+        data-field-error=${editor.error ? "printerIds" : nothing}
+        .searchPlaceholder=${t("prep.printers")}
+        .noResultsLabel=${t("venue.combobox_no_results")}
+        .countLabel=${(count: number) => format("prep.tickets.printer_count", { count: String(count) })}
+        @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
+          event.stopPropagation();
+          this.printerEditor = { ...editor, ids: event.detail.values, error: "" };
+        }}
+        @keydown=${(event: KeyboardEvent) => {
+          if (event.key === "Escape" && !this.printerBusy) {
+            event.stopPropagation();
+            this.printerEditor = undefined;
+          }
+        }}
+      ></wt-combobox>
+      <div part="cell-actions">
+        <wt-button
+          variant="secondary"
+          data-test=${`cancel-printers-${station.id}`}
+          ?disabled=${this.printerBusy}
+          @click=${() => {
+            this.printerEditor = undefined;
+          }}
+          >${t("venue.cancel")}</wt-button
+        >
+        <wt-button
+          data-test=${`save-printers-${station.id}`}
+          ?disabled=${this.printerBusy}
+          @click=${() => void this.#saveStationPrinters()}
+          >${t("venue.save")}</wt-button
+        >
+      </div>
+    </div>`;
+  }
+  #tickets() {
+    const view = this.view!;
+    const rows = [...view.stations].sort(
+      (a, b) =>
+        Number(b.active) - Number(a.active) ||
+        a.displayOrder - b.displayOrder ||
+        a.name.localeCompare(b.name),
+    );
+    const columns: DataTableColumn<PrepStation>[] = [
+      {
+        key: "name",
+        label: t("prep.name"),
+        cell: (station) =>
+          html`<span part=${station.active ? "station-name" : "disabled-station"}
+            >${station.name}${station.active ? "" : ` (${t("prep.health.disabled")})`}</span
+          >`,
+      },
+      {
+        key: "printers",
+        label: t("prep.tickets.printed_on"),
+        cell: (station) => this.#printerCell(station),
+      },
+      {
+        key: "screens",
+        label: t("prep.tickets.screens"),
+        cell: (station) =>
+          html`<span data-test=${`screens-${station.id}`}>
+            ${
+              view.devices
+                .filter(
+                  (device) =>
+                    device.stationId === station.id &&
+                    device.kind === "kds_station" &&
+                    device.active,
+                )
+                .map((device) => device.label)
+                .join(", ") || t("prep.none")
+            }
+            <a href="/manage/devices">${t("prep.devices")}</a></span
+          >`,
+      },
+      {
+        key: "watchers",
+        label: t("prep.tickets.watchers"),
+        cell: (station) =>
+          html`<span data-test=${`watchers-${station.id}`}>
+            ${
+              watchersOfStation(
+                view.watchers.filter((watcher) => watcher.active),
+                station.id,
+              )
+                .map((watcher) => watcher.name)
+                .join(", ") || t("prep.none")
+            }
+            <a href="/manage/prep-stations/view/watchers">${t("watchers.title")}</a></span
+          >`,
+      },
+    ];
+    return html`<wt-data-table
+      data-test="tickets-table"
+      .emptyMessage=${t("venue.combobox_no_results")}
+      aria-label=${t("prep.tab.tickets")}
+      .rows=${rows}
+      .columns=${columns}
+      rowKey="id"
+    ></wt-data-table>`;
+  }
+  async #saveWatcherPrinters() {
+    const editor = this.watcherPrinterEditor;
+    if (!editor || this.watcherPrinterBusy) return;
+    this.watcherPrinterBusy = true;
+    this.watcherPrinterEditor = { ...editor, fieldError: "", error: "" };
+    try {
+      await this.api.setWatcherPrinters(editor.watcherId, editor.ids);
+    } catch (error) {
+      const code = codeOf(error);
+      const field = (error as { params?: { field?: string } })?.params?.field;
+      const fieldRefusal =
+        code === "printer.not_found" ||
+        code === "printer.makes_and_watches" ||
+        (code === "management.request_invalid" && field === "printerIds");
+      this.watcherPrinterEditor = {
+        ...editor,
+        fieldError: fieldRefusal ? t("watchers.printer_refused") : "",
+        conflictPrinterId:
+          code === "printer.makes_and_watches"
+            ? (error as { params?: { id?: string } }).params?.id
+            : undefined,
+        error: fieldRefusal
+          ? ""
+          : t(code === "watcher.not_found" ? "watchers.not_found" : "prep.save_error"),
+      };
+      this.watcherPrinterBusy = false;
+      return;
+    }
+    this.watcherPrinterEditor = undefined;
+    this.watcherPrinterBusy = false;
+    await this.#load();
+  }
+  #watcherPrinterCell(watcher: WatcherView) {
+    const view = this.view!;
+    const names =
+      watcher.printerIds
+        .map((id) => view.printers.find((printer) => printer.id === id)?.name ?? id)
+        .join(", ") || t("prep.none");
+    const editor =
+      this.watcherPrinterEditor?.watcherId === watcher.id ? this.watcherPrinterEditor : undefined;
+    if (!editor)
+      return html`<wt-button
+        variant="secondary"
+        data-test=${`edit-watcher-printers-${watcher.id}`}
+        aria-label=${`${watcher.name}: ${t("watchers.printers")}`}
+        ?disabled=${this.watcherPrinterBusy}
+        @click=${() => {
+          this.watcherPrinterEditor = {
+            watcherId: watcher.id,
+            ids: [...watcher.printerIds],
+            fieldError: "",
+            error: "",
+          };
+        }}
+        >${names}</wt-button
+      >`;
+    const options = view.printers.map((printer) => {
+      const stations = view.stationPrinters
+        .filter((mapping) => mapping.printerId === printer.id)
+        .map((mapping) => this.#stationName(mapping.stationId));
+      const owner = view.watchers.find(
+        (row) =>
+          row.id !== watcher.id &&
+          (row.printerIds.includes(printer.id) || row.id === printer.watcherId),
+      );
+      return {
+        value: printer.id,
+        label: printer.name,
+        disabled:
+          (printer.active === false || stations.length > 0) && !editor.ids.includes(printer.id),
+        description:
+          printer.active === false
+            ? t("prep.health.disabled")
+            : stations.length
+              ? format("watchers.station_printer", { name: stations.join(", ") })
+              : owner
+                ? format("prep.tickets.watcher_printer", { name: owner.name })
+                : undefined,
+      };
+    });
+    return html`<div part="watcher-cell">
+      <wt-combobox
+        multiple
+        name="printerIds"
+        data-test=${`watcher-printers-${watcher.id}`}
+        label=${`${watcher.name}: ${t("watchers.printers")}`}
+        .options=${options}
+        .values=${editor.ids}
+        .disabled=${this.watcherPrinterBusy}
+        .error=${editor.fieldError}
+        .searchPlaceholder=${t("watchers.printers")}
+        .noResultsLabel=${t("venue.combobox_no_results")}
+        .countLabel=${(count: number) => format("prep.tickets.printer_count", { count: String(count) })}
+        @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
+          event.stopPropagation();
+          this.watcherPrinterEditor = {
+            ...editor,
+            ids: event.detail.values,
+            conflictPrinterId: undefined,
+            fieldError: "",
+            error: "",
+          };
+        }}
+        @keydown=${(event: KeyboardEvent) => {
+          if (event.key === "Escape" && !this.watcherPrinterBusy) {
+            event.stopPropagation();
+            this.watcherPrinterEditor = undefined;
+          }
+        }}
+      ></wt-combobox>
+      <wt-form-actions
+        data-test=${`watcher-printer-actions-${watcher.id}`}
+        .error=${[editor.fieldError ? t("watchers.fix_fields") : "", editor.error].filter(Boolean).join(" ")}
+      >
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test=${`cancel-watcher-printers-${watcher.id}`}
+          ?disabled=${this.watcherPrinterBusy}
+          @click=${() => {
+            this.watcherPrinterEditor = undefined;
+          }}
+          >${t("venue.cancel")}</wt-button
+        >
+        <wt-button
+          data-test=${`save-watcher-printers-${watcher.id}`}
+          ?disabled=${this.watcherPrinterBusy}
+          @click=${() => void this.#saveWatcherPrinters()}
+          >${t("venue.save")}</wt-button
+        >
+      </wt-form-actions>
+    </div>`;
+  }
+  #watcherInput(watcher: WatcherView, applyDraft = true): WatcherInput {
+    const input = {
+      name: watcher.name,
+      everyStation: watcher.everyStation,
+      stationIds: [...watcher.stationIds],
+      everyZone: watcher.everyZone,
+      zoneIds: [...watcher.zoneIds],
+      runsPass: watcher.runsPass,
+      displayOrder: watcher.displayOrder,
+    };
+    const editor = this.watcherCellEditor;
+    if (!applyDraft || !editor || editor.watcherId !== watcher.id) return input;
+    if (editor.field === "pass") return { ...input, runsPass: editor.values[0] === "yes" };
+    const every = editor.values.includes(EVERY_MEMBER);
+    const ids = every ? [] : editor.values;
+    return editor.field === "follows"
+      ? { ...input, everyStation: every, stationIds: ids }
+      : { ...input, everyZone: every, zoneIds: ids };
+  }
+  #watcherCellError(watcher: WatcherView) {
+    const editor = this.watcherCellEditor;
+    if (!editor?.attempted) return "";
+    const errors = watcherInputErrors(this.#watcherInput(watcher));
+    return editor.field === "follows"
+      ? errors.stationIds
+      : editor.field === "zones"
+        ? errors.zoneIds
+        : "";
+  }
+  async #saveWatcherCell() {
+    const editor = this.watcherCellEditor;
+    if (!editor || this.watcherCellBusy) return;
+    const watcher = this.view!.watchers.find((row) => row.id === editor.watcherId);
+    if (!watcher) return;
+    this.watcherCellEditor = { ...editor, attempted: true, fieldError: "", error: "" };
+    if (this.#watcherCellError(watcher)) {
+      await this.updateComplete;
+      this.shadowRoot!.querySelector('[data-test="watchers-table"]')
+        ?.shadowRoot?.querySelector<HTMLElement>('[data-test="watcher-cell-input"]')
+        ?.focus();
+      return;
+    }
+    this.watcherCellBusy = true;
+    try {
+      await this.api.updateWatcher(watcher.id, this.#watcherInput(watcher));
+    } catch (error) {
+      const code = codeOf(error);
+      const field = (error as { params?: { field?: string } })?.params?.field;
+      const fieldError =
+        editor.field === "follows" &&
+        (code === "station.not_found" ||
+          (code === "management.request_invalid" && field === "stationIds"))
+          ? t("watchers.need_station")
+          : editor.field === "zones" &&
+              (code === "zone.not_found" ||
+                (code === "management.request_invalid" && field === "zoneIds"))
+            ? t("watchers.need_zone")
+            : "";
+      this.watcherCellEditor = {
+        ...editor,
+        attempted: true,
+        fieldError,
+        error: fieldError
+          ? ""
+          : t(code === "watcher.not_found" ? "watchers.not_found" : "prep.save_error"),
+      };
+      this.watcherCellBusy = false;
+      return;
+    }
+    this.watcherCellEditor = undefined;
+    this.watcherCellBusy = false;
+    await this.#load();
+  }
+  #watcherChoiceCell(watcher: WatcherView, field: WatcherCell) {
+    const view = this.view!;
+    const label = t(
+      field === "follows"
+        ? "watchers.follows_column"
+        : field === "zones"
+          ? "watchers.zones_column"
+          : "watchers.runs_pass",
+    );
+    const follows = watcher.everyStation
+      ? t("watchers.every_station")
+      : view.stations
+          .filter((row) => row.active && watcher.stationIds.includes(row.id))
+          .map((row) => row.name)
+          .join(", ");
+    const zones = watcher.everyZone
+      ? t("watchers.every_zone")
+      : view.zones
+          .filter((row) => row.active !== false && watcher.zoneIds.includes(row.id))
+          .map((row) => row.name)
+          .join(", ");
+    const text =
+      field === "follows"
+        ? follows
+        : field === "zones"
+          ? zones
+          : t(watcher.runsPass ? "venue.yes" : "venue.no");
+    const editor =
+      this.watcherCellEditor?.watcherId === watcher.id && this.watcherCellEditor.field === field
+        ? this.watcherCellEditor
+        : undefined;
+    if (!editor)
+      return html`<wt-button
+        variant="secondary"
+        data-test=${`edit-watcher-${field}-${watcher.id}`}
+        aria-label=${`${watcher.name}: ${label}`}
+        ?disabled=${this.watcherCellBusy}
+        @click=${() => {
+          this.watcherCellEditor = {
+            watcherId: watcher.id,
+            field,
+            attempted: false,
+            fieldError: "",
+            error: "",
+            values:
+              field === "pass"
+                ? [watcher.runsPass ? "yes" : "no"]
+                : field === "follows"
+                  ? watcher.everyStation
+                    ? [EVERY_MEMBER]
+                    : [...watcher.stationIds]
+                  : watcher.everyZone
+                    ? [EVERY_MEMBER]
+                    : [...watcher.zoneIds],
+          };
+        }}
+        >${text || t("prep.none")}</wt-button
+      >`;
+    const options =
+      field === "pass"
+        ? [
+            { value: "yes", label: t("venue.yes") },
+            { value: "no", label: t("venue.no") },
+          ]
+        : [
+            {
+              value: EVERY_MEMBER,
+              label: t(
+                field === "follows"
+                  ? "watchers.choose_every_station"
+                  : "watchers.choose_every_zone",
+              ),
+            },
+            ...(field === "follows" ? view.stations : view.zones)
+              .filter((row) => row.active !== false)
+              .map((row) => ({ value: row.id, label: row.name })),
+          ];
+    const invalid = this.#watcherCellError(watcher);
+    const fieldError = invalid || editor.fieldError;
+    return html`<div part="watcher-cell">
+      <wt-combobox
+        data-test="watcher-cell-input"
+        name=${field === "follows" ? "stationIds" : field === "zones" ? "zoneIds" : "runsPass"}
+        label=${`${watcher.name}: ${label}`}
+        .required=${field !== "pass"}
+        .multiple=${field !== "pass"}
+        .options=${options}
+        .values=${editor.values}
+        .value=${editor.values[0] ?? ""}
+        .error=${fieldError}
+        .disabled=${this.watcherCellBusy}
+        .countLabel=${(count: number) => format("watchers.selection_count", { count: String(count) })}
+        .searchPlaceholder=${label}
+        .noResultsLabel=${t("venue.combobox_no_results")}
+        @wt-change=${(event: CustomEvent<{ values: string[]; value: string }>) => {
+          event.stopPropagation();
+          let values = field === "pass" ? [event.detail.value] : event.detail.values;
+          if (values.includes(EVERY_MEMBER) && values.length > 1)
+            values = editor.values.includes(EVERY_MEMBER)
+              ? values.filter((id) => id !== EVERY_MEMBER)
+              : [EVERY_MEMBER];
+          this.watcherCellEditor = { ...editor, values, fieldError: "", error: "" };
+        }}
+        @keydown=${(event: KeyboardEvent) => {
+          if (event.key === "Escape" && !this.watcherCellBusy) {
+            event.stopPropagation();
+            this.watcherCellEditor = undefined;
+          }
+        }}
+      ></wt-combobox
+      ><wt-form-actions
+        .error=${[fieldError ? t("watchers.fix_fields") : "", editor.error].filter(Boolean).join(" ")}
+      >
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="cancel-watcher-cell"
+          ?disabled=${this.watcherCellBusy}
+          @click=${() => {
+            this.watcherCellEditor = undefined;
+          }}
+          >${t("venue.cancel")}</wt-button
+        >
+        <wt-button
+          data-test="save-watcher-cell"
+          ?disabled=${this.watcherCellBusy || !!invalid}
+          @click=${() => void this.#saveWatcherCell()}
+          >${t("venue.save")}</wt-button
+        >
+      </wt-form-actions>
+    </div>`;
+  }
+  async #saveSettingsCell() {
+    const editor = this.settingsEditor;
+    if (!editor || this.settingsBusy) return;
+    this.settingsEditor = { ...editor, attempted: true };
+    if (this.#settingsInvalid()) {
+      await this.updateComplete;
+      const table = this.renderRoot.querySelector<LitElement>(
+        "wt-data-table[data-test=settings-table]",
+      );
+      if (table) await table.updateComplete;
+      table?.shadowRoot
+        ?.querySelector<HTMLElement>(
+          '[data-test="settings-choice"], [data-test="settings-minutes"]',
+        )
+        ?.focus();
+      return;
+    }
+    this.settingsBusy = true;
+    this.settingsEditor = { ...editor, fieldError: "", error: "" };
+    try {
+      if (editor.field === "rest")
+        await this.api.updateStation(editor.stationId, {
+          showsRestOfOrder: editor.value === "yes",
+        });
+      else if (editor.field === "fallback") {
+        const choice = editor.value || null;
+        if (choice !== this.#times(editor.stationId)?.fallbackStationId)
+          await this.api.setStationFallback(editor.stationId, choice);
+      } else
+        await this.api.updateStation(editor.stationId, {
+          [editor.field]: editor.value.trim() === "" ? null : Number(editor.value),
+        });
+    } catch (error) {
+      const code = codeOf(error);
+      const field = (error as { params?: { field?: string } })?.params?.field;
+      const fieldError = TIMING_FIELDS.includes(editor.field as TimingField)
+        ? code === "station.thresholds_invalid" ||
+          (code === "management.request_invalid" && field === editor.field)
+          ? t("prep.threshold_invalid")
+          : ""
+        : editor.field === "rest"
+          ? code === "management.request_invalid" && field === "showsRestOfOrder"
+            ? t("prep.save_error")
+            : ""
+          : code === "station.fallback_loop"
+            ? t("prep.fallback_loop")
+            : code === "route.station_inactive"
+              ? t("prep.station_disabled")
+              : "";
+      this.settingsEditor = {
+        ...editor,
+        fieldError,
+        error: fieldError ? "" : t("prep.save_error"),
+      };
+      this.settingsBusy = false;
+      return;
+    }
+    this.settingsEditor = undefined;
+    this.settingsBusy = false;
+    await this.#load();
+  }
+  #settingsInvalid() {
+    const editor = this.settingsEditor;
+    if (!editor?.attempted) return "";
+    if (editor.field === "rest")
+      return ["yes", "no"].includes(editor.value) ? "" : t("prep.choose_yes_no");
+    if (editor.field === "fallback") return "";
+    const station = this.view?.stations.find((s) => s.id === editor.stationId);
+    if (!station) return t("prep.save_error");
+    const value =
+      editor.value.trim() === "" ? station.timingDefaults[editor.field] : Number(editor.value);
+    const values = {
+      warmAfterMinutes: station.warmAfterMinutes,
+      overdueAfterMinutes: station.overdueAfterMinutes,
+      forgottenAfterMinutes: station.forgottenAfterMinutes,
+      [editor.field]: value,
+    };
+    return !Number.isInteger(value) ||
+      value < 1 ||
+      value > 2_147_483_647 ||
+      values.warmAfterMinutes >= values.overdueAfterMinutes ||
+      values.overdueAfterMinutes >= values.forgottenAfterMinutes
+      ? t("prep.threshold_invalid")
+      : "";
+  }
+  #settingsCell(station: PrepStation, field: "rest" | "fallback") {
+    const label = t(field === "rest" ? "prep.shows_rest_of_order" : "prep.when_closed");
+    if (field === "fallback" && station.isDefault)
+      return html`<span data-test=${`settings-fallback-${station.id}`}
+        >${t("prep.never_closes")}</span
+      >`;
+    const value =
+      field === "rest"
+        ? station.showsRestOfOrder
+          ? "yes"
+          : "no"
+        : (this.#times(station.id)?.fallbackStationId ?? "");
+    const text =
+      field === "rest"
+        ? t(station.showsRestOfOrder ? "venue.yes" : "venue.no")
+        : value
+          ? this.#stationName(value)
+          : t("prep.no_replacement_choice");
+    const editor =
+      this.settingsEditor?.stationId === station.id && this.settingsEditor.field === field
+        ? this.settingsEditor
+        : undefined;
+    if (!editor)
+      return html`<wt-button
+        variant="secondary"
+        data-test=${`edit-settings-${field}-${station.id}`}
+        aria-label=${`${station.name}: ${label}`}
+        ?disabled=${this.settingsBusy}
+        @click=${() => {
+          this.settingsEditor = {
+            stationId: station.id,
+            field,
+            value,
+            fieldError: "",
+            error: "",
+            confirming: false,
+            attempted: false,
+          };
+        }}
+        >${text}</wt-button
+      >`;
+    const invalid = this.#settingsInvalid();
+    return html`<div
+      part="watcher-cell"
+      @keydown=${(event: KeyboardEvent) => {
+        if (event.key === "Escape" && !this.settingsBusy) {
+          event.stopPropagation();
+          this.settingsEditor = undefined;
+        }
+        if (
+          event.key === "Enter" &&
+          event.target instanceof HTMLElement &&
+          event.target.tagName !== "WT-COMBOBOX"
+        )
+          submitOnEnter(
+            event,
+            (event.currentTarget as HTMLElement).querySelector("[data-test=save-settings-cell]"),
+          );
+      }}
+    >
+      <wt-combobox
+        data-test="settings-choice"
+        name=${field === "rest" ? "showsRestOfOrder" : "fallbackStationId"}
+        label=${`${station.name}: ${label}`}
+        .options=${
+          field === "rest"
+            ? [
+                { value: "yes", label: t("venue.yes") },
+                { value: "no", label: t("venue.no") },
+              ]
+            : this.#fallbackOptions(station.id)
+        }
+        .value=${editor.value}
+        .error=${invalid || editor.fieldError}
+        .disabled=${this.settingsBusy}
+        .required=${field === "rest"}
+        .placeholder=${field === "fallback" ? t("prep.no_replacement_choice") : ""}
+        .searchPlaceholder=${field === "fallback" ? t("prep.search_stations") : label}
+        .noResultsLabel=${t("venue.combobox_no_results")}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.settingsEditor = {
+            ...editor,
+            value: event.detail.value,
+            fieldError: "",
+            error: "",
+            confirming: false,
+          };
+        }}
+      ></wt-combobox>
+
+      ${editor.confirming ? html`<p data-test="settings-fallback-confirmation">${this.#fallbackConfirmation({ kind: "fallback", stationId: station.id, choice: editor.value, confirming: true })}</p>` : nothing}
+      <wt-form-actions
+        .error=${invalid || editor.fieldError ? t("watchers.fix_fields") : editor.error}
+      >
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="cancel-settings-cell"
+          ?disabled=${this.settingsBusy}
+          @click=${() => {
+            this.settingsEditor = undefined;
+          }}
+          >${t("venue.cancel")}</wt-button
+        >
+        <wt-button
+          data-test="save-settings-cell"
+          ?disabled=${this.settingsBusy || !!invalid}
+          @click=${() => {
+            if (field === "fallback" && !editor.confirming)
+              this.settingsEditor = { ...editor, confirming: true };
+            else void this.#saveSettingsCell();
+          }}
+          >${t("venue.save")}</wt-button
+        >
+      </wt-form-actions>
+    </div>`;
+  }
+  #timingCell(station: PrepStation, field: TimingField) {
+    const label = `${station.name}: ${t(TIMING_LABELS[field])}`;
+    const editor =
+      this.settingsEditor?.stationId === station.id && this.settingsEditor.field === field
+        ? this.settingsEditor
+        : undefined;
+    if (!editor)
+      return html`<wt-button
+        part=${station.timingOverrides[field] === null ? "inherited" : "timing-override"}
+        data-test=${`edit-settings-${field}-${station.id}`}
+        aria-label=${label}
+        ?disabled=${this.settingsBusy}
+        @click=${() => {
+          this.settingsEditor = {
+            stationId: station.id,
+            field,
+            value:
+              station.timingOverrides[field] === null ? "" : String(station.timingOverrides[field]),
+            fieldError: "",
+            error: "",
+            confirming: false,
+            attempted: false,
+          };
+        }}
+        >${station[field]}</wt-button
+      >`;
+    const invalid = this.#settingsInvalid();
+    return html`<div
+      part="watcher-cell"
+      @keydown=${(event: KeyboardEvent) => {
+        if (event.key === "Escape" && !this.settingsBusy) {
+          event.stopPropagation();
+          this.settingsEditor = undefined;
+        } else
+          submitOnEnter(
+            event,
+            (event.currentTarget as HTMLElement).querySelector("[data-test=save-settings-cell]"),
+          );
+      }}
+    >
+      <wt-input
+        data-test="settings-minutes"
+        name=${field}
+        label=${label}
+        type="number"
+        placeholder=${String(station.timingDefaults[field])}
+        hint=${t("prep.inherit_minutes")}
+        .value=${editor.value}
+        .error=${invalid || editor.fieldError}
+        .disabled=${this.settingsBusy}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.settingsEditor = { ...editor, value: event.detail.value, fieldError: "", error: "" };
+        }}
+      ></wt-input>
+      <wt-form-actions
+        .error=${invalid || editor.fieldError ? t("watchers.fix_fields") : editor.error}
+      >
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="cancel-settings-cell"
+          ?disabled=${this.settingsBusy}
+          @click=${() => {
+            this.settingsEditor = undefined;
+          }}
+          >${t("venue.cancel")}</wt-button
+        >
+        <wt-button
+          data-test="save-settings-cell"
+          ?disabled=${this.settingsBusy || !!invalid}
+          @click=${() => void this.#saveSettingsCell()}
+          >${t("venue.save")}</wt-button
+        >
+      </wt-form-actions>
+    </div>`;
+  }
+  #settings() {
+    const stations = [...this.view!.stations].sort(
+      (a, b) =>
+        Number(b.active) - Number(a.active) ||
+        a.displayOrder - b.displayOrder ||
+        a.name.localeCompare(b.name),
+    );
+    const columns: DataTableColumn<PrepStation>[] = [
+      {
+        key: "name",
+        label: t("prep.name"),
+        cell: (station) =>
+          html`<span part=${station.active ? "station-name" : "inherited"}
+            >${station.name}${station.active ? "" : ` (${t("prep.health.disabled")})`}</span
+          >`,
+      },
+      ...TIMING_FIELDS.map((field) => ({
+        key: field,
+        label: t(TIMING_LABELS[field]),
+        cell: (station: PrepStation) => this.#timingCell(station, field),
+      })),
+      {
+        key: "rest",
+        label: t("prep.shows_rest_of_order"),
+        cell: (station) => this.#settingsCell(station, "rest"),
+      },
+      {
+        key: "fallback",
+        label: t("prep.when_closed"),
+        cell: (station) => this.#settingsCell(station, "fallback"),
+      },
+    ];
+    return html`<wt-data-table
+      data-test="settings-table"
+      label=${t("prep.tab.settings")}
+      .columns=${columns}
+      .rows=${stations}
+      .rowKey=${(station: PrepStation) => station.id}
+    ></wt-data-table>`;
   }
   #watchers() {
     const view = this.view!;
     const ordered = [...view.watchers]
       .filter((watcher) => watcher.active)
       .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
+    const columns: DataTableColumn<WatcherView>[] = [
+      {
+        key: "name",
+        label: t("prep.name"),
+        cell: (watcher) => html`<span data-test=${`watcher-${watcher.id}`}>${watcher.name}</span>`,
+      },
+      {
+        key: "follows",
+        label: t("watchers.follows_column"),
+        cell: (watcher) => this.#watcherChoiceCell(watcher, "follows"),
+      },
+      {
+        key: "zones",
+        label: t("watchers.zones_column"),
+        cell: (watcher) => this.#watcherChoiceCell(watcher, "zones"),
+      },
+      {
+        key: "pass",
+        label: t("watchers.runs_pass"),
+        cell: (watcher) => this.#watcherChoiceCell(watcher, "pass"),
+      },
+      {
+        key: "screens",
+        label: t("watchers.screens"),
+        cell: (watcher) =>
+          html`<span part="watcher-cell" data-test=${`watcher-screens-${watcher.id}`}>
+            ${
+              view.devices
+                .filter((device) => device.watcherId === watcher.id)
+                .map(
+                  (device) =>
+                    `${device.label}${device.active ? "" : ` (${t("prep.health.disabled")})`}`,
+                )
+                .join(", ") || t("prep.none")
+            }
+            <a href="/manage/devices">${t("prep.devices")}</a></span
+          >`,
+      },
+      {
+        key: "printers",
+        label: t("watchers.printers"),
+        cell: (watcher) => this.#watcherPrinterCell(watcher),
+      },
+      {
+        key: "actions",
+        label: t("prep.actions"),
+        pinned: "end",
+        cell: (watcher) =>
+          html`<wt-row-actions .label=${`${watcher.name}: ${t("prep.actions")}`}>
+            <wt-button
+              variant="secondary"
+              data-test=${`rename-watcher-${watcher.id}`}
+              @click=${() => {
+                this.watcherRename = {
+                  id: watcher.id,
+                  name: watcher.name,
+                  attempted: false,
+                  fieldError: "",
+                  error: "",
+                };
+              }}
+              >${t("venue.rename")}</wt-button
+            >
+            <wt-button
+              variant="danger"
+              data-test=${`remove-watcher-${watcher.id}`}
+              @click=${() => {
+                this.watcherRemoval = watcher;
+                this.watcherRemoveError = "";
+              }}
+              >${t("watchers.remove")}</wt-button
+            >
+          </wt-row-actions>`,
+      },
+    ];
     return html`<section data-test="watchers-group">
-      <div class="toolbar">
-        <h2>${t("watchers.title")}</h2>
-        <wt-button
-          data-test="new-watcher"
-          @click=${() => {
-            this.watcherEditor = {};
-            this.watcherRefusal = undefined;
-          }}
-          >${t("watchers.new")}</wt-button
-        >
-      </div>
-      <div class="cards">
-        ${ordered.map((watcher) => {
-          const follows = watcher.everyStation
-            ? t("watchers.every_station")
-            : view.stations
-                .filter((station) => station.active && watcher.stationIds.includes(station.id))
-                .map((station) => station.name)
-                .join(", ");
-          const zones = watcher.everyZone
-            ? t("watchers.every_zone")
-            : view.zones
-                .filter((zone) => zone.active !== false && watcher.zoneIds.includes(zone.id))
-                .map((zone) => zone.name)
-                .join(", ");
-          const screens = view.devices
-            .filter((device) => device.watcherId === watcher.id && device.active)
-            .map((device) => device.label)
-            .join(", ");
-          const printers = view.printers
-            .filter(
-              (printer) =>
-                watcher.printerIds.includes(printer.id) || printer.watcherId === watcher.id,
-            )
-            .map((printer) => printer.name)
-            .join(", ");
-          return html`<wt-card data-test=${`watcher-${watcher.id}`}
-            ><h3>${watcher.name}</h3>
-            <p>${format("watchers.follows", { list: follows })}</p>
-            <p>${format("watchers.for", { list: zones })}</p>
-            ${watcher.runsPass ? html`<p>${t("watchers.runs_pass")}</p>` : nothing}
-            <p>
-              ${t("watchers.screens")}: ${screens || t("prep.none")}
-              <a href="/manage/devices">${t("prep.devices")}</a>
-            </p>
-            <p>
-              ${t("watchers.printers")}: ${printers || t("prep.none")}
-              <a href="/manage/printing-rules">${t("prep.printing_rules")}</a>
-            </p>
-            <div class="actions">
-              <wt-button
-                variant="secondary"
-                data-test=${`edit-watcher-${watcher.id}`}
-                @click=${() => {
-                  this.watcherEditor = { id: watcher.id };
-                  this.watcherRefusal = undefined;
-                }}
-                >${t("prep.edit")}</wt-button
-              >
-              <wt-button
-                variant="danger"
-                data-test=${`remove-watcher-${watcher.id}`}
-                @click=${() => {
-                  this.watcherRemoval = watcher;
-                  this.watcherRemoveError = "";
-                }}
-                >${t("watchers.remove")}</wt-button
-              >
-            </div>
-          </wt-card>`;
-        })}
-      </div>
+      <wt-data-table
+        data-test="watchers-table"
+        aria-label=${t("watchers.title")}
+        .rows=${ordered}
+        .columns=${columns}
+        rowKey="id"
+        .emptyLabel=${t("venue.combobox_no_results")}
+      ></wt-data-table>
     </section>`;
+  }
+  async #saveWatcherName() {
+    const draft = this.watcherRename;
+    if (!draft || this.busy) return;
+    const watcher = this.view!.watchers.find((row) => row.id === draft.id);
+    if (!watcher) return;
+    const name = draft.name.trim();
+    const input = { ...this.#watcherInput(watcher, false), name };
+    const invalid = watcherInputErrors(input).name;
+    this.watcherRename = { ...draft, attempted: true, fieldError: invalid, error: "" };
+    if (invalid) {
+      await this.updateComplete;
+      this.shadowRoot!.querySelector<HTMLElement>('[data-test="watcher-rename-name"]')?.focus();
+      return;
+    }
+    this.busy = true;
+    try {
+      await this.api.updateWatcher(watcher.id, input);
+    } catch (error) {
+      const code = codeOf(error);
+      const field = (error as { params?: { field?: string } })?.params?.field;
+      const fieldError =
+        code === "watcher.name_taken"
+          ? t("watchers.name_taken")
+          : code === "management.request_invalid" && field === "name"
+            ? t("venue.field_required")
+            : "";
+      this.watcherRename = {
+        ...draft,
+        attempted: true,
+        fieldError,
+        error: fieldError
+          ? ""
+          : t(code === "watcher.not_found" ? "watchers.not_found" : "prep.save_error"),
+      };
+      this.busy = false;
+      return;
+    }
+    this.watcherRename = undefined;
+    this.busy = false;
+    await this.#load();
+  }
+  #watcherRenameDialog() {
+    const draft = this.watcherRename;
+    if (!draft) return nothing;
+    const invalid = draft.attempted && !draft.name.trim();
+    return html`<wt-modal
+      open
+      size="compact"
+      data-test="watcher-rename-modal"
+      heading=${t("venue.rename")}
+      .dismissible=${!this.busy}
+      @wt-close=${() => {
+        this.watcherRename = undefined;
+      }}
+    >
+      <wt-input
+        name="name"
+        required
+        data-test="watcher-rename-name"
+        label=${t("prep.name")}
+        .value=${draft.name}
+        .error=${draft.fieldError}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          const name = event.detail.value;
+          this.watcherRename = {
+            ...draft,
+            name,
+            fieldError: draft.attempted && !name.trim() ? t("venue.field_required") : "",
+            error: "",
+          };
+        }}
+        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-watcher-name"]'))}
+      ></wt-input>
+      <wt-form-actions
+        .error=${[draft.fieldError ? t("watchers.fix_fields") : "", draft.error].filter(Boolean).join(" ")}
+      >
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          ?disabled=${this.busy}
+          @click=${() => {
+            this.watcherRename = undefined;
+          }}
+          >${t("venue.cancel")}</wt-button
+        >
+        <wt-button
+          data-test="save-watcher-name"
+          ?disabled=${this.busy || invalid}
+          @click=${() => void this.#saveWatcherName()}
+          >${t("venue.save")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-modal>`;
   }
   async #saveWatcher(input: WatcherInput) {
     if (this.busy || !this.watcherEditor) return;
@@ -1437,7 +2635,7 @@ export class PrepStationsScreen extends LitElement {
     return html`<wt-modal
       size=${editor.kind === "claim" || editor.kind === "exception_delete" ? "compact" : "standard"}
       open
-      heading=${editor.kind === "claim" ? t("prep.claim_folder") : editor.kind === "exception_delete" ? t("prep.confirm_delete_exception") : editor.kind === "exception" ? (editor.id ? t("prep.edit_exception") : t("prep.add_exception")) : editor.id ? t("prep.edit_station") : t("prep.new_station")}
+      heading=${editor.kind === "claim" ? t("prep.claim_folder") : editor.kind === "exception_delete" ? t("prep.confirm_delete_exception") : editor.kind === "exception" ? (editor.id ? t("prep.edit_exception") : t("prep.add_exception")) : t("prep.new_station")}
       @wt-close=${() => {
         this.editor = undefined;
       }}
@@ -1734,61 +2932,128 @@ export class PrepStationsScreen extends LitElement {
     const inactive = view?.stations.filter((station) => !station.active) ?? [];
     return html`<div class="toolbar">
         <h1>${t("prep.title")}</h1>
-        <wt-button @click=${() => this.#openStation()} data-test="new-station"
-          >${t("prep.new_station")}</wt-button
-        >
       </div>
       ${
         view
-          ? html`${this.#tester()}${this.#exceptions()}
-              <div class="cards">
-                ${active.map((s) => this.#stationCard(s))}<wt-card data-test="no-preparation"
-                  ><h2>${t("prep.no_preparation")}</h2>
-                  ${this.#chips(null)}<wt-button
-                    variant="secondary"
-                    data-test="claim-no-preparation"
-                    @click=${() => {
-                      this.editor = { kind: "claim", stationId: null };
-                    }}
-                    >${t("prep.claim_folder")}</wt-button
-                  ></wt-card
-                >${this.#unassigned()}
-              </div>
-              ${this.#watchers()}
-              ${
-                inactive.length
-                  ? html`<section>
-                      <h2>${t("prep.disabled")}</h2>
-                      ${inactive.map(
-                        (station) =>
-                          html`<wt-card data-test=${`inactive-${station.id}`}
-                            ><h3>${station.name}</h3>
-                            <p>
-                              ${this.#times(station.id)?.closedSendsTo ? format("prep.off_goes_to", { station: this.#stationName(this.#times(station.id)!.closedSendsTo!) }) : t("prep.off_asks")}
-                            </p>
-                            <p>
-                              ${this.#times(station.id)?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}
-                            </p>
-                            ${this.#warnings(station.id)}
-                            <div class="actions">
-                              <wt-button
+          ? html`<wt-tabs
+                label=${t("prep.title")}
+                .value=${this.tab}
+                .items=${(this.readOnly ? (["stations"] as const) : PREP_TABS).map((key) => ({ key, label: t(`prep.tab.${key}`) }))}
+                @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
+                  if (event.target !== event.currentTarget) return;
+                  const tab = PREP_TABS.find((tab) => tab === event.detail.value);
+                  if (!tab || (this.readOnly && tab !== "stations")) return;
+                  this.tab = tab;
+                  this.#url.write({ dashboard: "prep-stations", view: tab });
+                }}
+              >
+                ${
+                  this.readOnly
+                    ? nothing
+                    : html`<div slot="actions">
+                        <wt-button @click=${() => this.#openStation()} data-test="new-station"
+                          >${t("prep.new_station")}</wt-button
+                        >
+                        <wt-button
+                          data-test="new-watcher"
+                          @click=${() => {
+                            this.watcherEditor = {};
+                            this.watcherRefusal = undefined;
+                          }}
+                          >${t("watchers.new")}</wt-button
+                        >
+                      </div>`
+                }
+                <div slot="stations">
+                  <div
+                    class="reorder-status"
+                    data-test="station-order-status"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    ${this.stationAnnouncement}
+                  </div>
+                  <prep-station-health-table
+                    .snapshot=${this.health}
+                    .stations=${view.stations.map((station) => ({ ...station, displayOrder: this.stationOrder?.indexOf(station.id) ?? station.displayOrder }))}
+                    .actions=${this.readOnly ? {} : Object.fromEntries(view.stations.map((station) => [station.id, this.#stationMenu(station)]))}
+                    .today=${Object.fromEntries(
+                      view.stations.map((station) => {
+                        const status = this.#todayCell(station);
+                        return [station.id, status === nothing ? "" : status];
+                      }),
+                    )}
+                  ></prep-station-health-table>
+                </div>
+                ${
+                  this.readOnly
+                    ? nothing
+                    : html`<div slot="routing">
+                          ${this.#tester()}${this.#exceptions()}
+                          <div class="cards">
+                            ${active.map((s) => this.#stationCard(s))}<wt-card
+                              data-test="no-preparation"
+                              ><h2>${t("prep.no_preparation")}</h2>
+                              ${this.#chips(null)}<wt-button
                                 variant="secondary"
-                                data-test=${`change-fallback-${station.id}`}
-                                @click=${() => this.#openFallback(station.id, "fallback")}
-                                >${t("prep.change_fallback")}</wt-button
-                              ><wt-button
-                                data-test=${`switch-on-${station.id}`}
-                                @click=${() => this.#openStationAction({ kind: "switch_on", stationId: station.id })}
-                                >${t("prep.enable")}</wt-button
-                              >
-                            </div></wt-card
-                          >`,
-                      )}
+                                data-test="claim-no-preparation"
+                                @click=${() => {
+                                  this.editor = { kind: "claim", stationId: null };
+                                }}
+                                >${t("prep.claim_folder")}</wt-button
+                              ></wt-card
+                            >${this.#unassigned()}
+                          </div>
+                          ${
+                            inactive.length
+                              ? html`<section>
+                                  <h2>${t("prep.disabled")}</h2>
+                                  ${inactive.map(
+                                    (station) =>
+                                      html`<wt-card data-test=${`inactive-${station.id}`}
+                                        ><h3>${station.name}</h3>
+                                        <p>
+                                          ${this.#times(station.id)?.closedSendsTo ? format("prep.off_goes_to", { station: this.#stationName(this.#times(station.id)!.closedSendsTo!) }) : t("prep.off_asks")}
+                                        </p>
+                                        <p>
+                                          ${this.#times(station.id)?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}
+                                        </p>
+                                      </wt-card>`,
+                                  )}
+                                </section>`
+                              : nothing
+                          }
+                          ${off.length ? html`<p>${t("prep.disabled")}: ${off.map((c) => html`${this.#path(c.categoryId)} — ${this.#targetName(c.target)}. ${this.#times(c.target.kind === "station" ? c.target.stationId : "")?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}`)}</p>` : nothing}
+                        </div>
+                        <div slot="tickets">${this.#tickets()}</div>
+                        <div slot="watchers">${this.#watchers()}</div>
+                        <div slot="settings">${this.#settings()}</div>`
+                }
+              </wt-tabs>
+              ${
+                this.readOnly
+                  ? nothing
+                  : html`<section data-test="interim-station-hours">
+                      <h2>${t("venue.hours")}</h2>
+                      ${active
+                        .filter((station) => !station.isDefault)
+                        .map(
+                          (station) => html`
+                            <p>
+                              ${station.name}:
+                              ${this.#hoursSummary(this.#times(station.id)?.hours ?? [])}
+                            </p>
+                            <wt-button
+                              variant="secondary"
+                              data-test=${`edit-hours-${station.id}`}
+                              @click=${() => this.#openStationAction({ kind: "hours", stationId: station.id })}
+                              >${t("prep.edit_hours")}</wt-button
+                            >
+                          `,
+                        )}
                     </section>`
-                  : nothing
-              }
-              ${off.length ? html`<p>${t("prep.disabled")}: ${off.map((c) => html`${this.#path(c.categoryId)} — ${this.#targetName(c.target)}. ${this.#times(c.target.kind === "station" ? c.target.stationId : "")?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}`)}</p>` : nothing}`
+              }`
           : nothing
-      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}`;
+      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.readOnly ? nothing : html`${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}${this.#watcherRenameDialog()}${this.#renameDialog()}`}`;
   }
 }

@@ -1,6 +1,22 @@
 export const QUERY_DEPENDENCIES = {
+  health: [
+    "kitchen_stations",
+    "kitchen_timing_defaults",
+    "kitchen_station_timing",
+    "ticket_items",
+    "working_order_lines",
+    "working_orders",
+    "party_tables",
+    "dining_tables",
+    "devices",
+    "station_printers",
+    "printers",
+    "print_jobs",
+  ],
   settings: ["service_settings"],
   routing: [
+    "kitchen_timing_defaults",
+    "kitchen_station_timing",
     "station_claims",
     "route_exceptions",
     "kitchen_stations",

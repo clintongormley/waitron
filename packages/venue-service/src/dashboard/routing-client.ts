@@ -1,3 +1,4 @@
+import type { StationThresholds, TimingBand } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { RouteTarget, RoutingModel, ExceptionInput, RouteExplanation } from "../routing.js";
 import type { RoutingChange, RoutingMove } from "../routing-types.js";
@@ -15,6 +16,35 @@ export interface OutputsDown {
   screensDark: { stationId: string; stationName: string; lastSeenAt: string | null }[];
 }
 
+export interface StationHealthItem {
+  id: string;
+  name: string;
+  orderId: string;
+  orderNumber: number;
+  label: string | null;
+  tableNames: string[];
+  state: "queued" | "preparing" | "ready";
+  queuedAt: string;
+  remainingQuantity: string;
+  band: TimingBand;
+}
+export interface StationHealth {
+  id: string;
+  name: string;
+  hasScreen: boolean;
+  waiting: number;
+  preparing: number | null;
+  ready: number | null;
+  late: { warm: number; overdue: number; forgotten: number };
+  oldestMinutes: number | null;
+  items: StationHealthItem[];
+}
+export interface StationHealthSnapshot {
+  capturedAt: string;
+  stations: StationHealth[];
+  outputsDown: OutputsDown;
+}
+
 export interface PrepStation {
   id: string;
   name: string;
@@ -25,6 +55,8 @@ export interface PrepStation {
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
   showsRestOfOrder: boolean;
+  timingDefaults: StationThresholds;
+  timingOverrides: { [Field in keyof StationThresholds]: number | null };
 }
 export interface PrepStationsView {
   routing: RoutingModel;
@@ -33,7 +65,7 @@ export interface PrepStationsView {
   zones: { id: string; name: string; active?: boolean }[];
   products: { id: string; name: string }[];
   testProducts: { id: string; name: string }[];
-  printers: { id: string; name: string; watcherId?: string | null }[];
+  printers: { id: string; name: string; active?: boolean; watcherId?: string | null }[];
   stationPrinters: { stationId: string; printerId: string }[];
   devices: {
     id: string;
@@ -67,18 +99,50 @@ export class PrepStationsApi {
     private readonly request: DashboardRequest,
     readonly liveData?: LiveData,
     private readonly passive = false,
+    private readonly readOnly = false,
   ) {}
   get background() {
-    return new PrepStationsApi(this.request, this.liveData, true);
+    return new PrepStationsApi(this.request, this.liveData, true, this.readOnly);
+  }
+  get overview() {
+    return new PrepStationsApi(this.request, this.liveData, this.passive, true);
   }
   #read<T>(path: string): Promise<T> {
     return this.request<T>(path, "GET", undefined, { passive: this.passive });
   }
   async load(): Promise<PrepStationsView> {
+    if (this.readOnly) {
+      const [overview, stations] = await Promise.all([
+        this.#read<
+          Pick<
+            RoutingModel,
+            "stations" | "defaultStationId" | "stationTimes" | "todayEnds" | "clockReadable"
+          >
+        >("/management-api/venue-service/stations/overview"),
+        this.#read<PrepStation[]>("/management-api/stations?includeDisabled=true"),
+      ]);
+      return {
+        routing: {
+          ...overview,
+          claims: [],
+          exceptions: [],
+          unassigned: { folders: [], products: [] },
+        },
+        stations,
+        categories: [],
+        zones: [],
+        products: [],
+        testProducts: [],
+        printers: [],
+        stationPrinters: [],
+        devices: [],
+        watchers: [],
+      };
+    }
     const [routing, stations, categories, zones, products, printers, devices, watchers] =
       await Promise.all([
         this.#read<RoutingModel>("/management-api/venue-service/routing"),
-        this.#read<PrepStation[]>("/management-api/stations"),
+        this.#read<PrepStation[]>("/management-api/stations?includeDisabled=true"),
         this.#read<PrepStationsView["categories"]>("/management-api/categories"),
         this.#read<PrepStationsView["zones"]>("/management-api/zones"),
         this.#read<ListedProduct[]>("/management-api/products"),
@@ -147,14 +211,28 @@ export class PrepStationsApi {
   updateWatcher(id: string, input: WatcherInput): Promise<void> {
     return this.request(`/management-api/watchers/${id}`, "PUT", input);
   }
+  setWatcherPrinters(id: string, printerIds: readonly string[]): Promise<void> {
+    return this.request(`/management-api/watchers/${id}/printers`, "PUT", { printerIds });
+  }
   removeWatcher(id: string): Promise<void> {
     return this.request(`/management-api/watchers/${id}`, "DELETE");
   }
   updateStation(
     id: string,
-    input: Partial<StationInput & Pick<PrepStation, "showsRestOfOrder">>,
+    input: Partial<
+      Pick<StationInput, "name" | "displayOrder"> &
+        Pick<PrepStation, "showsRestOfOrder"> & {
+          [Field in keyof StationThresholds]: number | null;
+        }
+    >,
   ): Promise<void> {
     return this.request(`/management-api/stations/${id}`, "PATCH", input);
+  }
+  setStationPrinters(id: string, printerIds: readonly string[]): Promise<void> {
+    return this.request(`/management-api/stations/${id}/printers`, "PUT", { printerIds });
+  }
+  reorderStations(ids: readonly string[]): Promise<void> {
+    return this.request("/management-api/stations/order", "PUT", { ids });
   }
   deactivateStation(id: string): Promise<void> {
     return this.request(`/management-api/stations/${id}`, "DELETE");
@@ -172,6 +250,16 @@ export class PrepStationsApi {
   }
   setStationToday(id: string, state: "open" | "closed" | null): Promise<void> {
     return this.request(`/management-api/venue-service/stations/${id}/today`, "PUT", { state });
+  }
+  readStationHealth(): Promise<StationHealthSnapshot> {
+    return this.request<StationHealthSnapshot>(
+      "/management-api/stations/health",
+      "GET",
+      undefined,
+      {
+        passive: true,
+      },
+    );
   }
   listOutputsDown(): Promise<OutputsDown> {
     return this.request<OutputsDown>("/management-api/stations/outputs-down", "GET", undefined, {

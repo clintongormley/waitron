@@ -18,7 +18,7 @@ export interface DashboardModuleContext {
 
 /** A mounted screen instance: the app calls render() to paint it. */
 export interface DashboardScreenHandle {
-  render(): TemplateResult;
+  render(readOnly?: boolean): TemplateResult;
 }
 
 /** Where a contributed screen sits in the nav, and the permission that opens it. */
@@ -28,6 +28,7 @@ export interface DashboardScreenPlacement {
   group: NavGroupId;
   order?: number;
   requiresPermission: string;
+  readPermission?: string;
 }
 
 /** A contributed screen: where it sits and how it is built. */

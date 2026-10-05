@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
-import { DEFAULT_TIME_ZONE, locations, withTransaction } from "@waitron/db";
+import { DEFAULT_TIME_ZONE, kitchenTimingDefaults, locations, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -44,6 +44,7 @@ async function setupVenue(): Promise<TillConfig> {
       timeZone: DEFAULT_TIME_ZONE,
     })
     .returning({ id: locations.id });
+  await db.insert(kitchenTimingDefaults).values({ locationId: location!.id });
   const locationId = location!.id;
   const nodeId = await seedNode(db, brandLocationId(locationId));
   return {

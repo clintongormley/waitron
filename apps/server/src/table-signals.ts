@@ -2,7 +2,10 @@ import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { parentJoin, parentProducts, staffPresentationName } from "@waitron/catalogue";
 import {
+  assertKitchenTimingPresent,
   kitchenStations,
+  kitchenStationTiming,
+  kitchenTimingDefaults,
   orderDrafts,
   orderGroups,
   products,
@@ -37,6 +40,7 @@ async function readKitchenLines(
   billIds: readonly string[],
 ): Promise<KitchenLine[]> {
   if (billIds.length === 0) return [];
+  await assertKitchenTimingPresent(tx);
   const dish = alias(workingOrderLines, "signal_dish");
   const rows = await tx
     .select({
@@ -52,14 +56,19 @@ async function readKitchenLines(
       dishQuantity: dish.quantity,
       dishServedQuantity: dish.servedQuantity,
       dishUnitPrecision: dish.unitPrecision,
-      warmAfterMinutes: kitchenStations.warmAfterMinutes,
-      overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
-      forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
+      warmAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.warmAfterMinutes}, ${kitchenTimingDefaults.warmAfterMinutes})`,
+      overdueAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.overdueAfterMinutes}, ${kitchenTimingDefaults.overdueAfterMinutes})`,
+      forgottenAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.forgottenAfterMinutes}, ${kitchenTimingDefaults.forgottenAfterMinutes})`,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .leftJoin(dish, eq(dish.id, workingOrderLines.parentLineId))
     .innerJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
+    .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
+    .innerJoin(
+      kitchenTimingDefaults,
+      eq(kitchenTimingDefaults.locationId, kitchenStations.locationId),
+    )
     .where(
       and(
         inArray(workingOrderLines.workingOrderId, [...billIds]),

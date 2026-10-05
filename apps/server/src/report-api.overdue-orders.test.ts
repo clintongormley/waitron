@@ -6,6 +6,7 @@ import {
   catalogues,
   diningTables,
   kitchenStations,
+  kitchenTimingDefaults,
   locations,
   nodes,
   products,
@@ -122,6 +123,7 @@ const suite = useVenueDb({
         operationDescription: "Venta en establecimiento",
       })
       .returning({ id: locations.id });
+    await db.insert(kitchenTimingDefaults).values({ locationId: loc!.id });
     locationId = loc!.id;
     const [node] = await db
       .insert(nodes)

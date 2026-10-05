@@ -28,6 +28,7 @@ declare module "@waitron/shared" {
      * Declared here, as `table.not_found` is, because it has throwers in more than one package.
      */
     "station.not_found": { stationId: string };
+    "station.timing_missing": { locationId: string };
     "series.not_found": { seriesId: string };
     /**
      * A node has no `purpose='standard'` invoice series. A corruption/misuse refusal, structured so

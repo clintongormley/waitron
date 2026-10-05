@@ -61,6 +61,28 @@ export async function detachPrinterFromStation(
     .where(and(eq(stationPrinters.stationId, stationId), eq(stationPrinters.printerId, printerId)));
 }
 
+export async function replaceStationPrinters(
+  tx: Transaction,
+  cfg: PrintConfig,
+  stationId: string,
+  printerIds: readonly string[],
+): Promise<void> {
+  const [station] = await tx
+    .select({ id: kitchenStations.id })
+    .from(kitchenStations)
+    .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.active, true)));
+  if (!station) throw new AppError("station.not_found", { stationId });
+  const current = await listStationPrinters(tx, cfg, { stationId });
+  for (const printerId of printerIds) {
+    if (!current.some((row) => row.printerId === printerId)) {
+      await attachPrinterToStation(tx, { stationId, printerId });
+    }
+  }
+  for (const row of current) {
+    if (!printerIds.includes(row.printerId)) await detachPrinterFromStation(tx, cfg, row);
+  }
+}
+
 export async function listStationPrinters(
   tx: Transaction,
   cfg: PrintConfig,

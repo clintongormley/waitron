@@ -1,4 +1,5 @@
-import { LiveData } from "@waitron/dashboard-kit";
+import { page } from "vitest/browser";
+import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -127,120 +128,18 @@ async function flush(el: PrintingRulesScreen): Promise<void> {
 const q = (el: PrintingRulesScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 const text = (el: PrintingRulesScreen, sel: string) => q(el, sel)?.textContent?.trim();
 
-/** Exercise the native switch change event after the browser toggles its checked property. */
-function toggleSwitch(el: PrintingRulesScreen, sel: string, checked: boolean): void {
-  const input = q(el, sel)!.shadowRoot!.querySelector("input")!;
-  input.checked = checked;
-  input.dispatchEvent(new Event("change", { bubbles: true }));
-}
-
-const switchChecked = (el: PrintingRulesScreen, sel: string): boolean =>
-  q(el, sel)!.shadowRoot!.querySelector("input")!.checked;
-
 describe("printing rules", () => {
-  it("renders a station toggle per station, checked when this printer is attached", async () => {
-    const api = stubApi({
-      listPrinterStations: vi.fn(async (printerId: string): Promise<StationPrinter[]> =>
-        printerId === "p1" ? [{ stationId: "s1", printerId: "p1" }] : [],
-      ),
-    });
+  it("has no station assignment controls for an empty venue either", async () => {
+    const a = stubApi({ listStations: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
+      api: a,
     });
     await flush(el);
-
-    // p1 is attached to s1 only; p2 to nothing. Each station is a labelled toggle on each printer.
-    expect(q(el, "[data-test=station-toggle-p1-s1]")).toBeTruthy();
-    expect(q(el, "[data-test=station-toggle-p1-s2]")).toBeTruthy();
-    expect(switchChecked(el, "[data-test=station-toggle-p1-s1]")).toBe(true);
-    expect(switchChecked(el, "[data-test=station-toggle-p1-s2]")).toBe(false);
-    expect(switchChecked(el, "[data-test=station-toggle-p2-s1]")).toBe(false);
-    expect(switchChecked(el, "[data-test=station-toggle-p2-s2]")).toBe(false);
-    expect(q(el, "[data-test=station-toggle-p1-s1]")!.getAttribute("aria-label")).toBe("Cocina");
-    expect(api.listPrinterStations).toHaveBeenCalledWith("p1");
-    expect(api.listPrinterStations).toHaveBeenCalledWith("p2");
-  });
-
-  it("attaches a station when its toggle is switched on, and reflects the change after reload", async () => {
-    const attached = new Set<string>();
-    const api = stubApi({
-      listPrinterStations: vi.fn(async (printerId: string): Promise<StationPrinter[]> =>
-        printerId === "p1"
-          ? [...attached].map((stationId) => ({ stationId, printerId: "p1" }))
-          : [],
-      ),
-      attachPrinterToStation: vi.fn(async (stationId: string) => {
-        attached.add(stationId);
-      }),
-    });
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-
-    expect(switchChecked(el, "[data-test=station-toggle-p1-s2]")).toBe(false);
-    toggleSwitch(el, "[data-test=station-toggle-p1-s2]", true);
-    await flush(el);
-
-    expect(api.attachPrinterToStation).toHaveBeenCalledWith("s2", "p1");
-    expect(api.detachPrinterFromStation).not.toHaveBeenCalled();
-    expect(api.listPrinters).toHaveBeenCalledTimes(2);
-    expect(switchChecked(el, "[data-test=station-toggle-p1-s2]")).toBe(true);
-  });
-
-  it("detaches a station when its toggle is switched off, and reflects the change after reload", async () => {
-    const attached = new Set<string>(["s1"]);
-    const api = stubApi({
-      listPrinterStations: vi.fn(async (printerId: string): Promise<StationPrinter[]> =>
-        printerId === "p1"
-          ? [...attached].map((stationId) => ({ stationId, printerId: "p1" }))
-          : [],
-      ),
-      detachPrinterFromStation: vi.fn(async (stationId: string) => {
-        attached.delete(stationId);
-      }),
-    });
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-
-    expect(switchChecked(el, "[data-test=station-toggle-p1-s1]")).toBe(true);
-    toggleSwitch(el, "[data-test=station-toggle-p1-s1]", false);
-    await flush(el);
-
-    expect(api.detachPrinterFromStation).toHaveBeenCalledWith("s1", "p1");
-    expect(api.attachPrinterToStation).not.toHaveBeenCalled();
-    expect(switchChecked(el, "[data-test=station-toggle-p1-s1]")).toBe(false);
-  });
-
-  it("shows an error banner when a station toggle is rejected", async () => {
-    const api = stubApi({
-      attachPrinterToStation: vi.fn().mockRejectedValue({ code: "station.not_found" }),
-    });
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-
-    toggleSwitch(el, "[data-test=station-toggle-p1-s1]", true);
-    await flush(el);
-
-    const banner = q(el, "[role=alert]")?.textContent;
-    expect(banner).toContain(codeMessage("station.not_found", "es-ES"));
-    expect(banner).not.toContain("station.not_found");
-    expect(switchChecked(el, "[data-test=station-toggle-p1-s1]")).toBe(false);
-  });
-
-  it("shows the no-stations placeholder when the venue has no stations", async () => {
-    const api = stubApi({ listStations: vi.fn().mockResolvedValue([]) });
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-
-    expect(text(el, "[data-test=no-stations-p1]")).toBe(t("printers.no_stations", "es-ES"));
-    expect(q(el, "[data-test=station-toggle-p1-s1]")).toBeNull();
+    expect(q(el, '[data-test^="station-toggle-"]')).toBeNull();
+    expect(q(el, '[data-test^="no-stations-"]')).toBeNull();
+    expect(a.listStations).not.toHaveBeenCalled();
+    expect(q(el, '[data-test="printer-watcher-p1"]')).toBeNull();
+    expect(q(el, '[data-test="drawer-policy-loc-1-gated"]')).not.toBeNull();
   });
 
   it("shows no per-till section", async () => {
@@ -258,7 +157,7 @@ describe("printing rules", () => {
     ]) {
       expect(q(el, selector)).toBeNull();
     }
-    expect(q(el, "[data-test=station-toggle-p1-s1]")).not.toBeNull();
+    expect(q(el, "[data-test=printer-watcher-p1]")).toBeNull();
     expect(q(el, "[data-test=drawer-policy-loc-1-gated]")).not.toBeNull();
   });
 
@@ -358,105 +257,17 @@ describe("printing rules", () => {
     );
     expect(q(el, "[data-test=drawer-policy-unknown-loc-1]")).toBeTruthy();
   });
-  it("offers watchers and saves a selected watcher", async () => {
-    const api = stubApi({
-      listPrinters: vi.fn().mockResolvedValue([{ ...printers[0], watcherId: "w1" }]),
-    });
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-    const select = q(el, "wt-combobox[name=watcherId]") as HTMLElement & {
-      value: string;
-      options: { value: string; label: string }[];
-    };
-    expect(q(el, "[name=ticketScope]")).toBeNull();
-    expect(select.options.map((option) => [option.value, option.label])).toEqual([
-      ["", t("printers.watcher_no")],
-      ["w1", "Pass"],
-      ["w2", "Terrace"],
-    ]);
-    expect(select.value).toBe("w1");
-    select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "w2" } }));
-    await flush(el);
-    expect(api.setPrinterWatcher).toHaveBeenCalledWith("p1", "w2");
-    expect(q(el, "[data-test=station-toggle-p1-s1]")!.hasAttribute("disabled")).toBe(true);
-    expect(el.shadowRoot!.textContent).toContain(t("printers.watcher_station_disabled"));
-  });
-  it("keeps the watcher picker inside a phone-width printer card", async () => {
-    const { host, el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api: stubApi(),
-    });
-    host.style.width = "320px";
-    await flush(el);
-    const select = q(el, "wt-combobox[name=watcherId]")!;
-    expect(select.getBoundingClientRect().right).toBeLessThanOrEqual(
-      el.getBoundingClientRect().right,
-    );
-  });
-  it("shows a watcher attachment refusal inside its printer card and restores the stored selection", async () => {
-    let attached = true;
-    const api = stubApi({
-      setPrinterWatcher: vi.fn().mockRejectedValue({ code: "printer.makes_and_watches" }),
-      listPrinterStations: vi.fn(async (printerId: string): Promise<StationPrinter[]> =>
-        printerId === "p1" && attached ? [{ stationId: "s1", printerId: "p1" }] : [],
-      ),
-      detachPrinterFromStation: vi.fn(async () => {
-        attached = false;
-      }),
-    });
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-    const select = q(el, "wt-combobox[name=watcherId]") as HTMLElement & { value: string };
-    select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "w1" } }));
-    await flush(el);
-    expect(select.value).toBe("");
-    expect(select.closest("wt-card")!.textContent).toContain(t("printers.watcher_conflict"));
-    toggleSwitch(el, "[data-test=station-toggle-p1-s1]", false);
-    await flush(el);
-    expect(select.closest("wt-card")!.textContent).not.toContain(t("printers.watcher_conflict"));
-  });
-  it("keeps the watcher refusal until every conflicting station is detached", async () => {
-    const attached = new Set(["s1", "s2"]);
-    const api = stubApi({
-      setPrinterWatcher: vi.fn().mockRejectedValue({ code: "printer.makes_and_watches" }),
-      listPrinterStations: vi.fn(async (printerId: string): Promise<StationPrinter[]> =>
-        printerId === "p1" ? [...attached].map((stationId) => ({ stationId, printerId })) : [],
-      ),
-      detachPrinterFromStation: vi.fn(async (stationId: string) => {
-        attached.delete(stationId);
-      }),
-    });
-    const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
-      api,
-    });
-    await flush(el);
-    const card = q(el, "[data-test=printer-watcher-p1]")!.closest("wt-card")!;
-    const select = q(el, "[data-test=printer-watcher-p1]")!;
-    select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "w1" } }));
-    await flush(el);
-    expect(card.textContent).toContain(t("printers.watcher_conflict"));
-
-    toggleSwitch(el, "[data-test=station-toggle-p1-s1]", false);
-    await flush(el);
-    expect(card.textContent).toContain(t("printers.watcher_conflict"));
-    toggleSwitch(el, "[data-test=station-toggle-p1-s2]", false);
-    await flush(el);
-    expect(card.textContent).not.toContain(t("printers.watcher_conflict"));
-  });
   it("reports loading failures", async () => {
-    const api = stubApi({ listPrinters: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+    const api = stubApi({ getLocations: vi.fn().mockRejectedValue({ code: "server.internal" }) });
     const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
       api,
     });
     await flush(el);
     expect(q(el, "[role=alert]")?.textContent).toContain(codeMessage("server.internal", "es-ES"));
   });
-  it("clears a failed load's message and shows the printers once the server answers again", async () => {
+  it("clears a failed load's message and shows locations once the server answers again", async () => {
     const api = Object.assign(
-      stubApi({ listPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      stubApi({ getLocations: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
       { liveData: new LiveData() },
     );
     const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
@@ -465,30 +276,29 @@ describe("printing rules", () => {
     await vi.waitFor(() =>
       expect(text(el, "[role=alert]")).toBe(codeMessage("connection.failed", "es-ES")),
     );
-    vi.mocked(api.listPrinters).mockResolvedValue(printers);
+    vi.mocked(api.getLocations).mockResolvedValue(locations);
     api.liveData.refresh();
     await vi.waitFor(() => expect(q(el, "[role=alert]")).toBeNull());
-    await vi.waitFor(() => expect(q(el, "[data-test=station-toggle-p1-s1]")).toBeTruthy());
-    expect(api.listPrinterStations).toHaveBeenCalledWith("p1");
+    await vi.waitFor(() => expect(q(el, "[data-test=drawer-policy-loc-1-gated]")).toBeTruthy());
+    expect(api.getLocations).toHaveBeenCalledTimes(2);
   });
-  it("shows the empty printer state", async () => {
+  it("keeps the kitchen assignment links when no printers exist", async () => {
     const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
       api,
     });
     await flush(el);
-    expect(text(el, "[data-test=no-printers]")).toBe(t("printers.no_printers", "es-ES"));
+    expect(q(el, '[data-test="tickets-link"]')).not.toBeNull();
+    expect(q(el, '[data-test="watchers-link"]')).not.toBeNull();
   });
 });
 describe.each(["light", "dark"] as const)("printing rules accessibility (%s)", (theme) => {
   it.each(["empty", "error"])("renders the %s state accessibly", async (state) => {
     const api = stubApi({
-      listPrinters:
+      getLocations:
         state === "error"
           ? vi.fn().mockRejectedValue({ code: "server.internal" })
           : vi.fn().mockResolvedValue([]),
-      listStations: vi.fn().mockResolvedValue([]),
-      getLocations: vi.fn().mockResolvedValue([]),
     });
     const { el, host } = await mountWidget<PrintingRulesScreen>(
       "dashboard-printing-rules-screen",
@@ -496,7 +306,9 @@ describe.each(["light", "dark"] as const)("printing rules accessibility (%s)", (
       theme,
     );
     await flush(el);
-    expect(q(el, state === "error" ? "[role=alert]" : "[data-test=no-printers]")).not.toBeNull();
+    expect(
+      q(el, state === "error" ? "[role=alert]" : "[data-test=no-locations-drawer]"),
+    ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
   it("labels controls and groups accessibly", async () => {
@@ -510,32 +322,29 @@ describe.each(["light", "dark"] as const)("printing rules accessibility (%s)", (
   });
 });
 
-it("uses a named shared watcher picker and switches for station routing", async () => {
+it("links to watcher assignments with both kitchen editors removed", async () => {
   const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
     api: stubApi(),
   });
   await flush(el);
-  for (const [selector, name] of [["station-toggle-p1-s1", "stationIds"]]) {
-    const control = q(el, `[data-test="${selector}"]`)!;
-    expect(control.tagName).toBe("WT-SWITCH");
-    expect(control.shadowRoot!.querySelector("input")!.name).toBe(name);
-  }
-  expect(q(el, "wt-combobox[name=watcherId]")?.getAttribute("name")).toBe("watcherId");
+  expect(q(el, '[data-test^="station-toggle-"]')).toBeNull();
+  expect(q(el, "wt-combobox[name=watcherId]")).toBeNull();
+  expect(q(el, '[data-test="watchers-link"]')?.getAttribute("href")).toBe(
+    "/manage/prep-stations/view/watchers",
+  );
 });
 
-it("refreshes displayed printers when their data changes elsewhere", async () => {
+it("refreshes displayed locations when their data changes elsewhere", async () => {
   const liveData = new LiveData();
   const api = Object.assign(stubApi(), { liveData });
-  const { el } = await mountWidget<HTMLElement & { api: DashboardApi }>(
-    "dashboard-printing-rules-screen",
-    { api },
+  const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", { api });
+  await vi.waitFor(() => expect(text(el, "[data-test=drawer-location-name-loc-1]")).toBe("Barra"));
+  vi.mocked(api.getLocations).mockResolvedValue([{ id: "loc-1", name: "Dining room" }]);
+  liveData.invalidate([{ type: "locations", id: "loc-1" }]);
+  await vi.waitFor(() =>
+    expect(text(el, "[data-test=drawer-location-name-loc-1]")).toBe("Dining room"),
   );
-  const rows = (): unknown[] => (el as unknown as Record<string, unknown[]>)["printers"]!;
-  await vi.waitFor(() => expect(rows()?.length).toBeGreaterThan(0));
-  vi.mocked(api.listPrinters).mockResolvedValue([]);
-  liveData.invalidate([{ type: "printers", id: "changed-elsewhere" }]);
-  await vi.waitFor(() => expect(rows()).toEqual([]));
-  expect(api.listPrinters).toHaveBeenCalledTimes(2);
+  expect(api.getLocations).toHaveBeenCalledTimes(2);
 });
 
 it("ignores a second change while a save is still in flight", async () => {
@@ -553,7 +362,7 @@ it("ignores a second change while a save is still in flight", async () => {
   expect(api.setDrawerOpenPolicy).toHaveBeenCalledTimes(1);
   expect(api.setDrawerOpenPolicy).toHaveBeenCalledWith("loc-1", "open");
   release();
-  await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(api.getLocations).toHaveBeenCalledTimes(2));
   await vi.waitFor(() =>
     expect(
       (q(el, "[data-test=drawer-policy-loc-1-gated]") as HTMLElement & { disabled: boolean })
@@ -572,9 +381,9 @@ it("keeps a save's connection failure when the reads that failed beside it recov
   const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
     api,
   });
-  await vi.waitFor(() => expect(q(el, "[data-test=station-toggle-p1-s1]")).not.toBeNull());
+  await vi.waitFor(() => expect(q(el, "[data-test=drawer-policy-loc-1-gated]")).not.toBeNull());
 
-  vi.mocked(api.listStations).mockRejectedValue({ code: "connection.failed" });
+  vi.mocked(api.getLocations).mockRejectedValue({ code: "connection.failed" });
   liveData.refresh();
   await vi.waitFor(() =>
     expect(text(el, "[role=alert]")).toBe(codeMessage("connection.failed", "es-ES")),
@@ -582,16 +391,94 @@ it("keeps a save's connection failure when the reads that failed beside it recov
   q(el, "[data-test=drawer-policy-loc-1-open]")!.click();
   await vi.waitFor(() => expect(api.setDrawerOpenPolicy).toHaveBeenCalledTimes(1));
   await flush(el);
-  const readsBefore = vi.mocked(api.listStations).mock.calls.length;
+  const readsBefore = vi.mocked(api.getLocations).mock.calls.length;
   liveData.refresh();
   await vi.waitFor(() =>
-    expect(vi.mocked(api.listStations).mock.calls.length).toBeGreaterThan(readsBefore),
+    expect(vi.mocked(api.getLocations).mock.calls.length).toBeGreaterThan(readsBefore),
   );
   await flush(el);
 
-  vi.mocked(api.listStations).mockResolvedValue([...stations, { ...stations[1]!, id: "s3" }]);
+  vi.mocked(api.getLocations).mockResolvedValue([...locations, { id: "loc-3", name: "Terrace" }]);
   liveData.refresh();
-  await vi.waitFor(() => expect(q(el, "[data-test=station-toggle-p1-s3]")).not.toBeNull());
+  await vi.waitFor(() => expect(q(el, "[data-test=drawer-policy-loc-3-gated]")).not.toBeNull());
   await flush(el);
   expect(text(el, "[role=alert]")).toBe(codeMessage("connection.failed", "es-ES"));
+});
+
+it("hands station assignment to Prep stations Tickets while retaining drawer controls", async () => {
+  const a = stubApi();
+  const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+    api: a,
+  });
+  await flush(el);
+  expect(q(el, '[data-test^="station-toggle-"]')).toBeNull();
+  expect(q(el, '[data-test^="no-stations-"]')).toBeNull();
+  expect(
+    el.shadowRoot!.querySelector('[aria-label="' + t("printers.stations_title") + '"]'),
+  ).toBeNull();
+  expect(q(el, '[data-test="printer-watcher-p1"]')).toBeNull();
+  expect(q(el, '[data-test="drawer-policy-loc-1-gated"]')).not.toBeNull();
+  expect(a.listStations).not.toHaveBeenCalled();
+  expect(a.attachPrinterToStation).not.toHaveBeenCalled();
+  expect(a.detachPrinterFromStation).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["en", "light", 390],
+  ["en", "dark", 390],
+  ["es", "light", 390],
+  ["es", "dark", 390],
+  ["en", "light", 1280],
+  ["en", "dark", 1280],
+  ["es", "light", 1280],
+  ["es", "dark", 1280],
+] as const)(
+  "Printing rules assignment links and drawer controls remain accessible (%s %s %ipx)",
+  async (locale, theme, width) => {
+    const prior = { width: window.innerWidth, height: window.innerHeight };
+    setLocale(locale);
+    try {
+      await page.viewport(width, 900);
+      const { el, host } = await mountWidget<PrintingRulesScreen>(
+        "dashboard-printing-rules-screen",
+        { api: stubApi() },
+        theme,
+      );
+      await flush(el);
+      expect(window.innerWidth).toBe(width);
+      expect(q(el, '[data-test^="station-toggle-"]')).toBeNull();
+      const tickets = q(el, '[data-test="tickets-link"]')!;
+      const watchers = q(el, '[data-test="watchers-link"]')!;
+      expect(tickets.getAttribute("href")).toBe("/manage/prep-stations/view/tickets");
+      expect(watchers.getAttribute("href")).toBe("/manage/prep-stations/view/watchers");
+      expect(q(el, '[data-test="drawer-policy-loc-1-gated"]')).not.toBeNull();
+      await expectNoA11yViolations(host);
+      expect(tickets.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      expect(watchers.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      await page.screenshot({ path: `look/watcher-handover-${locale}-${theme}-${width}.png` });
+    } finally {
+      setLocale("es");
+      await page.viewport(prior.width, prior.height);
+    }
+  },
+);
+
+it("hands both printer assignments to Tickets and Watchers without reading their configuration", async () => {
+  const a = stubApi();
+  const { el } = await mountWidget<PrintingRulesScreen>("dashboard-printing-rules-screen", {
+    api: a,
+  });
+  await flush(el);
+  expect(q(el, '[data-test^="printer-watcher-"]')).toBeNull();
+  expect(q(el, '[data-test^="station-toggle-"]')).toBeNull();
+  expect(q(el, '[data-test="tickets-link"]')?.getAttribute("href")).toBe(
+    "/manage/prep-stations/view/tickets",
+  );
+  expect(q(el, '[data-test="watchers-link"]')?.getAttribute("href")).toBe(
+    "/manage/prep-stations/view/watchers",
+  );
+  expect(q(el, '[data-test="drawer-policy-loc-1-gated"]')).not.toBeNull();
+  expect(a.listPrinters).not.toHaveBeenCalled();
+  expect(a.listPrinterStations).not.toHaveBeenCalled();
+  expect(a.listWatchers).not.toHaveBeenCalled();
 });

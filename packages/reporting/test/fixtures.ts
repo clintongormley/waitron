@@ -19,6 +19,7 @@ import {
   diningTables,
   invoiceSeries,
   locations,
+  kitchenTimingDefaults,
   parties,
   partyTables,
   products,
@@ -57,6 +58,7 @@ export async function seedVenue(db: Database): Promise<SeededVenue> {
     .values({ name: "Main", invoiceLocales: ["es-ES"], operationDescription: "Test op" })
     .returning({ id: locations.id });
   const locationId = location!.id;
+  await db.insert(kitchenTimingDefaults).values({ locationId });
   const { deviceId } = await seedDevice(db, { locationId });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const [series] = await db

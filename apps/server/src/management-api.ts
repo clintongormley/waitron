@@ -2,6 +2,12 @@
 import "./errors.js";
 // The registry of `printer.not_found`, which `requireListedPrinters` throws.
 import "@waitron/printing";
+import {
+  getKitchenTimingDefaults,
+  setKitchenTimingDefaults,
+  parseStationTimingPatch,
+} from "./kitchen-timing.js";
+import { readStationHealth } from "./station-health.js";
 import { stationPrintersDown, stationScreensDark } from "./station-outputs-down.js";
 import type { Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
@@ -103,6 +109,7 @@ import {
   getFireControl,
   listCourses,
   moveCourse,
+  reorderStations,
   listStations,
   setBumpMode,
   setDefaultStation,
@@ -280,6 +287,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "placement.invalid": 400,
   "station.not_found": 404,
   "station.name_taken": 409,
+  "station.thresholds_invalid": 400,
   "watcher.not_found": 404,
   "watcher.name_taken": 409,
   "course.not_found": 404,
@@ -453,56 +461,6 @@ function parseCapacity(value: unknown): number | undefined {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 2_147_483_647)
     throw new AppError("management.request_invalid", { field: "capacity" });
   return value;
-}
-
-/**
- * `parseDisplayOrder`'s rule for one KDS timing threshold, which must be at least one minute. The
- * ordering across the three thresholds is the caller's check.
- */
-function parseThresholdMinutes(value: unknown, field: string): number | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 2_147_483_647)
-    throw new AppError("management.request_invalid", { field });
-  return value;
-}
-
-function parseStationThresholds(body: {
-  warmAfterMinutes?: unknown;
-  overdueAfterMinutes?: unknown;
-  forgottenAfterMinutes?: unknown;
-}):
-  | {
-      warmAfterMinutes: number;
-      overdueAfterMinutes: number;
-      forgottenAfterMinutes: number;
-    }
-  | undefined {
-  const warmAfterMinutes = parseThresholdMinutes(body.warmAfterMinutes, "warmAfterMinutes");
-  const overdueAfterMinutes = parseThresholdMinutes(
-    body.overdueAfterMinutes,
-    "overdueAfterMinutes",
-  );
-  const forgottenAfterMinutes = parseThresholdMinutes(
-    body.forgottenAfterMinutes,
-    "forgottenAfterMinutes",
-  );
-  if (
-    warmAfterMinutes === undefined &&
-    overdueAfterMinutes === undefined &&
-    forgottenAfterMinutes === undefined
-  )
-    return undefined;
-  if (
-    warmAfterMinutes === undefined ||
-    overdueAfterMinutes === undefined ||
-    forgottenAfterMinutes === undefined ||
-    warmAfterMinutes >= overdueAfterMinutes ||
-    overdueAfterMinutes >= forgottenAfterMinutes
-  )
-    throw new AppError("management.request_invalid", {
-      field: "warmAfterMinutes|overdueAfterMinutes|forgottenAfterMinutes",
-    });
-  return { warmAfterMinutes, overdueAfterMinutes, forgottenAfterMinutes };
 }
 
 /**
@@ -1791,6 +1749,26 @@ export function mountManagementApi(
     }),
   );
 
+  app.get("/management-api/kitchen-timing-defaults", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      return c.json(
+        await withVenueReadAuth(deps, sessionId, (tx) => getKitchenTimingDefaults(tx, cfg)),
+      );
+    }),
+  );
+
+  app.put("/management-api/kitchen-timing-defaults", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const body = await readRawJsonBody(c);
+      await withVenueAuth(deps, sessionId, (tx) => setKitchenTimingDefaults(tx, cfg, body));
+      return c.body(null, 204);
+    }),
+  );
+
   // ── Kitchen stations and routing ──
   app.get("/management-api/watchers", (c) =>
     run(c, log, async () => {
@@ -1858,7 +1836,7 @@ export function mountManagementApi(
         isDefault = body.isDefault;
       }
       const { name } = body;
-      const thresholds = parseStationThresholds(body);
+      const thresholds = parseStationTimingPatch(body);
       const result = await withVenueAuth(deps, sessionId, (tx) =>
         createStation(tx, cfg, { name, displayOrder, isDefault, thresholds }),
       );
@@ -1870,8 +1848,36 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const stations = await withVenueAuth(deps, sessionId, (tx) => listStations(tx, cfg));
+      const includeDisabled = c.req.query("includeDisabled") === "true";
+      const stations = await withVenueReadAuth(deps, sessionId, (tx) =>
+        listStations(tx, cfg, includeDisabled),
+      );
       return c.json(stations);
+    }),
+  );
+
+  app.put("/management-api/stations/order", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const body = await readRawJsonBody(c);
+      const ids =
+        body && typeof body === "object" && !Array.isArray(body)
+          ? (body as { ids?: unknown }).ids
+          : undefined;
+      await withVenueAuth(deps, sessionId, (tx) => reorderStations(tx, cfg, ids));
+      return c.body(null, 204);
+    }),
+  );
+
+  app.get("/management-api/stations/health", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const now = new Date();
+      return c.json(
+        await withVenueReadAuth(deps, sessionId, (tx) => readStationHealth(tx, cfg, now)),
+      );
     }),
   );
 
@@ -1888,9 +1894,6 @@ export function mountManagementApi(
     }),
   );
 
-  // The three timing thresholds travel together: if any is present, all three must be, strictly
-  // ordered `warm < overdue < forgotten` (the `kitchen_stations_thresholds_ordered` CHECK). A partial
-  // set could be ordering-checked only by reading the row, which this route deliberately does not do.
   app.patch("/management-api/stations/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1913,9 +1916,9 @@ export function mountManagementApi(
         displayOrder?: number;
         active?: boolean;
         showsRestOfOrder?: boolean;
-        warmAfterMinutes?: number;
-        overdueAfterMinutes?: number;
-        forgottenAfterMinutes?: number;
+        warmAfterMinutes?: number | null;
+        overdueAfterMinutes?: number | null;
+        forgottenAfterMinutes?: number | null;
       } = {};
       if (body.name !== undefined) {
         if (typeof body.name !== "string")
@@ -1935,15 +1938,15 @@ export function mountManagementApi(
           throw new AppError("management.request_invalid", { field: "showsRestOfOrder" });
         patch.showsRestOfOrder = body.showsRestOfOrder;
       }
-      Object.assign(patch, parseStationThresholds(body));
+      Object.assign(patch, parseStationTimingPatch(body));
       if (
         patch.name === undefined &&
         patch.displayOrder === undefined &&
         patch.active === undefined &&
         patch.showsRestOfOrder === undefined &&
-        // The all-or-nothing validation above never leaves warmAfterMinutes undefined while the other
-        // two thresholds are set, so this alone correctly proxies "no threshold field in this patch".
-        patch.warmAfterMinutes === undefined
+        patch.warmAfterMinutes === undefined &&
+        patch.overdueAfterMinutes === undefined &&
+        patch.forgottenAfterMinutes === undefined
       ) {
         return c.body(null, 204);
       }

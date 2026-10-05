@@ -323,6 +323,12 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     const api = stubApi({
       listStaff: vi.fn().mockResolvedValue(people),
       getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
+      getKitchenTimingDefaults: vi.fn().mockResolvedValue({
+        warmAfterMinutes: 5,
+        overdueAfterMinutes: 10,
+        forgottenAfterMinutes: 15,
+      }),
+      setKitchenTimingDefaults: vi.fn().mockResolvedValue(undefined),
       getFireControl: vi.fn().mockResolvedValue({ mode: "waiter" }),
       listCourses: vi.fn().mockResolvedValue([]),
       listStatuses: vi.fn().mockResolvedValue([]),

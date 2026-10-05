@@ -1,7 +1,10 @@
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
+  assertKitchenTimingPresent,
   kitchenStations,
+  kitchenStationTiming,
+  kitchenTimingDefaults,
   nodes,
   orderTableLabels,
   ticketItems,
@@ -37,6 +40,7 @@ export async function computeOverdueOrders(
   tx: Transaction,
   input: OverdueOrdersInput,
 ): Promise<OverdueOrder[]> {
+  await assertKitchenTimingPresent(tx);
   // Read ONCE, so every row in this run is aged and classified against the SAME instant.
   const nowMs = Date.now();
   const rows = await tx
@@ -46,9 +50,9 @@ export async function computeOverdueOrders(
       stationName: kitchenStations.name,
       servedAt: workingOrderLines.servedAt,
       queuedAt: ticketItems.queuedAt,
-      warmAfterMinutes: kitchenStations.warmAfterMinutes,
-      overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
-      forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
+      warmAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.warmAfterMinutes}, ${kitchenTimingDefaults.warmAfterMinutes})`,
+      overdueAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.overdueAfterMinutes}, ${kitchenTimingDefaults.overdueAfterMinutes})`,
+      forgottenAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.forgottenAfterMinutes}, ${kitchenTimingDefaults.forgottenAfterMinutes})`,
       partyId: workingOrders.partyId,
       deliveryTableId: workingOrders.deliveryTableId,
       label: workingOrders.label,
@@ -57,6 +61,11 @@ export async function computeOverdueOrders(
     .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
+    .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
+    .innerJoin(
+      kitchenTimingDefaults,
+      eq(kitchenTimingDefaults.locationId, kitchenStations.locationId),
+    )
     .where(
       and(
         eq(ticketItems.nodeId, input.nodeId),

@@ -715,6 +715,13 @@
       "when": 1791219599141,
       "tag": "0101_product_color",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "6",
+      "when": 1791235779581,
+      "tag": "0102_kitchen_timing_inheritance",
+      "breakpoints": true
     }
   ]
 }

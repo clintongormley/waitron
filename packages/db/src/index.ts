@@ -25,6 +25,7 @@ export type {
   VenueLock,
 } from "./client.js";
 export { runMigrations } from "./migrate.js";
+export { assertKitchenTimingPresent } from "./kitchen-timing-readiness.js";
 export { tableExists } from "./table-exists.js";
 export type { MigrationOptions } from "./migrate.js";
 export { claimRows } from "./job-claim.js";
@@ -96,6 +97,7 @@ export {
 } from "./schema/order-drafts.js";
 export { floorZones } from "./schema/floor-zones.js";
 export { kitchenStations } from "./schema/kitchen-stations.js";
+export { kitchenTimingDefaults, kitchenStationTiming } from "./schema/kitchen-timing.js";
 export { kitchenCourses } from "./schema/kitchen-courses.js";
 export { ticketItems, ticketState } from "./schema/ticket-items.js";
 export { devices } from "./schema/devices.js";

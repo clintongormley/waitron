@@ -6,7 +6,7 @@ export const dashboardPath: UrlPathConfig = {
   children: {
     "*": { view: "view" },
     catalogue: { product: "product", category: "category" },
-    "prep-stations": { test: "test" },
+    "prep-stations": { view: "view", test: "test" },
     menus: { menu: "menu", view: "view" },
     modifiers: { view: "view", list: "list" },
     orders: {

@@ -27,7 +27,7 @@ it("loads the routing and station context, including each station printer assign
       defaultStationId: null,
       stations: [],
     },
-    "/management-api/stations": [{ id: "bar", name: "Bar" }],
+    "/management-api/stations?includeDisabled=true": [{ id: "bar", name: "Bar" }],
     "/management-api/categories": [],
     "/management-api/zones": [],
     "/management-api/products": [],
@@ -410,4 +410,106 @@ it("serializes the scheduled weekday and time together", async () => {
     undefined,
     { passive: false },
   );
+});
+
+it("reads station health passively and preserves summary and drilldown data", async () => {
+  const snapshot = {
+    capturedAt: "2026-10-05T18:00:00.000Z",
+    stations: [
+      {
+        id: "bar",
+        waiting: 1,
+        preparing: null,
+        ready: null,
+        items: [{ name: "CANA", remainingQuantity: "2.000" }],
+      },
+    ],
+    outputsDown: { printersDown: [], screensDark: [] },
+  };
+  const request = vi.fn(async () => snapshot);
+  const api = new PrepStationsApi(request as DashboardRequest);
+  expect(await api.readStationHealth()).toEqual(snapshot);
+  expect(await api.background.readStationHealth()).toEqual(snapshot);
+  expect(request.mock.calls).toEqual([
+    ["/management-api/stations/health", "GET", undefined, { passive: true }],
+    ["/management-api/stations/health", "GET", undefined, { passive: true }],
+  ]);
+});
+
+it("writes a complete station order as one active request even from a background client", async () => {
+  const request = vi.fn(async () => undefined);
+  const client = new PrepStationsApi(request as DashboardRequest).background;
+  await client.reorderStations(["bar", "kitchen"]);
+  expect(request.mock.calls).toEqual([
+    ["/management-api/stations/order", "PUT", { ids: ["bar", "kitchen"] }],
+  ]);
+});
+
+it("saves a station's complete printer set in one non-passive request", async () => {
+  const request = vi.fn(async () => undefined);
+  await new PrepStationsApi(request as DashboardRequest).background.setStationPrinters("bar", [
+    "p2",
+    "p1",
+  ]);
+  expect(request.mock.calls).toEqual([
+    ["/management-api/stations/bar/printers", "PUT", { printerIds: ["p2", "p1"] }],
+  ]);
+});
+
+it("submits a whole watcher printer set as an active write even from a background client", async () => {
+  const request = vi.fn(async () => undefined);
+  const api = new PrepStationsApi(request as DashboardRequest).background;
+  await api.setWatcherPrinters("pass", ["front", "back"]);
+  await api.setWatcherPrinters("pass", []);
+  expect(request.mock.calls).toEqual([
+    ["/management-api/watchers/pass/printers", "PUT", { printerIds: ["front", "back"] }],
+    ["/management-api/watchers/pass/printers", "PUT", { printerIds: [] }],
+  ]);
+});
+
+it("loads the supervisor overview without requesting management-only context, including passive refresh", async () => {
+  const request = vi.fn(async (path: string) => {
+    if (path === "/management-api/venue-service/stations/overview")
+      return {
+        stations: [{ id: "bar", name: "Bar", active: true }],
+        defaultStationId: "bar",
+        stationTimes: [],
+        todayEnds: { timeOfDay: "06:00", tomorrow: true },
+        clockReadable: true,
+      };
+    if (path === "/management-api/stations?includeDisabled=true")
+      return [{ id: "bar", name: "Bar", active: true }];
+    throw new Error(`Unexpected management read ${path}`);
+  });
+  const overview = new PrepStationsApi(request as DashboardRequest).overview;
+  const loaded = await overview.load();
+  expect(loaded.stations).toEqual([{ id: "bar", name: "Bar", active: true }]);
+  expect(loaded.routing).toEqual({
+    stations: [{ id: "bar", name: "Bar", active: true }],
+    defaultStationId: "bar",
+    stationTimes: [],
+    todayEnds: { timeOfDay: "06:00", tomorrow: true },
+    clockReadable: true,
+    claims: [],
+    exceptions: [],
+    unassigned: { folders: [], products: [] },
+  });
+  for (const key of [
+    "categories",
+    "zones",
+    "products",
+    "testProducts",
+    "printers",
+    "stationPrinters",
+    "devices",
+    "watchers",
+  ] as const)
+    expect(loaded[key]).toEqual([]);
+  await overview.background.load();
+  expect(request.mock.calls).toEqual([
+    ["/management-api/venue-service/stations/overview", "GET", undefined, { passive: false }],
+    ["/management-api/stations?includeDisabled=true", "GET", undefined, { passive: false }],
+    ["/management-api/venue-service/stations/overview", "GET", undefined, { passive: true }],
+    ["/management-api/stations?includeDisabled=true", "GET", undefined, { passive: true }],
+  ]);
 });

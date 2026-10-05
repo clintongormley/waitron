@@ -641,7 +641,7 @@ describe("the setting for the reminder to fire the next group", () => {
     const select = reminderSelect(el);
     expect(select.label).toContain("Aviso para marchar el siguiente grupo");
     expect(select.options.map((option) => option.label)).toEqual([
-      "Desactivado",
+      "Deshabilitado",
       "5 minutos",
       "10 minutos",
       "15 minutos",

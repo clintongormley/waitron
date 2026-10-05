@@ -40,13 +40,19 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     "exception-editor",
     "exception-delete",
     "watcher",
-    "watcher-form",
+    "watcher-rename",
     "watcher-remove",
   ] as const)("checks %s state", async (state) => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
     const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
     el.api = {
+      updateWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
+      readStationHealth: vi.fn().mockResolvedValue({
+        capturedAt: "2026-10-05T12:00:00Z",
+        stations: [],
+        outputsDown: { printersDown: [], screensDark: [] },
+      }),
       load: vi.fn().mockResolvedValue(
         state === "empty"
           ? empty
@@ -76,6 +82,7 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
                         fallbackStationId: null,
                         today: null,
                         closedSendsTo: "bar",
+                        nextTransition: null,
                       },
                     ],
                   }
@@ -91,6 +98,16 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
                   warmAfterMinutes: 5,
                   overdueAfterMinutes: 10,
                   forgottenAfterMinutes: 15,
+                  timingDefaults: {
+                    warmAfterMinutes: 5,
+                    overdueAfterMinutes: 10,
+                    forgottenAfterMinutes: 15,
+                  },
+                  timingOverrides: {
+                    warmAfterMinutes: null,
+                    overdueAfterMinutes: null,
+                    forgottenAfterMinutes: null,
+                  },
                   showsRestOfOrder: state === "station-rest-on",
                 },
               ],
@@ -117,13 +134,26 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
     if (state === "station" || state === "station-rest-on") {
-      const input = el
-        .shadowRoot!.querySelector('wt-switch[name="showsRestOfOrder"]')!
-        .shadowRoot!.querySelector<HTMLInputElement>('input[role="switch"]')!;
-      expect(input.checked).toBe(state === "station-rest-on");
+      el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+        new CustomEvent("wt-tab-change", { detail: { value: "settings" } }),
+      );
+      await el.updateComplete;
+      const table = el.shadowRoot!.querySelector('[data-test="settings-table"]')!;
+      await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+      const button = table.shadowRoot!.querySelector<HTMLElement>(
+        '[data-test="edit-settings-rest-bar"]',
+      )!;
+      expect(button.textContent?.trim()).toBe(state === "station-rest-on" ? "Yes" : "No");
+      button.click();
+      await el.updateComplete;
+      const choice = table.shadowRoot!.querySelector('[data-test="settings-choice"]')!;
+      await (choice as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+      expect(choice.shadowRoot!.querySelector(".trigger .value")!.textContent?.trim()).toBe(
+        state === "station-rest-on" ? "Yes" : "No",
+      );
     }
     if (state === "editor" || state === "invalid") {
-      el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-bar"]')!.click();
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-station"]')!.click();
       await el.updateComplete;
     }
     if (state === "claim") {
@@ -145,15 +175,25 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-station"]')!.click();
       await el.updateComplete;
     }
-    if (state === "watcher-form") {
-      el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-watcher-pass"]')!.click();
+    if (state === "watcher-rename") {
+      el.shadowRoot!.querySelector('[data-test="watchers-table"]')!
+        .shadowRoot!.querySelector<HTMLElement>('[data-test="rename-watcher-pass"]')!
+        .click();
       await el.updateComplete;
-      const form = el.shadowRoot!.querySelector<HTMLElement>("watcher-form")!;
-      (form as HTMLElement & { refusal: object }).refusal = { code: "watcher.name_taken" };
-      await (form as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-watcher-name"]')!.click();
+      await vi.waitFor(() =>
+        expect(
+          el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+            '[data-test="watcher-rename-name"]',
+          )?.error,
+        ).toBe("A watcher already has this name."),
+      );
+      await el.updateComplete;
     }
     if (state === "watcher-remove") {
-      el.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-watcher-pass"]')!.click();
+      el.shadowRoot!.querySelector('[data-test="watchers-table"]')!
+        .shadowRoot!.querySelector<HTMLElement>('[data-test="remove-watcher-pass"]')!
+        .click();
       await el.updateComplete;
     }
     expect(el.shadowRoot!.querySelector("h1")).not.toBeNull();
@@ -194,6 +234,12 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
+        timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+        timingOverrides: {
+          warmAfterMinutes: null,
+          overdueAfterMinutes: null,
+          forgottenAfterMinutes: null,
+        },
       },
       {
         id: "bar",
@@ -204,9 +250,42 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
+        timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+        timingOverrides: {
+          warmAfterMinutes: null,
+          overdueAfterMinutes: null,
+          forgottenAfterMinutes: null,
+        },
       },
     ];
     el.api = {
+      updateWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
+      readStationHealth: vi.fn().mockResolvedValue({
+        capturedAt: "2026-10-05T12:00:00Z",
+        stations: stations.map((station) => ({
+          id: station.id,
+          name: station.name,
+          hasScreen: false,
+          waiting: 0,
+          preparing: null,
+          ready: null,
+          late: { warm: 0, overdue: 0, forgotten: 0 },
+          oldestMinutes: null,
+          items: [],
+        })),
+        outputsDown: {
+          printersDown: [
+            {
+              stationId: "bar",
+              stationName: "Upstairs bar",
+              printerId: "epson",
+              printerName: "Epson",
+              since: "2026-10-01T20:14:00",
+            },
+          ],
+          screensDark: [{ stationId: "bar", stationName: "Upstairs bar", lastSeenAt: null }],
+        },
+      }),
       load: vi.fn().mockResolvedValue({
         ...empty,
         stations,
@@ -223,6 +302,7 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
               fallbackStationId: null,
               today: null,
               closedSendsTo: "kitchen",
+              nextTransition: null,
             },
             {
               stationId: "bar",
@@ -248,6 +328,7 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
               today:
                 state === "opened-by-hand" ? "open" : state === "closed-by-hand" ? "closed" : null,
               closedSendsTo: state === "no-replacement" ? null : "kitchen",
+              nextTransition: null,
             },
           ],
         },
@@ -258,38 +339,57 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
       setStationHours: vi
         .fn()
         .mockRejectedValue({ code: "station.invalid", params: { field: "hours.0" } }),
-      listOutputsDown: vi.fn().mockResolvedValue({
-        printersDown: [
-          {
-            stationId: "bar",
-            stationName: "Upstairs bar",
-            printerId: "epson",
-            printerName: "Epson",
-            since: "2026-10-01T20:14:00",
-          },
-        ],
-        screensDark: [{ stationId: "bar", stationName: "Upstairs bar", lastSeenAt: null }],
-      }),
     } as unknown as PrepStationsApi;
     host.append(el);
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
-    const action = state.includes("hours")
-      ? "edit-hours"
-      : state.includes("fallback")
-        ? "change-fallback"
-        : state === "close-confirmation" || state === "refused-close"
-          ? "close-today"
-          : state === "switch-off" || state === "refused-switch-off"
-            ? "switch-off"
-            : null;
-    if (action) {
-      el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${action}-bar"]`)!.click();
+    const settingsTable = el.shadowRoot!.querySelector('[data-test="settings-table"]')!;
+    const settingsQ = (selector: string) =>
+      settingsTable.shadowRoot!.querySelector<HTMLElement>(selector)!;
+    const fallbackState = state.includes("fallback");
+    if (!fallbackState) {
+      el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+        new CustomEvent("wt-tab-change", { detail: { value: "stations" } }),
+      );
+      await el.updateComplete;
+      if (state === "warnings") {
+        const table = el.shadowRoot!.querySelector("prep-station-health-table")!;
+        await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+        const summary = table.shadowRoot!.querySelector("wt-data-table")!;
+        await (summary as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+        expect(summary.shadowRoot!.textContent).toContain("Printer Epson");
+        expect(summary.shadowRoot!.textContent).toContain("has ever checked in");
+      }
+    }
+    if (fallbackState) {
+      el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+        new CustomEvent("wt-tab-change", { detail: { value: "settings" } }),
+      );
+      await el.updateComplete;
+      await (settingsTable as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+      settingsQ('[data-test="edit-settings-fallback-bar"]').click();
       await el.updateComplete;
       if (state === "fallback-confirmation") {
-        el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-station-action"]')!.click();
+        settingsQ('[data-test="save-settings-cell"]').click();
         await el.updateComplete;
+        expect(settingsQ('[data-test="settings-fallback-confirmation"]')).not.toBeNull();
       }
+    }
+    const action = state.includes("hours")
+      ? "edit-hours"
+      : state === "close-confirmation" || state === "refused-close"
+        ? "close-today"
+        : state === "switch-off" || state === "refused-switch-off"
+          ? "disable"
+          : null;
+    if (action) {
+      const selector = `[data-test="${action}-bar"]`;
+      const summary = el
+        .shadowRoot!.querySelector("prep-station-health-table")!
+        .shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
+      (el.shadowRoot!.querySelector<HTMLElement>(selector) ??
+        summary.querySelector<HTMLElement>(selector))!.click();
+      await el.updateComplete;
       if (state === "invalid-hours" || state === "refused-hours") {
         const form = el.shadowRoot!.querySelector("station-hours-form")!;
         await (form as unknown as { updateComplete: Promise<boolean> }).updateComplete;
@@ -299,23 +399,35 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
     }
     if (state.startsWith("refused-")) {
       if (state === "refused-fallback") {
-        el.shadowRoot!.querySelector('[data-test="station-fallback"]')!.dispatchEvent(
+        settingsQ('[data-test="settings-choice"]').dispatchEvent(
           new CustomEvent("wt-change", { detail: { value: "" } }),
         );
         await el.updateComplete;
-      }
-      if (state !== "refused-hours") {
+        settingsQ('[data-test="save-settings-cell"]').click();
+        await el.updateComplete;
+        settingsQ('[data-test="save-settings-cell"]').click();
+      } else if (state !== "refused-hours") {
         el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-station-action"]')!.click();
         await el.updateComplete;
-        if (state === "refused-fallback" || state === "refused-switch-off")
+        if (state === "refused-switch-off")
           el.shadowRoot!.querySelector<HTMLElement>(
             '[data-test="confirm-station-action"]',
           )!.click();
       }
       await new Promise((r) => setTimeout(r, 0));
       await el.updateComplete;
-      const form = el.shadowRoot!.querySelector("station-hours-form");
-      expect((form?.shadowRoot ?? el.shadowRoot)!.querySelector('[role="alert"]')).not.toBeNull();
+      if (state === "refused-fallback") {
+        const choice = settingsQ('[data-test="settings-choice"]') as HTMLElement & {
+          error: string;
+          value: string;
+        };
+        expect(choice.error).toContain("loop");
+        expect(choice.value).toBe("");
+        expect(settingsQ('[data-test="save-settings-cell"]').hasAttribute("disabled")).toBe(false);
+      } else {
+        const form = el.shadowRoot!.querySelector("station-hours-form");
+        expect((form?.shadowRoot ?? el.shadowRoot)!.querySelector('[role="alert"]')).not.toBeNull();
+      }
     }
     await expectNoA11yViolations(host);
   });
@@ -334,6 +446,12 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
         host.style.boxSizing = "border-box";
         const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
         el.api = {
+          updateWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
+          readStationHealth: vi.fn().mockResolvedValue({
+            capturedAt: "2026-10-05T12:00:00Z",
+            stations: [],
+            outputsDown: { printersDown: [], screensDark: [] },
+          }),
           load: vi.fn().mockResolvedValue({
             ...empty,
             testProducts: [
@@ -366,6 +484,11 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
         await new Promise((resolve) => setTimeout(resolve, 0));
         await el.updateComplete;
         const root = el.shadowRoot!;
+        const tabs = root.querySelector("wt-tabs")!;
+        await tabs.updateComplete;
+        tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="routing"]')!.click();
+        await el.updateComplete;
+        await tabs.updateComplete;
         root
           .querySelector('[data-test="test-product"]')!
           .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "mojito" } }));

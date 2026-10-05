@@ -70,7 +70,10 @@ import {
   invoiceSeries,
   isUniqueViolation,
   kitchenCourses,
+  assertKitchenTimingPresent,
   kitchenStations,
+  kitchenStationTiming,
+  kitchenTimingDefaults,
   nowIso,
   orderGroups,
   orderTableLabels,
@@ -6280,6 +6283,7 @@ export async function listStationQueue(
   tx: Transaction,
   stationId: string,
 ): Promise<StationQueueGroup[]> {
+  await assertKitchenTimingPresent(tx);
   const rows = await tx
     .select({
       itemId: ticketItems.id,
@@ -6307,15 +6311,20 @@ export async function listStationQueue(
       label: workingOrders.label,
       status: workingOrders.status,
       ...queueGroupColumns,
-      warmAfterMinutes: kitchenStations.warmAfterMinutes,
-      overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
-      forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
+      warmAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.warmAfterMinutes}, ${kitchenTimingDefaults.warmAfterMinutes})`,
+      overdueAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.overdueAfterMinutes}, ${kitchenTimingDefaults.overdueAfterMinutes})`,
+      forgottenAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.forgottenAfterMinutes}, ${kitchenTimingDefaults.forgottenAfterMinutes})`,
       showsRestOfOrder: kitchenStations.showsRestOfOrder,
     })
     .from(ticketItems)
     .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
+    .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
+    .innerJoin(
+      kitchenTimingDefaults,
+      eq(kitchenTimingDefaults.locationId, kitchenStations.locationId),
+    )
     // Not filtered by `active`: a course deactivated after the item was fired still names its header.
     .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))
     .leftJoin(parties, eq(parties.id, workingOrders.partyId))
@@ -6526,6 +6535,7 @@ export async function readPassBoard(
   locationId: string,
   scope: SQL,
 ): Promise<ExpoOrder[]> {
+  await assertKitchenTimingPresent(tx);
   const rows = await tx
     .select({
       itemId: ticketItems.id,
@@ -6548,9 +6558,9 @@ export async function readPassBoard(
       stationName: kitchenStations.name,
       // Per item, not per order: one order's items can span stations with different thresholds.
       queuedAt: ticketItems.queuedAt,
-      warmAfterMinutes: kitchenStations.warmAfterMinutes,
-      overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
-      forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
+      warmAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.warmAfterMinutes}, ${kitchenTimingDefaults.warmAfterMinutes})`,
+      overdueAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.overdueAfterMinutes}, ${kitchenTimingDefaults.overdueAfterMinutes})`,
+      forgottenAfterMinutes: sql<number>`coalesce(${kitchenStationTiming.forgottenAfterMinutes}, ${kitchenTimingDefaults.forgottenAfterMinutes})`,
       courseId: ticketItems.courseId,
       courseName: kitchenCourses.name,
       courseDisplayOrder: kitchenCourses.displayOrder,
@@ -6567,6 +6577,11 @@ export async function readPassBoard(
     .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .innerJoin(kitchenStations, eq(ticketItems.stationId, kitchenStations.id))
+    .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
+    .innerJoin(
+      kitchenTimingDefaults,
+      eq(kitchenTimingDefaults.locationId, kitchenStations.locationId),
+    )
     // Not filtered by `active`, as in `listStationQueue`.
     .leftJoin(kitchenCourses, eq(ticketItems.courseId, kitchenCourses.id))
     .leftJoin(parties, eq(parties.id, workingOrders.partyId))
@@ -6810,6 +6825,7 @@ export async function listTablesWithState(
   locationId?: string,
   now: Date = new Date(),
 ): Promise<TableState[]> {
+  await assertKitchenTimingPresent(tx);
   const loc = locationId ?? cfg.locationId;
   const result = await tx.execute<{
     id: string;
@@ -6890,9 +6906,9 @@ export async function listTablesWithState(
              json_group_array(
                json_object(
                  'queuedAt', ti.queued_at,
-                 'warmAfterMinutes', ks.warm_after_minutes,
-                 'overdueAfterMinutes', ks.overdue_after_minutes,
-                 'forgottenAfterMinutes', ks.forgotten_after_minutes
+                 'warmAfterMinutes', coalesce(kst.warm_after_minutes, ktd.warm_after_minutes),
+                 'overdueAfterMinutes', coalesce(kst.overdue_after_minutes, ktd.overdue_after_minutes),
+                 'forgottenAfterMinutes', coalesce(kst.forgotten_after_minutes, ktd.forgotten_after_minutes)
                )
              ) filter (where wol.served_at is null and ti.id is not null) as unserved_lines
       from party_tables pt
@@ -6908,6 +6924,8 @@ export async function listTablesWithState(
       -- are unaffected by this join — such a row is excluded from unserved_lines by the FILTER instead.
       left join kitchen_stations ks
         on ks.id = ti.station_id
+      left join kitchen_station_timing kst on kst.station_id = ks.id
+      left join kitchen_timing_defaults ktd on ktd.location_id = ks.location_id
       where pt.left_at is null
       group by pt.table_id
     ) tab on tab.table_id = dt.id

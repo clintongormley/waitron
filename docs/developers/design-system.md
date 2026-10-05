@@ -2316,6 +2316,13 @@ into view when a page opens directly on it. Hidden panels remain
 mounted, so switching tabs retains their input values. Supply unique, nonempty keys and a
 localized `label` for the tab group.
 
+Prep stations uses `stations`, `routing`, `tickets`, `watchers` and `settings` at
+`/manage/prep-stations/view/<key>`. Stations shows live health and opens read-only dish drilldowns;
+Tickets and Watchers own their printer selections. Settings edits each station value in its own
+cell, with blank late-flag overrides inheriting the venue's Kitchen defaults. Station Rename,
+Make default and Disable/Enable actions belong to the Stations row menu. A supervisor sees only
+Stations. The interim weekly station-hours editor stays below the panels until the Hours step.
+
 Venue settings fills its tabs with panels from several owners. The page draws the only `h1`;
 each panel leaves it out because its tab already names the panel through `aria-labelledby`.
 

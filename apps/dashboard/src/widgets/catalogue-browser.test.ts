@@ -292,6 +292,7 @@ it("decides the asterisk as Made at does, following a switched-off station's fal
           fallbackStationId,
           today: null,
           closedSendsTo: fallbackStationId,
+          nextTransition: null,
         },
       ],
     });

@@ -57,6 +57,12 @@ function stubApi(modules: string[] = ["second", "unordered", "first"]): Dashboar
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     getSalesOverview: pending(),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
+    getKitchenTimingDefaults: vi.fn().mockResolvedValue({
+      warmAfterMinutes: 5,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+    }),
+    setKitchenTimingDefaults: vi.fn().mockResolvedValue(undefined),
     getFireControl: vi.fn().mockResolvedValue({ enabled: false }),
     getBumpMode: vi.fn().mockResolvedValue({ mode: "line" }),
     listCourses: vi.fn().mockResolvedValue([]),

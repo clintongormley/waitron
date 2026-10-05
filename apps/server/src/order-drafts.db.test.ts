@@ -3,6 +3,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   kitchenCourses,
+  kitchenTimingDefaults,
   locations,
   orderDraftEvents,
   orderDraftLines,
@@ -106,6 +107,7 @@ async function setupVenue(): Promise<Venue> {
     .insert(locations)
     .values({ name: "Sala", invoiceLocales: [LOCALE], operationDescription: "Restaurante" })
     .returning({ id: locations.id });
+  await db.insert(kitchenTimingDefaults).values({ locationId: location!.id });
   const locationId = location!.id;
   await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
   const nodeId = await seedNode(db, brandLocationId(locationId));
@@ -978,6 +980,7 @@ describe("a refused save writes nothing", () => {
       .insert(locations)
       .values({ name: "Terraza", invoiceLocales: [LOCALE], operationDescription: "Restaurante" })
       .returning({ id: locations.id });
+    await db.insert(kitchenTimingDefaults).values({ locationId: elsewhere!.id });
     const { id: courseId } = await inTx((tx) =>
       createCourse(tx, { ...v.cfg, locationId: brandLocationId(elsewhere!.id) }, { name: "Mains" }),
     );

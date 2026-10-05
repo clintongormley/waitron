@@ -94,6 +94,8 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "live table service in flight; copied to a standby, never drained back",
   ),
   classify("kitchen_stations", "state", STATE),
+  classify("kitchen_timing_defaults", "state", STATE),
+  classify("kitchen_station_timing", "state", STATE),
   classify("kitchen_courses", "state", STATE),
   classify("station_printers", "state", STATE),
   classify("watchers", "state", STATE),

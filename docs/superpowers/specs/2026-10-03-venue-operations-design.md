@@ -1,5 +1,7 @@
 # Venue operations: how the venue is organised and configured
 
+> **2026-10-05 — A261 step 3:** For the replacement station, printer, watcher and timing controls, see the [Prep stations tabs implementation plan](../plans/2026-10-05-prep-stations-tabs.md) and its dated implementation checkpoints. This document retains the earlier screen layout and procedures as historical context.
+
 > **2026-10-04 follow-up:** the [devices, menus and service zones design](2026-10-04-devices-menus-and-service-zones-design.md)
 > records department-wide menu membership and timetables, zone default-menu overrides, profile
 > starting zones and selectable station/watcher bindings. It reuses §7's special-date calendar.

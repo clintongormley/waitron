@@ -106,3 +106,605 @@ All choice/list values in Tickets, Watchers and Settings use an in-cell dropdown
 - A new printer assignment must not send duplicate station or watcher copies, including after reprint (Tasks 5 and 6).
 - A supervisor must see live numbers without gaining a configuration or kitchen-state write (Tasks 3 and 4).
 - A populated core station-table rebuild must preserve incoming child rows and triggers, or the migration must be redesigned (migration gate and Task 1).
+
+## 2026-10-05 implementation checkpoint: storage redesign
+
+The first generated nullable-column migration rebuilt `kitchen_stations`. On Node v26.7.0,
+`pnpm exec vitest run scripts/migration-upgrade.test.ts` failed at its `DROP TABLE kitchen_stations`
+with SQLite error 787 (`FOREIGN KEY constraint failed`). The new nullable-storage case passed on a
+fresh database, so that pass did not establish a working upgrade. The rejected migration was removed
+from this branch before committing; no shipped migration was edited.
+
+Use the redesign option above: `kitchen_timing_defaults` holds venue defaults and
+`kitchen_station_timing` holds nullable station overrides. The generated migration creates only
+these tables. The original station timing columns remain until their removal can be handled without
+rebuilding a referenced parent. Before wiring the readers, decide their retirement and any reset
+requirement under the house's pre-live no-data-migration rule; do not add a converter by default.
+
+The schema increment classifies both new tables as core state and exposes them through the schema
+and public db barrels. Core already owns stations and their timing readers, and reporting depends on
+db/shared rather than venue-service. Its focused upgrade test retains a 2/4/8 station, printer and
+watcher mappings, and a device's made-here mapping; it compares every original core application table's row values,
+non-internal schema objects and foreign-key inventory with a live change feed and append-only triggers installed.
+The cross-module upgrade guard still supplies its separate row-count check. Default provisioning,
+write validation, effective timing readers and the screen tasks remain to be built.
+
+## 2026-10-05 implementation checkpoint: venue defaults
+
+New venues provision a `kitchen_timing_defaults` row in the same transaction as their location.
+A retry preserves edited defaults. `GET /management-api/kitchen-timing-defaults` requires
+`venue.view`; `PUT` requires `venue.configure` and replaces all three defaults. The write validates
+positive whole-minute values, their order, and each station's resulting values before updating the
+row, including disabled stations. A refusal carries the affected station's id, name and field.
+Station override writes and the effective timing readers are still outstanding; this increment
+does not change their existing reads.
+
+For the completed build, use the approved pre-live reset option: reprovision the default row and
+replace original numeric station settings through the new override contract. Add no converter or
+legacy-column fallback. Keep the original columns physically present to avoid the rejected parent
+rebuild, but retire their runtime reads together in Task 2. State the reset in the PR's first line.
+The original populated-upgrade test remains an inventory/preservation receipt for the additive
+schema, not a receipt that original timing settings survive the new runtime contract.
+
+## 2026-10-05 implementation checkpoint: station override writes
+
+Station creation and edits now write `kitchen_station_timing`, leaving the original station columns
+untouched. Each positive whole-minute override can be saved independently; explicit null inherits
+that field and omission retains it. The write checks the resulting values against the venue defaults
+before changing station metadata or timing. The management station list resolves overrides against
+the default row. Station/default writes share the effective-order check; an existing station's
+refusal carries its id, name and field, while a refused creation carries name and field.
+
+The existing POST/PATCH storage assertions now read the override table. The old partial-trio
+refusal is replaced by successful partial-save checks plus refusal of an unordered effective set.
+The direct warm=99 update test now checks the named domain refusal instead of a raw database CHECK
+error. These are deliberate contract changes under Task 1, recorded for owner retrospective review.
+The kitchen fixture adds the default row that provisioning already supplies.
+
+Task 2 remains open: queue, pass, raw table aggregation, table signals and overdue reports still
+read original station columns. This checkpoint is not ready to ship. Complete those readers,
+then the health, UI and printing tasks before finish-branch.
+
+
+## 2026-10-05 implementation checkpoint: effective timing consumers
+
+Queue, pass, floor aggregation, table/bill signals and overdue reports now join venue defaults and
+nullable overrides, resolving each field with `coalesce` in the existing operation's query. None
+reads the original station timing columns. Retained work at disabled stations keeps its station's
+resolved values. The raw floor aggregation keeps both new joins on the left so an unfired line
+still contributes to its existing non-timing totals.
+
+The seven-case consumer suite checks exact boundaries with different venue/default station values,
+a default edit changing inherited live work while retaining explicit settings, and the existing
+made-here, collected and served exclusions for their respective readers. In a frozen-installed
+disposable candidate, restoring the original queue/pass/floor reader file failed seven tests,
+restoring the original table-signal reader failed five, and restoring the report reader failed four;
+restoring the candidate's implementation passed all seven. These are reader-file controls rather
+than a claim that every expression was individually deleted.
+
+Configuration export/import now carries both timing tables and omits the original station columns.
+Its new round-trip case compares venue location remapping, station id references, explicit values
+and null inheritance. The importer uses the station/default writer's shared validation before the
+transaction commits. Two new cases refused a non-positive warm override and an inverted effective
+order, with no target venue/default/override rows left behind. Deleting that import validation in a
+disposable checkout made both refusal cases resolve successfully; the valid round-trip still passed.
+Restoring it passed all three selected cases.
+
+Working-order, reporting, order-groups, print-problems, split-bill, tabs, station-queue-rest and
+working-order-reads manual venue fixtures, plus the shared split-extras venue fixture, add the
+provisioned default row. The existing two-station expo fixture writes its same 2/4/6 values into
+override storage with all existing assertions retained. The approved reset remains required; there is no converter or
+original-column fallback. Tasks 3–8 remain before finishing or shipping this branch.
+
+
+## 2026-10-05 implementation checkpoint: station-health read contract
+
+`GET /management-api/stations/health` requires `venue.view` and returns one captured time,
+station summaries and oldest-first dish detail. Counts are ticket dish rows, with remaining line
+quantities in the detail; extras are not another dish. Held, made-here, fully served, abandoned and
+collected work is excluded. Ready-but-unserved work remains in Ready and Late. A station without
+an active device selecting it puts every eligible state in Waiting and returns null for Preparing
+and Ready. A disconnected selected device still supplies those columns, with problems read through
+the existing output readers. Disabled stations retain their work. Effective timing uses defaults
+and overrides, and the detail uses recorded kitchen names and current party/table context.
+
+The new seven-case HTTP/database suite ran with the unchanged management and output suites:
+`pnpm --filter @waitron/server exec vitest run src/station-health.test.ts
+src/management-api.test.ts src/station-outputs-down.test.ts` passed 114 tests. The new route first
+failed five cases with 404; the extras case failed when a child was counted. Disposable candidate
+controls removed read authorization, the held-work filter and the location filter, and replaced
+effective timing with original columns. The selected assertions failed; restored checks passed.
+The location control initially failed with a runtime error, so its test was strengthened to assert
+the wrong-venue query's rows directly before repeating the control. Existing assertions are retained.
+
+The passive `PrepStationsApi.readStationHealth` method and health dependency list have focused
+browser checks. The core descriptor already exposes the timing tables through classification and
+change sources. Tasks 4–8 remain: the health list is not yet subscribed by the screen, and no UI
+timer, tabs, number cells or printing-control handover is implemented by this checkpoint. Keep the
+approved reset declaration and earlier changed-test notes when finishing the whole branch.
+
+
+## 2026-10-05 implementation checkpoint: live health table
+
+Task 4 is partially implemented. `station-health-table.ts` renders seven columns from the health
+snapshot, with Default/Disabled labels, disabled rows last, separate printer/screen problems and
+read-only drilldowns for station/state, late band and oldest work. Drilldowns retain their selection
+while new snapshots change membership. Labels are translated; table-cell styling uses parts and
+tokens. Summary and detail regions have distinct accessible names.
+
+The screen watches `QUERY_DEPENDENCIES.health` through its query controller with a fifteen-second
+refresh. Without live data it owns the matching interval; disconnect releases observations and
+intervals. The controller's recovery callback clears only a read message after the failing reads
+recover, instead of an unrelated routing snapshot clearing it. Open station drafts remain.
+
+Focused real-browser validation ran six files and 235 tests; unchanged subscription/style-token/
+pinned-action guards ran three files and 17 tests. Venue-service typechecking and focused lint passed.
+The initial table cases failed before registration; three screen cases failed before wiring; the
+loading and disabled-row cases failed before their changes. In a frozen-installed disposable copy,
+removing the detail filters failed two cases, removing the refresh interval failed one, and restoring
+both passed five selected cases. Existing test assertions remain; screen and axe API doubles gained
+the new passive health-read fixture. A synthetic dialog-cancel probe did not invoke the browser's
+Escape behavior; the corrected real Escape check passes. Axe found duplicate region names in the
+new drilldown; the named regions passed its light/dark checks.
+
+The component summary and drilldown were opened and inspected in EN/ES, light/dark, 390/1280 widths;
+these are component observations, not a completed Prep stations page review. Task 4 still needs the
+five URL-backed tabs, the final Today cells/buttons, station row menus/reorder and interim hours
+placement. The health table is temporarily mounted above the existing screen; do not land this
+checkpoint as the completed step. Tasks 5–8 and the final review/CI/landing gates remain.
+
+
+## 2026-10-05 implementation checkpoint: tab navigation
+
+The five subject tabs have stable `view` path keys. A bare page defaults to Stations; a legacy
+product-tester link defaults to Routing. Invalid keys are replaced with Stations, and browser
+Back restores the chosen panel and tester selection. Both the page controller and dashboard's
+shared path configuration preserve the tab and tester. Nested tab events do not change the page's
+selection. New station and New watcher sit in the strip's action slot; interim station hours and
+its existing editor are outside the panels. Categories replace folders in visible wording, and
+retained stations/watchers use Disable/Enable in English and Spanish.
+
+This is a navigation checkpoint, not the completed screen: Tickets and Settings are still empty
+panels, the routing cards retain legacy station settings/output links, and Watchers retains its
+cards. Task 4's Today actions/row menus/reordering and Tasks 5–7's assignments/settings editors
+remain before Task 8 review, CI and landing. No empty panel or partial page is authorised to ship.
+
+The hours assertion now checks the same overnight wording in the interim hours section; the
+existing dashboard tester-link assertion checks the canonical Routing path with its product
+retained. Wording checks retain their previous assertion strength with the approved category and
+Disable/Enable text. The timed-tester accessibility fixture selects Routing before measuring its
+controls; it retains every size, position, answer and accessibility assertion. The dashboard
+fixture supplies the complete station-health response. The build PR must name these changes
+alongside the earlier Task 1 changes.
+
+### Today actions checkpoint, 2026-10-05
+
+Task 4 remains partial. The Stations table now renders confirmed Open/Close for today actions and
+Back to the schedule for a whole-day override, using the existing write and confirmation path.
+Default and unscheduled stations say Always open without an action; disabled stations and an
+unreadable clock offer no hours action. A refused write retains the confirmation and permits retry.
+The effective fallback still comes from the server's `closedSendsTo`, not the configured first hop.
+
+Six new browser checks failed before implementation and then passed. The four existing screen/table
+suites ran 246 tests successfully. Eight new viewport/axe checks cover EN/ES, both themes and
+390/1280 widths; their captures were inspected. Unchanged UI guards ran 41 tests successfully.
+In a frozen-installed disposable candidate, removing the always-open guard or the disabled-station
+guard failed the relevant check; restoring both passed all 14 Today checks. No existing assertion
+was changed. Types, focused ESLint/Prettier and `git diff --check` exited zero.
+
+Today still needs schedule-derived next-opening/closing wording; legacy card controls remain until
+the routing-only card replacement. Row menus/reorder, Tasks 5–7 and the whole-branch Task 8 gates
+remain open. This checkpoint is not ready to finish or land.
+
+
+## Task 4 schedule-transition checkpoint — 2026-10-05T19:08:03.980056+02:00
+
+The routing snapshot now carries a nullable next schedule transition with venue weekday,
+HH:MM and civil days ahead. It uses the same current station-status resolver at weekly interval
+boundaries. Actual open/closed changes skip overlapping and adjoining intervals, including
+intervals that cover the whole week. Default, disabled, unscheduled, by-hand and unreadable-clock
+states have no scheduled transition. Current overrides still use the existing business-day expiry.
+
+The Today cell renders Open until / Opens at in EN/ES, with tomorrow or a later weekday where
+needed. A passive minute refresh supplies the new routing snapshot even without a database event;
+removing the screen stops its timer. Live-data sessions retain the existing shared query refresh.
+Existing assertions are retained. Complete StationTimes fixtures gained nextTransition:null in the
+Prep stations browser/axe suites and dashboard folder-made-at/catalogue-browser suites; the Today
+visual fixture additionally includes a next closing. No guard, fiscal or schema file changed in
+this increment. Red-first database and browser cases, subsequent focused suites, types, lint and
+visual/control receipts are recorded in the campaign ledger.
+
+Ruling: a transition on a later civil day names tomorrow or its weekday — the source spec's
+01:00 example crosses midnight, and a closed weekly station may next open several days later.
+This adds context to the specified Open until / Opens at wording without a new schedule rule.
+
+Task 4 remains partial: station row menus/reorder and routing-only card replacement are next.
+Tasks 5–7 still need Tickets/Watchers/Settings cell editors and venue-default UI; Task 8 whole-branch
+review, current-head CI and landing remain. The page is not authorised to ship at this checkpoint.
+
+
+## 2026-10-05 implementation checkpoint: station row actions and ordering
+
+Stations now adds Rename, Make default and confirmed Disable/Enable controls in each Name cell,
+retaining its seven data columns. The name-only form validates locally, distinguishes a duplicate
+name from a general request refusal, permits retry and closes after the write succeeds before
+refreshing. Existing Routing controls remain during the remaining tab handover.
+
+Pointer and Arrow-key moves update active station order; release persists one complete set through
+`PUT /management-api/stations/order`. Its transaction validates membership, completeness and
+uniqueness before updating display positions. Disabled station rows are outside the set. Keyboard
+moves restore the handle's focus and announce the position; disconnect releases drag listeners and
+the shared cursor. A refused request resets the optimistic order and displays its action message.
+
+The new order test seeds two extra active stations before reversing the list and compares a
+separately read disabled row before/after. The original new test used an active-only list to inspect
+disabled rows, so its empty comparison was replaced before this checkpoint. A new red/green HTTP
+case establishes `includeDisabled=true`; only the Prep page opts in, and existing active-only list
+assertions remain. The client's route expectation is intentionally changed under Task 4's retained
+row requirement. Its standalone browser fixture now registers the dashboard's grip and kebab SVG
+paths, which `apps/dashboard/src/main.ts` registers in the application.
+
+Focused verification: server management/kitchen 126 tests; browser Prep screen/client 197 tests,
+with the preceding five-file health/screen/client/axe run passing 284 tests before the retained-read
+and icon-fixture refinements. Eight EN/ES, light/dark, phone/desktop menu/rename checks pass and their
+sixteen captures were inspected. Unchanged root guards passed 75 tests. Disposable set-validation
+removal accepted an empty incomplete set with 204 instead of 400 while the positive reorder still
+passed. Task 4's routing-only replacement and Tasks 5–8 remain; the full branch is not ready to ship.
+
+
+## 2026-10-05 implementation checkpoint: Tickets selection
+
+Tickets now shows one row per retained station, with Printed on, Shown on screens and Also seen
+by. Active station rows open an in-cell printer multi-select; disabled and watcher-owned printers
+carry a reason and cannot be added. A retained disabled printer can be deselected. The screen links
+to Devices and the Watchers tab separately. Current active kitchen-screen bindings are shown;
+this checkpoint does not change device/profile selection writes.
+
+`PUT /management-api/stations/:sid/printers` requires `printer.manage` and applies the entire
+selection in the route's transaction, using the existing attach/detach validation. Failed additions
+roll back earlier additions and preserve old mappings. An empty set still requires an active
+station. Printer refusal stays beneath the picker; general refusal stays at the page, and either
+permits retry. A completed write closes the editor before its separate refresh. Live mapping
+updates retain an open draft. The picker count and empty search are localized; its refusal wraps
+inside a phone-width cell.
+
+The new fired-ticket/reprint case checks exact destination sets after two selection changes,
+one watcher copy per operation, document jobs and no drawer pulse. Printing rules still retains
+its assignment controls at this checkpoint. Complete their planned handover with equally strict
+moved behavior checks, and complete Routing, Watchers, Settings, defaults and supervisor loading,
+before the full Task 8 finish/land workflow. No existing behavioral assertion changed here.
+
+
+## Task 5 Printing rules handover checkpoint — 2026-10-05T20:13:24.940649+02:00
+
+Station printer assignments now have one editor, Prep stations Tickets. Printing rules keeps its
+watcher picker and drawer controls until Tasks 6 and A261 step 8 retire those respective controls.
+Its watcher refusal points to Tickets, and a live mapping snapshot clears that printer's conflict
+only once it has no station mappings. The unrelated page action-error recovery check remains.
+Tickets also supplies a localized empty message to its shared table.
+
+The station membership, attach/detach, refusal, empty-state and native-control checks moved to
+Tickets with exact saved-set and refreshed-selection assertions. Printing rules instead requires
+its old station controls absent while preserving its watcher/drawer assertions. The approved Task 5
+handover is the authority for these changed checks; their before/after file locations are retained
+in the campaign FYI for the final PR. The shared management verbs and printing code are unchanged
+in this checkpoint's diff.
+
+Observed failures: two handover cases before implementation, two wording cases before guidance
+changes, and the Spanish empty-state case before the table received its localized message. The
+three focused Prep stations browser files passed 288 tests; after strengthening the native-name
+and option assertions, all six moved cases passed again. Printing rules passed 36 tests including
+eight EN/ES light/dark phone/desktop accessibility cases. All eight captured refusal layouts were
+inspected. The three station-printer/fire/reprint consumer files passed 51 tests; three unchanged
+root guards passed 41 tests. In a frozen-installed disposable checkout, deleting conflict clearing
+failed its case while the unrelated save-error case passed; restoring it passed both. Removing
+saved selection initialization failed the moved membership case while Cancel passed; restoring it
+passed both. The disposable checkout was removed after byte-comparing its restored changed files.
+
+Task 5's handover is implemented. Task 4 still needs its routing-only replacement; Watchers,
+Settings, venue defaults UI, supervisor page-loading and the full Task 8 review/push/CI/land gates
+remain. This checkpoint does not make the branch ready to ship.
+
+
+## Task 6 watcher printer-selection checkpoint — 2026-10-05
+
+Task 6 is partial. The server now accepts a whole watcher printer selection at
+`PUT /management-api/watchers/:id/printers`, with `printer.manage` authorization and
+one transaction. New assignments reuse `setPrinterWatcher`; the target watcher must be active
+and belong to the location even when clearing the selection. Existing disabled printer assignments
+can remain or be removed without offering that printer for a new assignment. The Prep client
+exposes the write, including from its background instance without making it passive.
+
+Thirteen new real-HTTP cases failed with 404 before the route existed; the client case failed
+because the method was absent. The three focused server suites passed 63 tests and the client
+suite passed 22. No existing assertion changed. Two initially guessed error names in the new
+cases were corrected against `request-screens.ts` and identity's `authorize.ts`; those corrections
+are not product fixes. In a frozen-installed disposable candidate, moving the save outside its
+transaction failed the three rollback cases while successful replacement passed; restoration
+passed all four. Removing only the active-target check initially survived because the printer
+verb also rejects a disabled watcher. The new case now also attempts an empty selection: that
+mutation failed with 204 instead of 404, with successful replacement still passing; restoration
+passed both cases. The candidate's changed files matched the source and the candidate was removed.
+
+The Watchers table and its cell editors, read-only screen relationships, disable action and
+Printing rules watcher handover remain open. Settings, Routing cleanup, supervisor loading and
+Task 8's whole-branch review/push/CI/land gates also remain. This checkpoint adds no screen and
+makes no visual or branch-readiness claim. Campaign-local evidence is kept in the A261-3 ledger.
+
+### 2026-10-05: Task 6 printer-editor increment (build remains partial)
+
+The Watchers printer-selection UI uses the preceding whole-set API. New browser cases cover
+multi-printer save/reopen, station conflicts, disabled retained mappings, watcher transfer, Cancel,
+refusal/retry, a live read retaining the draft and its save error, and a successful write closing
+before a failed refresh. The Escape-cancellation case was observed red without its handler.
+The editor is mounted in the existing watcher cards as an intermediate checkpoint; the approved
+table, Follows/zones/pass/name cells, retained Screens and Printing rules watcher handover remain.
+Do not finish or land this partial page. Browser/server/guard counts and deletion-control outputs
+are recorded in the campaign ledger, rather than treating this note as a verification receipt.
+
+
+### 2026-10-05: Task 6 Watchers table increment (build remains partial)
+
+Watchers now has subject cells for Follows, service zones, Runs the pass, Screens and Printers,
+with Rename and Disable in a pinned row menu. The printer picker moved from its temporary card
+placement into the table. Choice editors share creation-form validation, keep every and explicit
+selections exclusive, and retain drafts/refusals through live reads. Screens remains read-only,
+includes retained inactive device bindings and links to Devices. Rename writes the saved values
+of other fields rather than including an unsaved choice draft.
+
+The existing relationship checks moved to their corresponding table cells, with exact choice
+values; the former whole-watcher update check now verifies Rename's complete request. Its axe
+refusal state now reaches the real Rename request rather than injecting a refusal into the old
+whole-record form. Their before/after locations are recorded in the campaign's changed-check FYI.
+New test-first checks and disposable deletion controls are recorded in the campaign ledger.
+
+Task 6 still needs the Printing rules watcher-printer handover. Task 4's Routing cleanup, Task 7's
+Settings/defaults and supervisor page-loading contract, and Task 8's whole-branch review, hook,
+current-head CI and landing remain. The full page is not ready to finish or ship.
+
+
+### 2026-10-05: Task 6 Printing rules handover (build remains partial)
+
+Printing rules now links to Prep stations Tickets and Watchers instead of reading or editing kitchen
+printer assignments. Its existing drawer-policy controls remain for step 8. Their saved-choice,
+refusal, in-flight gate and action-versus-read recovery checks retain their behavioral assertions;
+load fixtures now fail/recover the surviving location read. The watcher assignment checks now run
+on Watchers: whole-set choices and transfer, native saved selection, Cancel after refusal, localized
+station conflict guidance, phone geometry and light/dark accessibility. The old conflict-recovery
+check moved to the Watchers editor with partial/final station-release assertions and no resubmission.
+A second selected printer still serving a station keeps the refusal, even after the printer named by
+the server has been released. A general save error survives the same live read.
+
+New handover/conflict checks failed before their implementation. The new 320px geometry check first
+used a synthetic click on an offscreen table cell; the browser's real click scrolls the cell into
+view, and the retained viewport bounds pass. No production geometry change followed that probe.
+Tasks 4 (Routing cleanup), 7 (Settings/defaults/supervisor page loading) and 8 (whole-branch review,
+current-head CI and landing) remain. This checkpoint does not authorize shipping a partial page.
+
+
+## 2026-10-05 implementation checkpoint: Venue settings Kitchen late flags
+
+The Kitchen panel now loads venue defaults through its own shared dashboard query and edits all
+three values in one form. Every invalid field is marked after a submission; only the form's own
+checks or an in-flight write disable Save. A refused effective station order names the station
+under the returned field and remains retryable. Saved snapshots and drafts are separate: a live
+read changes the saved values without erasing a typed value or a save refusal. A successful write
+closes before its refresh, so a failed refresh reports a read failure. Cancel/Escape discards;
+Enter saves. Supervisors see saved values without a way to edit them. The query subscribes to
+`kitchen_timing_defaults` and its background GET is passive.
+
+The new client and browser assertions failed before the methods and form were added. Focused
+browser suites retain the existing Kitchen, Venue settings, client and live-query assertions.
+The shell's Kitchen fixtures add the new default-read/write methods without changing existing
+checks. Saved, locally invalid and station-refused states passed axe and viewport checks in
+English and Spanish, light and dark, at measured widths 390 and 1280; their captures were inspected.
+The initial capture showed the Edit button stretched across the panel; a geometry assertion failed,
+then passed after the button was allowed to fit its label.
+
+In a frozen-installed complete disposable candidate, deleting the local validation sent invalid
+writes; overwriting an open draft on a live read replaced its typed value; including a server
+refusal in Save's disabled condition prevented a retry. Each focused control failed with that
+change and passed after restoration, alongside its valid-save or Cancel positive control.
+The campaign ledger retains the literal commands and counts. This is a Task 7 subtask checkpoint;
+station Settings, Routing-only cleanup, supervisor Prep-page loading, whole-branch review and
+current-head CI remain before finishing or landing. The approved reset requirement remains.
+
+
+## 2026-10-05 Settings choice-cell checkpoint
+
+Task 7 now supplies one Settings row per active station and independent choice editors for
+Show the rest of the order and When closed, work goes to. The default reads Never closes and
+has no fallback picker. A fallback change confirms the existing destination sentence inside
+its cell; changing the choice clears that confirmation. The existing station patch and fallback
+routes remain the write seams. Cancel/Escape discards, an in-flight write holds the draft, a
+request refusal remains retryable, and a successful write closes before a separate refresh.
+Local yes/no validation marks and focuses the choice and rechecks after an invalid submission.
+
+`pnpm --filter @waitron/venue-service exec vitest run --project browser
+src/dashboard/prep-stations-screen.test.ts src/dashboard/prep-stations-screen.a11y.test.ts
+src/dashboard/prep-stations-screen.settings.test.ts src/dashboard/routing-client.test.ts`
+ran four files with 359 passing cases. The new cases include eight EN/ES, light/dark, 390/1280px
+accessibility/viewport states; their saved, picker, refusal, confirmation and fallback-refusal
+captures were inspected. In a frozen-installed disposable candidate, deleting validation,
+fallback confirmation, or invalid-field focus separately failed its targeted case while a valid
+save still passed; restoring all three passed the four selected cases. Package types, focused
+lint/format and the unchanged native-field/token/subscription guards passed. Existing checks and
+fixtures were unchanged. The campaign ledger retains commands and logs, including corrections
+to the new test harness's URL, field-message expectation and table lookup type.
+
+This is a Task 7 subtask checkpoint. The three timing cells/inheritance display, supervisor
+Prep-page loading, Task 4 Routing cleanup and Task 8 whole-branch finish/CI/land remain open.
+Do not ship this partial page.
+
+
+## 2026-10-05 Settings timing-cell checkpoint
+
+Task 7's late-flag cells now read effective values with separate raw overrides and venue defaults
+from the existing station list. A same-valued override remains explicit. Each cell saves only its
+own field; blank saves null. Local validation checks the latest effective trio, whole positive
+minutes and the existing integer bound. Invalid submissions retain/focus the field and recheck on
+change; a server refusal remains retryable with a field message and bottom summary. Cancel/Escape
+discard. The routing read subscribes to timing defaults and overrides as well as station metadata,
+so a venue default change updates inherited values without resetting an open draft or action error.
+
+The two existing whole-station response checks in `apps/server/src/kitchen.test.ts` gain exact
+`timingDefaults`/`timingOverrides` objects without changing existing values. Three Prep browser
+fixture files gain the same complete response metadata, including the accessibility fixture's
+station pair. Campaign-local test and deletion-control logs record the verification.
+
+Routing-only cleanup, supervisor page loading and Task 8 whole-branch review/hook/current-head
+CI/landing remain. This checkpoint does not mark the branch ready to ship.
+
+
+## Supervisor overview checkpoint — 2026-10-05
+
+The dashboard now accepts a module screen's optional read permission and passes its read-only
+state to the screen, following the settings-panel contract. Prep stations uses `venue.view` for
+Stations health and drilldowns, retaining `venue_service.manage` for configuration. Its overview
+client reads station metadata and a separate station-overview venue-service route; it requests no
+printer, device, watcher or catalogue management lists. Existing routing and write permissions
+remain in place. A saved configuration link and switching an open screen into read-only mode select Stations;
+configuration tabs, creation, row actions, reordering and Today writes are absent for viewers.
+
+New route, metadata, client, screen and shell cases failed before implementation. The final focused
+commands passed 66 venue-service route tests, 109 server tests, 312 dashboard shell tests and 350
+Prep browser tests, including eight EN/ES, light/dark, phone/desktop keyboard, axe and viewport
+cases. Sixteen page/drilldown captures were inspected. Three unchanged root guards passed 37
+cases; four affected package typechecks and focused lint passed. In a frozen-installed complete
+disposable copy, removing the overview authorization made the staff refusal fail while the
+supervisor case passed; removing the readonly row-action gate made the hidden-menu check fail
+while two manager cases passed; removing the shell read-access branch made the supervisor nav
+check fail while the manager tester case passed. Restoring each gate passed its selected cases. A strengthened overview case includes a nondefault
+station with scheduled status: removing its readonly Today gate exposes a closure button and fails
+that case, while the two manager Today cases pass; restoring it passes all three cases.
+
+The existing Prep placement check gains `readPermission: "venue.view"` under Tasks 3–4's approved
+supervisor read access. Its request fixture now supplies a complete empty health snapshot rather
+than an array; all existing behavior assertions remain. The first broader browser run passed its
+341 assertions but exited with that fixture's unhandled error; it was not a green run. New visual
+harness waits and screenshot paths were corrected before the final passing run. This is a subtask
+checkpoint: Routing-only cleanup and Task 8 whole-branch review/hook/CI/landing remain open.
+
+## Routing assignment/settings handover checkpoint — 2026-10-05T22:30:17.847328+02:00
+
+Routing station cards no longer repeat printer, screen or watcher relationships, late-flag
+summaries or the rest-of-order switch. Tickets retains the output names and Devices/Watchers
+links; Settings retains the choice, draft/refusal behavior and rendered Yes/No value.
+The card's claims, exception/tester paths and other station controls are still present.
+Task 4 remains partial: retire duplicate Today/default/rename/enable/disable/fallback and
+whole-record edit controls, moving their behavioral checks to the existing tables/cells,
+before Task 8's whole-branch review, hook, current-head CI and authorised landing.
+
+New five browser checks failed on each repeated control/text before removal, then passed.
+The four affected Prep browser files passed 381 cases. Forty-two unchanged root guards and
+venue-service typechecking passed. The eight EN/ES light/dark 390/1280 handover cases check
+axe, page overflow and native Settings rendering; 24 captures were inspected. A new dark
+harness initially failed contrast because it omitted the themed page canvas; matching the
+existing harness fixed that fixture error. No product contrast repair is claimed.
+Moved field-refusal control in an independent frozen-installed candidate failed one case
+while its unrelated refusal passed; changing the saved choice failed both moved refusal
+cases while five Routing controls passed. Restoring both passed all seven selected cases.
+Final formatting/lint and checkpoint details are recorded in the campaign ledger.
+
+## 2026-10-05 implementation checkpoint: Routing fallback handover
+
+Routing no longer offers either the active card's fallback picker/change button or the disabled
+card's change button. Settings keeps the fallback selection and destination confirmation in its
+cell, including a retained disabled destination, no replacement as null and retryable loop/inactive
+refusals. Its picker retains the localized station-search prompt and empty-choice placeholder.
+Disable still has its separate replacement confirmation; this checkpoint does not retire it.
+
+Existing fallback destination, null, refusal, search and accessibility checks now exercise Settings.
+The first new absence/search checks failed before implementation. Station Today/default/rename,
+Disable/Enable and whole-record edit handover remain before Task 4 is complete. Task 8 whole-branch
+review, rebase, normal hook, current-head CI and authorised landing remain after that work.
+
+The handover retains disabled stations at the bottom of Settings with a localized Disabled label.
+Their old standalone Routing editor could change a fallback without enabling the station, so
+filtering them out of Settings would remove an existing action. A new UI check failed on the
+missing cell, then passed with the exact null write and no Enable or station-update call.
+
+The old standalone editor skipped an unchanged fallback write. Settings now keeps that behavior,
+including an already stored disabled destination: it still confirms the destination, then closes
+without resubmitting the mapping. A new browser check first observed the unwanted request and
+then passed; changed destinations continue through the existing write/refusal cases.
+
+
+## 2026-10-05 implementation checkpoint: Routing station-action handover
+
+Routing no longer repeats Today, Make default, Disable or Enable controls. Their existing
+request, confirmation, retained-fallback, refusal, retry and pending-write checks use Stations.
+Six new browser cases first failed because each duplicate was present in Routing; the focused
+handover selection then passed 14 cases. The shared Today cell offers Back to the schedule for
+an existing day override, so the old explicit-open case now starts from a scheduled closure;
+it still asserts the exact `setStationToday("upstairs", "open")` write, and the separate clear
+case retains the exact null write. The server write implementation is unchanged in this increment.
+
+The legacy browser API fixture now supplies empty health rows for the stations its most recent
+load returned, without issuing an extra load. The timing-accessibility fixture supplies the
+same complete row shape for its own station list. Previously both returned no health rows and
+tested actions on Routing cards; the first moved selection exposed that fixture omission.
+
+Task 4 remains partial: whole-record editing and duplicate station status still need handover.
+Task 8 whole-branch checks, initial rebase and any migration regeneration, Claude run-it review,
+normal push hook, current-head CI and authorised landing remain. No readiness claim is made.
+
+
+## 2026-10-05 implementation checkpoint: remaining Routing handover
+
+Routing now keeps category claims, exceptions, their priority and the tester without a duplicate
+whole-station editor or station status/output problems. Rename and ordering use Stations; late
+flags use the individual Settings cells. Station creation keeps its form, numeric validation and
+Enter submission. Rename now refuses a draft if live metadata no longer contains that station.
+Stations reads output problems from the health snapshot, retiring the separate output read/timer.
+
+The existing whole-record/Enter/validation/stale-draft checks now exercise Rename, ordering,
+Settings and creation. The Default wording check reads Always open and a separate Default badge;
+its no-close assertion remains. Exact status, fallback, request, refusal, timer cleanup and
+per-station warning checks remain on their replacement surfaces. Campaign-local changed-check
+notes record the old and new assertions for the eventual PR.
+
+New editor/stale-name and duplicate-status/read checks failed before implementation. The four
+Prep browser files passed 396 cases; the final creation/rename controls passed four cases. A
+phone capture exposed an unconstrained warning paragraph. Eight real-browser width checks
+failed at 510/530 pixels against the shared 140-pixel name width before the wrapping change;
+the corrected width/line-fragment checks passed in all eight EN/ES, light/dark, 390/1280 states,
+with inspected captures. The first height assertion parsed a computed normal line height as NaN;
+it was a new harness error, replaced with actual text-line rectangles. The health component's
+complete two-file run passed 29 cases. Root guards, types, focused lint and formatting passed.
+In an independently installed disposable candidate, deleting the stale-name gate failed both
+stale-draft cases while an ordinary Enter rename passed; restoring it passed all three.
+
+Tasks 1–7 are implemented. Task 8 remains: whole-branch prose/consumer audit, initial rebase and
+any migration regeneration, required focused/schema/fiscal evidence, one Claude run-it review,
+normal push hook, current-head CI and authorised landing. Earlier partial-checkpoint descriptions
+above record their date's tree; this checkpoint describes the current Routing handover.
+
+
+## 2026-10-05 whole-branch review checkpoint
+
+The core journal collision was regenerated from main as `0102_kitchen_timing_inheritance.sql`,
+which creates the two timing tables without rebuilding stations. The initial rebase retained the
+landed Disable/Enable wording and moved its exact EN/ES check to Stations. Later clean rebases
+retained receipt and category-path work; the latter's two overlapping consumer files passed 185 tests.
+
+The Claude run-it seat took 603 seconds on captured head `b75d68a36` and base `30eeacc2c`, with
+an independent frozen-installed checkout. It ran eleven commands, including three deleted-guard
+controls and real Chromium. Its missing-default probe returned empty health and a bare Error.
+Seven new consumer cases then failed before the fix. Kitchen/pass/floor/signal/reporting reads now
+check that each existing location has timing defaults before their joins; missing configuration
+refuses `station.timing_missing`. The defaults read uses that same code. There is no backfill or
+old-value conversion: the approved reset remains the installation procedure. The retained parent
+columns now name their replacement at the declaration.
+
+The corrected consumer and health suites passed 22 tests; db readiness/storage/upgrade passed four;
+working-order/floor/watchers/tabs passed 367; overdue reporting passed 16. Root error/module guards
+passed 2,071 tests, and db/server/reporting types and focused lint exited zero. Removing the new
+shared readiness guard in the disposable copy failed six missing-default cases while eight
+positive/default-refusal controls passed. The restored run is recorded separately in campaign
+artifacts. These are focused results; the push hook, current-head CI and landing remain.
+
+The overview client's methods remain present; server permissions, rather than that render flag,
+authorize writes. The redundant active filter in reordering is left for later cleanup. The review's
+read-only transition concern is checked against the existing exact opening/closing boundary cases;
+no scheduling behavior was changed in this checkpoint.

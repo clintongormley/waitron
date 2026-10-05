@@ -8,10 +8,14 @@ import {
   kitchenCourses,
   products,
   kitchenStations,
+  kitchenStationTiming,
 } from "@waitron/db";
+import type { StationThresholds } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { productWithId, type ProductScope } from "@waitron/catalogue";
 import type { TillConfig } from "./till-config.js";
+import { assertStationTiming, getKitchenTimingDefaults } from "./kitchen-timing.js";
+import type { StationTimingPatch } from "./kitchen-timing.js";
 
 // Nothing here authorizes. The write verbs are called only from the kitchen routes, gated by
 // `venue.configure` (`withVenueAuth` in management-api.ts), and the product editor's save, gated by
@@ -26,6 +30,8 @@ export interface Station {
   isDefault: boolean;
   active: boolean;
   showsRestOfOrder: boolean;
+  timingDefaults: StationThresholds;
+  timingOverrides: { [Field in keyof StationThresholds]: number | null };
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
@@ -75,13 +81,14 @@ export async function createStation(
     name: string;
     displayOrder?: number;
     isDefault?: boolean;
-    thresholds?: {
-      warmAfterMinutes: number;
-      overdueAfterMinutes: number;
-      forgottenAfterMinutes: number;
-    };
+    thresholds?: StationTimingPatch;
   },
 ): Promise<{ id: string }> {
+  if (input.thresholds !== undefined) {
+    assertStationTiming(input.thresholds, await getKitchenTimingDefaults(tx, cfg), {
+      name: input.name,
+    });
+  }
   if (input.isDefault) {
     await clearDefault(tx, cfg);
   }
@@ -93,9 +100,11 @@ export async function createStation(
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
         isDefault: input.isDefault ?? false,
-        ...input.thresholds,
       })
       .returning({ id: kitchenStations.id });
+    if (input.thresholds !== undefined && Object.keys(input.thresholds).length > 0) {
+      await tx.insert(kitchenStationTiming).values({ stationId: row!.id, ...input.thresholds });
+    }
     return { id: row!.id };
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -105,9 +114,13 @@ export async function createStation(
   }
 }
 
-/** The venue's ACTIVE stations, by `display_order` then `name`. */
-export async function listStations(tx: Transaction, cfg: TillConfig): Promise<Station[]> {
-  return tx
+export async function listStations(
+  tx: Transaction,
+  cfg: TillConfig,
+  includeDisabled = false,
+): Promise<Station[]> {
+  const defaults = await getKitchenTimingDefaults(tx, cfg);
+  const stations = await tx
     .select({
       id: kitchenStations.id,
       name: kitchenStations.name,
@@ -115,68 +128,98 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
       isDefault: kitchenStations.isDefault,
       active: kitchenStations.active,
       showsRestOfOrder: kitchenStations.showsRestOfOrder,
-      warmAfterMinutes: kitchenStations.warmAfterMinutes,
-      overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
-      forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
+      warmAfterMinutes: kitchenStationTiming.warmAfterMinutes,
+      overdueAfterMinutes: kitchenStationTiming.overdueAfterMinutes,
+      forgottenAfterMinutes: kitchenStationTiming.forgottenAfterMinutes,
     })
     .from(kitchenStations)
-    .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
+    .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
+    .where(
+      and(
+        eq(kitchenStations.locationId, cfg.locationId),
+        includeDisabled ? undefined : eq(kitchenStations.active, true),
+      ),
+    )
     .orderBy(kitchenStations.displayOrder, kitchenStations.name);
+  return stations.map((station) => ({
+    ...station,
+    timingDefaults: defaults,
+    timingOverrides: {
+      warmAfterMinutes: station.warmAfterMinutes,
+      overdueAfterMinutes: station.overdueAfterMinutes,
+      forgottenAfterMinutes: station.forgottenAfterMinutes,
+    },
+    warmAfterMinutes: station.warmAfterMinutes ?? defaults.warmAfterMinutes,
+    overdueAfterMinutes: station.overdueAfterMinutes ?? defaults.overdueAfterMinutes,
+    forgottenAfterMinutes: station.forgottenAfterMinutes ?? defaults.forgottenAfterMinutes,
+  }));
 }
 
-/**
- * Edit any subset of a station's fields — NOT `is_default`, which only {@link setDefaultStation}
- * may flip. The route validates the timing thresholds (`warm < overdue < forgotten`) before this is
- * called. An absent id throws `station.not_found`; a name collision throws `station.name_taken`.
- */
+export async function reorderStations(
+  tx: Transaction,
+  cfg: TillConfig,
+  ids: unknown,
+): Promise<void> {
+  const stations = (await listStations(tx, cfg)).filter((station) => station.active);
+  if (
+    !Array.isArray(ids) ||
+    ids.length !== stations.length ||
+    new Set(ids).size !== ids.length ||
+    ids.some((id) => typeof id !== "string" || !stations.some((station) => station.id === id))
+  ) {
+    throw new AppError("management.request_invalid", { field: "ids" });
+  }
+  for (const [displayOrder, id] of ids.entries()) {
+    await tx.update(kitchenStations).set({ displayOrder }).where(eq(kitchenStations.id, id));
+  }
+}
+
 export async function updateStation(
   tx: Transaction,
-  _cfg: TillConfig,
+  cfg: TillConfig,
   id: string,
   patch: {
     name?: string;
     displayOrder?: number;
     active?: boolean;
     showsRestOfOrder?: boolean;
-    warmAfterMinutes?: number;
-    overdueAfterMinutes?: number;
-    forgottenAfterMinutes?: number;
-  },
+  } & StationTimingPatch,
 ): Promise<void> {
-  const set: {
-    name?: string;
-    displayOrder?: number;
-    active?: boolean;
-    showsRestOfOrder?: boolean;
-    warmAfterMinutes?: number;
-    overdueAfterMinutes?: number;
-    forgottenAfterMinutes?: number;
-  } = {};
-  if (patch.name !== undefined) set.name = patch.name;
-  if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
-  if (patch.active !== undefined) set.active = patch.active;
-  if (patch.showsRestOfOrder !== undefined) set.showsRestOfOrder = patch.showsRestOfOrder;
-  if (patch.warmAfterMinutes !== undefined) set.warmAfterMinutes = patch.warmAfterMinutes;
-  if (patch.overdueAfterMinutes !== undefined) set.overdueAfterMinutes = patch.overdueAfterMinutes;
-  if (patch.forgottenAfterMinutes !== undefined)
-    set.forgottenAfterMinutes = patch.forgottenAfterMinutes;
-
-  let updated: { id: string }[];
+  const { warmAfterMinutes, overdueAfterMinutes, forgottenAfterMinutes, ...set } = patch;
+  const timingPatch: StationTimingPatch = {};
+  if (warmAfterMinutes !== undefined) timingPatch.warmAfterMinutes = warmAfterMinutes;
+  if (overdueAfterMinutes !== undefined) timingPatch.overdueAfterMinutes = overdueAfterMinutes;
+  if (forgottenAfterMinutes !== undefined)
+    timingPatch.forgottenAfterMinutes = forgottenAfterMinutes;
+  const [station] = await tx
+    .select({ name: kitchenStations.name, timing: kitchenStationTiming })
+    .from(kitchenStations)
+    .leftJoin(kitchenStationTiming, eq(kitchenStationTiming.stationId, kitchenStations.id))
+    .where(and(eq(kitchenStations.id, id), eq(kitchenStations.locationId, cfg.locationId)));
+  if (station === undefined) throw new AppError("station.not_found", { stationId: id });
+  const hasTiming = Object.keys(timingPatch).length > 0;
+  if (hasTiming) {
+    assertStationTiming(
+      { ...station.timing, ...timingPatch },
+      await getKitchenTimingDefaults(tx, cfg),
+      { id, name: station.name },
+    );
+  }
   try {
-    updated = await tx
-      .update(kitchenStations)
-      .set(set)
-      .where(eq(kitchenStations.id, id))
-      .returning({ id: kitchenStations.id });
+    if (Object.keys(set).length > 0) {
+      await tx.update(kitchenStations).set(set).where(eq(kitchenStations.id, id));
+    }
   } catch (error) {
     if (isUniqueViolation(error)) {
-      // Only `name` participates in a unique an UPDATE can trip here, so it was necessarily supplied.
       throw new AppError("station.name_taken", { name: patch.name! });
     }
     throw error;
   }
-  if (updated.length === 0) {
-    throw new AppError("station.not_found", { stationId: id });
+  if (hasTiming) {
+    await tx
+      .insert(kitchenStationTiming)
+      .values({ stationId: id, ...timingPatch })
+      .onConflictDoUpdate({ target: kitchenStationTiming.stationId, set: timingPatch });
   }
 }
 

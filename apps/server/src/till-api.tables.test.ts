@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { floorZones, locations, withTransaction } from "@waitron/db";
+import { floorZones, kitchenTimingDefaults, locations, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { writeEditSentLines } from "@waitron/venue-service";
@@ -64,6 +64,7 @@ const suite = useVenueDb({
       .insert(locations)
       .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
       .returning({ id: locations.id });
+    await db.insert(kitchenTimingDefaults).values({ locationId: loc!.id });
     await seedKitchenStation(db, { locationId: brandLocationId(loc!.id) });
     // `openTab`/`addTabRound` create a working_orders row whose `node_id` FK requires a real row.
     const nodeId = await seedNode(db, brandLocationId(loc!.id));

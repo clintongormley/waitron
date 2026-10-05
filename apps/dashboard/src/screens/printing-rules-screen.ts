@@ -1,23 +1,13 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
-import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-card.js";
-import "@waitron/ui/src/components/wt-switch.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { drawerPolicyName } from "../i18n/domain.js";
-import type {
-  DashboardApi,
-  DrawerOpenPolicy,
-  LocationSummary,
-  Printer,
-  Station,
-  Watcher,
-} from "../api/client.js";
+import type { DashboardApi, DrawerOpenPolicy, LocationSummary } from "../api/client.js";
 
 const DRAWER_POLICIES: readonly DrawerOpenPolicy[] = ["gated", "open"];
 
@@ -56,20 +46,11 @@ export class PrintingRulesScreen extends LitElement {
         margin-right: auto;
         font-weight: var(--wt-font-weight-bold);
       }
-      .row wt-combobox {
-        flex: 0 1 calc(var(--wt-space-6) * 7);
-        min-width: 0;
-      }
       .empty {
         color: var(--wt-color-text-muted);
       }
       .error {
         color: var(--wt-color-danger);
-      }
-      .stations {
-        display: grid;
-        gap: var(--wt-space-2);
-        margin-top: var(--wt-space-3);
       }
     `,
   ];
@@ -82,11 +63,6 @@ export class PrintingRulesScreen extends LitElement {
       if (this.#readErrorShown) this.#showError(null);
     },
   );
-  @state() private printers: Printer[] = [];
-  @state() private stations: Station[] = [];
-  @state() private watchers: Watcher[] = [];
-  @state() private printerErrors: Record<string, string> = {};
-  @state() private printerStations: Record<string, string[]> = {};
   @state() private locations: LocationSummary[] = [];
   // Location settings have no read route, so only successful writes establish a known value.
   @state() private drawerPolicies: Record<string, DrawerOpenPolicy> = {};
@@ -112,37 +88,11 @@ export class PrintingRulesScreen extends LitElement {
     });
   }
   async #load(): Promise<void> {
-    // Stations gate on venue.configure, locations on schedule.manage, and printers and each
-    // printer's stations on printer.manage. Today manager and admin hold all three
-    // (packages/identity/src/permissions.ts); revisit this fan-out if one is ever granted on its own.
-    await Promise.all([
-      this.#queries.watch("listPrinters", [], async (printers) => {
-        this.printers = printers;
-        await this.#queries.watchGroup(
-          "listPrinterStations",
-          printers.map((printer) => [printer.id]),
-          (lists) => {
-            this.printerStations = Object.fromEntries(
-              printers.map((printer, index) => [
-                printer.id,
-                lists[index]!.map((item) => item.stationId),
-              ]),
-            );
-          },
-        );
-      }),
-      this.#queries.watch("listStations", [], (value) => {
-        this.stations = value;
-      }),
-      this.#queries.watch("listWatchers", [], (value) => {
-        this.watchers = value;
-      }),
-      this.#queries.watch("getLocations", [], (value) => {
-        this.locations = value;
-      }),
-    ]);
+    await this.#queries.watch("getLocations", [], (value) => {
+      this.locations = value;
+    });
   }
-  async #mutate(action: () => Promise<unknown>, printerId?: string): Promise<void> {
+  async #mutate(action: () => Promise<unknown>): Promise<void> {
     if (this.saving) return;
     this.saving = true;
     this.#showError(null);
@@ -151,14 +101,9 @@ export class PrintingRulesScreen extends LitElement {
       await action();
       written = true;
       await this.#load();
-      if (printerId && (this.printerStations[printerId] ?? []).length === 0) {
-        this.printerErrors = { ...this.printerErrors, [printerId]: "" };
-      }
     } catch (error) {
       const code = codeOf(error);
-      if (printerId && code === "printer.makes_and_watches") {
-        this.printerErrors = { ...this.printerErrors, [printerId]: code };
-      } else if (written) {
+      if (written) {
         this.#showReadError(error);
       } else {
         this.#showError(code);
@@ -172,71 +117,6 @@ export class PrintingRulesScreen extends LitElement {
       await this.api.setDrawerOpenPolicy(locationId, policy);
       this.drawerPolicies = { ...this.drawerPolicies, [locationId]: policy };
     });
-  }
-  #renderRouting(printer: Printer): TemplateResult {
-    return html`<li>
-      <wt-card>
-        <div class="row">
-          <span class="details">${printer.name}</span>
-          <wt-combobox
-            name="watcherId"
-            label=${t("printers.watcher_copies")}
-            search="auto"
-            searchPlaceholder=${t("categories.combobox_search")}
-            noResultsLabel=${t("categories.combobox_no_results")}
-            .options=${[
-              { value: "", label: t("printers.watcher_no") },
-              ...this.watchers
-                .filter((watcher) => watcher.active)
-                .map((watcher) => ({ value: watcher.id, label: watcher.name })),
-            ]}
-            .value=${live(printer.watcherId ?? "")}
-            .disabled=${this.saving}
-            data-test="printer-watcher-${printer.id}"
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              void this.#mutate(
-                () => this.api.setPrinterWatcher(printer.id, event.detail.value || null),
-                printer.id,
-              );
-            }}
-          ></wt-combobox>
-        </div>
-        <div class="stations" role="group" aria-label=${t("printers.stations_title")}>
-          <strong>${t("printers.stations_title")}</strong>
-          ${
-            this.stations.length === 0
-              ? html`<p class="empty" data-test="no-stations-${printer.id}">
-                  ${t("printers.no_stations")}
-                </p>`
-              : this.stations.map(
-                  (station) => html`
-                    <wt-switch
-                      label=${station.name}
-                      name="stationIds"
-                      aria-label=${station.name}
-                      data-test="station-toggle-${printer.id}-${station.id}"
-                      .checked=${live((this.printerStations[printer.id] ?? []).includes(station.id))}
-                      .disabled=${this.saving || printer.watcherId !== null}
-                      @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
-                        const checked = event.detail.checked;
-                        void this.#mutate(
-                          () =>
-                            checked
-                              ? this.api.attachPrinterToStation(station.id, printer.id)
-                              : this.api.detachPrinterFromStation(station.id, printer.id),
-                          printer.id,
-                        );
-                      }}
-                    ></wt-switch>
-                  `,
-                )
-          }
-        </div>
-        ${printer.watcherId !== null ? html`<p>${t("printers.watcher_station_disabled")}</p>` : nothing}
-        ${this.printerErrors[printer.id] ? html`<p class="error" role="alert">${t("printers.watcher_conflict")}</p>` : nothing}
-      </wt-card>
-    </li>`;
   }
   #drawerPolicyOption(locationId: string, policy: DrawerOpenPolicy): TemplateResult {
     return html`<wt-button
@@ -293,13 +173,16 @@ export class PrintingRulesScreen extends LitElement {
       <h1>${t("printing_rules.title")}</h1>
       <section>
         <h2>${t("printing_rules.routing_title")}</h2>
-        ${
-          this.printers.length === 0
-            ? html`<p class="empty" data-test="no-printers">${t("printers.no_printers")}</p>`
-            : html`<ol>
-                ${this.printers.map((printer) => this.#renderRouting(printer))}
-              </ol>`
-        }
+        <p>
+          <a data-test="tickets-link" href="/manage/prep-stations/view/tickets"
+            >${t("printing_rules.tickets_link")}</a
+          >
+        </p>
+        <p>
+          <a data-test="watchers-link" href="/manage/prep-stations/view/watchers"
+            >${t("printing_rules.watchers_link")}</a
+          >
+        </p>
       </section>
       ${this.#renderReceiptSection()}
       ${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}

@@ -41,6 +41,36 @@ function request(taxId = "B12345678"): VenueRequest {
   };
 }
 
+it("provisions late-flag defaults once and preserves edits when the venue plan is retried", async () => {
+  const plan = planVenue(request("B10000007"), ALL_MODULES);
+  const first = await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
+  const defaults = () =>
+    suite.db.execute<{
+      location_id: string;
+      warm_after_minutes: number;
+      overdue_after_minutes: number;
+      forgotten_after_minutes: number;
+    }>(sql`select * from kitchen_timing_defaults`);
+  expect((await defaults()).rows).toEqual([
+    {
+      location_id: first.locationId,
+      warm_after_minutes: 5,
+      overdue_after_minutes: 10,
+      forgotten_after_minutes: 15,
+    },
+  ]);
+  await suite.db.execute(sql`update kitchen_timing_defaults set warm_after_minutes = 3`);
+  await applyVenue(plan, { db: suite.db, modules: ALL_MODULES });
+  expect((await defaults()).rows).toEqual([
+    {
+      location_id: first.locationId,
+      warm_after_minutes: 3,
+      overdue_after_minutes: 10,
+      forgotten_after_minutes: 15,
+    },
+  ]);
+});
+
 describe("applyVenue: the one taxpayer row", () => {
   it("creates it with id 1 on a fresh database", async () => {
     await applyVenue(planVenue(request("B10000001"), ALL_MODULES), {

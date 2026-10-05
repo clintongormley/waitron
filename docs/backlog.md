@@ -3675,6 +3675,12 @@ one run and 29 in another on main f92dc84e6, and none on the W72h branch after i
 Pinned by the "crossing the phone width into rows its layout makes taller" case in
 `packages/ui/src/components/wt-data-table.test.ts`, which failed with the error before the change.
 
+On 2026-10-05 A261-3 also observed this message while running
+`pnpm --filter @waitron/dashboard exec vitest run src/widgets/folder-made-at.test.ts
+src/widgets/catalogue-browser.test.ts`: both the transition candidate and the previous
+`c41ed54910fece4add9f1475bf18034992545e99` commit in a frozen-installed disposable checkout
+reported 164 passing tests and logged the message. Its cause on that path has not been established.
+
 **Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
 owner 2026-10-04; since 2026-10-05 a tree, W82a, see the last paragraph).** The bulk Move
 dialog's Destination list showed categories in the order the server lists them, by creation time and then id (`listCategories`,
@@ -6324,7 +6330,100 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.
   Eight build steps, each its own queue item.
   [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) was approved on 2026-10-05;
-  its Prep stations tabs, live numbers and inherited late flags are not implemented. Approved decisions
+  its implementation and whole-branch review are complete; current-head CI remains before landing.
+  CI exposed missing timing-default rows in direct server fixtures and incomplete provisioning
+  cleanup; the fixtures now include the required rows, and cleanup removes timing children first.
+  The Spanish reminder check now uses the approved Deshabilitado wording.
+  Additional browser checks cover retained printer IDs, tied station/watcher ordering, extra
+  routing explanations, retryable watcher refusals and dialog cancellation/invalid rename recovery.
+  A refused unassigned-folder claim keeps its field message beside that folder; unavailable watcher
+  metadata keeps the retained watcher ID visible on its printer choice.
+  The schema foundation adds venue defaults and separate nullable station
+  timing storage. Provisioning now creates 5/10/15 defaults, with a supervisor-readable defaults
+  API whose writes refuse an invalid effective station order. Station creation and edits now write
+  independent nullable overrides. The management list, kitchen queue, pass, floor bands/signals and
+  overdue report resolve inherited values, and configuration transfer carries defaults and overrides.
+  The station-health API now returns dish-row counts, per-band lateness and oldest-first kitchen
+  drilldowns with remaining quantities, using one captured time. Supervisors can read it; staff
+  cannot. The screen now observes the health read and refreshes elapsed values every fifteen
+  seconds. A shared table renders live counts, per-band and state drilldowns, remaining quantities,
+  Default/Disabled labels and separate printer/screen problems. Health refreshes retain open drafts;
+  read recovery waits for the failing read and preserves action refusals. The five subject tabs now
+  have stable deep links, Back restoration and creation actions beside the strip; old tester links
+  open Routing, where category claims, exceptions and the tester remain mounted. Interim station
+  hours sit below the panels.
+  Category wording and Disable/Enable actions apply in both languages. Tickets now lists printer
+  selections, current kitchen screens and following watchers, with links to Devices and Watchers.
+  Its multi-select saves a complete printer set in one request; a refused set retains its draft and
+  previous mappings. Disabled printers can be removed from retained assignments but not added.
+  Printing rules now links to Tickets and Watchers instead of editing either printer assignment;
+  its drawer controls remain for step 8. Watchers retains a printer conflict until Tickets releases
+  every station mapping for the selected printers, without clearing an unrelated save error.
+  Tickets localises its empty state.
+  Watcher printer selections now have a whole-set API using the existing printer-management
+  permission and assignment checks in one transaction. A refused new mapping rolls back earlier
+  moves; an already selected disabled printer can be retained or cleared. The Prep client exposes
+  that write. The Watchers printer editor now submits a whole selection beside its shown output,
+  explains station and disabled-printer conflicts, permits transfer from another watcher, and keeps
+  refused drafts retryable through live reads. Cancel/Escape sends no write; a successful save closes
+  before refreshing. Watchers now uses a table with the printer picker in its Printers cell.
+  Follows and service-zone cells choose every member or an explicit list; Runs the pass uses its
+  own choice editor. Rename and Disable sit in the row menu. Screens includes retained inactive
+  bindings and links to Devices. Cell drafts and save refusals survive live reads; Rename writes
+  saved values for every other field, leaving unsaved drafts out of its request. The watcher-printer
+  handover is implemented. Stations now
+  offers confirmed Open/Close for today and Back to the schedule actions, with retry after a write refusal. Default and unscheduled stations
+  say Always open without an action; disabled stations and an unreadable clock offer no hours
+  action. Today now shows the next scheduled opening or closing, distinguishing tomorrow and later
+  weekdays; overlapping or adjoining intervals keep the station open until the actual closure.
+  Its passive minute refresh changes the displayed state without a database event. Stations now
+  has Rename, Make default and confirmed Disable/Enable row actions, plus pointer and keyboard
+  ordering saved as one validated active-station set. Rename submits only the name and closes before
+  refresh; refusal retains an editable draft. The Prep page explicitly reads retained station
+  metadata so disabled health rows can show their state and Enable action; ordinary station lists
+  remain active-only. Settings now has independent choice editors for Show the rest of the order
+  and When closed, work goes to; the default station reads Never closes without a fallback control.
+  A fallback save confirms its destination inside the cell; changing that draft requires a new
+  confirmation. Refusals retain a retryable draft, local validation focuses the choice, Cancel and
+  Escape discard, and live reads preserve typed choices and save errors. English/Spanish,
+  light/dark, phone/desktop saved, picker, refusal and confirmation captures were inspected.
+  Settings now shows the three effective late flags, distinguishing inherited minutes from an
+  explicit override even when it equals the venue default. Each numeric cell saves its own field;
+  clearing it inherits the default. Local checks enforce whole positive minutes and effective order,
+  focus the invalid cell and disable Save after an invalid submission. Server refusals keep the
+  draft retryable. Live defaults refresh inherited values while retaining drafts and action errors.
+  Supervisors can now open the live Stations overview and its read-only drilldowns. The page
+  loads only station metadata and current status, without printer, device or catalogue management
+  reads; configuration tabs and actions are absent. Saved configuration links return to Stations.
+  Routing cards no longer repeat printer/screen/watcher relationships, late-flag summaries or
+  the rest-of-order switch; those appear in Tickets and Settings. The standalone fallback editor
+  now lives
+  in the Settings cell, retaining destination confirmation, disabled choices, empty-to-null
+  saves and field refusals. Disabled stations remain editable at the bottom of Settings, labelled
+  Disabled; changing their fallback does not enable them. Confirming an unchanged fallback sends
+  no write, including a retained disabled destination. Routing no longer repeats Today, Make default,
+  Disable or Enable actions; they use the Stations table, with the same confirmation and refusal
+  paths. Whole-record editing and duplicate station status/output warnings have also left Routing.
+  Rename, ordering and Settings cells retain their separate write paths; station creation retains
+  its form. Rename refuses a draft whose station disappeared during a live refresh. Stations gets
+  its output problems from the health snapshot, with warning text wrapped within the shared name
+  width so it does not stretch the table into a single long line. The 2026-10-05 Claude run-it review
+  reproduced missing-default kitchen reads returning empty results; the readers now refuse
+  `station.timing_missing` instead. Seven consumer regression cases and the defaults-readiness
+  guard cover this refusal; no migration backfill or old-value conversion was added. The old
+  numeric columns carry a retirement note. Review notes retained for future cleanup: the overview
+  API object still exposes write methods (server routes remain the permission boundary), and
+  station reordering repeats an active filter after an active-only read. No write-permission
+  defect was reported. Push-hook validation, current-head CI and landing remain.
+  Venue settings › Kitchen now reads and
+  replaces the venue-wide late flags. Its required whole-minute fields validate every invalid
+  value and their order, naming a station when the server refuses the effective result. A refusal
+  retains a retryable draft; live reads update saved values without replacing it. Supervisors see
+  the saved defaults without edit controls. Enter saves, Cancel/Escape discards, and a successful
+  write closes the form before a separate refresh. The saved, invalid and station-refusal states
+  have English/Spanish, light/dark, phone/desktop browser checks and inspected captures.
+  The generated station-parent rebuild failed the populated upgrade with a foreign-key refusal;
+  the ongoing build uses the plan’s storage-redesign option. Approved decisions
   cover what live counts include, ready-but-unserved work, interim station hours, inactive display
   bindings and the core station-table rebuild/reset risk.
   [Step 5 Hours plan](superpowers/plans/2026-10-05-hours.md) was approved on 2026-10-05;

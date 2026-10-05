@@ -1,5 +1,7 @@
 # What a station's ticket shows: the rest of the order, and dishes made at the till (slice 3c-1) Implementation Plan
 
+> **2026-10-05 — A261 step 3:** For the replacement station, printer, watcher and timing controls, see the [Prep stations tabs implementation plan](2026-10-05-prep-stations-tabs.md) and its dated implementation checkpoints. This document retains the earlier screen layout and procedures as historical context.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **Update (2026-10-02, B29, branch `feat/service-handheld-permissions`):** `deviceSaleCfgOf`, which

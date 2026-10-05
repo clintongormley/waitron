@@ -86,6 +86,7 @@ const times = (
   fallbackStationId: null,
   today: null,
   closedSendsTo: null,
+  nextTransition: null,
   ...fields,
 });
 
