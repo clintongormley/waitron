@@ -769,19 +769,32 @@ export class ProductEditor extends LitElement {
     if (kind === "extras" || kind === "options") {
       const opener = this.#relatedOpener;
       this.#relatedOpener = null;
-      const row = [
-        ...this.shadowRoot!.querySelectorAll<HTMLElement>("tr[data-test=attached-modifier]"),
-      ].find((tr) => tr.dataset.modifier === opener?.key);
-      const target = row?.querySelector<HTMLElement>(
-        opener?.via === "row" ? ".row-activate" : "wt-row-actions",
-      );
-      if (target) {
-        target.focus();
+      const attached = () =>
+        [...this.shadowRoot!.querySelectorAll<HTMLElement>("tr[data-test=attached-modifier]")]
+          .find((tr) => tr.dataset.modifier === opener?.key)
+          ?.querySelector<HTMLElement>(opener?.via === "row" ? ".row-activate" : "wt-row-actions");
+      if (attached()) {
+        void this.focusOnceEnabled(attached);
         return;
       }
     }
     const control = kind === "extras" || kind === "options" ? "modifier" : kind;
-    this.shadowRoot!.querySelector<HTMLElement>(`[data-test=add-${control}]`)?.focus();
+    void this.focusOnceEnabled(() =>
+      this.shadowRoot!.querySelector<HTMLElement>(`[data-test=add-${control}]`),
+    );
+  }
+  /** The nested form's screen may hand focus back before this editor has drawn the control enabled
+   * again, and a disabled control does not take focus; then it waits for that update. It gives up if
+   * another element has taken focus meanwhile, but not if focus merely dropped to the page: the shut
+   * form can still hold focus at the first try and lose it to the page. */
+  private async focusOnceEnabled(find: () => HTMLElement | null | undefined): Promise<void> {
+    const target = find();
+    target?.focus();
+    if (!target || this.shadowRoot!.activeElement === target) return;
+    const before = deepActiveElement();
+    await this.updateComplete;
+    const now = deepActiveElement();
+    if (now === before || now === document.body) find()?.focus();
   }
   /** `restore` also makes an Inactive product Active again. Nothing else on the form changes
    * `active`, so a plain Save of an Inactive product keeps it Inactive. */
@@ -1792,4 +1805,10 @@ export class ProductEditor extends LitElement {
 function blankToNull(value: LocalizedText | null): LocalizedText | null {
   const kept = nonBlankNames(value ?? {});
   return Object.keys(kept).length ? kept : null;
+}
+
+function deepActiveElement(): Element | null {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active;
 }

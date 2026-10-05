@@ -200,8 +200,7 @@ export class CatalogueScreen extends LitElement {
   });
 
   /** Focus handed back before a nested form and its own dialog finish updating does not land: the
-   * dialog may still be open, or the editor control that opened the form may still be drawn
-   * disabled. */
+   * dialog may still be open. */
   async #returnChildFocus(kind: ProductChildKind): Promise<void> {
     const tag = CHILD_FORMS[kind];
     if (tag) {
