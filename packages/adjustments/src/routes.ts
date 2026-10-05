@@ -19,6 +19,7 @@ import {
   createAdjustmentReason,
   deactivateAdjustmentReason,
   listAdjustmentReasons,
+  reactivateAdjustmentReason,
   reorderAdjustmentReasons,
   updateAdjustmentReason,
   type AdjustmentReasonInput,
@@ -256,6 +257,14 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
         const reasonId = requireUuidParam(c.req.param("reasonId"), "AdjustmentReasonId");
         await gated(sessionId, (tx) => deactivateAdjustmentReason(tx, reasonId));
         return c.body(null, 204);
+      }),
+    );
+
+    app.post("/management-api/adjustments/reasons/:reasonId/reactivate", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const reasonId = requireUuidParam(c.req.param("reasonId"), "AdjustmentReasonId");
+        return c.json(await gated(sessionId, (tx) => reactivateAdjustmentReason(tx, reasonId)));
       }),
     );
 

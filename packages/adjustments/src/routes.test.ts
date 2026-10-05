@@ -294,6 +294,103 @@ describe("adjustment reason management routes", () => {
     });
   });
 
+  describe("reactivating a reason", () => {
+    async function deactivated(fx: Fixture): Promise<{ id: string }> {
+      const reason = (await (
+        await send(fx.app, "POST", REASONS, fx.cookie.manager, COMPLAINT)
+      ).json()) as { id: string };
+      expect(
+        (await send(fx.app, "DELETE", `${REASONS}/${reason.id}`, fx.cookie.manager)).status,
+      ).toBe(204);
+      return reason;
+    }
+    async function activeOf(fx: Fixture, id: string): Promise<boolean | undefined> {
+      const all = (await (
+        await send(fx.app, "GET", `${REASONS}?includeInactive=true`, fx.cookie.manager)
+      ).json()) as { reasons: { id: string; active: boolean }[] };
+      return all.reasons.find((reason) => reason.id === id)?.active;
+    }
+
+    it("lets a manager or an admin make a deactivated reason active again under the same id", async () => {
+      const fx = await fixture();
+      for (const role of ["manager", "admin"] as const) {
+        const reason = await deactivated(fx);
+        const response = await send(
+          fx.app,
+          "POST",
+          `${REASONS}/${reason.id}/reactivate`,
+          fx.cookie[role],
+        );
+        expect(response.status, role).toBe(200);
+        expect(await response.json()).toEqual({
+          id: reason.id,
+          ...COMPLAINT,
+          active: true,
+          position: expect.any(Number),
+        });
+        expect(await activeOf(fx, reason.id)).toBe(true);
+        expect(
+          (await send(fx.app, "DELETE", `${REASONS}/${reason.id}`, fx.cookie.manager)).status,
+        ).toBe(204);
+      }
+    });
+
+    it("refuses a supervisor or staff member, and leaves the reason deactivated", async () => {
+      const fx = await fixture();
+      const reason = await deactivated(fx);
+      for (const role of ["staff", "supervisor"] as const) {
+        const response = await send(
+          fx.app,
+          "POST",
+          `${REASONS}/${reason.id}/reactivate`,
+          fx.cookie[role],
+        );
+        expect(response.status, role).toBe(403);
+        expect(await response.json()).toEqual({
+          error: {
+            code: "authorization.not_permitted",
+            params: { permission: "adjustment.manage" },
+          },
+        });
+      }
+      expect(await activeOf(fx, reason.id)).toBe(false);
+    });
+
+    it("refuses a request with no management session", async () => {
+      const fx = await fixture();
+      const reason = await deactivated(fx);
+      const response = await send(fx.app, "POST", `${REASONS}/${reason.id}/reactivate`);
+      expect(response.status).toBe(401);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management_session.required" },
+      });
+      expect(await activeOf(fx, reason.id)).toBe(false);
+    });
+
+    it("answers a name an active reason holds with 409, an unknown reason with 404 and a malformed id with 400", async () => {
+      const fx = await fixture();
+      const manager = fx.cookie.manager;
+      const reason = await deactivated(fx);
+      expect((await send(fx.app, "POST", REASONS, manager, COMPLAINT)).status).toBe(201);
+
+      const taken = await send(fx.app, "POST", `${REASONS}/${reason.id}/reactivate`, manager);
+      expect(taken.status).toBe(409);
+      expect(await taken.json()).toEqual({
+        error: { code: "adjustment_reason.name_taken", params: { name: "Complaint" } },
+      });
+      expect(await activeOf(fx, reason.id)).toBe(false);
+
+      const missing = await send(fx.app, "POST", `${REASONS}/${MISSING}/reactivate`, manager);
+      expect(missing.status).toBe(404);
+      expect(await missing.json()).toEqual({
+        error: { code: "adjustment_reason.not_found", params: { reasonId: MISSING } },
+      });
+      const malformed = await send(fx.app, "POST", `${REASONS}/not-a-uuid/reactivate`, manager);
+      expect(malformed.status).toBe(400);
+      expect(await malformed.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+    });
+  });
+
   it("refuses a reorder body that is not a list of ids", async () => {
     const fx = await fixture();
     for (const body of [{}, { ids: "x" }, { ids: ["not-a-uuid"] }]) {
