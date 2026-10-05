@@ -26,6 +26,12 @@ export interface FolderMadeAt {
   someElsewhere: boolean;
 }
 
+/** Whether a claim or an exception, rather than the default station or nothing, reaches a place to
+ * make the category's dishes. The category tree's asterisk marks a category where this is false. */
+export function coveredByRule({ maker, source }: FolderMadeAt): boolean {
+  return source !== null && source.kind !== "default" && maker.kind !== "no_replacement";
+}
+
 /** One comparable string per outcome, so two choices are the same when they make the dish in the
  * same place or fail the same way. */
 function outcomeOf(choice: MakerChoice): string {

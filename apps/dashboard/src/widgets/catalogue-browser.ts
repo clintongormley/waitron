@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, iconButtonStyles, trackIconTooltip } from "@waitron/ui";
-import { chooseMaker, type RoutingModel } from "@waitron/venue-service/routing";
+import type { RoutingModel } from "@waitron/venue-service/routing";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
@@ -30,7 +30,7 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import { acceptsCatalogueDrop, type CategoryNameDraft, type ProductList } from "./product-list.js";
-import { folderMadeAt, type FolderMadeAt } from "./folder-made-at.js";
+import { coveredByRule, folderMadeAt, type FolderMadeAt } from "./folder-made-at.js";
 
 @customElement("dashboard-catalogue-browser")
 export class CatalogueBrowser extends LitElement {
@@ -536,27 +536,7 @@ export class CatalogueBrowser extends LitElement {
   }
 
   #unroutedFolderIds(): string[] {
-    if (!this.routing) return [];
-    const rules = {
-      // A category is covered only by rules that apply to every dish in every service zone.
-      exceptions: this.routing.exceptions.filter(
-        ({ zoneId, productId }) => zoneId === null && productId === null,
-      ),
-      claims: new Map(this.routing.claims.map(({ categoryId, target }) => [categoryId, target])),
-      parentOf: new Map(this.categories.map(({ id, parentId }) => [id, parentId])),
-      activeStationIds: new Set(
-        this.routing.stations.filter(({ active }) => active).map(({ id }) => id),
-      ),
-      defaultStationId: null,
-      timing: new Map(),
-    };
-    return this.categories
-      .filter(
-        ({ id }) =>
-          chooseMaker(rules, { productId: "", routedProductId: "", categoryId: id }, null, null)
-            .route === null,
-      )
-      .map(({ id }) => id);
+    return [...this.#folderMadeAt].filter(([, made]) => !coveredByRule(made)).map(([id]) => id);
   }
   #emit(name: string, detail: unknown): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));

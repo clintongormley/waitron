@@ -277,6 +277,41 @@ it("works the route out again when the products or the categories change", async
   expect(await madeAtText(el, "folder:w")).toBe("Bar from Drinks");
 });
 
+it("decides the asterisk as Made at does, following a switched-off station's fallback", async () => {
+  const marker = async (el: CatalogueBrowser, id: string) =>
+    (await tableOf(el)).shadowRoot!.querySelector(
+      `tr[data-row-key="folder:${id}"] [data-test="unrouted-folder"]`,
+    );
+  const barOff = (fallbackStationId: string | null) =>
+    routingWith({
+      stations: [
+        { id: "bar", name: "Bar", active: false },
+        { id: "terrace", name: "Terrace", active: true },
+        { id: "kitchen", name: "Kitchen", active: true },
+      ],
+      stationTimes: [
+        {
+          stationId: "bar",
+          status: { open: false, why: "switched_off" },
+          hours: [],
+          fallbackStationId,
+          today: null,
+          closedSendsTo: fallbackStationId,
+        },
+      ],
+    });
+  const el = await mountBrowser({ routing: barOff("terrace") });
+  await toggleCategory(el, "d");
+  expect(await madeAtText(el, "folder:d")).toBe("Terrace set on this category");
+  expect(await marker(el, "d")).toBeNull();
+  expect(await madeAtText(el, "folder:b")).toBe("Terrace from Drinks");
+  expect(await marker(el, "b")).toBeNull();
+  expect(await marker(el, "f")).not.toBeNull();
+  el.routing = barOff(null);
+  expect(await marker(el, "d")).not.toBeNull();
+  expect(await marker(el, "b")).not.toBeNull();
+});
+
 it("leaves categories blank while routing loads, and says so when its read failed", async () => {
   const el = await mountBrowser();
   expect(await madeAtText(el, "folder:d")).toBe("");
