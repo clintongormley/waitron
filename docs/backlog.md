@@ -5351,7 +5351,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b DONE (#1248, main ccbe2b41e); W105c DONE (#1251, main 58c65558b); W105f DONE (#1253, main 44ff56380); W105g DONE (#1254, main 969c96972); W105h DONE (#1258, main efa4ecb1b); W105e DONE (#1266, main 5ce168812). W104–W106, W105b, W105c and W105f DONE; the open points each left are listed below.**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b DONE (#1248, main ccbe2b41e); W105c DONE (#1251, main 58c65558b); W105f DONE (#1253, main 44ff56380); W105g DONE (#1254, main 969c96972); W105h DONE (#1258, main efa4ecb1b); W105e DONE (#1266, main 5ce168812); W106a DONE (#1272, main 700fdb00e). W104–W106, W105b, W105c and W105f DONE; the open points each left are listed below.**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
@@ -5436,7 +5436,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   minutes old, adding when it was taken (since W106a, "updated 11 minutes ago"). A report that passes ten minutes while the
   page is open is greyed then, without the list being read again
   (`apps/dashboard/src/screens/devices-screen.ts`). No low-battery alert: that is A272, still open.
-  Left OPEN by W106: (a) done by W106a (owner 2026-10-05: "relative time '5 minutes ago' with
+  Left OPEN by W106: (a) done by W106a (#1272; owner 2026-10-05: "relative time '5 minutes ago' with
   hover/click to show the actual timestamp"): the greyed battery report says "updated 11 minutes
   ago" / "actualizado hace 11 minutos", the Add a device dialog "Accepting devices: closes in 4
   minutes" / "Se aceptan dispositivos: se cierra dentro de 4 minutos", and the Add print agent
