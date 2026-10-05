@@ -239,7 +239,7 @@ export class DevicesScreen extends LitElement {
   @state() private deviceAddress = "";
   @state() private qr = "";
   @state() private addedName: string | null = null;
-  /** The Add dialog's own refusal: a wrong number, or its read of the address. */
+  /** The Add dialog's own refusal: a wrong number, a failed discard, or its read of the address. */
   @state() private addError: string | null = null;
   @state() private holdStatus: PairingHoldStatus = "idle";
   /** The taken hold's lapse, shown before the live read of the window next answers. */
@@ -359,7 +359,8 @@ export class DevicesScreen extends LitElement {
       const qr = await this.qrFor(deviceAddress);
       if (epoch === this.#addEpoch) this.qr = qr;
     } catch (error) {
-      if (epoch === this.#addEpoch) this.addError = codeOf(error);
+      // A read's failure never replaces an action's message.
+      if (epoch === this.#addEpoch && this.addError === null) this.addError = codeOf(error);
     }
   }
 
@@ -385,7 +386,12 @@ export class DevicesScreen extends LitElement {
     await closed;
   }
 
-  /** Closing Pair before the server settled the request discards it, so the device can ask again. */
+  /**
+   * Closing Pair before the server settled the request discards it, so the device can ask again. A
+   * discard that fails leaves the request pending, and claimed by this login if its number was
+   * checked, so the Add dialog that is still open says so; one closing with Add needs no message:
+   * the dialog that would show it is gone.
+   */
   #closePair(): void {
     const request = this.pairRequest;
     if (request === null) return;
@@ -393,7 +399,13 @@ export class DevicesScreen extends LitElement {
     this.pairRequest = null;
     this.checking = false;
     this.submitting = false;
-    if (!this.#pairSettled) void this.api.denyJoinRequest(request.id).catch(() => undefined);
+    if (this.#pairSettled) return;
+    const addEpoch = this.#addEpoch;
+    void this.api.denyJoinRequest(request.id).catch((error: unknown) => {
+      const code = codeOf(error);
+      if (code !== "join_request.not_found" && this.addingDevice && addEpoch === this.#addEpoch)
+        this.addError = code;
+    });
   }
 
   async #openPair(request: JoinRequestRow): Promise<void> {

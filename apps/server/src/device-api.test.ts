@@ -499,12 +499,99 @@ describe("POST /api/device/join", () => {
     );
     expect(rows).toEqual([{ label: "Caja nueva" }]);
   });
+
+  /** A knock admitted while the window is open whose body is held back until `finish` is called;
+   *  `reading` resolves once the route has started reading it, i.e. after the window check. */
+  function withheldKnock(app: Hono): {
+    reading: Promise<void>;
+    finish: () => void;
+    response: Promise<Response>;
+  } {
+    let started!: () => void;
+    let finish!: () => void;
+    const reading = new Promise<void>((resolve) => (started = resolve));
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('{"name":'));
+        finish = () => {
+          controller.enqueue(encoder.encode('"Late till"}'));
+          controller.close();
+        };
+      },
+      pull() {
+        started();
+      },
+    });
+    const response = Promise.resolve(
+      app.request(
+        new Request("http://localhost/api/device/join", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+          duplex: "half",
+        } as RequestInit),
+      ),
+    );
+    return { reading, finish: () => finish(), response };
+  }
+
+  it.each([
+    { reopened: true, label: "shut and reopened" },
+    { reopened: false, label: "shut" },
+  ])(
+    "refuses a knock admitted before the window $label while its body arrived, and keeps no row",
+    async ({ reopened }) => {
+      const venue = await setupVenue(suite.db);
+      let offset = 0;
+      const mode = createPairingMode({ now: () => Date.now() + offset });
+      const app = mountApp(venue.cfg, undefined, mode);
+      const first = mode.open();
+      const knock = withheldKnock(app);
+      await knock.reading;
+      mode.release(first.holdId);
+      if (reopened) {
+        offset += 1_000;
+        mode.open();
+      }
+      knock.finish();
+      const res = await knock.response;
+      expect(res.status).toBe(403);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+        "device.pairing_closed",
+      );
+      expect(res.headers.get("set-cookie")).toBeNull();
+      const { rows } = await suite.db.execute<{ n: number }>(
+        sql`select count(*) as n from join_requests `,
+      );
+      expect(rows[0]!.n).toBe(0);
+    },
+  );
+
+  it("admits a knock whose body arrives while the same open period goes on", async () => {
+    const venue = await setupVenue(suite.db);
+    const mode = createPairingMode();
+    const app = mountApp(venue.cfg, undefined, mode);
+    const first = mode.open();
+    const knock = withheldKnock(app);
+    await knock.reading;
+    // A second hold taken and the first released: the window never shut, so this is one period.
+    mode.open();
+    mode.release(first.holdId);
+    knock.finish();
+    const res = await knock.response;
+    expect(res.status).toBe(200);
+    const { rows } = await suite.db.execute<{ label: string }>(
+      sql`select label from join_requests `,
+    );
+    expect(rows).toEqual([{ label: "Late till" }]);
+  });
 });
 
 describe("devMode auto-accept", () => {
   it("auto-accepts a knock with the venue's default till profile, and the cookie works immediately", async () => {
     // The window is NEVER opened (mountDevApp builds a fresh shut holder), so in production this knock
-    // would 403. devMode holds it open and accepts the request in the same transaction with the venue's
+    // would 403. devMode skips the window check and accepts the request in the same transaction with the venue's
     // provisioned default `till` profile, so the joiner's cookie is a working device cookie at once — no
     // window, no approval step.
     const venue = await setupVenue(suite.db);

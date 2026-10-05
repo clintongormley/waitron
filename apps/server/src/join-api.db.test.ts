@@ -354,6 +354,34 @@ describe("the join window's holds", () => {
       expect((await errorOf(res)).code).toBe("management_session.required");
     }
   });
+
+  it("reading the window, taking a hold and renewing one leave join requests alone", async () => {
+    const venue = await setupVenue(suite.db);
+    let offset = 0;
+    const mode = createPairingMode({ now: () => Date.now() + offset });
+    const app = mountApp(venue.cfg, mode);
+    const first = mode.open();
+    await knock(venue, { kind: "device", label: "Stranded" });
+    // Shut on the holder alone, so the stranded request is still stored when the routes run.
+    mode.release(first.holdId);
+    offset += 1_000;
+    const cookie = venue.managerCookie;
+    expect((await send(app, "GET", "/management-api/pairing-mode", { cookie })).status).toBe(200);
+    expect(await pendingCount()).toBe(1);
+    const taken = await send(app, "POST", "/management-api/pairing-mode/holds", { cookie });
+    expect(taken.status).toBe(200);
+    expect(await pendingCount()).toBe(1);
+    const { holdId } = (await taken.json()) as { holdId: string };
+    const renewed = await send(app, "POST", `/management-api/pairing-mode/holds/${holdId}/renew`, {
+      cookie,
+    });
+    expect(renewed.status).toBe(200);
+    expect(await pendingCount()).toBe(1);
+    // The request was discardable all along: the queue's read discards it.
+    const listed = await send(app, "GET", "/management-api/join-requests?kind=device", { cookie });
+    expect(await listed.json()).toEqual([]);
+    expect(await pendingCount()).toBe(0);
+  });
 });
 
 describe("GET /management-api/join-requests", () => {

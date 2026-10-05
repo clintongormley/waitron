@@ -103,8 +103,15 @@ function optionalBodyUuid(v: unknown, field: string): string | null {
  * approved and what it becomes; each refuses the OTHER kind's ask 404.
  */
 export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
-  // Both gates discard the device requests a shut window or an ended claim strands, and drop those
-  // claims only once the transaction has committed.
+  // `gated` and `gatedByRowKind` discard the device requests a shut window or an ended claim
+  // strands, and drop those claims only once the transaction has committed. `authorized` does not:
+  // the window's read, take and renew routes act on no request, and the dashboard calls the read
+  // and renew ones repeatedly.
+  const authorized = (sessionId: string, permission: Permission): Promise<void> =>
+    withTransaction(deps.db, async (tx) => {
+      await authorizeManager(tx, { managementSessionId: sessionId, permission });
+    });
+
   const gated = async <T>(
     sessionId: string,
     permission: Permission,
@@ -158,7 +165,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
   app.get("/management-api/pairing-mode", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      await gated(sessionId, "device.manage", async () => undefined);
+      await authorized(sessionId, "device.manage");
       return c.json({
         open: deps.pairingMode.isOpen(),
         openUntil: deps.pairingMode.openUntil(),
@@ -171,7 +178,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
   app.post("/management-api/pairing-mode/holds", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      await gated(sessionId, "device.manage", async () => undefined);
+      await authorized(sessionId, "device.manage");
       return c.json(deps.pairingMode.open(), 200);
     }),
   );
@@ -182,9 +189,7 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
       const sessionId = requireManagementSession(c);
       // Renewal never counts as someone using the dashboard, so an unattended dialog lapses with the
       // login.
-      await withPassiveManagementRead(() =>
-        gated(sessionId, "device.manage", async () => undefined),
-      );
+      await withPassiveManagementRead(() => authorized(sessionId, "device.manage"));
       const renewed = deps.pairingMode.renew(c.req.param("holdId"));
       if (renewed === null) throw new AppError("device.pairing_hold_lapsed", {});
       return c.json(renewed, 200);

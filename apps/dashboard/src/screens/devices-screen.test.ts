@@ -1500,7 +1500,7 @@ describe("add a device", () => {
     expect(api.releasePairingHold).not.toHaveBeenCalled();
   });
 
-  it("Cancel discards the request at the settings step, and a failed discard is ignored", async () => {
+  it("Cancel discards the request at the settings step, and says nothing when it is already gone", async () => {
     const api = stubApi({
       denyJoinRequest: vi.fn().mockRejectedValue({ code: "join_request.not_found" }),
     });
@@ -1513,6 +1513,107 @@ describe("add a device", () => {
     expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
     await flush(el);
     expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
+  });
+
+  it("a discard that fails on Cancel is said in the Add dialog, and a second Cancel clears it", async () => {
+    const api = stubApi({
+      denyJoinRequest: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(undefined),
+    });
+    const el = await openAdd(api);
+    await openPair(el);
+
+    q(el, "[data-test=pair-cancel]")!.click();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe(
+        codeMessage("connection.failed"),
+      ),
+    );
+
+    await openPair(el);
+    q(el, "[data-test=pair-cancel]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    expect(api.denyJoinRequest).toHaveBeenCalledTimes(2);
+    await flush(el);
+    expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
+  });
+
+  it("Cancel at the number step says nothing when the request is already gone", async () => {
+    const api = stubApi({
+      denyJoinRequest: vi.fn().mockRejectedValue({ code: "join_request.not_found" }),
+    });
+    const el = await openAdd(api);
+    await openPair(el);
+
+    q(el, "[data-test=pair-cancel]")!.click();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    await flush(el);
+    expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
+  });
+
+  it("a discard that fails after Add was closed says nothing in the next Add dialog", async () => {
+    let rejectDeny!: (error: unknown) => void;
+    const api = stubApi({
+      denyJoinRequest: vi.fn().mockReturnValue(
+        new Promise<void>((_resolve, reject) => {
+          rejectDeny = reject;
+        }),
+      ),
+    });
+    const el = await openAdd(api);
+    await openPair(el);
+
+    q(el, "[data-test=add-device-close]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).toBeNull());
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    q(el, "[data-test=open-add-device]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).not.toBeNull());
+    rejectDeny({ code: "connection.failed" });
+    await flush(el);
+
+    expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
+  });
+
+  it("keeps a failed discard's message when the Add dialog's address read fails after it", async () => {
+    let rejectAddress!: (error: unknown) => void;
+    const api = stubApi({
+      pairingMode: vi
+        .fn()
+        .mockResolvedValueOnce(SHUT)
+        .mockReturnValueOnce(
+          new Promise((_resolve, reject) => {
+            rejectAddress = reject;
+          }),
+        )
+        .mockResolvedValue(SHUT),
+      denyJoinRequest: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-device]")!.click();
+    await vi.waitFor(() => expect(api.pairingMode).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(api.takePairingHold).toHaveBeenCalled());
+    await flush(el);
+    await openPair(el);
+    q(el, "[data-test=pair-cancel]")!.click();
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe(
+        codeMessage("connection.failed"),
+      ),
+    );
+
+    rejectAddress({ code: "server.internal" });
+    await flush(el);
+
+    expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe(
+      codeMessage("connection.failed"),
+    );
   });
 
   it("Escape on Pair discards the request and leaves the Add dialog open", async () => {

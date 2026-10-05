@@ -137,15 +137,22 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // a flood rather than reported as a shut door.
       enrolLimiter.check();
       // devMode accepts the knock immediately with the venue's default `till` profile, through the
-      // REAL join + accept verbs, so demo mode exercises the production path.
+      // real join and accept verbs, without a window, a number check or a claim.
       const auto = deps.devMode === true;
-      if (!auto && !deps.pairingMode.isOpen()) {
+      const admittedIn = deps.pairingMode.openSince();
+      if (!auto && admittedIn === null) {
         throw new AppError("device.pairing_closed", {});
       }
       const body = await readJsonBody<{ name?: unknown }>(c);
       const name = requireString(body.name, "name");
       let dropped: string[] = [];
       const made = await withTransaction(deps.db, async (tx) => {
+        // The window can shut, and open again, while the body arrives; a knock admitted in an
+        // earlier open period must not land in a later one as a fresh request (open periods are told
+        // apart by their start time, to the millisecond).
+        if (!auto && deps.pairingMode.openSince() !== admittedIn) {
+          throw new AppError("device.pairing_closed", {});
+        }
         // Before the cap is counted, so requests a shut window stranded do not hold places in it.
         dropped = await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
         const request = await createJoinRequest(tx, deps.cfg, { kind: "device", label: name });
