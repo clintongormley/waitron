@@ -3215,7 +3215,7 @@ W90 must be exported again after upgrading: one exported just before W90 is refu
 one short (seen 2026-10-05 in a throwaway test, not kept); an older one is refused at the first
 module, in the order they are checked, whose count differs.
 
-**A menu's prices are one editable Price overrides field per row — DONE (W89, this PR,
+**A menu's prices are one editable Price overrides field per row — DONE (W89, #1239,
 2026-10-05; owner 2026-10-04).** The menu editor's Prices tab is now "Price overrides" ("Precios
 propios"); its address keeps `view/prices`. Each product and each size has one price field in its
 row: blank, it shows the price it inherits as its placeholder — one amount, the range across a
@@ -3242,6 +3242,12 @@ and in the plan (`docs/superpowers/plans/2026-10-05-w89-menu-price-overrides.md`
 the tab on the running dev stack — the product page opening from a Status link, a real save and
 the re-read after it, and Undo against the real server (the look in Chromium used mounted widgets
 only).
+Left open, raised in #1239's review and not taken: the Preview tab still labels a clash "Menu
+price", the name of a column W89 removed (owner's wording choice); the Resolve menu still shows on
+a clashing row while a price is typed but not yet saved; and a size with its own price decides
+whether its clash comes from its product by matching the two clashes, which can be misread in a
+rare setup where they match exactly — telling them apart needs the prices read to say which level
+a clash came from.
 
 **A Products drag does not notice when a refresh removes what it is dragging or where it is going —
 DONE (W88a, #1228, 2026-10-05).** Found by W88's pre-merge review. The Products tree
