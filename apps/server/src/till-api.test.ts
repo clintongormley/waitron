@@ -1172,6 +1172,19 @@ describe("PUT /api/session/locale (set your OWN UI locale)", () => {
 });
 
 describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)", () => {
+  it("starts an unscoped till at prepay even when the retired venue mode differs", async () => {
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...deps(suite.db), cfg: { ...cfg, orderFlow: "invoice_first" } },
+      collect([]),
+    );
+
+    const res = await app.request("/api/till");
+    expect(res.status).toBe(200);
+    expect((await res.json()).orderFlow).toBe("prepay");
+  });
+
   it("GET /api/staff lists ACTIVE staff sorted by name, no cookie required, no secrets", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
