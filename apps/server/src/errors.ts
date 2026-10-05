@@ -724,8 +724,9 @@ declare module "@waitron/shared" {
       field: "receiptPrinterId" | "paymentSlipPrinterId" | "deviceProfileId";
     };
     /**
-     * A knock arrived at `POST /api/device/join` while pairing mode is shut — the ordinary state, not
-     * an anomaly. NO params: nothing about the window is the joiner's business.
+     * A knock arrived at `POST /api/device/join` while pairing mode is shut, or after it shut during
+     * the knock — the ordinary state, not an anomaly. NO params: nothing about the window is the
+     * joiner's business.
      */
     "device.pairing_closed": Record<string, never>;
     /**
@@ -764,7 +765,7 @@ declare module "@waitron/shared" {
     "join_request.not_found": Record<string, never>;
     /**
      * Another login matched this device request's number first and holds it while its Add dialog
-     * stays open. NO params: the dashboard's list already names who is pairing it.
+     * stays open. NO params: the dashboard's list names who is pairing it from its next refresh.
      */
     "join_request.claimed": Record<string, never>;
     /**

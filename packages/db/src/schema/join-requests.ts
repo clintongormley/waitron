@@ -18,11 +18,11 @@ import {
 export const joinRequestKind = enumType(["device", "print_agent"]);
 
 /**
- * A pending ask-to-join: someone knocked while pairing mode was open, and an admin has not yet matched
- * its number. NEVER a `devices` or `print_agents` row — for devices that is forced (the
+ * A pending ask-to-join: someone knocked while pairing mode was open, and an admin has not yet approved
+ * it. NEVER a `devices` or `print_agents` row — for devices that is forced (the
  * station-XOR-register constraint trigger cannot accept a request whose binding is unchosen), and for
  * agents it is chosen, so both real tables hold only approved rows and `active`/revoke keep one
- * meaning. Accept inserts the real row and deletes the request in one transaction; deny just deletes.
+ * meaning. Accept inserts the real row and deletes the request in one transaction.
  *
  * `local`: keyed by the node that received it (`node_id`), for the reason on that column.
  */
@@ -46,8 +46,8 @@ export const joinRequests = table(
     // `locations`.
     locationId: id("location_id").notNull(),
     kind: joinRequestKind("kind").notNull(),
-    // The name the joiner asked for. A device accept copies it to `devices.label`, an agent accept to
-    // `print_agents.name`.
+    // The name the joiner asked for. An agent accept copies it to `print_agents.name`; a device accept
+    // stores the name its caller passes (the Pair form's, or in dev mode the asked-for one).
     label: label("label").notNull(),
     // scrypt of the token minted at join. Copied to the real row at accept, so the joiner's cookie or
     // bearer token survives approval unchanged — only its SELECTOR changes.

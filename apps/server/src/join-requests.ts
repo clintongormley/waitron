@@ -440,7 +440,7 @@ export async function acceptPrintAgentJoinRequest(
     });
   if (row === undefined) throw new AppError("join_request.not_found", {});
   if (input.choice !== row.verificationNumber) {
-    // Already consumed by the delete above — a wrong tap is single-use, same as a device accept.
+    // Already consumed by the delete above — a wrong tap is single-use, same as `checkDeviceJoinNumber`.
     return { ok: false, reason: "mismatch" };
   }
 

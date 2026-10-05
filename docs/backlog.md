@@ -1424,7 +1424,7 @@ clears only a read's message, and a read failing again during the outage no long
 action's, except on Devices, where the queue reload after a wrong-number refusal still replaces that
 refusal; the replacing message is marked as a read's, so the reads' recovery clears it if a watched
 read also failed meanwhile, and otherwise it stays until the next action or until the screen is
-reopened. An action that
+reopened (2026-10-05, W104: Devices no longer reloads the queue after a wrong number). An action that
 saves and then re-reads counts a failure after the save as the re-read's. The reload after a
 successful action no longer clears another action's failure on Floor, Service status, Canvases,
 Staff and Payments, and a read an action takes before its write, such as Products' restore, counts

@@ -197,7 +197,7 @@ export const en = {
   "device.join_name_label": "Name",
   "device.join_submit": "Ask to join",
   "device.join_waiting_title": "Waiting for approval",
-  "device.join_waiting_hint": "In the dashboard, tap this number to approve this device",
+  "device.join_waiting_hint": "In the dashboard, tap this number to start adding this device",
   "device.join_number_label": "Verification number {number}",
   "device.join_refused_title": "This device was not approved",
   "device.join_refused_hint": "Ask a manager to approve it, then try again",
@@ -1150,7 +1150,8 @@ export const es: Record<StringKey, string> = {
   "device.join_name_label": "Nombre",
   "device.join_submit": "Solicitar alta",
   "device.join_waiting_title": "Esperando aprobación",
-  "device.join_waiting_hint": "En el panel, pulsa este número para aprobar este dispositivo",
+  "device.join_waiting_hint":
+    "En el panel, pulsa este número para empezar a añadir este dispositivo",
   "device.join_number_label": "Número de verificación {number}",
   "device.join_refused_title": "Este dispositivo no fue aprobado",
   "device.join_refused_hint": "Pide a un responsable que lo apruebe e inténtalo de nuevo",

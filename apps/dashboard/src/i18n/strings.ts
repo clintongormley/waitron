@@ -921,8 +921,7 @@ export const en = {
   "printers.status_active": "Active",
   "printers.status_revoked": "Disabled",
   "printers.last_seen_never": "Never",
-  "printers.pairing_hint":
-    "New print agents can ask to join while this dialog is open. Closing it stops new requests.",
+  "printers.pairing_hint": "New print agents can ask to join while this dialog is open.",
   "printers.table_loading": "Loading…",
   "printers.pairing_open_until": "Open until {time}",
   "pairing.hold_lapsed": "No longer accepting devices",
@@ -3072,7 +3071,7 @@ export const es: Record<StringKey, string> = {
   "printers.status_revoked": "Desactivado",
   "printers.last_seen_never": "Nunca",
   "printers.pairing_hint":
-    "Los nuevos agentes de impresión pueden solicitar acceso mientras este diálogo esté abierto. Al cerrarlo, se dejan de admitir nuevas solicitudes.",
+    "Los nuevos agentes de impresión pueden solicitar acceso mientras este diálogo esté abierto.",
   "printers.table_loading": "Cargando…",
   "printers.pairing_open_until": "Abierto hasta las {time}",
   "pairing.hold_lapsed": "Ya no se aceptan dispositivos",

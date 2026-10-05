@@ -2252,9 +2252,9 @@ export class TillApi {
 
   /**
    * Ask to join this venue → `POST /api/device/join`. Unauthenticated. Refused `device.pairing_closed`
-   * (403) unless an admin has pairing mode open; otherwise sets an httpOnly cookie naming a pending
-   * REQUEST, inert until an admin approves it. A flood draws `device.join_rate_limited`; a venue at its
-   * pending cap `device.join_full`.
+   * (403) unless an admin has pairing mode open, or if it shut during the knock; otherwise sets an
+   * httpOnly cookie naming a pending REQUEST, inert until an admin approves it. A flood draws
+   * `device.join_rate_limited`; a venue at its pending cap `device.join_full`.
    */
   join(name: string): Promise<DeviceJoinResult> {
     return this.#request<DeviceJoinResult>("/api/device/join", "POST", { name });
