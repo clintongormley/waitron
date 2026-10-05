@@ -308,7 +308,7 @@ it("tells the operator to ask a manager to open Add a device when the server say
   await (actions as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(actions.shadowRoot!.querySelector("[data-error]")!.getAttribute("role")).toBe("alert");
   expect(query(el, "[data-error]")).toBeNull();
-  // Still on the name form, with the name retained, so Ask to join is one tap once pairing is on.
+  // Still on the name form, with the name retained, so Ask to join is one tap once a manager opens Add a device.
   expect(query(el, "[data-name]")).not.toBeNull();
   expect(query(el, "[data-submit]")!.hasAttribute("disabled")).toBe(false);
 });

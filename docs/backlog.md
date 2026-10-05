@@ -5028,22 +5028,23 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   [Spec](superpowers/specs/2026-10-04-add-a-device-design.md);
   [plan](superpowers/plans/2026-10-04-add-a-device.md), three pull requests: W104 the window holds
   and the Add a device dialog, W105 the device table and Edit dialog, W106 battery.
-  **W104 (done):** the fifteen-minute join window and the "tried to join" count are gone. An open Add
-  a device dialog (Devices page) or Add a print agent dialog (Printers page) takes a hold on the
+  **W104 (done):** the fifteen-minute join window and the "tried to join" count are gone. An open
+  Add a device dialog (Devices page) or Add a print agent dialog (Printers page) takes a hold on the
   window and renews it while it stays open (`apps/dashboard/src/api/pairing-hold.ts`); outside dev
   mode a device may ask to join only while some hold is live, and once none is left the waiting
-  device requests are discarded. Tapping the right number claims the request for that login, so another login is refused
-  `join_request.claimed`; the claiming login then names the device and picks its profile
-  (`apps/server/src/join-api.ts`). A till refused with `device.pairing_closed` now tells the operator
-  to ask a manager to open Add a device. **Still owed:** W105, the device table and the Edit dialog;
-  W106, each device's battery on the Devices list.
+  device requests are discarded. Tapping the right number claims the request for that login, so
+  another login's check or deny is refused `join_request.claimed` and its approval
+  `join_request.unclaimed`; the claiming login then names the device and picks its profile
+  (`apps/server/src/join-api.ts`). A till refused with `device.pairing_closed` now tells the
+  operator to ask a manager to open Add a device. **Still owed:** W105, the device table and the
+  Edit dialog; W106, each device's battery on the Devices list.
   Left OPEN by W104, not acted on: (1) a Pair save that never answers locks both dialogs, because a
   save carries no time limit (`packages/dashboard-kit/src/request.ts` limits GETs only); (2) leaving
   the Devices page with Back while a Pair save is in flight still sends a deny for that request
-  (`#closePair`, `apps/dashboard/src/screens/devices-screen.ts`), and what then happens to the device
-  is untested; (3) the Add a device and Pair dialogs were looked at only through the browser test
-  harness with a stubbed server, never on a box, so a real QR code drawn from a real box address has
-  not been looked at.
+  (`#closePair`, `apps/dashboard/src/screens/devices-screen.ts`), and what then happens to the
+  device is untested; (3) the Add a device and Pair dialogs were looked at only through the browser
+  test harness with a stubbed server, never on a box, so a real QR code drawn from a real box
+  address has not been looked at.
 - **A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN.**
   A268 discards a waiting device's request when the last Add dialog closes. An agent told
   `not_approved` stops and needs resetting on its own setup page (`packages/print-agent/src/agent.ts`,
