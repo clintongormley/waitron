@@ -978,6 +978,16 @@ describe("a disabled device comes back as the same device", () => {
     expect((await errorOf(refused)).code).toBe("device_profile.not_found");
     expect(await pendingCount()).toBe(1);
     expect(await deviceRow(deviceId)).toMatchObject({ active: false, deviceProfileId: profileId });
+
+    const live = await seedProfile("till");
+    const retried = await send(
+      app,
+      "POST",
+      `/management-api/device-join-requests/${deviceId}/accept`,
+      { cookie: venue.managerCookie, body: { name: "Bar till", profileId: live } },
+    );
+    expect(retried.status).toBe(200);
+    expect(await deviceRow(deviceId)).toMatchObject({ active: true, deviceProfileId: live });
   });
 
   it("a returning device whose profile was deleted is enabled on a live profile, with that profile's first usable printers", async () => {

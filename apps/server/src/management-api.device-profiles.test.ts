@@ -520,7 +520,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     });
   });
 
-  it("DELETE a profile a device still references → 409 device_profile.in_use, profile survives", async () => {
+  it("DELETE a profile an active device holds → 409 device_profile.in_use, profile survives", async () => {
     const app = mountApp();
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
