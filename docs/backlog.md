@@ -8084,7 +8084,9 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   renamed on the way (only their text). W105a (2026-10-05) already moved printers, print agents
   and devices to **Disable / Deshabilitar**, status **Disabled** (Deshabilitada for a printer,
   Deshabilitado for an agent or a device) and **Enable / Habilitar**, renaming their keys; card
-  readers and staff still say Desactivar.
+  readers and staff still say Desactivar. Left open by W105a: a printer's Active status reads the
+  masculine "Activo" beside "Deshabilitada", because `printers.status_active` is shared with print
+  agents.
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile`; the Spanish
   form-factor label differs between two pickers ("TPV" vs "Caja registradora") — an owner copy call.
 - An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional
