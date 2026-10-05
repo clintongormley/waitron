@@ -1591,8 +1591,9 @@ deleted the right category; the dashboard was at fault. Fixed:
   reads the contents again and shows the new counts with the refusal's own message. Before this, a
   change between the dashboard's second read and the delete was not seen.
 - Choosing Edit or Delete in a product's row menu, or Edit, Remove or Restore in a variant's, now
-  closes the menu too (W74b). Those items stopped the click as the category Delete had, so the
-  menu stayed open after each of them.
+  closes the menu too (W74b, #1219). Those items stopped the click as the category Delete had, so
+  the menu stayed open after each of them. Tested in the list itself, which sends exactly one
+  request per choice; not tested through the whole Products screen that handles the requests.
 
 Still open from W74:
 - **An empty category's no-dialog delete does not see an inactive product added meanwhile**
