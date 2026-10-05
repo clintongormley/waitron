@@ -2998,7 +2998,8 @@ refuses a `table_service_statuses` row whose colour fails it with `setup.request
 export, before the staged file is written, and again when it is imported, where provisioning's
 transaction rolls back every venue row. A save's refusal is unchanged
 (`management.request_invalid`). Reproduced first: on `main` a bundle carrying `red;position:fixed`
-imported.
+imported. Left open: the save's existing refusal test asserts the code but not
+`{ field: "color" }` (Codex run-it review of #1257); tightening it was out of the item's scope.
 
 **Remaining "?" buttons that should be hints (A237, owner 2026-10-03) — OPEN.** The rule — a short
 explanation is the field's hint, and the "?" button is only for one too long for a hint or a field
