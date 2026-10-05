@@ -302,12 +302,14 @@ changes only HOW a variant or dish is made unsellable, and every total stays the
 | 1 | `…menu-prices-table.test.ts:1326` (`:1337`–`1347`) | each variant row shows whether it is offered | **DELETE** that expect; names and prices stay | R1 |
 | 1 | `…menu-prices-table.test.ts:1397` (`:1406`–`1414`) | wine range skips the carafe; tea reads "No variant offered" | wine `range(7.00, 15.00)`, tea `eur(2.40)`; the muted tea check goes with the string | R1 |
 | 1 | `…menu-prices-table.test.ts:1444` | comment says switched-off variants are skipped | comment fixed; expected order unchanged | R1 |
+| 1 | `…menu-prices-table.test.ts:1546` (`:1548`–`1551`) | "15.00" finds the carafe and opens the wine; "1500" finds nothing | "10.00" (the bottle's price before this menu, inside the wine's range) finds `mi-wine, mi-wine:v-bottle`; "1000" finds nothing; added: "15.00" now finds the wine itself, folded (`["mi-wine"]`) | R1 |
 | 1 | `…menu-prices-table.test.ts:1567` (`:1581`, `:1591`) | the chooser offers `active` | not offered | R1 |
 | 1 | `…menu-prices-table.test.ts:1683` (`:1689`) | wine "now" range skips the carafe | `range(7.00, 15.00)` | R1 |
 | 1 | `…menu-prices-table.test.ts:1748` | a menu price on a switched-off variant is ignored | **DELETE** — no switched-off variant exists; a variant's menu price in the range stays pinned at `:1688` | R1 |
 | 1 | `…menu-prices-table.test.ts:1778` | "No variant offered" when none is | **DELETE** — that state no longer exists | R1 |
 | 1 | `…menu-prices-table.test.ts:1803` (`:1806`–`1814`) | sort order with tea unpriced | tea (2.40) sorts first: `mi-tea, mi-juice, mi-cider, mi-soup, mi-wine, mi-burger, mi-steak` | R1 |
 | 1 | `…menu-prices-table.test.ts:1938` | three states for the product and every variant | **DELETE** — the states no longer exist | R1 |
+| 1 | `…menu-prices-table.test.ts:1953` (`:1985`–`1986`) | resolving a variant's price clash forwards each variant's stored `offered` | sends `variantId` and `price` only, the same prices | R3 |
 | 1 | `…menu-prices-table.test.ts:1996` (`:2045`) | summary counts overrides and switch-offs per included menu | summary counts overrides only, new wording | R1 |
 | 1 | `…menu-prices-table.test.ts:2052` | Sell it / Switch it off resolves an on/off clash (2 cases) | **DELETE** — no on/off clash exists | R2 |
 | 1 | `…menu-prices-table.test.ts:2115` (`:2152`) | summary text includes "and switches off 0 items" | text without it | R1 |

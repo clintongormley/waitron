@@ -379,9 +379,9 @@ export class MenuPricesTable extends LitElement {
       name: item.name,
       item: variant ? null : { grossPrice },
       variants: variant
-        ? item.variants.map((v) => ({
-            ...v,
-            ...(v.variantId === variant.variantId ? { price: grossPrice } : {}),
+        ? item.variants.map(({ variantId, price }) => ({
+            variantId,
+            price: variantId === variant.variantId ? grossPrice : price,
           }))
         : item.variants.length
           ? null

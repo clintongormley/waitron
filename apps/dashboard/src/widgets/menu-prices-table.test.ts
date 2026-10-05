@@ -1461,10 +1461,14 @@ describe("variants", () => {
 
   it("finds a price as it is written, not as the amount it sorts by", async () => {
     const el = await mountVariants();
-    await search(el, "15.00");
-    expect(shown(el)).toEqual(["mi-wine", "mi-wine:v-carafe"]);
-    await search(el, "1500");
+    // The bottle's price before this menu sits inside the wine's range, so only its own row shows it.
+    await search(el, "10.00");
+    expect(shown(el)).toEqual(["mi-wine", "mi-wine:v-bottle"]);
+    await search(el, "1000");
     expect(shown(el)).toEqual([]);
+    // The carafe's 15.00 is the top of the wine's charged range, so the wine is found itself.
+    await search(el, "15.00");
+    expect(shown(el)).toEqual(["mi-wine"]);
   });
 
   it("keeps a product's variants when the product is found by its name", async () => {
@@ -1844,8 +1848,8 @@ it("resolves one variant clash while preserving every sibling override", async (
           name: "Lemonade",
           item: null,
           variants: [
-            { variantId: "v-small", price: "3.50", offered: true },
-            { variantId: "v-large", price: "3.75", offered: false },
+            { variantId: "v-small", price: "3.50" },
+            { variantId: "v-large", price: "3.75" },
           ],
         },
       ],
