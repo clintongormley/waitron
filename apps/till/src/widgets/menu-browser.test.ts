@@ -859,7 +859,10 @@ describe("till-menu-browser", () => {
     const WHITE = "rgb(255, 255, 255)";
     const BLACK = "rgb(0, 0, 0)";
 
-    async function mountPainted(theme: Theme): Promise<TillMenuBrowser> {
+    async function mountPainted(
+      theme: Theme,
+      store = new WorkingOrderStore(),
+    ): Promise<TillMenuBrowser> {
       const { el } = await mountWidget<TillMenuBrowser>(
         "till-menu-browser",
         {
@@ -882,7 +885,7 @@ describe("till-menu-browser", () => {
             homeLayouts: [{ id: "lay-home", name: "Home", tiles: [] }],
           }),
           products: painted,
-          store: new WorkingOrderStore(),
+          store,
         },
         theme,
       );
@@ -906,27 +909,99 @@ describe("till-menu-browser", () => {
       return computed;
     }
 
+    type Rgba = [number, number, number, number];
+
+    function rgba(computed: string): Rgba {
+      expect(computed).toMatch(/^rgba?\(/);
+      const [r, g, b, a = 1] = computed.match(/[\d.]+/g)!.map(Number);
+      return [r!, g!, b!, a];
+    }
+
+    /** `top` laid over the opaque `under`, at `top`'s own alpha unless `alpha` is given. */
+    function over(top: Rgba, under: Rgba, alpha = top[3]): Rgba {
+      const mix = (i: number) => top[i]! * alpha + under[i]! * (1 - alpha);
+      return [mix(0), mix(1), mix(2), 1];
+    }
+
+    function contrast(a: Rgba, b: Rgba): number {
+      const luminance = ([r, g, b]: Rgba) => {
+        const [lr, lg, lb] = [r, g, b].map((v) => {
+          const s = v / 255;
+          return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+        });
+        return 0.2126 * lr! + 0.7152 * lg! + 0.0722 * lb!;
+      };
+      const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (hi! + 0.05) / (lo! + 0.05);
+    }
+
+    /** The contrast a label is SEEN at: its colour on the tile's fill, the whole button then faded
+     * by its opacity onto the page behind the widget. axe does not check a disabled control. */
+    function seenContrast(el: TillMenuBrowser, tile: Button, label: string): number {
+      const page = rgba(getComputedStyle(el.parentElement!).backgroundColor);
+      const fade = opacity(tile) * Number(getComputedStyle(tile).opacity);
+      const fill = over(rgba(background(tile)), page);
+      const text = over(rgba(ink(tile, label)), fill);
+      return contrast(over(text, page, fade), over(fill, page, fade));
+    }
+
+    const stripe = (tile: Button) => {
+      const style = getComputedStyle(inner(tile));
+      return {
+        color: style.borderInlineStartColor,
+        width: parseFloat(style.borderInlineStartWidth),
+        otherEdge: parseFloat(style.borderInlineEndWidth),
+      };
+    };
+
+    const SOLD_OUT = ["Blue gone", "Pink gone", "Plain gone"];
+
     describe.each(["light", "dark"] as const)("%s theme", (theme) => {
-      it("paints a dark product's tile with white labels, a sold-out tile's included", async () => {
+      it("paints a dark product's tile with white labels, and a sold-out one's stripe", async () => {
         const el = await mountPainted(theme);
-        for (const name of ["Blue", "Blue gone"]) {
-          const tile = entry(el, "structure", name);
-          expect(background(tile)).toBe("rgb(37, 107, 177)");
-          expect(ink(tile, ".name")).toBe(WHITE);
-          expect(ink(tile, ".price")).toBe(WHITE);
-        }
-        expect(ink(entry(el, "structure", "Blue gone"), ".sold-out")).toBe(WHITE);
+        const tile = entry(el, "structure", "Blue");
+        expect(background(tile)).toBe("rgb(37, 107, 177)");
+        expect(ink(tile, ".name")).toBe(WHITE);
+        expect(ink(tile, ".price")).toBe(WHITE);
+        expect(stripe(entry(el, "structure", "Blue gone")).color).toBe("rgb(37, 107, 177)");
       });
 
-      it("paints a pale product's tile with black labels, a sold-out tile's included", async () => {
+      it("paints a pale product's tile with black labels, and a sold-out one's stripe", async () => {
         const el = await mountPainted(theme);
-        for (const name of ["Pink", "Pink gone"]) {
-          const tile = entry(el, "structure", name);
-          expect(background(tile)).toBe("rgb(237, 171, 171)");
-          expect(ink(tile, ".name")).toBe(BLACK);
-          expect(ink(tile, ".price")).toBe(BLACK);
+        const tile = entry(el, "structure", "Pink");
+        expect(background(tile)).toBe("rgb(237, 171, 171)");
+        expect(ink(tile, ".name")).toBe(BLACK);
+        expect(ink(tile, ".price")).toBe(BLACK);
+        expect(stripe(entry(el, "structure", "Pink gone")).color).toBe("rgb(237, 171, 171)");
+      });
+
+      it("draws every sold-out tile on the neutral grey, never its colour or an available tile's white", async () => {
+        const el = await mountPainted(theme);
+        const grey = token(el, "background-color", "var(--wt-color-border)");
+        const surface = token(el, "background-color", "var(--wt-color-surface)");
+        expect(grey).not.toBe(surface);
+        for (const name of SOLD_OUT) expect(background(entry(el, "structure", name))).toBe(grey);
+      });
+
+      it("keeps a sold-out painted tile's colour as a stripe wider than its other edges, and gives a plain one none", async () => {
+        const el = await mountPainted(theme);
+        for (const name of ["Blue gone", "Pink gone"]) {
+          const { width, otherEdge } = stripe(entry(el, "structure", name));
+          expect(width).toBeGreaterThanOrEqual(otherEdge + 2);
         }
-        expect(ink(entry(el, "structure", "Pink gone"), ".sold-out")).toBe(BLACK);
+        const plain = stripe(entry(el, "structure", "Plain gone"));
+        expect(plain.width).toBe(plain.otherEdge);
+      });
+
+      it("reads a sold-out tile's name, price and Sold out at 4.5:1 or more where it is seen", async () => {
+        const el = await mountPainted(theme);
+        const readings = SOLD_OUT.flatMap((name) =>
+          [".name", ".price", ".sold-out"].map((label) => ({
+            label: `${name} ${label}`,
+            seen: seenContrast(el, entry(el, "structure", name), label),
+          })),
+        );
+        expect(readings.filter(({ seen }) => seen < 4.5)).toEqual([]);
       });
 
       it("paints a coloured section's tile and its Section label", async () => {
@@ -977,15 +1052,28 @@ describe("till-menu-browser", () => {
         expect(opacity(entry(el, "structure", "Bare"))).toBe(1);
       });
 
-      it("keeps the sold-out fade on a painted tile, which still says Sold out", async () => {
+      it("draws a sold-out tile, painted or not, unfaded and still disabled, saying Sold out in the body colour", async () => {
+        const store = new WorkingOrderStore();
+        const el = await mountPainted(theme, store);
+        const body = token(el, "color", "var(--wt-color-text)");
+        for (const name of SOLD_OUT) {
+          const tile = entry(el, "structure", name);
+          expect(opacity(tile)).toBe(1);
+          expect(inner(tile).disabled).toBe(true);
+          expect(tile.querySelector(".sold-out")!.textContent!.trim()).toBe("Sold out");
+          expect(ink(tile, ".sold-out")).toBe(body);
+          await tap(el, tile);
+        }
+        expect(store.lines).toEqual([]);
+      });
+
+      it("says Agotado on a sold-out painted tile in Spanish", async () => {
+        setLocale("es-ES");
         const el = await mountPainted(theme);
-        const tile = entry(el, "structure", "Blue gone");
-        const neutral = entry(el, "structure", "Plain gone");
-        expect(opacity(neutral)).toBeLessThan(1);
-        expect(opacity(tile)).toBe(opacity(neutral));
-        expect(inner(tile).disabled).toBe(true);
-        expect(tile.querySelector(".sold-out")!.textContent!.trim()).toBe("Sold out");
-        expect(ink(tile, ".sold-out")).toBe(WHITE);
+        for (const name of ["Blue gone", "Pink gone"])
+          expect(entry(el, "structure", name).querySelector(".sold-out")!.textContent!.trim()).toBe(
+            "Agotado",
+          );
       });
     });
   });
