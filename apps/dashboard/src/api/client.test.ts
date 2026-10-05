@@ -28,12 +28,26 @@ describe("DashboardApi", () => {
   it("sends the selected folder contents choice on deletion", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    await api.deleteCatalogueItems({ productIds: [], categoryIds: ["f"] }, "move_up");
+    const shown = [{ id: "f", folders: 0, activeProducts: 0, routes: 0 }];
+    await api.deleteCatalogueItems({ productIds: [], categoryIds: ["f"] }, "move_up", shown);
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/folders/delete",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ productIds: [], categoryIds: ["f"], contents: "move_up" }),
+        body: JSON.stringify({ productIds: [], categoryIds: ["f"], contents: "move_up", shown }),
+      }),
+    );
+  });
+  it("sends the counts the person was shown with a category deletion", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    const shown = [{ id: "f", folders: 1, activeProducts: 2, routes: 3 }];
+    await api.deleteCatalogueItems({ productIds: [], categoryIds: ["f"] }, "delete", shown);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/folders/delete",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ productIds: [], categoryIds: ["f"], contents: "delete", shown }),
       }),
     );
   });

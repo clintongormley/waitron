@@ -398,3 +398,12 @@ it("says why a receipt language cannot be changed, in both languages", () => {
     "Algunos pedidos de este local siguen en curso en el idioma actual del recibo, así que todavía no se puede cambiar.",
   );
 });
+
+it("says a category delete deleted nothing because the categories' contents changed", () => {
+  expect(codeMessage("category.contents_changed", "en")).toBe(
+    "What these categories hold has changed, so nothing was deleted. Check the new counts and try again.",
+  );
+  expect(codeMessage("category.contents_changed", "es")).toBe(
+    "Lo que contienen estas categorías ha cambiado, así que no se ha eliminado nada. Revisa las nuevas cifras y vuelve a intentarlo.",
+  );
+});

@@ -320,6 +320,11 @@ export interface FolderSummary {
   activeProducts: number;
   routes: number;
 }
+/**
+ * One selected category's counts as the client read them before deleting it (its dialog showed
+ * them, when it asked).
+ */
+export type ShownFolderCounts = Pick<FolderSummary, "id" | "folders" | "activeProducts" | "routes">;
 export interface Unit {
   id: string;
   name: Record<string, string>;
@@ -1925,8 +1930,16 @@ export class DashboardApi {
     return this.#request("/management-api/folders/move", "POST", { ...selection, to });
   }
 
-  deleteCatalogueItems(selection: CatalogueSelection, contents: FolderContents): Promise<void> {
-    return this.#request("/management-api/folders/delete", "POST", { ...selection, contents });
+  deleteCatalogueItems(
+    selection: CatalogueSelection,
+    contents: FolderContents,
+    shown: ShownFolderCounts[],
+  ): Promise<void> {
+    return this.#request("/management-api/folders/delete", "POST", {
+      ...selection,
+      contents,
+      shown,
+    });
   }
 
   summariseFolders(categoryIds: string[]): Promise<FolderSummary[]> {

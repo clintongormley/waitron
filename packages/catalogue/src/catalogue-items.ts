@@ -23,12 +23,24 @@ export interface FolderSummary {
   activeProducts: number;
   routes: number;
 }
+/**
+ * One selected category's counts as the client read them before deleting it (its dialog showed
+ * them, when it asked).
+ */
+export type ShownFolderCounts = Pick<FolderSummary, "id" | "folders" | "activeProducts" | "routes">;
 
 /** The folder tree, read once: each folder's parent, depth and whole subtree. */
 class FolderTree {
   readonly #parent = new Map<string, string | null>();
+  readonly #children = new Map<string, string[]>();
   constructor(readonly folders: readonly Category[]) {
-    for (const { id, parentId } of folders) this.#parent.set(id, parentId);
+    for (const { id, parentId } of folders) {
+      this.#parent.set(id, parentId);
+      if (parentId === null) continue;
+      const siblings = this.#children.get(parentId);
+      if (siblings === undefined) this.#children.set(parentId, [id]);
+      else siblings.push(id);
+    }
   }
   require(id: string): void {
     if (!this.#parent.has(id)) throw new AppError("category.not_found", { categoryId: id });
@@ -60,8 +72,8 @@ class FolderTree {
     const found = [id];
     const seen = new Set(found);
     for (let i = 0; i < found.length; i++)
-      for (const [child, parent] of this.#parent)
-        if (parent === found[i] && !seen.has(child)) {
+      for (const child of this.#children.get(found[i]!) ?? [])
+        if (!seen.has(child)) {
           seen.add(child);
           found.push(child);
         }
@@ -122,8 +134,10 @@ export async function deleteCatalogueItems(
   tx: Transaction,
   selection: CatalogueSelection,
   contents: FolderContents,
+  shown?: readonly ShownFolderCounts[],
 ): Promise<void> {
   const tree = await readTree(tx, selection);
+  if (shown !== undefined) await assertContentsAsShown(tx, tree, selection.categoryIds, shown);
   if (contents === "move_up") await assertMovedUpNamesFree(tx, tree, selection.categoryIds);
   for (const id of selection.productIds) await deactivateProduct(tx, id);
   if (contents === "move_up") {
@@ -174,6 +188,25 @@ async function assertMovedUpNamesFree(
   );
 }
 
+async function assertContentsAsShown(
+  tx: Transaction,
+  tree: FolderTree,
+  categoryIds: readonly string[],
+  shown: readonly ShownFolderCounts[],
+): Promise<void> {
+  const byId = new Map(shown.map((counts) => [counts.id, counts]));
+  for (const summary of await summarise(tx, tree, categoryIds)) {
+    const seen = byId.get(summary.id);
+    if (
+      seen === undefined ||
+      seen.folders !== summary.folders ||
+      seen.activeProducts !== summary.activeProducts ||
+      seen.routes !== summary.routes
+    )
+      throw new AppError("category.contents_changed", { categoryId: summary.id });
+  }
+}
+
 /** Deletes one category, moving its products and the categories under it up to its parent. */
 export async function deleteCategory(tx: Transaction, id: string): Promise<void> {
   await deleteCatalogueItems(tx, { productIds: [], categoryIds: [id] }, "move_up");
@@ -200,50 +233,65 @@ export async function summariseFolders(
 ): Promise<FolderSummary[]> {
   const tree = new FolderTree(await listCategories(tx));
   for (const id of categoryIds) tree.require(id);
+  return summarise(tx, tree, categoryIds);
+}
+
+/** Counts each folder's own contents once, however many selected subtrees share it, then sums
+ * per subtree, so a selected category inside another selected one counts its contents in both. */
+async function summarise(
+  tx: Transaction,
+  tree: FolderTree,
+  categoryIds: readonly string[],
+): Promise<FolderSummary[]> {
+  const subtrees = categoryIds.map((id) => tree.subtree(id));
+  const counts = new Map(
+    subtrees.flat().map((id) => [id, { products: 0, activeProducts: 0, routes: 0 }]),
+  );
   const claimsPresent = await tableExists(tx, "station_claims");
   const exceptionsPresent = await tableExists(tx, "route_exceptions");
-  const summaries: FolderSummary[] = [];
-  for (const id of categoryIds) {
-    const subtree = tree.subtree(id);
-    let productCount = 0;
-    let activeCount = 0;
-    let routeCount = 0;
-    for (const batch of batches(subtree)) {
-      const [row] = await tx
-        .select({
-          n: sql<number>`count(*)`,
-          active: sql<number>`count(*) filter (where ${eq(products.active, true)})`,
-        })
-        .from(products)
-        .where(and(inArray(products.categoryId, batch), isTopLevelProduct));
-      productCount += Number(row!.n);
-      activeCount += Number(row!.active);
-      if (claimsPresent || exceptionsPresent) {
-        const folderIds = sql.join(
-          batch.map((folder) => sql`${folder}`),
-          sql`, `,
-        );
-        if (claimsPresent) {
-          const claims = await tx.execute<{ n: number }>(
-            sql`select count(*) as n from station_claims where category_id in (${folderIds})`,
-          );
-          routeCount += Number(claims.rows[0]!.n);
-        }
-        if (exceptionsPresent) {
-          const exceptions = await tx.execute<{ n: number }>(
-            sql`select count(*) as n from route_exceptions where category_id in (${folderIds})`,
-          );
-          routeCount += Number(exceptions.rows[0]!.n);
-        }
-      }
+  for (const batch of batches([...counts.keys()])) {
+    for (const row of await tx
+      .select({
+        categoryId: products.categoryId,
+        n: sql<number>`count(*)`,
+        active: sql<number>`count(*) filter (where ${eq(products.active, true)})`,
+      })
+      .from(products)
+      .where(and(inArray(products.categoryId, batch), isTopLevelProduct))
+      .groupBy(products.categoryId)) {
+      const entry = counts.get(row.categoryId!)!;
+      entry.products += Number(row.n);
+      entry.activeProducts += Number(row.active);
     }
-    summaries.push({
-      id,
-      folders: subtree.length - 1,
-      products: productCount,
-      activeProducts: activeCount,
-      routes: routeCount,
-    });
+    const inBatch = sql.join(
+      batch.map((folder) => sql`${folder}`),
+      sql`, `,
+    );
+    for (const [present, table] of [
+      [claimsPresent, sql`station_claims`],
+      [exceptionsPresent, sql`route_exceptions`],
+    ] as const) {
+      if (!present) continue;
+      const routes = await tx.execute<{ category_id: string; n: number }>(
+        sql`select category_id, count(*) as n from ${table} where category_id in (${inBatch}) group by category_id`,
+      );
+      for (const row of routes.rows) counts.get(row.category_id)!.routes += Number(row.n);
+    }
   }
-  return summaries;
+  return subtrees.map((subtree) => {
+    const summary = {
+      id: subtree[0]!,
+      folders: subtree.length - 1,
+      products: 0,
+      activeProducts: 0,
+      routes: 0,
+    };
+    for (const folder of subtree) {
+      const entry = counts.get(folder)!;
+      summary.products += entry.products;
+      summary.activeProducts += entry.activeProducts;
+      summary.routes += entry.routes;
+    }
+    return summary;
+  });
 }

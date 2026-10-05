@@ -17,6 +17,7 @@ import {
   summariseFolders,
   type CatalogueSelection,
   type FolderContents,
+  type ShownFolderCounts,
   catalogueExists,
   readContentLanguages,
   listTranslationGapReport,
@@ -206,6 +207,38 @@ function selectionBody(body: Record<string, unknown>): CatalogueSelection {
   };
 }
 
+/** One entry per selected category, exactly; the counts themselves are compared by the delete. */
+function shownBody(value: unknown, categoryIds: readonly string[]): ShownFolderCounts[] {
+  const invalid = () => new AppError("management.request_invalid", { field: "shown" });
+  const count = (n: unknown): n is number => Number.isSafeInteger(n) && (n as number) >= 0;
+  if (!Array.isArray(value)) throw invalid();
+  const shown = value.map((entry: unknown): ShownFolderCounts => {
+    if (
+      !isPlainObject(entry) ||
+      typeof entry.id !== "string" ||
+      !isUuid(entry.id) ||
+      !count(entry.folders) ||
+      !count(entry.activeProducts) ||
+      !count(entry.routes)
+    )
+      throw invalid();
+    return {
+      id: entry.id,
+      folders: entry.folders,
+      activeProducts: entry.activeProducts,
+      routes: entry.routes,
+    };
+  });
+  const ids = new Set(shown.map(({ id }) => id));
+  if (
+    ids.size !== shown.length ||
+    ids.size !== categoryIds.length ||
+    categoryIds.some((id) => !ids.has(id))
+  )
+    throw invalid();
+  return shown;
+}
+
 /** A position or index, shape only: the section writes refuse a negative or fractional one. */
 function numberField(value: unknown, field: string): number {
   if (typeof value !== "number") throw new AppError("management.request_invalid", { field });
@@ -267,6 +300,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "extras.product_has_variants": 409,
   "product.offered_as_extra": 409,
   "category.name_taken": 409,
+  "category.contents_changed": 409,
   "product.name_taken": 409,
 };
 
@@ -1078,7 +1112,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (body.contents !== "move_up" && body.contents !== "delete")
         throw new AppError("management.request_invalid", { field: "contents" });
       const contents: FolderContents = body.contents;
-      await gated(session, (tx) => deleteCatalogueItems(tx, selection, contents));
+      const shown = selection.categoryIds.length
+        ? shownBody(body.shown, selection.categoryIds)
+        : undefined;
+      await gated(session, (tx) => deleteCatalogueItems(tx, selection, contents, shown));
       return c.body(null, 204);
     }),
   );

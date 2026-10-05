@@ -265,8 +265,12 @@ If the summary cannot be read, deletion waits for a successful new attempt rathe
 to approve unknown contents. The dialog lists each category being deleted by its full path, adding
 "(2 of 3)" where several categories share a path. Pressing **Delete** in the dialog reads the counts
 again; if the numbers of subcategories, active products or routing rules have changed, it deletes
-nothing, shows the new counts and asks you to confirm again. A refused action keeps its dialog open
-with a message at the bottom.
+nothing, shows the new counts and asks you to confirm again. The delete request carries the counts
+the dashboard read before deleting, and the server compares them again inside the delete itself: if
+they no longer match, nothing is deleted and the dialog shows the new counts with the refusal's own
+message. If an empty category, which is deleted without confirmation, has gained subcategories,
+active products or routing rules by then, the dialog opens with its new counts. A refused action
+keeps its dialog open with a message at the bottom.
 Deleting a category removes its station claim and every exception naming it, because both tables
 have a cascading foreign key to `categories`. The summary counts those removed rules; it does
 not list products whose station would change. **Move to…** also has no routing preview. Check
@@ -287,11 +291,14 @@ a non-string name is `management.request_invalid` (400).
 | `GET /management-api/categories/:id` | 200, category |
 | `PATCH /management-api/categories/:id` | supplied name or parent fields; 200, saved category |
 | `POST /management-api/folders/move` | `{ productIds, categoryIds, to }`; 204 |
-| `POST /management-api/folders/delete` | `{ productIds, categoryIds, contents }`; 204 |
+| `POST /management-api/folders/delete` | `{ productIds, categoryIds, contents, shown }`; 204 |
 | `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes }[]`; `products` includes Inactive products, `activeProducts` leaves them out |
 
 Both ID arrays are required and contain distinct UUIDs. `to` is a category ID or null. `contents`
-is `move_up` or `delete`. For example, once you have created Cocktails and your products, use their
+is `move_up` or `delete`. `shown` is the counts the client read before deleting (the ones its
+dialog showed, when it asked): one `{ id, folders, activeProducts, routes }` per selected category,
+exactly, with whole numbers of zero or more. It is required when `categoryIds` is not empty and
+ignored when it is. For example, once you have created Cocktails and your products, use their
 returned IDs to move two products and a category together:
 
 ```http
@@ -309,9 +316,11 @@ The successful response is `204 No Content`. A missing product or variant ID is 
 (404); a missing category is `category.not_found` (404); a category move into itself or its descendants
 is `category.parent_cycle` (409). A category name that would match a sibling's is
 `category.name_taken` (409, `{ field, name }`), from the category create and update routes, from
-`folders/move`, and from `folders/delete` when `contents` is `move_up`. Malformed arrays or
+`folders/move`, and from `folders/delete` when `contents` is `move_up`. A `folders/delete` whose
+`shown` counts differ from the server's own for any selected category is `category.contents_changed`
+(409, `{ categoryId }`, the first such category), and deletes nothing. Malformed arrays or
 repeated IDs are `management.request_invalid` (400), and a malformed UUID is `shared.invalid_id`
-(400). Category-summary counts cover each complete subtree; the browser counts selected roots when ancestors and descendants are selected together.
+(400); a missing or malformed `shown` is `management.request_invalid` with `field: "shown"`. Category-summary counts cover each complete subtree; the browser counts selected roots when ancestors and descendants are selected together.
 
 The former per-category delete, dependants and product-membership routes are retired. Use the
 category selection operations above. The product editor still saves `primaryCategoryId`, which

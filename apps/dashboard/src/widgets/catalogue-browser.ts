@@ -264,8 +264,8 @@ export class CatalogueBrowser extends LitElement {
       this.summaryLoading = false;
     }
   }
-  /** `shown` marks a confirmation from the dialog, whose counts are read again before deleting. */
-  async #confirm(operation = this.operation, shown = false): Promise<void> {
+  /** A confirmation from the dialog reads its counts again before deleting. */
+  async #confirm(operation = this.operation, fromDialog = false): Promise<void> {
     if (
       this.operationBusy ||
       this.summaryLoading ||
@@ -283,9 +283,29 @@ export class CatalogueBrowser extends LitElement {
           this.destination === "top" ? null : this.destination,
         );
       else {
-        if (shown && this.operationSelection.categoryIds.length && !(await this.#unchanged()))
+        if (fromDialog && this.operationSelection.categoryIds.length && !(await this.#unchanged()))
           return;
-        await this.api.deleteCatalogueItems(this.operationSelection, this.contents);
+        try {
+          await this.api.deleteCatalogueItems(
+            this.operationSelection,
+            this.contents,
+            this.summaries.map(({ id, folders, activeProducts, routes }) => ({
+              id,
+              folders,
+              activeProducts,
+              routes,
+            })),
+          );
+        } catch (error) {
+          if (codeOf(error, "") !== "category.contents_changed") throw error;
+          this.operation = operation;
+          const fresh = await this.#readAgain();
+          if (fresh) {
+            this.summaries = fresh;
+            this.operationError = codeMessage("category.contents_changed");
+          }
+          return;
+        }
       }
       this.operation = null;
       this.selected = [];
@@ -296,9 +316,9 @@ export class CatalogueBrowser extends LitElement {
       this.operationBusy = false;
     }
   }
-  /** When what the dialog showed has changed, shows the new counts instead; when it cannot be read
-   * again, says so and leaves Delete to try again. A refusal carrying a code is left to the caller. */
-  async #unchanged(): Promise<boolean> {
+  /** The selected categories' contents read again; when they cannot be read, says so and answers
+   * null, leaving Delete to try again. A refusal carrying a code is left to the caller. */
+  async #readAgain(): Promise<FolderSummary[] | null> {
     const ids = this.operationSelection.categoryIds;
     let read: unknown;
     try {
@@ -310,19 +330,25 @@ export class CatalogueBrowser extends LitElement {
     const fresh = ids.map((id) => list.find((summary) => summary.id === id));
     if (fresh.some((summary) => summary === undefined)) {
       this.operationError = t("folders.summary_error");
-      return false;
+      return null;
     }
+    return fresh as FolderSummary[];
+  }
+  /** When what the dialog showed has changed, shows the new counts instead. */
+  async #unchanged(): Promise<boolean> {
+    const fresh = await this.#readAgain();
+    if (!fresh) return false;
     const same = fresh.every((summary, index) => {
       const shown = this.summaries[index];
       return (
         shown !== undefined &&
-        summary!.folders === shown.folders &&
-        summary!.activeProducts === shown.activeProducts &&
-        summary!.routes === shown.routes
+        summary.folders === shown.folders &&
+        summary.activeProducts === shown.activeProducts &&
+        summary.routes === shown.routes
       );
     });
     if (same) return true;
-    this.summaries = fresh as FolderSummary[];
+    this.summaries = fresh;
     this.operationError = t("folders.summary_changed");
     return false;
   }

@@ -63,6 +63,10 @@ it("folder summaries count claims and exceptions in the subtree and deletion rem
         productIds: [],
         categoryIds: [child, parent],
         contents: "delete",
+        shown: [
+          { id: child, folders: 0, activeProducts: 0, routes: 2 },
+          { id: parent, folders: 1, activeProducts: 0, routes: 2 },
+        ],
       })
     ).status,
   ).toBe(204);
@@ -73,6 +77,28 @@ it("folder summaries count claims and exceptions in the subtree and deletion rem
     (await suite.db.execute(sql`select id from route_exceptions where category_id = ${child}`))
       .rows,
   ).toEqual([]);
+});
+
+it("refuses a category delete with 409 when a routing rule was added since the counts were shown", async () => {
+  const v = await setupVenue();
+  const app = mountApp();
+  const drinks = await createCategory(app, v.managerCookie, "Drinks");
+  await suite.db
+    .insert(stationClaims)
+    .values({ locationId: v.locationId, categoryId: drinks, noPreparation: true });
+  const response = await send(app, "POST", "/management-api/folders/delete", v.managerCookie, {
+    productIds: [],
+    categoryIds: [drinks],
+    contents: "delete",
+    shown: [{ id: drinks, folders: 0, activeProducts: 0, routes: 0 }],
+  });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({
+    error: { code: "category.contents_changed", params: { categoryId: drinks } },
+  });
+  expect(
+    (await suite.db.execute(sql`select id from station_claims where category_id = ${drinks}`)).rows,
+  ).toHaveLength(1);
 });
 
 interface Venue {
