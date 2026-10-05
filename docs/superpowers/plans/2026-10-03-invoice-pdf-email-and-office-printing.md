@@ -103,14 +103,14 @@
 - `apps/server/src/account-email.ts`: the mail message type gains attachments, or a sibling invoice-mail module shares the transport.
 - `apps/server/src/email-delivery.ts`: invoice email in a demo resolves to the captured inbox even when `email.smtp` is set; a venue preparing to go live follows account email's rule (SMTP when set, otherwise the captured inbox). `resolveEmailDelivery` takes only a practice-mode flag today, which cannot tell a demo from a prepare venue, so the invoice rule needs the venue's mode.
 - The server's background work loop.
-- The location settings (a contact email and optional phone) and the screen that edits them.
+- The location settings (a contact email and optional phone) and the screen that edits them. _(2026-10-05, W111: an optional venue-wide phone and email now exist in the receipt settings — `phone` and `email` in the `tenant_receipts.receipt` JSON, edited on the dashboard's Receipts screen; decide whether to reuse them rather than add a second contact email.)_
 - A231's full-invoice dialog in `apps/till`, and `apps/till/src/api/client.ts`.
 - The till and dashboard translations.
 - `deploy/compose.yml`, for the capture service's size limit, if the measurement needs it.
 
 **Red first, till browser suite:**
 
-- The F1 dialog offers Printed receipt (the default). It offers A4 only with an invoice printer set, and Email only when the server says invoice email can be sent and the location has a contact email.
+- The F1 dialog offers Printed receipt (the default). It offers A4 only with an invoice printer set, and Email only when the server says invoice email can be sent and the location has a contact email. _(2026-10-05, W111: see the pointer on the location settings above — the receipt settings' optional `email` may be that contact email.)_
 - Choosing Email requires an address and the consent box.
 - The box is unticked by default and shows the versioned statement in the receipt language.
 - Issue stays disabled until both fields are valid, under the forms rules.

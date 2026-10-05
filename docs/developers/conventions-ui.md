@@ -464,11 +464,11 @@ body and QR shifted right and clipped on a 58mm roll; that payload carried no pr
 Whether the printer's own width setting also contributed was not tested. Since 2026-10-01 (C107)
 text lines are drawn into full-width pictures with their centring already in them. The receipt
 sends a native centre command, and a return to left after it, around its QR block (caption, QR
-picture, legend), around its top block (logo, names, slogan, address, phone, email, `NIF`; W111,
-2026-10-05) and around its footer message when it has one; a receipt with no QR still sends the
-other two (`apps/server/src/receipt-ticket.ts`). The QR and the logo are drawn only as wide as
-themselves, not as wide as the line, so where they land across the paper is the printer's own
-centring.
+picture, legend), around its top block (logo, names, slogan, address, phone, email, the "Duplicate"
+label, `NIF`; W111, 2026-10-05) and around its footer message when it has one; a receipt with no
+QR still sends the other two (`apps/server/src/receipt-ticket.ts`). The QR and the logo are drawn
+only as wide as themselves, not as wide as the line, so where they land across the paper is the
+printer's own centring.
 `apps/server/src/receipt-ticket.test.ts` pins the print area at the start of the job, 360 dots in its
 58mm case and 512 in its 80mm one, and that every line's picture is that wide;
 `apps/server/src/print-job-preview.test.ts` pins only that the dashboard preview consumes both

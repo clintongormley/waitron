@@ -5988,9 +5988,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   - **Settings live in the existing `tenant_receipts.receipt` JSON, so there is no migration.**
     `ReceiptConfig` (`packages/layouts/src/types.ts`) gains `phone`, `email`, `printAddress` and
     `logo` beside `headerSubtitle` and `footerMessage`. `headerSubtitle` keeps its key; the Receipts
-    screen calls it Slogan / Eslogan. A phone is at most 30 characters of digits, spaces and
-    `+ ( ) . - /` with at least six digits; an email is at most 254 characters shaped
-    `name@domain.tld`; an empty one means not set. A bad value is refused `receipt.invalid` with a
+    screen calls it Slogan / Eslogan. A phone is at most 30 characters and passes the shared
+    `isValidTelephone` (`packages/shared/src/telephone.ts`: 6 to 15 digits, a "+" only at the
+    start); an email is at most 254 characters, with no space around it, and passes identity's
+    `isValidEmail`; an empty one means not set. The Receipts screen checks both before saving. A bad value is refused `receipt.invalid` with a
     `reason` (`invalid_phone`, `invalid_email`, `invalid_logo`, `image_not_found`, `not_boolean`),
     shown under its field (`validateReceiptConfig`, `packages/layouts/src/validate.ts`).
   - **The address is the venue location's own**, never typed again: street line 1, line 2,
@@ -5999,12 +6000,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     (`printAddress: false`); the screen shows the address it will print, or says the location has
     none saved.
   - **The logo is turned into printable black-and-white dots once, when the settings are saved, not
-    when a receipt prints.** Decoding an image needs sharp, which runs only outside a transaction,
-    and a receipt is built inside the sale's transaction. The save stores one picture per paper
-    width in the same JSON (`logoRasters`, drawn by `drawLogoRasters`,
+    when a receipt prints.** Decoding an image uses sharp, which must not run inside a transaction
+    because the decode would hold the venue's one write lock (`prepareImage`,
+    `packages/media/src/prepare.ts`), and a receipt is built inside the sale's transaction. The
+    save stores one picture per paper width in the same JSON (`logoRasters`, drawn by `drawLogoRasters`,
     `apps/server/src/receipt-logo.ts`); `getReceipt` leaves them out, so neither the dashboard's read
-    nor the till's boot carries them. Printing reads the stored picture through `getReceiptLogo`
-    (`packages/layouts/src/receipt-store.ts`), which answers no logo, rather than failing the sale,
+    nor the till's boot carries them. Printing reads the settings and that paper's picture in one
+    read through `getPrintedReceipt` (`packages/layouts/src/receipt-store.ts`), which answers no logo, rather than failing the sale,
     for a stored picture of the wrong shape — a configuration import copies the JSON unchecked. The
     image is picked and uploaded through the media library, whose upload refuses an over-large,
     non-image or unreadable file with its own codes; an image the receipt uses cannot be deleted
@@ -6014,12 +6016,24 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     QR may take (`safeWidthDots`: 360 dots on 58 mm, 504 on 80 mm) and at most 160 dots high
     (`LOGO_MAX_HEIGHT_DOTS`, `packages/printing/src/dither.ts`) — 20 mm at 203 dpi, 22.6 mm at
     180 dpi. So a square or tall image takes at most about 2 cm of roll, while a wordmark up to
-    about three times as wide as it is tall still uses the full 80 mm width.
+    about three times as wide as it is tall still uses the QR's full width on 80 mm paper, 504
+    dots (about 63 mm at 203 dpi).
   - **A reprint shows the current trim:** the address, phone, email, slogan and logo are read when a
     copy prints (`buildReceiptBytes`, `apps/server/src/receipt-print.ts`), not kept with the sale, so
     a copy of an earlier sale shows today's.
   - **Overlap with lane E's A231 (full invoices at the till), for whoever rebases second:** on an F1
     that prints the taxpayer's domicile, the location address is not printed as well.
+  - **Overlap with A231d (invoices by email):** its approved design adds a contact email and
+    optional phone to the location's settings; the venue-wide `phone` and `email` above already
+    exist, so whoever builds A231d decides whether to reuse them rather than add a second contact
+    email.
+  - **The Receipts preview redraws the whole receipt once per highlighted part.** It finds each
+    part it highlights (a "mark") by drawing the receipt again without that part and comparing the
+    two (`apps/server/src/receipt-preview-api.ts`). W111 took the marks
+    from 2 to 6, so one preview can draw the receipt up to 7 times, and the screen asks for a
+    preview after each pause in typing. Cheaper: have `formatReceipt`
+    (`apps/server/src/receipt-ticket.ts`) record the byte range each part emits, so one draw yields
+    every mark. Not measured.
   - Not yet checked on paper: the logo, and the centred block, on the owner's box (FYI in the
     campaign's questions file). Local screenshots in `~/waitron-campaign/w111-shots/`.
 - **«QR tributario:» above the QR (C115, owner 2026-09-30) — done (2026-10-01, #999).** Both the
