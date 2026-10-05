@@ -3536,11 +3536,19 @@ gets a new node id. Giving the imported row the importing box's node was ruled o
 self-enrolment found that row inactive and refused it with `device.join_revoked`. An export made
 before this change that lists a print agent carries `node_id`, so setup refuses it with
 `setup.request_invalid` naming `print_agents.node_id`; export it again.
-Still open, for the owner, and older than W72c: the export still carries each agent's `setup_url`
-and `setup_port`, and the Printers screen links an agent's host cell to its `setup_url`
-(`apps/dashboard/src/screens/printers-screen.ts`), so an imported agent that had reported one, which
-arrives inactive and is shown once the status filter includes disabled agents, would link to the
-exporting machine's setup page (read, not run).
+Since W72f (2026-10-05) an export also leaves out each print agent's `setup_url` and `setup_port`.
+Before, a run of an export and import read the exporting agent's setup page address and port on the
+imported row, and the Printers screen links an agent's host cell to that address
+(`apps/dashboard/src/screens/printers-screen.ts`), so an imported agent would have linked to the
+exporting machine's setup page. Both now arrive empty. The agents list builds an address from the
+port only for an agent whose node is this box's (`apps/server/src/print-api.ts`, read, not run), and
+an imported agent has no node, and no host either, since the export leaves that out too, so its host
+cell reads "Not reported yet", with no link (`apps/dashboard/src/screens/printers-screen.ts`, read,
+not run), until the agent is reconnected and reports its host, setup address and port again with
+each job pull (`packages/print-agent/src/agent.ts`, read, not run). An export made between W72c
+and this change listed both columns, empty ones included, so one that lists a print agent is
+refused at setup with `setup.request_invalid` naming `print_agents.setup_url` (an older one names
+`print_agents.node_id`, as above); export it again.
 Fixed in W72e (#1241, 2026-10-05): at 390 px the Products tree's category name box used to cut its
 duplicate-name refusal, and `category.invalid`'s, off against the pinned Actions column. The table
 is as wide as its widest row, and the refusal's one long line widened the Name column past the
