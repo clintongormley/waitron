@@ -5862,6 +5862,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
   special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.
   Eight build steps, each its own queue item.
+  [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) is written for owner review;
+  its Prep stations tabs, live numbers and inherited late flags are not implemented. Review choices
+  cover what live counts include, ready-but-unserved work, interim station hours, inactive display
+  bindings and the core station-table rebuild/reset risk.
   [Step 1, PR #1166](https://github.com/clintongormley/waitron/pull/1166) gathers Receipts,
   Tables and Kitchen settings into tabs; supervisors can read Tables and Kitchen, while writes
   remain manager-only (owner amendment, 2026-10-04).
