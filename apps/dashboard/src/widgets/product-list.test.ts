@@ -2070,20 +2070,29 @@ describe("the product list as a tree", () => {
     },
   );
 
-  it("closes a top-level product's menu when Delete is chosen from it", async () => {
-    const { el, root } = await mountTree();
-    const deletes: unknown[] = [];
-    el.addEventListener("delete-product", (event) => deletes.push((event as CustomEvent).detail));
-    const menu = root.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-      '[data-test="actions-bread"]',
-    )!;
-    menu.show();
-    const popup = menu.shadowRoot!.querySelector("[popover]")!;
-    expect(popup.matches(":popover-open")).toBe(true);
-    await userEvent.click(root.querySelector<HTMLElement>('[data-test="delete-bread"]')!);
-    expect(deletes).toEqual([{ productId: "bread" }]);
-    expect(popup.matches(":popover-open")).toBe(false);
-  });
+  it.each([
+    ["Edit", "edit-bread", "edit-product"],
+    ["Delete", "delete-bread", "delete-product"],
+  ])(
+    "closes a top-level product's menu when %s is chosen from it, and sends only that request",
+    async (_label, button, request) => {
+      const { el, root } = await mountTree();
+      const seen: [string, string][] = [];
+      for (const name of ["edit-product", "delete-product", "restore-product"])
+        el.addEventListener(name, (event) =>
+          seen.push([name, (event as CustomEvent<{ productId: string }>).detail.productId]),
+        );
+      const menu = root.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+        '[data-test="actions-bread"]',
+      )!;
+      menu.show();
+      const popup = menu.shadowRoot!.querySelector("[popover]")!;
+      expect(popup.matches(":popover-open")).toBe(true);
+      await userEvent.click(root.querySelector<HTMLElement>(`[data-test="${button}"]`)!);
+      expect(seen).toEqual([[request, "bread"]]);
+      expect(popup.matches(":popover-open")).toBe(false);
+    },
+  );
 
   it("a rename's box sends a cancel on Esc, and on leaving it blank", async () => {
     const { el } = await mountTree();
