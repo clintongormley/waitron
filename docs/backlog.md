@@ -3266,7 +3266,7 @@ rare setup where they match exactly — telling them apart needs the prices read
 a clash came from.
 
 **A product has one colour everywhere, taken from its category unless it has its own — DONE (W92,
-2026-10-05).** A category can have a colour, set in the Products tree from a colour square
+#1250, 2026-10-05).** A category can have a colour, set in the Products tree from a colour square
 after its name and count, or from the square inside the box that names a new category or renames
 one (a category is still named inline, the owner's choice of 2026-10-05). A square opens a small
 chooser with the shared swatches, No colour and Custom; choosing is the answer. From a row the
@@ -3311,8 +3311,17 @@ Left open:
 - A case in `apps/dashboard/src/screens/catalogue-screen.test.ts` (near line 2135, added by #1087
   before W92) prints "[Unhandled rejection] Error: marker" in passing runs; the noise should go.
 - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
-  during the branch's work, and the cause was not found; that they pass is to be confirmed by the
-  PR's dashboard CI shard.
+  during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
+  its final head.
+- A sold-out painted till tile keeps the usual 50% disabled fade, so its labels read at about 2.2:1
+  to 3.5:1 contrast (measured by the second-to-last review, Codex). Disabled controls are outside
+  the contrast rule; a stronger sold-out style for painted tiles is the owner's call.
+- The category colour chooser (`category-color-form.ts`) and the product colour dialog
+  (`product-color-form.ts`) share most of their code; a review suggested one component. Kept as two
+  in W92 because the plan modelled one on the other.
+- The product colour dialog opened from Menu Structure does not pick up another manager's change to
+  that product's own colour while it is open. I believe this predates the last review round; not
+  checked against earlier commits.
 
 **A Products drag does not notice when a refresh removes what it is dragging or where it is going —
 DONE (W88a, #1228, 2026-10-05).** Found by W88's pre-merge review. The Products tree
