@@ -98,11 +98,11 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     root.querySelector<HTMLInputElement>('input[data-column="price-on-menu"]')!.click();
     await table.updateComplete;
     expect(root.querySelector('tr[data-row-key="mi-lemonade:v-large"]')).not.toBeNull();
-    // A struck price, a muted one with its hidden words, and a muted "Not offered", all drawn.
+    // A struck price, a muted one with its hidden words, and a muted "no own price", all drawn.
     expect(root.querySelector("s")).not.toBeNull();
     expect(root.querySelector('[part~="visually-hidden"]')).not.toBeNull();
     expect(
-      root.querySelector('tr[data-row-key="mi-lemonade:v-large"] [part~="muted"]'),
+      root.querySelector('tr[data-row-key="mi-lemonade:v-small"] [part~="muted"]'),
     ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
@@ -164,31 +164,6 @@ describe.each(["light", "dark"] as const)("price source and clash states (%s)", 
       tip.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
       await tip.updateComplete;
       expect(tip.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-      await expectNoA11yViolations(host);
-      setLocale("es-ES");
-    },
-  );
-  it.each(["en-GB", "es-ES"])(
-    "accessible three-state editor with disagreeing offered sources (%s)",
-    async (locale) => {
-      setLocale(locale);
-      const product = rows[1]!;
-      const offered = {
-        state: "clash",
-        candidates: [
-          { place: { kind: "own_sections" }, value: true, source: { kind: "product" } },
-          {
-            place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
-            value: false,
-            source: { kind: "own" },
-          },
-        ],
-      } as MenuPriceRow["combined"]["offered"];
-      const { el, host } = await mount(theme, {
-        editing: product.menuItemId,
-        rows: [{ ...product, combined: { ...product.combined, offered } }],
-      });
-      expect(el.shadowRoot!.querySelector('wt-combobox[name="offered"]')).not.toBeNull();
       await expectNoA11yViolations(host);
       setLocale("es-ES");
     },

@@ -6506,22 +6506,6 @@ it.each(["light", "dark"] as const)(
   },
 );
 
-it("sends only an offered reset and leaves the replacement variant set untouched", async () => {
-  const client = api();
-  const el = await mountPrices(client);
-  await openOffer(el, "mi-lemonade");
-  const select = pricesModal(el).querySelector('wt-combobox[name="offered"]');
-  expect(select).not.toBeNull();
-  await chooseOption(select!, "");
-  await prices(el).updateComplete;
-  await inOffer(el, "offer-save");
-  await vi.waitFor(() =>
-    expect(client.updateMenuItem).toHaveBeenCalledExactlyOnceWith("menu-lunch", "mi-lemonade", {
-      offered: null,
-    }),
-  );
-  expect(client.setMenuVariants).not.toHaveBeenCalled();
-});
 it("shows the current clash count from the menus status read", async () => {
   const client = api({
     getMenuStatuses: vi.fn().mockResolvedValue({

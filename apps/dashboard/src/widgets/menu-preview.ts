@@ -575,24 +575,19 @@ export class MenuPreviewPanel extends LitElement {
             ? (offer?.variants.find((variant) => variant.id === clash.variantId)?.name ??
               clash.variantId)
             : null;
-          const words =
-            clash.field === "price"
-              ? describeSetting(
-                  {
-                    state: "clash",
-                    candidates:
-                      clash.candidates as import("@waitron/catalogue/src/menu-combine-types.js").Candidate<
-                        import("@waitron/shared").Decimal
-                      >[],
-                  },
-                  { product: name },
-                  t,
-                )
-              : t("menu_prices.sources_disagree");
+          const words = describeSetting(
+            {
+              state: "clash",
+              candidates:
+                clash.candidates as import("@waitron/catalogue/src/menu-combine-types.js").Candidate<
+                  import("@waitron/shared").Decimal
+                >[],
+            },
+            { product: name },
+            t,
+          );
           return html`<li>
-            ${name}${variant ? ` — ${variant}` : ""}:
-            ${t(clash.field === "price" ? "menu_prices.menu_price" : "menu_prices.active")} —
-            ${words}
+            ${name}${variant ? ` — ${variant}` : ""}: ${t("menu_prices.menu_price")} — ${words}
           </li>`;
         })}
       </ul>

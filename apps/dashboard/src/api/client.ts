@@ -1880,7 +1880,7 @@ export class DashboardApi {
   updateMenuItem(
     menuId: string,
     menuItemId: string,
-    input: { grossPrice?: string | null; offered?: boolean | null },
+    input: { grossPrice?: string | null },
   ): Promise<void> {
     return this.#request<void>(
       `/management-api/catalogues/${menuId}/items/${menuItemId}`,
