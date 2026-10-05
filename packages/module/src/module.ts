@@ -608,6 +608,9 @@ export interface ConfigurationTransferTable {
    * references, so a key onto a column that is not an id would have a value equal to a bundle id
    * replaced. */
   readonly references?: readonly string[];
+  /** An export leaves behind each row whose value in this column is not null, and then, in every
+   * declared table, each row whose foreign key names a row left behind. */
+  readonly leaveBehindWhenSet?: string;
   readonly reconnect?: boolean;
 }
 

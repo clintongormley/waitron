@@ -530,6 +530,8 @@ export interface DeviceRow {
   lastSeenAt: string | null;
   enrolledAt: string;
   deviceProfileId: string | null;
+  /** The profile was deleted while only disabled devices held it. */
+  profileRetired: boolean;
   receiptPrinterId: string | null;
   paymentSlipPrinterId: string | null;
   /** A whole percentage, 0 to 100. */

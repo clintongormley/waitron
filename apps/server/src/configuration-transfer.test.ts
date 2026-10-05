@@ -33,10 +33,12 @@ import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import {
   catalogues,
   categories,
   deviceProfiles,
+  devices,
   diningTables,
   floorZones,
   kitchenStations,
@@ -53,7 +55,11 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { readProfilePrinterLists, setProfilePrinterLists } from "@waitron/layouts";
+import {
+  deleteDeviceProfile,
+  readProfilePrinterLists,
+  setProfilePrinterLists,
+} from "@waitron/layouts";
 import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
 import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { recordSale } from "@waitron/core";
@@ -75,6 +81,7 @@ import { schemaVersionsByModule } from "./backup-manifest.js";
 import { systemClock } from "./till-backend.js";
 import {
   buildConfigurationBundle,
+  exportConfigurationTables,
   decodeConfigurationBundle,
   encodeConfigurationBundle,
   importConfigurationTables,
@@ -2059,4 +2066,457 @@ it("counts an exported product with no Active flag as Active, as the column stor
     select count(*) as count from tenants where tax_id = ${target.taxId}
   `);
   expect(persisted.rows[0]!.count).toBe(0);
+});
+
+it("refuses a leave-behind name the table has no column for", async () => {
+  for (const column of ["no_such_column", 'retired_at" or "1']) {
+    const module = {
+      name: "probe",
+      configurationTransfer: {
+        kind: "tables",
+        tables: [{ name: "device_profiles", leaveBehindWhenSet: column }],
+      },
+    } as unknown as WaitronModule;
+    await expect(exportConfigurationTables(suite.db, [module])).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: `device_profiles.${column}` },
+    });
+  }
+});
+
+it("leaves behind every row a chain of keys leads to a left-behind row, matching a key on all its columns, in any declared order", async () => {
+  await suite.db.execute(sql`create table zz_parents (id text primary key, gone_at text)`);
+  await suite.db.execute(sql`
+    create table zz_children (
+      id text primary key, code text, parent_id text references zz_parents(id),
+      unique (code, parent_id)
+    )
+  `);
+  await suite.db.execute(sql`
+    create table zz_grandchildren (
+      id text primary key, child_code text, child_parent_id text,
+      foreign key (child_code, child_parent_id) references zz_children(code, parent_id)
+    )
+  `);
+  try {
+    await suite.db.execute(sql`
+      insert into zz_parents values ('p-kept', null), ('p-gone', '2026-10-05T12:00:00.000Z')
+    `);
+    await suite.db.execute(sql`
+      insert into zz_children values
+        ('c-kept', 'A', 'p-kept'), ('c-gone', 'A', 'p-gone'), ('c-none', 'B', null)
+    `);
+    await suite.db.execute(sql`
+      insert into zz_grandchildren values
+        ('g-kept', 'A', 'p-kept'), ('g-gone', 'A', 'p-gone'), ('g-none', null, null)
+    `);
+    const module = {
+      name: "probe",
+      configurationTransfer: {
+        kind: "tables",
+        // Grandchildren first, so a single pass over the keys would not reach them.
+        tables: [
+          { name: "zz_grandchildren" },
+          { name: "zz_children" },
+          { name: "zz_parents", leaveBehindWhenSet: "gone_at" },
+        ],
+      },
+    } as unknown as WaitronModule;
+    const { tables } = await exportConfigurationTables(suite.db, [module]);
+    const ids = (name: string) => tables[name]!.map((row) => row.id);
+    expect(ids("zz_parents")).toEqual(["p-kept"]);
+    expect(ids("zz_children")).toEqual(["c-kept", "c-none"]);
+    expect(ids("zz_grandchildren")).toEqual(["g-kept", "g-none"]);
+  } finally {
+    for (const name of ["zz_grandchildren", "zz_children", "zz_parents"])
+      await suite.db.execute(sql`drop table ${sql.identifier(name)}`);
+  }
+});
+
+/** Hold `profileId` by a disabled device only, then delete it through the real path, which retires
+ * the row rather than removing it. */
+async function retireProfile(locationId: string, profileId: string): Promise<void> {
+  await seedDevice(suite.db, { locationId, profileId });
+  await suite.db
+    .update(devices)
+    .set({ active: false })
+    .where(eq(devices.deviceProfileId, profileId));
+  await withTransaction(suite.db, async (tx) => {
+    const [admin] = await tx
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.role, "admin"));
+    const session = await startManagementSession(tx, { personId: admin!.id });
+    await deleteDeviceProfile(tx, { managementSessionId: session.token, id: profileId });
+  });
+  const [row] = await suite.db
+    .select({ retiredAt: deviceProfiles.retiredAt })
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.id, profileId));
+  expect(row?.retiredAt).not.toBeNull();
+}
+
+it("leaves behind a retired profile that no row uses, and the bundle still imports", async () => {
+  const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const [retired] = await suite.db
+    .insert(deviceProfiles)
+    .values({ name: "Old till", formFactor: "till" })
+    .returning({ id: deviceProfiles.id });
+  await retireProfile(source.locationId, retired!.id);
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-05T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.device_profiles!.map((row) => row.name)).not.toContain("Old till");
+  await applyVenue(planVenue(venue("B86420975"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const names = await targetSuite.db.select({ name: deviceProfiles.name }).from(deviceProfiles);
+  expect(names.map((row) => row.name)).not.toContain("Old till");
+});
+
+it("leaves a retired profile's home layout choices behind with it, while a live profile's rows travel", async () => {
+  const source = await applyVenue(planVenue(venue("B13579246"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const original = await withTransaction(suite.db, async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Layout menu" });
+    const counter = await createHomeLayout(tx, menu.id, "Counter");
+    const [printer] = await tx
+      .insert(printers)
+      .values({
+        locationId: source.locationId,
+        name: "Bar printer",
+        transport: "network_tcp",
+        host: "10.0.2.1",
+      })
+      .returning({ id: printers.id });
+    const [live, retired] = await tx
+      .insert(deviceProfiles)
+      .values([
+        { name: "Handheld", formFactor: "phone-portrait" },
+        { name: "Old till", formFactor: "till" },
+      ])
+      .returning({ id: deviceProfiles.id });
+    for (const profile of [live!, retired!]) {
+      await setDeviceHomeLayout(tx, profile.id, menu.id, counter.id);
+      await setProfilePrinterLists(tx, profile.id, {
+        receiptPrinterIds: [printer!.id],
+        paymentSlipPrinterIds: [],
+      });
+    }
+    return { menu: menu.id, counter: counter.id, live: live!.id, retired: retired!.id };
+  });
+  await retireProfile(source.locationId, original.retired);
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-05T12:00:00Z"),
+    versions,
+  );
+  const exportedProfiles = transferred.tables.device_profiles!.map((row) => row.id);
+  expect(exportedProfiles).toContain(original.live);
+  expect(exportedProfiles).not.toContain(original.retired);
+  expect(transferred.tables.device_profile_home_layouts).toEqual([
+    { device_profile_id: original.live, menu_id: original.menu, layout_id: original.counter },
+  ]);
+  expect(transferred.tables.device_profile_printers!.map((row) => row.device_profile_id)).toEqual([
+    original.live,
+  ]);
+  await applyVenue(planVenue(venue("B97531246"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  await withTransaction(targetSuite.db, async (tx) => {
+    const profiles = await tx
+      .select({ id: deviceProfiles.id, name: deviceProfiles.name })
+      .from(deviceProfiles);
+    expect(profiles.map((row) => row.name)).not.toContain("Old till");
+    const handheld = profiles.find((row) => row.name === "Handheld")!;
+    const menus = await deviceHomeLayouts(tx, handheld.id);
+    const menu = menus.find((entry) => entry.menuName === "Layout menu")!;
+    const counter = menu.layouts.find((layout) => layout.name === "Counter")!;
+    expect(menu).toMatchObject({ selectedLayoutId: counter.id, selectedRemoved: false });
+    const lists = await readProfilePrinterLists(tx, handheld.id);
+    expect(lists.receiptPrinterIds).toHaveLength(1);
+  });
+});
+
+/** Creates `tables` in order, fills them, checks the fixture breaks no foreign key, exports them
+ * declared in reverse order with the first as the leave-behind table, and drops them again. */
+async function exportScratch(
+  tables: Array<{ name: string; create: string; rows: string }>,
+  leaveBehindWhenSet: string,
+): Promise<Record<string, unknown[]>> {
+  try {
+    for (const table of tables) await suite.db.execute(sql.raw(table.create));
+    for (const table of tables)
+      await suite.db.execute(
+        sql`insert into ${sql.identifier(table.name)} values ${sql.raw(table.rows)}`,
+      );
+    const violations = await suite.db.execute(sql`pragma foreign_key_check`);
+    expect(violations.rows).toEqual([]);
+    const declared = tables.map((table, index) =>
+      index === 0 ? { name: table.name, leaveBehindWhenSet } : { name: table.name },
+    );
+    const module = {
+      name: "probe",
+      configurationTransfer: { kind: "tables", tables: declared.reverse() },
+    } as unknown as WaitronModule;
+    const { tables: exported } = await exportConfigurationTables(suite.db, [module]);
+    return Object.fromEntries(
+      Object.entries(exported).map(([name, rows]) => [name, rows.map((row) => row.id)]),
+    );
+  } finally {
+    for (const table of [...tables].reverse())
+      await suite.db.execute(sql`drop table if exists ${sql.identifier(table.name)}`);
+  }
+}
+
+it("follows a key that names no parent columns to the parent's primary key, composite ones included", async () => {
+  const ids = await exportScratch(
+    [
+      {
+        name: "zz_parents",
+        create:
+          "create table zz_parents (id text, part text, gone_at text, primary key (part, id))",
+        rows: "('p-kept', 'A', null), ('p-gone', 'A', '2026-10-05T12:00:00.000Z')",
+      },
+      {
+        name: "zz_children",
+        create: `create table zz_children (
+          id text primary key, parent_part text, parent_id text,
+          foreign key (parent_part, parent_id) references zz_parents
+        )`,
+        rows: "('c-kept', 'A', 'p-kept'), ('c-gone', 'A', 'p-gone')",
+      },
+      {
+        name: "zz_grandchildren",
+        create:
+          "create table zz_grandchildren (id text primary key, child_id text references zz_children)",
+        rows: "('g-kept', 'c-kept'), ('g-gone', 'c-gone')",
+      },
+    ],
+    "gone_at",
+  );
+  expect(ids).toEqual({
+    zz_grandchildren: ["g-kept"],
+    zz_children: ["c-kept"],
+    zz_parents: ["p-kept"],
+  });
+});
+
+it("matches a key as the engine does, with the parent column's affinity and collation", async () => {
+  const ids = await exportScratch(
+    [
+      {
+        name: "zz_parents",
+        create: `create table zz_parents (
+          id text primary key, num integer unique, name text collate nocase unique,
+          code text unique, gone_at text
+        )`,
+        rows: `('p-kept', 2, 'Kept', '1', null),
+          ('p-gone', 1, 'Gone', '01', '2026-10-05T12:00:00.000Z')`,
+      },
+      {
+        name: "zz_children",
+        create: `create table zz_children (
+          id text primary key,
+          num_ref text references zz_parents(num),
+          name_ref text references zz_parents(name),
+          code_ref integer references zz_parents(code)
+        )`,
+        // '1' is the integer 1 under the parent's affinity, 'gone' is 'Gone' under its collation,
+        // and the integer 1 is the text '1' under the parent's affinity, so not '01'.
+        rows: `('c-num', '1', null, null), ('c-name', null, 'gone', null),
+          ('c-code', null, null, 1)`,
+      },
+    ],
+    "gone_at",
+  );
+  expect(ids).toEqual({ zz_children: ["c-code"], zz_parents: ["p-kept"] });
+});
+
+it("follows a key whose parent table is spelled in another case", async () => {
+  const ids = await exportScratch(
+    [
+      {
+        name: "zz_parents",
+        create: "create table zz_parents (id text primary key, gone_at text)",
+        rows: "('p-kept', null), ('p-gone', '2026-10-05T12:00:00.000Z')",
+      },
+      {
+        name: "zz_children",
+        create:
+          "create table zz_children (id text primary key, parent_id text references ZZ_Parents(id))",
+        rows: "('c-kept', 'p-kept'), ('c-gone', 'p-gone')",
+      },
+    ],
+    "gone_at",
+  );
+  expect(ids).toEqual({ zz_children: ["c-kept"], zz_parents: ["p-kept"] });
+});
+
+it("leaves behind by a generated column", async () => {
+  const ids = await exportScratch(
+    [
+      {
+        name: "zz_parents",
+        create: `create table zz_parents (
+          id text primary key, gone_at text, gone text generated always as (substr(gone_at, 1, 10))
+        )`,
+        rows: "('p-kept', null), ('p-gone', '2026-10-05T12:00:00.000Z')",
+      },
+    ],
+    "gone",
+  );
+  expect(ids).toEqual({ zz_parents: ["p-kept"] });
+});
+
+it("never takes a key with a null in it as naming a left-behind row", async () => {
+  const ids = await exportScratch(
+    [
+      {
+        name: "zz_parents",
+        create: `create table zz_parents (
+          id text primary key, alt text unique, a text, b text, gone_at text, unique (a, b)
+        )`,
+        rows: "('p-gone', null, 'A', null, '2026-10-05T12:00:00.000Z')",
+      },
+      {
+        name: "zz_children",
+        create: `create table zz_children (
+          id text primary key, alt_ref text references zz_parents(alt), a text, b text,
+          foreign key (a, b) references zz_parents(a, b)
+        )`,
+        rows: "('c-alt', null, null, null), ('c-pair', null, 'A', null)",
+      },
+    ],
+    "gone_at",
+  );
+  expect(ids).toEqual({ zz_children: ["c-alt", "c-pair"], zz_parents: [] });
+});
+
+it("pairs only the tables a left-behind row's keys reach, so an unrelated table need not have rowids", async () => {
+  const ids = await exportScratch(
+    [
+      {
+        name: "zz_parents",
+        create: "create table zz_parents (id text primary key, gone_at text)",
+        rows: "('p-kept', null), ('p-gone', '2026-10-05T12:00:00.000Z')",
+      },
+      {
+        name: "zz_children",
+        create:
+          "create table zz_children (id text primary key, parent_id text references zz_parents(id))",
+        rows: "('c-kept', 'p-kept'), ('c-gone', 'p-gone')",
+      },
+      {
+        name: "zz_others",
+        create: "create table zz_others (id text primary key) without rowid",
+        rows: "('o-1')",
+      },
+      {
+        name: "zz_other_children",
+        create:
+          "create table zz_other_children (id text primary key, other_id text references zz_others(id))",
+        rows: "('oc-1', 'o-1')",
+      },
+    ],
+    "gone_at",
+  );
+  expect(ids).toEqual({
+    zz_other_children: ["oc-1"],
+    zz_others: ["o-1"],
+    zz_children: ["c-kept"],
+    zz_parents: ["p-kept"],
+  });
+});
+
+it("refuses a leave-behind export it cannot pair by rowid, or whose key it cannot resolve", async () => {
+  const cases = [
+    {
+      create: [
+        "create table zz_parents (id text primary key, gone_at text) without rowid",
+        "create table zz_children (id text primary key, parent_id text references zz_parents(id))",
+      ],
+      field: "table:zz_parents",
+    },
+    {
+      create: [
+        "create table ZZ_Parents (id text primary key, gone_at text) without rowid",
+        "create table zz_children (id text primary key, parent_id text references zz_parents(id))",
+      ],
+      field: "table:zz_parents",
+    },
+    {
+      create: [
+        "create table zz_parents (id text primary key, gone_at text, __export_rowid integer)",
+        "create table zz_children (id text primary key, parent_id text references zz_parents(id))",
+      ],
+      field: "zz_parents.__export_rowid",
+    },
+    {
+      create: [
+        "create table zz_parents (id text primary key, gone_at text)",
+        "create table zz_children (id text primary key, rowid text, parent_id text references zz_parents(id))",
+      ],
+      field: "zz_children.rowid",
+    },
+    {
+      create: [
+        "create table zz_parents (id text primary key, gone_at text)",
+        "create table zz_children (id text primary key, RowId text, parent_id text references zz_parents(id))",
+      ],
+      field: "zz_children.RowId",
+    },
+    {
+      create: [
+        "create table zz_parents (id text primary key, gone_at text)",
+        "create table zz_children (id text primary key, parent_id text references zz_parents(id), rowid text generated always as (parent_id) virtual)",
+      ],
+      field: "zz_children.rowid",
+    },
+    {
+      create: [
+        "create table zz_parents (id text unique, gone_at text)",
+        "create table zz_children (id text primary key, parent_id text references zz_parents)",
+      ],
+      field: "table:zz_children",
+    },
+  ];
+  for (const { create, field } of cases) {
+    try {
+      for (const statement of create) await suite.db.execute(sql.raw(statement));
+      const module = {
+        name: "probe",
+        configurationTransfer: {
+          kind: "tables",
+          tables: [{ name: "zz_children" }, { name: "zz_parents", leaveBehindWhenSet: "gone_at" }],
+        },
+      } as unknown as WaitronModule;
+      await expect(exportConfigurationTables(suite.db, [module])).rejects.toMatchObject({
+        code: "setup.request_invalid",
+        params: { field },
+      });
+    } finally {
+      for (const name of ["zz_children", "zz_parents"])
+        await suite.db.execute(sql`drop table if exists ${sql.identifier(name)}`);
+    }
+  }
 });

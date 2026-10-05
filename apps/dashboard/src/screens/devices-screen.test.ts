@@ -99,6 +99,7 @@ const devices: DeviceRow[] = [
     lastSeenAt: "2026-08-25T14:30:00.000Z",
     enrolledAt: "2026-08-20T09:00:00.000Z",
     deviceProfileId: "dp1",
+    profileRetired: false,
     receiptPrinterId: "pr1",
     paymentSlipPrinterId: null,
     batteryLevel: null,
@@ -116,6 +117,7 @@ const devices: DeviceRow[] = [
     lastSeenAt: null,
     enrolledAt: "2026-08-19T09:00:00.000Z",
     deviceProfileId: null,
+    profileRetired: false,
     receiptPrinterId: null,
     paymentSlipPrinterId: null,
     batteryLevel: null,
@@ -704,6 +706,73 @@ describe("the device table", () => {
         dq(el.shadowRoot!, "[data-test=remove-d1]")!.click();
         await flush(el);
         expect(deepText(el, "[data-test=remove-d1]")).toBe(confirm);
+        cleanupWidgets();
+      }
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it("says Profile deleted, muted, for a device whose profile the server reports retired, in English and Spanish", async () => {
+    const retired: DeviceRow = {
+      ...devices[1]!,
+      id: "d8",
+      deviceProfileId: "dp-retired",
+      profileRetired: true,
+    };
+    const before = currentLocale();
+    try {
+      for (const [locale, deleted] of [
+        ["en", "Profile deleted"],
+        ["es-ES", "Perfil eliminado"],
+      ] as const) {
+        setLocale(locale);
+        const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+          api: stubApi({ listDevices: vi.fn().mockResolvedValue([devices[0]!, retired]) }),
+        });
+        await flush(el);
+        expect(deepText(el, "[data-test=device-profile-d8]")).toBe(deleted);
+        const shown = dq(el.shadowRoot!, "[data-test=device-profile-d8] [part=profile-retired]")!;
+        const probe = document.createElement("span");
+        probe.style.color = "var(--wt-color-text-muted)";
+        el.parentElement!.appendChild(probe);
+        expect(getComputedStyle(shown).color).toBe(getComputedStyle(probe).color);
+        probe.remove();
+        expect(deepText(el, "[data-test=device-profile-d1]")).toBe("Counter till");
+        expect(
+          dq(el.shadowRoot!, "[data-test=device-profile-d1] [part=profile-retired]"),
+        ).toBeNull();
+        cleanupWidgets();
+      }
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it("sorts a device whose profile is retired by the words its Profile cell shows", async () => {
+    const retired: DeviceRow = {
+      ...devices[1]!,
+      id: "d8",
+      deviceProfileId: "dp-retired",
+      profileRetired: true,
+    };
+    const before = currentLocale();
+    try {
+      for (const locale of ["en", "es-ES"] as const) {
+        setLocale(locale);
+        const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+          api: stubApi({ listDevices: vi.fn().mockResolvedValue([retired, devices[0]!]) }),
+        });
+        await flush(el);
+        const table = devicesTable(el);
+        const profile = table.columns.find((c) => c.key === "profile")!;
+        expect(profile.sortValue!(retired)).toBe(deepText(el, "[data-test=device-profile-d8]"));
+        table.sortKey = "profile";
+        await table.updateComplete;
+        const order = [...table.shadowRoot!.querySelectorAll("tr[data-row-key]")].map((row) =>
+          row.getAttribute("data-row-key"),
+        );
+        expect(order).toEqual(["d1", "d8"]);
         cleanupWidgets();
       }
     } finally {

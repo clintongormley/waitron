@@ -431,6 +431,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           .select({
             id: devices.id,
             formFactor: deviceProfiles.formFactor,
+            profileRetiredAt: deviceProfiles.retiredAt,
             stationId: devices.stationId,
             watcherId: devices.watcherId,
             deviceProfileId: devices.deviceProfileId,
@@ -450,8 +451,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         madeHere: await listMadeHereStations(tx),
       }));
       return c.json(
-        rows.map(({ formFactor, ...row }) => ({
+        rows.map(({ formFactor, profileRetiredAt, ...row }) => ({
           ...row,
+          profileRetired: profileRetiredAt !== null,
           kind: kindOfFormFactor(formFactor),
           madeHereStationIds: madeHere.get(row.id) ?? [],
         })),
