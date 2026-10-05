@@ -3423,8 +3423,13 @@ random id. It now replaces ids only in a table's `id` column, its foreign-key co
 columns a module lists as `references` for a reference the schema gives no foreign key
 (`option_lists.default_label_id`, `device_profile_home_layouts.layout_id`). Those two were the only
 such columns a probe found, run over every import in the transfer tests and an import of the demo
-seed; a reference column added later with neither a foreign key nor a `references` entry keeps the
-old id, and nothing checks for one.
+seed; a reference column added later that is no foreign key, `references`, `locationColumns` or
+`omit` entry keeps the old id. Since W72d (2026-10-05) a guard fails on one: `scripts/id-columns-are-references.test.ts`
+migrates a real database and refuses any column of a transferred table whose name ends `_id` or
+`_ids` that is not the row's `id`, a foreign key, a `references` entry, a location column or left out
+of the export. It found one such column, `printers.poll_id`, which is free text the operator types
+for a cloud-poll printer, and lists it as not a reference. It knows an id column only by its name,
+so a reference named otherwise is still unseen.
 Since W72b (#1236, 2026-10-05) both setup routes answer an export that cannot be opened as the restore
 routes answer a copy that cannot be opened: `backup.artifact_invalid`, `backup.archive_invalid` and
 `recovery.passphrase_invalid` get 422, where since `fabdb224d1` (2026-09-10) they fell to the

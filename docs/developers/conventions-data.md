@@ -917,6 +917,26 @@ table that does not exist is created without complaint, and the insert that fire
 other direction: a trigger ON a missing table is refused when it is created. So a missing
 dependency of this shape surfaces only when the trigger first fires.
 
+## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry, a location column or left out of the export
+
+A configuration import gives every row whose `id` is text a new one, and rewrites a value to the new
+id only in a table's `id` column, its foreign-key columns, and the columns its module lists as
+`references` (`importConfigurationTables`, `apps/server/src/configuration-transfer.ts`, which reads
+`pragma_foreign_key_list` for the keys). It overwrites the columns a table lists in
+`locationColumns` with the importing venue's location, and the export leaves out the columns a
+table lists in `omit`. Any other column the export carries that holds a row's id arrives holding
+the EXPORTING venue's id. Before W72a (#1230) the import replaced any text equal to a bundle id in every
+column, so a product named like an id arrived renamed; the narrowing is what makes this rule
+necessary. A reference the schema cannot give a foreign key goes in `references`, as
+`option_lists.default_label_id` and `device_profile_home_layouts.layout_id` do.
+
+Guard: `scripts/id-columns-are-references.test.ts`, which migrates a real database and reads every
+transferred table's columns and keys. Weaker than its name: it knows an id column only by a name
+ending `_id` or `_ids`, so a reference named otherwise is unseen; a column on its `NOT_REFERENCES`
+list is trusted by the reason written there, so one that later starts holding an id passes; and a
+declared `_ids` column passes, though the import replaces only a whole value equal to an id
+(`configuration-transfer.ts`, the `idMap.has(value)` test), never ids inside a list.
+
 **Transactions**
 
 ## Multi-table writes share ONE transaction, and `withTransaction` IS that transaction
