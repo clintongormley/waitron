@@ -6,7 +6,12 @@ import { plantStoredCategory, seedLegacySellingUnits, useCatalogueDb } from "../
 import { createCategory, listCategories, readCategory } from "./categories.js";
 import { createCatalogue, createProduct, deactivateProduct } from "./operations.js";
 import { setProductVariants } from "./variants.js";
-import { deleteCatalogueItems, moveCatalogueItems, summariseFolders } from "./catalogue-items.js";
+import {
+  deleteCatalogueItems,
+  moveCatalogueItems,
+  summariseFolders,
+  type FolderContents,
+} from "./catalogue-items.js";
 
 const suite = useCatalogueDb();
 const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, action);
@@ -269,22 +274,43 @@ describe("deleteCatalogueItems with the counts the person was shown", () => {
   ])("refuses with old counts after %s, and deletes nothing", async (_change, change) => {
     const shown = await shownFor([d]);
     await app(change);
-    let error: unknown;
-    try {
-      await app((tx) =>
+    await expect(
+      app((tx) =>
         deleteCatalogueItems(tx, { productIds: [burger], categoryIds: [d] }, "delete", shown),
-      );
-    } catch (caught) {
-      error = caught;
-    }
-    expect(error).toMatchObject({
-      code: "category.contents_changed",
-      params: { categoryId: d },
-    });
+      ),
+    ).rejects.toMatchObject({ code: "category.contents_changed", params: { categoryId: d } });
     expect((await app((tx) => readCategory(tx, d))).id).toBe(d);
     expect((await app((tx) => readCategory(tx, b))).parentId).toBe(d);
     for (const id of [cola, lager, burger]) expect((await product(id)).active).toBe(true);
   });
+
+  it.each<FolderContents>(["move_up", "delete"])(
+    "checks the counts before switching off a selected product, even before rollback (%s)",
+    async (contents) => {
+      const shown = await shownFor([d]);
+      await app((tx) => addProduct(tx, b));
+      let beforeRollback: boolean | undefined;
+      await expect(
+        app(async (tx) => {
+          try {
+            await deleteCatalogueItems(
+              tx,
+              { productIds: [burger], categoryIds: [d] },
+              contents,
+              shown,
+            );
+          } finally {
+            const [row] = await tx
+              .select({ active: products.active })
+              .from(products)
+              .where(eq(products.id, burger));
+            beforeRollback = row!.active;
+          }
+        }),
+      ).rejects.toMatchObject({ code: "category.contents_changed", params: { categoryId: d } });
+      expect(beforeRollback).toBe(true);
+    },
+  );
 
   it("names the first selected category whose counts differ", async () => {
     const shown = await shownFor([f, b]);

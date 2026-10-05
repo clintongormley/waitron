@@ -16,7 +16,8 @@ declare module "@waitron/shared" {
      * `product.invalid` does. */
     "category.name_taken": { field: "name"; name: string };
     /** A category's numbers of subcategories, active products or routing rules differ from those
-     * the person confirming its deletion was shown, or none were shown for it. */
+     * the client read before deleting it (the ones its dialog showed, when it asked), or none were
+     * sent for it. */
     "category.contents_changed": { categoryId: string };
     /** A sale line's classification snapshot names a category that does not exist, holds
      * an empty name, repeats a category in its chain, or ends at a category that is not the
