@@ -3543,7 +3543,7 @@ line under the grip (local screenshots in `~/waitron-campaign/w72g-shots/`). Pin
 their own line" cases, the 1280-to-390 px case and the 1280 px "beside the grip and folder icon"
 cases in `apps/dashboard/src/widgets/product-list.test.ts`; desktop width is unchanged. W72g left
 Chromium logging "ResizeObserver loop completed with undelivered notifications" when the table
-crossed 440 px while a name box was open. Fixed in W72h (2026-10-05, the owner's choice):
+crossed 440 px while a name box was open. Fixed in W72h (#1247, 2026-10-05, the owner's choice):
 `wt-data-table` now sets `narrow` a frame after its resize observer reports the new width
 (`packages/ui/src/components/wt-data-table.ts`). `env -u AI_AGENT -u CLAUDECODE pnpm --filter
 @waitron/dashboard exec vitest run src/widgets/product-list.test.ts` printed that error 31 times in
