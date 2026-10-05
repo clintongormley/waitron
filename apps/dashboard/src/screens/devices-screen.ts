@@ -210,7 +210,7 @@ export class DevicesScreen extends LitElement {
       wt-data-table::part(profile-retired) {
         color: var(--wt-color-text-muted);
       }
-      wt-data-table::part(battery-as-of),
+      wt-data-table::part(battery-updated),
       wt-data-table::part(returning-hint) {
         display: block;
       }
@@ -781,7 +781,7 @@ export class DevicesScreen extends LitElement {
           : nothing
       }${
         stale
-          ? html` <span part="battery-as-of"
+          ? html` <span part="battery-updated"
               >${relativeTime(t("devices.battery_updated"), at, { now: this.now })}</span
             >`
           : nothing

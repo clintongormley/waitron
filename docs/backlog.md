@@ -5433,7 +5433,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   (`apps/till/src/api/battery-report.ts`). The
   Devices table's Battery column, between Shows and Status, shows "82%" with a lightning mark while
   charging, "Not reported" for a device that never sent one, and greys a report more than ten
-  minutes old, adding "as of" and the time it was taken. A report that passes ten minutes while the
+  minutes old, adding when it was taken (since W106a, "updated 11 minutes ago"). A report that passes ten minutes while the
   page is open is greyed then, without the list being read again
   (`apps/dashboard/src/screens/devices-screen.ts`). No low-battery alert: that is A272, still open.
   Left OPEN by W106: (a) done by W106a (owner 2026-10-05: "relative time '5 minutes ago' with
@@ -5459,7 +5459,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   starts reporting from its first draw only, so an app removed from the page and put back does not
   report until it restarts. (e) test gaps: no battery case for a disabled device; no failing test
   for the `isConnected` check in the Battery column's update step; "Not reported" sorting last is
-  held only by `wt-data-table`'s own tests.
+  held only by `wt-data-table`'s own tests. (f) `wt-relative-time`'s words are an inline button
+  smaller than `--wt-tap-min`, under WCAG 2.2 criterion 2.5.8's exception for a target in a
+  sentence (`docs/developers/design-system.md`); whether they should take a 44px hit area instead
+  is the owner's call.
   Left OPEN by W105, not acted on: (5) a kitchen screen whose station or watcher was switched off
   opens with Shows empty, so even a rename asks for a new one; whether to let it keep a switched-off
   one is the owner's call. (6) done by W105a (#1244): printers and devices both say Disable/Deshabilitar,
