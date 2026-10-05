@@ -1,5 +1,6 @@
 import { css, html, nothing, type TemplateResult } from "lit";
-import { CATEGORY_PALETTE, isHexColor } from "@waitron/ui";
+import { CATEGORY_PALETTE } from "@waitron/ui";
+import { isStoredColor } from "@waitron/catalogue/src/color-inheritance.js";
 import { t } from "../i18n/t.js";
 
 const PALETTE_GROUP_SIZE = CATEGORY_PALETTE.length / 2;
@@ -156,9 +157,9 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
   const { color, busy, error, name, errorId, change, customEvent = "input" } = options;
   // Checked, because the chip paints it into a style attribute; anything else reads as no colour.
   const inherited =
-    typeof options.categoryColor === "string" && !isHexColor(options.categoryColor)
-      ? null
-      : options.categoryColor;
+    options.categoryColor === undefined || isStoredColor(options.categoryColor)
+      ? options.categoryColor
+      : null;
   const labelId = `${name}-none-label`;
   const fallback =
     inherited === undefined
