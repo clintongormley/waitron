@@ -55,7 +55,7 @@ export class TillDeadEndsSection extends LitElement {
         <div class="row" data-dead-end=${row.key}>
           <div class="name">${row.name} ×${trimQuantity(row.quantity)}</div>
           <p class="reason">
-            ${t(row.why === "closed" ? "dead_end.closed" : "dead_end.switched_off").replace("{station}", () => row.stationName)}
+            ${t(row.why === "closed" ? "dead_end.closed" : "dead_end.disabled").replace("{station}", () => row.stationName)}
           </p>
           <wt-combobox
             name="make-at"

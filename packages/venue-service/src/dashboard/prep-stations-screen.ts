@@ -603,11 +603,14 @@ export class PrepStationsScreen extends LitElement {
     const exception = this.view?.routing.exceptions.find((row) => row.id === decision.exceptionId);
     return t("prep.test_exception").replace("{rule}", this.#exceptionText(exception));
   }
-  #testFallback(step: RouteExplanation["fallbacks"][number], index: number): string {
-    const explanation = this.explanation!;
-    const reason = format(`prep.test_${step.why}`, {
+  #fallbackReason(step: RouteExplanation["fallbacks"][number]): string {
+    return format(step.why === "switched_off" ? "prep.test_disabled" : `prep.test_${step.why}`, {
       station: this.#testStationName(step.stationId),
     });
+  }
+  #testFallback(step: RouteExplanation["fallbacks"][number], index: number): string {
+    const explanation = this.explanation!;
+    const reason = this.#fallbackReason(step);
     const next = explanation.fallbacks[index + 1]?.stationId;
     if (next === undefined && explanation.noReplacement)
       return format("prep.test_no_replacement", { reason });
@@ -651,9 +654,7 @@ export class PrepStationsScreen extends LitElement {
     const fallbacks = extra.fallbacks
       .map((step, index) =>
         format("prep.test_fallback_step", {
-          reason: format(`prep.test_${step.why}`, {
-            station: this.#testStationName(step.stationId),
-          }),
+          reason: this.#fallbackReason(step),
           destination: this.#testStationName(
             extra.fallbacks[index + 1]?.stationId ?? outcome.stationId,
           ),

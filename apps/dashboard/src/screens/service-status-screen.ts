@@ -253,7 +253,7 @@ export class ServiceStatusScreen extends LitElement {
             data-test="deactivate-${s.id}"
             ?disabled=${!s.active}
             @click=${() => void this.#deactivate(s.id)}
-            >${t("action.disable_record")}</wt-button
+            >${t("action.disable")}</wt-button
           >
         </div>
       </wt-card>

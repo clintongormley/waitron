@@ -2357,22 +2357,25 @@ removing a product from a menu removes that offer.
 
 Something switched off but kept — a product, a variant, an options or extras list, a zone, a
 department, a station, a table, a table status, an adjustment reason, a user, a printer, a print
-agent, a device, a card reader — is switched off with **Disable** and brought back with **Enable**.
-Its status reads **Active** or **Disabled**; there is no "Enabled" status. **Delete** is only for
-something really deleted, and **Remove** for taking a row out of a list or a link off a record,
+agent, a device, a card reader — is switched off with **Disable**, and wherever a screen brings it
+back, that action is **Enable**. Some have no Enable on any screen yet; the backlog entry "One word
+for switched off, kept for the record" in `docs/backlog.md` lists them. Its status reads **Active**
+or **Disabled**; there is no "Enabled" status. **Delete** is only for something really deleted, and **Remove** for taking a row out of a list or a link off a record,
 which may delete that row (Remove from this list, Remove image, a passkey). "Restore", "Add again", "Deactivate", "Reactivate" and
 "Inactive" are not used for a record that is kept.
 
 In Spanish the action is **Deshabilitar** and **Habilitar**, and the status **Activo** or
 **Deshabilitado** agrees with the noun the screen uses: Deshabilitado for a producto, departamento,
-estado, motivo, usuario, lector or dispositivo; Deshabilitada for a variante, lista, zona, estación or
-impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and "Inactivo" are not used
-for a record that is kept. A setting turned off (backups, a toggle) is not a record and keeps its own
+estado, motivo, usuario, lector, agente or dispositivo; Deshabilitada for a variante, lista, zona,
+estación, mesa or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
+"Inactivo" are not used for a record that is kept. A setting turned off (backups, a toggle) is not a record and keeps its own
 words.
 
 Where a screen has both, the action follows what the code does: the products list's bulk action
 reads Disable while only products are selected and Delete once a category is in the selection,
-because the category is deleted and its products only disabled.
+because the category itself is deleted. Products selected directly are disabled; the category's own
+products are disabled only with **Delete it too**, and with **Move it up to the parent category**
+they stay active.
 
 ### Products: Active and Available are two different words
 

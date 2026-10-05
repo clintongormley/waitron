@@ -156,7 +156,7 @@ const en = {
   "prep.test_time_required": "Choose a time.",
   "prep.test_out_of_hours": "{station} is closed outside its opening hours",
   "prep.test_closed_by_hand": "{station} is closed by hand today",
-  "prep.test_switched_off": "{station} is disabled",
+  "prep.test_disabled": "{station} is disabled",
   "prep.test_fallback_step": "{reason}, so its work goes to {destination}.",
   "prep.test_no_replacement":
     "{reason}, and it has no replacement, so the till asks the waiter where to make this.",
@@ -485,7 +485,7 @@ const es: Record<keyof typeof en, string> = {
   "prep.test_time_required": "Elige una hora.",
   "prep.test_out_of_hours": "{station} está cerrada fuera de su horario de apertura",
   "prep.test_closed_by_hand": "{station} se ha cerrado a mano hoy",
-  "prep.test_switched_off": "{station} está deshabilitada",
+  "prep.test_disabled": "{station} está deshabilitada",
   "prep.test_fallback_step": "{reason}, por lo que su trabajo va a {destination}.",
   "prep.test_no_replacement":
     "{reason}, y no tiene sustituta, por lo que la caja pregunta al camarero dónde preparar esto.",

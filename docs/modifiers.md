@@ -58,9 +58,9 @@ An option carries the same three names, shown in its own window with nothing fol
 [content languages](content-and-images.md).
 
 Each list has an **Active** switch, and the list's **Status** column reads **Active** or
-**Inactive**. An active list needs something to answer it with, so the form refuses to save an
+**Disabled**. An active list needs something to answer it with, so the form refuses to save an
 active extras list with no products on it, or an active options list with no available option. It
-tells you to add or enable one, or to make the list inactive.
+tells you to add one (or, for options, add or enable one), or to disable this list.
 
 A **Default** seeds a new selection once. Changing it does not change an order you already started.
 Switching the default option off, or deleting it, makes the first available option the default

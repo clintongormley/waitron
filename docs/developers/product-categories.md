@@ -26,16 +26,16 @@ are not refused when a save leaves them as they are. A product's category is
 row you can rename or delete.
 
 A red asterisk beside a category means the route the Made at column shows for it reaches no
-switched-on station, so it reads No replacement or Nowhere. That route is the category's baseline:
+active station, so it reads No replacement or Nowhere. That route is the category's baseline:
 Made at leaves out exceptions limited to one service zone or one product, so some of a marked
 category's dishes can still be made in a zone, or for a product, that such an exception covers. A
-rule naming a switched-off station ends in No replacement unless that station's chain of fallbacks
-reaches a station that is switched on; the default station does not stand in for it. A category no
-rule covers is made at the default station while that station is switched on, and reads Nowhere
-when it is switched off or none is set. A route to No preparation carries no asterisk. The
+rule naming a disabled station ends in No replacement unless that station's chain of fallbacks
+reaches a station that is active; the default station does not stand in for it. A category no
+rule covers is made at the default station while that station is active, and reads Nowhere
+when it is disabled or none is set. A route to No preparation carries no asterisk. The
 asterisk's tooltip explains the warning. To clear it, set a claim, or an exception that covers the
-category in every service zone, on Prep Stations; or switch on the station its rule names or one in
-that station's chain of fallbacks; or, for a category no rule covers, switch on the default station,
+category in every service zone, on Prep Stations; or enable the station its rule names or one in
+that station's chain of fallbacks; or, for a category no rule covers, enable the default station,
 or use Make default on Prep Stations when none is set.
 
 A variant is always in its product's reporting category. Its effective category
@@ -122,7 +122,7 @@ value. The retired `active` and `offered` fields are refused with `management.re
 this menu answers `menu_item.not_found` (404). Publish again to change what the till sells.
 
 `PATCH /management-api/catalogues/:id/items/:itemId/variants/:variantId` sets or clears this
-menu's price for one size of the item's product, Active or Inactive, and leaves every other size's
+menu's price for one size of the item's product, Active or Disabled, and leaves every other size's
 price as it is. The body is `{ price }`, a price or null; it returns 204. A missing `price`, or one
 that is neither a string nor null, answers `management.request_invalid` (400, `field: "price"`),
 and any other key in the body answers the same code naming that key. A malformed price answers
@@ -131,7 +131,7 @@ and any other key in the body answers the same code naming that key. A malformed
 `menu_item.not_found` (404).
 
 `GET /management-api/catalogues/:id/prices` gives one row per product reached by the working
-structure, Active or Inactive, including sold-out products. An inactive menu gives no rows. Each row is
+structure, Active or Disabled, including sold-out products. An inactive menu gives no rows. Each row is
 `{ menuItemId, productId, name, categoryId, placements, override, effectivePrice, combined, active, variants }`,
 with `active` the product's own Active state.
 `override` is this menu's saved price, which may be null. `combined` explains the resulting price,
@@ -148,7 +148,7 @@ source records whether it was decided at the size or product level. For example,
 to €3.00 and Casa Delgado includes only Drinks' beer, Casa charges €3.00. If Casa also places that
 beer in its own Specials at the product's €2.80, the two values clash. Setting Casa's own beer
 price to €3.00 resolves it. `variants` keeps the menu's size prices as
-`{ variantId, price, active }`, one per size, Inactive ones included, with `price` null where this
+`{ variantId, price, active }`, one per size, disabled ones included, with `price` null where this
 menu sets none and `active` the size's own Active state; `combined.variants` explains each one's
 result.
 
@@ -207,7 +207,7 @@ Malformed ids answer `shared.invalid_id` (400) and malformed bodies `management.
 (400). `menu.layout_not_found` (404, `layoutId`, and `menuId` when checking ownership) refuses an
 absent layout or one belonging to another menu. `menu.default_layout_required` (409, `layoutId`)
 refuses deletion of the default. `menu.shortcut_unreachable` (409, `layoutId`, `ref`) refuses a
-target outside the working structure, including the menu's own root. Inactive products are
+target outside the working structure, including the menu's own root. Disabled products are
 structurally accepted, but publish as empty tiles. `menu_section.wrong_role` (409, `sectionId`,
 `role`) refuses a layout as a target. `menu_section.not_found` names a missing section or member; a
 product target must be a stored top-level product or it answers `menu_section.membership_invalid`
@@ -273,8 +273,10 @@ requested keeps its captured selection, including while the category summary is 
 With only products selected, the toolbar's action reads **Disable**: it switches them off (the
 product's `active` flag), and its dialog asks "Disable N products?". Their rows and previous sales
 remain, and you can enable the products again later. Once a category is in the selection the action
-reads **Delete**, because the category itself is deleted; the products in it are still only
-disabled. Before deleting a non-empty category, choose what happens to its contents:
+reads **Delete**, because the category itself is deleted. Products you selected directly are still
+only disabled. The category's own products are disabled only if you choose **Delete it too**; with
+**Move it up to the parent category** they stay active. Before deleting a non-empty category, choose
+what happens to its contents:
 
 - **Move it up to the parent category** keeps the products active and moves the category's direct
   products and subcategories to its parent. For a top-level category they move to **All products**.
@@ -318,7 +320,7 @@ a non-string name is `management.request_invalid` (400).
 | `PATCH /management-api/categories/:id` | supplied name or parent fields; 200, saved category |
 | `POST /management-api/folders/move` | `{ productIds, categoryIds, to }`; 204 |
 | `POST /management-api/folders/delete` | `{ productIds, categoryIds, contents, shown }`; 204 |
-| `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes, ownRoutes }[]`; `products` includes Inactive products, `activeProducts` leaves them out; `routes` counts the rules naming the category or any category below it, `ownRoutes` those naming the category itself |
+| `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes, ownRoutes }[]`; `products` includes disabled products, `activeProducts` leaves them out; `routes` counts the rules naming the category or any category below it, `ownRoutes` those naming the category itself |
 
 Both ID arrays are required and contain distinct UUIDs. `to` is a category ID or null. `contents`
 is `move_up` or `delete`. `shown` is the counts the client read before deleting (the ones its
