@@ -794,6 +794,14 @@ describe("till-app boot interrupted by removal from the page", () => {
 });
 
 describe("till-app content languages", () => {
+  // `captureMinuteTimers` takes every one-minute timer, and the battery reporter's send limit is one.
+  beforeEach(() => {
+    Object.defineProperty(navigator, "getBattery", { configurable: true, value: undefined });
+  });
+  afterEach(() => {
+    delete (navigator as { getBattery?: unknown }).getBattery;
+  });
+
   it("re-reads the content languages every minute and applies the new answer", async () => {
     const timers = captureMinuteTimers();
     try {
@@ -1524,6 +1532,161 @@ describe("till-app fits the page it is given", () => {
     expect(edges.app).toBe(pageBottom);
     expect(edges.screen).toBe(pageBottom);
     expectChooserOnPage(edges.chooser, pageBox);
+  });
+});
+
+describe("till-app battery report", () => {
+  let battery: EventTarget & { level: number; charging: boolean };
+  beforeEach(() => {
+    battery = Object.assign(new EventTarget(), { level: 0.82, charging: false });
+    Object.defineProperty(navigator, "getBattery", {
+      configurable: true,
+      value: () => Promise.resolve(battery),
+    });
+  });
+  afterEach(() => {
+    delete (navigator as { getBattery?: unknown }).getBattery;
+  });
+
+  it("reports the battery once booted as a paired device, and again when it changes", async () => {
+    const reportBattery = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mountApp({ reportBattery });
+    await flush(el);
+    expect(reportBattery).toHaveBeenCalledWith(
+      { level: 82, charging: false },
+      { signal: expect.any(AbortSignal) },
+    );
+
+    battery.charging = true;
+    battery.dispatchEvent(new Event("chargingchange"));
+    expect(reportBattery).toHaveBeenLastCalledWith(
+      { level: 82, charging: true },
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(reportBattery).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancels the report in flight when the app is removed from the page", async () => {
+    const reportBattery = vi.fn(() => new Promise<void>(() => undefined));
+    const { el, host } = await mountApp({ reportBattery });
+    await flush(el);
+    const [, options] = reportBattery.mock.calls[0] as unknown as [
+      unknown,
+      { signal: AbortSignal },
+    ];
+    expect(options.signal.aborted).toBe(false);
+
+    host.removeChild(el);
+    expect(options.signal.aborted).toBe(true);
+  });
+
+  it("reports nothing from a browser that is not a paired device", async () => {
+    const reportBattery = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mountApp({
+      reportBattery,
+      getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+    });
+    await flush(el);
+    expect(reportBattery).not.toHaveBeenCalled();
+  });
+
+  it("stops reporting when the app is removed from the page", async () => {
+    const reportBattery = vi.fn().mockResolvedValue(undefined);
+    const { el, host } = await mountApp({ reportBattery });
+    await flush(el);
+    reportBattery.mockClear();
+
+    host.removeChild(el);
+    battery.dispatchEvent(new Event("levelchange"));
+    expect(reportBattery).not.toHaveBeenCalled();
+  });
+
+  it("does not start reporting when the device identity arrives after removal", async () => {
+    const reportBattery = vi.fn().mockResolvedValue(undefined);
+    let resolveIdentity!: (identity: unknown) => void;
+    const { el, host } = await mountApp({
+      reportBattery,
+      getDeviceIdentity: vi.fn(() => new Promise((resolve) => (resolveIdentity = resolve))),
+    });
+    await flush(el);
+
+    host.removeChild(el);
+    resolveIdentity({ deviceId: "till-dev", name: "Till 1", formFactor: "till", stationId: null });
+    await flush(el);
+    battery.dispatchEvent(new Event("levelchange"));
+    expect(reportBattery).not.toHaveBeenCalled();
+  });
+
+  it("stops the previous report when a re-boot finds the device no longer paired", async () => {
+    const reportBattery = vi.fn().mockResolvedValue(undefined);
+    const getDeviceIdentity = vi
+      .fn()
+      .mockResolvedValueOnce({
+        deviceId: "till-dev",
+        name: "Till 1",
+        formFactor: "till",
+        stationId: null,
+      })
+      .mockRejectedValue({ code: "device.unauthorized" });
+    const { el } = await mountApp({ reportBattery, getDeviceIdentity });
+    await flush(el);
+    reportBattery.mockClear();
+
+    emit(lock(el)!, "device-unauthorized");
+    await flush(el);
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+    battery.dispatchEvent(new Event("levelchange"));
+    expect(reportBattery).not.toHaveBeenCalled();
+  });
+
+  it("does not start reporting when a boot's identity arrives after a later boot found the device unpaired", async () => {
+    const reportBattery = vi.fn().mockResolvedValue(undefined);
+    let resolveFirstIdentity!: (identity: unknown) => void;
+    const getDeviceIdentity = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveFirstIdentity = resolve)))
+      .mockRejectedValue({ code: "device.unauthorized" });
+    const { el } = await mountApp({ reportBattery, getDeviceIdentity });
+    await flush(el);
+
+    emit(lock(el)!, "device-unauthorized");
+    await flush(el);
+    expect(getDeviceIdentity).toHaveBeenCalledTimes(2);
+    resolveFirstIdentity({
+      deviceId: "till-dev",
+      name: "Till 1",
+      formFactor: "till",
+      stationId: null,
+    });
+    await flush(el);
+    battery.dispatchEvent(new Event("levelchange"));
+    await flush(el);
+    expect(reportBattery).not.toHaveBeenCalled();
+  });
+
+  it("keeps the later boot's report running when an earlier boot's identity arrives late", async () => {
+    const reportBattery = vi.fn().mockResolvedValue(undefined);
+    const identity = { deviceId: "till-dev", name: "Till 1", formFactor: "till", stationId: null };
+    let resolveFirstIdentity!: (identity: unknown) => void;
+    const getDeviceIdentity = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((resolve) => (resolveFirstIdentity = resolve)))
+      .mockResolvedValue(identity);
+    const { el } = await mountApp({ reportBattery, getDeviceIdentity });
+    await flush(el);
+
+    emit(lock(el)!, "device-unauthorized");
+    await flush(el);
+    expect(reportBattery).toHaveBeenCalledTimes(1);
+    resolveFirstIdentity(identity);
+    await flush(el);
+    reportBattery.mockClear();
+
+    battery.level = 0.81;
+    battery.dispatchEvent(new Event("levelchange"));
+    expect(reportBattery.mock.calls).toEqual([
+      [{ level: 81, charging: false }, { signal: expect.any(AbortSignal) }],
+    ]);
   });
 });
 

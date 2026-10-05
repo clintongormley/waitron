@@ -8,6 +8,7 @@ import {
   baseStyles,
   focusFirstInvalid,
   submitOnEnter,
+  visuallyHiddenStyles,
   type DataTableColumn,
   type WtModal,
 } from "@waitron/ui";
@@ -129,6 +130,20 @@ function bindsStation(formFactor: FormFactor): boolean {
   return formFactor === "kds";
 }
 
+/** A battery report older than this is greyed and says when it was taken (spec §6). */
+const BATTERY_STALE_MS = 10 * 60_000;
+
+/** A lightning bolt; U+FE0E asks for the text form, which takes the cell's colour, not an emoji. */
+const CHARGING_MARK = "\u26A1\uFE0E";
+
+/** A longer `setTimeout` delay overflows and fires at once. */
+const LONGEST_TIMER_MS = 2 ** 31 - 1;
+
+/** A report taken at `reportedAt` is stale once the time is strictly past this. */
+function batteryStaleAfter(reportedAt: string): number {
+  return Date.parse(reportedAt) + BATTERY_STALE_MS;
+}
+
 @customElement("dashboard-devices-screen")
 export class DevicesScreen extends LitElement {
   static override styles = [
@@ -172,8 +187,15 @@ export class DevicesScreen extends LitElement {
         color: var(--wt-color-text);
         font-weight: var(--wt-font-weight-bold);
       }
-      wt-data-table::part(being-paired) {
+      wt-data-table::part(being-paired),
+      wt-data-table::part(battery-stale) {
         color: var(--wt-color-text-muted);
+      }
+      wt-data-table::part(battery-as-of) {
+        display: block;
+      }
+      wt-data-table::part(visually-hidden) {
+        ${visuallyHiddenStyles}
       }
       .pair-fields,
       .edit-fields {
@@ -232,6 +254,11 @@ export class DevicesScreen extends LitElement {
   @state() private printers: Printer[] = [];
   @state() private pairing: PairingModeState | undefined;
   @state() private pendingJoins: JoinRequestRow[] = [];
+
+  /** Replaced by a test, so a report's age is fixed. */
+  @property({ attribute: false }) now = (): Date => new Date();
+  /** Redraws when the next fresh battery report turns stale: the list is not re-read for that. */
+  #staleTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** Seen by a test, so it can check what the code encodes. */
   @property({ attribute: false }) qrFor = (text: string): Promise<string> =>
@@ -347,7 +374,29 @@ export class DevicesScreen extends LitElement {
     if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
   }
 
+  override updated(): void {
+    clearTimeout(this.#staleTimer);
+    this.#staleTimer = undefined;
+    if (!this.isConnected) return;
+    const now = this.now().getTime();
+    const next = Math.min(
+      ...this.devices
+        .map(({ batteryLevel: level, batteryReportedAt: at }) =>
+          level === null || at === null ? Infinity : batteryStaleAfter(at),
+        )
+        .filter((at) => at >= now),
+    );
+    // Stale is strictly older than the limit, so the first stale moment is a millisecond past it.
+    if (next !== Infinity)
+      this.#staleTimer = setTimeout(
+        () => this.requestUpdate(),
+        Math.min(next - now + 1, LONGEST_TIMER_MS),
+      );
+  }
+
   override disconnectedCallback(): void {
+    clearTimeout(this.#staleTimer);
+    this.#staleTimer = undefined;
     this.#endAdding();
     this.#endEdit();
     super.disconnectedCallback();
@@ -634,6 +683,33 @@ export class DevicesScreen extends LitElement {
     return formatIsoMinute(iso);
   }
 
+  #battery(device: DeviceRow): TemplateResult {
+    const id = device.id;
+    if (device.batteryLevel === null)
+      return html`<span data-test=${`device-battery-${id}`}
+        >${t("devices.battery_not_reported")}</span
+      >`;
+    const at = device.batteryReportedAt;
+    const stale = at !== null && this.now().getTime() > batteryStaleAfter(at);
+    return html`<span data-test=${`device-battery-${id}`} part=${stale ? "battery-stale" : nothing}
+      ><span data-test=${`device-battery-level-${id}`}>${device.batteryLevel}%</span>${
+        device.batteryCharging
+          ? html` <span aria-hidden="true" data-test=${`device-battery-mark-${id}`}
+                >${CHARGING_MARK}</span
+              ><span part="visually-hidden" data-test=${`device-battery-charging-${id}`}>
+                ${t("devices.battery_charging")}</span
+              >`
+          : nothing
+      }${
+        stale
+          ? html` <span part="battery-as-of"
+              >${t("devices.battery_as_of").replace("{time}", formatIsoMinute(at))}</span
+            >`
+          : nothing
+      }</span
+    >`;
+  }
+
   // ── The Edit dialog ──────────────────────────────────────────────────────────────────────────────
 
   /** The first printer in `ids` that is switched on, as the server's `firstUsablePrinters` picks. */
@@ -880,6 +956,13 @@ export class DevicesScreen extends LitElement {
           html`<span data-test=${`device-station-${d.id}`}
             >${d.kind === "kds_station" ? this.#bindingName(d) : ""}</span
           >`,
+      },
+      {
+        key: "battery",
+        choosable: "shown",
+        label: t("devices.column_battery"),
+        sortValue: (d) => d.batteryLevel,
+        cell: (d) => this.#battery(d),
       },
       {
         key: "status",

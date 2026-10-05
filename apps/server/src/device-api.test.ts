@@ -1714,6 +1714,153 @@ describe("a device's current printers", () => {
   });
 });
 
+describe("PUT /api/device/battery", () => {
+  /** A device API whose clock reads `clock.at`, so a test can move time past the one-minute limit. */
+  function mountClockedApp(cfg: TillConfig, clock: { at: Date }): Hono {
+    const app = new Hono();
+    const pairingMode = createPairingMode();
+    windows.set(app, pairingMode);
+    mountDeviceApi(
+      app,
+      { db: suite.db, cfg, secureCookies: false, pairingMode, now: () => clock.at },
+      noopLog,
+    );
+    return app;
+  }
+
+  async function storedBattery(deviceId: string) {
+    const [row] = await suite.db
+      .select({
+        level: devices.batteryLevel,
+        charging: devices.batteryCharging,
+        reportedAt: devices.batteryReportedAt,
+      })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    return row!;
+  }
+
+  /** Sends one report and holds that the route answered it with 204. */
+  async function report(app: Hono, jar: string, body: { level: number; charging: boolean }) {
+    const res = await send(app, "PUT", "/api/device/battery", { cookie: jar, body });
+    expect(res.status).toBe(204);
+  }
+
+  const T0 = new Date("2026-10-04T10:00:00.000Z");
+  const later = (ms: number) => new Date(T0.getTime() + ms);
+
+  it("stores a report's level, charging state and time", async () => {
+    const venue = await setupVenue(suite.db);
+    const clock = { at: T0 };
+    const app = mountClockedApp(venue.cfg, clock);
+    const { deviceId, jar } = await enrolHandheld(app, venue);
+    await report(app, jar, { level: 82, charging: false });
+    expect(await storedBattery(deviceId)).toEqual({
+      level: 82,
+      charging: false,
+      reportedAt: T0.toISOString(),
+    });
+  });
+
+  it("keeps the first report when a second, with the same charging state, comes within a minute", async () => {
+    const venue = await setupVenue(suite.db);
+    const clock = { at: T0 };
+    const app = mountClockedApp(venue.cfg, clock);
+    const { deviceId, jar } = await enrolHandheld(app, venue);
+    await report(app, jar, { level: 82, charging: false });
+    clock.at = later(30_000);
+    await report(app, jar, { level: 81, charging: false });
+    expect(await storedBattery(deviceId)).toEqual({
+      level: 82,
+      charging: false,
+      reportedAt: T0.toISOString(),
+    });
+  });
+
+  it("stores a report within a minute when the charging state changed", async () => {
+    const venue = await setupVenue(suite.db);
+    const clock = { at: T0 };
+    const app = mountClockedApp(venue.cfg, clock);
+    const { deviceId, jar } = await enrolHandheld(app, venue);
+    await report(app, jar, { level: 82, charging: false });
+    clock.at = later(30_000);
+    await report(app, jar, { level: 82, charging: true });
+    expect(await storedBattery(deviceId)).toEqual({
+      level: 82,
+      charging: true,
+      reportedAt: later(30_000).toISOString(),
+    });
+  });
+
+  it("stores a report with the same charging state once a minute has passed", async () => {
+    const venue = await setupVenue(suite.db);
+    const clock = { at: T0 };
+    const app = mountClockedApp(venue.cfg, clock);
+    const { deviceId, jar } = await enrolHandheld(app, venue);
+    await report(app, jar, { level: 82, charging: false });
+    clock.at = later(61_000);
+    await report(app, jar, { level: 79, charging: false });
+    expect(await storedBattery(deviceId)).toEqual({
+      level: 79,
+      charging: false,
+      reportedAt: later(61_000).toISOString(),
+    });
+  });
+
+  it.each([
+    ["level", { level: 101, charging: false }],
+    ["level", { level: -1, charging: false }],
+    ["level", { level: 50.5, charging: false }],
+    ["level", { level: "50", charging: false }],
+    ["charging", { level: 50, charging: "yes" }],
+  ])("refuses a bad %s (%j) naming the field, and stores nothing", async (field, body) => {
+    const venue = await setupVenue(suite.db);
+    const app = mountClockedApp(venue.cfg, { at: T0 });
+    const { deviceId, jar } = await enrolHandheld(app, venue);
+    const res = await send(app, "PUT", "/api/device/battery", { cookie: jar, body });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field } },
+    });
+    expect(await storedBattery(deviceId)).toEqual({
+      level: null,
+      charging: null,
+      reportedAt: null,
+    });
+  });
+
+  it("refuses a caller with no device cookie as device.unauthorized", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountClockedApp(venue.cfg, { at: T0 });
+    const res = await send(app, "PUT", "/api/device/battery", {
+      body: { level: 50, charging: false },
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "device.unauthorized" } });
+  });
+
+  it("the management list carries each device's battery report, null before one is stored", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountClockedApp(venue.cfg, { at: T0 });
+    const reporter = await enrolHandheld(app, venue);
+    const silent = await enrolTill(app, venue, "Caja muda");
+    await report(app, reporter.jar, { level: 64, charging: true });
+    const res = await send(app, "GET", "/management-api/devices", { cookie: venue.managerCookie });
+    expect(res.status).toBe(200);
+    const rows = (await res.json()) as { id: string }[];
+    expect(rows.find((r) => r.id === reporter.deviceId)).toMatchObject({
+      batteryLevel: 64,
+      batteryCharging: true,
+      batteryReportedAt: T0.toISOString(),
+    });
+    expect(rows.find((r) => r.id === silent.deviceId)).toMatchObject({
+      batteryLevel: null,
+      batteryCharging: null,
+      batteryReportedAt: null,
+    });
+  });
+});
+
 describe("join rate limiter (spec §8)", () => {
   it("rate-limits the knock: the (cap+1)th is 429 BEFORE the DB, then the window resets", async () => {
     const venue = await setupVenue(suite.db);

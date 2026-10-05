@@ -19,6 +19,7 @@ import { diag } from "./diagnostics.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
 import { TillApi, isNetworkFailure, type MadeHereItem } from "./api/client.js";
 import type { ServerRouter } from "./api/server-router.js";
+import { startBatteryReport, type BatteryLike } from "./api/battery-report.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import {
   displayQuantity,
@@ -1071,6 +1072,7 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#battery?.stop();
     this.#menuPoll.stop();
     this.#draftSync?.drop();
     this.#abandonListRefreshes();
@@ -1083,6 +1085,8 @@ export class TillApp extends LitElement {
     void this.sessionActivity.stop();
     super.disconnectedCallback();
   }
+
+  #battery?: { stop(): void };
 
   /** The one basket the whole flow shares. A stable reference (widgets subscribe to it directly). */
   readonly #store = new WorkingOrderStore();
@@ -1102,7 +1106,7 @@ export class TillApp extends LitElement {
   #browserLocale?: string;
   #browserLocaleVenue?: string;
   #localeList?: Awaited<ReturnType<TillApi["getLocales"]>>["locales"];
-  #localeBootGeneration = 0;
+  #bootGeneration = 0;
   #preLoginChoice?: string;
   #venueLocaleReady = false;
   #loginPending = false;
@@ -1686,7 +1690,8 @@ export class TillApp extends LitElement {
   }
 
   async #boot(): Promise<void> {
-    const localeBootGeneration = ++this.#localeBootGeneration;
+    this.#battery?.stop();
+    const bootGeneration = ++this.#bootGeneration;
     this.#browserLocale = undefined;
     this.#browserLocaleVenue = undefined;
     this.#localeList = undefined;
@@ -1694,7 +1699,7 @@ export class TillApp extends LitElement {
     void this.api
       .getLocales()
       .then(({ locales, loginDefault, venueDefault }) => {
-        if (!this.isConnected || localeBootGeneration !== this.#localeBootGeneration) return;
+        if (!this.isConnected || bootGeneration !== this.#bootGeneration) return;
         this.#browserLocale = loginDefault;
         this.#browserLocaleVenue = venueDefault;
         this.#localeList = locales;
@@ -1783,6 +1788,15 @@ export class TillApp extends LitElement {
         this.makeNow = [];
       this.deviceName = identity.name;
       this.deviceId = identity.deviceId;
+      // `disconnectedCallback` has already run for a torn-down app, so nothing would stop a reporter
+      // started now; and a boot a later one has overtaken must not start one.
+      if (this.isConnected && bootGeneration === this.#bootGeneration) {
+        const nav = navigator as Navigator & { getBattery?: () => Promise<BatteryLike> };
+        this.#battery = startBatteryReport(
+          (r, signal) => this.api.reportBattery(r, { signal }),
+          nav.getBattery === undefined ? undefined : () => nav.getBattery!(),
+        );
+      }
       this.#holdIdentity(identity);
       this.#restoreMakeNow();
       const kind = kindOfFormFactor(identity.formFactor);

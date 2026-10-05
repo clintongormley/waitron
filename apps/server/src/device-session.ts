@@ -250,12 +250,16 @@ export async function tryReadDevice(
 // At most one sighting write a minute: it is checked on every authenticated request, and the
 // dashboard shows last-seen only to the minute (`devices-screen.ts`'s `#lastSeen`).
 //
-// `last_seen_at` is text, so `<` on it compares strings, which orders two instants correctly only
-// for the one spelling its writer uses: `toISOString()`, which is what `nowIso` returns.
+// `last_seen_at` and `battery_reported_at` are text, so `<` on them compares strings, which orders
+// two instants correctly only for one spelling: `toISOString()`, which both their writers use
+// (`nowIso` here, and the battery route in `device-api.ts`).
 const staleBefore = (seenAt: string): string =>
   new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
 
-/** Whether a device last seen at `lastSeenAt` is due a fresh sighting at `seenAt`. */
+/**
+ * Whether nothing is stored yet, or what is stored at `lastSeenAt` is more than a minute older than
+ * `seenAt`.
+ */
 export function sightingDue(lastSeenAt: string | null, seenAt: string): boolean {
   return lastSeenAt === null || lastSeenAt < staleBefore(seenAt);
 }

@@ -18,7 +18,7 @@ import {
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
-import { readDeviceCookie, requireDevice, setDeviceCookie } from "./device-session.js";
+import { readDeviceCookie, requireDevice, setDeviceCookie, sightingDue } from "./device-session.js";
 import { mapDeviceNameTaken, requireDeviceName, resolveDeviceBinding } from "./device.js";
 import { requestCfg } from "./request-config.js";
 import {
@@ -68,6 +68,8 @@ export interface DeviceApiDeps {
    * host; absent, or a host outside it, gives a host-only cookie.
    */
   tenantDomain?: string;
+  /** The battery route's clock; tests inject one to step past the one-minute limit. */
+  now?: () => Date;
 }
 
 const DEVICE_MANAGE_PERMISSION: Permission = "device.manage";
@@ -261,6 +263,40 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
     }),
   );
 
+  // ── Report the device's battery (DEVICE-GUARDED) ─────────────────────────────────────────────
+  app.put("/api/device/battery", (c) =>
+    run(c, log, async () => {
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      const body = await readJsonBody<{ level?: unknown; charging?: unknown }>(c);
+      const level = body.level;
+      if (typeof level !== "number" || !Number.isInteger(level) || level < 0 || level > 100)
+        throw new AppError("management.request_invalid", { field: "level" });
+      if (typeof body.charging !== "boolean")
+        throw new AppError("management.request_invalid", { field: "charging" });
+      const charging = body.charging;
+      const at = (deps.now?.() ?? new Date()).toISOString();
+      await withTransaction(deps.db, async (tx) => {
+        const [row] = await tx
+          .select({ charging: devices.batteryCharging, reportedAt: devices.batteryReportedAt })
+          .from(devices)
+          .where(ownDeviceById(device.deviceId));
+        // At most one stored report a minute, as for last-seen, unless the charger was plugged or
+        // unplugged.
+        if (
+          row?.reportedAt != null &&
+          row.charging === charging &&
+          !sightingDue(row.reportedAt, at)
+        )
+          return;
+        await tx
+          .update(devices)
+          .set({ batteryLevel: level, batteryCharging: charging, batteryReportedAt: at })
+          .where(ownDeviceById(device.deviceId));
+      });
+      return c.body(null, 204);
+    }),
+  );
+
   app.get("/api/device/watcher", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
@@ -385,6 +421,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             label: devices.label,
             active: devices.active,
             lastSeenAt: devices.lastSeenAt,
+            batteryLevel: devices.batteryLevel,
+            batteryCharging: devices.batteryCharging,
+            batteryReportedAt: devices.batteryReportedAt,
             enrolledAt: devices.enrolledAt,
           })
           .from(devices)
