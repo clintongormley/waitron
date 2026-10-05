@@ -1,6 +1,6 @@
 import "./errors.js";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, sql } from "drizzle-orm";
 import {
   type Database,
   type Transaction,
@@ -13,6 +13,7 @@ import { hashSecret, verifySecretAsync } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { firstUsablePrinters, type FormFactor } from "@waitron/layouts";
 import { insertDevice, resolveDeviceBinding } from "./device.js";
+import type { PairingMode } from "./pairing-mode.js";
 import type { TillConfig } from "./till-config.js";
 
 /** The predicate every statement here carries: a pending request belongs to the node that received
@@ -22,8 +23,8 @@ const ownedBy = (cfg: Pick<TillConfig, "nodeId">) => eq(joinRequests.nodeId, cfg
 /** Both surfaces' pending joins live in one table; this is which one a row is for. */
 export type JoinRequestKind = "device" | "print_agent";
 
-/** A request lapses after this long — the same fifteen minutes as the pairing window, so a knock
- * cannot outlive the window that admitted it by more than one window. */
+/** A request lapses after this long, even while the window stays open. A device request also ends
+ * when the window shuts ({@link discardLapsedDeviceRequests}). */
 export const JOIN_TTL_MS = 15 * 60 * 1000;
 
 /** Pending rows per kind, across this node's requests. It also bounds the numbers the decoy rule
@@ -42,6 +43,32 @@ async function sweepLapsed(tx: Transaction, cfg: TillConfig): Promise<void> {
         lt(joinRequests.createdAt, new Date(Date.now() - JOIN_TTL_MS).toISOString()),
       ),
     );
+}
+
+export type DeviceRequestWindow = Pick<PairingMode, "openSince" | "orphanedClaims">;
+
+/**
+ * A device asks only while the window is open, so a device request made before the window last
+ * shut, or one whose claim's hold has ended, is discarded. Print-agent requests are left alone: an
+ * agent told `not_approved` stops for good (`packages/print-agent/src/agent.ts`), A269.
+ *
+ * Returns the ids of the claims whose hold has ended. The caller drops those claims only after its
+ * transaction commits: dropped here, a rolled-back transaction would bring the row back unclaimed.
+ */
+export async function discardLapsedDeviceRequests(
+  tx: Transaction,
+  cfg: TillConfig,
+  window: DeviceRequestWindow,
+): Promise<string[]> {
+  const since = window.openSince();
+  const device = and(ownedBy(cfg), eq(joinRequests.kind, "device"));
+  await tx
+    .delete(joinRequests)
+    .where(since === null ? device : and(device, lt(joinRequests.createdAt, since)));
+  const orphaned = window.orphanedClaims();
+  if (orphaned.length > 0)
+    await tx.delete(joinRequests).where(and(device, inArray(joinRequests.id, orphaned)));
+  return orphaned;
 }
 
 /** Every number currently spoken for among this node's requests, EITHER kind, split by role. The
@@ -276,9 +303,12 @@ export async function readJoinStatus(
   cfg: TillConfig,
   joinId: string,
   token: string,
+  window: DeviceRequestWindow & Pick<PairingMode, "dropClaim">,
 ): Promise<JoinStatus> {
+  let dropped: string[] = [];
   const stored = await withTransaction(db, async (tx): Promise<StoredJoinHash> => {
     await sweepLapsed(tx, cfg);
+    dropped = await discardLapsedDeviceRequests(tx, cfg, window);
     const [pending] = await tx
       .select({ tokenHash: joinRequests.tokenHash })
       .from(joinRequests)
@@ -290,14 +320,31 @@ export async function readJoinStatus(
       .where(and(eq(devices.id, joinId), eq(devices.active, true)));
     return accepted === undefined ? null : { accepted: accepted.tokenHash };
   });
+  for (const id of dropped) window.dropClaim(id);
   return statusFor(token, stored);
 }
 
-/** What {@link acceptDeviceJoinRequest} hands back. A wrong choice is a RESULT, never a throw — see
- * that function's header for why. */
-export type AcceptResult =
-  | { ok: true; deviceId: string; name: string; formFactor: FormFactor }
-  | { ok: false; reason: "mismatch" };
+/**
+ * Compare the tapped number with a device request's own. A mismatch DELETES the request and is
+ * returned, not thrown, so the deletion commits and a wrong tap cannot be retried.
+ */
+export async function checkDeviceJoinNumber(
+  tx: Transaction,
+  cfg: TillConfig,
+  id: string,
+  choice: string,
+): Promise<{ ok: boolean }> {
+  await sweepLapsed(tx, cfg);
+  const where = and(ownedBy(cfg), eq(joinRequests.id, id), eq(joinRequests.kind, "device"));
+  const [row] = await tx
+    .select({ n: joinRequests.verificationNumber })
+    .from(joinRequests)
+    .where(where);
+  if (row === undefined) throw new AppError("join_request.not_found", {});
+  if (choice === row.n) return { ok: true };
+  await tx.delete(joinRequests).where(where);
+  return { ok: false };
+}
 
 /**
  * Approve a device's ask-to-join.
@@ -313,22 +360,21 @@ export type AcceptResult =
  * ONE transaction: a later failure (an unknown profile, a missing station, a taken device name)
  * rolls the consumption back too, so the request survives for a genuine retry.
  *
- * A WRONG CHOICE DENIES — AND THAT IS WHY THIS RETURNS RATHER THAN THROWS: an `AppError` thrown
- * here would roll the consumed row back into existence and make a wrong tap an unlimited retry
- * (design §1.2). The caller commits this result and throws `device.join_mismatch` AFTER the
- * transaction returns.
+ * The number is not compared here: {@link checkDeviceJoinNumber} compared it earlier, and the
+ * accept route refuses a login that holds no live claim from that check. The device is named
+ * `input.label`, not the label the request was made with.
  */
 export async function acceptDeviceJoinRequest(
   tx: Transaction,
   cfg: TillConfig,
   id: string,
   input: {
-    choice: string;
+    label: string;
     profileId: string;
     stationId?: string | null;
     watcherId?: string | null;
   },
-): Promise<AcceptResult> {
+): Promise<{ deviceId: string; name: string; formFactor: FormFactor }> {
   await sweepLapsed(tx, cfg);
 
   const [row] = await tx
@@ -336,17 +382,10 @@ export async function acceptDeviceJoinRequest(
     .where(and(ownedBy(cfg), eq(joinRequests.id, id), eq(joinRequests.kind, "device")))
     .returning({
       id: joinRequests.id,
-      label: joinRequests.label,
-      verificationNumber: joinRequests.verificationNumber,
       tokenHash: joinRequests.tokenHash,
       locationId: joinRequests.locationId,
     });
   if (row === undefined) throw new AppError("join_request.not_found", {});
-
-  if (input.choice !== row.verificationNumber) {
-    // Already consumed by the delete above.
-    return { ok: false, reason: "mismatch" };
-  }
 
   const binding = await resolveDeviceBinding(tx, cfg, {
     profileId: input.profileId,
@@ -363,24 +402,24 @@ export async function acceptDeviceJoinRequest(
     deviceProfileId: input.profileId,
     receiptPrinterId: printers.receiptPrinterId,
     paymentSlipPrinterId: printers.paymentSlipPrinterId,
-    label: row.label,
+    label: input.label,
     tokenHash: row.tokenHash,
     active: true,
   });
 
-  return { ok: true, deviceId: row.id, name: row.label, formFactor: binding.formFactor };
+  return { deviceId: row.id, name: input.label, formFactor: binding.formFactor };
 }
 
-/** What {@link acceptPrintAgentJoinRequest} hands back. A wrong choice is a RESULT, never a throw —
- * the same reason {@link acceptDeviceJoinRequest} returns: an AppError would roll the consuming delete
- * back into existence and turn a wrong tap into an unlimited retry (design §1.2). */
+/** What {@link acceptPrintAgentJoinRequest} hands back. A wrong choice is a RESULT, never a throw:
+ * an AppError would roll the consuming delete back into existence and turn a wrong tap into an
+ * unlimited retry (design §1.2). */
 export type AgentAcceptResult =
   { ok: true; agentId: string; name: string } | { ok: false; reason: "mismatch" };
 
 /**
- * Approve a print agent's ask-to-join. The mirror of {@link acceptDeviceJoinRequest}, minus the
- * device binding. The `print_agents` row takes the request's own id and token hash, so the bearer
- * the agent has held since join keeps working.
+ * Approve a print agent's ask-to-join. Unlike {@link acceptDeviceJoinRequest}, it compares the
+ * number itself, after the consuming delete, and binds nothing. The `print_agents` row takes the
+ * request's own id and token hash, so the bearer the agent has held since join keeps working.
  */
 export async function acceptPrintAgentJoinRequest(
   tx: Transaction,
@@ -401,7 +440,7 @@ export async function acceptPrintAgentJoinRequest(
     });
   if (row === undefined) throw new AppError("join_request.not_found", {});
   if (input.choice !== row.verificationNumber) {
-    // Already consumed by the delete above — a wrong tap is single-use, same as a device accept.
+    // Already consumed by the delete above — a wrong tap is single-use, same as `checkDeviceJoinNumber`.
     return { ok: false, reason: "mismatch" };
   }
 

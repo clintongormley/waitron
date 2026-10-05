@@ -225,11 +225,15 @@ alerts").
 
 ## A background API client does not make POST requests passive
 
-The request primitive marks only GETs as passive. Automatic pairing renewal uses an explicit
-authenticated route that resolves the session without touching its activity time. Cost: renewing
-the Add print agent dialog through the ordinary Open route moved session expiry forward by ten
-minutes in the regression; the renewal route leaves it unchanged and still refuses expired sessions
-(`apps/server/src/join-api.db.test.ts`, “renews the window without extending the session”).
+The request primitive marks only GETs as passive. Automatic renewal of a pairing hold uses an
+explicit authenticated route that resolves the session without touching its activity time. Cost:
+renewing the Add print agent dialog through the route that opened the window moved session expiry
+forward by ten minutes in the regression. Today's routes are in `apps/server/src/join-api.ts`:
+taking a hold (`POST /management-api/pairing-mode/holds`) extends the session, and renewing one
+(`POST /management-api/pairing-mode/holds/:holdId/renew`) leaves it unchanged and still refuses
+expired sessions (`apps/server/src/join-api.db.test.ts`, “renews a hold without extending the
+session, while taking a hold extends it” and “refuses renewal after the management session
+expires, and the hold is not renewed”).
 
 ## Dashboard subscription names travel with their server sources
 

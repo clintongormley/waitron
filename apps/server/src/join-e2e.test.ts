@@ -27,7 +27,11 @@ const noopLog: Logger = () => {};
 function mountBoth(cfg: TillConfig, pairingMode: PairingMode = createPairingMode()): Hono {
   const app = new Hono();
   mountDeviceApi(app, { db: suite.db, cfg, secureCookies: false, pairingMode }, noopLog);
-  mountJoinApi(app, { db: suite.db, cfg, pairingMode }, noopLog);
+  mountJoinApi(
+    app,
+    { db: suite.db, cfg, pairingMode, deviceAddress: "https://waitron.local" },
+    noopLog,
+  );
   return app;
 }
 
@@ -59,12 +63,13 @@ function deviceCookieFrom(res: Response): string {
   return res.headers.get("set-cookie")!.split(";")[0]!;
 }
 
-/** Through the REAL management route, not `pairingMode.open()`. */
-async function openWindow(app: Hono, venue: Venue): Promise<void> {
-  const res = await send(app, "POST", "/management-api/pairing-mode", {
+/** Through the REAL management route, not `pairingMode.open()`. Returns the hold's id. */
+async function openWindow(app: Hono, venue: Venue): Promise<string> {
+  const res = await send(app, "POST", "/management-api/pairing-mode/holds", {
     cookie: venue.managerCookie,
   });
   expect(res.status).toBe(200);
+  return ((await res.json()) as { holdId: string }).holdId;
 }
 
 async function knock(
@@ -106,7 +111,7 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     const profileId = await seedProfile("till");
 
     // 1. The admin opens the venue's pairing window (join-api route).
-    await openWindow(app, venue);
+    const holdId = await openWindow(app, venue);
 
     // 2. The device knocks with only a name (device-api route); the token rides only the cookie.
     const { joinId, verificationNumber, jar } = await knock(app, "Bar till");
@@ -122,7 +127,13 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     // `toEqual`, so the EXACT key set proves no number field rides beside the ask (a substring scan
     // for a two-digit number would collide with the id and the timestamp).
     expect(list).toEqual([
-      { id: joinId, kind: "device", label: "Bar till", createdAt: expect.any(String) },
+      {
+        id: joinId,
+        kind: "device",
+        label: "Bar till",
+        createdAt: expect.any(String),
+        pairingBy: null,
+      },
     ]);
 
     // 4. The challenge gives the admin three numbers to pick from, one of them the device's real one.
@@ -139,12 +150,19 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     expect(choices).toContain(verificationNumber);
     for (const c of choices) expect(c).toMatch(/^\d{2}$/);
 
-    // 5. The admin matches the device's number and accepts (join-api route).
+    // 5. The admin matches the device's number, then approves it under a name (join-api routes).
+    const checkRes = await send(
+      app,
+      "POST",
+      `/management-api/device-join-requests/${joinId}/check`,
+      { cookie: venue.managerCookie, body: { choice: verificationNumber, holdId } },
+    );
+    expect(checkRes.status).toBe(204);
     const acceptRes = await send(
       app,
       "POST",
       `/management-api/device-join-requests/${joinId}/accept`,
-      { cookie: venue.managerCookie, body: { choice: verificationNumber, profileId } },
+      { cookie: venue.managerCookie, body: { name: "Bar till", profileId } },
     );
     expect(acceptRes.status).toBe(200);
     expect(await acceptRes.json()).toEqual({
@@ -175,20 +193,20 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     const venue = await setupVenue(suite.db);
     const app = mountBoth(venue.cfg);
     const profileId = await seedProfile("till");
-    await openWindow(app, venue);
+    const holdId = await openWindow(app, venue);
 
     const { joinId, verificationNumber, jar } = await knock(app, "Bar till");
     // Any two-digit string other than the device's real number is wrong by construction.
     const wrong = verificationNumber === "00" ? "01" : "00";
 
-    const acceptRes = await send(
+    const checkRes = await send(
       app,
       "POST",
-      `/management-api/device-join-requests/${joinId}/accept`,
-      { cookie: venue.managerCookie, body: { choice: wrong, profileId } },
+      `/management-api/device-join-requests/${joinId}/check`,
+      { cookie: venue.managerCookie, body: { choice: wrong, holdId } },
     );
-    expect(acceptRes.status).toBe(400);
-    expect((await errorOf(acceptRes)).code).toBe("device.join_mismatch");
+    expect(checkRes.status).toBe(400);
+    expect((await errorOf(checkRes)).code).toBe("device.join_mismatch");
 
     // The wrong tap DENIED: the device's status turns not_approved rather than staying pending.
     const statusRes = await send(app, "GET", "/api/device/join/status", { cookie: jar });
@@ -199,16 +217,23 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     const again = await knock(app, "Bar till, second try");
     expect(again.joinId).not.toBe(joinId);
     expect(await pendingCount()).toBe(1);
+    const checkAgain = await send(
+      app,
+      "POST",
+      `/management-api/device-join-requests/${again.joinId}/check`,
+      { cookie: venue.managerCookie, body: { choice: again.verificationNumber, holdId } },
+    );
+    expect(checkAgain.status).toBe(204);
     const acceptAgain = await send(
       app,
       "POST",
       `/management-api/device-join-requests/${again.joinId}/accept`,
-      { cookie: venue.managerCookie, body: { choice: again.verificationNumber, profileId } },
+      { cookie: venue.managerCookie, body: { name: "Bar till", profileId } },
     );
     expect(acceptAgain.status).toBe(200);
   });
 
-  it("a knock with the window shut writes nothing and is counted, not recorded", async () => {
+  it("a knock with the window shut writes nothing and leaves the window shut", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountBoth(venue.cfg);
 
@@ -217,7 +242,11 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
       cookie: venue.managerCookie,
     });
     expect(before.status).toBe(200);
-    expect(await before.json()).toMatchObject({ open: false, refusedRecently: 0 });
+    expect(await before.json()).toEqual({
+      open: false,
+      openUntil: null,
+      deviceAddress: "https://waitron.local",
+    });
 
     const knockRes = await send(app, "POST", "/api/device/join", { body: { name: "Bar till" } });
     expect(knockRes.status).toBe(403);
@@ -225,10 +254,69 @@ describe("device join and accept, end to end (both surfaces, one window)", () =>
     expect(knockRes.headers.get("set-cookie")).toBeNull();
     expect(await pendingCount()).toBe(0);
 
-    // COUNTED, not RECORDED: the refused tally went up while the pending table stayed empty.
     const after = await send(app, "GET", "/management-api/pairing-mode", {
       cookie: venue.managerCookie,
     });
-    expect(await after.json()).toMatchObject({ open: false, refusedRecently: 1 });
+    expect(await after.json()).toEqual({
+      open: false,
+      openUntil: null,
+      deviceAddress: "https://waitron.local",
+    });
+  });
+});
+
+describe("a claim whose hold lapsed is forgotten only once its request's deletion commits", () => {
+  /** Claim a knocked device's request under hold A, then let A lapse while hold B keeps the window
+   *  open. */
+  async function lapsedClaim() {
+    const venue = await setupVenue(suite.db);
+    let offset = 0;
+    const mode = createPairingMode({ now: () => Date.now() + offset });
+    const app = mountBoth(venue.cfg, mode);
+    const holdA = await openWindow(app, venue);
+    const device = await knock(app, "Bar till");
+    const checked = await send(
+      app,
+      "POST",
+      `/management-api/device-join-requests/${device.joinId}/check`,
+      { cookie: venue.managerCookie, body: { choice: device.verificationNumber, holdId: holdA } },
+    );
+    expect(checked.status).toBe(204);
+    offset += 2 * 60_000;
+    mode.open();
+    offset += 90_000;
+    expect(mode.orphanedClaims()).toEqual([device.joinId]);
+    return { venue, mode, app, device };
+  }
+
+  it("a refused request rolls the discard back and keeps the claim for the next discard", async () => {
+    const { venue, mode, app, device } = await lapsedClaim();
+    const refused = await send(app, "GET", "/management-api/join-requests?kind=device", {
+      cookie: venue.staffCookie,
+    });
+    expect(refused.status).toBe(403);
+    // The staff request's transaction rolled back, row and all, so the claim must still be there.
+    expect(await pendingCount()).toBe(1);
+    expect(mode.orphanedClaims()).toEqual([device.joinId]);
+
+    const status = await send(app, "GET", "/api/device/join/status", { cookie: device.jar });
+    expect(await status.json()).toEqual({ status: "not_approved" });
+    expect(await pendingCount()).toBe(0);
+    expect(mode.orphanedClaims()).toEqual([]);
+  });
+
+  it("the device's status read forgets the claim it discarded", async () => {
+    const { mode, app, device } = await lapsedClaim();
+    const status = await send(app, "GET", "/api/device/join/status", { cookie: device.jar });
+    expect(await status.json()).toEqual({ status: "not_approved" });
+    expect(mode.orphanedClaims()).toEqual([]);
+  });
+
+  it("another device's knock forgets the claim it discarded", async () => {
+    const { mode, app, device } = await lapsedClaim();
+    const other = await knock(app, "Barra 2");
+    expect(other.joinId).not.toBe(device.joinId);
+    expect(await pendingCount()).toBe(1);
+    expect(mode.orphanedClaims()).toEqual([]);
   });
 });

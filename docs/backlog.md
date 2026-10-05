@@ -1424,7 +1424,7 @@ clears only a read's message, and a read failing again during the outage no long
 action's, except on Devices, where the queue reload after a wrong-number refusal still replaces that
 refusal; the replacing message is marked as a read's, so the reads' recovery clears it if a watched
 read also failed meanwhile, and otherwise it stays until the next action or until the screen is
-reopened. An action that
+reopened (2026-10-05, W104: Devices no longer reloads the queue after a wrong number). An action that
 saves and then re-reads counts a failure after the save as the re-read's. The reload after a
 successful action no longer clears another action's failure on Floor, Service status, Canvases,
 Staff and Payments, and a read an action takes before its write, such as Products' restore, counts
@@ -5019,7 +5019,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — SPEC APPROVED, PLANNED, QUEUED (lane C, W104–W106, 2026-10-05).**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (branch `feat/add-a-device`, #1225); W105 and W106 QUEUED (lane C).**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
@@ -5028,6 +5028,25 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   [Spec](superpowers/specs/2026-10-04-add-a-device-design.md);
   [plan](superpowers/plans/2026-10-04-add-a-device.md), three pull requests: W104 the window holds
   and the Add a device dialog, W105 the device table and Edit dialog, W106 battery.
+  **W104 (done):** the fifteen-minute join window and the "tried to join" count are gone. An open
+  Add a device dialog (Devices page) or Add a print agent dialog (Printers page) takes a hold on the
+  window and renews it while it stays open (`apps/dashboard/src/api/pairing-hold.ts`); outside dev
+  mode a device may ask to join only while some hold is live, and once none is left the waiting
+  device requests are discarded. Tapping the right number claims the request for that login, so
+  another login's check or deny is refused `join_request.claimed` and its approval
+  `join_request.unclaimed`; the claiming login then names the device and picks its profile
+  (`apps/server/src/join-api.ts`). A till refused with `device.pairing_closed` now tells the
+  operator to ask a manager to open Add a device. **Still owed:** W105, the device table and the
+  Edit dialog; W106, each device's battery on the Devices list.
+  Left OPEN by W104, not acted on: (1) a Pair save that never answers locks both dialogs, because a
+  save carries no time limit (`packages/dashboard-kit/src/request.ts` limits GETs only); (2) leaving
+  the Devices page with Back while a Pair save is in flight still sends a deny for that request
+  (`#closePair`, `apps/dashboard/src/screens/devices-screen.ts`), and what then happens to the
+  device is untested; (3) the Add a device and Pair dialogs were looked at only through the browser
+  test harness with a stubbed server, never on a box, so a real QR code drawn from a real box
+  address has not been looked at. (4) a device's knock is refused if the window shut while its body was
+  arriving, but open periods are told apart only by their start time, to the millisecond
+  (`apps/server/src/device-api.ts`), so a shut and reopen within one millisecond would pass.
 - **A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN.**
   A268 discards a waiting device's request when the last Add dialog closes. An agent told
   `not_approved` stops and needs resetting on its own setup page (`packages/print-agent/src/agent.ts`,

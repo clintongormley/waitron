@@ -462,9 +462,9 @@ async function main(): Promise<void> {
   console.log("    Pantalla Pase (watcher display)");
   console.log("");
   console.log(
-    `  Or knock from a FRESH browser at http://localhost:${tillPort} — a manager then switches on`,
+    `  Or knock from a FRESH browser at http://localhost:${tillPort} — dev mode accepts it at once`,
   );
-  console.log("  pairing mode in the dashboard and matches the number the till shows.");
+  console.log("  as a till.");
   const salesDays = resolveSalesDays();
   if (!result.reused) {
     console.log(

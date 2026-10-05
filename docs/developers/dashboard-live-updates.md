@@ -37,13 +37,12 @@ whether the message came from a read (Payments' `#readErrorShown`, set only thro
 `#showError(code, fromRead)`, `apps/dashboard/src/screens/payments-screen.ts`): `recovered` clears
 only a read's message; a reload that runs after a successful action and can finish after another
 action failed (the screen's actions are not serialised) clears only a read's message too; and a
-read's failure does not replace an action's message (Devices' queue reload after a wrong-number
-refusal replaces the refusal on purpose). A read an action takes before its write counts as a
-read's, and when an action writes and then re-reads, a failure after the write counts as a read's. A
-screen whose most recent load stopped before it started its later reads (on opening, on being
-reattached, or in the reload after a save) runs the unfinished part again from `recovered`, and only
-while that load has not completed. That rerun starts the reads the load never reached and takes its
-remaining steps, such as opening the item the page's link names; it performs no mutation.
+read's failure does not replace an action's message. A read an action takes before its write
+counts as a read's, and when an action writes and then re-reads, a failure after the write counts
+as a read's. A screen whose most recent load stopped before it started its later reads (on opening,
+on being reattached, or in the reload after a save) runs the unfinished part again from `recovered`,
+and only while that load has not completed. That rerun starts the reads the load never reached and
+takes its remaining steps, such as opening the item the page's link names; it performs no mutation.
 
 Use passive requests for automatic refreshes so leaving a dashboard open does not keep its session
 alive. `DashboardQueries` handles that distinction for core screens. A module using `request`

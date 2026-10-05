@@ -21,7 +21,12 @@ import { requireManagementSession } from "@waitron/server-kit";
 import { readDeviceCookie, requireDevice, setDeviceCookie } from "./device-session.js";
 import { requireDeviceBinding } from "./device.js";
 import { requestCfg } from "./request-config.js";
-import { acceptDeviceJoinRequest, createJoinRequest, readJoinStatus } from "./join-requests.js";
+import {
+  acceptDeviceJoinRequest,
+  createJoinRequest,
+  discardLapsedDeviceRequests,
+  readJoinStatus,
+} from "./join-requests.js";
 import type { PairingMode } from "./pairing-mode.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { requireBodyUuid, requireNullableBodyUuid, requireString } from "@waitron/server-kit";
@@ -132,16 +137,24 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // a flood rather than reported as a shut door.
       enrolLimiter.check();
       // devMode accepts the knock immediately with the venue's default `till` profile, through the
-      // REAL join + accept verbs, so demo mode exercises the production path. The window is not
-      // consulted, so `noteRefused` never fires in dev.
+      // real join and accept verbs, without a window, a number check or a claim.
       const auto = deps.devMode === true;
-      if (!auto && !deps.pairingMode.isOpen()) {
-        deps.pairingMode.noteRefused();
+      const admittedIn = deps.pairingMode.openSince();
+      if (!auto && admittedIn === null) {
         throw new AppError("device.pairing_closed", {});
       }
       const body = await readJsonBody<{ name?: unknown }>(c);
       const name = requireString(body.name, "name");
+      let dropped: string[] = [];
       const made = await withTransaction(deps.db, async (tx) => {
+        // The window can shut, and open again, while the body arrives; a knock admitted in an
+        // earlier open period must not land in a later one as a fresh request (open periods are told
+        // apart by their start time, to the millisecond).
+        if (!auto && deps.pairingMode.openSince() !== admittedIn) {
+          throw new AppError("device.pairing_closed", {});
+        }
+        // Before the cap is counted, so requests a shut window stranded do not hold places in it.
+        dropped = await discardLapsedDeviceRequests(tx, deps.cfg, deps.pairingMode);
         const request = await createJoinRequest(tx, deps.cfg, { kind: "device", label: name });
         if (auto) {
           // Accept in the SAME transaction, so a later throw (no till profile, or a taken device
@@ -152,12 +165,13 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           );
           if (till === undefined) throw new AppError("device_profile.not_found", {});
           await acceptDeviceJoinRequest(tx, deps.cfg, request.joinId, {
-            choice: request.verificationNumber,
+            label: name,
             profileId: till.id,
           });
         }
         return request;
       });
+      for (const id of dropped) deps.pairingMode.dropClaim(id);
       // The cookie's SELECTOR is the join request's id, which accept carries onto the devices row — so
       // this cookie is set once and never re-issued. Until then it names no device, so `requireDevice`
       // finds nothing and every other device route answers `device.unauthorized`: the token is inert by
@@ -184,7 +198,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // The selector goes into a by-id comparison that refuses nothing and would match nothing, so
       // this screen is what turns a non-uuid into a clean refusal.
       if (!isUuid(joinId)) throw new AppError("device.unauthorized", {});
-      const status = await readJoinStatus(deps.db, deps.cfg, joinId, token);
+      const status = await readJoinStatus(deps.db, deps.cfg, joinId, token, deps.pairingMode);
       return c.json({ status }, 200);
     }),
   );

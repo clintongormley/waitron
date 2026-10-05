@@ -159,7 +159,11 @@ describe("print-agent end to end", () => {
       { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
       noopLog,
     );
-    mountJoinApi(app, { db: suite.db, cfg, pairingMode }, noopLog);
+    mountJoinApi(
+      app,
+      { db: suite.db, cfg, pairingMode, deviceAddress: "https://waitron.local" },
+      noopLog,
+    );
     mountNodeApi(
       app,
       {
@@ -244,7 +248,11 @@ describe("print-agent end to end", () => {
       { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
       noopLog,
     );
-    mountJoinApi(app, { db: suite.db, cfg, pairingMode }, noopLog);
+    mountJoinApi(
+      app,
+      { db: suite.db, cfg, pairingMode, deviceAddress: "https://waitron.local" },
+      noopLog,
+    );
     mountNodeApi(
       app,
       {
@@ -379,7 +387,11 @@ describe("print-agent end to end", () => {
       { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
       noopLog,
     );
-    mountJoinApi(app, { db: suite.db, cfg, pairingMode }, noopLog);
+    mountJoinApi(
+      app,
+      { db: suite.db, cfg, pairingMode, deviceAddress: "https://waitron.local" },
+      noopLog,
+    );
     mountNodeApi(
       app,
       {
@@ -468,7 +480,11 @@ describe("print-agent end to end", () => {
       { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
       noopLog,
     );
-    mountJoinApi(app, { db: suite.db, cfg, pairingMode }, noopLog);
+    mountJoinApi(
+      app,
+      { db: suite.db, cfg, pairingMode, deviceAddress: "https://waitron.local" },
+      noopLog,
+    );
     mountNodeApi(
       app,
       {

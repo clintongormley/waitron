@@ -314,10 +314,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   callbacks assign snapshots; they do not rerun loaders that reset drafts.
 - **A screen that shows a read's and an action's failure in one field remembers which one set it:
   the reads' recovery clears only a read's message, a reload that can finish after another action
-  failed clears only a read's message, and a read's failure does not replace an action's** (Devices'
-  queue reload after a wrong-number refusal replaces the refusal on purpose). Cost: a recovery that
-  matched the message's code, or cleared on any successful read, wiped a save's `connection.failed`
-  (A224). Nothing guards it across screens. See
+  failed clears only a read's message, and a read's failure does not replace an action's**. Cost: a
+  recovery that matched the message's code, or cleared on any successful read, wiped a save's
+  `connection.failed` (A224). Nothing guards it across screens. See
   [dashboard-live-updates.md](docs/developers/dashboard-live-updates.md).
 - **A background API client does not make POST requests passive.** Only GETs are marked passive;
   automatic pairing renewal uses its own authenticated route.

@@ -724,10 +724,16 @@ declare module "@waitron/shared" {
       field: "receiptPrinterId" | "paymentSlipPrinterId" | "deviceProfileId";
     };
     /**
-     * A knock arrived at `POST /api/device/join` while pairing mode is shut — the ordinary state, not
-     * an anomaly. NO params: nothing about the window is the joiner's business.
+     * A knock arrived at `POST /api/device/join` while pairing mode is shut, or after it shut during
+     * the knock — the ordinary state, not an anomaly. NO params: nothing about the window is the
+     * joiner's business.
      */
     "device.pairing_closed": Record<string, never>;
+    /**
+     * A renewal or a number check named a hold on the join window this server does not hold: it
+     * lapsed, was released, or was taken before a restart. NO params.
+     */
+    "device.pairing_hold_lapsed": Record<string, never>;
     /**
      * This node already holds the cap of pending DEVICE join requests; an uncapped list is a
      * denial-of-service on the admin's attention. Per kind, so agents mid-install cannot lock
@@ -752,9 +758,24 @@ declare module "@waitron/shared" {
     "device.join_revoked": Record<string, never>;
     /**
      * No pending join request with that id — never existed, already accepted or denied, or lapsed.
-     * One code for all: the admin's recovery is the same, and the joiner must knock again.
+     * The admin's recovery is the same in each case, and the joiner must knock again. Not one code
+     * for all on the device accept route: there a well-formed id naming no pending request, which
+     * this login holds no live claim on, answers `join_request.unclaimed` instead.
      */
     "join_request.not_found": Record<string, never>;
+    /**
+     * Another login matched this device request's number first and holds it while its Add dialog
+     * stays open. NO params: the dashboard's list names who is pairing it from its next refresh.
+     */
+    "join_request.claimed": Record<string, never>;
+    /**
+     * The device approval route found no live claim of this login's on that id: this login never
+     * matched the number, another login did, the id is a well-formed one naming no pending request (a
+     * malformed id, or a print agent's pending request, answers `join_request.not_found` first), or the
+     * match ended with the hold it was made under — which ends the request too, so the device must
+     * ask again. NO params.
+     */
+    "join_request.unclaimed": Record<string, never>;
     /**
      * A self-signed server certificate was asked for with an empty `hostnames` list. The minter
      * refuses before generating a key.

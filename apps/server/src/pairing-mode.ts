@@ -1,55 +1,100 @@
+import { randomUUID } from "node:crypto";
+
 /**
- * Pairing mode — the venue-wide window during which anything may ask to join.
+ * The venue-wide join window, held open by the dashboard dialogs that are open.
  *
- * IN MEMORY, ON THE PRIMARY, DELIBERATELY, not a table: it fails closed on both events that should
- * close it — a restart, and a promotion (a node that has just taken over must not inherit an open
- * door). `boot.ts` builds ONE holder and passes it to the device, join and print mounts.
+ * IN MEMORY, ON THE PRIMARY, DELIBERATELY, not a table: a restart or a promotion forgets every hold
+ * and claim, so the window starts shut. `boot.ts` builds ONE holder for the device, join and print
+ * mounts.
  */
+export const PAIRING_HOLD_MS = 3 * 60 * 1000;
 
-export const PAIRING_WINDOW_MS = 15 * 60 * 1000;
-
-/** How far back `refusedRecently` looks. The dashboard renders it as "N tried to join in the last 10
- * minutes" beside the toggle, so the copy and this constant must move together. */
-export const REFUSED_WINDOW_MS = 10 * 60 * 1000;
-
-export interface PairingMode {
-  /** Open the window, or extend an already-open one by a fresh TTL. */
-  open(): { openUntil: string };
-  close(): void;
-  isOpen(): boolean;
-  /** The ISO instant the window lapses, or `null` when shut. */
-  openUntil(): string | null;
-  /** Record a knock refused because the window was shut. Deliberately NOT a row: persisting refused
-   * knocks would hand an attacker the row creation the window exists to deny. */
-  noteRefused(): void;
-  refusedRecently(): number;
+/** Which login matched a request's number, and the hold it lives as long as. `sessionKey` is
+ * `hashSessionToken` of the session, so this long-lived map never keeps a live credential. */
+export interface PairingClaim {
+  holdId: string;
+  sessionKey: string;
+  personName: string;
 }
 
-export function createPairingMode(opts: { now?: () => number; ttlMs?: number } = {}): PairingMode {
-  const { now = Date.now, ttlMs = PAIRING_WINDOW_MS } = opts;
-  let openUntilMs = 0;
-  let refusedAt: number[] = [];
+export interface PairingMode {
+  open(): { holdId: string; openUntil: string };
+  renew(holdId: string): { openUntil: string } | null;
+  release(holdId: string): void;
+  hasHold(holdId: string): boolean;
+  isOpen(): boolean;
+  openUntil(): string | null;
+  openSince(): string | null;
+  claim(requestId: string, claim: PairingClaim): void;
+  claimOf(requestId: string): PairingClaim | undefined;
+  orphanedClaims(): string[];
+  dropClaim(requestId: string): void;
+}
+
+export function createPairingMode(
+  opts: { now?: () => number; holdMs?: number; newId?: () => string } = {},
+): PairingMode {
+  const { now = Date.now, holdMs = PAIRING_HOLD_MS, newId = randomUUID } = opts;
+  const holds = new Map<string, number>();
+  const claims = new Map<string, PairingClaim>();
+  let openSinceMs: number | null = null;
+
+  const prune = (): void => {
+    const t = now();
+    for (const [id, until] of holds) if (until <= t) holds.delete(id);
+    if (holds.size === 0) openSinceMs = null;
+  };
+  const live = (holdId: string): boolean => {
+    prune();
+    return holds.has(holdId);
+  };
+  const iso = (ms: number): string => new Date(ms).toISOString();
+
   return {
     open() {
-      openUntilMs = now() + ttlMs;
-      return { openUntil: new Date(openUntilMs).toISOString() };
+      prune();
+      const t = now();
+      if (openSinceMs === null) openSinceMs = t;
+      const holdId = newId();
+      holds.set(holdId, t + holdMs);
+      return { holdId, openUntil: iso(t + holdMs) };
     },
-    close() {
-      openUntilMs = 0;
+    renew(holdId) {
+      if (!live(holdId)) return null;
+      const until = now() + holdMs;
+      holds.set(holdId, until);
+      return { openUntil: iso(until) };
     },
+    release(holdId) {
+      holds.delete(holdId);
+      prune();
+    },
+    hasHold: live,
     isOpen() {
-      return now() < openUntilMs;
+      prune();
+      return holds.size > 0;
     },
     openUntil() {
-      return now() < openUntilMs ? new Date(openUntilMs).toISOString() : null;
+      prune();
+      return holds.size === 0 ? null : iso(Math.max(...holds.values()));
     },
-    noteRefused() {
-      refusedAt.push(now());
+    openSince() {
+      prune();
+      return openSinceMs === null ? null : iso(openSinceMs);
     },
-    refusedRecently() {
-      const cutoff = now() - REFUSED_WINDOW_MS;
-      refusedAt = refusedAt.filter((t) => t > cutoff);
-      return refusedAt.length;
+    claim(requestId, claim) {
+      claims.set(requestId, claim);
+    },
+    claimOf(requestId) {
+      const claim = claims.get(requestId);
+      return claim !== undefined && live(claim.holdId) ? claim : undefined;
+    },
+    orphanedClaims() {
+      prune();
+      return [...claims].filter(([, c]) => !holds.has(c.holdId)).map(([id]) => id);
+    },
+    dropClaim(requestId) {
+      claims.delete(requestId);
     },
   };
 }

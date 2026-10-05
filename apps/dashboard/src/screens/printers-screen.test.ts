@@ -212,8 +212,12 @@ const pending: JoinRequestRow[] = [
 const CHOICES = ["12", "47", "83"];
 const REAL_NUMBER = "47";
 
-const SHUT = { open: false, openUntil: null, refusedRecently: 0 };
-const OPEN = { open: true, openUntil: "2026-09-08T10:20:00.000Z", refusedRecently: 0 };
+const SHUT = { open: false, openUntil: null, deviceAddress: "https://waitron.local" };
+const OPEN = {
+  open: true,
+  openUntil: "2026-09-08T10:20:00.000Z",
+  deviceAddress: "https://waitron.local",
+};
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
@@ -235,9 +239,9 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     revokeAgent: vi.fn().mockResolvedValue(undefined),
     allowAgent: vi.fn().mockResolvedValue(undefined),
     pairingMode: vi.fn().mockResolvedValue(SHUT),
-    openPairingMode: vi.fn().mockResolvedValue({ openUntil: OPEN.openUntil }),
-    renewPairingMode: vi.fn().mockResolvedValue({ openUntil: OPEN.openUntil }),
-    closePairingMode: vi.fn().mockResolvedValue(undefined),
+    takePairingHold: vi.fn().mockResolvedValue({ holdId: "h1", openUntil: OPEN.openUntil }),
+    renewPairingHold: vi.fn().mockResolvedValue({ openUntil: OPEN.openUntil }),
+    releasePairingHold: vi.fn().mockResolvedValue(undefined),
     joinRequests: vi.fn().mockResolvedValue(pending),
     joinChallenge: vi.fn().mockResolvedValue({ choices: CHOICES }),
     denyJoinRequest: vi.fn().mockResolvedValue(undefined),
@@ -891,7 +895,7 @@ describe("printer configuration tabs", () => {
     button.click();
     await flush(el);
     expect(q(el, "[data-test=new-agent-modal]")).not.toBeNull();
-    expect(api.openPairingMode).toHaveBeenCalledOnce();
+    expect(api.takePairingHold).toHaveBeenCalledOnce();
   });
 
   /** Focuses and presses the empty table's Add button, as a person's click leaves it. */
@@ -1071,7 +1075,8 @@ describe("printer configuration tabs", () => {
     await flush(el);
     q(el, "[data-test=open-add-agent]")!.click();
     await flush(el);
-    expect(api.openPairingMode).toHaveBeenCalledOnce();
+    expect(api.takePairingHold).toHaveBeenCalledOnce();
+    expect(api.releasePairingHold).not.toHaveBeenCalled();
     expect(q(el, "[data-test=pairing-open]")).toBeNull();
     expect(q(el, "[data-test=refresh-joins]")).toBeNull();
     expect(
@@ -1081,7 +1086,7 @@ describe("printer configuration tabs", () => {
     ).toBe("true");
     q(el, "[data-test=cancel-new-agent]")!.click();
     await flush(el);
-    expect(api.closePairingMode).toHaveBeenCalledOnce();
+    expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1");
   });
 
   it("offers one printer scan action without a redundant refresh", async () => {
@@ -1475,7 +1480,7 @@ describe("printers-screen", () => {
     await flush(el);
     q(el, "[data-test=open-add-agent]")!.click();
     await flush(el);
-    expect(api.openPairingMode).toHaveBeenCalledOnce();
+    expect(api.takePairingHold).toHaveBeenCalledOnce();
     expect(text(el, "[data-test=pairing-until]")).toBe(
       t("printers.pairing_open_until", "es-ES").replace("{time}", "2026-09-08 10:20"),
     );
@@ -1486,7 +1491,7 @@ describe("printers-screen", () => {
 
   it("shows an error banner when opening the window is rejected", async () => {
     const api = stubApi({
-      openPairingMode: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+      takePairingHold: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
     });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -3717,8 +3722,7 @@ it("shows a localized resend failure and permits another attempt", async () => {
 it("keeps pairing open, polls passively, and makes Scan usable again after listening", async () => {
   const background = {
     joinRequests: vi.fn().mockResolvedValue(pending),
-    openPairingMode: vi.fn().mockResolvedValue({ openUntil: OPEN.openUntil }),
-    renewPairingMode: vi.fn().mockResolvedValue({ openUntil: OPEN.openUntil }),
+    renewPairingHold: vi.fn().mockResolvedValue({ openUntil: OPEN.openUntil }),
   };
   const api = stubApi({ background: background as unknown as DashboardApi });
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -3734,21 +3738,22 @@ it("keeps pairing open, polls passively, and makes Scan usable again after liste
       false,
     );
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(background.renewPairingMode).toHaveBeenCalled();
+    expect(background.renewPairingHold).toHaveBeenCalledWith("h1");
+    expect(api.renewPairingHold).not.toHaveBeenCalled();
     const scans = background.joinRequests.mock.calls.length;
     el.remove();
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(api.closePairingMode).toHaveBeenCalledOnce();
+    expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1");
     expect(background.joinRequests).toHaveBeenCalledTimes(scans);
   } finally {
     vi.useRealTimers();
   }
 });
 
-it("closes a pending pairing open after the modal is dismissed", async () => {
-  let resolve!: (value: { openUntil: string | null }) => void;
+it("releases a hold whose take answers after the modal is dismissed", async () => {
+  let resolve!: (value: { holdId: string; openUntil: string }) => void;
   const api = stubApi({
-    openPairingMode: vi.fn().mockReturnValue(
+    takePairingHold: vi.fn().mockReturnValue(
       new Promise((done) => {
         resolve = done;
       }),
@@ -3760,22 +3765,26 @@ it("closes a pending pairing open after the modal is dismissed", async () => {
   await flush(el);
   q(el, "[data-test=cancel-new-agent]")!.click();
   await flush(el);
-  expect(api.closePairingMode).not.toHaveBeenCalled();
-  resolve({ openUntil: OPEN.openUntil });
+  expect(api.releasePairingHold).not.toHaveBeenCalled();
+  resolve({ holdId: "late", openUntil: OPEN.openUntil });
   await flush(el);
-  expect(api.closePairingMode).toHaveBeenCalledOnce();
+  expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("late");
   expect(q(el, "[data-test=new-agent-modal]")).toBeNull();
 });
 
-it("reports a failed pairing close after dismissing the modal", async () => {
-  const api = stubApi({ closePairingMode: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+it("shows nothing when a hold's release fails after dismissing the modal, since the hold lapses on its own", async () => {
+  const api = stubApi({
+    releasePairingHold: vi.fn().mockRejectedValue({ code: "server.internal" }),
+  });
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
   q(el, "[data-test=open-add-agent]")!.click();
   await flush(el);
   q(el, "[data-test=cancel-new-agent]")!.click();
   await flush(el);
-  expect(text(el, "[role=alert]")).toContain(codeMessage("server.internal"));
+  expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1");
+  expect(q(el, "[role=alert]")).toBeNull();
+  expect((el as unknown as { errorKey: string | null }).errorKey).toBeNull();
 });
 
 // At 1280px wide no size is capped by the window: standard is 42rem (672px), wide 64rem (1024px).
@@ -3959,29 +3968,21 @@ it("starts a fresh agent read immediately after reopening, without overlapping i
   }
 });
 
-it("does not open pairing when the screen leaves before the queued open starts", async () => {
+it("releases the hold when the screen leaves before the take answers", async () => {
   const api = stubApi();
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
   q(el, "[data-test=open-add-agent]")!.click();
   el.remove();
-  await vi.waitFor(() => expect(api.closePairingMode).toHaveBeenCalledOnce());
-  expect(api.openPairingMode).not.toHaveBeenCalled();
-});
-
-it("retains the refused-request hint when pairing opens automatically", async () => {
-  const api = stubApi({ pairingMode: vi.fn().mockResolvedValue({ ...SHUT, refusedRecently: 2 }) });
-  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-  await flush(el);
-  q(el, "[data-test=open-add-agent]")!.click();
-  await flush(el);
-  expect(text(el, "[data-test=pairing-refused]")).toContain("2");
+  await vi.waitFor(() => expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1"));
+  expect(api.takePairingHold).toHaveBeenCalledOnce();
+  expect(api.renewPairingHold).not.toHaveBeenCalled();
 });
 
 it("ignores a previous opening's pairing failure while the reopened dialog scans", async () => {
   let rejectOld!: (error: unknown) => void;
   const api = stubApi({
-    openPairingMode: vi
+    takePairingHold: vi
       .fn()
       .mockImplementationOnce(
         () =>
@@ -4011,9 +4012,9 @@ it("ignores a previous opening's pairing failure while the reopened dialog scans
 
 it("does not show a previous pairing deadline after reopening before the next open completes", async () => {
   const api = stubApi({
-    openPairingMode: vi
+    takePairingHold: vi
       .fn()
-      .mockResolvedValueOnce({ openUntil: OPEN.openUntil })
+      .mockResolvedValueOnce({ holdId: "h1", openUntil: OPEN.openUntil })
       .mockImplementation(() => new Promise(() => {})),
   });
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -4305,7 +4306,7 @@ describe("printers-screen agent joining edges", () => {
     add.click();
 
     await vi.waitFor(() => expect(q(el, "[data-test=pairing-until]")).not.toBeNull());
-    expect(api.openPairingMode).toHaveBeenCalledOnce();
+    expect(api.takePairingHold).toHaveBeenCalledOnce();
   });
 
   it("ignores Scan while an agent scan is still listening, and rescans once it has finished", async () => {
@@ -4316,17 +4317,20 @@ describe("printers-screen agent joining edges", () => {
     try {
       q(el, "[data-test=open-add-agent]")!.click();
       await flush(el);
-      expect(api.openPairingMode).toHaveBeenCalledOnce();
+      expect(api.takePairingHold).toHaveBeenCalledOnce();
+      const reads = vi.mocked(api.joinRequests).mock.calls.length;
 
       q(el, "[data-test=scan-agents]")!.click();
       await flush(el);
-      expect(api.openPairingMode).toHaveBeenCalledOnce();
+      expect(api.joinRequests).toHaveBeenCalledTimes(reads);
 
       await vi.advanceTimersByTimeAsync(AGENT_SCAN_LISTEN_MS + SCAN_POLL_MS);
       await flush(el);
+      const afterListening = vi.mocked(api.joinRequests).mock.calls.length;
       q(el, "[data-test=scan-agents]")!.click();
       await flush(el);
-      expect(api.openPairingMode).toHaveBeenCalledTimes(2);
+      expect(api.joinRequests).toHaveBeenCalledTimes(afterListening + 1);
+      expect(api.takePairingHold).toHaveBeenCalledOnce();
     } finally {
       el.remove();
       vi.useRealTimers();
@@ -4379,17 +4383,17 @@ describe("printers-screen agent joining edges", () => {
   });
 
   it("opens the window before the first pairing read arrives, and a close before the open finishes leaves no deadline", async () => {
-    let finishOpen!: (value: { openUntil: string | null }) => void;
+    let finishOpen!: (value: { holdId: string; openUntil: string }) => void;
     const api = stubApi({
       pairingMode: vi.fn().mockReturnValue(new Promise(() => {})),
-      openPairingMode: vi
+      takePairingHold: vi
         .fn()
         .mockReturnValueOnce(
           new Promise((resolve) => {
             finishOpen = resolve;
           }),
         )
-        .mockResolvedValue({ openUntil: OPEN.openUntil }),
+        .mockResolvedValue({ holdId: "h2", openUntil: OPEN.openUntil }),
     });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -4400,9 +4404,9 @@ describe("printers-screen agent joining edges", () => {
     expect(q(el, "[data-test=pairing-refused]")).toBeNull();
     q(el, "[data-test=cancel-new-agent]")!.click();
     await flush(el);
-    finishOpen({ openUntil: OPEN.openUntil });
+    finishOpen({ holdId: "h1", openUntil: OPEN.openUntil });
     await flush(el);
-    await vi.waitFor(() => expect(api.closePairingMode).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1"));
 
     q(el, "[data-test=open-add-agent]")!.click();
     await vi.waitFor(() =>
@@ -5074,7 +5078,7 @@ describe("printers-screen pairing renewal and stale scan edges", () => {
     history.replaceState(null, "", "/");
   });
 
-  it("renews pairing through the screen's own client when it has no background client", async () => {
+  it("renews the hold through the screen's own client when it has no background client", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -5084,13 +5088,148 @@ describe("printers-screen pairing renewal and stale scan edges", () => {
       await vi.advanceTimersByTimeAsync(60_000 + SCAN_POLL_MS);
       await el.updateComplete;
 
-      expect(api.renewPairingMode).toHaveBeenCalled();
+      expect(api.renewPairingHold).toHaveBeenCalledWith("h1");
       expect(q(el, "[data-test=new-agent-modal] [role=alert]")).toBeNull();
       expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe("");
     } finally {
       el.remove();
       vi.useRealTimers();
     }
+  });
+
+  it("shows the lapsed notice and takes a new hold on Start again", async () => {
+    const api = stubApi({
+      renewPairingHold: vi.fn().mockRejectedValue({ code: "device.pairing_hold_lapsed" }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers();
+    try {
+      q(el, "[data-test=open-add-agent]")!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(q(el, "[data-test=hold-lapsed]")).toBeNull();
+      await vi.advanceTimersByTimeAsync(60_000);
+      await el.updateComplete;
+
+      const notice = q(el, "[data-test=new-agent-modal] [data-test=hold-lapsed]")!;
+      expect(notice.getAttribute("role")).toBe("status");
+      expect(notice.textContent).toContain(t("pairing.hold_lapsed"));
+      expect(text(el, "[data-test=hold-restart]")).toBe(t("pairing.hold_restart"));
+      // The lapsed hold's deadline is no longer this dialog's to show.
+      expect(q(el, "[data-test=pairing-until]")).toBeNull();
+      // The lapse is told, not a failure: the form's bottom message stays empty.
+      expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe("");
+      // It never takes a new hold on its own.
+      await vi.advanceTimersByTimeAsync(180_000);
+      expect(api.takePairingHold).toHaveBeenCalledOnce();
+      expect(api.renewPairingHold).toHaveBeenCalledOnce();
+
+      q(el, "[data-test=hold-restart]")!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(api.takePairingHold).toHaveBeenCalledTimes(2);
+      expect(q(el, "[data-test=hold-lapsed]")).toBeNull();
+      expect(text(el, "[data-test=pairing-until]")).toBe(
+        t("printers.pairing_open_until").replace("{time}", "2026-09-08 10:20"),
+      );
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops renewing after the login ends, says why, and no longer shows the window's deadline", async () => {
+    const api = stubApi({
+      pairingMode: vi.fn().mockResolvedValue(OPEN),
+      renewPairingHold: vi.fn().mockRejectedValue({ code: "management_session.expired" }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers();
+    try {
+      q(el, "[data-test=open-add-agent]")!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(q(el, "[data-test=pairing-until]")).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(180_000);
+      await el.updateComplete;
+
+      expect(api.renewPairingHold).toHaveBeenCalledOnce();
+      expect(q(el, "[data-test=pairing-until]")).toBeNull();
+      expect(q(el, "[data-test=hold-restart]")).not.toBeNull();
+      expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe(
+        codeMessage("management_session.expired"),
+      );
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it("a failed take can be retried and its message survives Scan", async () => {
+    const api = stubApi({
+      takePairingHold: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue({ holdId: "h2", openUntil: OPEN.openUntil }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      q(el, "[data-test=open-add-agent]")!.click();
+      await flush(el);
+      const notice = q(el, "[data-test=new-agent-modal] [data-test=hold-lapsed]")!;
+      expect(notice.textContent).toContain(t("pairing.hold_lapsed"));
+      expect(q(el, "[data-test=hold-restart]")).not.toBeNull();
+      expect(q(el, "[data-test=pairing-until]")).toBeNull();
+      expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe(
+        codeMessage("connection.failed"),
+      );
+
+      await vi.advanceTimersByTimeAsync(AGENT_SCAN_LISTEN_MS + SCAN_POLL_MS);
+      await flush(el);
+      const reads = vi.mocked(api.joinRequests).mock.calls.length;
+      q(el, "[data-test=scan-agents]")!.click();
+      await flush(el);
+      expect(api.joinRequests).toHaveBeenCalledTimes(reads + 1);
+      expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe(
+        codeMessage("connection.failed"),
+      );
+      expect(q(el, "[data-test=hold-lapsed]")).not.toBeNull();
+
+      q(el, "[data-test=hold-restart]")!.click();
+      await flush(el);
+      expect(api.takePairingHold).toHaveBeenCalledTimes(2);
+      expect(q(el, "[data-test=hold-lapsed]")).toBeNull();
+      expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe("");
+      expect(text(el, "[data-test=pairing-until]")).toBe(
+        t("printers.pairing_open_until").replace("{time}", "2026-09-08 10:20"),
+      );
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    [
+      "the window's read, when it lapses later than the taken hold",
+      "2026-09-08T10:23:00.000Z",
+      "10:23",
+    ],
+    ["the taken hold's, when the window's read is older", "2026-09-08T10:18:00.000Z", "10:20"],
+  ])("shows the later deadline while the dialog holds the window: %s", async (_, read, shown) => {
+    const api = stubApi({
+      pairingMode: vi.fn().mockResolvedValue({ ...OPEN, openUntil: read }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-agent]")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=pairing-until]")).toBe(
+      t("printers.pairing_open_until").replace("{time}", `2026-09-08 ${shown}`),
+    );
   });
 
   it("opens the window and shows its lapse time before the first pairing read has arrived", async () => {

@@ -1470,7 +1470,7 @@ async function bootServer(
       },
       log,
     );
-    mountJoinApi(app, { db, cfg: till, pairingMode }, log);
+    mountJoinApi(app, { db, cfg: till, pairingMode, deviceAddress: config.advertisedOrigin }, log);
     mountPrintApi(
       app,
       {

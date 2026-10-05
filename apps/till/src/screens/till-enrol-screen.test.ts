@@ -292,7 +292,7 @@ it("shows 'not approved' with a Try again that knocks afresh", async () => {
   }
 });
 
-it("tells the operator to ask for pairing mode when the server says pairing_closed", async () => {
+it("tells the operator to ask a manager to open Add a device when the server says pairing_closed", async () => {
   // The one refusal with a real next step, so it must not fold into the generic sentence.
   const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", {
     api: stubApi({ join: vi.fn().mockRejectedValue({ code: "device.pairing_closed" }) }),
@@ -302,13 +302,13 @@ it("tells the operator to ask for pairing mode when the server says pairing_clos
   expect(bottomMessage(el)).toBe(codeMessage("device.pairing_closed"));
   // Without this, the assertion above passes by degrading with the resolver's table.
   expect(bottomMessage(el)).not.toBe(codeMessage("server.internal"));
-  expect(bottomMessage(el)).toContain("Allow new devices");
+  expect(bottomMessage(el)).toContain("Add a device");
   // The one message sits above the button, announced there; nothing is left at the top.
   const actions = query(el, "wt-form-actions")!;
   await (actions as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(actions.shadowRoot!.querySelector("[data-error]")!.getAttribute("role")).toBe("alert");
   expect(query(el, "[data-error]")).toBeNull();
-  // Still on the name form, with the name retained, so Ask to join is one tap once pairing is on.
+  // Still on the name form, with the name retained, so Ask to join is one tap once a manager opens Add a device.
   expect(query(el, "[data-name]")).not.toBeNull();
   expect(query(el, "[data-submit]")!.hasAttribute("disabled")).toBe(false);
 });

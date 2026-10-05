@@ -1,8 +1,9 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { html } from "lit";
 import { registerCatalogue, type CardProviderPanel } from "@waitron/dashboard-kit";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -146,17 +147,30 @@ const deviceProfiles: DeviceProfile[] = [
 ];
 
 const pending: JoinRequestRow[] = [
-  { id: "j1", kind: "device", label: "Pantalla pase", createdAt: "2026-09-08T10:02:00.000Z" },
+  {
+    id: "r1",
+    kind: "device",
+    label: "Barra 1",
+    createdAt: "2026-09-08T10:02:00.000Z",
+    pairingBy: null,
+  },
+  {
+    id: "r2",
+    kind: "device",
+    label: "Pantalla pase",
+    createdAt: "2026-09-08T10:03:00.000Z",
+    pairingBy: null,
+  },
 ];
 
-/** The three numbers the server offers for `j1`, shuffled, one of them real — and which one that is.
- * The dashboard is never told, so the test knowing it is the only way to check that the pending LIST
- * does not carry it. */
+/** The three numbers the server offers for a request, one of them real — and which one that is. The
+ * dashboard is never told, so the test knowing it is the only way to check the list does not carry
+ * it. */
 const CHOICES = ["12", "47", "83"];
 const REAL_NUMBER = "47";
 
-const SHUT = { open: false, openUntil: null, refusedRecently: 0 };
-const OPEN = { open: true, openUntil: "2026-09-08T10:20:00.000Z", refusedRecently: 0 };
+const SHUT = { open: false, openUntil: null, deviceAddress: "https://waitron.local" };
+const TAKEN_UNTIL = "2026-09-08T10:05:00.000Z";
 
 const printers: Printer[] = [
   {
@@ -207,14 +221,16 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
     listPrinters: vi.fn().mockResolvedValue(printers),
     pairingMode: vi.fn().mockResolvedValue(SHUT),
-    openPairingMode: vi.fn().mockResolvedValue({ openUntil: OPEN.openUntil }),
-    closePairingMode: vi.fn().mockResolvedValue(undefined),
+    takePairingHold: vi.fn().mockResolvedValue({ holdId: "h1", openUntil: TAKEN_UNTIL }),
+    renewPairingHold: vi.fn().mockResolvedValue({ openUntil: TAKEN_UNTIL }),
+    releasePairingHold: vi.fn().mockResolvedValue(undefined),
+    checkDeviceJoinNumber: vi.fn().mockResolvedValue(undefined),
     joinRequests: vi.fn().mockResolvedValue(pending),
     joinChallenge: vi.fn().mockResolvedValue({ choices: CHOICES }),
     denyJoinRequest: vi.fn().mockResolvedValue(undefined),
     acceptDeviceJoinRequest: vi
       .fn()
-      .mockResolvedValue({ deviceId: "j1", name: "Pantalla pase", formFactor: "kds" }),
+      .mockResolvedValue({ deviceId: "d9", name: "Barra 2", formFactor: "kds" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),
     reassignDeviceProfile: vi.fn().mockResolvedValue(undefined),
     listReaders: vi.fn().mockResolvedValue(readers),
@@ -512,395 +528,6 @@ describe("devices-screen", () => {
     await flush(el);
 
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
-  });
-
-  // ── The pairing window ─────────────────────────────────────────────────────────────────────────
-
-  it("shows the shut window's Open control, with the refused-knock hint", async () => {
-    const api = stubApi({
-      pairingMode: vi.fn().mockResolvedValue({ ...SHUT, refusedRecently: 2 }),
-    });
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    expect(q(el, "[data-test=pairing-open]")).toBeTruthy();
-    expect(q(el, "[data-test=pairing-until]")).toBeNull();
-    // The count is composed into the copy at the render edge (this catalogue has no interpolation).
-    expect(text(el, "[data-test=pairing-refused]")).toBe(
-      t("devices.pairing_refused", "es-ES").replace("{count}", "2"),
-    );
-  });
-
-  it("hides the refused-knock hint when nothing was turned away", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    expect(q(el, "[data-test=pairing-refused]")).toBeNull();
-  });
-
-  it("opens the window and shows when it lapses", async () => {
-    const pairingMode = vi.fn().mockResolvedValueOnce(SHUT).mockResolvedValue(OPEN);
-    const api = stubApi({ pairingMode });
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    q(el, "[data-test=pairing-open]")!.click();
-    await flush(el);
-
-    expect(api.openPairingMode).toHaveBeenCalledWith();
-    expect(text(el, "[data-test=pairing-until]")).toBe(
-      t("devices.pairing_open_until", "es-ES").replace("{time}", "2026-09-08 10:20"),
-    );
-    expect(q(el, "[data-test=pairing-open]")).toBeNull();
-  });
-
-  // Extend is the SAME call as Open — the route moves an open window's lapse rather than adding one.
-  it("extends and closes an open window", async () => {
-    const api = stubApi({ pairingMode: vi.fn().mockResolvedValue(OPEN) });
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    q(el, "[data-test=pairing-extend]")!.click();
-    await flush(el);
-    expect(api.openPairingMode).toHaveBeenCalledWith();
-
-    q(el, "[data-test=pairing-close]")!.click();
-    await flush(el);
-    expect(api.closePairingMode).toHaveBeenCalledWith();
-  });
-
-  it("shows an error banner when opening the window is rejected", async () => {
-    const api = stubApi({
-      openPairingMode: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
-    });
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    q(el, "[data-test=pairing-open]")!.click();
-    await flush(el);
-
-    expect((el as unknown as { errorKey: string | null }).errorKey).toBe(
-      "authorization.not_permitted",
-    );
-  });
-
-  // ── The pending queue ──────────────────────────────────────────────────────────────────────────
-
-  it("lists the pending requests by the name the device asked for", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    expect(api.joinRequests).toHaveBeenCalledWith("device");
-    expect(text(el, "[data-test=join-label-j1]")).toBe("Pantalla pase");
-    expect(text(el, "[data-test=join-asked-j1]")).toBe("2026-09-08 10:02");
-  });
-
-  // The list must never show the answer beside the question. Asserted against the SPECIFIC number
-  // over the panel's rendered TEXT: a blanket /\d{2}/ would match the row's timestamp, and `innerHTML`
-  // carries lit's random marker comments, one of which contained "47" once.
-  it("never renders the request's verification number in the pending list", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    const panel = q(el, "[data-test=join-panel]")!;
-    expect(panel.textContent).toContain("Pantalla pase");
-    expect(panel.textContent).not.toContain(REAL_NUMBER);
-    expect(panel.querySelectorAll("[data-choice]")).toHaveLength(0);
-    expect(api.joinChallenge).not.toHaveBeenCalled();
-  });
-
-  it("shows the empty placeholder when nothing is waiting to join", async () => {
-    const api = stubApi({ joinRequests: vi.fn().mockResolvedValue([]) });
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    expect(text(el, "[data-test=no-join-requests]")).toBe(t("devices.join_none", "es-ES"));
-  });
-
-  it("denies only on the confirming second click, then reloads the queue", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    q(el, "[data-test=join-deny-j1]")!.click();
-    await el.updateComplete;
-    expect(api.denyJoinRequest).not.toHaveBeenCalled();
-    expect(text(el, "[data-test=join-deny-j1]")).toBe(t("devices.join_deny_confirm", "es-ES"));
-
-    q(el, "[data-test=join-deny-j1]")!.click();
-    await flush(el);
-    expect(api.denyJoinRequest).toHaveBeenCalledWith("j1");
-    expect(api.joinRequests).toHaveBeenCalledTimes(2);
-  });
-
-  // ── The accept dialog's numeric match ──────────────────────────────────────────────────────────
-
-  it("opens a row and renders the three numbers as buttons", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    q(el, "[data-test=join-review-j1]")!.click();
-    await flush(el);
-
-    expect(api.joinChallenge).toHaveBeenCalledWith("j1");
-    const buttons = Array.from(el.shadowRoot!.querySelectorAll("[data-choice]"));
-    expect(buttons.map((b) => b.getAttribute("data-choice"))).toEqual(CHOICES);
-    expect(buttons.map((b) => b.textContent?.trim())).toEqual(CHOICES);
-  });
-
-  // The numbers stay untappable until the binding is complete, so a tap is always a decision about
-  // the number and never an accidental accept with the wrong profile.
-  it("keeps the number buttons disabled until the profile and its binding are chosen", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-    q(el, "[data-test=join-review-j1]")!.click();
-    await flush(el);
-
-    const choice = () => q(el, `[data-choice="${REAL_NUMBER}"]`) as import("@waitron/ui").WtButton;
-    expect(choice().disabled).toBe(true);
-
-    // A kds profile needs a station too: choosing the profile alone is not enough.
-    pickSelect(el, "join-profile", "dp3");
-    await el.updateComplete;
-    expect(choice().disabled).toBe(true);
-
-    pickSelect(el, "join-binding", "station:s1");
-    await el.updateComplete;
-    expect(choice().disabled).toBe(false);
-  });
-
-  it("offers active stations and watchers as distinct grouped binding choices", async () => {
-    const api = stubApi({
-      listStations: vi
-        .fn()
-        .mockResolvedValue([...stations, { ...stations[0]!, id: "retired", active: false }]),
-      listWatchers: vi
-        .fn()
-        .mockResolvedValue([...watchers, { ...watchers[0]!, id: "retired-w", active: false }]),
-    });
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-    q(el, "[data-test=join-review-j1]")!.click();
-    await flush(el);
-    pickSelect(el, "join-profile", "dp3");
-    await el.updateComplete;
-    const binding = q(el, "[data-test=join-binding]") as Dropdown & {
-      name: string;
-      label: string;
-      placeholder: string;
-    };
-    expect(binding.name).toBe("binding");
-    expect(binding.label).toBe("Muestra");
-    expect(binding.options).toEqual([
-      { value: "", label: "Elige qué muestra" },
-      { value: "station:s1", label: "Cocina", group: "Estaciones" },
-      { value: "station:s2", label: "Barra", group: "Estaciones" },
-      { value: "watcher:w1", label: "Pass", group: "Puntos de seguimiento" },
-    ]);
-  });
-
-  it("accepts a watcher binding without sending a station binding", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-    q(el, "[data-test=join-review-j1]")!.click();
-    await flush(el);
-    pickSelect(el, "join-profile", "dp3");
-    await el.updateComplete;
-    pickSelect(el, "join-binding", "watcher:w1");
-    await el.updateComplete;
-    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
-    await flush(el);
-    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("j1", {
-      choice: REAL_NUMBER,
-      profileId: "dp3",
-      watcherId: "w1",
-    });
-  });
-
-  it("shows a removed watcher refusal at the bottom of the open dialog", async () => {
-    const api = stubApi({
-      acceptDeviceJoinRequest: vi.fn().mockRejectedValue({ code: "watcher.not_found" }),
-    });
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-    q(el, "[data-test=join-review-j1]")!.click();
-    await flush(el);
-    pickSelect(el, "join-profile", "dp3");
-    await el.updateComplete;
-    pickSelect(el, "join-binding", "watcher:w1");
-    await el.updateComplete;
-    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
-    await flush(el);
-    const dialog = q(el, "[data-test=join-dialog]")!;
-    expect(dialog).toBeTruthy();
-    const alert = dialog.querySelector("[role=alert]");
-    expect(alert?.textContent).toContain(codeMessage("watcher.not_found", "es-ES"));
-    expect(alert?.nextElementSibling?.getAttribute("slot")).toBe("footer");
-    expect(el.shadowRoot!.querySelectorAll('[role="alert"]')).toHaveLength(1);
-  });
-
-  it("shows no station picker for a till profile", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-    q(el, "[data-test=join-review-j1]")!.click();
-    await flush(el);
-
-    pickSelect(el, "join-profile", "dp1");
-    await el.updateComplete;
-
-    expect(q(el, "[data-test=join-binding]")).toBeNull();
-    expect(q(el, "[data-test=join-register]")).toBeNull();
-    expect(
-      (q(el, `[data-choice="${REAL_NUMBER}"]`) as import("@waitron/ui").WtButton).disabled,
-    ).toBe(false);
-  });
-
-  it("accepting a handheld shows no till picker and sends no registerId", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-    q(el, "[data-test=join-review-j1]")!.click();
-    await flush(el);
-
-    pickSelect(el, "join-profile", "dp2");
-    await el.updateComplete;
-    expect(q(el, "[data-test=join-binding]")).toBeNull();
-    expect(q(el, "[data-test=join-register]")).toBeNull();
-    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
-    await flush(el);
-
-    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("j1", {
-      choice: REAL_NUMBER,
-      profileId: "dp2",
-    });
-  });
-
-  it("shows a taken device name at the bottom of the open dialog, in the person's language", async () => {
-    const api = stubApi({
-      acceptDeviceJoinRequest: vi.fn().mockRejectedValue({ code: "device.name_taken" }),
-    });
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-    q(el, "[data-test=join-review-j1]")!.click();
-    await flush(el);
-    pickSelect(el, "join-profile", "dp1");
-    await el.updateComplete;
-    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
-    await flush(el);
-
-    const alert = q(el, "[data-test=join-dialog]")!.querySelector("[role=alert]");
-    expect(alert?.textContent?.trim()).toBe(
-      "Ya hay un dispositivo activo con ese nombre aquí. Cambia el nombre del dispositivo y que lo solicite de nuevo",
-    );
-  });
-
-  it("accepts with the tapped number, then closes the dialog and reloads both lists", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-    q(el, "[data-test=join-review-j1]")!.click();
-    await flush(el);
-    pickSelect(el, "join-profile", "dp3");
-    await el.updateComplete;
-    pickSelect(el, "join-binding", "station:s1");
-    await el.updateComplete;
-
-    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
-    await flush(el);
-
-    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("j1", {
-      choice: REAL_NUMBER,
-      profileId: "dp3",
-      stationId: "s1",
-    });
-    expect(q(el, "[data-test=join-dialog]")).toBeNull();
-    expect(api.listDevices).toHaveBeenCalledTimes(2);
-    expect(api.joinRequests).toHaveBeenCalledTimes(2);
-  });
-
-  // A wrong tap has ALREADY denied the request server-side, so it is terminal for the row: the dialog
-  // closes, the row is gone, and the copy sends the operator back to the device.
-  it("treats a mismatch as terminal: the row goes, and the operator is told to ask again", async () => {
-    const api = stubApi({
-      acceptDeviceJoinRequest: vi.fn().mockRejectedValue({ code: "device.join_mismatch" }),
-      // The server deleted the request before answering, so the refreshed queue is empty.
-      joinRequests: vi.fn().mockResolvedValueOnce(pending).mockResolvedValue([]),
-    });
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-    q(el, "[data-test=join-review-j1]")!.click();
-    await flush(el);
-    pickSelect(el, "join-profile", "dp3");
-    await el.updateComplete;
-    pickSelect(el, "join-binding", "station:s1");
-    await el.updateComplete;
-
-    q(el, '[data-choice="12"]')!.click();
-    await flush(el);
-
-    expect(q(el, "[data-test=join-row-j1]")).toBeNull();
-    expect(q(el, "[data-test=join-dialog]")).toBeNull();
-    const banner = q(el, "[role=alert]")?.textContent;
-    expect(banner).toContain(codeMessage("device.join_mismatch", "es-ES"));
-    expect(banner).not.toContain("device.join_mismatch");
-  });
-
-  // The counterpart that gives the mismatch branch its meaning: a fault the operator CAN fix leaves
-  // the dialog open on the same request, so they can correct the binding and tap again.
-  it("keeps the dialog open on a recoverable accept fault", async () => {
-    const api = stubApi({
-      acceptDeviceJoinRequest: vi.fn().mockRejectedValue({ code: "device.station_required" }),
-    });
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-    q(el, "[data-test=join-review-j1]")!.click();
-    await flush(el);
-    pickSelect(el, "join-profile", "dp3");
-    await el.updateComplete;
-    pickSelect(el, "join-binding", "station:s1");
-    await el.updateComplete;
-
-    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
-    await flush(el);
-
-    expect(q(el, "[data-test=join-dialog]")).toBeTruthy();
-    expect((el as unknown as { errorKey: string | null }).errorKey).toBe("device.station_required");
-  });
-
-  it("reopens a row without re-fetching its numbers — the set is fixed server-side", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    q(el, "[data-test=join-review-j1]")!.click();
-    await flush(el);
-    q(el, "[data-test=join-cancel]")!.click();
-    await el.updateComplete;
-    q(el, "[data-test=join-review-j1]")!.click();
-    await flush(el);
-
-    expect(api.joinChallenge).toHaveBeenCalledTimes(1);
-    expect(el.shadowRoot!.querySelectorAll("[data-choice]")).toHaveLength(3);
-  });
-
-  it("shows an error banner when the challenge fetch is rejected", async () => {
-    const api = stubApi({
-      joinChallenge: vi.fn().mockRejectedValue({ code: "join_request.not_found" }),
-    });
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-
-    q(el, "[data-test=join-review-j1]")!.click();
-    await flush(el);
-
-    expect((el as unknown as { errorKey: string | null }).errorKey).toBe("join_request.not_found");
   });
 
   // The generate-code panel and its verb are gone: a device is created by ACCEPTING a request.
@@ -1226,50 +853,6 @@ describe("devices-screen fields", () => {
     await flush(el);
     expect(api.reassignDeviceProfile).toHaveBeenCalledWith("d1", "dp2");
   });
-
-  it("picks the joining device's profile and station from labelled dropdowns", async () => {
-    const api = stubApi();
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await flush(el);
-    q(el, "[data-test=join-review-j1]")!.click();
-    await flush(el);
-
-    const profile = box(el, "join-profile");
-    expect(profile.name).toBe("profileId");
-    expect(profile.label).toBe(t("devices.device_profile"));
-    expect(profile.placeholder).toBe(t("devices.join_pick_profile"));
-    expect(profile.options).toEqual([
-      { value: "", label: t("devices.join_pick_profile") },
-      { value: "dp1", label: "Counter till" },
-      { value: "dp2", label: "Waiter handheld" },
-      { value: "dp3", label: "Pass screen" },
-    ]);
-    expect(profile.value).toBe("");
-
-    await chooseOption(profile, "dp3");
-    await el.updateComplete;
-    const station = box(el, "join-binding");
-    expect(station.name).toBe("binding");
-    expect(station.label).toBe(t("devices.shows"));
-    expect(station.placeholder).toBe(t("devices.join_pick_binding"));
-    expect(station.options.map((o) => o.value)).toEqual([
-      "",
-      "station:s1",
-      "station:s2",
-      "watcher:w1",
-    ]);
-    expect(station.value).toBe("");
-
-    await chooseOption(profile, "dp2");
-    await el.updateComplete;
-    expect(q(el, "[data-test=join-register]")).toBeNull();
-    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
-    await flush(el);
-    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("j1", {
-      choice: REAL_NUMBER,
-      profileId: "dp2",
-    });
-  });
 });
 
 it("refreshes displayed devices when their data changes elsewhere", async () => {
@@ -1288,47 +871,6 @@ it("refreshes displayed devices when their data changes elsewhere", async () => 
 });
 
 describe("devices-screen remaining edges", () => {
-  async function openKdsDialog(api: DashboardApi) {
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await vi.waitFor(() => expect(q(el, "[data-test=join-review-j1]")).not.toBeNull());
-    q(el, "[data-test=join-review-j1]")!.click();
-    await vi.waitFor(() => expect(q(el, `[data-choice="${REAL_NUMBER}"]`)).not.toBeNull());
-    pickSelect(el, "join-profile", "dp3");
-    await el.updateComplete;
-    pickSelect(el, "join-binding", "station:s1");
-    await el.updateComplete;
-    return el;
-  }
-
-  it("shows a localized alert when closing the window is rejected", async () => {
-    const api = stubApi({
-      pairingMode: vi.fn().mockResolvedValue(OPEN),
-      closePairingMode: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
-    });
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await vi.waitFor(() => expect(q(el, "[data-test=pairing-close]")).not.toBeNull());
-
-    q(el, "[data-test=pairing-close]")!.click();
-
-    await vi.waitFor(() =>
-      expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("authorization.not_permitted")),
-    );
-    expect(q(el, "[data-test=pairing-until]")).not.toBeNull();
-  });
-
-  it("shows an open window with no lapse time without a raw placeholder", async () => {
-    const api = stubApi({
-      pairingMode: vi.fn().mockResolvedValue({ open: true, openUntil: null, refusedRecently: 0 }),
-    });
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await vi.waitFor(() => expect(q(el, "[data-test=pairing-until]")).not.toBeNull());
-
-    expect(text(el, "[data-test=pairing-until]")).toBe(
-      t("devices.pairing_open_until").replace("{time}", "").trim(),
-    );
-    expect(text(el, "[data-test=pairing-until]")).not.toContain("{");
-  });
-
   it("names a device whose profile is not in the loaded set with the no-profile placeholder", async () => {
     const orphan: DeviceRow = { ...devices[0]!, id: "d9", deviceProfileId: "dp-gone" };
     const api = stubApi({ listDevices: vi.fn().mockResolvedValue([orphan]) });
@@ -1357,144 +899,850 @@ describe("devices-screen remaining edges", () => {
     );
     expect(select().value).toBe("");
   });
+});
 
-  it("closes the accept dialog when the dialog itself is dismissed", async () => {
-    const el = await openKdsDialog(stubApi());
-    const dialog = q(el, "[data-test=join-dialog]")!;
+describe("add a device", () => {
+  type Field = HTMLElement & { value: string; error: string; invalid: boolean };
+  type Button = HTMLElement & { disabled: boolean };
 
-    dialog.shadowRoot!.querySelector("dialog")!.close();
+  /** Waiting rows are table cells, which live in the table's own shadow root. */
+  function deep(root: ShadowRoot | Element, sel: string): HTMLElement | null {
+    const found = root.querySelector<HTMLElement>(sel);
+    if (found) return found;
+    for (const node of root.querySelectorAll<HTMLElement>("*")) {
+      if (node.shadowRoot) {
+        const nested = deep(node.shadowRoot, sel);
+        if (nested) return nested;
+      }
+    }
+    return null;
+  }
+  const d = (el: DevicesScreen, sel: string) => deep(el.shadowRoot!, sel);
+  const fakeQr = () => vi.fn().mockResolvedValue("data:image/png;base64,FAKE");
 
-    await vi.waitFor(() => expect(q(el, "[data-test=join-dialog]")).toBeNull());
-    expect(q(el, "[data-test=join-row-j1]")).not.toBeNull();
+  function typeField(el: DevicesScreen, sel: string, value: string): void {
+    q(el, sel)!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+  }
+
+  async function bottomOf(el: DevicesScreen, actions: string): Promise<string> {
+    const row = q(el, actions) as HTMLElementTagNameMap["wt-form-actions"];
+    return (await formMessageOf(row))?.textContent?.trim() ?? "";
+  }
+
+  async function openAdd(api: DashboardApi, qrFor = fakeQr()): Promise<DevicesScreen> {
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api, qrFor });
+    await flush(el);
+    q(el, "[data-test=open-add-device]")!.click();
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=device-qr]")?.getAttribute("src")).toBeTruthy(),
+    );
+    await vi.waitFor(() => expect(api.takePairingHold).toHaveBeenCalled());
+    await flush(el);
+    return el;
+  }
+
+  async function openPair(el: DevicesScreen, id = "r1"): Promise<void> {
+    d(el, `[data-test=pair-${id}]`)!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).not.toBeNull());
+    await flush(el);
+  }
+
+  async function toSettings(el: DevicesScreen): Promise<void> {
+    await openPair(el);
+    await vi.waitFor(() => expect(q(el, `[data-choice="${REAL_NUMBER}"]`)).not.toBeNull());
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-name]")).not.toBeNull());
+    await flush(el);
+  }
+
+  // At 1280px wide the standard size is not capped by the window: 42rem (672px).
+  it("sizes the Add a device and Pair dialogs to the standard width on desktop", async () => {
+    await page.viewport(1280, 900);
+    const el = await openAdd(stubApi());
+    const width = (id: string) =>
+      q(el, `[data-test=${id}]`)!.shadowRoot!.querySelector("dialog")!.getBoundingClientRect()
+        .width;
+    expect(width("add-device-modal")).toBeCloseTo(672, 0);
+    await openPair(el);
+    expect(width("pair-modal")).toBeCloseTo(672, 0);
   });
 
-  it("closes the open accept dialog when that same request is denied", async () => {
+  it("offers Add a device in the heading and on the empty list", async () => {
+    const api = stubApi({ listDevices: vi.fn().mockResolvedValue([]) });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+
+    const buttons = el.shadowRoot!.querySelectorAll("[data-test=open-add-device]");
+    expect(buttons).toHaveLength(2);
+    expect([...buttons].map((b) => b.textContent?.trim())).toEqual([
+      t("devices.add"),
+      t("devices.add"),
+    ]);
+    // The page no longer holds the window itself: nothing is taken until the dialog opens.
+    expect(q(el, "[data-test=pairing-mode]")).toBeNull();
+    expect(q(el, "[data-test=join-panel]")).toBeNull();
+    expect(api.takePairingHold).not.toHaveBeenCalled();
+  });
+
+  it("Add a device takes a hold and shows the QR code and address", async () => {
     const api = stubApi();
-    const el = await openKdsDialog(api);
+    const qrFor = fakeQr();
+    const el = await openAdd(api, qrFor);
 
-    q(el, "[data-test=join-deny-j1]")!.click();
-    await el.updateComplete;
-    q(el, "[data-test=join-deny-j1]")!.click();
-
-    await vi.waitFor(() => expect(api.denyJoinRequest).toHaveBeenCalledWith("j1"));
-    await vi.waitFor(() => expect(api.joinRequests).toHaveBeenCalledTimes(2));
-    await el.updateComplete;
-    expect(q(el, "[data-test=join-dialog]")).toBeNull();
+    expect(api.takePairingHold).toHaveBeenCalledTimes(1);
+    expect(q(el, "[data-test=add-device-modal]")).not.toBeNull();
+    expect(text(el, "[data-test=device-address]")).toBe("https://waitron.local");
+    expect(qrFor).toHaveBeenCalledExactlyOnceWith("https://waitron.local");
+    expect(q(el, "[data-test=device-qr]")!.getAttribute("src")).toBe("data:image/png;base64,FAKE");
+    expect(q(el, "[data-test=device-qr]")!.getAttribute("alt")).toBe(t("devices.qr_alt"));
   });
 
-  it("keeps the dialog open when a DIFFERENT request is denied", async () => {
-    const second: JoinRequestRow = {
-      id: "j2",
-      kind: "device",
-      label: "Otra pantalla",
-      createdAt: "2026-09-08T10:05:00.000Z",
-    };
-    const api = stubApi({ joinRequests: vi.fn().mockResolvedValue([...pending, second]) });
-    const el = await openKdsDialog(api);
-
-    q(el, "[data-test=join-deny-j2]")!.click();
-    await el.updateComplete;
-    q(el, "[data-test=join-deny-j2]")!.click();
-
-    await vi.waitFor(() => expect(api.denyJoinRequest).toHaveBeenCalledWith("j2"));
-    await vi.waitFor(() => expect(api.joinRequests).toHaveBeenCalledTimes(2));
-    await el.updateComplete;
-    expect(q(el, "[data-test=join-dialog]")).not.toBeNull();
-  });
-
-  it("sends one accept when a number is tapped twice before the first answer", async () => {
-    let release!: () => void;
-    const answer = new Promise((resolve) => {
-      release = () => resolve({ deviceId: "j1", name: "Pantalla pase", formFactor: "kds" });
-    });
-    const api = stubApi({ acceptDeviceJoinRequest: vi.fn().mockReturnValueOnce(answer) });
-    const el = await openKdsDialog(api);
-    const number = q(el, `[data-choice="${REAL_NUMBER}"]`)!;
-
-    number.click();
-    number.click();
-    release();
-
-    await vi.waitFor(() => expect(q(el, "[data-test=join-dialog]")).toBeNull());
-    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1);
-  });
-
-  it("ignores a number tap while no profile is chosen", async () => {
+  it("draws the address as a real QR code image", async () => {
     const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await vi.waitFor(() => expect(q(el, "[data-test=join-review-j1]")).not.toBeNull());
-    q(el, "[data-test=join-review-j1]")!.click();
-    await vi.waitFor(() => expect(q(el, `[data-choice="${REAL_NUMBER}"]`)).not.toBeNull());
-
-    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
-    await el.updateComplete;
-
-    expect(api.acceptDeviceJoinRequest).not.toHaveBeenCalled();
-    expect(q(el, "[data-test=join-dialog]")).not.toBeNull();
+    await flush(el);
+    q(el, "[data-test=open-add-device]")!.click();
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=device-qr]")?.getAttribute("src")).toMatch(/^data:image\/png/),
+    );
   });
 
-  it("reports the queue reload's own failure after a mismatch closes the dialog", async () => {
+  it("shows when the window lapses: the later of the hold's own lapse and the window's", async () => {
+    const earlier = { ...SHUT, open: true, openUntil: "2026-09-08T10:04:00.000Z" };
+    const later = { ...SHUT, open: true, openUntil: "2026-09-08T10:07:00.000Z" };
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi({ pairingMode: vi.fn().mockResolvedValue(earlier) }), {
+      liveData,
+    });
+    const el = await openAdd(api);
+    expect(text(el, "[data-test=pairing-until]")).toBe(
+      t("devices.open_until").replace("{time}", "2026-09-08 10:05"),
+    );
+
+    vi.mocked(api.pairingMode).mockResolvedValue(later);
+    liveData.refresh();
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=pairing-until]")).toBe(
+        t("devices.open_until").replace("{time}", "2026-09-08 10:07"),
+      ),
+    );
+  });
+
+  it("closing the dialog releases the hold", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+
+    q(el, "[data-test=add-device-close]")!.click();
+
+    await vi.waitFor(() => expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1"));
+    await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).toBeNull());
+  });
+
+  it("leaving the screen releases the hold", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+
+    el.remove();
+
+    expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1");
+  });
+
+  it("lists waiting devices with Pair and no Deny", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+
+    expect(api.joinRequests).toHaveBeenCalledWith("device");
+    expect(d(el, "[data-test=waiting-row-r1]")?.textContent?.trim()).toBe("Barra 1");
+    expect(d(el, "[data-test=waiting-row-r2]")?.textContent?.trim()).toBe("Pantalla pase");
+    expect(d(el, "[data-test=pair-r1]")?.textContent?.trim()).toBe(t("devices.pair"));
+    expect(d(el, "[data-test=pair-r1]")?.getAttribute("aria-label")).toBe(
+      `${t("devices.pair")} Barra 1`,
+    );
+    expect(d(el, "[data-test=pair-r2]")).not.toBeNull();
+    expect(d(el, "[data-test^=join-deny]")).toBeNull();
+    expect(q(el, "[data-test=waiting-empty]")).toBeNull();
+  });
+
+  // The list must never show the answer beside the question.
+  it("never shows a request's number in the waiting list", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+
+    const table = q(el, "[data-test=waiting-table]")!;
+    expect(table.shadowRoot!.textContent).toContain("Barra 1");
+    expect(table.shadowRoot!.textContent).not.toContain(REAL_NUMBER);
+    expect(d(el, "[data-choice]")).toBeNull();
+    expect(api.joinChallenge).not.toHaveBeenCalled();
+  });
+
+  it("says it is waiting, with a spinner, while no device has asked", async () => {
+    const api = stubApi({ joinRequests: vi.fn().mockResolvedValue([]) });
+    const el = await openAdd(api);
+
+    expect(text(el, "[data-test=waiting-empty]")).toBe(t("devices.waiting"));
+    expect(q(el, "[data-test=waiting-empty] wt-spinner")).not.toBeNull();
+    expect(q(el, "[data-test=waiting-table]")).toBeNull();
+  });
+
+  it("does not say it is waiting once the dialog no longer accepts devices", async () => {
     const api = stubApi({
-      acceptDeviceJoinRequest: vi.fn().mockRejectedValue({ code: "device.join_mismatch" }),
+      joinRequests: vi.fn().mockResolvedValue([]),
+      takePairingHold: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const el = await openAdd(api);
+    await vi.waitFor(() => expect(q(el, "[data-test=hold-lapsed]")).not.toBeNull());
+
+    expect(q(el, "[data-test=waiting-empty]")).toBeNull();
+  });
+
+  it("shows a row another manager is pairing without Pair", async () => {
+    const api = stubApi({
       joinRequests: vi
         .fn()
-        .mockResolvedValueOnce(pending)
-        .mockRejectedValue({ code: "connection.failed" }),
+        .mockResolvedValue([{ ...pending[0]!, pairingBy: { name: "Ana", mine: false } }]),
     });
-    const el = await openKdsDialog(api);
+    const el = await openAdd(api);
+
+    expect(d(el, "[data-test=being-paired-r1]")?.textContent?.trim()).toBe(
+      t("devices.being_paired_by").replace("{name}", "Ana"),
+    );
+    expect(d(el, "[data-test=pair-r1]")).toBeNull();
+  });
+
+  it("a row this login is already pairing opens straight at its settings", async () => {
+    const api = stubApi({
+      joinRequests: vi
+        .fn()
+        .mockResolvedValue([{ ...pending[0]!, pairingBy: { name: "Me", mine: true } }]),
+    });
+    const el = await openAdd(api);
+
+    await openPair(el);
+
+    expect(api.joinChallenge).not.toHaveBeenCalled();
+    expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Barra 1");
+  });
+
+  it("asks for the number on the device, offering the three as large named buttons", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+    await openPair(el);
+
+    expect(q(el, "[data-test=pair-modal]")!.getAttribute("heading")).toBe(
+      t("devices.pair_title").replace("{name}", "Barra 1"),
+    );
+    await vi.waitFor(() => expect(q(el, "[data-choice]")).not.toBeNull());
+    expect(api.joinChallenge).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(text(el, "[data-test=pair-modal] #pair-prompt")).toBe(t("devices.join_match_prompt"));
+    const buttons = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-choice]")];
+    expect(buttons.map((b) => b.getAttribute("data-choice"))).toEqual(CHOICES);
+    expect(buttons.map((b) => b.getAttribute("size"))).toEqual(["lg", "lg", "lg"]);
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual(
+      CHOICES.map((n) => t("devices.join_choice_label").replace("{number}", n)),
+    );
+    expect(q(el, "[data-test=pair-name]")).toBeNull();
+  });
+
+  it("a right number moves to settings with the name filled in", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+
+    await toSettings(el);
+
+    expect(api.checkDeviceJoinNumber).toHaveBeenCalledExactlyOnceWith("r1", {
+      choice: REAL_NUMBER,
+      holdId: "h1",
+    });
+    expect((q(el, "[data-test=pair-name]") as Field).value).toBe("Barra 1");
+    expect(q(el, "[data-choice]")).toBeNull();
+  });
+
+  it("checks one number at a time: every number is disabled while a check is unanswered", async () => {
+    let answer!: () => void;
+    const api = stubApi({
+      checkDeviceJoinNumber: vi.fn().mockReturnValue(new Promise<void>((r) => (answer = r))),
+    });
+    const el = await openAdd(api);
+    await openPair(el);
+    await vi.waitFor(() => expect(q(el, "[data-choice]")).not.toBeNull());
+
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+    await flush(el);
+    const buttons = [...el.shadowRoot!.querySelectorAll<Button>("[data-choice]")];
+    expect(buttons.map((b) => b.disabled)).toEqual([true, true, true]);
+    q(el, '[data-choice="12"]')!.click();
+    answer();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-name]")).not.toBeNull());
+    expect(api.checkDeviceJoinNumber).toHaveBeenCalledTimes(1);
+  });
+
+  it("a wrong number closes Pair and says so in the Add dialog", async () => {
+    const api = stubApi({
+      checkDeviceJoinNumber: vi.fn().mockRejectedValue({ code: "device.join_mismatch" }),
+    });
+    const el = await openAdd(api);
+    await openPair(el);
+    await vi.waitFor(() => expect(q(el, "[data-choice]")).not.toBeNull());
 
     q(el, '[data-choice="12"]')!.click();
 
-    await vi.waitFor(() =>
-      expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed")),
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe(
+      codeMessage("device.join_mismatch"),
     );
-    expect(q(el, "[data-test=join-dialog]")).toBeNull();
+    // The server deleted the request before answering, so there is nothing to discard.
+    expect(api.denyJoinRequest).not.toHaveBeenCalled();
+    expect(d(el, "[data-test=waiting-row-r1]")).toBeNull();
   });
-});
 
-it("shows a localized alert and keeps the row when a deny is rejected", async () => {
-  const api = stubApi({
-    denyJoinRequest: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+  it("keeps Pair open on a number refusal it can still recover from", async () => {
+    const api = stubApi({
+      checkDeviceJoinNumber: vi.fn().mockRejectedValue({ code: "join_request.claimed" }),
+    });
+    const el = await openAdd(api);
+    await openPair(el);
+    await vi.waitFor(() => expect(q(el, "[data-choice]")).not.toBeNull());
+
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(
+        codeMessage("join_request.claimed"),
+      ),
+    );
+    expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
+    expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
   });
-  const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-  await vi.waitFor(() => expect(q(el, "[data-test=join-deny-j1]")).not.toBeNull());
 
-  q(el, "[data-test=join-deny-j1]")!.click();
-  await el.updateComplete;
-  q(el, "[data-test=join-deny-j1]")!.click();
+  it("shows a refused number fetch in the Pair dialog", async () => {
+    const api = stubApi({
+      joinChallenge: vi.fn().mockRejectedValue({ code: "join_request.not_found" }),
+    });
+    const el = await openAdd(api);
+    await openPair(el);
 
-  await vi.waitFor(() =>
-    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("authorization.not_permitted")),
-  );
-  expect(q(el, "[data-test=join-row-j1]")).not.toBeNull();
-  expect(api.joinRequests).toHaveBeenCalledTimes(1);
-});
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(
+        codeMessage("join_request.not_found"),
+      ),
+    );
+  });
 
-describe("devices-screen keeps an action's message while the reads recover", () => {
-  it("keeps a failed pairing open's connection failure through a failed re-read and the reads' recovery", async () => {
+  it("Pair sends the typed name, profile and binding, then says Added", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+    await toSettings(el);
+
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
+    await el.updateComplete;
+    await chooseOption(q(el, "[data-test=pair-binding]")!, "station:s1");
+    typeField(el, "[data-test=pair-name]", "Barra 2");
+    await el.updateComplete;
+    q(el, "[data-test=pair-submit]")!.click();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledExactlyOnceWith("r1", {
+      name: "Barra 2",
+      profileId: "dp3",
+      stationId: "s1",
+    });
+    expect(text(el, "[data-test=added-device]")).toBe(
+      t("devices.added").replace("{name}", "Barra 2"),
+    );
+    expect(q(el, "[data-test=added-device]")!.getAttribute("role")).toBe("status");
+    expect(api.listDevices).toHaveBeenCalledTimes(2);
+    expect(api.denyJoinRequest).not.toHaveBeenCalled();
+    expect(q(el, "[data-test=add-device-modal]")).not.toBeNull();
+  });
+
+  it("sends a watcher binding without a station, and no binding for a till", async () => {
+    const api = stubApi({
+      listStations: vi
+        .fn()
+        .mockResolvedValue([...stations, { ...stations[0]!, id: "retired", active: false }]),
+      listWatchers: vi
+        .fn()
+        .mockResolvedValue([...watchers, { ...watchers[0]!, id: "retired-w", active: false }]),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
+    await el.updateComplete;
+    const binding = q(el, "[data-test=pair-binding]") as HTMLElement & {
+      name: string;
+      label: string;
+      required: boolean;
+      placeholder: string;
+      options: unknown[];
+    };
+    expect(binding.name).toBe("binding");
+    expect(binding.label).toBe(t("devices.shows"));
+    expect(binding.required).toBe(true);
+    expect(binding.placeholder).toBe(t("devices.join_pick_binding"));
+    // The retired station and watcher are left out.
+    expect(binding.options).toEqual([
+      { value: "station:s1", label: "Cocina", group: t("devices.stations_group") },
+      { value: "station:s2", label: "Barra", group: t("devices.stations_group") },
+      { value: "watcher:w1", label: "Pass", group: t("devices.watchers_group") },
+    ]);
+    await chooseOption(binding, "watcher:w1");
+    await el.updateComplete;
+    q(el, "[data-test=pair-submit]")!.click();
+    await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(1));
+    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
+      name: "Barra 1",
+      profileId: "dp3",
+      watcherId: "w1",
+    });
+
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    await openPair(el, "r2");
+    await vi.waitFor(() => expect(q(el, "[data-choice]")).not.toBeNull());
+    q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-profile]")).not.toBeNull());
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    await el.updateComplete;
+    expect(q(el, "[data-test=pair-binding]")).toBeNull();
+    q(el, "[data-test=pair-submit]")!.click();
+    await vi.waitFor(() => expect(api.acceptDeviceJoinRequest).toHaveBeenCalledTimes(2));
+    expect(api.acceptDeviceJoinRequest).toHaveBeenLastCalledWith("r2", {
+      name: "Pantalla pase",
+      profileId: "dp1",
+    });
+  });
+
+  it("names the settings fields and marks each required", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+    await toSettings(el);
+
+    const name = q(el, "[data-test=pair-name]") as Field & { name: string; required: boolean };
+    const profile = q(el, "[data-test=pair-profile]") as Field & {
+      name: string;
+      required: boolean;
+      label: string;
+      placeholder: string;
+      options: unknown[];
+    };
+    expect(profile.placeholder).toBe(t("devices.join_pick_profile"));
+    expect([name.name, name.required]).toEqual(["name", true]);
+    expect(name.getAttribute("label")).toBe(t("devices.name"));
+    expect([profile.name, profile.required, profile.label]).toEqual([
+      "profileId",
+      true,
+      t("devices.device_profile"),
+    ]);
+    expect(profile.options).toEqual([
+      { value: "dp1", label: "Counter till" },
+      { value: "dp2", label: "Waiter handheld" },
+      { value: "dp3", label: "Pass screen" },
+    ]);
+  });
+
+  it("a taken name is shown under Name and Pair stays open", async () => {
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi.fn().mockRejectedValue({ code: "device.name_taken" }),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    await el.updateComplete;
+
+    q(el, "[data-test=pair-submit]")!.click();
+
+    await vi.waitFor(() =>
+      expect((q(el, "[data-test=pair-name]") as Field).error).toBe(
+        codeMessage("device.name_taken"),
+      ),
+    );
+    expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
+    expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(t("form.fix_fields"));
+    // A refusal never disables the action by itself.
+    expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(false);
+    typeField(el, "[data-test=pair-name]", "Barra 9");
+    await el.updateComplete;
+    expect((q(el, "[data-test=pair-name]") as Field).error).toBe("");
+  });
+
+  it("Pair is disabled while the name is blank", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    typeField(el, "[data-test=pair-name]", "   ");
+    await el.updateComplete;
+
+    q(el, "[data-test=pair-submit]")!.click();
+    await flush(el);
+
+    expect(api.acceptDeviceJoinRequest).not.toHaveBeenCalled();
+    expect((q(el, "[data-test=pair-name]") as Field).error).toBe(t("form.name_required"));
+    expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(true);
+    expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(t("form.fix_fields"));
+    typeField(el, "[data-test=pair-name]", "Barra 3");
+    await el.updateComplete;
+    expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(false);
+  });
+
+  it("asks for a profile, and for what a kitchen screen shows, before pairing", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+    await toSettings(el);
+
+    q(el, "[data-test=pair-submit]")!.click();
+    await flush(el);
+    expect((q(el, "[data-test=pair-profile]") as Field).error).toBe(t("devices.join_pick_profile"));
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
+    await el.updateComplete;
+    expect((q(el, "[data-test=pair-profile]") as Field).error).toBe("");
+    expect((q(el, "[data-test=pair-binding]") as Field).error).toBe(
+      codeMessage("device.station_required"),
+    );
+    expect((q(el, "[data-test=pair-submit]") as Button).disabled).toBe(true);
+    expect(api.acceptDeviceJoinRequest).not.toHaveBeenCalled();
+  });
+
+  it("a refusal naming the station goes under Shows", async () => {
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi.fn().mockRejectedValue({ code: "station.not_found" }),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
+    await el.updateComplete;
+    await chooseOption(q(el, "[data-test=pair-binding]")!, "station:s1");
+    await el.updateComplete;
+
+    q(el, "[data-test=pair-submit]")!.click();
+
+    await vi.waitFor(() =>
+      expect((q(el, "[data-test=pair-binding]") as Field).error).toBe(
+        codeMessage("station.not_found"),
+      ),
+    );
+    expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(t("form.fix_fields"));
+  });
+
+  it("puts a request-invalid refusal under the field its params name", async () => {
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi
+        .fn()
+        .mockRejectedValue({ code: "management.request_invalid", params: { field: "profileId" } }),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    await el.updateComplete;
+
+    q(el, "[data-test=pair-submit]")!.click();
+
+    await vi.waitFor(() =>
+      expect((q(el, "[data-test=pair-profile]") as Field).error).toBe(
+        codeMessage("management.request_invalid"),
+      ),
+    );
+    expect((q(el, "[data-test=pair-name]") as Field).error).toBe("");
+  });
+
+  it("shows a refusal naming no field at the bottom of Pair", async () => {
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi.fn().mockRejectedValue({ code: "join_request.unclaimed" }),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    await el.updateComplete;
+
+    q(el, "[data-test=pair-submit]")!.click();
+
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(
+        codeMessage("join_request.unclaimed"),
+      ),
+    );
+    expect((q(el, "[data-test=pair-name]") as Field).error).toBe("");
+    expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
+  });
+
+  it("lets a Pair save that is under way decide the outcome: Escape and Cancel wait for it", async () => {
+    let answer!: (value: { deviceId: string; name: string; formFactor: string }) => void;
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi.fn().mockReturnValue(new Promise((r) => (answer = r))),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    await el.updateComplete;
+    q(el, "[data-test=pair-submit]")!.click();
+    await flush(el);
+
+    expect((q(el, "[data-test=pair-cancel]") as Button).disabled).toBe(true);
+    const dialog = q(el, "[data-test=pair-modal]")!.shadowRoot!.querySelector("dialog")!;
+    dialog.focus();
+    await userEvent.keyboard("{Escape}");
+    await flush(el);
+    expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
+    expect(dialog.open).toBe(true);
+    // The Escape must not fall through to the Add dialog underneath either.
+    expect(q(el, "[data-test=add-device-modal]")).not.toBeNull();
+    expect(api.releasePairingHold).not.toHaveBeenCalled();
+    expect(api.denyJoinRequest).not.toHaveBeenCalled();
+
+    answer({ deviceId: "d9", name: "Barra 1", formFactor: "till" });
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    expect(text(el, "[data-test=added-device]")).toBe(
+      t("devices.added").replace("{name}", "Barra 1"),
+    );
+    expect(api.denyJoinRequest).not.toHaveBeenCalled();
+  });
+
+  it("Cancel discards the request at the number step", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+    await openPair(el);
+
+    q(el, "[data-test=pair-cancel]")!.click();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(q(el, "[data-test=add-device-modal]")).not.toBeNull();
+    expect(api.releasePairingHold).not.toHaveBeenCalled();
+  });
+
+  it("Cancel discards the request at the settings step, and says nothing when it is already gone", async () => {
+    const api = stubApi({
+      denyJoinRequest: vi.fn().mockRejectedValue({ code: "join_request.not_found" }),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+
+    q(el, "[data-test=pair-cancel]")!.click();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    await flush(el);
+    expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
+  });
+
+  it("a discard that fails on Cancel is said in the Add dialog, and a second Cancel clears it", async () => {
+    const api = stubApi({
+      denyJoinRequest: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue(undefined),
+    });
+    const el = await openAdd(api);
+    await openPair(el);
+
+    q(el, "[data-test=pair-cancel]")!.click();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe(
+        codeMessage("connection.failed"),
+      ),
+    );
+
+    await openPair(el);
+    q(el, "[data-test=pair-cancel]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    expect(api.denyJoinRequest).toHaveBeenCalledTimes(2);
+    await flush(el);
+    expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
+  });
+
+  it("Cancel at the number step says nothing when the request is already gone", async () => {
+    const api = stubApi({
+      denyJoinRequest: vi.fn().mockRejectedValue({ code: "join_request.not_found" }),
+    });
+    const el = await openAdd(api);
+    await openPair(el);
+
+    q(el, "[data-test=pair-cancel]")!.click();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    await flush(el);
+    expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
+  });
+
+  it("a discard that fails after Add was closed says nothing in the next Add dialog", async () => {
+    let rejectDeny!: (error: unknown) => void;
+    const api = stubApi({
+      denyJoinRequest: vi.fn().mockReturnValue(
+        new Promise<void>((_resolve, reject) => {
+          rejectDeny = reject;
+        }),
+      ),
+    });
+    const el = await openAdd(api);
+    await openPair(el);
+
+    q(el, "[data-test=add-device-close]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).toBeNull());
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    q(el, "[data-test=open-add-device]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).not.toBeNull());
+    rejectDeny({ code: "connection.failed" });
+    await flush(el);
+
+    expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
+  });
+
+  it("keeps a failed discard's message when the Add dialog's address read fails after it", async () => {
+    let rejectAddress!: (error: unknown) => void;
+    const api = stubApi({
+      pairingMode: vi
+        .fn()
+        .mockResolvedValueOnce(SHUT)
+        .mockReturnValueOnce(
+          new Promise((_resolve, reject) => {
+            rejectAddress = reject;
+          }),
+        )
+        .mockResolvedValue(SHUT),
+      denyJoinRequest: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
+    await flush(el);
+    q(el, "[data-test=open-add-device]")!.click();
+    await vi.waitFor(() => expect(api.pairingMode).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(api.takePairingHold).toHaveBeenCalled());
+    await flush(el);
+    await openPair(el);
+    q(el, "[data-test=pair-cancel]")!.click();
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe(
+        codeMessage("connection.failed"),
+      ),
+    );
+
+    rejectAddress({ code: "server.internal" });
+    await flush(el);
+
+    expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe(
+      codeMessage("connection.failed"),
+    );
+  });
+
+  it("Escape on Pair discards the request and leaves the Add dialog open", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+    await openPair(el);
+
+    q(el, "[data-test=pair-modal]")!.shadowRoot!.querySelector("dialog")!.close();
+
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(q(el, "[data-test=add-device-modal]")).not.toBeNull();
+  });
+
+  it("closing Add while Pair is open discards the request and releases the hold", async () => {
+    const api = stubApi();
+    const el = await openAdd(api);
+    await openPair(el);
+
+    el.remove();
+
+    expect(api.denyJoinRequest).toHaveBeenCalledExactlyOnceWith("r1");
+    expect(api.releasePairingHold).toHaveBeenCalledExactlyOnceWith("h1");
+  });
+
+  // The renewal goes through `background`, which this stub does not have: the controller falls back
+  // to the API itself, so `renewPairingHold` below is the one it calls. Only the interval timers are
+  // faked, so animation frames stay real.
+  it("a lapsed hold shows the notice, and Start again takes a new hold", async () => {
+    const api = stubApi({
+      renewPairingHold: vi.fn().mockRejectedValue({ code: "device.pairing_hold_lapsed" }),
+    });
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const el = await openAdd(api);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.waitFor(() => expect(q(el, "[data-test=hold-lapsed]")).not.toBeNull());
+      await flush(el);
+      expect(api.renewPairingHold).toHaveBeenCalledWith("h1");
+      expect((d(el, "[data-test=pair-r1]") as Button).disabled).toBe(true);
+      expect((d(el, "[data-test=pair-r2]") as Button).disabled).toBe(true);
+
+      q(el, "[data-test=hold-restart]")!.click();
+      await vi.waitFor(() => expect(api.takePairingHold).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(q(el, "[data-test=hold-lapsed]")).toBeNull());
+      await flush(el);
+      expect((d(el, "[data-test=pair-r1]") as Button).disabled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a tap after the hold lapsed says so and sends nothing", async () => {
+    const api = stubApi({
+      renewPairingHold: vi.fn().mockRejectedValue({ code: "device.pairing_hold_lapsed" }),
+    });
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const el = await openAdd(api);
+      await openPair(el);
+      await vi.waitFor(() => expect(q(el, "[data-choice]")).not.toBeNull());
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.waitFor(() => expect(q(el, "[data-test=hold-lapsed]")).not.toBeNull());
+      q(el, `[data-choice="${REAL_NUMBER}"]`)!.click();
+      await flush(el);
+
+      expect(api.checkDeviceJoinNumber).not.toHaveBeenCalled();
+      expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(
+        codeMessage("device.pairing_hold_lapsed"),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a refused take offers Start again", async () => {
+    const api = stubApi({
+      takePairingHold: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue({ holdId: "h2", openUntil: TAKEN_UNTIL }),
+    });
+    const el = await openAdd(api);
+
+    await vi.waitFor(() => expect(q(el, "[data-test=hold-restart]")).not.toBeNull());
+    expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe(
+      codeMessage("connection.failed"),
+    );
+    expect((d(el, "[data-test=pair-r1]") as Button).disabled).toBe(true);
+
+    q(el, "[data-test=hold-restart]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=hold-restart]")).toBeNull());
+    await flush(el);
+    expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe("");
+    expect((d(el, "[data-test=pair-r1]") as Button).disabled).toBe(false);
+  });
+
+  it("keeps a refused take's message through a failed re-read and the reads' recovery", async () => {
     const api = Object.assign(
-      stubApi({ openPairingMode: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      stubApi({ takePairingHold: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
       { liveData: new LiveData() },
     );
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
-    await vi.waitFor(() => expect(q(el, "[data-test=pairing-open]")).not.toBeNull());
-    vi.mocked(api.listDevices).mockRejectedValue({ code: "connection.failed" });
-    api.liveData.refresh();
-    await vi.waitFor(() => expect(q(el, "[role=alert]")).not.toBeNull());
+    const el = await openAdd(api);
+    await vi.waitFor(() => expect(q(el, "[data-test=hold-restart]")).not.toBeNull());
 
-    q(el, "[data-test=pairing-open]")!.click();
-    await vi.waitFor(() => expect(api.openPairingMode).toHaveBeenCalledTimes(1));
-    await flush(el);
-    const reads = vi.mocked(api.listDevices).mock.calls.length;
+    vi.mocked(api.listDevices).mockRejectedValue({ code: "server.internal" });
     api.liveData.refresh();
-    await vi.waitFor(() => expect(api.listDevices).toHaveBeenCalledTimes(reads + 1));
+    await vi.waitFor(() => expect(q(el, "[data-test=page-error]")).not.toBeNull());
+    vi.mocked(api.listDevices).mockResolvedValue(devices);
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(q(el, "[data-test=page-error]")).toBeNull());
     await flush(el);
 
-    const added: DeviceRow = { ...devices[0]!, id: "d3", label: "Pantalla nueva" };
-    vi.mocked(api.listDevices).mockResolvedValue([...devices, added]);
-    api.liveData.refresh();
-    await vi.waitFor(() => expect(q(el, "[data-test=device-row-d3]")).not.toBeNull());
-    await flush(el);
-    expect(q(el, "[role=alert]")?.textContent).toBe(codeMessage("connection.failed"));
+    expect(await bottomOf(el, "[data-test=add-device-actions]")).toBe(
+      codeMessage("connection.failed"),
+    );
   });
 });

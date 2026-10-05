@@ -22,6 +22,7 @@ import { createStation } from "./kitchen.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { insertDevice, resolveDeviceBinding } from "./device.js";
 import { acceptDeviceJoinRequest, createJoinRequest, readJoinStatus } from "./join-requests.js";
+import { createPairingMode } from "./pairing-mode.js";
 import { createWatcher, removeWatcher } from "./watchers.js";
 import "./errors.js";
 
@@ -252,20 +253,20 @@ describe("device names among a location's active devices", () => {
     const { cfg } = await setupVenue();
     const profileId = await seedProfile("till", "Perfil Caja");
     await enrolDeviceForTest(suite.db, cfg, { name: "Barra", profileId });
+    // Opened before the request, or the status read discards it as made while the window was shut.
+    const window = createPairingMode();
+    window.open();
     const made = await withTransaction(suite.db, (tx) =>
       createJoinRequest(tx, cfg, { kind: "device", label: "Barra" }),
     );
 
     await expect(
       withTransaction(suite.db, (tx) =>
-        acceptDeviceJoinRequest(tx, cfg, made.joinId, {
-          choice: made.verificationNumber,
-          profileId,
-        }),
+        acceptDeviceJoinRequest(tx, cfg, made.joinId, { label: "Barra", profileId }),
       ),
     ).rejects.toMatchObject({ code: "device.name_taken" });
 
-    expect(await readJoinStatus(suite.db, cfg, made.joinId, made.token)).toBe("pending");
+    expect(await readJoinStatus(suite.db, cfg, made.joinId, made.token, window)).toBe("pending");
     expect(await activeNamed(cfg.locationId, "Barra")).toBe(1);
   });
 

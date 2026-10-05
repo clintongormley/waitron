@@ -2,12 +2,25 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { toDataURL } from "qrcode";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  submitOnEnter,
+  type DataTableColumn,
+  type WtModal,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-card.js";
-import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-modal.js";
+import "@waitron/ui/src/components/wt-data-table.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-spinner.js";
+import { PairingHold, type PairingHoldStatus } from "../api/pairing-hold.js";
+import { bottomMessage, refusal } from "../i18n/form-message.js";
+import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
 import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
 import { registerCatalogue, type CardProviderPanel, t as tRaw } from "@waitron/dashboard-kit";
 import { t } from "../i18n/t.js";
@@ -27,6 +40,24 @@ import type {
   Watcher,
 } from "../api/client.js";
 
+type PairField = "name" | "profile" | "binding";
+
+/** Refusals of a pairing that are about one settings field (CLAUDE.md §3: by what the error carries). */
+const PAIR_FIELD_BY_CODE: Record<string, PairField> = {
+  "device.name_taken": "name",
+  "device.station_required": "binding",
+  "station.not_found": "binding",
+  "watcher.not_found": "binding",
+  "device_profile.not_found": "profile",
+};
+
+const PAIR_FIELD_BY_PARAM: Record<string, PairField> = {
+  name: "name",
+  profileId: "profile",
+  stationId: "binding",
+  watcherId: "binding",
+};
+
 /**
  * Whether a joining device of this form factor binds a station or watcher: only a `kds` screen does.
  * The server re-derives this, so it only decides whether to show the picker.
@@ -39,19 +70,51 @@ function bindsStation(formFactor: FormFactor): boolean {
 export class DevicesScreen extends LitElement {
   static override styles = [
     baseStyles,
+    holdNoticeStyles,
     css`
       :host {
         display: block;
       }
-      .title {
+      .heading {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
         margin: 0 0 var(--wt-space-4);
+      }
+      .title {
+        margin: 0;
         font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
       }
-      .panel-title {
+      .qr {
+        display: block;
+        width: calc(var(--wt-space-6) * 6);
+        max-width: 100%;
+        height: auto;
         margin: 0 0 var(--wt-space-3);
-        font-size: var(--wt-font-size-md);
+      }
+      .hint code {
+        overflow-wrap: anywhere;
         color: var(--wt-color-text);
+      }
+      .waiting {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        color: var(--wt-color-text-muted);
+      }
+      .added {
+        color: var(--wt-color-text);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      wt-data-table::part(being-paired) {
+        color: var(--wt-color-text-muted);
+      }
+      .pair-fields {
+        display: grid;
+        gap: var(--wt-space-3);
       }
       ol {
         list-style: none;
@@ -114,10 +177,6 @@ export class DevicesScreen extends LitElement {
         margin: 0;
         color: var(--wt-color-text);
       }
-      .pickers wt-combobox {
-        flex: 1 1 calc(var(--wt-space-6) * 6);
-        min-width: 0;
-      }
       .made-here {
         margin: var(--wt-space-3) 0 0;
         padding: var(--wt-space-3);
@@ -137,18 +196,6 @@ export class DevicesScreen extends LitElement {
       .hint {
         margin: 0 0 var(--wt-space-3);
         color: var(--wt-color-text-muted);
-      }
-      .actions {
-        display: flex;
-        gap: var(--wt-space-2);
-        align-items: center;
-        flex-wrap: wrap;
-      }
-      .pickers {
-        display: flex;
-        gap: var(--wt-space-3);
-        flex-wrap: wrap;
-        margin-bottom: var(--wt-space-4);
       }
       .choices {
         display: flex;
@@ -174,9 +221,6 @@ export class DevicesScreen extends LitElement {
 
   @property({ attribute: false }) panels: readonly CardProviderPanel[] = CARD_PROVIDER_PANELS;
 
-  // Whether an accept is in flight — a second tap on a number while the first is unanswered would
-  // race a request the server may already have consumed, so the choices disable until it settles.
-  @state() private submitting = false;
   @state() private devices: DeviceRow[] = [];
   @state() private stations: Station[] = [];
   @state() private watchers: Watcher[] = [];
@@ -186,12 +230,46 @@ export class DevicesScreen extends LitElement {
   @state() private deviceReaders: Record<string, string | null> = {};
   @state() private pairing: PairingModeState | undefined;
   @state() private pendingJoins: JoinRequestRow[] = [];
-  @state() private openRequestId: string | null = null;
-  @state() private challenges: Record<string, string[]> = {};
+
+  /** Seen by a test, so it can check what the code encodes. */
+  @property({ attribute: false }) qrFor = (text: string): Promise<string> =>
+    toDataURL(text, { margin: 1, width: 192 });
+
+  @state() private addingDevice = false;
+  @state() private deviceAddress = "";
+  @state() private qr = "";
+  @state() private addedName: string | null = null;
+  /** The Add dialog's own refusal: a wrong number, a failed discard, or its read of the address. */
+  @state() private addError: string | null = null;
+  @state() private holdStatus: PairingHoldStatus = "idle";
+  /** The taken hold's lapse, shown before the live read of the window next answers. */
+  @state() private takenUntil: string | null = null;
+  /** Apart from `addError`, so nothing else the dialog does clears why the hold ended. */
+  @state() private holdErrorKey: string | null = null;
+  readonly #hold = new PairingHold(
+    () => this.api,
+    (status, code, openUntil) => {
+      this.holdStatus = status;
+      this.takenUntil = status === "held" ? openUntil : null;
+      this.holdErrorKey = status === "failed" ? code : null;
+    },
+  );
+  #addEpoch = 0;
+
+  @state() private pairRequest: JoinRequestRow | null = null;
+  @state() private pairStep: "number" | "settings" = "number";
+  @state() private choices: string[] | null = null;
+  @state() private checking = false;
+  @state() private submitting = false;
+  @state() private pairError: string | null = null;
+  @state() private pairName = "";
   @state() private chosenProfileId = "";
   @state() private chosenBinding = "";
-  // Separate from `armedRevokeId`, so arming a Deny does not disarm a Revoke in the list below it.
-  @state() private armedDenyId: string | null = null;
+  @state() private formAttempted = false;
+  @state() private fieldRefusal: { field: PairField; code: string } | null = null;
+  /** Set once the server has approved or deleted the request, so closing Pair has nothing to discard. */
+  #pairSettled = false;
+  #pairEpoch = 0;
   @state() private armedRevokeId: string | null = null;
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
@@ -210,7 +288,6 @@ export class DevicesScreen extends LitElement {
   async #load(): Promise<void> {
     this.#showError(null);
     this.armedRevokeId = null;
-    this.armedDenyId = null;
     try {
       await Promise.all([
         this.#queries.watch("listDevices", [], async (value) => {
@@ -261,79 +338,138 @@ export class DevicesScreen extends LitElement {
     if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
   }
 
-  async #reloadJoins(): Promise<void> {
-    this.armedDenyId = null;
-    const [pairing, pendingJoins] = await Promise.all([
-      this.api.pairingMode(),
-      this.api.joinRequests("device"),
-    ]);
-    this.pairing = pairing;
-    this.pendingJoins = pendingJoins;
+  override disconnectedCallback(): void {
+    this.#endAdding();
+    super.disconnectedCallback();
   }
 
-  /** Open and Extend are the same call: the route moves an open window's lapse rather than adding one. */
-  async #openPairing(): Promise<void> {
-    this.#showError(null);
-    let written = false;
+  async #openAddDevice(): Promise<void> {
+    if (this.addingDevice) return;
+    const epoch = ++this.#addEpoch;
+    this.addingDevice = true;
+    this.addedName = null;
+    this.addError = null;
+    this.qr = "";
+    this.deviceAddress = "";
+    void this.#hold.start();
     try {
-      await this.api.openPairingMode();
-      written = true;
-      await this.#reloadJoins();
+      const { deviceAddress } = await this.api.pairingMode();
+      if (epoch !== this.#addEpoch) return;
+      this.deviceAddress = deviceAddress;
+      const qr = await this.qrFor(deviceAddress);
+      if (epoch === this.#addEpoch) this.qr = qr;
     } catch (error) {
-      if (written) this.#showReadError(error);
-      else this.#showError(codeOf(error));
+      // A read's failure never replaces an action's message.
+      if (epoch === this.#addEpoch && this.addError === null) this.addError = codeOf(error);
     }
   }
 
-  async #closePairing(): Promise<void> {
-    this.#showError(null);
-    let written = false;
-    try {
-      await this.api.closePairingMode();
-      written = true;
-      await this.#reloadJoins();
-    } catch (error) {
-      if (written) this.#showReadError(error);
-      else this.#showError(codeOf(error));
-    }
+  /** Every way the Add dialog ends: Close, Escape, or the screen going away. */
+  #endAdding(): void {
+    if (!this.addingDevice) return;
+    this.#addEpoch++;
+    this.addingDevice = false;
+    this.#closePair();
+    this.#hold.stop();
+    this.addedName = null;
+    this.addError = null;
   }
 
-  /** Fetches the three numbers the FIRST time only: the server fixes the set at join. */
-  async #openRequest(id: string): Promise<void> {
-    this.#showError(null);
-    this.openRequestId = id;
-    this.chosenProfileId = "";
-    this.chosenBinding = "";
-    if (this.challenges[id] !== undefined) return;
-    try {
-      const { choices } = await this.api.joinChallenge(id);
-      this.challenges = { ...this.challenges, [id]: choices };
-    } catch (error) {
-      this.#showReadError(error);
-    }
+  async #closeModal(id: string): Promise<void> {
+    const modal = this.renderRoot.querySelector<WtModal>(`[data-test="${id}"]`);
+    if (!modal?.open) return;
+    // Native close restores focus before wt-close takes the modal out of the template.
+    const closed = new Promise<void>((resolve) =>
+      modal.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    modal.open = false;
+    await closed;
   }
 
-  /** Denying cannot be undone, so it takes a second, confirming click. */
-  #onDeny(id: string): void {
-    if (this.armedDenyId === id) {
-      this.armedDenyId = null;
-      void this.#deny(id);
+  /**
+   * Closing Pair before the server settled the request discards it, so the device can ask again. A
+   * discard that fails leaves the request pending, and claimed by this login if its number was
+   * checked, so the Add dialog that is still open says so; one closing with Add needs no message:
+   * the dialog that would show it is gone.
+   */
+  #closePair(): void {
+    const request = this.pairRequest;
+    if (request === null) return;
+    this.#pairEpoch++;
+    this.pairRequest = null;
+    this.checking = false;
+    this.submitting = false;
+    if (this.#pairSettled) return;
+    const addEpoch = this.#addEpoch;
+    void this.api.denyJoinRequest(request.id).catch((error: unknown) => {
+      const code = codeOf(error);
+      if (code !== "join_request.not_found" && this.addingDevice && addEpoch === this.#addEpoch)
+        this.addError = code;
+    });
+  }
+
+  async #openPair(request: JoinRequestRow): Promise<void> {
+    this.#closePair();
+    const epoch = ++this.#pairEpoch;
+    this.#pairSettled = false;
+    this.pairRequest = request;
+    this.addError = null;
+    this.addedName = null;
+    this.pairError = null;
+    this.choices = null;
+    if (request.pairingBy?.mine) {
+      this.#toSettings(request);
       return;
     }
-    this.armedDenyId = id;
+    this.pairStep = "number";
+    try {
+      const { choices } = await this.api.joinChallenge(request.id);
+      if (epoch === this.#pairEpoch) this.choices = choices;
+    } catch (error) {
+      if (epoch === this.#pairEpoch) this.pairError = codeOf(error);
+    }
   }
 
-  async #deny(id: string): Promise<void> {
-    this.#showError(null);
-    let written = false;
+  #toSettings(request: JoinRequestRow): void {
+    this.pairStep = "settings";
+    this.pairName = request.label;
+    this.chosenProfileId = "";
+    this.chosenBinding = "";
+    this.formAttempted = false;
+    this.fieldRefusal = null;
+    this.pairError = null;
+  }
+
+  /** A wrong number is terminal: the server deleted the request before answering. */
+  async #checkNumber(choice: string): Promise<void> {
+    const request = this.pairRequest;
+    if (request === null || this.checking) return;
+    const holdId = this.#hold.holdId;
+    if (holdId === null) {
+      this.pairError = "device.pairing_hold_lapsed";
+      return;
+    }
+    const epoch = this.#pairEpoch;
+    this.checking = true;
+    this.pairError = null;
     try {
-      await this.api.denyJoinRequest(id);
-      written = true;
-      if (this.openRequestId === id) this.openRequestId = null;
-      await this.#reloadJoins();
+      await this.api.checkDeviceJoinNumber(request.id, { choice, holdId });
+      if (epoch !== this.#pairEpoch) return;
+      this.checking = false;
+      this.#toSettings(request);
     } catch (error) {
-      if (written) this.#showReadError(error);
-      else this.#showError(codeOf(error));
+      if (epoch !== this.#pairEpoch) return;
+      this.checking = false;
+      const code = codeOf(error);
+      if (code !== "device.join_mismatch") {
+        this.pairError = code;
+        return;
+      }
+      this.#pairSettled = true;
+      this.pendingJoins = this.pendingJoins.filter((row) => row.id !== request.id);
+      await this.#closeModal("pair-modal");
+      this.#closePair();
+      this.addError = code;
     }
   }
 
@@ -341,55 +477,91 @@ export class DevicesScreen extends LitElement {
     return this.deviceProfiles.find((p) => p.id === this.chosenProfileId);
   }
 
-  /** Until this holds the numbers stay untappable, so a tap is never an accept with an unchosen
-   * binding. */
-  #bindingReady(): boolean {
+  #bindingShown(): boolean {
     const profile = this.#chosenProfile();
-    if (profile === undefined) return false;
-    return !bindsStation(profile.formFactor) || this.chosenBinding !== "";
+    return profile !== undefined && bindsStation(profile.formFactor);
   }
 
-  /**
-   * A WRONG number is terminal: the server deleted the request before answering
-   * `device.join_mismatch`, so the dialog closes. Every other fault names something fixable here, so
-   * the dialog stays open for a corrected second tap.
-   */
-  async #accept(request: JoinRequestRow, choice: string): Promise<void> {
-    const profile = this.#chosenProfile();
-    if (this.submitting || profile === undefined || !this.#bindingReady()) return;
-    const binding = bindsStation(profile.formFactor);
-    this.#showError(null);
-    this.submitting = true;
-    let written = false;
-    try {
-      await this.api.acceptDeviceJoinRequest(request.id, {
-        choice,
-        profileId: profile.id,
-        ...(binding && this.chosenBinding.startsWith("station:")
-          ? { stationId: this.chosenBinding.slice("station:".length) }
-          : {}),
-        ...(binding && this.chosenBinding.startsWith("watcher:")
-          ? { watcherId: this.chosenBinding.slice("watcher:".length) }
-          : {}),
+  /** The form's own checks, which hold Pair disabled once a submission has been tried. */
+  #ownErrors(): Record<PairField, string> {
+    if (!this.formAttempted) return { name: "", profile: "", binding: "" };
+    return {
+      name: this.pairName.trim() === "" ? t("form.name_required") : "",
+      profile: this.chosenProfileId === "" ? t("devices.join_pick_profile") : "",
+      binding:
+        this.#bindingShown() && this.chosenBinding === ""
+          ? codeMessage("device.station_required")
+          : "",
+    };
+  }
+
+  #pairErrors(): Record<PairField, string> {
+    const errors = this.#ownErrors();
+    const refused = this.fieldRefusal;
+    if (refused !== null && errors[refused.field] === "")
+      errors[refused.field] = codeMessage(refused.code);
+    return errors;
+  }
+
+  /** The field a refusal is about, when the form shows that field. */
+  #refusedField(error: unknown): PairField | null {
+    const code = codeOf(error);
+    const param = (error as { params?: { field?: unknown } } | null)?.params?.field;
+    const field =
+      code === "management.request_invalid" && typeof param === "string"
+        ? PAIR_FIELD_BY_PARAM[param]
+        : PAIR_FIELD_BY_CODE[code];
+    if (field === undefined) return null;
+    return field !== "binding" || this.#bindingShown() ? field : null;
+  }
+
+  #clearRefusal(field: PairField): void {
+    if (this.fieldRefusal?.field === field) this.fieldRefusal = null;
+  }
+
+  async #submitPair(): Promise<void> {
+    const request = this.pairRequest;
+    if (request === null || this.submitting) return;
+    this.formAttempted = true;
+    const own = this.#ownErrors();
+    if (own.name || own.profile || own.binding) {
+      void this.updateComplete.then(() => {
+        const modal = this.renderRoot.querySelector("[data-test=pair-modal]");
+        if (modal) void focusFirstInvalid(modal);
       });
-      written = true;
-      this.openRequestId = null;
-      await Promise.all([this.#reloadJoins(), this.#reloadDevices()]);
+      return;
+    }
+    const binding = this.#bindingShown() ? this.chosenBinding : "";
+    const epoch = this.#pairEpoch;
+    this.submitting = true;
+    this.pairError = null;
+    this.fieldRefusal = null;
+    let result: { name: string };
+    try {
+      result = await this.api.acceptDeviceJoinRequest(request.id, {
+        name: this.pairName.trim(),
+        profileId: this.chosenProfileId,
+        ...(binding.startsWith("station:") ? { stationId: binding.slice("station:".length) } : {}),
+        ...(binding.startsWith("watcher:") ? { watcherId: binding.slice("watcher:".length) } : {}),
+      });
     } catch (error) {
-      const code = codeOf(error);
-      if (written) this.#showReadError(error);
-      else this.#showError(code);
-      if (code === "device.join_mismatch") {
-        this.openRequestId = null;
-        try {
-          await this.#reloadJoins();
-        } catch (reloadError) {
-          // Replaces the refusal on purpose: the person must see the queue could not be refreshed.
-          this.#showError(codeOf(reloadError), true);
-        }
-      }
-    } finally {
+      if (epoch !== this.#pairEpoch) return;
       this.submitting = false;
+      const field = this.#refusedField(error);
+      if (field === null) this.pairError = codeOf(error);
+      else this.fieldRefusal = { field, code: codeOf(error) };
+      return;
+    }
+    if (epoch !== this.#pairEpoch) return;
+    this.#pairSettled = true;
+    this.pendingJoins = this.pendingJoins.filter((row) => row.id !== request.id);
+    await this.#closeModal("pair-modal");
+    this.#closePair();
+    this.addedName = result.name;
+    try {
+      await this.#reloadDevices();
+    } catch (error) {
+      this.#showReadError(error);
     }
   }
 
@@ -662,106 +834,142 @@ export class DevicesScreen extends LitElement {
     </li>`;
   }
 
-  /** The refused-knock count covers `REFUSED_WINDOW_MS` (apps/server/src/pairing-mode.ts), which the
-   * copy names as ten minutes; the two move together. */
-  #renderPairing(): TemplateResult {
-    const mode = this.pairing;
-    if (mode === undefined) return html`<p class="hint">${t("devices.pairing_loading")}</p>`;
-    return html`<wt-card data-test="pairing-mode">
-      <h2 class="panel-title">${t("devices.pairing_title")}</h2>
-      <p class="hint">${t("devices.pairing_hint")}</p>
+  #renderAddButton(): TemplateResult {
+    return html`<wt-button
+      variant="primary"
+      data-test="open-add-device"
+      @click=${() => void this.#openAddDevice()}
+      >${t("devices.add")}</wt-button
+    >`;
+  }
+
+  /** Only while this dialog holds the window: the later of its own hold's lapse and the window's. */
+  #openUntil(): string | null {
+    if (this.holdStatus !== "held") return null;
+    const read = this.pairing?.open ? this.pairing.openUntil : null;
+    return read !== null && (this.takenUntil === null || read > this.takenUntil)
+      ? read
+      : this.takenUntil;
+  }
+
+  #renderWaiting(): TemplateResult | typeof nothing {
+    if (this.pendingJoins.length === 0)
+      return this.holdStatus === "lapsed" || this.holdStatus === "failed"
+        ? nothing
+        : html`<p class="waiting" data-test="waiting-empty">
+            <wt-spinner></wt-spinner>${t("devices.waiting")}
+          </p>`;
+    const held = this.#hold.holdId !== null;
+    const columns: DataTableColumn<JoinRequestRow>[] = [
+      {
+        key: "name",
+        label: t("devices.name"),
+        cell: (request) =>
+          html`<span data-test=${`waiting-row-${request.id}`}>${request.label}</span>`,
+      },
+      {
+        key: "actions",
+        label: t("devices.actions"),
+        pinned: "end",
+        cell: (request) =>
+          request.pairingBy && !request.pairingBy.mine
+            ? html`<span part="being-paired" data-test=${`being-paired-${request.id}`}
+                >${t("devices.being_paired_by").replace("{name}", request.pairingBy.name)}</span
+              >`
+            : html`<wt-button
+                size="sm"
+                data-test=${`pair-${request.id}`}
+                aria-label=${`${t("devices.pair")} ${request.label}`}
+                ?disabled=${!held}
+                @click=${() => void this.#openPair(request)}
+                >${t("devices.pair")}</wt-button
+              >`,
+      },
+    ];
+    return html`<wt-data-table
+      data-test="waiting-table"
+      aria-label=${t("devices.waiting_title")}
+      .rows=${this.pendingJoins}
+      .columns=${columns}
+      .rowKey=${(request: JoinRequestRow) => request.id}
+    ></wt-data-table>`;
+  }
+
+  #renderAddDialog(): TemplateResult | typeof nothing {
+    if (!this.addingDevice) return nothing;
+    const until = this.#openUntil();
+    const [before, after] = t("devices.add_hint").split("{address}");
+    return html`<wt-modal
+      size="standard"
+      data-test="add-device-modal"
+      heading=${t("devices.add_title")}
+      .open=${true}
+      .dismissible=${!this.submitting}
+      @wt-close=${() => this.#endAdding()}
+    >
+      ${this.qr === "" ? nothing : html`<img class="qr" data-test="device-qr" src=${this.qr} alt=${t("devices.qr_alt")} />`}
+      <p class="hint">
+        ${before}<code data-test="device-address">${this.deviceAddress}</code>${after}
+      </p>
+      ${until === null ? nothing : html`<p class="hint" data-test="pairing-until">${t("devices.open_until").replace("{time}", formatIsoMinute(until))}</p>`}
+      ${holdNotice(this.holdStatus, () => void this.#hold.start())}
       ${
-        mode.open
-          ? html`<p data-test="pairing-until">
-                ${t("devices.pairing_open_until").replace(
-                  "{time}",
-                  mode.openUntil === null ? "" : formatIsoMinute(mode.openUntil),
-                )}
-              </p>
-              <div class="actions">
-                <wt-button
-                  variant="primary"
-                  data-test="pairing-extend"
-                  @click=${() => void this.#openPairing()}
-                  >${t("devices.pairing_extend")}</wt-button
-                >
-                <wt-button
-                  variant="secondary"
-                  data-test="pairing-close"
-                  @click=${() => void this.#closePairing()}
-                  >${t("devices.pairing_close")}</wt-button
-                >
-              </div>`
-          : html`<div class="actions">
-                <wt-button
-                  variant="primary"
-                  data-test="pairing-open"
-                  @click=${() => void this.#openPairing()}
-                  >${t("devices.pairing_open")}</wt-button
-                >
-              </div>
-              ${
-                mode.refusedRecently > 0
-                  ? html`<p class="hint" data-test="pairing-refused">
-                      ${t("devices.pairing_refused").replace(
-                        "{count}",
-                        String(mode.refusedRecently),
-                      )}
-                    </p>`
-                  : nothing
-              }`
+        this.addedName === null
+          ? nothing
+          : html`<p class="added" role="status" data-test="added-device">
+              ${t("devices.added").replace("{name}", this.addedName)}
+            </p>`
       }
-    </wt-card>`;
+      ${this.#renderWaiting()}
+      <wt-form-actions
+        slot="footer"
+        data-test="add-device-actions"
+        .error=${bottomMessage(refusal(this.holdErrorKey), refusal(this.addError))}
+        ><wt-button
+          slot="cancel"
+          data-test="add-device-close"
+          @click=${() => void this.#closeModal("add-device-modal")}
+          >${t("action.close")}</wt-button
+        ></wt-form-actions
+      >
+    </wt-modal>`;
   }
 
-  /** No join number is shown or fetched for the row (design §1.2 rule 1). */
-  #renderJoinRequest(request: JoinRequestRow): TemplateResult {
-    const armed = this.armedDenyId === request.id;
-    return html`<li data-test="join-row-${request.id}">
-      <wt-card>
-        <div class="row">
-          <div class="details">
-            <span class="label" data-test="join-label-${request.id}">${request.label}</span>
-            <span class="meta">
-              <span data-test="join-asked-${request.id}"
-                >${formatIsoMinute(request.createdAt)}</span
-              >
-            </span>
-          </div>
-          <wt-button
-            variant="primary"
-            size="sm"
-            data-test="join-review-${request.id}"
-            aria-label=${`${t("devices.join_review")} ${request.label}`}
-            @click=${() => void this.#openRequest(request.id)}
-            >${t("devices.join_review")}</wt-button
-          >
-          <wt-button
-            variant="danger"
-            size="sm"
-            data-test="join-deny-${request.id}"
-            data-armed=${armed ? "true" : nothing}
-            aria-label=${`${armed ? t("devices.join_deny_confirm") : t("devices.join_deny")} ${request.label}`}
-            @click=${() => this.#onDeny(request.id)}
-            >${armed ? t("devices.join_deny_confirm") : t("devices.join_deny")}</wt-button
-          >
-        </div>
-      </wt-card>
-    </li>`;
+  #renderNumberStep(): TemplateResult {
+    if (this.choices === null)
+      return this.pairError === null
+        ? html`<p class="hint">${t("devices.join_loading")}</p>`
+        : html``;
+    return html`<p id="pair-prompt">${t("devices.join_match_prompt")}</p>
+      <div class="choices" role="group" aria-labelledby="pair-prompt">
+        ${this.choices.map(
+          // Large, so the number can be matched against a device across the room.
+          (number) =>
+            html`<wt-button
+              variant="secondary"
+              size="lg"
+              data-choice=${number}
+              ?disabled=${this.checking}
+              aria-label=${t("devices.join_choice_label").replace("{number}", number)}
+              @click=${() => void this.#checkNumber(number)}
+              >${number}</wt-button
+            >`,
+        )}
+      </div>`;
   }
 
-  #renderBindingPicker(profile: DeviceProfile): TemplateResult | typeof nothing {
-    if (!bindsStation(profile.formFactor)) return nothing;
+  #renderBindingPicker(error: string): TemplateResult | typeof nothing {
+    if (!this.#bindingShown()) return nothing;
     return html`<wt-combobox
-      data-test="join-binding"
+      data-test="pair-binding"
       name="binding"
+      required
       label=${t("devices.shows")}
       search="auto"
       placeholder=${t("devices.join_pick_binding")}
       searchPlaceholder=${t("categories.combobox_search")}
       noResultsLabel=${t("categories.combobox_no_results")}
       .options=${[
-        { value: "", label: t("devices.join_pick_binding") },
         ...this.stations
           .filter((station) => station.active)
           .map((station) => ({
@@ -778,115 +986,128 @@ export class DevicesScreen extends LitElement {
           })),
       ]}
       .value=${this.chosenBinding}
-      @wt-change=${(e: CustomEvent<{ value: string }>) => (this.chosenBinding = e.detail.value)}
+      .error=${error}
+      .invalid=${error !== ""}
+      @wt-change=${(e: CustomEvent<{ value: string }>) => {
+        this.chosenBinding = e.detail.value;
+        this.#clearRefusal("binding");
+      }}
     ></wt-combobox>`;
   }
 
-  /** A wrong tap denies the request, so the numbers stay disabled until the binding is complete, and
-   * there is no separate Accept: the number IS the accept. */
-  #renderAcceptDialog(): TemplateResult | typeof nothing {
-    const request = this.pendingJoins.find((r) => r.id === this.openRequestId);
-    if (request === undefined) return nothing;
-    const choices = this.challenges[request.id];
-    const profile = this.#chosenProfile();
-    const ready = this.#bindingReady();
-    return html`<wt-dialog
-      data-test="join-dialog"
-      heading=${t("devices.join_dialog_title")}
+  #renderSettingsStep(errors: Record<PairField, string>): TemplateResult {
+    return html`<div class="pair-fields">
+      <wt-input
+        data-test="pair-name"
+        name="name"
+        required
+        label=${t("devices.name")}
+        .value=${live(this.pairName)}
+        .error=${errors.name}
+        .invalid=${errors.name !== ""}
+        @keydown=${(e: KeyboardEvent) =>
+          submitOnEnter(e, this.renderRoot.querySelector<HTMLElement>("[data-test=pair-submit]"))}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+          e.stopPropagation();
+          this.pairName = e.detail.value;
+          this.#clearRefusal("name");
+        }}
+      ></wt-input>
+      <wt-combobox
+        data-test="pair-profile"
+        name="profileId"
+        required
+        label=${t("devices.device_profile")}
+        search="auto"
+        placeholder=${t("devices.join_pick_profile")}
+        searchPlaceholder=${t("categories.combobox_search")}
+        noResultsLabel=${t("categories.combobox_no_results")}
+        .options=${this.deviceProfiles.map((p) => ({ value: p.id, label: p.name }))}
+        .value=${this.chosenProfileId}
+        .error=${errors.profile}
+        .invalid=${errors.profile !== ""}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => {
+          this.chosenProfileId = e.detail.value;
+          this.chosenBinding = "";
+          this.#clearRefusal("profile");
+          this.#clearRefusal("binding");
+        }}
+      ></wt-combobox>
+      ${this.#renderBindingPicker(errors.binding)}
+    </div>`;
+  }
+
+  #renderPairDialog(): TemplateResult | typeof nothing {
+    const request = this.pairRequest;
+    if (request === null) return nothing;
+    const settings = this.pairStep === "settings";
+    const errors = settings ? this.#pairErrors() : { name: "", profile: "", binding: "" };
+    const marked = errors.name !== "" || errors.profile !== "" || errors.binding !== "";
+    const own = this.#ownErrors();
+    const blocked = own.name !== "" || own.profile !== "" || own.binding !== "";
+    return html`<wt-modal
+      size="standard"
+      data-test="pair-modal"
+      heading=${t("devices.pair_title").replace("{name}", request.label)}
       .open=${true}
-      @wt-close=${() => (this.openRequestId = null)}
+      .dismissible=${!this.submitting}
+      @wt-close=${() => this.#closePair()}
     >
-      <p class="label" data-test="join-dialog-label">${request.label}</p>
-      <div class="pickers">
-        <wt-combobox
-          data-test="join-profile"
-          name="profileId"
-          label=${t("devices.device_profile")}
-          search="auto"
-          placeholder=${t("devices.join_pick_profile")}
-          searchPlaceholder=${t("categories.combobox_search")}
-          noResultsLabel=${t("categories.combobox_no_results")}
-          .options=${[
-            { value: "", label: t("devices.join_pick_profile") },
-            ...this.deviceProfiles.map((p) => ({ value: p.id, label: p.name })),
-          ]}
-          .value=${this.chosenProfileId}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => {
-            this.chosenProfileId = e.detail.value;
-            this.chosenBinding = "";
-          }}
-        ></wt-combobox>
-        ${profile === undefined ? nothing : this.#renderBindingPicker(profile)}
-      </div>
-      ${
-        choices === undefined
-          ? html`<p class="hint">${t("devices.join_loading")}</p>`
-          : html`<p id="join-match-prompt">${t("devices.join_match_prompt")}</p>
-              ${ready ? nothing : html`<p class="hint">${t("devices.join_pick_first")}</p>`}
-              <div class="choices" role="group" aria-labelledby="join-match-prompt">
-                ${choices.map(
-                  // `size="lg"`: the number has to be legible from where the admin is standing,
-                  // against a device across the room — that is the whole job of a two-digit code.
-                  (number) =>
-                    html`<wt-button
-                      variant="secondary"
-                      size="lg"
-                      data-choice=${number}
-                      ?disabled=${!ready || this.submitting}
-                      aria-label=${t("devices.join_choice_label").replace("{number}", number)}
-                      @click=${() => void this.#accept(request, number)}
-                      >${number}</wt-button
-                    >`,
-                )}
-              </div>`
-      }
-      ${
-        this.errorKey && this.openRequestId === request.id
-          ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
-          : nothing
-      }
-      <wt-button
+      ${settings ? this.#renderSettingsStep(errors) : this.#renderNumberStep()}
+      <wt-form-actions
         slot="footer"
-        variant="ghost"
-        data-test="join-cancel"
-        @click=${() => (this.openRequestId = null)}
-        >${t("action.cancel")}</wt-button
+        data-test="pair-actions"
+        .error=${bottomMessage(refusal(this.pairError), marked ? t("form.fix_fields") : null)}
       >
-    </wt-dialog>`;
+        <wt-button
+          slot="cancel"
+          data-test="pair-cancel"
+          ?disabled=${this.submitting}
+          @click=${() => void this.#closeModal("pair-modal")}
+          >${t("action.cancel")}</wt-button
+        >
+        ${
+          settings
+            ? html`<wt-button
+                variant="primary"
+                data-test="pair-submit"
+                ?loading=${this.submitting}
+                ?disabled=${blocked}
+                @click=${() => void this.#submitPair()}
+                >${t("devices.pair")}</wt-button
+              >`
+            : nothing
+        }
+      </wt-form-actions>
+    </wt-modal>`;
   }
 
   override render(): TemplateResult {
     return html`
-      <h1 class="title">${t("devices.title")}</h1>
-      <section data-test="pairing-panel">${this.#renderPairing()}</section>
-
-      <section data-test="join-panel">
-        <h2 class="panel-title">${t("devices.join_waiting_title")}</h2>
-        ${
-          this.pendingJoins.length === 0
-            ? html`<p class="empty" data-test="no-join-requests">${t("devices.join_none")}</p>`
-            : html`<ol>
-                ${this.pendingJoins.map((request) => this.#renderJoinRequest(request))}
-              </ol>`
-        }
-      </section>
+      <div class="heading">
+        <h1 class="title">${t("devices.title")}</h1>
+        ${this.#renderAddButton()}
+      </div>
 
       <section data-test="devices-panel">
         ${
           this.devices.length === 0
-            ? html`<p class="empty" data-test="no-devices">${t("devices.no_devices")}</p>`
+            ? html`<p class="empty" data-test="no-devices">${t("devices.no_devices")}</p>
+                ${this.#renderAddButton()}`
             : html`<ol>
                 ${this.devices.map((device) => this.#renderDevice(device))}
               </ol>`
         }
       </section>
 
-      ${this.#renderAcceptDialog()}
       ${
-        this.errorKey && this.openRequestId === null
-          ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>`
+        this.errorKey
+          ? html`<p class="error" role="alert" data-test="page-error">
+              ${codeMessage(this.errorKey)}
+            </p>`
           : nothing
       }
+      ${this.#renderAddDialog()} ${this.#renderPairDialog()}
     `;
   }
 }

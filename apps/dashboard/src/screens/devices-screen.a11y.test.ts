@@ -16,9 +16,10 @@ import type {
 } from "../api/client.js";
 
 /**
- * Scanned in three states: the default list, the pairing window OPEN, and the accept dialog. The stub
- * must resolve every list verb or a stray rejection pollutes the run. The last block pins that each
- * number button has a real accessible NAME and that the dialog works from the keyboard alone.
+ * Scanned in the default list, the Add a device dialog (with waiting rows, with none, after its hold
+ * lapsed, and after its hold was refused) and both Pair steps. The stub must resolve every list verb or a stray rejection pollutes the run. The
+ * last block pins that each number button has a real accessible NAME and that pairing works from the
+ * keyboard alone.
  */
 const stations: Station[] = [
   {
@@ -125,7 +126,20 @@ const deviceProfiles: DeviceProfile[] = [
 ];
 
 const pending: JoinRequestRow[] = [
-  { id: "j1", kind: "device", label: "Pantalla pase", createdAt: "2026-09-08T10:02:00.000Z" },
+  {
+    id: "r1",
+    kind: "device",
+    label: "Pantalla pase",
+    createdAt: "2026-09-08T10:02:00.000Z",
+    pairingBy: null,
+  },
+  {
+    id: "r2",
+    kind: "device",
+    label: "Caja de la terraza",
+    createdAt: "2026-09-08T10:03:00.000Z",
+    pairingBy: { name: "Ana", mine: false },
+  },
 ];
 
 const CHOICES = ["12", "47", "83"];
@@ -150,7 +164,7 @@ const printers: Printer[] = [
   },
 ];
 
-function stubApi(pairingOpen = false): DashboardApi {
+function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): DashboardApi {
   return {
     listDevices: vi.fn().mockResolvedValue(devices),
     listStations: vi.fn().mockResolvedValue(stations),
@@ -158,18 +172,22 @@ function stubApi(pairingOpen = false): DashboardApi {
     listDeviceProfiles: vi.fn().mockResolvedValue(deviceProfiles),
     listPrinters: vi.fn().mockResolvedValue(printers),
     pairingMode: vi.fn().mockResolvedValue({
-      open: pairingOpen,
-      openUntil: pairingOpen ? "2026-09-08T10:20:00.000Z" : null,
-      refusedRecently: pairingOpen ? 0 : 2,
+      open: false,
+      openUntil: null,
+      deviceAddress: "https://waitron.local",
     }),
-    openPairingMode: vi.fn().mockResolvedValue({ openUntil: "2026-09-08T10:20:00.000Z" }),
-    closePairingMode: vi.fn().mockResolvedValue(undefined),
+    takePairingHold: vi
+      .fn()
+      .mockResolvedValue({ holdId: "h1", openUntil: "2026-09-08T10:05:00.000Z" }),
+    renewPairingHold: vi.fn().mockResolvedValue({ openUntil: "2026-09-08T10:05:00.000Z" }),
+    releasePairingHold: vi.fn().mockResolvedValue(undefined),
     joinRequests: vi.fn().mockResolvedValue(pending),
     joinChallenge: vi.fn().mockResolvedValue({ choices: CHOICES }),
+    checkDeviceJoinNumber: vi.fn().mockResolvedValue(undefined),
     denyJoinRequest: vi.fn().mockResolvedValue(undefined),
     acceptDeviceJoinRequest: vi
       .fn()
-      .mockResolvedValue({ deviceId: "j1", name: "Pantalla pase", formFactor: "kds" }),
+      .mockResolvedValue({ deviceId: "d9", name: "Pantalla pase", formFactor: "kds" }),
     revokeDevice: vi.fn().mockResolvedValue(undefined),
     reassignDeviceProfile: vi.fn().mockResolvedValue(undefined),
     listReaders: vi.fn().mockResolvedValue([
@@ -184,7 +202,36 @@ function stubApi(pairingOpen = false): DashboardApi {
     ]),
     getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r1" }),
     setDeviceReader: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
   } as unknown as DashboardApi;
+}
+
+/** Waiting rows are table cells, which live in the table's own shadow root. */
+function deep(root: ShadowRoot | Element, sel: string): HTMLElement | null {
+  const found = root.querySelector<HTMLElement>(sel);
+  if (found) return found;
+  for (const node of root.querySelectorAll<HTMLElement>("*")) {
+    if (node.shadowRoot) {
+      const nested = deep(node.shadowRoot, sel);
+      if (nested) return nested;
+    }
+  }
+  return null;
+}
+
+async function openAdd(el: DevicesScreen): Promise<void> {
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=open-add-device]")!.click();
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("[data-test=device-qr]")?.getAttribute("src")).toBeTruthy(),
+  );
+  await flush(el);
+}
+
+async function openPair(el: DevicesScreen): Promise<void> {
+  await vi.waitFor(() => expect(deep(el.shadowRoot!, "[data-test=pair-r1]")).not.toBeNull());
+  deep(el.shadowRoot!, "[data-test=pair-r1]")!.click();
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-choice]")).not.toBeNull());
+  await flush(el);
 }
 
 async function flush(el: DevicesScreen): Promise<void> {
@@ -235,61 +282,159 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
-  it("renders the open pairing window accessibly", async () => {
+  it.each([390, 1280])(
+    "renders the Add a device dialog with waiting rows accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        { api: stubApi() },
+        theme,
+      );
+      await flush(el);
+      await openAdd(el);
+      await vi.waitFor(() =>
+        expect(deep(el.shadowRoot!, "[data-test=being-paired-r2]")).not.toBeNull(),
+      );
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
+
+  it("renders the Add a device dialog with nothing waiting accessibly", async () => {
     const { el, host } = await mountWidget<DevicesScreen>(
       "dashboard-devices-screen",
-      { api: stubApi(true) },
+      { api: stubApi({ joinRequests: vi.fn().mockResolvedValue([]) }) },
       theme,
+    );
+    await flush(el);
+    await openAdd(el);
+    expect(el.shadowRoot!.querySelector("[data-test=waiting-empty] wt-spinner")).toBeTruthy();
+    await expectNoA11yViolations(host);
+  });
+
+  // Only the interval timers are faked, so animation frames stay real. The stub has no `background`,
+  // so the controller renews through the API itself.
+  it("renders the Add a device dialog after its hold lapsed accessibly", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        {
+          api: stubApi({
+            renewPairingHold: vi.fn().mockRejectedValue({ code: "device.pairing_hold_lapsed" }),
+          }),
+        },
+        theme,
+      );
+      await flush(el);
+      await openAdd(el);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.waitFor(() =>
+        expect(
+          el.shadowRoot!.querySelector("[data-test=hold-lapsed]")?.getAttribute("data-status"),
+        ).toBe("lapsed"),
+      );
+      await flush(el);
+      await expectNoA11yViolations(host);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders the Add a device dialog after its hold was refused accessibly", async () => {
+    const { el, host } = await mountWidget<DevicesScreen>(
+      "dashboard-devices-screen",
+      {
+        api: stubApi({ takePairingHold: vi.fn().mockRejectedValue({ code: "connection.failed" }) }),
+      },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=open-add-device]")!.click();
+    await vi.waitFor(() =>
+      expect(
+        el.shadowRoot!.querySelector("[data-test=hold-lapsed]")?.getAttribute("data-status"),
+      ).toBe("failed"),
     );
     await flush(el);
     await expectNoA11yViolations(host);
   });
 
-  it("renders the accept dialog and its three numbers accessibly", async () => {
-    const { el, host } = await mountWidget<DevicesScreen>(
-      "dashboard-devices-screen",
-      { api: stubApi(true) },
-      theme,
-    );
-    await flush(el);
-    // Open the waiting row and choose a kds profile, so the station picker AND the three number
-    // buttons are both in the a11y tree (a modal <dialog> is only exposed once it is open).
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=join-review-j1]")!.click();
-    await flush(el);
-    await chooseOption(el.shadowRoot!.querySelector("[data-test=join-profile]")!, "dp3");
-    await el.updateComplete;
-    const binding = el.shadowRoot!.querySelector("[data-test=join-binding]")!;
-    await userEvent.click(binding.shadowRoot!.querySelector(".trigger")!);
-    expect(
-      Array.from(binding.shadowRoot!.querySelectorAll(".group-heading")).map((group) =>
-        group.textContent?.trim(),
-      ),
-    ).toEqual(["Estaciones", "Puntos de seguimiento"]);
-    await expectNoA11yViolations(host);
-  });
+  it.each([390, 1280])(
+    "renders the Pair dialog's number step accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        { api: stubApi() },
+        theme,
+      );
+      await flush(el);
+      await openAdd(el);
+      await openPair(el);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
+
+  it.each([390, 1280])(
+    "renders the Pair dialog's settings step with a Name error accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        {
+          api: stubApi({
+            acceptDeviceJoinRequest: vi.fn().mockRejectedValue({ code: "device.name_taken" }),
+          }),
+        },
+        theme,
+      );
+      await flush(el);
+      await openAdd(el);
+      await openPair(el);
+      el.shadowRoot!.querySelector<HTMLElement>('[data-choice="47"]')!.click();
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=pair-profile]")).not.toBeNull(),
+      );
+      await chooseOption(el.shadowRoot!.querySelector("[data-test=pair-profile]")!, "dp3");
+      await el.updateComplete;
+      const binding = el.shadowRoot!.querySelector("[data-test=pair-binding]")!;
+      await chooseOption(binding, "station:s1");
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=pair-submit]")!.click();
+      await vi.waitFor(() =>
+        expect(
+          (el.shadowRoot!.querySelector("[data-test=pair-name]") as HTMLElement & { error: string })
+            .error,
+        ).not.toBe(""),
+      );
+      await flush(el);
+      await userEvent.click(binding.shadowRoot!.querySelector(".trigger")!);
+      expect(
+        Array.from(binding.shadowRoot!.querySelectorAll(".group-heading")).map((group) =>
+          group.textContent?.trim(),
+        ),
+      ).toEqual(["Estaciones", "Puntos de seguimiento"]);
+      await userEvent.keyboard("{Escape}");
+      await flush(el);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
 });
 
 describe("devices-screen a11y — the numeric match", () => {
-  /** Opens the waiting row's dialog and picks the kds profile + station, so the numbers are tappable. */
-  async function openReadyDialog(): Promise<DevicesScreen> {
-    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
-      api: stubApi(true),
-    });
-    await flush(el);
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=join-review-j1]")!.click();
-    await flush(el);
-    await chooseOption(el.shadowRoot!.querySelector("[data-test=join-profile]")!, "dp3");
-    await el.updateComplete;
-    await chooseOption(el.shadowRoot!.querySelector("[data-test=join-binding]")!, "station:s1");
-    await el.updateComplete;
-    return el;
-  }
-
   // A bare "47" is not a name a screen reader can act on — the number has to be announced as one.
   // Read off the INNER <button>, which is the element that actually carries the name (wt-button
   // forwards `aria-label` into its shadow root).
   it("names every number button, not just labels it with the digits", async () => {
-    const el = await openReadyDialog();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    await openAdd(el);
+    await openPair(el);
     const names = Array.from(el.shadowRoot!.querySelectorAll("[data-choice]")).map((b) =>
       b.shadowRoot!.querySelector("button")!.getAttribute("aria-label"),
     );
@@ -298,31 +443,36 @@ describe("devices-screen a11y — the numeric match", () => {
     );
   });
 
-  // Reachable AND operable from the keyboard alone: Enter on the focused row control opens the
-  // dialog, and Enter on a focused number accepts with it. Real key events, not synthetic clicks.
-  it("opens the dialog and accepts a number from the keyboard alone", async () => {
-    const api = stubApi(true);
+  // Reachable AND operable from the keyboard alone: Enter on the focused Pair opens the dialog, Enter
+  // on a focused number checks it, and Enter in the name field pairs. Real key events.
+  it("pairs a device from the keyboard alone", async () => {
+    const api = stubApi();
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
+    await openAdd(el);
+    await vi.waitFor(() => expect(deep(el.shadowRoot!, "[data-test=pair-r1]")).not.toBeNull());
 
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=join-review-j1]")!.focus();
+    deep(el.shadowRoot!, "[data-test=pair-r1]")!.focus();
     await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-choice]")).not.toBeNull());
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=join-dialog]")).toBeTruthy();
-
-    await chooseOption(el.shadowRoot!.querySelector("[data-test=join-profile]")!, "dp3");
-    await el.updateComplete;
-    await chooseOption(el.shadowRoot!.querySelector("[data-test=join-binding]")!, "station:s1");
-    await el.updateComplete;
 
     el.shadowRoot!.querySelector<HTMLElement>('[data-choice="47"]')!.focus();
     await userEvent.keyboard("{Enter}");
-    await flush(el);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=pair-name]")).not.toBeNull(),
+    );
+    expect(api.checkDeviceJoinNumber).toHaveBeenCalledWith("r1", { choice: "47", holdId: "h1" });
 
-    expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("j1", {
-      choice: "47",
-      profileId: "dp3",
-      stationId: "s1",
-    });
+    await chooseOption(el.shadowRoot!.querySelector("[data-test=pair-profile]")!, "dp1");
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=pair-name]")!.focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() =>
+      expect(api.acceptDeviceJoinRequest).toHaveBeenCalledWith("r1", {
+        name: "Pantalla pase",
+        profileId: "dp1",
+      }),
+    );
   });
 });

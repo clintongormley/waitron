@@ -4,7 +4,7 @@ import type { TillConfig } from "../till-config.js";
 
 /**
  * Enrol a device — knock, then accept — in one call. Deliberately NOT a production verb: it bypasses
- * the pairing window and the numeric match, which a route must never do.
+ * the pairing window, the number check and the claim, which a route must never do.
  */
 export async function enrolDeviceForTest(
   db: Database,
@@ -19,14 +19,11 @@ export async function enrolDeviceForTest(
   return withTransaction(db, async (tx) => {
     const made = await createJoinRequest(tx, cfg, { kind: "device", label: input.name });
     const accepted = await acceptDeviceJoinRequest(tx, cfg, made.joinId, {
-      choice: made.verificationNumber,
+      label: input.name,
       profileId: input.profileId,
       stationId: input.stationId ?? null,
       watcherId: input.watcherId ?? null,
     });
-    /* v8 ignore start -- the fixture always passes the request's own number */
-    if (!accepted.ok) throw new Error("enrolDeviceForTest: mismatch");
-    /* v8 ignore stop */
     return { deviceId: accepted.deviceId, token: made.token };
   });
 }

@@ -166,11 +166,13 @@ function stubApi(pairingOpen = false, overrides: Partial<DashboardApi> = {}): Da
     pairingMode: vi.fn().mockResolvedValue({
       open: pairingOpen,
       openUntil: pairingOpen ? "2026-09-08T10:20:00.000Z" : null,
-      refusedRecently: pairingOpen ? 0 : 2,
+      deviceAddress: "https://waitron.local",
     }),
-    openPairingMode: vi.fn().mockResolvedValue({ openUntil: "2026-09-08T10:20:00.000Z" }),
-    renewPairingMode: vi.fn().mockResolvedValue({ openUntil: "2026-09-08T10:20:00.000Z" }),
-    closePairingMode: vi.fn().mockResolvedValue(undefined),
+    takePairingHold: vi
+      .fn()
+      .mockResolvedValue({ holdId: "h1", openUntil: "2026-09-08T10:20:00.000Z" }),
+    renewPairingHold: vi.fn().mockResolvedValue({ openUntil: "2026-09-08T10:20:00.000Z" }),
+    releasePairingHold: vi.fn().mockResolvedValue(undefined),
     joinRequests: vi.fn().mockResolvedValue(pending),
     joinChallenge: vi.fn().mockResolvedValue({ choices: CHOICES }),
     denyJoinRequest: vi.fn().mockResolvedValue(undefined),
@@ -351,6 +353,29 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await flush(el);
     q(el, "[data-test=open-add-agent]")!.click();
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a lapsed hold's notice and Start again accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      {
+        api: stubApi(false, {
+          renewPairingHold: vi.fn().mockRejectedValue({ code: "device.pairing_hold_lapsed" }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    vi.useFakeTimers();
+    try {
+      q(el, "[data-test=open-add-agent]")!.click();
+      await vi.advanceTimersByTimeAsync(60_000);
+    } finally {
+      vi.useRealTimers();
+    }
+    await flush(el);
+    expect(q(el, "[data-test=hold-lapsed]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

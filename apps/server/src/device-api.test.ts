@@ -265,8 +265,8 @@ async function seedProfile(
 }
 
 /**
- * Knock on `app` with an OPEN window, then accept the request directly on `suite.db` with its own
- * number — the two halves of production enrolment, the first through the real route (so the cookie
+ * Knock on `app` with an OPEN window, then accept the request directly on `suite.db` under the
+ * name it knocked with — the two halves of production enrolment, the first through the real route (so the cookie
  * under test is the one the route set) and the second through the verb, because the accept route is
  * `join-api.ts`'s. Returns the joiner's cookie jar and the id the accept carried onto the `devices` row.
  */
@@ -278,15 +278,14 @@ async function knockAndAccept(
   windows.get(app)!.open();
   const res = await send(app, "POST", "/api/device/join", { body: { name: input.name } });
   expect(res.status).toBe(200);
-  const knock = (await res.json()) as { joinId: string; verificationNumber: string };
+  const knock = (await res.json()) as { joinId: string };
   const accepted = await withTransaction(suite.db, async (tx) => {
     return acceptDeviceJoinRequest(tx, venue.cfg, knock.joinId, {
-      choice: knock.verificationNumber,
+      label: input.name,
       profileId: input.profileId,
       stationId: input.stationId ?? null,
     });
   });
-  if (!accepted.ok) throw new Error("device-api.test: the fixture's own number mismatched");
   return {
     deviceId: accepted.deviceId,
     jar: deviceCookieFrom(res),
@@ -350,7 +349,6 @@ describe("POST /api/device/join", () => {
     );
     expect(rows[0]!.n).toBe(0);
     expect(res.headers.get("set-cookie")).toBeNull();
-    expect(mode.refusedRecently()).toBe(1);
   });
 
   it("mints a request, sets the cookie and returns the number when the window is open", async () => {
@@ -418,8 +416,7 @@ describe("POST /api/device/join", () => {
   });
 
   it("is rate limited BEFORE the window is consulted and before any DB work", async () => {
-    // The window is SHUT, so a 403 would also be a plausible answer — the 429 is what proves the
-    // limiter runs FIRST, and the absent `noteRefused` proves the window was never consulted.
+    // The window is SHUT, so a limiter running second would answer 403; the 429 proves it runs FIRST.
     const venue = await setupVenue(suite.db);
     const limiter = createEnrolRateLimiter({ now: () => 1_000 });
     const mode = createPairingMode();
@@ -431,7 +428,6 @@ describe("POST /api/device/join", () => {
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
       "device.join_rate_limited",
     );
-    expect(mode.refusedRecently()).toBe(0);
     const { rows } = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from join_requests `,
     );
@@ -481,12 +477,121 @@ describe("POST /api/device/join", () => {
       "device.join_full",
     );
   });
+
+  it("does not count requests a shut window stranded against the cap", async () => {
+    const venue = await setupVenue(suite.db);
+    let offset = 0;
+    const mode = createPairingMode({ now: () => Date.now() + offset });
+    const app = mountApp(venue.cfg, undefined, mode);
+    const first = mode.open();
+    for (let i = 0; i < PENDING_CAP; i++) {
+      const ok = await send(app, "POST", "/api/device/join", { body: { name: `Caja ${i}` } });
+      expect(ok.status).toBe(200);
+    }
+    // Shut and reopened on the holder alone, so only the knock itself can discard the old ten.
+    mode.release(first.holdId);
+    offset += 1_000;
+    mode.open();
+    const res = await send(app, "POST", "/api/device/join", { body: { name: "Caja nueva" } });
+    expect(res.status).toBe(200);
+    const { rows } = await suite.db.execute<{ label: string }>(
+      sql`select label from join_requests `,
+    );
+    expect(rows).toEqual([{ label: "Caja nueva" }]);
+  });
+
+  /** A knock admitted while the window is open whose body is held back until `finish` is called;
+   *  `reading` resolves once the route has started reading it, i.e. after the window check. */
+  function withheldKnock(app: Hono): {
+    reading: Promise<void>;
+    finish: () => void;
+    response: Promise<Response>;
+  } {
+    let started!: () => void;
+    let finish!: () => void;
+    const reading = new Promise<void>((resolve) => (started = resolve));
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('{"name":'));
+        finish = () => {
+          controller.enqueue(encoder.encode('"Late till"}'));
+          controller.close();
+        };
+      },
+      pull() {
+        started();
+      },
+    });
+    const response = Promise.resolve(
+      app.request(
+        new Request("http://localhost/api/device/join", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body,
+          duplex: "half",
+        } as RequestInit),
+      ),
+    );
+    return { reading, finish: () => finish(), response };
+  }
+
+  it.each([
+    { reopened: true, label: "shut and reopened" },
+    { reopened: false, label: "shut" },
+  ])(
+    "refuses a knock admitted before the window $label while its body arrived, and keeps no row",
+    async ({ reopened }) => {
+      const venue = await setupVenue(suite.db);
+      let offset = 0;
+      const mode = createPairingMode({ now: () => Date.now() + offset });
+      const app = mountApp(venue.cfg, undefined, mode);
+      const first = mode.open();
+      const knock = withheldKnock(app);
+      await knock.reading;
+      mode.release(first.holdId);
+      if (reopened) {
+        offset += 1_000;
+        mode.open();
+      }
+      knock.finish();
+      const res = await knock.response;
+      expect(res.status).toBe(403);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+        "device.pairing_closed",
+      );
+      expect(res.headers.get("set-cookie")).toBeNull();
+      const { rows } = await suite.db.execute<{ n: number }>(
+        sql`select count(*) as n from join_requests `,
+      );
+      expect(rows[0]!.n).toBe(0);
+    },
+  );
+
+  it("admits a knock whose body arrives while the same open period goes on", async () => {
+    const venue = await setupVenue(suite.db);
+    const mode = createPairingMode();
+    const app = mountApp(venue.cfg, undefined, mode);
+    const first = mode.open();
+    const knock = withheldKnock(app);
+    await knock.reading;
+    // A second hold taken and the first released: the window never shut, so this is one period.
+    mode.open();
+    mode.release(first.holdId);
+    knock.finish();
+    const res = await knock.response;
+    expect(res.status).toBe(200);
+    const { rows } = await suite.db.execute<{ label: string }>(
+      sql`select label from join_requests `,
+    );
+    expect(rows).toEqual([{ label: "Late till" }]);
+  });
 });
 
 describe("devMode auto-accept", () => {
   it("auto-accepts a knock with the venue's default till profile, and the cookie works immediately", async () => {
     // The window is NEVER opened (mountDevApp builds a fresh shut holder), so in production this knock
-    // would 403. devMode holds it open and accepts the request in the same transaction with the venue's
+    // would 403. devMode skips the window check and accepts the request in the same transaction with the venue's
     // provisioned default `till` profile, so the joiner's cookie is a working device cookie at once — no
     // window, no approval step.
     const venue = await setupVenue(suite.db);
@@ -545,10 +650,7 @@ describe("GET /api/device/join/status", () => {
     const knock = await send(app, "POST", "/api/device/join", { body: { name: "Caja nueva" } });
     expect(knock.status).toBe(200);
     const jar = deviceCookieFrom(knock);
-    const { joinId, verificationNumber } = (await knock.json()) as {
-      joinId: string;
-      verificationNumber: string;
-    };
+    const { joinId } = (await knock.json()) as { joinId: string };
 
     const pending = await send(app, "GET", "/api/device/join/status", { cookie: jar });
     expect(pending.status).toBe(200);
@@ -557,7 +659,7 @@ describe("GET /api/device/join/status", () => {
     const profileId = await seedProfile("till");
     await withTransaction(suite.db, async (tx) => {
       return acceptDeviceJoinRequest(tx, venue.cfg, joinId, {
-        choice: verificationNumber,
+        label: "Caja nueva",
         profileId,
       });
     });
@@ -573,6 +675,25 @@ describe("GET /api/device/join/status", () => {
     const me = await send(app, "GET", "/api/device/me", { cookie: jar });
     expect(me.status).toBe(200);
     expect((await me.json()) as { deviceId: string }).toMatchObject({ deviceId: joinId });
+  });
+
+  it("is not_approved once the window has shut", async () => {
+    const venue = await setupVenue(suite.db);
+    const mode = createPairingMode();
+    const { holdId } = mode.open();
+    const app = mountApp(venue.cfg, undefined, mode);
+    const knock = await send(app, "POST", "/api/device/join", { body: { name: "Caja nueva" } });
+    const jar = deviceCookieFrom(knock);
+    const pending = await send(app, "GET", "/api/device/join/status", { cookie: jar });
+    expect(await pending.json()).toEqual({ status: "pending" });
+    mode.release(holdId);
+    const shut = await send(app, "GET", "/api/device/join/status", { cookie: jar });
+    expect(shut.status).toBe(200);
+    expect(await shut.json()).toEqual({ status: "not_approved" });
+    const { rows } = await suite.db.execute<{ n: number }>(
+      sql`select count(*) as n from join_requests `,
+    );
+    expect(rows[0]!.n).toBe(0);
   });
 
   it("is not_approved after a deny, and for a cookie that names nothing", async () => {

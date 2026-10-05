@@ -564,14 +564,15 @@ export interface JoinRequestRow {
   kind: "device" | "print_agent";
   label: string;
   createdAt: string;
+  /** Device rows only: the manager whose number check claimed the request, if any. */
+  pairingBy?: { name: string; mine: boolean } | null;
 }
 
-/** `refusedRecently` counts the knocks the shut window refused within `REFUSED_WINDOW_MS`
- * (`apps/server/src/pairing-mode.ts`). It is held in memory, so a restart resets it. */
+/** `deviceAddress` is the address the server advertises to the venue's devices, not this tab's. */
 export interface PairingModeState {
   open: boolean;
   openUntil: string | null;
-  refusedRecently: number;
+  deviceAddress: string;
 }
 
 export type FireControl = "waiter" | "kitchen" | "expo";
@@ -2404,20 +2405,23 @@ export class DashboardApi {
     return this.#request<PairingModeState>("/management-api/pairing-mode", "GET");
   }
 
-  /** On an open window this moves the lapse to a full window from now, so Extend and Open are one
-   * call. */
-  openPairingMode(): Promise<{ openUntil: string }> {
-    return this.#request<{ openUntil: string }>("/management-api/pairing-mode", "POST");
+  takePairingHold(): Promise<{ holdId: string; openUntil: string }> {
+    return this.#request<{ holdId: string; openUntil: string }>(
+      "/management-api/pairing-mode/holds",
+      "POST",
+    );
   }
 
-  /** Open or extend the window for an open dialog without extending its authenticated session. */
-  renewPairingMode(): Promise<{ openUntil: string }> {
-    return this.#request<{ openUntil: string }>("/management-api/pairing-mode/renew", "POST");
+  /** The route leaves the session's idle clock alone; call it through `background`. */
+  renewPairingHold(holdId: string): Promise<{ openUntil: string }> {
+    return this.#request<{ openUntil: string }>(
+      `/management-api/pairing-mode/holds/${holdId}/renew`,
+      "POST",
+    );
   }
 
-  /** Requests already pending stay pending and can still be accepted. */
-  closePairingMode(): Promise<void> {
-    return this.#request<void>("/management-api/pairing-mode", "DELETE");
+  releasePairingHold(holdId: string): Promise<void> {
+    return this.#request<void>(`/management-api/pairing-mode/holds/${holdId}`, "DELETE");
   }
 
   joinRequests(kind: "device" | "print_agent"): Promise<JoinRequestRow[]> {
@@ -2438,11 +2442,18 @@ export class DashboardApi {
   }
 
   /** A wrong `choice` is terminal: the server deletes the request before answering
-   * `device.join_mismatch`, so the caller refreshes rather than offering a second attempt. */
+   * `device.join_mismatch`, so the caller refreshes rather than offering a second attempt. A match
+   * claims the request for this login and hold. */
+  checkDeviceJoinNumber(id: string, input: { choice: string; holdId: string }): Promise<void> {
+    return this.#request<void>(`/management-api/device-join-requests/${id}/check`, "POST", input);
+  }
+
+  /** Refused `join_request.unclaimed` unless this login holds a live claim from
+   * {@link checkDeviceJoinNumber}. */
   acceptDeviceJoinRequest(
     id: string,
     input: {
-      choice: string;
+      name: string;
       profileId: string;
       stationId?: string;
       watcherId?: string;
@@ -2455,7 +2466,8 @@ export class DashboardApi {
     );
   }
 
-  /** A wrong `choice` is terminal, as in {@link acceptDeviceJoinRequest}. */
+  /** A wrong `choice` is terminal: the server deletes the request before answering
+   * `device.join_mismatch`. */
   acceptPrintAgentJoinRequest(id: string, input: { choice: string }): Promise<void> {
     return this.#request<void>(
       `/management-api/print-agent-join-requests/${id}/accept`,

@@ -40,10 +40,10 @@ it("defaults to the module locale when none is passed (shipped default en-GB)", 
 
 it("resolves a shut pairing window to its own actionable copy, in both locales (device-join-and-accept §2)", () => {
   expect(codeMessage("device.pairing_closed", "en")).toBe(
-    "New devices aren't being accepted right now. Ask a manager to switch on “Allow new devices”.",
+    "New devices aren't being accepted right now. Ask a manager to open Add a device in the dashboard.",
   );
   expect(codeMessage("device.pairing_closed", "es")).toBe(
-    "Ahora mismo no se aceptan dispositivos nuevos. Pide a un responsable que active «Permitir dispositivos nuevos».",
+    "Ahora mismo no se aceptan dispositivos nuevos. Pide a un responsable que abra «Añadir un dispositivo» en el panel.",
   );
   expect(codeMessage("device.unauthorized", "en")).toBe(
     "This device isn't set up — ask to join this venue",
