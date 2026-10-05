@@ -5521,6 +5521,8 @@ export async function issueUnpaidInvoice(
     operatorId,
     settlement: { kind: "deferred" },
   });
+  const receiptContext = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
+  await VENUE_SERVICE.recordSaleReceiptHeader(tx, cfg, saleId, receiptContext?.zoneId ?? null);
   const order = await readReceiptOrder(tx, cfg, id, { atIssuance: true });
   await tx
     .update(workingOrders)

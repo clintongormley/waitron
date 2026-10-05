@@ -41,7 +41,7 @@ import {
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
-import { ALL_MODULES } from "./modules.js";
+import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
 import {
   abandonHeldOrder,
@@ -1672,6 +1672,34 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await registroCount(id)).toBe(1); // STILL one registro
     expect(await outstanding()).toEqual([]); // settled → no longer owed
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "3.50" }]);
+  });
+
+  it("snapshots the department trading name when an invoice-first order is placed", async () => {
+    const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
+    await suite.db.execute(
+      sql`update departments set trading_name = 'Deli Before Payment' where location_id = ${cfg.locationId}`,
+    );
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+    });
+    await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
+    const [sale] = await suite.db
+      .select({ id: sales.id })
+      .from(sales)
+      .where(eq(sales.workingOrderId, id));
+    expect(sale).toBeDefined();
+    await suite.db.execute(
+      sql`update departments set trading_name = 'Renamed After Filing' where location_id = ${cfg.locationId}`,
+    );
+
+    const header = await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.readSaleReceiptHeader(tx, sale!.id),
+    );
+    expect(header?.tradingName).toBe("Deli Before Payment");
+    expect(header?.printTradingName).toBe(true);
   });
 
   it("Mode I: the placed result carries the backend's words beside its QR", async () => {

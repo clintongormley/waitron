@@ -43,7 +43,6 @@ export interface TillConfig {
   sendingDeviceId?: string;
   /** Line ids of made-here records this request writes, for its till answer. */
   madeHereSink?: Set<string>;
-  /** Fallback for a till request with no selected zone; zone-scoped work resolves its policy. */
   orderFlow: OrderFlow;
   /**
    * The largest total this regime records for a sale with no named customer, from the fiscal

@@ -1831,8 +1831,7 @@ export class TillApp extends LitElement {
       this.counterServiceZoneId = context.zoneId;
       this.api.setServiceZone(context.zoneId);
       this.receiptPrintMode = context.receiptPrintMode ?? "auto";
-      if (zones !== undefined && context.serviceMode !== "table_tab")
-        this.orderFlow = context.serviceMode;
+      if (context.serviceMode !== "table_tab") this.orderFlow = context.serviceMode;
     } catch {
       if (replaced()) return;
       offerLoadFailed = true;

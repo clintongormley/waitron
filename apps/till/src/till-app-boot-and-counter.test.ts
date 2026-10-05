@@ -921,6 +921,21 @@ describe("till-app receipt issuance", () => {
     ).toBe(false);
   });
 
+  it("takes pay timing from the zone context when no zone chooser is supplied", async () => {
+    const catalogue = zoneOffers(
+      { menus: [defaultMenu], products: [cafe] },
+      "zone-counter",
+      "ticket_then_pay",
+    );
+    delete catalogue.zones;
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+    });
+    const c = await toCounter(el);
+
+    expect(c.orderFlow).toBe("ticket_then_pay");
+  });
+
   it("offers the original receipt according to the selected zone, even when boot says auto", async () => {
     const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe] }, "zone-counter");
     catalogue.context.receiptPrintMode = "on_request";
