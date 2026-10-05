@@ -5919,6 +5919,11 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   its Prep stations tabs, live numbers and inherited late flags are not implemented. Review choices
   cover what live counts include, ready-but-unserved work, interim station hours, inactive display
   bindings and the core station-table rebuild/reset risk.
+  [Step 5 Hours plan](superpowers/plans/2026-10-05-hours.md) is written for owner review;
+  its standard week, special-date list/calendar and shared menu/wages date interface are not
+  implemented. Build waits for step 3. Review choices cover unset versus Closed/all-day hours,
+  overnight and clock-change rules, manual override expiry, whole-venue closure and palette,
+  single-department display, read permissions and the proposed pre-live schedule reset.
   [Step 1, PR #1166](https://github.com/clintongormley/waitron/pull/1166) gathers Receipts,
   Tables and Kitchen settings into tabs; supervisors can read Tables and Kitchen, while writes
   remain manager-only (owner amendment, 2026-10-04).
