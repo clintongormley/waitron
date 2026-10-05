@@ -2563,6 +2563,18 @@ describe("TillApi", () => {
     );
     expect(out).toBeUndefined();
   });
+
+  it("reportBattery hands a caller's abort signal to fetch", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const signal = new AbortController().signal;
+
+    await new TillApi("", fetchStub).reportBattery({ level: 82, charging: false }, { signal });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/battery",
+      expect.objectContaining({ method: "PUT", signal }),
+    );
+  });
 });
 
 describe("TillApi: a seated party", () => {

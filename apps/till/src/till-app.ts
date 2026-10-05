@@ -1106,7 +1106,7 @@ export class TillApp extends LitElement {
   #browserLocale?: string;
   #browserLocaleVenue?: string;
   #localeList?: Awaited<ReturnType<TillApi["getLocales"]>>["locales"];
-  #localeBootGeneration = 0;
+  #bootGeneration = 0;
   #preLoginChoice?: string;
   #venueLocaleReady = false;
   #loginPending = false;
@@ -1691,7 +1691,7 @@ export class TillApp extends LitElement {
 
   async #boot(): Promise<void> {
     this.#battery?.stop();
-    const localeBootGeneration = ++this.#localeBootGeneration;
+    const bootGeneration = ++this.#bootGeneration;
     this.#browserLocale = undefined;
     this.#browserLocaleVenue = undefined;
     this.#localeList = undefined;
@@ -1699,7 +1699,7 @@ export class TillApp extends LitElement {
     void this.api
       .getLocales()
       .then(({ locales, loginDefault, venueDefault }) => {
-        if (!this.isConnected || localeBootGeneration !== this.#localeBootGeneration) return;
+        if (!this.isConnected || bootGeneration !== this.#bootGeneration) return;
         this.#browserLocale = loginDefault;
         this.#browserLocaleVenue = venueDefault;
         this.#localeList = locales;
@@ -1788,12 +1788,12 @@ export class TillApp extends LitElement {
         this.makeNow = [];
       this.deviceName = identity.name;
       this.deviceId = identity.deviceId;
-      this.#battery?.stop();
-      // `disconnectedCallback` has already run for a torn-down app, so nothing would stop this one.
-      if (this.isConnected) {
+      // `disconnectedCallback` has already run for a torn-down app, so nothing would stop a reporter
+      // started now; and a boot a later one has overtaken must not start one.
+      if (this.isConnected && bootGeneration === this.#bootGeneration) {
         const nav = navigator as Navigator & { getBattery?: () => Promise<BatteryLike> };
         this.#battery = startBatteryReport(
-          (r) => this.api.reportBattery(r),
+          (r, signal) => this.api.reportBattery(r, { signal }),
           nav.getBattery === undefined ? undefined : () => nav.getBattery!(),
         );
       }

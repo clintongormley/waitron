@@ -1941,8 +1941,11 @@ export class TillApi {
   }
 
   /** `PUT /api/device/battery`, as the device the cookie names; `level` is a whole percentage. */
-  async reportBattery(report: { level: number; charging: boolean }): Promise<void> {
-    await this.#request<void>("/api/device/battery", "PUT", report);
+  async reportBattery(
+    report: { level: number; charging: boolean },
+    options: ReadOptions = {},
+  ): Promise<void> {
+    await this.#request<void>("/api/device/battery", "PUT", report, options.signal);
   }
 
   /** `GET /api/products` — see {@link ProductCatalogue}. */
