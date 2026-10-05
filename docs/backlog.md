@@ -3410,13 +3410,26 @@ tests' order checks (W85's name-order group, the status-filter case and the vari
 now check the product's order; listed in the PR.
 
 **Products at phone width: a long name runs under the pinned Actions column, cut with no ellipsis —
-OPEN (found 2026-10-05 during W85a's check).** At 390 px in the demo venue, with Croquetas'
-variants open, "Ración 10" showed as "Ración 1(" and the product's "4 variantes" as "4 variante"
-against the pinned Actions column (`~/waitron-campaign/w85a-shots/shot-dark-390.png`, a local
-screenshot). W85a changes only the variants' order, so I believe this predates it; not compared
-with `main`. Seen in the same check, also not traced: in the product editor's variant table the
-Unit button sits against the Price heading with no gap. The owner queued both on 2026-10-05: the
-long name as W85b and the Unit button gap as W85c.
+the long name FIXED (W85b); the Unit button gap OPEN (W85c).** Found 2026-10-05 during W85a's
+check, and queued by the owner the same day as two items:
+
+- Fixed in W85b (2026-10-05): at 390 px in the demo venue, with Croquetas' variants open,
+  "Ración 10" showed as "Ración 1(" and the product's "4 variantes" as "4 variante", cut off by the
+  pinned Actions column (`~/waitron-campaign/w85a-shots/shot-dark-390.png`, a local screenshot).
+  The table is as wide as its widest row, so a long name widened the Name column and its end sat
+  under the pinned column while the table was unscrolled. Every name in the Products tree's Name
+  column — a category's name with its count and its asterisk for no active station, All products
+  and its count, a product's name with its variant count, and a variant's name — now takes only the
+  room between its own start and the row's pinned cell, measured as if the table were unscrolled,
+  and wraps inside it, a single long word included. The room is measured a frame after the table
+  resizes or redraws, by the same pass that already fitted the category name box (`#fitNames`,
+  `apps/dashboard/src/widgets/product-list.ts`). A name that fits stays on one line. Pinned by the
+  390 px, 430-to-390 px and 1280 px cases in `apps/dashboard/src/widgets/product-list.test.ts`; the
+  redraws tested are a branch opened (also with the table scrolled sideways), a search and
+  selection turned on. Not covered: while a category is being renamed, its count and
+  asterisk follow the name box and are not capped.
+- Still open, W85c: in the product editor's variant table the Unit button sits against the Price
+  heading with no gap. Seen in the same check, not traced.
 
 **Catalogue: no two categories with one parent, and no two Active products, share a name — DONE
 (W72, #1214, owner 2026-10-05).** A category's name is now refused when another category with the same
@@ -3498,14 +3511,15 @@ duplicate-name refusal, and `category.invalid`'s, off against the pinned Actions
 is as wide as its widest row, and the refusal's one long line widened the Name column past the
 screen. The box now takes only the room before the pinned column, measured when it opens and again
 after the table resizes or redraws, and its refusal wraps inside it; a box the table is scrolled
-past is scrolled back to its start (`#fitNameBox`,
+past is scrolled back to its start (`#fitNameBox`, since W85b `#fitNames`,
 `apps/dashboard/src/widgets/product-list.ts`). The new box for a category being added is the same
 box. Pinned by the 390 px cases in `apps/dashboard/src/widgets/product-list.test.ts`. The fix
 changes only the name box, so the long product names in the phone-width entry above are not
-affected (W85b). Still open, for the owner: in the demo venue at 390 px the tree's leading slots
-leave the box about 55 px, so the refusal wraps about one word a line (local screenshots in
-`~/waitron-campaign/w72e-shots/`); whether to give it more room, for example by narrowing those
-slots at phone width alongside W85b, is asked in the campaign's questions file.
+affected (W85b) _(2026-10-05: since fixed, in the entry above)_. Still open, for the owner: in
+the demo venue at 390 px the tree's leading slots leave the box about 55 px, so the refusal wraps
+about one word a line (local screenshots in `~/waitron-campaign/w72e-shots/`); whether to give it more room, for example by narrowing those
+slots at phone width alongside W85b, is asked in the campaign's questions file. _(2026-10-05:
+W85b did not change those slots.)_
 
 **Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
 owner 2026-10-04; since 2026-10-05 a tree, W82a, see the last paragraph).** The bulk Move

@@ -228,6 +228,13 @@ export class ProductList extends LitElement {
         font-size: var(--wt-font-size-sm);
         white-space: nowrap;
       }
+      /* Each takes only the room #fitNames measures before the row's pinned cell, and wraps there. */
+      wt-data-table::part(folder-name),
+      wt-data-table::part(name-stack),
+      wt-data-table::part(variant-name) {
+        max-inline-size: var(--name-room);
+        overflow-wrap: anywhere;
+      }
       wt-data-table::part(name-box) {
         flex: 1 1 calc(var(--wt-tap-min) * 4);
         min-width: 0;
@@ -562,7 +569,7 @@ export class ProductList extends LitElement {
     if (!box) return;
     await box.updateComplete;
     // Fitted first, or focus scrolls the table sideways to show the whole uncapped box.
-    this.#fitNameBox();
+    this.#fitNames();
     box.focus();
     box.shadowRoot!.querySelector("input")!.select();
   }
@@ -630,34 +637,50 @@ export class ProductList extends LitElement {
   }
 
   /** Re-measured a frame after the table resizes or updates, never inside the resize observer's
-   * callback, which the box's new height would re-trigger. */
+   * callback, which the names' new heights would re-trigger. */
   #scheduleFit(): void {
     if (this.#fitFrame) return;
     this.#fitFrame = requestAnimationFrame(() => {
       this.#fitFrame = 0;
-      this.#fitNameBox();
+      this.#fitNames();
     });
   }
 
-  /** The table is as wide as its widest row, which on a phone runs under the pinned column, so the
-   * name box takes only the room before that column, measured as if unscrolled, and its refusal
-   * wraps inside it. A box whose start the table is scrolled past is scrolled back to, so a refusal
-   * that arrives after the person scrolled sideways is read from its first letter. */
-  #fitNameBox(): void {
+  /** The table is as wide as its widest row, which on a phone runs under the pinned column, so each
+   * name, and the name box, takes only the room before that column, measured as if unscrolled, and
+   * wraps inside it. Every room is measured before any is written, so writing one room does not
+   * force a fresh layout before the next is read. A name box whose start the table is scrolled past
+   * is scrolled back to, so a refusal that arrives after the person scrolled sideways is read from
+   * its first letter. */
+  #fitNames(): void {
     const root = this.#table()!.shadowRoot!;
-    const box = root.querySelector<HTMLElement>('wt-input[name="category-name"]');
-    if (!box) return;
     const scroll = root.querySelector<HTMLElement>(".scroll")!;
-    const cell = box.closest("td")!;
-    const end = cell
-      .closest("tr")!
-      .querySelector('td[data-pinned="end"]')!
-      .getBoundingClientRect().left;
-    const room =
-      end -
-      (box.getBoundingClientRect().left + scroll.scrollLeft) -
-      parseFloat(getComputedStyle(cell).paddingInlineEnd);
-    box.style.setProperty("--name-box-room", `${room}px`);
+    const box = root.querySelector<HTMLElement>('wt-input[name="category-name"]');
+    const names = [
+      ...root.querySelectorAll<HTMLElement>(
+        '[part~="folder-name"], [part~="name-stack"], [part~="variant-name"]',
+      ),
+    ];
+    const fitted = box ? [...names, box] : names;
+    const scrolled = scroll.scrollLeft;
+    const rooms = fitted.map((element) => {
+      const cell = element.closest("td")!;
+      const end = cell
+        .closest("tr")!
+        .querySelector('td[data-pinned="end"]')!
+        .getBoundingClientRect().left;
+      const room =
+        end -
+        (element.getBoundingClientRect().left + scrolled) -
+        parseFloat(getComputedStyle(cell).paddingInlineEnd);
+      return `${Math.max(0, room)}px`;
+    });
+    fitted.forEach((element, index) => {
+      const property = element === box ? "--name-box-room" : "--name-room";
+      if (element.style.getPropertyValue(property) !== rooms[index])
+        element.style.setProperty(property, rooms[index]!);
+    });
+    if (!box) return;
     const hidden = scroll.getBoundingClientRect().left - box.getBoundingClientRect().left;
     if (hidden > 0) scroll.scrollLeft -= hidden;
   }
@@ -1068,9 +1091,10 @@ export class ProductList extends LitElement {
         if (row.kind === "root") {
           if (column.key === "name")
             return html`<span part="folder-cell"
-              ><span part="grip-space"></span>${folderIcon}<strong
-                >${t("folders.all_products")}</strong
-              ><span part="count" data-test="count-root">${this.#contents(null)}</span></span
+              ><span part="grip-space"></span>${folderIcon}<span part="folder-name"
+                ><strong>${t("folders.all_products")}</strong
+                ><span part="count" data-test="count-root">${this.#contents(null)}</span></span
+              ></span
             >`;
           if (column.key === "actions")
             return html`<wt-row-actions
@@ -1082,18 +1106,9 @@ export class ProductList extends LitElement {
           return nothing;
         }
         const { folder } = row;
-        if (column.key === "name")
-          return html`<span part="folder-cell"
-            ><button
-              class="drag-grip"
-              part="drag-grip"
-              type="button"
-              aria-label=${`${t("folders.drag")}: ${folder.name}`}
-            >
-              <wt-icon name="grip"></wt-icon></button
-            >${folderIcon}${
-              this.#renaming(folder.id) ? this.#nameBox() : html`<strong>${folder.name}</strong>`
-            }<span part="count" data-test=${`count-${folder.id}`}>${this.#contents(folder.id)}</span
+        if (column.key === "name") {
+          const after = html`<span part="count" data-test=${`count-${folder.id}`}
+              >${this.#contents(folder.id)}</span
             >${
               this.unroutedFolderIds.includes(folder.id)
                 ? html`<span
@@ -1105,8 +1120,22 @@ export class ProductList extends LitElement {
                     >*</span
                   >`
                 : nothing
+            }`;
+          return html`<span part="folder-cell"
+            ><button
+              class="drag-grip"
+              part="drag-grip"
+              type="button"
+              aria-label=${`${t("folders.drag")}: ${folder.name}`}
+            >
+              <wt-icon name="grip"></wt-icon></button
+            >${folderIcon}${
+              this.#renaming(folder.id)
+                ? html`${this.#nameBox()}${after}`
+                : html`<span part="folder-name"><strong>${folder.name}</strong>${after}</span>`
             }</span
           >`;
+        }
         if (column.key === "actions")
           return html`<wt-row-actions
             align="end"
