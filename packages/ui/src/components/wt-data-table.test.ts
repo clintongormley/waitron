@@ -1213,10 +1213,10 @@ test("a real click on a pinned cell's empty space toggles a toggling tree row on
   expect(treeKeys(el)).toEqual(["food", "drinks"]);
 });
 
-/** A resize is reported after layout and before the next paint, so the table has seen a new width by
- * the second frame. */
+/** A resize is reported after layout and before the next paint, and the table sets `narrow` a frame
+ * after that, so it has taken a new width by the third frame. */
 async function frames(): Promise<void> {
-  for (let i = 0; i < 2; i += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+  for (let i = 0; i < 3; i += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
 test("a phone-width tree indents each level half as far, and no deeper than four levels", async () => {
@@ -1368,6 +1368,33 @@ test("a tree stops watching its width while it is out of the page, and watches a
   host.append(el);
   await frames();
   expect(el.hasAttribute("narrow")).toBe(true);
+});
+
+test("crossing the phone width into rows its layout makes taller reports no ResizeObserver loop, and the phone layout still applies", async () => {
+  const style = document.createElement("style");
+  style.textContent = "wt-data-table[narrow]::part(tall) { display: block; block-size: 200px; }";
+  document.head.append(style);
+  onTestFinished(() => style.remove());
+  const el = await treeTable({
+    columns: [
+      { key: "name", label: "Name", cell: (r) => html`<span part="tall">${r.name}</span>` },
+    ],
+  });
+  el.style.width = "600px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
+  const errors: string[] = [];
+  const record = (event: ErrorEvent) => errors.push(event.message);
+  addEventListener("error", record);
+  onTestFinished(() => removeEventListener("error", record));
+  el.style.width = "360px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(true);
+  expect(errors).toEqual([]);
+  el.style.width = "600px";
+  await frames();
+  expect(el.hasAttribute("narrow")).toBe(false);
+  expect(errors).toEqual([]);
 });
 
 test("lines a toggling branch's name up with the text beside it", async () => {

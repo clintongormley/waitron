@@ -785,11 +785,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
   private readonly seededBranches = new Set<string>();
   #restored = false;
   /** A CSS condition cannot read a token, so the width is compared here and the host carries the
-   * answer as `narrow`. */
+   * answer as `narrow`. It waits a frame for the reason #hostObserver's effects do: a screen's
+   * `narrow` rules can resize the box this observer watches. */
   readonly #scrollObserver = new ResizeObserver((entries) => {
-    for (const { contentRect } of entries)
-      this.toggleAttribute("narrow", contentRect.width <= NARROW_TREE_WIDTH);
+    for (const { contentRect } of entries) this.#scrollWidth = contentRect.width;
+    if (this.#narrowFrame !== null) return;
+    this.#narrowFrame = requestAnimationFrame(() => {
+      this.#narrowFrame = null;
+      this.toggleAttribute("narrow", this.#scrollWidth <= NARROW_TREE_WIDTH);
+    });
   });
+  #scrollWidth = 0;
+  #narrowFrame: number | null = null;
   /** Watched while column widths are held or `leadingFilters` is set. Its effects wait a frame:
    * run inside the callback, they make Chromium report "ResizeObserver loop completed with
    * undelivered notifications". */
@@ -846,8 +853,16 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (scroll === this.#observedScroll) return;
     if (this.#observedScroll) this.#scrollObserver.unobserve(this.#observedScroll);
     if (scroll) this.#scrollObserver.observe(scroll);
-    else this.removeAttribute("narrow");
+    else {
+      this.#cancelNarrowFrame();
+      this.removeAttribute("narrow");
+    }
     this.#observedScroll = scroll;
+  }
+
+  #cancelNarrowFrame(): void {
+    if (this.#narrowFrame !== null) cancelAnimationFrame(this.#narrowFrame);
+    this.#narrowFrame = null;
   }
 
   #padScroll(): void {
@@ -898,6 +913,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (this.#resizeFrame !== null) cancelAnimationFrame(this.#resizeFrame);
     this.#resizeFrame = null;
     this.#scrollObserver.disconnect();
+    this.#cancelNarrowFrame();
     this.#observedScroll = null;
     this.#headObserver.disconnect();
     this.#observedHead = null;
