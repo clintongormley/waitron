@@ -2990,7 +2990,7 @@ when the zone cannot be read, as a last defence
 ([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), S8).
 
 **A configuration import does not check a table status's colour (A273, review of W92, 2026-10-05) —
-DONE (`fix/import-status-colour`).** A save and an import now share one rule, `isStatusColor`
+DONE (#1257).** A save and an import now share one rule, `isStatusColor`
 (`packages/db/src/status-color.ts`), which still allows a short named colour such as `amber`. The
 core module's import check (`validateCoreConfiguration`, `packages/db/src/configuration-transfer.ts`)
 refuses a `table_service_statuses` row whose colour fails it with `setup.request_invalid`
