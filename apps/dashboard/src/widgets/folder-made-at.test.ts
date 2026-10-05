@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { RoutingModel } from "@waitron/venue-service/routing";
 import type { CategorySummary, Product } from "../api/client.js";
 import {
-  coveredByRule,
   folderMadeAt,
+  isRouted,
   type FolderMaker,
   type FolderMakerSource,
 } from "./folder-made-at.js";
@@ -346,7 +346,7 @@ describe("folderMadeAt — names it cannot find", () => {
   });
 });
 
-describe("coveredByRule — what the category tree's asterisk reads", () => {
+describe("isRouted — what the category tree's asterisk reads", () => {
   const made = (maker: FolderMaker, source: FolderMakerSource | null) => ({
     maker,
     source,
@@ -354,25 +354,24 @@ describe("coveredByRule — what the category tree's asterisk reads", () => {
   });
   const bar = { kind: "station", stationName: "Bar" } as const;
 
-  it("counts a claim or an exception that reaches a station or no preparation", () => {
-    expect(coveredByRule(made(bar, { kind: "own" }))).toBe(true);
-    expect(coveredByRule(made(bar, { kind: "inherited", name: "Drinks" }))).toBe(true);
-    expect(coveredByRule(made({ kind: "no_preparation" }, { kind: "exception" }))).toBe(true);
+  it("counts a route that reaches a station or no preparation, whatever decided it", () => {
+    expect(isRouted(made(bar, { kind: "own" }))).toBe(true);
+    expect(isRouted(made(bar, { kind: "inherited", name: "Drinks" }))).toBe(true);
+    expect(isRouted(made(bar, { kind: "exception" }))).toBe(true);
+    expect(isRouted(made(bar, { kind: "default" }))).toBe(true);
+    expect(isRouted(made({ kind: "no_preparation" }, { kind: "exception" }))).toBe(true);
   });
 
-  it("does not count the default station, no rule, or a rule whose station has no replacement", () => {
-    expect(coveredByRule(made(bar, { kind: "default" }))).toBe(false);
-    expect(coveredByRule(made({ kind: "nowhere" }, null))).toBe(false);
-    expect(
-      coveredByRule(made({ kind: "no_replacement", stationName: "Bar" }, { kind: "own" })),
-    ).toBe(false);
+  it("does not count no rule, or a rule whose station has no replacement", () => {
+    expect(isRouted(made({ kind: "nowhere" }, null))).toBe(false);
+    expect(isRouted(made({ kind: "no_replacement", stationName: "Bar" }, { kind: "own" }))).toBe(
+      false,
+    );
   });
 
   it("does not count a maker that reaches nowhere, whatever the source", () => {
-    expect(coveredByRule(made({ kind: "nowhere" }, { kind: "own" }))).toBe(false);
-    expect(coveredByRule(made({ kind: "nowhere" }, { kind: "inherited", name: "Drinks" }))).toBe(
-      false,
-    );
-    expect(coveredByRule(made({ kind: "nowhere" }, { kind: "exception" }))).toBe(false);
+    expect(isRouted(made({ kind: "nowhere" }, { kind: "own" }))).toBe(false);
+    expect(isRouted(made({ kind: "nowhere" }, { kind: "inherited", name: "Drinks" }))).toBe(false);
+    expect(isRouted(made({ kind: "nowhere" }, { kind: "exception" }))).toBe(false);
   });
 });

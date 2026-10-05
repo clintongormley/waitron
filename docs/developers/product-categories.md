@@ -25,12 +25,18 @@ are not refused when a save leaves them as they are. A product's category is
 `products.category_id`. When this is null, the product is Uncategorised, which is not a category
 row you can rename or delete.
 
-A red asterisk beside a category means the route the Made at column shows for it is not decided by
-a claim or by an exception that covers every dish in every service zone, or that it ends in No
-replacement. A rule naming a switched-off station ends in No replacement unless that station's
-chain of fallbacks reaches a station that is switched on. Its tooltip explains the warning. Set a
-claim or an exception that covers the category in every service zone on Prep Stations to route
-those dishes before they fall through to the default station.
+A red asterisk beside a category means the route the Made at column shows for it reaches no
+switched-on station, so it reads No replacement or Nowhere. That route is the category's baseline:
+Made at leaves out exceptions limited to one service zone or one product, so some of a marked
+category's dishes can still be made in a zone, or for a product, that such an exception covers. A
+rule naming a switched-off station ends in No replacement unless that station's chain of fallbacks
+reaches a station that is switched on; the default station does not stand in for it. A category no
+rule covers is made at the default station while that station is switched on, and reads Nowhere
+when it is switched off or none is set. A route to No preparation carries no asterisk. The
+asterisk's tooltip explains the warning. To clear it, set a claim, or an exception that covers the
+category in every service zone, on Prep Stations; or switch on the station its rule names or one in
+that station's chain of fallbacks; or, for a category no rule covers, switch on the default station,
+or use Make default on Prep Stations when none is set.
 
 A variant is always in its product's reporting category. Its effective category
 (`effectiveProductColumns.categoryId`, `packages/catalogue/src/variant-fallback.ts`), which

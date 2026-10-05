@@ -3546,6 +3546,13 @@ and no asterisk, while one whose chain reaches none keeps the asterisk and reads
 _2026-10-05: the asterisk's tooltip and accessible name now read "No active station assigned"
 ("Ninguna estación activa asignada"; W86b, #1231, owner's wording), key `folders.no_active_station`. The
 old "No kitchen routing rule covers this category" read as if any matching rule cleared the mark._
+_2026-10-05: changed by W86c (the owner's choice on the open point raised in #1231: the asterisk
+clears whenever the dishes go to a switched-on station, the default station included, or to No
+preparation): it reads the maker Made at shows (`isRouted`, which replaced `coveredByRule`), so a
+category no rule covers shows no asterisk while the venue's default station is switched on, and
+reads Nowhere and keeps the asterisk when that station is switched off or none is set. Like Made at,
+it judges the category's baseline route and leaves out exceptions limited to one service zone or one
+product._
 (5) the "some items made elsewhere" note does not look at whether the categories involved hold any
 products, so it can claim items that do not exist yet: a subcategory with no products whose own
 claim routes elsewhere marks its parent (judged from the code, not run), and an empty category
