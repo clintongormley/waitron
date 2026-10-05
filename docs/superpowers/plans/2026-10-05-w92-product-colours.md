@@ -244,6 +244,9 @@ if (body.color !== undefined) {
 
 ### Task 2: A product's own colour, and variants having none
 
+(2026-10-05, finish-branch review: `setProductColor` and `product-colors.ts` were removed;
+`updateProduct` (`packages/catalogue/src/operations.ts`) writes the colour in its one update.)
+
 **Files:**
 - Modify: `packages/catalogue/src/variant-fallback.ts:100-115`, `product-types.ts` (`Product`, `ProductEditorInput`), `product-editor-input.ts`, `product-editor.ts`, `operations.ts` (`PRODUCT_BASE_COLUMNS` `:168`, `RawProduct`, `UpdateProductInput` `:134`, `patchProduct` `:1124`)
 - Create: `packages/catalogue/src/product-colors.ts` (exported from `index.ts`)
@@ -349,6 +352,9 @@ if (isVariant && color !== null) invalid("color");
 - [ ] **Step 4: commit:** "Products: an own colour, set in the editor or by PATCH; a variant has none".
 
 ### Task 3: The published document carries each product's effective colour
+
+(2026-10-05, finish-branch review: `readEffectiveColors` was folded into `readDishFacts`
+(`packages/catalogue/src/menu-document.ts`), and `product-colors.ts` was removed.)
 
 **Files:**
 - Modify: `packages/catalogue/src/product-colors.ts` (add `readEffectiveColors`), `menu-document.ts` (`buildMenuDocuments` `:128`, `freezeOffer` `:302`, `PRODUCT_FIELD_ORDER` `:650`, `productFields` `:723`), `menu-document-types.ts` (`FrozenOffer` `:35`, `LiveOffer` `:118`, `ProductChangeField` `:185`)
@@ -535,6 +541,9 @@ function tilePaint(color: string | null | undefined): string | undefined {
 
 ### Task 5: Products tree — Edit replaces Rename, with a colour swatch
 
+(2026-10-05, finish-branch review: `colorField`'s `noneLabel` and `inherited` options became one
+`categoryColor` option.)
+
 **Files:**
 - Modify: `apps/dashboard/src/widgets/color-field.ts` (options; the none button `:143-156`), `apps/dashboard/src/api/client.ts:296-304` (`CategorySummary.color`, `CategoryInput.color?`), `apps/dashboard/src/widgets/category-form.ts:53-78` (`categoryRefusalErrors`), `apps/dashboard/src/widgets/product-list.ts` (line numbers at c2b886e99, after W72e: `CategoryNameDraft` `:55-56`, `willUpdate`'s rename branch `:537-540`, `#renaming` `:665-667`, folder cell `:1094-1096`, menu's Rename `:1116-1122`, `rowActivation` `:1274-1275`), `apps/dashboard/src/widgets/catalogue-browser.ts` (`#saveName` `:538-556`, `@rename-folder` `:604-608`)
 - Keep unchanged: W72e's `#fitNameBox` and `#scheduleFit` (`product-list.ts:634-663`), which then serve only the box for a new category
@@ -642,6 +651,9 @@ function tilePaint(color: string | null | undefined): string | undefined {
 
 ### Task 6: Product editor — the colour chooser and "Use category colour"
 
+(2026-10-05, finish-branch review: the editor passes `colorField` one `categoryColor` option in
+place of `noneLabel` and `inherited`.)
+
 **Files:**
 - Modify: `apps/dashboard/src/widgets/product-editor.ts` (`SERVER_FIELDS` `:100`, `DRAFT_ERROR_KEYS` `:162`, `renderName` area `:1021-1049`, `render` `:1740`)
 - Test: `apps/dashboard/src/widgets/product-editor.test.ts`, `product-editor.a11y.test.ts`, `apps/dashboard/src/screens/catalogue-screen.test.ts`
@@ -671,6 +683,9 @@ function tilePaint(color: string | null | undefined): string | undefined {
 - [ ] **Step 4: commit:** "Product editor: choose a colour, or use the category's".
 
 ### Task 7: Menu Structure — product and section swatches
+
+(2026-10-05, finish-branch review: `wt-product-color` carries `{ productId, categoryColor }`, and
+`dashboard-product-color-form`'s `inherited` property is called `categoryColor`.)
 
 **Files:**
 - Create: `apps/dashboard/src/widgets/product-color-form.ts` (`dashboard-product-color-form`), `product-color-form.test.ts`, `product-color-form.a11y.test.ts`
@@ -804,4 +819,6 @@ behaviour.
 | rebase | `…product-list.test.ts:1777` | W72g: a rename box in `b` and a new category's box in `d` stay beside the grip and folder icon at 1280 px | the new category's box in `d` alone, same assertions | R3 |
 | finish-branch | `apps/dashboard/src/widgets/color-field.test.ts:185` (`:190`) and `:199` (`:207`) (53d79bad5) | the no-colour choice's accessible name is `"Use category colour"`, the label the test host passed as `noneLabel` | `t("editor.color_use_category")`; the host passes `categoryColor` instead of `noneLabel` and `inherited` | review simplification: one `categoryColor` option replaced `noneLabel` and `inherited`, so the label now comes from the field itself; the same check |
 | finish-branch | `apps/dashboard/src/widgets/menu-structure-table.test.ts:1322` (`:1334`, `:1344`) (dc3346abf) | the swatch's `wt-product-color` detail is `{ productId: "p-lemonade" }` | `{ productId: "p-lemonade", categoryColor: "#256bb1" }` | the event now carries the category colour, so the Menus screen no longer keeps its own map of categories |
-| finish-branch | `packages/catalogue/src/product-colors.test.ts:52`, `:61`, `:80`, `:89` (89da89e8a) | the four cases call `setProductColor(tx, id, color)` | they call `updateProduct(tx, id, { color })`; their assertions are unchanged; two new cases, `:141` and `:161`, pin a patch carrying a category and a colour | review fix: `updateProduct` writes the category and the colour in one update, and `setProductColor` and `product-colors.ts`, with no caller left outside their tests, were deleted |
+| finish-branch | `packages/catalogue/src/operations.test.ts:2130`, `:2139`, `:2158`, `:2167` (89da89e8a; in `product-colors.test.ts` until 765b2e3e4) | the four cases call `setProductColor(tx, id, color)` | they call `updateProduct(tx, id, { color })`; their assertions are unchanged; two new cases, `:2191` and `:2211`, pin a patch carrying a category and a colour | review fix: `updateProduct` writes the category and the colour in one update, and `setProductColor` and `product-colors.ts`, with no caller left outside their tests, were deleted |
+| finish-branch | `packages/catalogue/src/menu-document.test.ts:385` (548095779; then in `product-colors.test.ts`) | the case reads colours with `readEffectiveColors(tx, ids)` | with a local helper that maps `readDishFacts(tx, ids)` to each id's `color`; the two `toEqual` assertions are unchanged; a new case, now `:401`, pins the `select` calls | review fix: `readEffectiveColors` was folded into `readDishFacts`, so a menu reads each batch of products once |
+| finish-branch | `packages/catalogue/src/product-colors.test.ts` (765b2e3e4) | every case sits in that file | the cases sit in `operations.test.ts`, `describe("a product's own colour")` (`:2089`), and `menu-document.test.ts`, `describe("readDishFacts")` (`:350`); the file is deleted; assertions unchanged except the batch case (`menu-document.test.ts:401`): two ids and 2 `select` calls before, `BATCH_SIZE + 1` ids and 3 after | the file was named after a deleted source file; the batch case now crosses a batch boundary, so it can tell a read per batch from one read in total |

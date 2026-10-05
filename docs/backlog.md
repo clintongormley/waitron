@@ -2989,6 +2989,16 @@ pack marks the Canary tax territory unsupported.) Slice 3b's station opening hou
 when the zone cannot be read, as a last defence
 ([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), S8).
 
+**A configuration import does not check a table status's colour (A273, review of W92, 2026-10-05) —
+OPEN.** A save checks it (`STATUS_COLOR_RE`, `apps/server/src/tables.ts`), but the import copies
+`table_service_statuses` as a plain table (`packages/db/src/configuration-transfer.ts`) and core has
+no import check, so a bundle can store a colour such as `red;position:fixed`. The till puts that
+colour straight into a `style` attribute (`apps/till/src/screens/till-floor-screen.ts` and
+`till-table-order-screen.ts`). Read, not run. W92 closed the same gap for product, category and
+section colours (`validateCatalogueConfiguration`). **Wanted:** the import refuses a status colour
+the save would refuse. Status colours allow named colours such as `amber`, so a till-side guard
+cannot simply be `isHexColor`.
+
 **Remaining "?" buttons that should be hints (A237, owner 2026-10-03) — OPEN.** The rule — a short
 explanation is the field's hint, and the "?" button is only for one too long for a hint or a field
 that starts filled in — was applied to the setup wizard's first four screens only, and nothing
@@ -3270,8 +3280,9 @@ change to publish: the menu reads as changed, its Preview tab names the change "
 tills show it once the menu is published. On the till, a coloured product or section tile fills
 with its colour and its labels turn black or white, whichever reads better; a sold-out painted tile
 keeps the usual fade. The swatches sit after the name, not before it, so names at one depth stay
-lined up (W84). The Home page tab's tile preview stays uncoloured: the campaign queue's W93, not
-yet in this backlog, is to replace that tab. How it works: [products.md](developers/products.md), _Colour_, and
+lined up (W84). The Home page tab's tile preview stays uncoloured
+([W92 spec](superpowers/specs/2026-10-05-w92-product-colours-design.md), Question 3 and
+Decision 8). How it works: [products.md](developers/products.md), _Colour_, and
 [product-categories.md](developers/product-categories.md).
 **Upgrading:** two migrations, core `0100_product_color.sql` and catalogue
 `0025_category_color.sql`, each add one nullable column (`products.color`,

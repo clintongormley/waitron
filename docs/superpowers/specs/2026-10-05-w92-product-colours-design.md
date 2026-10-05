@@ -96,7 +96,9 @@ coordinate with it beyond building on its tree.
    so a variant's id answers `product.not_found` (`packages/catalogue/src/categories.ts:142-151`).
    Its effective colour is its parent's: the published offer carries one colour, and its frozen
    variants carry none. No variant is drawn as a tile today (the till offers them as choices in the
-   modifier picker).
+   modifier picker). (2026-10-05, finish-branch review: `setProductColor` and `product-colors.ts`
+   were removed; `updateProduct` (`packages/catalogue/src/operations.ts`) writes the colour in its
+   one update and answers a variant's id `product.not_found`.)
 4. **Writes.** Categories: `CategoryInput` gains `color?: string | null`; create and the PATCH route
    take it (`apps/server/src/catalogue-api.ts:142-151`, `:1156-1162`); a value that is not a string
    or null answers `management.request_invalid` `{ field: "color" }`, and a string that is not
@@ -108,7 +110,10 @@ coordinate with it beyond building on its tree.
    (`apps/server/src/catalogue-api.ts:1392`) takes `color` for the Menu Structure dialog; both reach
    `setProductColor`, which refuses a bad value `product.invalid` `{ field: "color" }`. Reads:
    `Category` and `CategorySummary` gain `color`; `Product` (`listProducts`), `ProductEditorInput` and
-   so `ProductEditorValue` gain the product's own `color`.
+   so `ProductEditorValue` gain the product's own `color`. (2026-10-05, finish-branch review: the
+   editor save writes the colour beside the main category
+   (`packages/catalogue/src/product-editor.ts`), and the PATCH reaches `updateProduct`, which refuses
+   a bad value `product.invalid` `{ field: "color" }`; `setProductColor` was removed.)
 5. **Published document.** Effective colour is resolved when a document is built: one batched read
    of every offered product's own colour and main category, one read of the category tree, then the
    pure rule (`readEffectiveColors`, no per-product query). `FrozenOffer` and `LiveOffer` gain an
@@ -127,7 +132,8 @@ coordinate with it beyond building on its tree.
    in each menu's preview with the other published menus in `alsoOn`, and reaches a till only when
    that menu is published. `ZoneMenuOffer` (`packages/module/src/module.ts:98-146`) is left alone: it
    carries no `image` either, and the till reads offers as `LiveOffer`
-   (`apps/till/src/api/client.ts:363`).
+   (`apps/till/src/api/client.ts:363`). (2026-10-05, finish-branch review: `readEffectiveColors` was
+   folded into `readDishFacts`, `packages/catalogue/src/menu-document.ts`.)
 6. **Sections keep their own colour, for their own tile.** Unchanged in storage and document
    (`menu-document.ts:198`); nothing applies it to the products inside.
 7. **Till.** `menuOfferToTillProduct` (`apps/till/src/api/client.ts:405`) copies `color`;
@@ -239,6 +245,9 @@ colours.
 | variants | `product-editor-input.test.ts`: a variant body with a colour is refused `product.invalid` `color` (and any body with `""` or `"#B12525"`); `variant-fallback.test.ts`: `color` is parent-always; `categories.db.test.ts` (or `operations.test.ts`): `setProductColor` on a variant id answers `product.not_found`; `menu-document.test.ts`: frozen variants carry no `color` |
 | draft-versus-live colour | `menu-publication.test.ts`: after publish, a category colour edit makes status "changed" and the preview list "colour", the served offer (`applyLiveFields`) keeps the old colour, and after publishing again it carries the new one; a live version published before W92 (no `color` in its offers) is `changed`, lists `["color"]` and is served with no colour |
 | readable tile labels in both themes | till `menu-browser.test.ts`: on a dark (`#256bb1`) and a pale (`#edabab`) tile every label computes the readable colour, a null or absent colour keeps the neutral look, and a painted tile keeps `wt-button`'s hover dip and sold-out fade; `menu-browser.a11y.test.ts`: axe in light and dark with coloured product and section tiles |
+
+(2026-10-05, finish-branch review: the variants row's `setProductColor` case calls `updateProduct`
+in `operations.test.ts`, `describe("a product's own colour")`.)
 
 Also: `categories.test.ts` (colour stored, patched alone, refused when malformed); the category
 dialog and the swatches (dashboard, browser mode, both themes in the `*.a11y.test.ts` files);
