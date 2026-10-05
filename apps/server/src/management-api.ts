@@ -9,7 +9,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isAppError } from "@waitron/shared";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 import { ownPasswordChanges } from "./own-password-ahead.js";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   fireControlMode,
   printers,
@@ -60,7 +60,9 @@ import {
   createDeviceProfile,
   deleteCanvas,
   deleteDeviceProfile,
+  encodeLogoRaster,
   getReceipt,
+  getReceiptLogo,
   getCanvas,
   getDeviceProfile,
   getDeviceProfileWithPrinters,
@@ -72,8 +74,10 @@ import {
   readProfilePrinterLists,
   updateCanvas,
   updateDeviceProfile,
+  validateReceiptConfig,
   type ProfilePrinterLists,
 } from "@waitron/layouts";
+import { mediaImages, readImageBytes } from "@waitron/media";
 import {
   clearPlacement,
   createStatus,
@@ -128,6 +132,8 @@ import {
   setManagementCookie,
 } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
+import { drawLogoRasters } from "./receipt-logo.js";
+import { readLocationAddress } from "./venue-address.js";
 import type { Logger } from "./logger.js";
 import type { AccountEmailSender } from "./account-email.js";
 import { exchangeGoogleCode, type GoogleOidcConfig } from "./google-oidc.js";
@@ -258,6 +264,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "password.too_short": 400,
   "management.request_invalid": 400,
   "receipt.invalid": 400,
+  "image.invalid_file": 422,
   "canvas.not_found": 404,
   "canvas.name_taken": 409,
   "canvas.in_use": 409,
@@ -368,6 +375,10 @@ function requireDeviceProfileId(id: string): string {
 function requireMenuId(id: string): string {
   if (!isUuid(id)) throw new AppError("catalogue.not_found", { catalogueId: id });
   return id;
+}
+
+function logoNotFound(): AppError<"receipt.invalid"> {
+  return new AppError("receipt.invalid", { reason: "image_not_found", field: "logo" });
 }
 
 function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
@@ -1103,14 +1114,16 @@ export function mountManagementApi(
   app.get("/management-api/receipt", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const receipt = await withTransaction(deps.db, async (tx) => {
+      const { locationId } = requireVenueCfg(deps);
+      const body = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
-        return getReceipt(tx);
+        const receipt = await getReceipt(tx);
+        return { receipt, venueAddress: await readLocationAddress(tx, locationId) };
       });
-      return c.json({ receipt });
+      return c.json(body);
     }),
   );
 
@@ -1127,10 +1140,41 @@ export function mountManagementApi(
         throw new AppError("management.request_invalid", { field: "receipt" });
       }
       const { receipt } = body;
+      let logo: string | undefined;
+      // The kept pictures are handed back rather than left for `putReceipt` to find, so a save that
+      // changes the logo in between cannot leave this one without them.
+      const kept = await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "layout.configure",
+        });
+        logo = validateReceiptConfig(receipt).logo;
+        if (logo === undefined) return undefined;
+        if ((await getReceipt(tx)).logo === logo) {
+          const narrow = await getReceiptLogo(tx, "58mm");
+          const wide = await getReceiptLogo(tx, "80mm");
+          if (narrow !== null && wide !== null) {
+            return { "58mm": encodeLogoRaster(narrow), "80mm": encodeLogoRaster(wide) };
+          }
+        }
+        const image = await readImageBytes(tx, logo);
+        if (image === null) throw logoNotFound();
+        return image.bytes;
+      });
+      // Outside any transaction: sharp decodes the image.
+      const logoRasters = kept instanceof Uint8Array ? await drawLogoRasters(kept) : kept;
       await withTransaction(deps.db, async (tx) => {
+        if (logo !== undefined) {
+          const [image] = await tx
+            .select({ id: mediaImages.id })
+            .from(mediaImages)
+            .where(eq(mediaImages.filename, logo));
+          if (image === undefined) throw logoNotFound();
+        }
         await putReceipt(tx, {
           managementSessionId: sessionId,
           receipt,
+          ...(logoRasters === undefined ? {} : { logoRasters }),
         });
       });
       return c.body(null, 204);
