@@ -2835,7 +2835,7 @@ describe("the editor's keyboard", () => {
   });
 });
 
-it("returns focus to the row that opened an editor, or to the tabs once that row is gone", async () => {
+it("returns focus to a retained row or the tree's Add action when that row is gone", async () => {
   const liveData = new LiveData();
   const load = vi.fn().mockResolvedValue(structuredClone(model));
   const el = await mount({ load, liveData } as unknown as VenueServiceApi);
@@ -2854,7 +2854,33 @@ it("returns focus to the row that opened an editor, or to the tabs once that row
   liveData.invalidate([{ type: "departments", id: "d2" }]);
   await vi.waitFor(() => expect(column(el, "departments", 0)).toEqual(["Restaurant and bar"]));
   await action(el, "cancel-editor");
-  expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("wt-tabs"));
+  expect(el.shadowRoot!.activeElement).toBe(
+    el.shadowRoot!.querySelector('[data-test="policy-tree-actions"] [data-test="new-department"]'),
+  );
+});
+
+it("returns focus to the tree's Add action when an edited department disappears", async () => {
+  const liveData = new LiveData();
+  const load = vi.fn().mockResolvedValue(structuredClone(model));
+  const el = await mount({ load, liveData } as unknown as VenueServiceApi);
+  await action(el, "edit-tree-department-d2");
+  const updated = structuredClone(model);
+  updated.departments = [updated.departments[0]!];
+  updated.hours = [];
+  load.mockResolvedValue(updated);
+  liveData.invalidate([{ type: "departments", id: "d2" }]);
+  await vi.waitFor(() =>
+    expect(table(el, "policy-tree").shadowRoot!.textContent).not.toContain("Casa Delgado Deli"),
+  );
+  expect(find(el, '[data-test="edit-tree-department-d2"]')).toBeNull();
+  await action(el, "cancel-editor");
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.activeElement).toBe(
+      el.shadowRoot!.querySelector(
+        '[data-test="policy-tree-actions"] [data-test="new-department"]',
+      ),
+    ),
+  );
 });
 
 it("returns focus to a row's menu after an edit opened from it is saved", async () => {

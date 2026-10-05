@@ -179,6 +179,7 @@ export class VenueOperationsScreen extends LitElement {
   @state() private editor?: Editor;
   @state() private zoneId = "";
   #opener?: HTMLElement;
+  #openerAction?: { element: HTMLElement; key: string };
 
   readonly #url = new UrlStateController(
     this,
@@ -240,6 +241,7 @@ export class VenueOperationsScreen extends LitElement {
   #returnFocus(): void {
     void this.updateComplete.then(() => {
       const opener = this.#opener;
+      const openerAction = this.#openerAction;
       const twin =
         opener?.slot === "empty-action"
           ? this.renderRoot.querySelector<HTMLElement>(
@@ -250,7 +252,16 @@ export class VenueOperationsScreen extends LitElement {
                   : `[data-test="policy-tree-actions"] [data-test="${opener.dataset.test}"]`,
             )
           : null;
-      (opener?.isConnected ? opener : (twin ?? this.renderRoot.querySelector("wt-tabs")))?.focus();
+      (opener?.isConnected &&
+      (!openerAction ||
+        (openerAction.element.isConnected &&
+          openerAction.element.dataset.test === openerAction.key))
+        ? opener
+        : (twin ??
+          this.renderRoot.querySelector<HTMLElement>(
+            '[data-test="policy-tree-actions"] [data-test="new-department"]',
+          ))
+      )?.focus();
     });
   }
   #selectView(event: CustomEvent<{ value: View }>): void {
@@ -397,6 +408,7 @@ export class VenueOperationsScreen extends LitElement {
             @click=${(event: Event) => {
               const menu = (event.currentTarget as HTMLElement).closest("wt-row-actions")!;
               this.#opener = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+              this.#openerAction = { element: event.currentTarget as HTMLElement, key: action.key };
               // An action that saves at once disables every action before the menu sees this click,
               // and the menu stays open for a click on a disabled action. Hiding it leaves focus
               // on the page, not on the menu's button.
@@ -452,6 +464,7 @@ export class VenueOperationsScreen extends LitElement {
       ?disabled=${this.busy || action.disabled === true}
       @click=${(event: Event) => {
         this.#opener = event.currentTarget as HTMLElement;
+        this.#openerAction = undefined;
         action.run();
       }}
       >${action.label}</wt-button
@@ -655,6 +668,7 @@ export class VenueOperationsScreen extends LitElement {
                             data-test="zone-readiness-action"
                             @click=${(event: Event) => {
                               this.#opener = event.currentTarget as HTMLElement;
+                              this.#openerAction = undefined;
                               this.#open({ kind: "assignment", zoneId: row.zone.id });
                             }}
                           >
