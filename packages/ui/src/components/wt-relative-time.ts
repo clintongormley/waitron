@@ -61,11 +61,6 @@ export class WtRelativeTime extends LitElement {
         cursor: help;
       }
 
-      button:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-
       /* Fixed, because place() writes viewport coordinates onto it. */
       [popover] {
         position: fixed;
