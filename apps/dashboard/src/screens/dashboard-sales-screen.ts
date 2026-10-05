@@ -28,7 +28,7 @@ import type {
   VatSummaryDto,
 } from "../api/client.js";
 import { today } from "../date-utils.js";
-import { PATH_SEPARATOR } from "../widgets/classification-fields.js";
+import { PATH_SEPARATOR } from "../widgets/category-form.js";
 
 const money = (value: string): string => formatMoney(value, currentLocale());
 

@@ -2,6 +2,8 @@ import type { CategorySummary } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
+export const PATH_SEPARATOR = " › ";
+
 /** The category, then each category above it, stopping at a parent the list lacks or a loop. */
 export function categoryAncestors(
   category: CategorySummary,
@@ -21,7 +23,7 @@ export function categoryAncestors(
 export function categoryPath(
   category: CategorySummary,
   categories: readonly CategorySummary[],
-  separator = " / ",
+  separator = PATH_SEPARATOR,
 ): string {
   return categoryAncestors(category, categories)
     .map(({ name }) => name)

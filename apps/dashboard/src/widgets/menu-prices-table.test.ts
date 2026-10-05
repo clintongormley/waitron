@@ -314,7 +314,7 @@ it("lists each product once with its price override, and where it appears by the
   ]);
   const placements = [...row(el, "mi-lemonade")!.querySelectorAll("[part~=placement]")].map(text);
   expect(placements).toEqual(["Favourites", "Drinks"]);
-  expect(column(el, "category")).toEqual(["Principales", "Bebidas", "Bebidas / Cerveza"]);
+  expect(column(el, "category")).toEqual(["Principales", "Bebidas", "Bebidas › Cerveza"]);
   const keys = ["mi-burger", "mi-lemonade", "mi-lager"];
   expect(keys.map((key) => override(el, key).value)).toEqual(["", "2.50", ""]);
   // Lemonade left blank would charge its sizes' prices: 3.00 for the small, following the
@@ -434,7 +434,7 @@ it("filters by a reporting category, including the categories inside it", async 
   expect(options(el, "category")).toEqual([
     t("menu_prices.all_categories"),
     "Bebidas",
-    "Bebidas / Cerveza",
+    "Bebidas › Cerveza",
     "Principales",
   ]);
   await choose(el, "category", "c-drinks");

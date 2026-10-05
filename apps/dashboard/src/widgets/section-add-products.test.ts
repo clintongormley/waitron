@@ -111,7 +111,7 @@ it("filters by category from the shared dropdown, with All categories as its pro
   expect(box.options).toEqual([
     { value: "", label: t("add_products.all_categories") },
     { value: "c-drinks", label: "Bebidas" },
-    { value: "c-beer", label: "Bebidas / Cerveza" },
+    { value: "c-beer", label: "Bebidas › Cerveza" },
     { value: "c-mains", label: "Principales" },
   ]);
   expect(box.value).toBe("");
@@ -139,7 +139,7 @@ it("keeps the category filter's width, and the search field beside it, whatever 
   expect(measure().searchLeft).toBeCloseTo(before.searchLeft, 0);
   await chooseOption(box, "c-beer");
   await el.updateComplete;
-  expect(await shownCategory(el)).toBe("Bebidas / Cerveza");
+  expect(await shownCategory(el)).toBe("Bebidas › Cerveza");
   expect(measure().width).toBeCloseTo(before.width, 0);
   expect(measure().searchLeft).toBeCloseTo(before.searchLeft, 0);
 });
@@ -153,7 +153,7 @@ it("offers every reporting category by its path", async () => {
   const el = await mount();
   const options = categoryBox(el).options;
   expect(options.map((option) => option.value)).toEqual(["", "c-drinks", "c-beer", "c-mains"]);
-  expect(options[2]!.label).toBe("Bebidas / Cerveza");
+  expect(options[2]!.label).toBe("Bebidas › Cerveza");
 });
 
 it("filtering by Drinks also lists what sits under Beer, and not Mains", async () => {
@@ -322,7 +322,7 @@ it("widens the chosen filter when a category is added beneath it", async () => {
   await el.updateComplete;
   expect(listed(el)).toEqual(["p-cider", "p-ipa", "p-lager", "p-lemonade"]);
   expect(categoryBox(el).options.find((option) => option.value === "c-cider")!.label).toBe(
-    "Bebidas / Sidra",
+    "Bebidas › Sidra",
   );
 });
 
@@ -332,7 +332,7 @@ it("names the categories by their one name whatever language is in force", async
   setLocale("en");
   await search(el, "a");
   expect(categoryBox(el).options.find((option) => option.value === "c-beer")!.label).toBe(
-    "Bebidas / Cerveza",
+    "Bebidas › Cerveza",
   );
 });
 

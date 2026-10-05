@@ -36,7 +36,7 @@ import type {
 import { currentLocale, t } from "../i18n/t.js";
 import { productStatusName } from "../i18n/domain.js";
 import { leftToBrowser } from "../navigation.js";
-import { byLabel, categoryAncestors, categoryPath } from "./category-form.js";
+import { byLabel, categoryAncestors, categoryPath, PATH_SEPARATOR } from "./category-form.js";
 import { priceSearchText, priceText } from "./form-fields.js";
 
 /** One field's value to write. `previous` is the value it replaces in the order writes are made,
@@ -802,7 +802,9 @@ export class MenuPricesTable extends LitElement {
 
   #placementName(path: readonly string[]): string {
     if (path.length === 0) return t("menu_prices.top_level");
-    return path.map((id) => this.#sectionNames.get(id) ?? t("members.missing")).join(" › ");
+    return path
+      .map((id) => this.#sectionNames.get(id) ?? t("members.missing"))
+      .join(PATH_SEPARATOR);
   }
 
   #categoryName(row: MenuPriceRow): string {

@@ -3547,6 +3547,27 @@ describe("the Products tree's Name column", () => {
     expect(rowKeys(root)).toContain("ribs");
     expect(rowKeys(root)).not.toContain("chop");
   });
+
+  it.each(["Food › Meat › Grill", "Food > Meat > Grill"])(
+    "finds a product by its category's path typed as %s",
+    async (typed) => {
+      const { el, root } = await mountDeep();
+      el.search = typed;
+      await el.updateComplete;
+      await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+      expect(rowKeys(root)).toContain("ribs");
+      expect(rowKeys(root)).not.toContain("chop");
+    },
+  );
+
+  it("finds an empty category by its parent's path typed with ›", async () => {
+    const { el, root } = await mountDeep({ products: [] });
+    el.search = "Food › Meat";
+    await el.updateComplete;
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    expect(rowKeys(root)).toContain("folder:g");
+    expect(rowKeys(root)).not.toContain("folder:d");
+  });
 });
 
 describe("a category's Made at", () => {

@@ -15,7 +15,7 @@ import {
   productStatusName,
   vatClassName,
 } from "../i18n/domain.js";
-import { categoryPath, categoryWithDescendants } from "./category-form.js";
+import { categoryPath, categoryWithDescendants, PATH_SEPARATOR } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
 import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
 import {
@@ -806,10 +806,14 @@ export class ProductList extends LitElement {
     return parts.join(", ");
   }
 
-  #category(id: string | null): string {
+  /** A category's path for the search box, spelled with each separator a person might type. */
+  #categorySearchText(id: string | null): string {
     if (id === null) return "";
     const category = this.categories.find((candidate) => candidate.id === id);
-    return category ? categoryPath(category, this.categories) : t("editor.missing_choice");
+    if (!category) return t("editor.missing_choice");
+    return [PATH_SEPARATOR, " / ", " > "]
+      .map((separator) => categoryPath(category, this.categories, separator))
+      .join(" ");
   }
 
   #modifierNames(product: Product): string {
@@ -911,7 +915,7 @@ export class ProductList extends LitElement {
           [
             product.name,
             ...product.variants.map(({ name }) => name),
-            this.#category(product.primaryCategoryId),
+            this.#categorySearchText(product.primaryCategoryId),
           ].join(" "),
         cell: ({ product, variant }, { ancestorOnly }) =>
           variant
@@ -1253,7 +1257,7 @@ export class ProductList extends LitElement {
                 : row.kind === "root" || row.kind === "draft"
                   ? ""
                   : column.key === "name"
-                    ? `${row.folder.name} ${this.#category(row.folder.parentId)}`
+                    ? `${row.folder.name} ${this.#categorySearchText(row.folder.parentId)}`
                     : "",
           }
         : {}),

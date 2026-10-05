@@ -22,9 +22,9 @@ const child: CategorySummary = {
   color: null,
 };
 
-it("names a category by the path of names down to it, joined by the separator it is given", () => {
-  expect(categoryPath(child, [food, child])).toBe("Food / Sandwiches");
-  expect(categoryPath(child, [food, child], " › ")).toBe("Food › Sandwiches");
+it("names a category by the path of names down to it, joined by the shared separator or the one it is given", () => {
+  expect(categoryPath(child, [food, child])).toBe("Food › Sandwiches");
+  expect(categoryPath(child, [food, child], " / ")).toBe("Food / Sandwiches");
   expect(categoryPath(food, [food, child])).toBe("Food");
 });
 
