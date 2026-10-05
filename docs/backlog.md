@@ -5141,8 +5141,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   whether it is charging and when that was reported (core `0099`). A paired device sends both to
   `PUT /api/device/battery`, which refuses a level outside 0 to 100 and stores at most one report a
   minute unless the charging state changed (`apps/server/src/device-api.ts`). The till sends a
-  report when it starts as a paired device and whenever the level or charging state changes, but
-  only where the browser has `navigator.getBattery` (`apps/till/src/api/battery-report.ts`). The
+  report when it starts as a paired device and whenever the level or charging state changes, and
+  re-sends its current reading every five minutes, one send at a time, so a steady battery is not
+  greyed as stale; it does so only where the browser has `navigator.getBattery`
+  (`apps/till/src/api/battery-report.ts`). The
   Devices table's Battery column, between Shows and Status, shows "82%" with a lightning mark while
   charging, "Not reported" for a device that never sent one, and greys a report more than ten
   minutes old, adding "as of" and the time it was taken. A report that passes ten minutes while the

@@ -1742,6 +1742,14 @@ export function startBatteryReport(
 }
 ```
 
+> **2026-10-05, finish-branch review:** the shipped reporter differs. It sends one report at a time,
+> and a change or tick while one is out sends the battery's reading as it is once that send settles;
+> a send with no answer is given up after a time limit. It re-sends every five minutes from the
+> first report, so while the page runs and its sends are answered a steady battery is stored again
+> before it greys at ten minutes. The shipped `#boot` starts the reporter only while the app is
+> connected and its boot is still the current one, without the `this.#battery?.stop()` line the
+> snippet below puts beside the start; the stop at the top of the boot method stays.
+
 In `till-app.ts`, after `this.deviceId = identity.deviceId;` in the boot sequence:
 
 ```ts

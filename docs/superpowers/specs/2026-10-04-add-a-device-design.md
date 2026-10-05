@@ -163,7 +163,9 @@ listed, with no Edit and a row that does not open.
   through a new device route. The server stores a report when the charging state changed or at least
   a minute has passed since the last stored one, the same limit as the last-seen time
   (`SIGHTING_INTERVAL_MS`, `apps/server/src/device-session.ts`), and refuses a level outside 0 to
-  100.
+  100. (2026-10-05: the shipped reporter also re-sends its reading every five minutes, one send at a
+  time, so a steady battery is stored again before it greys; the server stores when more than a
+  minute has passed, not at least a minute. See the plan's Task 10 note.)
 - **Storage.** Three new nullable columns on `devices`: the level, the charging state and the time of
   the report. Storing them on the device row means the Devices list updates live through the change
   feed. The migration must generate as three plain column additions with no CHECK: a new CHECK makes
