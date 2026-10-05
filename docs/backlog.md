@@ -1208,7 +1208,13 @@ neither reading has been tested — next step: a browser case that opens a dialo
 its trigger and records where focus lands, then correct the sentence to what it shows. (2) The unit
 form's wait in `#returnChildFocus` works because the product editor finishes redrawing Add unit as
 enabled in the meantime (seen in Codex's timing log); the code does not wait for the editor itself,
-and nobody has tested whether that order is guaranteed.
+and nobody has tested whether that order is guaranteed. W71h settled (2): the editor's
+`returnRelatedFocus` still focuses an Add control at once, and when that control is still drawn
+disabled it waits for the editor's next update and focuses it then (`focusOnceEnabled`,
+`apps/dashboard/src/widgets/product-editor.ts`). A case in `catalogue-screen.test.ts` holds the
+editor's update back until after the unit form's Cancel, checks Add unit is still disabled, then
+releases it and sees focus land on Add unit; without the wait it fails. The course box and an
+attached list's row are focused at once, as before, with no such wait.
 
 **The Extras editor shows Portion beside Price, and a fixed 1 for a product sold by the unit
 (W75, owner 2026-10-04) — DONE (#1194).** In `apps/dashboard/src/widgets/extra-list-form.ts` Portion is a

@@ -781,7 +781,16 @@ export class ProductEditor extends LitElement {
       }
     }
     const control = kind === "extras" || kind === "options" ? "modifier" : kind;
-    this.shadowRoot!.querySelector<HTMLElement>(`[data-test=add-${control}]`)?.focus();
+    void this.focusOnceEnabled(`[data-test=add-${control}]`);
+  }
+  /** The nested form's screen may hand focus back before this editor has drawn the control enabled
+   * again, and a disabled control does not take focus; then it waits for that update. */
+  private async focusOnceEnabled(selector: string): Promise<void> {
+    const target = this.shadowRoot!.querySelector<HTMLElement>(selector);
+    target?.focus();
+    if (!target || this.shadowRoot!.activeElement === target) return;
+    await this.updateComplete;
+    this.shadowRoot!.querySelector<HTMLElement>(selector)?.focus();
   }
   /** `restore` also makes an Inactive product Active again. Nothing else on the form changes
    * `active`, so a plain Save of an Inactive product keeps it Inactive. */
