@@ -2367,9 +2367,11 @@ describe("till-app", () => {
   });
 
   // ── Device front door ───────────────────────────────────────────────────────
-  // One boot decision: dev + no adopted tab device → the chooser; not enrolled (401, not dev) → the join
-  // screen; enrolled `kds` → the kiosk shell (the kds-boot test above); enrolled other → the login (lock)
-  // screen. The default stub is an enrolled `till` (→ login); these tests override it.
+  // One boot decision: dev + no adopted tab device → the chooser; dev + an adopted device refused
+  // `device.unauthorized` → forgotten, then the chooser (the join screen if the device list fails);
+  // not enrolled (401, not dev) → the join screen; enrolled `kds` → the kiosk shell (the kds-boot test
+  // above); enrolled other → the login (lock) screen. The default stub is an enrolled `till` (→ login);
+  // these tests override it.
 
   it("a NOT-enrolled browser (401 identity probe, not dev) shows the join screen", async () => {
     // getDevDevices rejects (not dev) and getDeviceIdentity 401s — the fresh production-browser case.
@@ -2459,6 +2461,79 @@ describe("till-app", () => {
       await flush(el);
       expect(chooser(el)).toBeNull();
       expect(lock(el)).not.toBeNull();
+      expect(getDevDevices).not.toHaveBeenCalled();
+    } finally {
+      sessionStorage.removeItem(DEV_DEVICE_STORAGE_KEY);
+    }
+  });
+
+  it("forgets a remembered dev device the server no longer knows and shows the chooser", async () => {
+    sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "deleted-by-reset");
+    try {
+      const list: DevDeviceList = { devices: [] };
+      const { el } = await mountApp({
+        getDevDevices: vi.fn().mockResolvedValue(list),
+        getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+      });
+      await flush(el);
+      expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBeNull();
+      expect(chooser(el)).not.toBeNull();
+      expect(chooser(el)!.list).toEqual(list);
+      expect(enrolScreen(el)).toBeNull();
+      expect((el as unknown as { frontDoor?: string }).frontDoor).toBe("chooser");
+    } finally {
+      sessionStorage.removeItem(DEV_DEVICE_STORAGE_KEY);
+    }
+  });
+
+  it("forgets a stale dev device and shows the join screen when the device list then fails to load", async () => {
+    sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "deleted-by-reset");
+    try {
+      const { el } = await mountApp({
+        getDevDevices: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+        getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+      });
+      await flush(el);
+      expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBeNull();
+      expect(chooser(el)).toBeNull();
+      expect(enrolScreen(el)).not.toBeNull();
+      expect((el as unknown as { frontDoor?: string }).frontDoor).toBe("enrol");
+    } finally {
+      sessionStorage.removeItem(DEV_DEVICE_STORAGE_KEY);
+    }
+  });
+
+  it("keeps the join screen for an unknown device outside development, even with a remembered id", async () => {
+    sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "deleted-by-reset");
+    try {
+      const { el } = await mountApp({
+        getDevDevices: vi.fn().mockRejectedValue({ code: "server.not_found" }),
+        getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+      });
+      await flush(el);
+      expect(chooser(el)).toBeNull();
+      expect(enrolScreen(el)).not.toBeNull();
+      expect((el as unknown as { frontDoor?: string }).frontDoor).toBe("enrol");
+      expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBeNull();
+    } finally {
+      sessionStorage.removeItem(DEV_DEVICE_STORAGE_KEY);
+    }
+  });
+
+  it("keeps a remembered dev device when its identity read fails for another reason", async () => {
+    sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "adopted-1");
+    try {
+      const getDevDevices = vi.fn().mockResolvedValue({ devices: [] });
+      const { el } = await mountApp({
+        getDevDevices,
+        getDeviceIdentity: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+      });
+      await flush(el);
+      expect(sessionStorage.getItem(DEV_DEVICE_STORAGE_KEY)).toBe("adopted-1");
+      expect(chooser(el)).toBeNull();
+      expect(lock(el)).not.toBeNull();
+      expect(enrolScreen(el)).toBeNull();
+      expect((el as unknown as { frontDoor?: string }).frontDoor).toBeUndefined();
       expect(getDevDevices).not.toHaveBeenCalled();
     } finally {
       sessionStorage.removeItem(DEV_DEVICE_STORAGE_KEY);

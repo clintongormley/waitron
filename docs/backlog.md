@@ -5514,6 +5514,16 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   tab that misses the dev chooser (the chooser's failure is swallowed, `apps/till/src/till-app.ts`)
   lands on the most recently paired device's login. **Next action:** a short spec for per-tab device
   secrets and per-tab sign-ins usable in Demo, and reproduce the owner's report first.
+- **A dev tab that remembers a device a reset deleted goes back to the device picker (W107) — DONE
+  in this change.** The tab used to boot to the join screen, and joining from it could not recover
+  it: run on the demo stack 2026-10-06, a join sent with a stale `x-waitron-dev-device` header
+  created and approved a new device, but `GET /api/device/me` kept answering `device.unauthorized`
+  because in dev mode the server reads the header instead of the device cookie
+  (`apps/server/src/device-session.ts`). Now a dev tab whose remembered device is refused
+  `device.unauthorized` forgets it and shows the picker. If the picker's device list then fails to
+  load, the tab shows the join screen instead, and a join from it no longer sends the forgotten id.
+  Outside dev mode the browser still gets the join screen, and any other failure keeps the
+  remembered device (`#boot`, `apps/till/src/till-app.ts`).
 - **A low-battery alert (A272, idea, 2026-10-04) — OPEN.** A268 shows each device's battery on the
   Devices list; nothing alerts when a handheld runs low.
 

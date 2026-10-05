@@ -1149,7 +1149,9 @@ export class TillApp extends LitElement {
   @state() private handheldMode = false;
   /**
    * The device front door {@link #boot} chose, shown ahead of the lock screen and shell: `"chooser"` in
-   * dev mode when this tab has adopted no device, `"enrol"` for a browser with no device cookie.
+   * dev mode when this tab has adopted no device or the device it adopted is refused
+   * `device.unauthorized`, `"enrol"` when the identity probe is refused `device.unauthorized` and no
+   * chooser is shown.
    * `undefined` once enrolled.
    */
   @state() private frontDoor?: "chooser" | "enrol";
@@ -1771,19 +1773,11 @@ export class TillApp extends LitElement {
     this.#setScreen("lock");
     // The till has no server flag for dev mode: the dev-only `GET /api/dev/devices` answers only there,
     // and its list is also the chooser's data.
-    if (!this.devTab) {
-      try {
-        this.devDevices = await this.api.getDevDevices();
-        if (!this.isConnected) return;
-        this.frontDoor = "chooser";
-        return;
-      } catch {
-        // Not dev mode, or a transient failure.
-      }
-    }
+    if (!this.devTab && (await this.#openDevChooser())) return;
     // A KDS boots straight into its station, prefetching the queue; any other or unknown kind waits on
     // the lock screen for a sign-in. A browser with no device cookie answers `device.unauthorized` and
-    // gets the join screen, which is not a boot failure.
+    // gets the join screen (a dev tab whose remembered device is refused forgets it and gets the picker
+    // below, or the join screen if the device list fails to load), which is not a boot failure.
     try {
       const identity = await this.api.getDeviceIdentity();
       if (previousDeviceId !== undefined && previousDeviceId !== identity.deviceId)
@@ -1818,9 +1812,31 @@ export class TillApp extends LitElement {
       // Only a genuine `device.unauthorized` goes to the join screen. Any other failure is transient,
       // and stranding a sellable till behind an approval it cannot get would block sales, so it falls
       // through to the login screen.
-      if ((error as { code?: string }).code === "device.unauthorized") this.frontDoor = "enrol";
+      if ((error as { code?: string }).code === "device.unauthorized") {
+        // A dev tab's remembered device can be gone (a venue reset deletes it). In dev mode the server
+        // reads the header instead of the device cookie, so joining from this tab could not recover it.
+        if (this.devTab) {
+          clearDevDeviceId();
+          this.devTab = false;
+          if (await this.#openDevChooser()) return;
+        }
+        this.frontDoor = "enrol";
+      }
     }
     this.#configureSessionActivity();
+  }
+
+  /** True when dev mode answered, so the boot stops here. */
+  async #openDevChooser(): Promise<boolean> {
+    try {
+      this.devDevices = await this.api.getDevDevices();
+      if (!this.isConnected) return true;
+      this.frontDoor = "chooser";
+      return true;
+    } catch {
+      // Not dev mode, or a transient failure.
+      return false;
+    }
   }
 
   async #onLoggedIn(event: Event): Promise<void> {
@@ -3201,7 +3217,10 @@ export class TillApp extends LitElement {
     await this.#boot();
   }
 
-  /** A revoked device cookie: re-boot, which routes the device to the join screen. */
+  /**
+   * A refused device: re-boot, which routes it to the join screen (a dev tab with a remembered
+   * device forgets it and gets the picker, unless the device list fails to load).
+   */
   async #onDeviceUnauthorized(): Promise<void> {
     this.makeNow = [];
     await this.#boot();
@@ -7651,8 +7670,9 @@ export class TillApp extends LitElement {
         <!-- The device FRONT DOOR (device-enrolment §3.1), shown ahead of the shell/lock so it takes
              precedence over whatever screen the boot left set. The chooser is the dev-only device picker
              (its enrolled event is handled INSIDE the chooser — a dev-tab adopt, not the app's re-boot);
-             the enrol screen is the join screen a fresh production browser shows, whose enrolled event
-             (wired above) re-boots into the matching shell. -->
+             the enrol screen is the join screen a browser whose device is refused shows (in dev, only
+             when the chooser's list failed), whose enrolled event (wired above) re-boots into the
+             matching shell. -->
         ${
           this.frontDoor === "chooser"
             ? html`<till-device-chooser
