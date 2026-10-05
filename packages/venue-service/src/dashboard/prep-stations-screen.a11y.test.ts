@@ -40,13 +40,14 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
     "exception-editor",
     "exception-delete",
     "watcher",
-    "watcher-form",
+    "watcher-rename",
     "watcher-remove",
   ] as const)("checks %s state", async (state) => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
     const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
     el.api = {
+      updateWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
       readStationHealth: vi.fn().mockResolvedValue({
         capturedAt: "2026-10-05T12:00:00Z",
         stations: [],
@@ -151,15 +152,25 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
       el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-station"]')!.click();
       await el.updateComplete;
     }
-    if (state === "watcher-form") {
-      el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-watcher-pass"]')!.click();
+    if (state === "watcher-rename") {
+      el.shadowRoot!.querySelector('[data-test="watchers-table"]')!
+        .shadowRoot!.querySelector<HTMLElement>('[data-test="rename-watcher-pass"]')!
+        .click();
       await el.updateComplete;
-      const form = el.shadowRoot!.querySelector<HTMLElement>("watcher-form")!;
-      (form as HTMLElement & { refusal: object }).refusal = { code: "watcher.name_taken" };
-      await (form as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-watcher-name"]')!.click();
+      await vi.waitFor(() =>
+        expect(
+          el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+            '[data-test="watcher-rename-name"]',
+          )?.error,
+        ).toBe("A watcher already has this name."),
+      );
+      await el.updateComplete;
     }
     if (state === "watcher-remove") {
-      el.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-watcher-pass"]')!.click();
+      el.shadowRoot!.querySelector('[data-test="watchers-table"]')!
+        .shadowRoot!.querySelector<HTMLElement>('[data-test="remove-watcher-pass"]')!
+        .click();
       await el.updateComplete;
     }
     expect(el.shadowRoot!.querySelector("h1")).not.toBeNull();
@@ -213,6 +224,7 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
       },
     ];
     el.api = {
+      updateWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
       readStationHealth: vi.fn().mockResolvedValue({
         capturedAt: "2026-10-05T12:00:00Z",
         stations: [],
@@ -347,6 +359,7 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
         host.style.boxSizing = "border-box";
         const el = document.createElement("dashboard-prep-stations-screen") as PrepStationsScreen;
         el.api = {
+          updateWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
           readStationHealth: vi.fn().mockResolvedValue({
             capturedAt: "2026-10-05T12:00:00Z",
             stations: [],

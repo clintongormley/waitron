@@ -97,7 +97,7 @@ function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
     ...overrides,
   } as unknown as PrepStationsApi;
 }
-it("shows watcher cards and station and tester follow lines", async () => {
+it("shows watcher table relationships and station and tester follow lines", async () => {
   setLocale("en");
   const pass = {
     id: "pass",
@@ -149,13 +149,17 @@ it("shows watcher cards and station and tester follow lines", async () => {
     }),
   });
   const el = await mount(a);
-  expect(q(el, '[data-test="watcher-pass"]')?.textContent).toContain("Follows: every station");
-  expect(q(el, '[data-test="watcher-pass"]')?.textContent).toContain("For: every service zone");
-  expect(q(el, '[data-test="watcher-pass"]')?.textContent).toContain("Runs the pass");
-  expect(q(el, '[data-test="watcher-pass"]')?.textContent).toContain("Pass screen");
-  expect(q(el, '[data-test="watcher-pass"]')?.textContent).toContain("Expo printer");
-  expect(q(el, '[data-test="watcher-runner"]')?.textContent).toContain("Follows: Bar");
-  expect(q(el, '[data-test="watcher-runner"]')?.textContent).toContain("For: Terrace");
+  expect(q(el, '[data-test="edit-watcher-follows-pass"]')?.textContent?.trim()).toBe(
+    "every station",
+  );
+  expect(q(el, '[data-test="edit-watcher-zones-pass"]')?.textContent?.trim()).toBe(
+    "every service zone",
+  );
+  expect(q(el, '[data-test="edit-watcher-pass-pass"]')?.textContent?.trim()).toBe("Yes");
+  expect(q(el, '[data-test="watcher-screens-pass"]')?.textContent).toContain("Pass screen");
+  expect(q(el, '[data-test="edit-watcher-printers-pass"]')?.textContent).toContain("Expo printer");
+  expect(q(el, '[data-test="edit-watcher-follows-runner"]')?.textContent?.trim()).toBe("Bar");
+  expect(q(el, '[data-test="edit-watcher-zones-runner"]')?.textContent?.trim()).toBe("Terrace");
   expect(q(el, '[data-test="station-bar"]')?.textContent).toContain(
     "Watched by: Pass, Terrace runner",
   );
@@ -208,24 +212,23 @@ it("creates, edits and confirms removal of a watcher", async () => {
   );
   await settle(el);
   expect(a.createWatcher).toHaveBeenCalled();
-  q(el, '[data-test="edit-watcher-pass"]')!.click();
+  q(el, '[data-test="rename-watcher-pass"]')!.click();
   await settle(el);
-  q(el, '[data-test="watcher-modal"] watcher-form')!.dispatchEvent(
-    new CustomEvent("watcher-save", {
-      detail: {
-        input: {
-          name: "Pass",
-          everyStation: true,
-          stationIds: [],
-          everyZone: true,
-          zoneIds: [],
-          runsPass: true,
-        },
-      },
-    }),
-  );
+  const rename = q(el, '[data-test="watcher-rename-name"]') as WtInput;
+  expect(rename.value).toBe("Pass");
+  rename.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Expo" } }));
   await settle(el);
-  expect(a.updateWatcher).toHaveBeenCalledWith("pass", expect.any(Object));
+  q(el, '[data-test="save-watcher-name"]')!.click();
+  await settle(el);
+  expect(a.updateWatcher).toHaveBeenCalledWith("pass", {
+    name: "Expo",
+    everyStation: true,
+    stationIds: [],
+    everyZone: true,
+    zoneIds: [],
+    runsPass: true,
+    displayOrder: 0,
+  });
   q(el, '[data-test="remove-watcher-pass"]')!.click();
   await settle(el);
   expect(q(el, '[data-test="remove-watcher-modal"]')?.textContent).toContain("Disable Pass?");
@@ -281,7 +284,12 @@ async function settle(el: PrepStationsScreen) {
   await new Promise((r) => setTimeout(r, 0));
   await el.updateComplete;
 }
-const q = (el: PrepStationsScreen, s: string) => el.shadowRoot!.querySelector<HTMLElement>(s);
+const q = (el: PrepStationsScreen, s: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(s) ??
+  el
+    .shadowRoot!.querySelector('[data-test="watchers-table"]')
+    ?.shadowRoot?.querySelector<HTMLElement>(s) ??
+  null;
 const upstairs = {
   ...view.stations[0]!,
   id: "upstairs",
@@ -4231,3 +4239,426 @@ it("Watchers Escape cancels a printer draft without writing and reopens the save
   expect(a.setWatcherPrinters).not.toHaveBeenCalled();
   expect((await openWatcherPrinters(el)).values).toEqual(["watcher"]);
 });
+
+function watcherTableQ(el: PrepStationsScreen, selector: string) {
+  const table = q(el, '[data-test="watchers-table"]');
+  expect(table, "Watchers has one table of editable subject cells").not.toBeNull();
+  return table!.shadowRoot!.querySelector<HTMLElement>(selector);
+}
+async function openWatcherCell(el: PrepStationsScreen, field: string) {
+  watcherTableQ(el, `[data-test="edit-watcher-${field}-pass"]`)!.click();
+  await settle(el);
+  return watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox;
+}
+function chooseWatcherCell(combo: WtCombobox, values: string[]) {
+  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values, value: values[0] ?? "" } }));
+}
+it("Watchers table keeps current and retained screen relationships read-only", async () => {
+  const server = structuredClone(ticketView);
+  server.devices.push(
+    {
+      id: "pass-screen",
+      label: "Pass display",
+      stationId: null,
+      watcherId: "pass",
+      kind: "kds_station",
+      active: true,
+    },
+    {
+      id: "old-screen",
+      label: "Old display",
+      stationId: null,
+      watcherId: "pass",
+      kind: "kds_station",
+      active: false,
+    },
+  );
+  const { el } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(server) });
+  const table = q(el, '[data-test="watchers-table"]') as unknown as {
+    columns: { label: string }[];
+  };
+  expect(table?.columns.map((column) => column.label)).toEqual([
+    "Name",
+    "Follows",
+    "For service zones",
+    "Runs the pass",
+    "Screens",
+    "Printers",
+    "Actions",
+  ]);
+  const screens = watcherTableQ(el, '[data-test="watcher-screens-pass"]')!;
+  expect(screens.textContent).toContain("Pass display");
+  expect(screens.textContent).toContain("Old display (Disabled)");
+  expect(screens.querySelector("a")!.getAttribute("href")).toBe("/manage/devices");
+  expect(screens.querySelector("wt-combobox, wt-input, wt-switch")).toBeNull();
+  expect(watcherTableQ(el, '[data-test="edit-watcher-printers-pass"]')).not.toBeNull();
+});
+it.each(["follows", "zones"])(
+  "Watchers %s cell keeps every and explicit selection exclusive and persists only its field",
+  async (field) => {
+    const server = structuredClone(ticketView);
+    server.zones = [
+      { id: "terrace", name: "Terrace", active: true },
+      { id: "off-zone", name: "Old zone", active: false },
+    ];
+    const save = vi.fn(
+      async (_id: string, input: Parameters<PrepStationsApi["updateWatcher"]>[1]) => {
+        Object.assign(server.watchers[0]!, input);
+      },
+    );
+    const { el } = await mountWatcherPrinters({
+      load: vi.fn(async () => structuredClone(server)),
+      updateWatcher: save,
+    });
+    let combo = await openWatcherCell(el, field);
+    expect(combo.multiple).toBe(true);
+    expect(combo.name).toBe(field === "follows" ? "stationIds" : "zoneIds");
+    expect(combo.options.some((option) => option.value === "off-zone")).toBe(false);
+    chooseWatcherCell(combo, field === "follows" ? ["bar", "__every__"] : ["__every__", "terrace"]);
+    await settle(el);
+    combo = watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox;
+    expect(combo.values).toEqual(field === "follows" ? ["__every__"] : ["terrace"]);
+    watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
+    await vi.waitFor(() =>
+      expect(save).toHaveBeenCalledExactlyOnceWith("pass", {
+        name: "Pass",
+        everyStation: field === "follows",
+        stationIds: field === "follows" ? [] : ["bar"],
+        everyZone: field !== "zones",
+        zoneIds: field === "zones" ? ["terrace"] : [],
+        runsPass: true,
+        displayOrder: 0,
+      }),
+    );
+    await settle(el);
+    combo = await openWatcherCell(el, field);
+    expect(combo.values).toEqual(field === "follows" ? ["__every__"] : ["terrace"]);
+  },
+);
+it("Watchers empty follows submission explains itself and disables Save until corrected", async () => {
+  const save = vi.fn();
+  const { el } = await mountWatcherPrinters({ updateWatcher: save });
+  const combo = await openWatcherCell(el, "follows");
+  chooseWatcherCell(combo, []);
+  await settle(el);
+  watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
+  await settle(el);
+  expect(save).not.toHaveBeenCalled();
+  expect((watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox).error).toBe(
+    "Choose at least one station, or every station",
+  );
+  expect(watcherTableQ(el, '[data-test="save-watcher-cell"]')!.hasAttribute("disabled")).toBe(true);
+  expect(watcherTableQ(el, "wt-form-actions")!.shadowRoot!.textContent).toContain(
+    "Fix the fields marked above.",
+  );
+  chooseWatcherCell(combo, ["__every__"]);
+  await settle(el);
+  expect(watcherTableQ(el, '[data-test="save-watcher-cell"]')!.hasAttribute("disabled")).toBe(
+    false,
+  );
+});
+it("Watchers pass cell saves a choice without opening the whole watcher dialog", async () => {
+  const server = structuredClone(ticketView);
+  const save = vi.fn(
+    async (_id: string, input: Parameters<PrepStationsApi["updateWatcher"]>[1]) => {
+      Object.assign(server.watchers[0]!, input);
+    },
+  );
+  const { el } = await mountWatcherPrinters({
+    load: vi.fn(async () => structuredClone(server)),
+    updateWatcher: save,
+  });
+  const combo = await openWatcherCell(el, "pass");
+  expect(combo.multiple).toBe(false);
+  expect(combo.value).toBe("yes");
+  chooseWatcherCell(combo, ["no"]);
+  await settle(el);
+  watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
+  await vi.waitFor(() => expect(server.watchers[0]!.runsPass).toBe(false));
+  expect(q(el, '[data-test="watcher-modal"]')).toBeNull();
+  await settle(el);
+  expect((await openWatcherCell(el, "pass")).value).toBe("no");
+});
+it.each(["station.not_found", "connection.failed"])(
+  "Watchers cell keeps its draft and retry action after %s",
+  async (code) => {
+    const save = vi.fn().mockRejectedValueOnce({ code }).mockResolvedValue(undefined);
+    const { el } = await mountWatcherPrinters({ updateWatcher: save });
+    const combo = await openWatcherCell(el, "follows");
+    chooseWatcherCell(combo, ["__every__"]);
+    await settle(el);
+    watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await settle(el);
+    expect((watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox).values).toEqual([
+      "__every__",
+    ]);
+    expect(watcherTableQ(el, '[data-test="save-watcher-cell"]')!.hasAttribute("disabled")).toBe(
+      false,
+    );
+    const field = watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox;
+    expect(field.error).toBe(
+      code === "station.not_found" ? "Choose at least one station, or every station" : "",
+    );
+    watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    await settle(el);
+    expect(watcherTableQ(el, '[data-test="watcher-cell-input"]')).toBeNull();
+  },
+);
+it("Watchers Cancel and Escape discard cell edits without a write", async () => {
+  const save = vi.fn();
+  const { el } = await mountWatcherPrinters({ updateWatcher: save });
+  let combo = await openWatcherCell(el, "follows");
+  chooseWatcherCell(combo, ["__every__"]);
+  await settle(el);
+  watcherTableQ(el, '[data-test="cancel-watcher-cell"]')!.click();
+  await settle(el);
+  combo = await openWatcherCell(el, "follows");
+  expect(combo.values).toEqual(["bar"]);
+  combo.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }),
+  );
+  await settle(el);
+  expect(watcherTableQ(el, '[data-test="watcher-cell-input"]')).toBeNull();
+  expect(save).not.toHaveBeenCalled();
+});
+
+it("Watchers Rename changes only the name and closes before a failed refresh", async () => {
+  const server = structuredClone(ticketView);
+  const save = vi.fn(
+    async (_id: string, input: Parameters<PrepStationsApi["updateWatcher"]>[1]) => {
+      Object.assign(server.watchers[0]!, input);
+    },
+  );
+  const load = vi
+    .fn()
+    .mockResolvedValueOnce(server)
+    .mockRejectedValueOnce({ code: "connection.failed" });
+  const { el } = await mountWatcherPrinters({ load, updateWatcher: save });
+  watcherTableQ(el, '[data-test="rename-watcher-pass"]')!.click();
+  await settle(el);
+  expect(q(el, "watcher-form")).toBeNull();
+  const input = q(el, '[data-test="watcher-rename-name"]') as WtInput;
+  expect(input.name).toBe("name");
+  expect(input.required).toBe(true);
+  input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "  Expo  " } }));
+  await settle(el);
+  q(el, '[data-test="save-watcher-name"]')!.click();
+  await vi.waitFor(() =>
+    expect(save).toHaveBeenCalledExactlyOnceWith("pass", {
+      name: "Expo",
+      everyStation: false,
+      stationIds: ["bar"],
+      everyZone: true,
+      zoneIds: [],
+      runsPass: true,
+      displayOrder: 0,
+    }),
+  );
+  await settle(el);
+  expect(q(el, '[data-test="watcher-rename-modal"]')).toBeNull();
+  expect(el.shadowRoot!.textContent).toContain("could not be loaded");
+});
+it("Watchers Rename validates empty names and retains a retryable duplicate-name refusal", async () => {
+  const save = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "watcher.name_taken" })
+    .mockResolvedValue(undefined);
+  const { el } = await mountWatcherPrinters({ updateWatcher: save });
+  watcherTableQ(el, '[data-test="rename-watcher-pass"]')!.click();
+  await settle(el);
+  let input = q(el, '[data-test="watcher-rename-name"]') as WtInput;
+  input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: " " } }));
+  await settle(el);
+  q(el, '[data-test="save-watcher-name"]')!.click();
+  await settle(el);
+  expect(save).not.toHaveBeenCalled();
+  input = q(el, '[data-test="watcher-rename-name"]') as WtInput;
+  expect(input.error).toBe("This field is required.");
+  expect(q(el, '[data-test="save-watcher-name"]')!.hasAttribute("disabled")).toBe(true);
+  input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Expo" } }));
+  await settle(el);
+  q(el, '[data-test="save-watcher-name"]')!.click();
+  await settle(el);
+  expect((q(el, '[data-test="watcher-rename-name"]') as WtInput).error).toBe(
+    "A watcher already has this name.",
+  );
+  expect(q(el, '[data-test="save-watcher-name"]')!.hasAttribute("disabled")).toBe(false);
+  q(el, '[data-test="save-watcher-name"]')!.click();
+  await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+  await settle(el);
+  expect(q(el, '[data-test="watcher-rename-modal"]')).toBeNull();
+});
+it("Watchers service zones refuses an empty explicit set and allows every zone instead", async () => {
+  const save = vi.fn();
+  const { el } = await mountWatcherPrinters({ updateWatcher: save });
+  const combo = await openWatcherCell(el, "zones");
+  chooseWatcherCell(combo, []);
+  await settle(el);
+  watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
+  await settle(el);
+  expect(save).not.toHaveBeenCalled();
+  expect((watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox).error).toBe(
+    "Choose at least one service zone, or every service zone",
+  );
+  expect(watcherTableQ(el, '[data-test="save-watcher-cell"]')!.hasAttribute("disabled")).toBe(true);
+  chooseWatcherCell(combo, ["__every__"]);
+  await settle(el);
+  expect(watcherTableQ(el, '[data-test="save-watcher-cell"]')!.hasAttribute("disabled")).toBe(
+    false,
+  );
+});
+it("Watchers live recovery keeps a cell draft and its action error while other saved fields refresh", async () => {
+  const server = structuredClone(ticketView);
+  let readFailed = false;
+  const liveData = new LiveData();
+  const save = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "connection.failed" })
+    .mockResolvedValue(undefined);
+  const { el } = await mountWatcherPrinters({
+    liveData,
+    load: vi.fn(async () => {
+      if (readFailed) throw { code: "connection.failed" };
+      return structuredClone(server);
+    }),
+    updateWatcher: save,
+  });
+  const combo = await openWatcherCell(el, "follows");
+  chooseWatcherCell(combo, ["__every__"]);
+  await settle(el);
+  watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
+  await settle(el);
+  readFailed = true;
+  liveData.invalidate([{ type: "watchers", id: "pass" }]);
+  await settle(el);
+  readFailed = false;
+  server.watchers[0]!.runsPass = false;
+  liveData.invalidate([{ type: "watchers", id: "pass" }]);
+  await settle(el);
+  expect((watcherTableQ(el, '[data-test="watcher-cell-input"]') as WtCombobox).values).toEqual([
+    "__every__",
+  ]);
+  expect(watcherTableQ(el, "wt-form-actions")!.shadowRoot!.textContent).toContain(
+    "could not be saved",
+  );
+  watcherTableQ(el, '[data-test="save-watcher-cell"]')!.click();
+  await vi.waitFor(() =>
+    expect(save).toHaveBeenLastCalledWith("pass", {
+      name: "Pass",
+      everyStation: true,
+      stationIds: [],
+      everyZone: true,
+      zoneIds: [],
+      runsPass: false,
+      displayOrder: 0,
+    }),
+  );
+});
+
+it("Watchers Rename leaves an unsaved follows draft out of its write", async () => {
+  const save = vi.fn().mockResolvedValue(undefined);
+  const { el } = await mountWatcherPrinters({ updateWatcher: save });
+  const combo = await openWatcherCell(el, "follows");
+  chooseWatcherCell(combo, ["__every__"]);
+  await settle(el);
+  watcherTableQ(el, '[data-test="rename-watcher-pass"]')!.click();
+  await settle(el);
+  (q(el, '[data-test="watcher-rename-name"]') as WtInput).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Expo" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-watcher-name"]')!.click();
+  await vi.waitFor(() =>
+    expect(save).toHaveBeenCalledExactlyOnceWith("pass", {
+      name: "Expo",
+      everyStation: false,
+      stationIds: ["bar"],
+      everyZone: true,
+      zoneIds: [],
+      runsPass: true,
+      displayOrder: 0,
+    }),
+  );
+});
+
+it.each([
+  ["en", "light", 390],
+  ["en", "dark", 390],
+  ["es", "light", 390],
+  ["es", "dark", 390],
+  ["en", "light", 1280],
+  ["en", "dark", 1280],
+  ["es", "light", 1280],
+  ["es", "dark", 1280],
+] as const)(
+  "Watchers table cells and Rename render accessibly in %s %s at %ipx",
+  async (locale, theme, width) => {
+    const previous = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(width, 900);
+      const server = structuredClone(ticketView);
+      server.zones = [
+        { id: "terrace", name: "Terrace", active: true },
+        { id: "removed", name: "Old terrace", active: false },
+      ];
+      server.devices.push({
+        id: "retained",
+        label: "Old display",
+        stationId: null,
+        watcherId: "pass",
+        kind: "kds_station",
+        active: false,
+      });
+      const { el } = await mountWatcherPrinters({
+        load: vi.fn().mockResolvedValue(server),
+        updateWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
+      });
+      setLocale(locale);
+      el.requestUpdate();
+      await settle(el);
+      const host = el.parentElement!;
+      host.style.width = `${width}px`;
+      host.setAttribute("data-theme", theme);
+      host.style.background = "var(--wt-color-bg)";
+      expect(window.innerWidth).toBe(width);
+      expect(host.getBoundingClientRect().width).toBe(width);
+      const table = q(el, '[data-test="watchers-table"]')!;
+      expect(table.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      for (const field of ["follows", "zones", "pass"]) {
+        const combo = await openWatcherCell(el, field);
+        await combo.updateComplete;
+        await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
+        const popup = combo.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+        expect(popup.matches(":popover-open")).toBe(true);
+        expect(popup.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+        expect(popup.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+        expect(popup.textContent).not.toContain("Old terrace");
+        await expectNoA11yViolations(host);
+        await page.screenshot({
+          path: `look/watcher-table-${locale}-${theme}-${width}-${field}.png`,
+        });
+        await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
+        watcherTableQ(el, '[data-test="cancel-watcher-cell"]')!.click();
+        await settle(el);
+      }
+      const menu = watcherTableQ(el, "wt-row-actions")!;
+      await page.elementLocator(menu.shadowRoot!.querySelector("button")!).click();
+      await page.screenshot({ path: `look/watcher-table-${locale}-${theme}-${width}-menu.png` });
+      await page.elementLocator(watcherTableQ(el, '[data-test="rename-watcher-pass"]')!).click();
+      await settle(el);
+      q(el, '[data-test="save-watcher-name"]')!.click();
+      await settle(el);
+      expect((q(el, '[data-test="watcher-rename-name"]') as WtInput).error).toBe(
+        locale === "en"
+          ? "A watcher already has this name."
+          : "Ya existe un punto de seguimiento con este nombre.",
+      );
+      await expectNoA11yViolations(host);
+      await page.screenshot({ path: `look/watcher-table-${locale}-${theme}-${width}-rename.png` });
+    } finally {
+      await page.viewport(previous.width, previous.height);
+    }
+  },
+);

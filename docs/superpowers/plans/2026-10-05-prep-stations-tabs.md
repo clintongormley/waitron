@@ -441,3 +441,23 @@ The editor is mounted in the existing watcher cards as an intermediate checkpoin
 table, Follows/zones/pass/name cells, retained Screens and Printing rules watcher handover remain.
 Do not finish or land this partial page. Browser/server/guard counts and deletion-control outputs
 are recorded in the campaign ledger, rather than treating this note as a verification receipt.
+
+
+### 2026-10-05: Task 6 Watchers table increment (build remains partial)
+
+Watchers now has subject cells for Follows, service zones, Runs the pass, Screens and Printers,
+with Rename and Disable in a pinned row menu. The printer picker moved from its temporary card
+placement into the table. Choice editors share creation-form validation, keep every and explicit
+selections exclusive, and retain drafts/refusals through live reads. Screens remains read-only,
+includes retained inactive device bindings and links to Devices. Rename writes the saved values
+of other fields rather than including an unsaved choice draft.
+
+The existing relationship checks moved to their corresponding table cells, with exact choice
+values; the former whole-watcher update check now verifies Rename's complete request. Its axe
+refusal state now reaches the real Rename request rather than injecting a refusal into the old
+whole-record form. Their before/after locations are recorded in the campaign's changed-check FYI.
+New test-first checks and disposable deletion controls are recorded in the campaign ledger.
+
+Task 6 still needs the Printing rules watcher-printer handover. Task 4's Routing cleanup, Task 7's
+Settings/defaults and supervisor page-loading contract, and Task 8's whole-branch review, hook,
+current-head CI and landing remain. The full page is not ready to finish or ship.

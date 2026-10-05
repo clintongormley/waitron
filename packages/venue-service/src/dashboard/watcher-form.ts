@@ -12,6 +12,14 @@ import { t } from "./strings.js";
 type Choice = { id: string; name: string; active?: boolean };
 type Refusal = { code: string; params?: { field?: string } };
 
+export function watcherInputErrors(input: WatcherInput) {
+  return {
+    name: input.name.trim() ? "" : t("venue.field_required"),
+    stationIds: input.everyStation || input.stationIds.length ? "" : t("watchers.need_station"),
+    zoneIds: input.everyZone || input.zoneIds.length ? "" : t("watchers.need_zone"),
+  };
+}
+
 @customElement("watcher-form")
 export class WatcherForm extends LitElement {
   static override styles = [
@@ -110,13 +118,9 @@ export class WatcherForm extends LitElement {
     };
   }
   private get invalid() {
-    const input = this.input;
-    return (
-      !input.name ||
-      (!input.everyStation && !input.stationIds.length) ||
-      (!input.everyZone && !input.zoneIds.length)
-    );
+    return Object.values(watcherInputErrors(this.input)).some(Boolean);
   }
+
   private set(field: keyof WatcherInput, value: WatcherInput[typeof field]) {
     this.draft = { ...this.draft, [field]: value };
     this.refusal = undefined;
@@ -143,13 +147,9 @@ export class WatcherForm extends LitElement {
     )
       return t("watchers.need_zone");
     if (!this.attempted) return "";
-    if (field === "name" && !this.input.name) return t("venue.field_required");
-    if (field === "stationIds" && !this.input.everyStation && !this.input.stationIds.length)
-      return t("watchers.need_station");
-    if (field === "zoneIds" && !this.input.everyZone && !this.input.zoneIds.length)
-      return t("watchers.need_zone");
-    return "";
+    return watcherInputErrors(this.input)[field];
   }
+
   private save() {
     if (this.busy) return;
     this.attempted = true;

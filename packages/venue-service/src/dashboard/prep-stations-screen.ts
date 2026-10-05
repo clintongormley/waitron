@@ -48,7 +48,7 @@ import { watchersOfStation, watchersSeeing, type WatcherView } from "./watchers-
 import { t } from "./strings.js";
 import "./station-hours-form.js";
 import "./station-health-table.js";
-import "./watcher-form.js";
+import { watcherInputErrors } from "./watcher-form.js";
 
 type StationAction =
   | { kind: "today"; stationId: string; state: "open" | "closed" | null }
@@ -68,6 +68,8 @@ type Editor =
   | { kind: "exception_delete"; id: string };
 const PREP_TABS = ["stations", "routing", "tickets", "watchers", "settings"] as const;
 type PrepTab = (typeof PREP_TABS)[number];
+type WatcherCell = "follows" | "zones" | "pass";
+const EVERY_MEMBER = "__every__";
 
 const NO_PREPARATION = "no_preparation";
 const targetFor = (id: string): RouteTarget =>
@@ -84,6 +86,7 @@ export class PrepStationsScreen extends LitElement {
         display: block;
         min-width: 0;
       }
+      wt-data-table::part(watcher-cell),
       wt-data-table::part(printer-cell) {
         display: grid;
         gap: var(--wt-space-2);
@@ -227,8 +230,24 @@ export class PrepStationsScreen extends LitElement {
     error: string;
   };
   @state() private watcherPrinterBusy = false;
+  @state() private watcherCellEditor?: {
+    watcherId: string;
+    field: WatcherCell;
+    values: string[];
+    attempted: boolean;
+    fieldError: string;
+    error: string;
+  };
+  @state() private watcherCellBusy = false;
   @state() private editor?: Editor;
   @state() private watcherEditor?: { id?: string };
+  @state() private watcherRename?: {
+    id: string;
+    name: string;
+    attempted: boolean;
+    fieldError: string;
+    error: string;
+  };
   @state() private watcherRemoval?: WatcherView;
   @state() private watcherRefusal?: { code: string; params?: { field?: string } };
   @state() private watcherRemoveError = "";
@@ -1800,7 +1819,7 @@ export class PrepStationsScreen extends LitElement {
                 : undefined,
       };
     });
-    return html`<div class="watcher-printer-cell">
+    return html`<div part="watcher-cell">
       <wt-combobox
         multiple
         name="printerIds"
@@ -1852,67 +1871,395 @@ export class PrepStationsScreen extends LitElement {
       </wt-form-actions>
     </div>`;
   }
+  #watcherInput(watcher: WatcherView, applyDraft = true): WatcherInput {
+    const input = {
+      name: watcher.name,
+      everyStation: watcher.everyStation,
+      stationIds: [...watcher.stationIds],
+      everyZone: watcher.everyZone,
+      zoneIds: [...watcher.zoneIds],
+      runsPass: watcher.runsPass,
+      displayOrder: watcher.displayOrder,
+    };
+    const editor = this.watcherCellEditor;
+    if (!applyDraft || !editor || editor.watcherId !== watcher.id) return input;
+    if (editor.field === "pass") return { ...input, runsPass: editor.values[0] === "yes" };
+    const every = editor.values.includes(EVERY_MEMBER);
+    const ids = every ? [] : editor.values;
+    return editor.field === "follows"
+      ? { ...input, everyStation: every, stationIds: ids }
+      : { ...input, everyZone: every, zoneIds: ids };
+  }
+  #watcherCellError(watcher: WatcherView) {
+    const editor = this.watcherCellEditor;
+    if (!editor?.attempted) return "";
+    const errors = watcherInputErrors(this.#watcherInput(watcher));
+    return editor.field === "follows"
+      ? errors.stationIds
+      : editor.field === "zones"
+        ? errors.zoneIds
+        : "";
+  }
+  async #saveWatcherCell() {
+    const editor = this.watcherCellEditor;
+    if (!editor || this.watcherCellBusy) return;
+    const watcher = this.view!.watchers.find((row) => row.id === editor.watcherId);
+    if (!watcher) return;
+    this.watcherCellEditor = { ...editor, attempted: true, fieldError: "", error: "" };
+    if (this.#watcherCellError(watcher)) {
+      await this.updateComplete;
+      this.shadowRoot!.querySelector('[data-test="watchers-table"]')
+        ?.shadowRoot?.querySelector<HTMLElement>('[data-test="watcher-cell-input"]')
+        ?.focus();
+      return;
+    }
+    this.watcherCellBusy = true;
+    try {
+      await this.api.updateWatcher(watcher.id, this.#watcherInput(watcher));
+    } catch (error) {
+      const code = codeOf(error);
+      const field = (error as { params?: { field?: string } })?.params?.field;
+      const fieldError =
+        editor.field === "follows" &&
+        (code === "station.not_found" ||
+          (code === "management.request_invalid" && field === "stationIds"))
+          ? t("watchers.need_station")
+          : editor.field === "zones" &&
+              (code === "zone.not_found" ||
+                (code === "management.request_invalid" && field === "zoneIds"))
+            ? t("watchers.need_zone")
+            : "";
+      this.watcherCellEditor = {
+        ...editor,
+        attempted: true,
+        fieldError,
+        error: fieldError
+          ? ""
+          : t(code === "watcher.not_found" ? "watchers.not_found" : "prep.save_error"),
+      };
+      this.watcherCellBusy = false;
+      return;
+    }
+    this.watcherCellEditor = undefined;
+    this.watcherCellBusy = false;
+    await this.#load();
+  }
+  #watcherChoiceCell(watcher: WatcherView, field: WatcherCell) {
+    const view = this.view!;
+    const label = t(
+      field === "follows"
+        ? "watchers.follows_column"
+        : field === "zones"
+          ? "watchers.zones_column"
+          : "watchers.runs_pass",
+    );
+    const follows = watcher.everyStation
+      ? t("watchers.every_station")
+      : view.stations
+          .filter((row) => row.active && watcher.stationIds.includes(row.id))
+          .map((row) => row.name)
+          .join(", ");
+    const zones = watcher.everyZone
+      ? t("watchers.every_zone")
+      : view.zones
+          .filter((row) => row.active !== false && watcher.zoneIds.includes(row.id))
+          .map((row) => row.name)
+          .join(", ");
+    const text =
+      field === "follows"
+        ? follows
+        : field === "zones"
+          ? zones
+          : t(watcher.runsPass ? "venue.yes" : "venue.no");
+    const editor =
+      this.watcherCellEditor?.watcherId === watcher.id && this.watcherCellEditor.field === field
+        ? this.watcherCellEditor
+        : undefined;
+    if (!editor)
+      return html`<wt-button
+        variant="secondary"
+        data-test=${`edit-watcher-${field}-${watcher.id}`}
+        aria-label=${`${watcher.name}: ${label}`}
+        ?disabled=${this.watcherCellBusy}
+        @click=${() => {
+          this.watcherCellEditor = {
+            watcherId: watcher.id,
+            field,
+            attempted: false,
+            fieldError: "",
+            error: "",
+            values:
+              field === "pass"
+                ? [watcher.runsPass ? "yes" : "no"]
+                : field === "follows"
+                  ? watcher.everyStation
+                    ? [EVERY_MEMBER]
+                    : [...watcher.stationIds]
+                  : watcher.everyZone
+                    ? [EVERY_MEMBER]
+                    : [...watcher.zoneIds],
+          };
+        }}
+        >${text || t("prep.none")}</wt-button
+      >`;
+    const options =
+      field === "pass"
+        ? [
+            { value: "yes", label: t("venue.yes") },
+            { value: "no", label: t("venue.no") },
+          ]
+        : [
+            {
+              value: EVERY_MEMBER,
+              label: t(
+                field === "follows"
+                  ? "watchers.choose_every_station"
+                  : "watchers.choose_every_zone",
+              ),
+            },
+            ...(field === "follows" ? view.stations : view.zones)
+              .filter((row) => row.active !== false)
+              .map((row) => ({ value: row.id, label: row.name })),
+          ];
+    const invalid = this.#watcherCellError(watcher);
+    const fieldError = invalid || editor.fieldError;
+    return html`<div part="watcher-cell">
+      <wt-combobox
+        data-test="watcher-cell-input"
+        name=${field === "follows" ? "stationIds" : field === "zones" ? "zoneIds" : "runsPass"}
+        label=${`${watcher.name}: ${label}`}
+        .required=${field !== "pass"}
+        .multiple=${field !== "pass"}
+        .options=${options}
+        .values=${editor.values}
+        .value=${editor.values[0] ?? ""}
+        .error=${fieldError}
+        .disabled=${this.watcherCellBusy}
+        .countLabel=${(count: number) => format("watchers.selection_count", { count: String(count) })}
+        .searchPlaceholder=${label}
+        .noResultsLabel=${t("venue.combobox_no_results")}
+        @wt-change=${(event: CustomEvent<{ values: string[]; value: string }>) => {
+          event.stopPropagation();
+          let values = field === "pass" ? [event.detail.value] : event.detail.values;
+          if (values.includes(EVERY_MEMBER) && values.length > 1)
+            values = editor.values.includes(EVERY_MEMBER)
+              ? values.filter((id) => id !== EVERY_MEMBER)
+              : [EVERY_MEMBER];
+          this.watcherCellEditor = { ...editor, values, fieldError: "", error: "" };
+        }}
+        @keydown=${(event: KeyboardEvent) => {
+          if (event.key === "Escape" && !this.watcherCellBusy) {
+            event.stopPropagation();
+            this.watcherCellEditor = undefined;
+          }
+        }}
+      ></wt-combobox
+      ><wt-form-actions
+        .error=${[fieldError ? t("watchers.fix_fields") : "", editor.error].filter(Boolean).join(" ")}
+      >
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="cancel-watcher-cell"
+          ?disabled=${this.watcherCellBusy}
+          @click=${() => {
+            this.watcherCellEditor = undefined;
+          }}
+          >${t("venue.cancel")}</wt-button
+        >
+        <wt-button
+          data-test="save-watcher-cell"
+          ?disabled=${this.watcherCellBusy || !!invalid}
+          @click=${() => void this.#saveWatcherCell()}
+          >${t("venue.save")}</wt-button
+        >
+      </wt-form-actions>
+    </div>`;
+  }
   #watchers() {
     const view = this.view!;
     const ordered = [...view.watchers]
       .filter((watcher) => watcher.active)
       .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
+    const columns: DataTableColumn<WatcherView>[] = [
+      {
+        key: "name",
+        label: t("prep.name"),
+        cell: (watcher) => html`<span data-test=${`watcher-${watcher.id}`}>${watcher.name}</span>`,
+      },
+      {
+        key: "follows",
+        label: t("watchers.follows_column"),
+        cell: (watcher) => this.#watcherChoiceCell(watcher, "follows"),
+      },
+      {
+        key: "zones",
+        label: t("watchers.zones_column"),
+        cell: (watcher) => this.#watcherChoiceCell(watcher, "zones"),
+      },
+      {
+        key: "pass",
+        label: t("watchers.runs_pass"),
+        cell: (watcher) => this.#watcherChoiceCell(watcher, "pass"),
+      },
+      {
+        key: "screens",
+        label: t("watchers.screens"),
+        cell: (watcher) =>
+          html`<span part="watcher-cell" data-test=${`watcher-screens-${watcher.id}`}>
+            ${
+              view.devices
+                .filter((device) => device.watcherId === watcher.id)
+                .map(
+                  (device) =>
+                    `${device.label}${device.active ? "" : ` (${t("prep.health.disabled")})`}`,
+                )
+                .join(", ") || t("prep.none")
+            }
+            <a href="/manage/devices">${t("prep.devices")}</a></span
+          >`,
+      },
+      {
+        key: "printers",
+        label: t("watchers.printers"),
+        cell: (watcher) => this.#watcherPrinterCell(watcher),
+      },
+      {
+        key: "actions",
+        label: t("prep.actions"),
+        pinned: "end",
+        cell: (watcher) =>
+          html`<wt-row-actions .label=${`${watcher.name}: ${t("prep.actions")}`}>
+            <wt-button
+              variant="secondary"
+              data-test=${`rename-watcher-${watcher.id}`}
+              @click=${() => {
+                this.watcherRename = {
+                  id: watcher.id,
+                  name: watcher.name,
+                  attempted: false,
+                  fieldError: "",
+                  error: "",
+                };
+              }}
+              >${t("venue.rename")}</wt-button
+            >
+            <wt-button
+              variant="danger"
+              data-test=${`remove-watcher-${watcher.id}`}
+              @click=${() => {
+                this.watcherRemoval = watcher;
+                this.watcherRemoveError = "";
+              }}
+              >${t("watchers.remove")}</wt-button
+            >
+          </wt-row-actions>`,
+      },
+    ];
     return html`<section data-test="watchers-group">
-      <div class="toolbar">
-        <h2>${t("watchers.title")}</h2>
-      </div>
-      <div class="cards">
-        ${ordered.map((watcher) => {
-          const follows = watcher.everyStation
-            ? t("watchers.every_station")
-            : view.stations
-                .filter((station) => station.active && watcher.stationIds.includes(station.id))
-                .map((station) => station.name)
-                .join(", ");
-          const zones = watcher.everyZone
-            ? t("watchers.every_zone")
-            : view.zones
-                .filter((zone) => zone.active !== false && watcher.zoneIds.includes(zone.id))
-                .map((zone) => zone.name)
-                .join(", ");
-          const screens = view.devices
-            .filter((device) => device.watcherId === watcher.id && device.active)
-            .map((device) => device.label)
-            .join(", ");
-          return html`<wt-card data-test=${`watcher-${watcher.id}`}
-            ><h3>${watcher.name}</h3>
-            <p>${format("watchers.follows", { list: follows })}</p>
-            <p>${format("watchers.for", { list: zones })}</p>
-            ${watcher.runsPass ? html`<p>${t("watchers.runs_pass")}</p>` : nothing}
-            <p>
-              ${t("watchers.screens")}: ${screens || t("prep.none")}
-              <a href="/manage/devices">${t("prep.devices")}</a>
-            </p>
-            <div>${t("watchers.printers")}: ${this.#watcherPrinterCell(watcher)}</div>
-            <div class="actions">
-              <wt-button
-                variant="secondary"
-                data-test=${`edit-watcher-${watcher.id}`}
-                @click=${() => {
-                  this.watcherEditor = { id: watcher.id };
-                  this.watcherRefusal = undefined;
-                }}
-                >${t("prep.edit")}</wt-button
-              >
-              <wt-button
-                variant="danger"
-                data-test=${`remove-watcher-${watcher.id}`}
-                @click=${() => {
-                  this.watcherRemoval = watcher;
-                  this.watcherRemoveError = "";
-                }}
-                >${t("watchers.remove")}</wt-button
-              >
-            </div>
-          </wt-card>`;
-        })}
-      </div>
+      <wt-data-table
+        data-test="watchers-table"
+        aria-label=${t("watchers.title")}
+        .rows=${ordered}
+        .columns=${columns}
+        rowKey="id"
+        .emptyLabel=${t("venue.combobox_no_results")}
+      ></wt-data-table>
     </section>`;
+  }
+  async #saveWatcherName() {
+    const draft = this.watcherRename;
+    if (!draft || this.busy) return;
+    const watcher = this.view!.watchers.find((row) => row.id === draft.id);
+    if (!watcher) return;
+    const name = draft.name.trim();
+    const input = { ...this.#watcherInput(watcher, false), name };
+    const invalid = watcherInputErrors(input).name;
+    this.watcherRename = { ...draft, attempted: true, fieldError: invalid, error: "" };
+    if (invalid) {
+      await this.updateComplete;
+      this.shadowRoot!.querySelector<HTMLElement>('[data-test="watcher-rename-name"]')?.focus();
+      return;
+    }
+    this.busy = true;
+    try {
+      await this.api.updateWatcher(watcher.id, input);
+    } catch (error) {
+      const code = codeOf(error);
+      const field = (error as { params?: { field?: string } })?.params?.field;
+      const fieldError =
+        code === "watcher.name_taken"
+          ? t("watchers.name_taken")
+          : code === "management.request_invalid" && field === "name"
+            ? t("venue.field_required")
+            : "";
+      this.watcherRename = {
+        ...draft,
+        attempted: true,
+        fieldError,
+        error: fieldError
+          ? ""
+          : t(code === "watcher.not_found" ? "watchers.not_found" : "prep.save_error"),
+      };
+      this.busy = false;
+      return;
+    }
+    this.watcherRename = undefined;
+    this.busy = false;
+    await this.#load();
+  }
+  #watcherRenameDialog() {
+    const draft = this.watcherRename;
+    if (!draft) return nothing;
+    const invalid = draft.attempted && !draft.name.trim();
+    return html`<wt-modal
+      open
+      size="compact"
+      data-test="watcher-rename-modal"
+      heading=${t("venue.rename")}
+      .dismissible=${!this.busy}
+      @wt-close=${() => {
+        this.watcherRename = undefined;
+      }}
+    >
+      <wt-input
+        name="name"
+        required
+        data-test="watcher-rename-name"
+        label=${t("prep.name")}
+        .value=${draft.name}
+        .error=${draft.fieldError}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          const name = event.detail.value;
+          this.watcherRename = {
+            ...draft,
+            name,
+            fieldError: draft.attempted && !name.trim() ? t("venue.field_required") : "",
+            error: "",
+          };
+        }}
+        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-watcher-name"]'))}
+      ></wt-input>
+      <wt-form-actions
+        .error=${[draft.fieldError ? t("watchers.fix_fields") : "", draft.error].filter(Boolean).join(" ")}
+      >
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          ?disabled=${this.busy}
+          @click=${() => {
+            this.watcherRename = undefined;
+          }}
+          >${t("venue.cancel")}</wt-button
+        >
+        <wt-button
+          data-test="save-watcher-name"
+          ?disabled=${this.busy || invalid}
+          @click=${() => void this.#saveWatcherName()}
+          >${t("venue.save")}</wt-button
+        >
+      </wt-form-actions>
+    </wt-modal>`;
   }
   async #saveWatcher(input: WatcherInput) {
     if (this.busy || !this.watcherEditor) return;
@@ -2477,6 +2824,6 @@ export class PrepStationsScreen extends LitElement {
                   )}
               </section>`
           : nothing
-      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}${this.#renameDialog()}`;
+      }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}${this.#watcherRenameDialog()}${this.#renameDialog()}`;
   }
 }

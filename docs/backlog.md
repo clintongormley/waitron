@@ -6346,10 +6346,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   that write. The Watchers printer editor now submits a whole selection beside its shown output,
   explains station and disabled-printer conflicts, permits transfer from another watcher, and keeps
   refused drafts retryable through live reads. Cancel/Escape sends no write; a successful save closes
-  before refreshing. The Watchers table and its other cell editors remain open work; this editor is
-  currently mounted in the existing watcher cards and will move into the Printers cell.
-  Settings is still empty; legacy station settings/output links remain in Routing, and Watchers
-  still uses cards. Stations now offers confirmed Open/Close for today and
+  before refreshing. Watchers now uses a table with the printer picker in its Printers cell.
+  Follows and service-zone cells choose every member or an explicit list; Runs the pass uses its
+  own choice editor. Rename and Disable sit in the row menu. Screens includes retained inactive
+  bindings and links to Devices. Cell drafts and save refusals survive live reads; Rename writes
+  saved values for every other field, leaving unsaved drafts out of its request. Printing rules'
+  watcher-printer handover remains open, as do Settings and the legacy controls in Routing. Stations now offers confirmed Open/Close for today and
   Back to the schedule actions, with retry after a write refusal. Default and unscheduled stations
   say Always open without an action; disabled stations and an unreadable clock offer no hours
   action. Today now shows the next scheduled opening or closing, distinguishing tomorrow and later
