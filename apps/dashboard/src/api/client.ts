@@ -2635,7 +2635,9 @@ export class DashboardApi {
     input: {
       name: string;
       profileId: string;
+      /** Absent or null clears it; a kitchen screen needs this or `watcherId`. */
       stationId?: string | null;
+      /** Absent or null clears it; a kitchen screen needs this or `stationId`. */
       watcherId?: string | null;
       receiptPrinterId: string | null;
       paymentSlipPrinterId: string | null;

@@ -5364,11 +5364,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   (`apps/server/src/join-api.ts`). A till refused with `device.pairing_closed` now tells the
   operator to ask a manager to open Add a device.
   **W105 (done):** one request, `PATCH /management-api/devices/:id`, saves a device's
-  name, profile, Shows, printers and made-here stations in one transaction, replacing the reassign
+  name, profile, Shows, printers and made-here stations in one transaction (since W105e, 2026-10-05, a
+  kitchen screen's save leaves made-here out), replacing the reassign
   and made-here routes (`apps/server/src/device-api.ts`). The Devices list is a table with an Edit
   dialog and a two-press Disable in each active row's menu; a disabled device's row does not open
-  (`rowClickable`, new on `wt-data-table`). The card reader is read when the dialog opens and saved
-  second, through its own route; without `payments.manage` the field is not shown.
+  (`rowClickable`, new on `wt-data-table`). The card reader is read when the dialog opens (since W105e, only when the session holds
+  `payments.manage`) and saved second, through its own route; without `payments.manage` the field is not shown.
   **W105b (done, #1248):** a disabled device can come back as itself. If its browser asks to join while an Add a
   device dialog is open, the server checks the browser's old device cookie and marks the request
   "returning" with the device's own id, name, profile and station or watcher
@@ -5473,11 +5474,14 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   holds that its profile no longer lists is offered and chosen, marked "Name (not on this profile)"
   / "Nombre (no está en este perfil)" (`devices.printer_not_on_profile_mark`; a switched-off one
   also reads "(Disabled)"), and Save keeps it; a changed profile no longer offers it
-  (`#printerOptions`, `apps/dashboard/src/screens/devices-screen.ts`). Before the dashboard's
-  printer list has been read, nothing extra is offered and Save still keeps the held printer. (10) done by W105e (2026-10-05): the dashboard tells the
+  (`#printerOptions`, `apps/dashboard/src/screens/devices-screen.ts`). When the held printer is not in the
+  dashboard's printer list (not read yet, or read before that printer was added), nothing extra is
+  offered and Save still keeps the held printer. (10) done by W105e (2026-10-05): the dashboard tells the
   Devices screen whether the session holds `payments.manage` (`canManageReaders`, from the "who am I"
   read in `apps/dashboard/src/dashboard-app.ts`); without it Edit never draws the card reader field
-  nor asks about readers. With it the reader is read as before, and a refusal still hides the field. Review suggestions #1235 did not take, listed in its description: the edit
+  nor asks about readers. With it the reader is read as before, and a refusal still hides the field.
+  If the session loses `payments.manage` while Edit is open (the dashboard re-reads permissions when
+  the tab comes back into view), the field goes and Save sends no reader. Review suggestions #1235 did not take, listed in its description: the edit
   route checks permission before the device id where revoke checks the id first; its body is the
   whole device rather than only the fields named; it can write the device row up to three times;
   `rowClickable` and `rowActivation` could be one option; a save fetches the list twice; Edit and

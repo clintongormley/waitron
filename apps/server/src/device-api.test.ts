@@ -1141,7 +1141,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     madeHereStationIds: string[];
   };
 
-  /** What the Edit dialog would send for the device as stored, so a case changes only its own field. */
+  /** What a till's Edit dialog would send for it as stored, so a case changes only its own field. */
   async function storedBody(deviceId: string): Promise<EditBody> {
     const [row] = await suite.db
       .select({
@@ -1443,7 +1443,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     ).toEqual([bar.id]);
   });
 
-  it("refuses a stored made-here station since switched off as station.not_found", async () => {
+  it("refuses a stored made-here station since switched off as station.not_found when the body sends it", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId } = await enrolTill(app, venue, "Caja");
