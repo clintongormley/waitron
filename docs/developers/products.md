@@ -319,16 +319,17 @@ The dashboard does the same with such a value: the swatches in the Products
 tree and a menu's Structure tree draw it as no colour, and the colour chooser's "Use category
 colour" choice says the category has none (`apps/dashboard/src/widgets/color-field.ts`).
 
-A sold-out tile, painted or not, is drawn grey (`--wt-color-border`) at full strength instead of
-taking `wt-button`'s usual disabled fade, its name, price and "Sold out" in `--wt-color-text`; a
+A sold-out till tile, painted or not, is drawn grey (`--wt-color-border`) at full strength instead
+of taking `wt-button`'s usual disabled fade, its name, price and "Sold out" in `--wt-color-text`; a
 painted one keeps its colour as a stripe along its start edge, `--wt-space-2` wide (W92a). The
 button stays disabled, so a tap adds nothing. The "tile colours" cases in
 `apps/till/src/widgets/menu-browser.test.ts` work out each label's contrast as it is seen, the
 button's opacity included, and hold it at 4.5:1 or more in both themes; they also pin the grey, the
-stripe's colour and that it is wider than the tile's other edges, the disabled button and the
-language of "Sold out". axe does not check this: the home case in `menu-browser.a11y.test.ts`, which
-includes two painted sold-out tiles, passed on the old fade, whose labels read at 2.16:1 to 3.49:1.
-On the grey, a pale colour's stripe is faint in the light theme (about 1.35:1 for `#edabab`) and a
+stripe's colour and that it is wider than the tile's opposite edge, the disabled button and the
+language of "Sold out". axe does not check this: the case "home, with a plain and two painted (dark
+and pale) sold-out tiles and a weighed product's tile, has no violations" in
+`menu-browser.a11y.test.ts` passed on the old fade, under which the painted tiles' labels read at
+2.16:1 to 3.49:1. On the grey, a pale colour's stripe is faint in the light theme (about 1.35:1 for `#edabab`) and a
 dark one's in the dark theme (about 2.11:1 for `#256bb1`); the name and "Sold out" still say what
 the tile is.
 

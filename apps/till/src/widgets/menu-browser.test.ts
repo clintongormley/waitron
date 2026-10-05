@@ -950,7 +950,7 @@ describe("till-menu-browser", () => {
       return {
         color: style.borderInlineStartColor,
         width: parseFloat(style.borderInlineStartWidth),
-        otherEdge: parseFloat(style.borderInlineEndWidth),
+        oppositeEdge: parseFloat(style.borderInlineEndWidth),
       };
     };
 
@@ -983,14 +983,14 @@ describe("till-menu-browser", () => {
         for (const name of SOLD_OUT) expect(background(entry(el, "structure", name))).toBe(grey);
       });
 
-      it("keeps a sold-out painted tile's colour as a stripe wider than its other edges, and gives a plain one none", async () => {
+      it("keeps a sold-out painted tile's colour as a stripe wider than its opposite edge, and gives a plain one none", async () => {
         const el = await mountPainted(theme);
         for (const name of ["Blue gone", "Pink gone"]) {
-          const { width, otherEdge } = stripe(entry(el, "structure", name));
-          expect(width).toBeGreaterThanOrEqual(otherEdge + 2);
+          const { width, oppositeEdge } = stripe(entry(el, "structure", name));
+          expect(width).toBeGreaterThanOrEqual(oppositeEdge + 2);
         }
         const plain = stripe(entry(el, "structure", "Plain gone"));
-        expect(plain.width).toBe(plain.otherEdge);
+        expect(plain.width).toBe(plain.oppositeEdge);
       });
 
       it("reads a sold-out tile's name, price and Sold out at 4.5:1 or more where it is seen", async () => {

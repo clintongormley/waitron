@@ -197,12 +197,13 @@ its background and computing black or white text, though no screen passes it one
 different idiom from the one the floor plan and service statuses
 already use for a data colour — a neutral chip with the colour shown only as a border and a dot —
 which was tried for categories and declined: a pale colour nearly disappears as a border in the
-theme where it's already pale (light colours in light mode, dark colours in dark mode). A sold-out
-till tile uses that border idiom on purpose: painted or not, it is grey (`--wt-color-border`) with
-`--wt-color-text` labels in place of `wt-button`'s disabled fade, and a painted one keeps its colour
-only as a stripe on its start edge ([products.md](products.md), _Colour_). That stripe is faint for
-a pale colour in the light theme and a dark colour in the dark theme, which is accepted because the
-tile's name and "Sold out" carry the meaning. Reach for the filled-background idiom only for a
+theme where it's already pale (light colours in light mode, dark colours in dark mode). A painted
+sold-out till tile uses that border idiom on purpose, without the dot. Every sold-out till tile,
+painted or not, is grey (`--wt-color-border`) with `--wt-color-text` labels in place of
+`wt-button`'s disabled fade, and a painted one keeps its colour only as a stripe on its start edge
+([products.md](products.md), _Colour_). That stripe is faint for a pale colour in the light theme
+and a dark colour in the dark theme, which is accepted because the tile's name and "Sold out" carry
+the meaning. Reach for the filled-background idiom only for a
 colour that is itself the data, never as a shortcut around a `--wt-color-*` token.
 
 ### Structure
