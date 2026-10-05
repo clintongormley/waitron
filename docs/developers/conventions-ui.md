@@ -423,7 +423,9 @@ from discovery, blocking re-add. The table now defaults to Active with Disabled/
 Devices follow the same rule, though nothing discovers them. A disabled device's browser keeps its
 `waitron_device` cookie, and a knock whose cookie token verifies against a disabled row
 (`provenDisabledDevice`, `apps/server/src/join-requests.ts`) takes that device's id: the pending list
-marks it `returning`, with the row's name, profile and binding, and accepting it enables the same
+marks it `returning`, with the row's name, profile and binding, and whether that profile was
+retired (`profileRetired`, which the waiting list's hint reads and which starts Enable's Profile
+empty), and accepting it enables the same
 row. If that profile was retired since (deleted while only disabled devices held it), accepting with
 it is refused `device_profile.not_found` and the request stays, so Enable needs another profile.
 Outside dev mode it still needs an open Add a device dialog and the number check; in dev mode

@@ -5272,12 +5272,15 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   device dialog is open, the server checks the browser's old device cookie and marks the request
   "returning" with the device's own id, name, profile and station or watcher
   (`apps/server/src/join-requests.ts`). The dialog lists it under its old name with "Disabled
-  device. Enabling it restores its settings." and an Enable (Habilitar) button in place of Pair;
+  device. Enabling it restores its settings." (since W105g, 2026-10-05, the hint reads "Disabled
+  device. Its profile was deleted: choose one to enable it." instead when the device's profile was
+  retired; see (8) under "Left OPEN by W105" below) and an Enable (Habilitar) button in place of Pair;
   after the usual number check the step is titled "Enable <name>" and starts filled in
   (`apps/dashboard/src/screens/devices-screen.ts`). A station or watcher that is gone or switched
   off starts empty, to choose again; so does a profile missing from the dashboard's list of
   profiles, which since W105c is what a profile deleted while only disabled devices held it looks
-  like. If the device asks again while its Enable dialog is open, the
+  like; since W105g (2026-10-05) Profile also starts empty whenever the server reports the profile
+  retired, even while that list has not yet been re-read. If the device asks again while its Enable dialog is open, the
   new ask replaces the old one under the same id; the dialog closes without sending a discard,
   which the server would answer as naming an ask already gone, and says the device asked again
   with new numbers. Cancel and the number check name the ask by its

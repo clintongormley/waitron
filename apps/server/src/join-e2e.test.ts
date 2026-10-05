@@ -1182,12 +1182,9 @@ describe("a disabled device comes back as the same device", () => {
     expect((await deleteProfile(venue, profileId)).status).toBe(204);
     await joined(await knockWith(app, "Bar till", jar));
 
-    const [listed] = (await listJoinRequests(app, venue)) as {
-      id: string;
-      returning: { profileId: string; profileRetired: boolean } | null;
-    }[];
-    expect(listed!.id).toBe(deviceId);
-    expect(listed!.returning).toMatchObject({ profileId, profileRetired: true });
+    expect(await listJoinRequests(app, venue)).toMatchObject([
+      { id: deviceId, returning: { profileId, profileRetired: true } },
+    ]);
   });
 
   it("a returning device whose profile was deleted is enabled on a live profile, with that profile's first usable printers", async () => {

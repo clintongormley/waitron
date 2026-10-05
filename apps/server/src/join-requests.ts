@@ -236,7 +236,10 @@ export async function provenDisabledDevice(
   return { deviceId: parsed.id, tokenHash: row.tokenHash };
 }
 
-/** What the Pair step offers for a returning device: the disabled row's own name and binding. */
+/**
+ * What the Pair step offers for a returning device: the disabled row's own name and binding, and
+ * whether its profile was retired.
+ */
 export interface ReturningDetails {
   name: string;
   profileId: string;
