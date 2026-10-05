@@ -5958,6 +5958,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   notices, label/naming rules, permissions and three additive venue-service tables. The consolidated
   2027 BOE list was not located by the plan's dated search; recheck it before the build rather than
   extrapolating dates or treating a regional publication as nationwide coverage.
+  [Step 4 Routing grid plan](superpowers/plans/2026-10-05-routing-grid.md) is written for owner
+  review; the grid and row-first cell storage are not implemented. Build waits for this plan’s
+  approval and Prep stations landing. Review choices cover uncategorised products (No category
+  remains unconfirmed), nested collapsed counts, configured versus fallback cell presentation,
+  read-only default-cell permissions, retained disabled targets, zone cleanup and pre-live routing
+  reset. It replaces claims/ordered exceptions without conversion, with five stored coordinate
+  classes and populated-upgrade/configuration-transfer checks.
   [Step 1, PR #1166](https://github.com/clintongormley/waitron/pull/1166) gathers Receipts,
   Tables and Kitchen settings into tabs; supervisors can read Tables and Kitchen, while writes
   remain manager-only (owner amendment, 2026-10-04).
