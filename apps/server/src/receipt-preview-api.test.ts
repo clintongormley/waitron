@@ -1,8 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { devices, locations, printers, readTenant, withTransaction } from "@waitron/db";
+import {
+  devices,
+  locations,
+  printers,
+  readTenant,
+  tenantReceipts,
+  withTransaction,
+} from "@waitron/db";
+import { mediaImages, uploadImage } from "@waitron/media";
+import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { validateReceiptConfig } from "@waitron/layouts";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -167,7 +176,11 @@ describe("GET /management-api/receipt-preview", () => {
     const name = lines.indexOf("Deli Test SL");
     expect(name).toBeGreaterThanOrEqual(0);
     expect(lines[name + 1]).toBe("Calle Mayor 1, Madrid");
-    expect(lines[name + 2]).toBe(`NIF: ${taxId}`);
+    expect(lines.slice(name + 2, name + 5)).toEqual([
+      "Calle Mayor 1",
+      "28013 Madrid",
+      `NIF: ${taxId}`,
+    ]);
     expect(lines.some((line) => line.startsWith("1  Café y tostada"))).toBe(true);
     const change = lines.findIndex((line) => line.startsWith("Cambio"));
     expect(lines.slice(change + 1).filter(Boolean)).toEqual(["Gracias por su visita"]);
@@ -248,11 +261,23 @@ describe("GET /management-api/receipt-preview", () => {
     expect(linesOf(result, footerMessage!.start, footerMessage!.end)).toEqual(["Hasta pronto"]);
   });
 
-  it("marks nothing for a trim field left out", async () => {
+  it("marks nothing for a trim field left out, and the location's address, which prints unless switched off", async () => {
     const result = await rendered({});
-    expect(result.marks).toEqual({ headerSubtitle: null, footerMessage: null });
     const lines = printedLines(result);
-    expect(lines[lines.indexOf("Deli Test SL") + 1]).toBe(`NIF: ${taxId}`);
+    const name = lines.indexOf("Deli Test SL");
+    expect(result.marks).toEqual({
+      headerSubtitle: null,
+      footerMessage: null,
+      phone: null,
+      email: null,
+      address: { start: name + 1, end: name + 3 },
+      logo: null,
+    });
+    expect(lines.slice(name + 1, name + 4)).toEqual([
+      "Calle Mayor 1",
+      "28013 Madrid",
+      `NIF: ${taxId}`,
+    ]);
   });
 
   it("is drawn 512 dots wide (80 mm at 180 dpi) when the location has no active receipt printer", async () => {
@@ -602,5 +627,141 @@ describe("GET /management-api/receipt-preview", () => {
     const { error } = (await response.json()) as { error: { code: string; params: unknown } };
     const expected = saveRefusal as { code: string; params: unknown };
     expect(error).toEqual({ code: expected.code, params: expected.params });
+  });
+});
+
+describe("the receipt preview's top block", () => {
+  afterEach(async () => {
+    await suite.db.delete(tenantReceipts);
+    await suite.db.delete(mediaImages);
+  });
+
+  async function libraryImage(width: number): Promise<string> {
+    const image = await samplePreparedImage({ width, height: 12, format: "png" });
+    const { image: stored } = await withTransaction(suite.db, (tx) =>
+      uploadImage(tx, { image, names: { es: "Logo" } }),
+    );
+    return stored.filename;
+  }
+
+  async function spoilImageBytes(filename: string): Promise<void> {
+    await suite.db.execute(
+      sql`update media_image_data set bytes = ${Buffer.from([1, 2, 3])}
+          where image_id = (select id from media_images where filename = ${filename})`,
+    );
+  }
+
+  const sizes = (result: ReceiptPreviewResponse) =>
+    pictures(result).map((block) => (block.kind === "image" ? [block.width, block.height] : []));
+
+  it("draws the location's address, the phone and the email under the slogan, and marks each", async () => {
+    const result = await rendered({
+      headerSubtitle: "Desde 1990",
+      phone: "910 000 000",
+      email: "hola@deli.test",
+    });
+    const lines = printedLines(result);
+    const name = lines.indexOf("Deli Test SL");
+    expect(lines.slice(name, name + 7)).toEqual([
+      "Deli Test SL",
+      "Desde 1990",
+      "Calle Mayor 1",
+      "28013 Madrid",
+      "Tel. 910 000 000",
+      "hola@deli.test",
+      `NIF: ${taxId}`,
+    ]);
+    const { address, phone, email, logo } = result.marks;
+    expect(linesOf(result, address!.start, address!.end)).toEqual([
+      "Calle Mayor 1",
+      "28013 Madrid",
+    ]);
+    expect(linesOf(result, phone!.start, phone!.end)).toEqual(["Tel. 910 000 000"]);
+    expect(linesOf(result, email!.start, email!.end)).toEqual(["hola@deli.test"]);
+    expect(logo).toBeNull();
+  });
+
+  it("draws no address, and marks none, when the receipt switches it off", async () => {
+    const result = await rendered({ printAddress: false });
+    const lines = printedLines(result);
+    expect(lines[lines.indexOf("Deli Test SL") + 1]).toBe(`NIF: ${taxId}`);
+    expect(result.marks).toEqual({
+      headerSubtitle: null,
+      footerMessage: null,
+      phone: null,
+      email: null,
+      address: null,
+      logo: null,
+    });
+  });
+
+  it("draws a library logo fitted to the paper above the venue's name, and marks it", async () => {
+    const logo = await libraryImage(40);
+    const result = await rendered({ logo });
+    // 40 × 12 fitted inside 504 × 160 on the default 80 mm paper.
+    expect(sizes(result)).toEqual([[504, 151]]);
+    const mark = result.marks.logo!;
+    expect(mark.end - mark.start).toBe(1);
+    expect(result.preview.blocks[mark.start]).toMatchObject({ kind: "image", width: 504 });
+    expect(linesOf(result, mark.end, mark.end + 1)).toEqual(["Deli Test SL"]);
+  });
+
+  it("draws the saved picture when the logo is the saved one", async () => {
+    const logo = await libraryImage(41);
+    const raster = {
+      widthDots: 16,
+      heightDots: 2,
+      data: Buffer.from([1, 2, 3, 4]).toString("base64"),
+    };
+    await suite.db
+      .insert(tenantReceipts)
+      .values({ receipt: { logo, logoRasters: { "58mm": raster, "80mm": raster } } });
+    expect(sizes(await rendered({ logo }))).toEqual([[16, 2]]);
+  });
+
+  it("draws a library logo once, and from then on without reading the image", async () => {
+    const logo = await libraryImage(42);
+    const mounted = app();
+    const draw = async () => {
+      const response = await mounted.request(
+        `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify({ logo }))}`,
+        { headers: { cookie: venue.managerCookie } },
+      );
+      expect(response.status).toBe(200);
+      return (await response.json()) as ReceiptPreviewResponse;
+    };
+    // 42 × 12 fitted inside 504 × 160.
+    expect(sizes(await draw())).toEqual([[504, 144]]);
+    await spoilImageBytes(logo);
+    expect(sizes(await draw())).toEqual([[504, 144]]);
+    // A fresh mount has nothing drawn yet, and the image will no longer decode.
+    expect(sizes(await rendered({ logo }))).toEqual([]);
+  });
+
+  it("draws no logo once the unsaved logo's image is deleted, though it was drawn before", async () => {
+    const logo = await libraryImage(44);
+    const mounted = app();
+    const draw = async () => {
+      const response = await mounted.request(
+        `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify({ logo }))}`,
+        { headers: { cookie: venue.managerCookie } },
+      );
+      expect(response.status).toBe(200);
+      return (await response.json()) as ReceiptPreviewResponse;
+    };
+    expect(sizes(await draw())).toEqual([[504, 137]]);
+    await suite.db.delete(mediaImages).where(eq(mediaImages.filename, logo));
+    const after = await draw();
+    expect([sizes(after), after.marks.logo]).toEqual([[], null]);
+  });
+
+  it("draws no logo, and refuses nothing, when the image is gone or will not decode", async () => {
+    const gone = await rendered({ logo: `${"c".repeat(64)}.png` });
+    expect([sizes(gone), gone.marks.logo]).toEqual([[], null]);
+
+    const spoiled = await libraryImage(43);
+    await spoilImageBytes(spoiled);
+    const undecodable = await rendered({ logo: spoiled });
+    expect([sizes(undecodable), undecodable.marks.logo]).toEqual([[], null]);
   });
 });

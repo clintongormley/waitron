@@ -1,10 +1,13 @@
 import {
   FEED_BEFORE_CUT,
+  LOGO_MAX_HEIGHT_DOTS,
   columnsFor,
   esc,
+  safeWidthDots,
   textGrid,
   withQuietZone,
   type EscSetting,
+  type MonoRaster,
 } from "@waitron/printing";
 import { compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
@@ -106,10 +109,10 @@ it.each([PRINTER_58, PRINTER_80])(
       }),
     );
     expect(lines.slice(0, 4)).toEqual([
-      "Bar La Buena",
-      ISSUER.venueName,
-      TRIM.headerSubtitle,
-      "NIF: B12345678",
+      centred(printer, "Bar La Buena"),
+      centred(printer, ISSUER.venueName),
+      centred(printer, TRIM.headerSubtitle!),
+      centred(printer, "NIF: B12345678"),
     ]);
   },
 );
@@ -132,8 +135,12 @@ it.each([
         printer: PRINTER_80,
       }),
     );
-    expect(lines.slice(0, 3)).toEqual([ISSUER.venueName, TRIM.headerSubtitle, "NIF: B12345678"]);
-    expect(lines.filter((line) => line === ISSUER.venueName)).toHaveLength(1);
+    expect(lines.slice(0, 3)).toEqual([
+      centred(PRINTER_80, ISSUER.venueName),
+      centred(PRINTER_80, TRIM.headerSubtitle!),
+      centred(PRINTER_80, "NIF: B12345678"),
+    ]);
+    expect(lines.filter((line) => line === centred(PRINTER_80, ISSUER.venueName))).toHaveLength(1);
   },
 );
 
@@ -245,7 +252,7 @@ it("prints a QR the regime gives no words for on its own, before the issuer", ()
       printer: PRINTER_80,
     }),
   );
-  expect(lines.slice(0, 3)).toEqual(["<QR>", "", ISSUER.venueName]);
+  expect(lines.slice(0, 3)).toEqual(["<QR>", "", centred(PRINTER_80, ISSUER.venueName)]);
 });
 
 /** A centred line on `printer`'s paper, padded as the receipt pads it. */
@@ -279,9 +286,9 @@ describe("the QR comes first on an invoice that carries one", () => {
         "<QR>",
         centred(printer, "VERI*FACTU"),
         "",
-        ISSUER.venueName,
-        TRIM.headerSubtitle!,
-        `NIF: ${ISSUER.nif}`,
+        centred(printer, ISSUER.venueName),
+        centred(printer, TRIM.headerSubtitle!),
+        centred(printer, `NIF: ${ISSUER.nif}`),
       ]);
     },
   );
@@ -319,7 +326,7 @@ describe("the QR comes first on an invoice that carries one", () => {
       "<QR>",
       centred(PRINTER_80, "VERI*FACTU"),
       "",
-      ISSUER.venueName,
+      centred(PRINTER_80, ISSUER.venueName),
     ]);
     expect(lines.at(-1)).toBe("PRUEBA - SIN COBRO REAL");
   });
@@ -334,10 +341,10 @@ describe("the QR comes first on an invoice that carries one", () => {
         printer: PRINTER_80,
       }),
     );
-    expect(lines[0]).toBe(ISSUER.venueName);
+    expect(lines[0]).toBe(centred(PRINTER_80, ISSUER.venueName));
     const change = lines.findIndex((line) => line.startsWith("Cambio"));
     expect(change).toBeGreaterThan(0);
-    expect(lines.slice(change + 1)).toEqual(["", TRIM.footerMessage!]);
+    expect(lines.slice(change + 1)).toEqual(["", centred(PRINTER_80, TRIM.footerMessage!)]);
     expect(lines.join("\n")).not.toContain("VERI*FACTU");
   });
 });
@@ -416,8 +423,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       expect(lines).toContain(legend);
       for (const line of lines.filter((line) => line !== legend))
         expect(line.length).toBeLessThanOrEqual(columns);
-      expect(lines).toContain(ISSUER.venueName);
-      expect(lines.at(-1)).toBe(TRIM.footerMessage!);
+      expect(lines).toContain(centred(printer, ISSUER.venueName));
+      expect(lines).toContain("Mesa 6 · Pedido 41");
+      expect(lines.at(-1)).toBe(centred(printer, TRIM.footerMessage!));
     },
   );
   it.each([PRINTER_80, PRINTER_58])(
@@ -1079,8 +1087,9 @@ it("adds only the duplicate marker and preserves the order grouping and QR bytes
   expect(decodeTicket(original)).toContain("Mesa 6 · Pedido 41");
   expect(decodeTicket(original)).not.toContain("DUPLICADO");
   const commands = printedCommands(duplicate);
-  expect(commands.filter((c) => c.text === "DUPLICADO")).toHaveLength(1);
-  expect(Buffer.concat(commands.filter((c) => c.text !== "DUPLICADO").map((c) => c.bytes))).toEqual(
+  const marker = centred(PRINTER_80, "DUPLICADO");
+  expect(commands.filter((c) => c.text === marker)).toHaveLength(1);
+  expect(Buffer.concat(commands.filter((c) => c.text !== marker).map((c) => c.bytes))).toEqual(
     Buffer.from(original),
   );
   expect(decodeTicket(duplicate)).toContain("DUPLICADO");
@@ -2093,4 +2102,248 @@ describe("a receipt's goods names can be looked up in another language than its 
     expect(text).toContain("Tipus de pa: Sègol sencer");
     expect(text).toContain("Pernil extra 0,50 €");
   });
+});
+
+describe("the top block is centred: logo, names, slogan, address, phone, email, NIF (W111)", () => {
+  const ADDRESS = ["Calle Mayor 1", "28013 Madrid"] as const;
+  const FULL_TRIM: ReceiptTrim = {
+    ...TRIM,
+    phone: "912 345 678",
+    email: "hola@labuena.es",
+  };
+
+  /** A logo as tall and as wide as the paper allows, with a pattern a text band never has. */
+  function logoFor(printer: EscSetting): MonoRaster {
+    const widthDots = safeWidthDots(printer.paperWidth);
+    const heightDots = LOGO_MAX_HEIGHT_DOTS;
+    return {
+      widthDots,
+      heightDots,
+      bits: new Uint8Array(Math.ceil(widthDots / 8) * heightDots).fill(0xa5),
+    };
+  }
+
+  /** Each image from the QR on: a drawn line of text as what it reads, any other as its size. */
+  function afterQr(bytes: Uint8Array): string[] {
+    return fromQr(bytes)
+      .filter((c) => c.name === "GS v 0")
+      .slice(1)
+      .map((c) => c.text ?? `<${c.widthDots}×${c.heightDots}>`);
+  }
+
+  it.each([PRINTER_58, PRINTER_80])(
+    "prints the block in its order, every line centred, after the QR block on $paperWidth",
+    (printer) => {
+      const logo = logoFor(printer);
+      const lines = afterQr(
+        formatReceipt({
+          result: FILED_SALE,
+          issuer: ISSUER,
+          receiptHeader: { tradingName: "Bar La Buena", printTradingName: true },
+          receipt: FULL_TRIM,
+          venueAddress: ADDRESS,
+          logo,
+          invoiceLocale: "es-ES",
+          printer,
+          duplicate: true,
+        }),
+      );
+      expect(lines.slice(0, 15)).toEqual([
+        centred(printer, "VERI*FACTU"),
+        "",
+        `<${logo.widthDots}×${logo.heightDots}>`,
+        centred(printer, "Bar La Buena"),
+        centred(printer, ISSUER.venueName),
+        centred(printer, TRIM.headerSubtitle!),
+        centred(printer, "Calle Mayor 1"),
+        centred(printer, "28013 Madrid"),
+        centred(printer, "Tel. 912 345 678"),
+        centred(printer, "hola@labuena.es"),
+        centred(printer, "DUPLICADO"),
+        centred(printer, "NIF: B12345678"),
+        "",
+        "Mesa 6 · Pedido 41",
+        expect.stringMatching(/^Factura +A\/1$/u),
+      ]);
+    },
+  );
+
+  it.each([PRINTER_58, PRINTER_80])(
+    "turns centring on before the logo and back off before the order line on $paperWidth",
+    (printer) => {
+      const logo = logoFor(printer);
+      const commands = fromQr(
+        formatReceipt({
+          result: FILED_SALE,
+          issuer: ISSUER,
+          receipt: FULL_TRIM,
+          logo,
+          invoiceLocale: "es-ES",
+          printer,
+        }),
+      );
+      const logoAt = commands.findIndex(
+        (c) => c.widthDots === logo.widthDots && c.text === undefined,
+      );
+      expect(logoAt).toBeGreaterThan(0);
+      const lastAlignBeforeLogo = commands
+        .slice(0, logoAt)
+        .filter((c) => c.name === "ESC a")
+        .at(-1);
+      expect([...lastAlignBeforeLogo!.bytes]).toEqual([0x1b, 0x61, 1]);
+      expect(Buffer.from(commands[logoAt]!.bytes)).toEqual(Buffer.from(esc().bitmap(logo).bytes()));
+      const nifAt = commands.findIndex((c) => c.text?.trim() === "NIF: B12345678");
+      const orderAt = commands.findIndex((c) => c.text === "Mesa 6 · Pedido 41");
+      const aligns = commands.slice(nifAt, orderAt).filter((c) => c.name === "ESC a");
+      expect(aligns.map((c) => [...c.bytes])).toEqual([[0x1b, 0x61, 0]]);
+    },
+  );
+
+  it("prints the logo first, centred, on a sale with no QR", () => {
+    const logo = logoFor(PRINTER_80);
+    const commands = printedCommands(
+      formatReceipt({
+        result: NO_QR_SALE,
+        issuer: ISSUER,
+        receipt: {},
+        logo,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    ).filter((c) => c.name === "ESC a" || c.name === "GS v 0");
+    expect([...commands[0]!.bytes]).toEqual([0x1b, 0x61, 1]);
+    expect(commands[1]).toMatchObject({ widthDots: logo.widthDots, heightDots: logo.heightDots });
+    expect(commands[1]!.text).toBeUndefined();
+    expect(commands[2]!.text).toBe(centred(PRINTER_80, ISSUER.venueName));
+  });
+
+  it.each([
+    { name: "nothing", receipt: {}, venueAddress: undefined, logo: undefined, extra: [] },
+    {
+      name: "a null logo and no address lines",
+      receipt: {},
+      venueAddress: [],
+      logo: null,
+      extra: [],
+    },
+    { name: "a phone", receipt: { phone: "912 345 678" }, extra: ["Tel. 912 345 678"] },
+    { name: "an email", receipt: { email: "hola@labuena.es" }, extra: ["hola@labuena.es"] },
+    { name: "a slogan", receipt: { headerSubtitle: "Desde 1952" }, extra: ["Desde 1952"] },
+    { name: "an address", receipt: {}, venueAddress: ["Calle Mayor 1"], extra: ["Calle Mayor 1"] },
+  ])("prints only the lines that are set: $name", ({ receipt, venueAddress, logo, extra }) => {
+    const lines = afterQr(
+      formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt,
+        ...(venueAddress === undefined ? {} : { venueAddress }),
+        ...(logo === undefined ? {} : { logo }),
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    );
+    const block = [ISSUER.venueName, ...extra, "NIF: B12345678"].map((s) => centred(PRINTER_80, s));
+    expect(lines.slice(0, block.length + 4)).toEqual([
+      centred(PRINTER_80, "VERI*FACTU"),
+      "",
+      ...block,
+      "",
+      "Mesa 6 · Pedido 41",
+    ]);
+  });
+
+  it("wraps a long address line like other text, each part centred and no word lost", () => {
+    const long = "Polígono Industrial Las Mercedes, Nave 14, Calle de la Fundición 27";
+    const lines = afterQr(
+      formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: {},
+        venueAddress: [long],
+        invoiceLocale: "es-ES",
+        printer: PRINTER_58,
+      }),
+    );
+    const start = lines.indexOf(centred(PRINTER_58, ISSUER.venueName)) + 1;
+    const end = lines.indexOf(centred(PRINTER_58, "NIF: B12345678"));
+    const parts = lines.slice(start, end);
+    expect(parts.length).toBeGreaterThan(1);
+    for (const part of parts) expect(part).toBe(centred(PRINTER_58, part.trim()));
+    expect(parts.map((part) => part.trim()).join(" ")).toBe(long);
+  });
+
+  it("keeps the goods, the VAT breakdown and the total in left-aligned columns", () => {
+    const lines = afterQr(
+      formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: FULL_TRIM,
+        venueAddress: ADDRESS,
+        logo: logoFor(PRINTER_80),
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    );
+    const { columns } = textGrid(PRINTER_80.paperWidth, PRINTER_80.resolution);
+    for (const start of ["1  Menú del día", "2  Agua mineral", "Base 21%", "IVA 10%", "TOTAL"]) {
+      const line = lines.find((l) => l.startsWith(start));
+      expect(line, start).toBeDefined();
+      expect(line!.length, start).toBe(columns);
+    }
+  });
+
+  it.each([PRINTER_58, PRINTER_80])(
+    "centres the footer message, then returns to the left on $paperWidth",
+    (printer) => {
+      const commands = printedCommands(
+        formatReceipt({
+          result: FILED_SALE,
+          issuer: ISSUER,
+          receipt: TRIM,
+          invoiceLocale: "es-ES",
+          printer,
+        }),
+      );
+      const footerAt = commands.findIndex((c) => c.text?.trim() === TRIM.footerMessage);
+      expect(commands[footerAt]!.text).toBe(centred(printer, TRIM.footerMessage!));
+      const aligns = (from: typeof commands) =>
+        from.filter((c) => c.name === "ESC a").map((c) => [...c.bytes]);
+      expect(aligns(commands.slice(0, footerAt)).at(-1)).toEqual([0x1b, 0x61, 1]);
+      expect(aligns(commands.slice(footerAt + 1))).toEqual([[0x1b, 0x61, 0]]);
+    },
+  );
+
+  it("keeps the practice warning at the tear-off end left-aligned after a centred footer", () => {
+    const lines = drawn(
+      formatReceipt({
+        result: FILED_SALE,
+        issuer: ISSUER,
+        receipt: TRIM,
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+        simulated: true,
+      }),
+    );
+    expect(lines.slice(-3)).toEqual([
+      centred(PRINTER_80, TRIM.footerMessage!),
+      "",
+      "PRUEBA - SIN COBRO REAL",
+    ]);
+  });
+
+  it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES"])(
+    "prints the phone under the receipt language's label in %s",
+    (invoiceLocale) => {
+      const lines = afterQr(
+        formatReceipt({
+          result: FILED_SALE,
+          issuer: ISSUER,
+          receipt: { phone: "912 345 678" },
+          invoiceLocale,
+          printer: PRINTER_80,
+        }),
+      );
+      expect(lines).toContain(centred(PRINTER_80, "Tel. 912 345 678"));
+    },
+  );
 });

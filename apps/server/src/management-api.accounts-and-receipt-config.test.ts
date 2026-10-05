@@ -12,13 +12,21 @@ import { createHash, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi, type Mock } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { tenantReceipts, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { encryptTotpSecret, hashPassword, hashPin, persons } from "@waitron/identity";
-import { DEFAULT_RECEIPT } from "@waitron/layouts";
+import { DEFAULT_RECEIPT, getPrintedReceipt } from "@waitron/layouts";
+import { mediaImages, uploadImage } from "@waitron/media";
+import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { applyVenue, planVenue } from "@waitron/provisioning";
+import {
+  locationId as brandLocationId,
+  nodeId as brandNodeId,
+  seriesId as brandSeriesId,
+} from "@waitron/shared";
 import type { Logger } from "./logger.js";
+import type { TillConfig } from "./till-config.js";
 import type { AccountEmailSender } from "./account-email.js";
 import type { exchangeGoogleCode } from "./google-oidc.js";
 import {
@@ -73,8 +81,10 @@ function invitationBody(
   };
 }
 
+let venueCfg: TillConfig | undefined;
+
 async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
-  await applyVenue(
+  const venue = await applyVenue(
     planVenue(
       {
         country: "ES",
@@ -106,6 +116,16 @@ async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
+  venueCfg = {
+    nodeId: brandNodeId(venue.nodeId),
+    seriesId: brandSeriesId(venue.seriesIds[0]!),
+    locationId: brandLocationId(venue.locationId),
+    locale: LOCALE,
+    invoiceLocales: [LOCALE],
+    tipsEnabled: false,
+    simplifiedInvoiceLimit: null,
+    orderFlow: "prepay",
+  };
 
   // Through the table definition: `persons.id` and `persons.created_at` are `$defaultFn`
   // generators, which a raw SQL insert never reaches.
@@ -149,6 +169,7 @@ function mountApp(
     {
       db: suite.db,
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
+      venueCfg,
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
@@ -1192,10 +1213,60 @@ describe("Management API staff + session routes", () => {
   });
 });
 
-async function getReceiptOverHttp(app: Hono, cookie: string): Promise<{ receipt: unknown }> {
+async function getReceiptOverHttp(
+  app: Hono,
+  cookie: string,
+): Promise<{ receipt: unknown; venueAddress: string[] }> {
   const res = await app.request("/management-api/receipt", { headers: { cookie } });
   expect(res.status).toBe(200);
-  return (await res.json()) as { receipt: unknown };
+  return (await res.json()) as { receipt: unknown; venueAddress: string[] };
+}
+
+const VENUE_ADDRESS = ["Calle Mayor 1", "28013 Madrid"];
+
+function putReceiptOverHttp(app: Hono, cookie: string, receipt: unknown): Promise<Response> {
+  return Promise.resolve(
+    app.request("/management-api/receipt", {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ receipt }),
+    }),
+  );
+}
+
+/** A library image, as the media upload route stores one; `width` keeps photos distinct. */
+async function libraryImage(width: number): Promise<string> {
+  const image = await samplePreparedImage({ width, height: 12, format: "png" });
+  const { image: stored } = await withTransaction(suite.db, (tx) =>
+    uploadImage(tx, { image, names: { es: "Logo" } }),
+  );
+  return stored.filename;
+}
+
+/** The receipt row as stored, server-only keys included. */
+async function storedReceipt(): Promise<Record<string, unknown> | undefined> {
+  const [row] = await suite.db.select().from(tenantReceipts);
+  return row?.receipt as Record<string, unknown> | undefined;
+}
+
+/** Replaces a library image's bytes with some that will not decode. */
+async function spoilImageBytes(filename: string): Promise<void> {
+  await suite.db.execute(
+    sql`update media_image_data set bytes = ${Buffer.from([1, 2, 3])}
+        where image_id = (select id from media_images where filename = ${filename})`,
+  );
+}
+
+/** Starts `first`, waits until it is queued behind the held lock, then queues `second`. */
+async function queuedInOrder<T>(first: () => Promise<T>, second: () => Promise<unknown>) {
+  const lock = await holdWriteLock();
+  const firstDone = first();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const secondDone = second();
+  await lock.release();
+  const result = await firstDone;
+  await secondDone;
+  return result;
 }
 
 describe("Management API — receipt routes (Task 7)", () => {
@@ -1251,7 +1322,7 @@ describe("Management API — receipt routes (Task 7)", () => {
 
     // A fresh venue has no `tenant_receipts` row, so the built-in default comes back.
     const body = await getReceiptOverHttp(app, cookie);
-    expect(body).toEqual({ receipt: DEFAULT_RECEIPT });
+    expect(body).toEqual({ receipt: DEFAULT_RECEIPT, venueAddress: VENUE_ADDRESS });
   });
 
   it("manager PUT /management-api/receipt → 204, then GET /management-api/receipt reads it back (round-trip)", async () => {
@@ -1268,7 +1339,147 @@ describe("Management API — receipt routes (Task 7)", () => {
     expect(put.status).toBe(204);
     expect(await put.text()).toBe("");
 
-    expect(await getReceiptOverHttp(app, cookie)).toEqual({ receipt });
+    expect(await getReceiptOverHttp(app, cookie)).toEqual({
+      receipt,
+      venueAddress: VENUE_ADDRESS,
+    });
+  });
+
+  it("GET returns the location's address lines even when the receipt does not print them", async () => {
+    await setupTenant();
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
+    expect((await putReceiptOverHttp(app, cookie, { printAddress: false })).status).toBe(204);
+    expect(await getReceiptOverHttp(app, cookie)).toEqual({
+      receipt: { printAddress: false },
+      venueAddress: VENUE_ADDRESS,
+    });
+  });
+
+  it("PUT with a library logo stores a printable picture for each paper, and GET does not return it", async () => {
+    await setupTenant();
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
+    const logo = await libraryImage(40);
+
+    expect((await putReceiptOverHttp(app, cookie, { logo, phone: "+34 910 000 000" })).status).toBe(
+      204,
+    );
+    expect(await getReceiptOverHttp(app, cookie)).toEqual({
+      receipt: { logo, phone: "+34 910 000 000" },
+      venueAddress: VENUE_ADDRESS,
+    });
+    const printable = await withTransaction(suite.db, async (tx) => [
+      (await getPrintedReceipt(tx, "58mm")).logo,
+      (await getPrintedReceipt(tx, "80mm")).logo,
+    ]);
+    // 40 × 12 fitted inside 360 × 160 and 504 × 160.
+    expect(printable.map((r) => [r?.widthDots, r?.heightDots])).toEqual([
+      [360, 108],
+      [504, 151],
+    ]);
+
+    expect((await putReceiptOverHttp(app, cookie, {})).status).toBe(204);
+    expect(await storedReceipt()).toEqual({});
+  });
+
+  it("PUT naming no library image is refused under the logo field, and saves nothing", async () => {
+    await setupTenant();
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
+    const res = await putReceiptOverHttp(app, cookie, { logo: `${"c".repeat(64)}.png` });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "receipt.invalid", params: { reason: "image_not_found", field: "logo" } },
+    });
+    expect(await storedReceipt()).toBeUndefined();
+  });
+
+  it("PUT with a library image that will not decode is refused image.invalid_file, and saves nothing", async () => {
+    await setupTenant();
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
+    const logo = await libraryImage(41);
+    await spoilImageBytes(logo);
+    const res = await putReceiptOverHttp(app, cookie, { logo });
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error: { code: "image.invalid_file", params: {} } });
+    expect(await storedReceipt()).toBeUndefined();
+  });
+
+  it("PUT keeping the saved logo keeps its pictures without decoding the image again", async () => {
+    await setupTenant();
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
+    const logo = await libraryImage(42);
+    expect((await putReceiptOverHttp(app, cookie, { logo })).status).toBe(204);
+    const before = (await storedReceipt())!.logoRasters;
+    // A decode would now fail, so a 204 shows none ran.
+    await spoilImageBytes(logo);
+
+    expect((await putReceiptOverHttp(app, cookie, { logo, footerMessage: "Gracias" })).status).toBe(
+      204,
+    );
+    expect(await storedReceipt()).toEqual({ logo, footerMessage: "Gracias", logoRasters: before });
+  });
+
+  it("PUT keeping the saved logo draws it again when a saved picture cannot be printed", async () => {
+    await setupTenant();
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
+    const logo = await libraryImage(43);
+    expect((await putReceiptOverHttp(app, cookie, { logo })).status).toBe(204);
+    const drawn = (await storedReceipt())!.logoRasters as Record<string, unknown>;
+    await suite.db.update(tenantReceipts).set({
+      receipt: {
+        logo,
+        logoRasters: { ...drawn, "80mm": { widthDots: 8, heightDots: 1, data: "" } },
+      },
+    });
+
+    expect((await putReceiptOverHttp(app, cookie, { logo })).status).toBe(204);
+    expect(await storedReceipt()).toEqual({ logo, logoRasters: drawn });
+  });
+
+  it("PUT keeping the saved logo still saves it with its pictures when another save drops the logo first", async () => {
+    await setupTenant();
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
+    const logo = await libraryImage(44);
+    expect((await putReceiptOverHttp(app, cookie, { logo })).status).toBe(204);
+    const drawn = (await storedReceipt())!.logoRasters;
+    // Had this save read the row after the other one, it would have had to decode, and failed.
+    await spoilImageBytes(logo);
+
+    const res = await queuedInOrder(
+      () => putReceiptOverHttp(app, cookie, { logo, footerMessage: "Gracias" }),
+      () =>
+        withTransaction(suite.db, async (tx) => {
+          await tx.update(tenantReceipts).set({ receipt: { footerMessage: "Otra" } });
+        }),
+    );
+    expect(res.status).toBe(204);
+    expect(await storedReceipt()).toEqual({ logo, footerMessage: "Gracias", logoRasters: drawn });
+  });
+
+  it("PUT is refused image_not_found when the image is deleted while its pictures are drawn", async () => {
+    await setupTenant();
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
+    const logo = await libraryImage(45);
+
+    const res = await queuedInOrder(
+      () => putReceiptOverHttp(app, cookie, { logo }),
+      () =>
+        withTransaction(suite.db, async (tx) => {
+          await tx.delete(mediaImages).where(eq(mediaImages.filename, logo));
+        }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "receipt.invalid", params: { reason: "image_not_found", field: "logo" } },
+    });
+    expect(await storedReceipt()).toBeUndefined();
   });
 
   it("PUT /management-api/receipt with an unknown field → 400 receipt.invalid", async () => {

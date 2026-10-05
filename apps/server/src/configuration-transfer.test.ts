@@ -51,12 +51,15 @@ import {
   CORE_CONFIGURATION_TRANSFER,
   products,
   sales,
+  tenantReceipts,
   withTransaction,
   workingOrders,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   deleteDeviceProfile,
+  getPrintedReceipt,
+  getReceipt,
   readProfilePrinterLists,
   setProfilePrinterLists,
 } from "@waitron/layouts";
@@ -77,6 +80,7 @@ import {
 import { payments } from "@waitron/payments";
 import { decimal, locationId, nodeId, seriesId, deviceOrigin } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
+import { drawLogoRasters } from "./receipt-logo.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { systemClock } from "./till-backend.js";
 import {
@@ -1297,6 +1301,50 @@ it("transfers the venue's limit on a bill's total discount", async () => {
   expect(await withTransaction(targetSuite.db, readAdjustmentSettings)).toEqual({
     maxBillDiscountBp: 4000,
   });
+});
+
+it("transfers the receipt's logo with its image and pictures, and the imported receipt prints it", async () => {
+  const photo = await samplePreparedImage({ width: 10 });
+  const source = await applyVenue(planVenue(venue("B13572470"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const logo = await withTransaction(suite.db, async (tx) => {
+    const { image } = await uploadImage(tx, { image: photo, names: { es: "Logo" } }, {});
+    return image.filename;
+  });
+  const receipt = { logo, logoRasters: await drawLogoRasters(photo.bytes) };
+  await withTransaction(suite.db, (tx) => tx.insert(tenantReceipts).values({ receipt }));
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-09-30T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const printed = async (db: typeof suite.db) =>
+    withTransaction(db, async (tx) => ({
+      receipt: await getReceipt(tx),
+      narrow: (await getPrintedReceipt(tx, "58mm")).logo,
+      wide: (await getPrintedReceipt(tx, "80mm")).logo,
+      image: (await readImageBytes(tx, logo)) !== null,
+    }));
+  const imported = await printed(targetSuite.db);
+  expect(imported).toEqual(await printed(suite.db));
+  expect(imported.receipt).toEqual({ logo });
+  // 10 × 6 fitted inside 160 dots high on either paper.
+  expect([imported.narrow?.widthDots, imported.wide?.widthDots, imported.image]).toEqual([
+    267,
+    267,
+    true,
+  ]);
 });
 
 it("transfers a station's rest of the order switch", async () => {

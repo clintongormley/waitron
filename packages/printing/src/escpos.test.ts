@@ -439,6 +439,28 @@ describe("text drawn as images", () => {
     ).toBe(8 + 0xffff);
   });
 
+  it("sends an already-packed 1-bit picture as a GS v 0 image", () => {
+    const bits = Uint8Array.of(0x80, 0x40, 0x40, 0x40);
+    expect([...esc().bitmap({ widthDots: 10, heightDots: 2, bits }).bytes()]).toEqual([
+      ...header(2, 2),
+      0x80,
+      0x40,
+      0x40,
+      0x40,
+    ]);
+  });
+
+  it("refuses a packed picture whose data is not one padded row of bytes per dot row", () => {
+    const builder = esc().init();
+    expect(() => builder.bitmap({ widthDots: 10, heightDots: 2, bits: new Uint8Array(3) })).toThrow(
+      RangeError,
+    );
+    expect(() => builder.bitmap({ widthDots: 0, heightDots: 2, bits: new Uint8Array(0) })).toThrow(
+      RangeError,
+    );
+    expect([...builder.bytes()]).toEqual([0x1b, 0x40]);
+  });
+
   it("refuses a picture with no dots or a fractional size", () => {
     expect(() => esc().raster(0, 1, () => true)).toThrow(RangeError);
     expect(() => esc().raster(1, 0, () => true)).toThrow(RangeError);

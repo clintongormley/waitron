@@ -1134,6 +1134,9 @@ importers:
       '@waitron/identity':
         specifier: workspace:*
         version: link:../identity
+      '@waitron/printing':
+        specifier: workspace:*
+        version: link:../printing
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared

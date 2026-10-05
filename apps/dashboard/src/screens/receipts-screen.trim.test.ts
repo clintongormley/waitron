@@ -17,14 +17,21 @@ const PREVIEW = {
     truncated: false,
     unsupported: false,
   },
-  marks: { headerSubtitle: null, footerMessage: null },
+  marks: {
+    headerSubtitle: null,
+    footerMessage: null,
+    phone: null,
+    email: null,
+    address: null,
+    logo: null,
+  },
   paperWidth: "80mm",
   paperWidths: ["80mm"],
 };
 
 function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig = {}): DashboardApi {
   return {
-    getReceipt: vi.fn().mockResolvedValue({ receipt: { ...receipt } }),
+    getReceipt: vi.fn().mockResolvedValue({ receipt: { ...receipt }, venueAddress: [] }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
     getLocationSettings: vi
       .fn()
@@ -280,6 +287,7 @@ it("refreshes clean receipt fields while preserving an unsaved header", async ()
   );
   vi.mocked(api.getReceipt).mockResolvedValue({
     receipt: { headerSubtitle: "Elsewhere", footerMessage: "Updated" },
+    venueAddress: [],
   });
   liveData.invalidate([{ type: "tenant_receipts" }]);
   await vi.waitFor(() =>

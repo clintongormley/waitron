@@ -4,10 +4,12 @@ import {
   TEXT_BAND_HEIGHT,
   chooseQrDots,
   columnsFor,
+  ditherToRaster,
   dpiValue,
   drawTextBand,
   gridForWidth,
   labelAmountLines,
+  LOGO_MAX_HEIGHT_DOTS,
   prepareText,
   QR_QUIET_ZONE,
   readRasterText,
@@ -32,5 +34,9 @@ describe("package barrel", () => {
     expect(textGrid("80mm", "203dpi")).toEqual(gridForWidth(576));
     const band = drawTextBand("€", gridForWidth(360));
     expect(readRasterText(360, TEXT_BAND_HEIGHT, band)).toBe("€");
+    expect(LOGO_MAX_HEIGHT_DOTS).toBe(160);
+    expect([...ditherToRaster({ width: 1, height: 1, pixels: Uint8Array.of(0) }).bits]).toEqual([
+      0x80,
+    ]);
   });
 });

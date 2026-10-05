@@ -45,7 +45,7 @@ Terms used below:
 The first version asked six questions. The owner's answers, relayed by the supervising session at about 08:45:
 
 1. **Approved.** One original, chosen at issue; at most one attempt at the original unless it certainly failed; no courtesy PDF beside a paper original in the first build.
-2. **Approved.** The consent statement's content, and a venue contact email in the location settings as the way to withdraw after leaving.
+2. **Approved.** The consent statement's content, and a venue contact email in the location settings as the way to withdraw after leaving. _(2026-10-05, W111: the receipt settings now hold an optional venue-wide phone and email — `phone` and `email` in the `tenant_receipts.receipt` JSON, edited on the dashboard's Receipts screen. Whoever builds this decides whether to reuse that email rather than add a second contact email.)_
 3. **Approved.** Every delivered PDF is stored in the database, and therefore in the bucket.
 4. **Managers only** may email or download an invoice from the dashboard.
 5. **Approved.** `pdfkit` and a bundled font, subject to the build's first-task checks.
@@ -223,7 +223,7 @@ Choosing Email shows an email address field and a consent box, unticked by defau
 - paper is still available, free, at any time;
 - the customer can withdraw this consent by telling the staff, or after leaving by writing to the venue's contact address.
 
-The statement is shown in the receipt language, and its text is versioned. The venue's contact address does not exist yet: the build adds a contact email (and optional phone) to the location's settings, and Email is offered only once one is set.
+The statement is shown in the receipt language, and its text is versioned. The venue's contact address does not exist yet: the build adds a contact email (and optional phone) to the location's settings, and Email is offered only once one is set. _(2026-10-05, W111: an optional venue-wide phone and email now exist in the receipt settings — `phone` and `email` in the `tenant_receipts.receipt` JSON, edited on the dashboard's Receipts screen; decide whether to reuse them rather than add a second contact email.)_
 
 The dialog follows the shared form rules ([design-system.md → Forms](../../developers/design-system.md#forms)): the required fields are marked, a mistake is explained beside the field, and Issue stays disabled until the fields are right. The server checks everything again.
 

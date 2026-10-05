@@ -120,6 +120,8 @@ export interface TillInfo {
   activeReaders: TillActiveReader[];
   tipsEnabled: boolean;
   receipt: ReceiptConfig;
+  /** This location's address as the receipt prints it, one line each; none when it prints none. */
+  venueAddress: string[];
   /**
    * The CALLING device's layout canvas — its assigned one, or the form-factor default the server falls
    * back to (a cookieless request gets the `till` default).

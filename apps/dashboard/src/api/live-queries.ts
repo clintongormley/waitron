@@ -253,7 +253,7 @@ export const QUERY_DEPENDENCIES = {
   getRoster: ["shifts", "roster_versions", "employments", "absences"],
   listPrinterStations: ["station_printers"],
   listPurchaseInvoices: ["purchase_invoices", "purchase_invoice_vat"],
-  getReceipt: ["tenant_receipts"],
+  getReceipt: ["tenant_receipts", "locations"],
   getLocationSettings: ["locations"],
   getReceiptLanguage: ["locations"],
   getProductRecipe: ["recipe_lines", "ingredients", "products"],

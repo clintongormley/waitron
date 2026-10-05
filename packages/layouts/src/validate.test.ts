@@ -59,4 +59,87 @@ describe("validateReceiptConfig", () => {
     const error = catchAppError(() => validateReceiptConfig({ showCashChange: true }));
     expect(error.params).toEqual({ reason: "unknown_field" });
   });
+
+  const LOGO = `${"ab".repeat(32)}.png`;
+
+  it("accepts a phone, an email, the address switch and a library logo", () => {
+    const input = {
+      phone: "+34 (91) 123-45.67",
+      email: "hola@bar-pepe.es",
+      printAddress: false,
+      logo: LOGO,
+    };
+    expect(validateReceiptConfig(input)).toEqual(input);
+  });
+
+  it("drops an empty phone, email or logo, which means not set", () => {
+    expect(validateReceiptConfig({ phone: "", email: "", logo: "", footerMessage: "x" })).toEqual({
+      footerMessage: "x",
+    });
+  });
+
+  it("accepts a phone at 30 characters with at least six digits", () => {
+    const phone = "1".repeat(6) + " ".repeat(24);
+    expect(validateReceiptConfig({ phone })).toEqual({ phone });
+  });
+
+  it.each([
+    ["one character too long", `912 345 678${" ".repeat(20)}`],
+    ["fewer than six digits", "(91) 2-34"],
+    ["more than fifteen digits", "1234567890123456"],
+    ["a plus sign that does not lead", "912+345678"],
+    ["a slash", "91/234 5678"],
+    ["no digit at all", "+ ( ) - ."],
+    ["a letter", "912 345 67a"],
+    ["a character outside the allowed punctuation", "912#345678"],
+  ])("refuses a phone with %s as invalid_phone", (_, phone) => {
+    const error = catchAppError(() => validateReceiptConfig({ phone }));
+    expect(error.params).toEqual({ reason: "invalid_phone", field: "phone" });
+  });
+
+  it("accepts an email at 254 characters", () => {
+    const email = `${"a".repeat(64)}@${"b".repeat(185)}.com`;
+    expect(email).toHaveLength(254);
+    expect(validateReceiptConfig({ email })).toEqual({ email });
+  });
+
+  it.each([
+    ["one character too long", `${"a".repeat(64)}@${"b".repeat(186)}.com`],
+    ["no at sign", "hola.bar-pepe.es"],
+    ["no dot in the domain", "hola@localhost"],
+    ["a space", "hola @bar.es"],
+    ["a leading space", " hola@bar.es"],
+    ["a trailing newline", "hola@bar.es\n"],
+    ["two at signs", "a@b@c.es"],
+    ["nothing before the at sign", "@bar.es"],
+    ["nothing after the last dot", "hola@bar."],
+  ])("refuses an email with %s as invalid_email", (_, email) => {
+    const error = catchAppError(() => validateReceiptConfig({ email }));
+    expect(error.params).toEqual({ reason: "invalid_email", field: "email" });
+  });
+
+  it("refuses a printAddress that is not a boolean as not_boolean", () => {
+    const error = catchAppError(() => validateReceiptConfig({ printAddress: "false" }));
+    expect(error.params).toEqual({ reason: "not_boolean", field: "printAddress" });
+  });
+
+  it.each([
+    ["an uppercase hash", `${"AB".repeat(32)}.png`],
+    ["a short hash", `${"ab".repeat(31)}.png`],
+    ["another extension", `${"ab".repeat(32)}.gif`],
+    ["a path", `../${"ab".repeat(32)}.png`],
+  ])("refuses a logo with %s as invalid_logo", (_, logo) => {
+    const error = catchAppError(() => validateReceiptConfig({ logo }));
+    expect(error.params).toEqual({ reason: "invalid_logo", field: "logo" });
+  });
+
+  it.each(["phone", "email", "logo"])("refuses a non-string %s as not_string", (field) => {
+    const error = catchAppError(() => validateReceiptConfig({ [field]: 912345678 }));
+    expect(error.params).toEqual({ reason: "not_string", field });
+  });
+
+  it("refuses logoRasters from a caller: the server derives them", () => {
+    const error = catchAppError(() => validateReceiptConfig({ logoRasters: {} }));
+    expect(error.params).toEqual({ reason: "unknown_field" });
+  });
 });

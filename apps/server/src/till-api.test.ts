@@ -1239,6 +1239,8 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       activeReaders: [],
       tipsEnabled: false,
       receipt: DEFAULT_RECEIPT,
+      // The seeded location has no address.
+      venueAddress: [],
       receiptPrintMode: "auto",
       // Cookieless: no device, so the boot read resolves the `till` form-factor default canvas
       // (`getCanvasForFormFactor` → DEFAULT_CANVASES.till) rather than leaving it absent (SP-B4).
@@ -1542,6 +1544,41 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       expect(body).not.toHaveProperty("layout");
     } finally {
       await suite.db.execute(sql`delete from tenant_receipts `);
+    }
+  });
+
+  it("GET /api/till carries the location's address lines, none when the receipt switches them off, and never the logo's pictures", async () => {
+    const raster = { widthDots: 8, heightDots: 1, data: "/w==" };
+    const logo = `${"a".repeat(64)}.png`;
+    await suite.db
+      .update(locations)
+      .set({ addressLine1: "Calle Mayor 1", postalCode: "28013", city: "Madrid" })
+      .where(eq(locations.id, cfg.locationId));
+    try {
+      const app = new Hono();
+      mountTillApi(app, deps(suite.db), collect([]));
+      const boot = async () =>
+        (await (await app.request("/api/till")).json()) as {
+          receipt: unknown;
+          venueAddress: unknown;
+        };
+      await suite.db
+        .insert(tenantReceipts)
+        .values({ receipt: { logo, logoRasters: { "58mm": raster, "80mm": raster } } });
+      expect(await boot()).toMatchObject({
+        receipt: { logo },
+        venueAddress: ["Calle Mayor 1", "28013 Madrid"],
+      });
+      expect((await boot()).receipt).toEqual({ logo });
+
+      await suite.db.update(tenantReceipts).set({ receipt: { printAddress: false } });
+      expect(await boot()).toMatchObject({ receipt: { printAddress: false }, venueAddress: [] });
+    } finally {
+      await suite.db.execute(sql`delete from tenant_receipts`);
+      await suite.db
+        .update(locations)
+        .set({ addressLine1: null, postalCode: null, city: null })
+        .where(eq(locations.id, cfg.locationId));
     }
   });
 

@@ -119,6 +119,7 @@ export type { MergeableDraftLine } from "./draft-merge.js";
 export { deriveDisplayName } from "./derive-display-name.js";
 export { isValidTelephone } from "./telephone.js";
 export { isValidGuestCount, MAX_GUEST_COUNT } from "./guest-count.js";
+export { MEDIA_FILENAME } from "./media-filename.js";
 export { firstCodeInCauseChain, MAX_CAUSE_DEPTH } from "./cause-chain.js";
 export { sqliteFailureOf } from "./engine-failure.js";
 export { quoteLiteral } from "./sql-literal.js";

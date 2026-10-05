@@ -1,7 +1,8 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
+  disabledStyles,
   visuallyHiddenStyles,
   currentContentLanguages,
   ContentLanguageController,
@@ -70,6 +71,9 @@ export class ImageUpload extends LitElement {
         background: var(--wt-color-surface);
         cursor: pointer;
       }
+      .thumb:disabled {
+        ${disabledStyles}
+      }
       .thumb.inherited {
         border-style: dashed;
         border-color: var(--wt-color-text-muted);
@@ -90,11 +94,15 @@ export class ImageUpload extends LitElement {
   ];
   @property({ attribute: false }) api!: ImageUploader;
   @property() image: string | null = null;
+  /** The heading above the full control; "Image" when empty. */
+  @property() label = "";
   /** The photo a blank `image` falls back to — a variant's parent's — is not stored. */
   @property() inheritedImage: string | null = null;
   /** Marks the control's button invalid, so `focusFirstInvalid` lands on it. */
   @property({ type: Boolean }) invalid = false;
   @property({ type: Boolean, reflect: true }) thumbnail = false;
+  /** Nothing can be chosen or removed, and a library left open closes. */
+  @property({ type: Boolean, reflect: true }) disabled = false;
   @state() private pickerOpen = false;
   @state() private selectedNames: Record<string, string> = {};
   #selectedFilename: string | null = null;
@@ -103,13 +111,18 @@ export class ImageUpload extends LitElement {
     super();
     new ContentLanguageController(this);
   }
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("disabled") && this.disabled && this.pickerOpen) this.#setOpen(false);
+  }
   #setOpen(open: boolean): void {
+    if (open && this.disabled) return;
     this.pickerOpen = open;
     this.dispatchEvent(
       new CustomEvent("image-picker-state", { detail: { open }, bubbles: true, composed: true }),
     );
   }
   #change(image: string | null): void {
+    if (this.disabled) return;
     this.image = image;
     this.dispatchEvent(
       new CustomEvent("image-changed", { detail: { image }, bubbles: true, composed: true }),
@@ -125,6 +138,7 @@ export class ImageUpload extends LitElement {
         aria-label=${t(this.image ? "image.change_photo" : "image.add_photo")}
         aria-invalid=${this.invalid ? "true" : nothing}
         aria-describedby=${inherited ? this.#captionId : nothing}
+        ?disabled=${this.disabled}
         @click=${() => this.#setOpen(true)}
       >
         ${shown ? html`<img src=${`/media/${encodeURIComponent(shown)}`} alt="" />` : nothing}
@@ -150,12 +164,13 @@ export class ImageUpload extends LitElement {
   }
 
   #renderFull() {
-    return html`<p>${t("image.label")}</p>
+    return html`<p>${this.label || t("image.label")}</p>
       <div class="actions">
         <wt-button
           data-test="choose-image"
           variant="secondary"
           aria-invalid=${this.invalid ? "true" : nothing}
+          ?disabled=${this.disabled}
           @click=${() => this.#setOpen(true)}
           >${t("image.choose")}</wt-button
         >
@@ -164,6 +179,7 @@ export class ImageUpload extends LitElement {
             ? html`<wt-button
                 data-test="remove-image"
                 variant="secondary"
+                ?disabled=${this.disabled}
                 @click=${() => this.#remove()}
                 >${t("image.remove")}</wt-button
               >`

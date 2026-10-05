@@ -1146,6 +1146,40 @@ it.each([
   ).toEqual(["Toast", marked]);
 });
 
+it.each([
+  ["en-GB", "Receipt logo"],
+  ["es-ES", "Logotipo del recibo"],
+])(
+  "in %s, links the receipt using the image as its logo to the Receipts screen, and blocks the delete",
+  async (locale, label) => {
+    setLocale(locale);
+    const client = api();
+    client.getImage.mockResolvedValue({
+      image: { ...image, usageCount: 1 },
+      uses: [{ kind: "receipt" }],
+    });
+    await mount(client);
+    click("[data-test=delete-one]");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-modal li")?.textContent).toBe(label),
+    );
+    expect(el.shadowRoot!.querySelector("wt-modal li a")!.getAttribute("href")).toBe(
+      "/manage/venue-settings/view/receipts",
+    );
+    expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
+  },
+);
+
+// `countUsages` (packages/media/src/images.ts) counts the receipt's logo from this table.
+it("refreshes the library passively when tenant_receipts changes", async () => {
+  const liveData = new LiveData();
+  const background = api();
+  const client = Object.assign(api(), { background, liveData });
+  await mount(client);
+  liveData.invalidate([{ type: "tenant_receipts" }]);
+  await vi.waitFor(() => expect(background.listImages).toHaveBeenCalledOnce());
+});
+
 it("confirms the image asked about last when an earlier usage lookup answers late", async () => {
   const client = api();
   const two = { ...image, id: "two", names: { es: "Tostada" } };

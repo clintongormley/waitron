@@ -386,7 +386,17 @@ export type RecipeLine = Ingredient;
 export interface ReceiptConfig {
   headerSubtitle?: string;
   footerMessage?: string;
+  phone?: string;
+  email?: string;
+  /** Absent prints the location's address; `false` prints none. */
+  printAddress?: boolean;
+  /** A media library filename. */
+  logo?: string;
 }
+
+/** The parts of a receipt a preview marks. */
+export type ReceiptMarkName =
+  "headerSubtitle" | "footerMessage" | "phone" | "email" | "address" | "logo";
 
 /** Blocks `[start, end)` of a print preview. */
 export interface BlockRange {
@@ -394,10 +404,10 @@ export interface BlockRange {
   end: number;
 }
 
-/** A sample receipt drawn with unsaved trim, and the blocks each trim field adds (`null` when blank). */
+/** A sample receipt drawn with unsaved trim, and the blocks each part adds (`null` when it prints nothing). */
 export interface ReceiptPreview {
   preview: PrintJobPreview;
-  marks: { headerSubtitle: BlockRange | null; footerMessage: BlockRange | null };
+  marks: Record<ReceiptMarkName, BlockRange | null>;
   /** The width drawn at. */
   paperWidth: PrintPaperWidth;
   /** The widths of the location's active devices' receipt printers, narrowest first; empty when none. */
@@ -2227,8 +2237,9 @@ export class DashboardApi {
     return this.#request("/management-api/location-settings", "PUT", { operationDescription });
   }
 
-  getReceipt(): Promise<{ receipt: ReceiptConfig }> {
-    return this.#request<{ receipt: ReceiptConfig }>("/management-api/receipt", "GET");
+  /** `venueAddress` is this location's address as a receipt prints it, whatever `printAddress` says. */
+  getReceipt(): Promise<{ receipt: ReceiptConfig; venueAddress: string[] }> {
+    return this.#request("/management-api/receipt", "GET");
   }
 
   async getVenueDepartments(): Promise<{ id: string; name: string; active: boolean }[]> {

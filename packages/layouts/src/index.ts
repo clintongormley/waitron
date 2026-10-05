@@ -1,7 +1,12 @@
-export type { ReceiptConfig } from "./types.js";
+export type { ReceiptConfig, ReceiptLogoRasters, StoredLogoRaster } from "./types.js";
 export { DEFAULT_RECEIPT } from "./defaults.js";
 export type { ConfigValidator, WidgetConfigSchema } from "./widget-config.js";
-export { MAX_RECEIPT_FIELD_LENGTH, validateReceiptConfig } from "./validate.js";
+export {
+  MAX_RECEIPT_EMAIL_LENGTH,
+  MAX_RECEIPT_FIELD_LENGTH,
+  MAX_RECEIPT_PHONE_LENGTH,
+  validateReceiptConfig,
+} from "./validate.js";
 export { MAX_TAB_TITLE_LENGTH, validateCanvas } from "./validate-canvas.js";
 
 export { FORM_FACTORS, CARD_TYPES, CAPABILITY_FLAGS, kindOfFormFactor } from "./canvas.js";
@@ -60,7 +65,13 @@ export type {
   ChooseDevicePrinterResult,
 } from "./device-printers.js";
 export { getTenantTheme, putTenantTheme } from "./theme-store.js";
-export { getReceipt, putReceipt } from "./receipt-store.js";
+export {
+  encodeLogoRaster,
+  getPrintedReceipt,
+  getReceipt,
+  getStoredLogoRasters,
+  putReceipt,
+} from "./receipt-store.js";
 
 // Keeps errors.ts's `declare module "@waitron/shared"` augmentation reachable from the public
 // barrel (the rule is in packages/shared/src/errors.ts).

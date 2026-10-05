@@ -30,6 +30,7 @@ import {
   locationId,
   mapComments,
   MAX_GUEST_COUNT,
+  MEDIA_FILENAME,
   MAX_MONEY_INTEGER_DIGITS,
   MAX_QUANTITY_INTEGER_DIGITS,
   MAX_RATE_INTEGER_DIGITS,
@@ -150,6 +151,10 @@ describe("package public surface (./index.js)", () => {
   it("re-exports the profile helpers", () => {
     expect(deriveDisplayName("", "", "", "Alba", "Ruiz")).toBe("Alba Ruiz");
     expect(isValidTelephone("+34 600 000 000")).toBe(true);
+  });
+
+  it("re-exports the media library filename pattern", () => {
+    expect(MEDIA_FILENAME.test(`${"ab".repeat(32)}.webp`)).toBe(true);
   });
 
   it("re-exports the timing band classifier", () => {

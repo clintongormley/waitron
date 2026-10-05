@@ -4,6 +4,7 @@
  */
 
 import { textGrid, type PaperWidth, type Resolution, type TextGrid } from "./layout.js";
+import { assertPictureSize, type MonoRaster } from "./dither.js";
 import { TEXT_BAND_HEIGHT, drawTextBand, type Alignment } from "./raster-text.js";
 
 const ESC = 0x1b;
@@ -91,15 +92,22 @@ export class EscBuilder {
 
   /** A 1-bit picture `widthDots` × `heightDots`, `dot(x, y)` true where it prints. */
   raster(widthDots: number, heightDots: number, dot: (x: number, y: number) => boolean): this {
-    for (const [name, value] of [
-      ["widthDots", widthDots],
-      ["heightDots", heightDots],
-    ] as const) {
-      if (!Number.isInteger(value) || value < 1) {
-        throw new RangeError(`raster ${name} must be an integer >= 1, got ${value}`);
-      }
-    }
+    assertPictureSize("raster", { widthDots, heightDots });
     this.pushRaster(Math.ceil(widthDots / 8), heightDots, packRows(widthDots, heightDots, dot));
+    return this;
+  }
+
+  /** A picture already packed as {@link MonoRaster} describes, such as `ditherToRaster`'s. */
+  bitmap(raster: MonoRaster): this {
+    const { widthDots, heightDots, bits } = raster;
+    assertPictureSize("bitmap", { widthDots, heightDots });
+    const widthBytes = Math.ceil(widthDots / 8);
+    if (bits.length !== widthBytes * heightDots) {
+      throw new RangeError(
+        `bitmap of ${widthDots} × ${heightDots} dots needs ${widthBytes * heightDots} bytes, got ${bits.length}`,
+      );
+    }
+    this.pushRaster(widthBytes, heightDots, bits);
     return this;
   }
 

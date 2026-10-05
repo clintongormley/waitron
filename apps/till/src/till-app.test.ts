@@ -8217,6 +8217,29 @@ describe("till-app", () => {
       expect(ticket(el)!.receipt).toEqual(receipt);
     });
 
+    it("threads the location's printed address from getTill through to the ticket view", async () => {
+      const venueAddress = ["Calle Mayor 1", "28013 Madrid"];
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, venueAddress }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(ticket(el)!.venueAddress).toEqual(venueAddress);
+    });
+
+    it("defaults the ticket address to none when GET /api/till omits it", async () => {
+      const { el } = await mountApp();
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+      emit(c, "confirm-payment", { method: "cash", amount: "5" });
+      await flush(el);
+      expect(ticket(el)!.venueAddress).toEqual([]);
+    });
+
     it("defaults the ticket receipt to {} when GET /api/till omits it (older server)", async () => {
       const { el } = await mountApp(); // the `till` fixture omits `receipt`
       const c = await toCounter(el);

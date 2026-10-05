@@ -26,7 +26,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createPinThrottle, hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { createPrinter, updatePrinter } from "@waitron/printing";
+import { createPrinter, textGrid, updatePrinter } from "@waitron/printing";
 import { departmentSalePolicies, departments, stationClaims } from "@waitron/venue-service";
 import type { PrintConfig } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -1272,10 +1272,13 @@ describe("original receipt and payment slip actions", () => {
         .map((j) => new Uint8Array(j.payload))
         .find((p) => decodeTicket(p).includes("DUPLICADO"))!,
     );
-    expect(duplicate.filter((c) => c.text === "DUPLICADO")).toHaveLength(1);
-    expect(
-      Buffer.concat(duplicate.filter((c) => c.text !== "DUPLICADO").map((c) => c.bytes)),
-    ).toEqual(Buffer.from(original));
+    // `makePrinter` leaves the paper and resolution at the printers table's defaults.
+    const { columns } = textGrid("80mm", "180dpi");
+    const marker = `${" ".repeat(Math.floor((columns - "DUPLICADO".length) / 2))}DUPLICADO`;
+    expect(duplicate.filter((c) => c.text === marker)).toHaveLength(1);
+    expect(Buffer.concat(duplicate.filter((c) => c.text !== marker).map((c) => c.bytes))).toEqual(
+      Buffer.from(original),
+    );
     expect(await registroCount(cfg)).toBe(1);
     expect(await saleCount(cfg)).toBe(1);
   });

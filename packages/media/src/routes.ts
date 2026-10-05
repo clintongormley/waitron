@@ -3,7 +3,7 @@ import { bodyLimit } from "hono/body-limit";
 import { withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import type { ModuleRoutes } from "@waitron/module";
-import { AppError, FALLBACK_LOCALE } from "@waitron/shared";
+import { AppError, FALLBACK_LOCALE, MEDIA_FILENAME } from "@waitron/shared";
 import {
   createErrorBoundary,
   readJsonBody,
@@ -42,7 +42,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "media.unsupported_type": 415,
 };
 const run = createErrorBoundary(STATUS, "image.request_failed");
-export const MEDIA_FILENAME = /^[0-9a-f]{64}\.(jpg|png|webp)$/;
 function parseField(value: unknown): unknown {
   if (typeof value !== "string") throw new AppError("image.invalid_metadata", {});
   try {
