@@ -3529,7 +3529,7 @@ affected (W85b) _(2026-10-05: since fixed, in the entry above)_. In the demo
 venue at 390 px the tree's leading slots left the box about 55 px, so the refusal wrapped about one
 word a line (local screenshots in `~/waitron-campaign/w72e-shots/`) _(2026-10-05: since W72g the
 box has a line of its own at phone width, below)_.
-Fixed in W72g (2026-10-05, the owner's choice): at phone width, while the table carries `narrow`,
+Fixed in W72g (#1246, 2026-10-05, the owner's choice): at phone width, while the table carries `narrow`,
 the category name box and its refusal sit on a line of their own under the grip, taking the room
 before the pinned column from the grip's start. The grip, the folder icon and a renamed category's
 count and asterisk stay on the line above, and the count and asterisk wrap in what the grip and icon
@@ -3541,7 +3541,12 @@ after the change, renaming a top-level category and one a level down that were a
 with a search typed and the duplicate-name refusal shown, the box measured 146 to 163 px on its own
 line under the grip (local screenshots in `~/waitron-campaign/w72g-shots/`). Pinned by the "on
 their own line" cases, the 1280-to-390 px case and the 1280 px "beside the grip and folder icon"
-cases in `apps/dashboard/src/widgets/product-list.test.ts`; desktop width is unchanged.
+cases in `apps/dashboard/src/widgets/product-list.test.ts`; desktop width is unchanged. Still open, for the
+owner: when the table crosses 440 px while a name box is open, Chromium logs "ResizeObserver loop
+completed with undelivered notifications" (four times in the W72g suite run, none on the commit
+before it; none when the box opens after the table is already narrow). Stopping it would mean
+`wt-data-table` setting `narrow` a frame later (`packages/ui/src/components/wt-data-table.ts`); asked
+in the campaign's questions file.
 
 **Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
 owner 2026-10-04; since 2026-10-05 a tree, W82a, see the last paragraph).** The bulk Move
