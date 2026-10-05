@@ -2281,6 +2281,23 @@ the product editor uses it; (4) the test title "…when the table's heading drop
 says dropdown for what is now a button; (5) the product editor's VAT dropdown is not disabled while
 saving (same on `main` before W66, not checked further).
 
+**Modals come in three sizes chosen for their content (W70, owner 2026-10-04) — DONE (PR pending).**
+The owner, on the Product editor: _"the modal is too wide for these forms. we need modals of different
+sizes for different display purposes"_. `wt-modal` takes `size="compact"` (28rem, 448px: a
+confirmation, or one or two short fields), `"standard"` (42rem, 672px: an ordinary editor, the Product
+editor among them) or `"wide"` (64rem, 1024px: a table wider than a form, an image grid, a photo
+beside its uses). On a phone every size fills the screen less its side margins, as before. Every
+modal on the dashboard, the till's modifier picker and the two demo modals now name a size; a modal
+that serves jobs of clearly different sizes picks one per job (the profile's details and
+authenticator setup are standard, its other steps compact). Leaving the size off still gives the wide
+modal, so a modal nobody sized shows everything rather than scrolling sideways. W66's Pricing unit
+chooser stays a small dialog (`wt-dialog`) rather than a full-height modal for one dropdown, held to
+the compact width. Detail: design-system.md, the `wt-modal` entry. Left open: (1) a compact modal is
+still as tall as the screen, so a confirmation is a narrow column with empty space under its text —
+height was out of scope, and whether a short modal should shrink to its content is the owner's call;
+(2) in the wide Extras editor at 1280px wide, the items table scrolls sideways by 4px (978px of
+content in a 974px box), with or without the size attribute.
+
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).** The owner: _"the Kitchen name, and
 customer facing names aren't showing the internal name as the default value, at least when I add a variant and fill in
@@ -5087,7 +5104,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 
 - **Content languages are managed on the page itself (C111, #987) — left open:** the Add language
   dialog is the one standard modal size, so it is a tall, mostly empty sheet with one field; whether
-  a one-field form should use something smaller is the owner's call. At 390px the Spanish "Hacer
+  a one-field form should use something smaller is the owner's call. _2026-10-05 (W70): the dialog
+  is now the compact size, still as tall as the screen._ At 390px the Spanish "Hacer
   predeterminado" and "Quitar" fit side by side with the dashboard's own padding (16px a side), and
   stack when the page is padded 24px a side, so on a phone narrower than 390px they can stack.
 

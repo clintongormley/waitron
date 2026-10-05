@@ -264,7 +264,7 @@ the `wt-modal` entry below). `wt-dialog` and `wt-help-tooltip` read their own to
 `48rem` (768px). Some add and edit forms are built in `wt-dialog` rather than `wt-modal` (the
 ingredient form is one), so they are held to 768px too. Only `wt-modal` reads the three modal
 tokens, so overriding one resizes no dialog; to resize a dialog, set `--wt-dialog-max-width` (the
-till's device chooser does).
+till's device chooser and the product editor's Pricing unit chooser do).
 
 `--wt-form-max-width` (`36rem`, 576px at the default text size) is the form width: the one width
 of a form inside a `wt-modal` (owner, 2026-09-30, C105). A field there grows no wider than it,
@@ -1483,7 +1483,9 @@ Two notes on the primitives this pattern uses, both in the table above:
   `wt-change` on input and `wt-unit-click` when the button is pressed. On a product's own page the
   product editor draws its price field with that button, whether or not the product has variants,
   and on `wt-unit-click` opens the unit chooser: a `wt-dialog` titled Pricing unit, placed beside
-  the editor's `wt-modal` rather than in the Pricing section, which may be folded shut. It holds the
+  the editor's `wt-modal` rather than in the Pricing section, which may be folded shut. It is the
+  compact modal width (448px at 1280px wide): its `--wt-dialog-max-width` is
+  `min(90vw, var(--wt-modal-compact-width))`, and its contents take the body's full width. It holds the
   unit dropdown, with the product's unit chosen, and Add unit; its footer's Close button and Escape
   shut it without changing the unit, and choosing a unit changes it and shuts the dialog. Either
   way focus goes back to the button that opened it (`focusUnit()` on the price field). A refused
