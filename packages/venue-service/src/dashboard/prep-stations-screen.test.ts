@@ -2637,7 +2637,9 @@ it.each(["station.fallback_loop", "route.station_inactive"])(
     settingsQ(el, '[data-test="save-settings-cell"]')!.click();
     await settle(el);
     expect((settingsQ(el, '[data-test="settings-choice"]') as WtCombobox).error).toContain(
-      code === "station.fallback_loop" ? "loop" : "This station is disabled. Choose an active station.",
+      code === "station.fallback_loop"
+        ? "loop"
+        : "This station is disabled. Choose an active station.",
     );
   },
 );
@@ -2684,7 +2686,7 @@ it.each([
     locale: "es-ES",
     disable: "Deshabilitar",
     confirm: "¿Deshabilitar Upstairs bar? Su trabajo irá a:",
-    heading: "Deshabilitadas",
+    heading: "Deshabilitada",
     hint: "Deshabilitada: sin sustituta, el TPV pregunta",
     enable: "Habilitar",
   },
@@ -2695,7 +2697,7 @@ it.each([
     const on = await mount(
       api({ load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })) }),
     );
-    const off = q(on, '[data-test="switch-off-upstairs"]')!;
+    const off = q(on, '[data-test="disable-upstairs"]')!;
     expect(off.textContent!.trim()).toBe(disable);
     off.click();
     await settle(on);
@@ -2706,10 +2708,10 @@ it.each([
     next.stations[1]!.active = false;
     next.routing.stations[1]!.active = false;
     const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
-    const card = q(el, '[data-test="inactive-upstairs"]')!;
-    expect(card.closest("section")!.querySelector("h2")!.textContent!.trim()).toBe(heading);
-    expect(card.textContent).toContain(hint);
-    const back = q(el, '[data-test="switch-on-upstairs"]')!;
+    const row = healthRow(el, "upstairs");
+    expect(row.querySelector('[part="badge"]')!.textContent!.trim()).toBe(heading);
+    expect(q(el, '[data-test="inactive-upstairs"]')!.textContent).toContain(hint);
+    const back = q(el, '[data-test="enable-upstairs"]')!;
     expect(back.textContent!.trim()).toBe(enable);
     back.click();
     await settle(el);

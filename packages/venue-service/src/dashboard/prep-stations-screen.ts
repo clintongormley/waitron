@@ -721,7 +721,7 @@ export class PrepStationsScreen extends LitElement {
           data-test=${`${station.active ? "disable" : "enable"}-${station.id}`}
           ?disabled=${this.busy}
           @click=${() => (station.active ? this.#openFallback(station.id, "switch_off") : this.#openStationAction({ kind: "switch_on", stationId: station.id }))}
-          >${t(station.active ? "prep.switch_off" : "prep.enable")}</wt-button
+          >${t(station.active ? "prep.disable" : "prep.enable")}</wt-button
         >
       </wt-row-actions>`;
   }
@@ -1481,7 +1481,7 @@ export class PrepStationsScreen extends LitElement {
         this.printerEditor = { ...editor, error: t("prep.tickets.printer_refused") };
       } else {
         this.#showError(
-          code === "station.not_found" ? t("prep.station_inactive") : t("prep.save_error"),
+          code === "station.not_found" ? t("prep.station_disabled") : t("prep.save_error"),
         );
       }
       this.printerBusy = false;
@@ -2032,7 +2032,7 @@ export class PrepStationsScreen extends LitElement {
           : code === "station.fallback_loop"
             ? t("prep.fallback_loop")
             : code === "route.station_inactive"
-              ? t("prep.station_inactive")
+              ? t("prep.station_disabled")
               : "";
       this.settingsEditor = {
         ...editor,

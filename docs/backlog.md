@@ -6320,7 +6320,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.
   Eight build steps, each its own queue item.
   [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) was approved on 2026-10-05;
-  its build is in progress. The schema foundation adds venue defaults and separate nullable station
+  its implementation is complete; whole-branch review and current-head CI remain before landing.
+  The schema foundation adds venue defaults and separate nullable station
   timing storage. Provisioning now creates 5/10/15 defaults, with a supervisor-readable defaults
   API whose writes refuse an invalid effective station order. Station creation and edits now write
   independent nullable overrides. The management list, kitchen queue, pass, floor bands/signals and
