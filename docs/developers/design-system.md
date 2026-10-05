@@ -1564,13 +1564,13 @@ Two notes on the primitives this pattern uses, both in the table above:
   The dropdown, like Add unit, is disabled while the editor is saving or has another of its windows
   open. Add unit leaves the chooser open under the unit form, so a
   cancelled form returns focus to Add unit; a saved one chooses the new unit and shuts the
-  chooser. On a variant's page the editor sets
-  `fixed-unit` and shows the product's unit as text, because a variant's unit is always its
-  product's (A222), and draws no chooser. A product with variants also has a unit button
-  (`pricing-unit`) in the variants table's price heading, naming the unit and opening the same
-  chooser. A table 30rem wide or less hides its price column and that button with it, so on a
-  phone the price field's button is the only way to the unit. The extras list form's price cells set `fixed-unit`:
-  a row shows its product's unit, which is chosen on the product, so a unit button there would be a
+  chooser. On a variant's page the editor sets `fixed-unit` and shows the product's unit as text,
+  because a variant's unit is always its product's (A222), and draws no chooser. A product with
+  variants also has a unit button (`pricing-unit`) in the variants table's price heading, with a
+  `--wt-space-2` gap between it and the word Price, naming the unit and opening the same chooser. A
+  table 30rem wide or less hides its price column and that button with it, so on a phone the price
+  field's button is the only way to the unit. The extras list form's price cells set `fixed-unit`: a
+  row shows its product's unit, which is chosen on the product, so a unit button there would be a
   control that does nothing. Where that form is 30rem wide or less, the unit moves under the amount
   as text that breaks inside a word where it must, so a long unit does not widen the table:
   `extra-list-form.test.ts` checks that with "kilogramos", "Unidadesdeembalaje" and a multi-word
