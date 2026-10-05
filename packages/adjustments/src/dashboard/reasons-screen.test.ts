@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { LiveData, setLocale, tableNoMatches } from "@waitron/dashboard-kit";
+import { LiveData, codeMessage, setLocale, tableNoMatches } from "@waitron/dashboard-kit";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import {
   chooseOption,
@@ -1408,7 +1408,7 @@ describe("enabling", () => {
 
   it.each([
     { locale: "en", message: "Another active reason already has this name" },
-    { locale: "es", message: "Ya hay otro motivo activo con este nombre" },
+    { locale: "es", message: codeMessage("adjustment_reason.name_taken", "es") },
   ])(
     "in $locale, says at the top of the screen that an active reason holds the name, and leaves it disabled",
     async ({ locale, message }) => {
