@@ -6323,14 +6323,18 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Departments and zones; other screens still await their own one-department survey. Tab billing and
   the shared calendar remain open.
 - **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — SPEC
-  APPROVED; steps 1–2 implemented, later steps open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
+  APPROVED; steps 1–3 implemented, later steps open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
   The sidebar's Venue operations group; Venue settings with one tab per group
   (Receipts moves there); Departments and zones as one table edited in place; Prep stations as one
   tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
   special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.
   Eight build steps, each its own queue item.
   [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) was approved on 2026-10-05;
-  its implementation and whole-branch review are complete; current-head CI remains before landing.
+  its build landed as [PR #1269](https://github.com/clintongormley/waitron/pull/1269) on
+  2026-10-06 at `924a94b745275627003db2912156dfbb266aa3ae`. Current-head package checks
+  and coverage passed in CI `37385456975`; the 603-second Claude review findings were resolved.
+  Existing installations require the approved venue reset to provision timing defaults; no
+  old-value conversion or backfill is included. The exact-merge CI run is `37386339024`.
   CI exposed missing timing-default rows in direct server fixtures and incomplete provisioning
   cleanup; the fixtures now include the required rows, and cleanup removes timing children first.
   The Spanish reminder check now uses the approved Deshabilitado wording.
@@ -6414,7 +6418,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   numeric columns carry a retirement note. Review notes retained for future cleanup: the overview
   API object still exposes write methods (server routes remain the permission boundary), and
   station reordering repeats an active filter after an active-only read. No write-permission
-  defect was reported. Push-hook validation, current-head CI and landing remain.
+  defect was reported. Push-hook validation and current-head CI passed before landing.
   Venue settings › Kitchen now reads and
   replaces the venue-wide late flags. Its required whole-minute fields validate every invalid
   value and their order, naming a station when the server refuses the effective result. A refusal
@@ -6423,18 +6427,19 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   write closes the form before a separate refresh. The saved, invalid and station-refusal states
   have English/Spanish, light/dark, phone/desktop browser checks and inspected captures.
   The generated station-parent rebuild failed the populated upgrade with a foreign-key refusal;
-  the ongoing build uses the plan’s storage-redesign option. Approved decisions
+  the landed build uses the plan’s storage-redesign option. Approved decisions
   cover what live counts include, ready-but-unserved work, interim station hours, inactive display
   bindings and the core station-table rebuild/reset risk.
   [Step 5 Hours plan](superpowers/plans/2026-10-05-hours.md) was approved on 2026-10-05;
   its standard week, special-date list/calendar and shared menu/wages date interface are not
-  implemented. Build waits for step 3. Approved decisions cover unset versus Closed/all-day hours,
+  implemented. Its Prep stations dependency is landed; follow the lane queue for the build.
+  Approved decisions cover unset versus Closed/all-day hours,
   overnight and clock-change rules, manual override expiry, whole-venue closure and palette,
   single-department display, read permissions and the proposed pre-live schedule reset.
   [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) is approved with
   the owner's 2026-10-05 13:25 amendments; national/regional data, owner-entered city holidays and
   holiday-aware special-date naming are not implemented. Build waits for Hours landing, including
-  its Prep stations dependency; those upstream plans were approved at 13:10/13:15 but are not built.
+  its Prep stations dependency, which is now landed. Hours remains unbuilt.
   Local holidays follow the venue address city directly, with no confirmation or reselection.
   Geography changes retain but hide old entries with `These local holidays were for <old city>`;
   matching the address again restores them automatically. Two additive venue-service tables hold
@@ -6445,8 +6450,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   The consolidated 2027 BOE list was not located by the plan's dated search; recheck it before the
   build rather than extrapolating dates or treating a regional publication as nationwide coverage.
   [Step 4 Routing grid plan](superpowers/plans/2026-10-05-routing-grid.md) was approved on
-  2026-10-05; the grid and row-first cell storage are not implemented. Build waits for Prep stations
-  landing. Approved decisions cover the No category group, nested collapsed counts, configured
+  2026-10-05; the grid and row-first cell storage are not implemented. Its Prep stations dependency
+  is landed; follow the lane queue for the build. Approved decisions cover the No category group,
+  nested collapsed counts, configured
   versus fallback cell presentation,
   read-only default-cell permissions, retained disabled targets, zone cleanup and pre-live routing
   reset. It replaces claims/ordered exceptions without conversion, with five stored coordinate
@@ -6463,11 +6469,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   history removal use a separately approved setup/reset instead. Build waits for plan approval,
   with step 2 already landed; later Hours/holidays/menu builds retain their own compatibility tests.
   [Step 8 Printing rules and drawer policy retirement plan](superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
-  has completed spec-only review with corrections and awaits owner approval; its build remains open.
+  was approved by the owner on 2026-10-05; its build remains open.
   It removes the redundant
   page and legacy location receipt/drawer settings, makes manual drawer authorization unconditional,
   and preserves device/profile/printer gates, automatic drawer jobs and receipt/replay safeguards.
-  Build waits for plan approval and step 3 landing; A238 and step 2 are landed. Recommendations cover
+  The owner approved the plan on 2026-10-05 at 15:55; its step 3 dependency is now landed,
+  alongside A238 and step 2. Follow the lane queue for the build. Recommendations cover
   old bookmarks, incompatible export refusal and explicit reset approval if the populated locations
   upgrade cannot preserve cross-set rows and triggers. Existing guards remain unchanged; useful
   screen checks move to surviving surfaces before retirement, with any deletion lacking an equally strict replacement requiring approval.
