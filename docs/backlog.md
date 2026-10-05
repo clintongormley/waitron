@@ -5118,7 +5118,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE on its branch `feat/device-battery` (#1240).**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c). All three DONE; the open points each left are listed below.**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
@@ -5142,7 +5142,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   dialog and a two-press Remove in each active row's menu; a removed device's row does not open
   (`rowClickable`, new on `wt-data-table`). The card reader is read when the dialog opens and saved
   second, through its own route; without `payments.manage` the field is not shown.
-  **W106 (done on its branch, #1240):** `devices` gains three empty-by-default columns: the battery level,
+  **W106 (done, #1240):** `devices` gains three empty-by-default columns: the battery level,
   whether it is charging and when that was reported (core `0099`). A paired device sends both to
   `PUT /api/device/battery`, which refuses a level outside 0 to 100 and stores at most one report a
   minute unless the charging state changed (`apps/server/src/device-api.ts`). The till sends a
