@@ -193,7 +193,14 @@ override row with a switch and no menu price (switched off, or explicitly on) ca
 upgrading. A fresh demo seed writes no override rows (`apps/server/scripts/demo-seed/` has no
 `setMenuVariants` or override insert), so it migrates cleanly. Republish every menu after the
 upgrade (stored documents, above). A configuration bundle exported before W90 cannot be imported
-after it: export writes `select *` of each table (`apps/server/src/configuration-transfer.ts:230`),
-so every `menu_items` row carries an `offered` key, and import refuses a row with a column the table
-lacks, `setup.request_invalid` with `field: "table:menu_items"` (`:411`–`418`; read, not run).
-Export again after upgrading.
+after it. The bundle records each module's applied migration count, and both
+`validateConfigurationBundle` and the import refuse a count that differs from the target's before
+looking at any row (`apps/server/src/configuration-transfer.ts:366`–`369`), so a bundle whose
+catalogue count is one short is refused `setup.request_invalid` with `field: "module:catalogue"`.
+Measured 2026-10-05 in a throwaway test (deleted after the run) against this branch: a bundle
+exported from a venue with one menu item, its catalogue count lowered from 25 to 24 and `offered:
+true` added to its `menu_items` row, was refused `module:catalogue` by both; the same bundle with
+the count left at 25 passed validation and was refused at import with `field: "table:menu_items"`
+(`:412`–`418`), the column check this note first named. Only that check order was measured: with
+other modules also behind, the refusal names the first module, in the modules' order, whose count
+differs (read, not run). Export again after upgrading.
