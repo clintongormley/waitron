@@ -5113,7 +5113,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE on its branch `feat/device-battery`.**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE on its branch `feat/device-battery` (#1240).**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
@@ -5137,7 +5137,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   dialog and a two-press Remove in each active row's menu; a removed device's row does not open
   (`rowClickable`, new on `wt-data-table`). The card reader is read when the dialog opens and saved
   second, through its own route; without `payments.manage` the field is not shown.
-  **W106 (done on its branch):** `devices` gains three empty-by-default columns: the battery level,
+  **W106 (done on its branch, #1240):** `devices` gains three empty-by-default columns: the battery level,
   whether it is charging and when that was reported (core `0099`). A paired device sends both to
   `PUT /api/device/battery`, which refuses a level outside 0 to 100 and stores at most one report a
   minute unless the charging state changed (`apps/server/src/device-api.ts`). The till sends a
@@ -5150,6 +5150,16 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   minutes old, adding "as of" and the time it was taken. A report that passes ten minutes while the
   page is open is greyed then, without the list being read again
   (`apps/dashboard/src/screens/devices-screen.ts`). No low-battery alert: that is A272, still open.
+  Left OPEN by W106, not acted on: (a) the Spanish "as of" reads "a las 2026-10-05 11:49", because
+  the time carries the date; owner wording needed (for example "del {time}"), and
+  `devices.open_until` and `printers.pairing_open_until` have the same shape. (b) the greying
+  compares the dashboard browser's clock with the server's stamp, so a browser clock far behind
+  shows an old report as current. (c) a report exactly 60 s after the last stored one is not stored
+  (`sightingDue` is strictly more than a minute); the spec says "at least a minute". (d) the till
+  starts reporting from its first draw only, so an app removed from the page and put back does not
+  report until it restarts. (e) test gaps: no battery case for a removed device; no failing test
+  for the `isConnected` check in the Battery column's update step; "Not reported" sorting last is
+  held only by `wt-data-table`'s own tests.
   Left OPEN by W105, not acted on: (5) a kitchen screen whose station or watcher was switched off
   opens with Shows empty, so even a rename asks for a new one; whether to let it keep a switched-off
   one is the owner's call. (6) the Status column still says "Revoked" (`devices.status_revoked`)
