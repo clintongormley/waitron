@@ -328,7 +328,9 @@ repeated IDs are `management.request_invalid` (400), and a malformed UUID is `sh
 Category-summary counts cover each complete subtree, except `ownRoutes`, which counts only the
 routing rules naming the category itself. The browser counts the outermost selected categories when
 ancestors and descendants are selected together, except that under **Move it up to the parent
-category** its routing-rule warning sums `ownRoutes` over every selected category.
+category** its routing-rule warning sums `ownRoutes` over every selected category. Under **Delete it
+too** the warning's sentence says the rules name these categories "or ones inside them", because its
+count reaches subcategories the dialog does not list.
 
 The former per-category delete, dependants and product-membership routes are retired. Use the
 category selection operations above. The product editor still saves `primaryCategoryId`, which
