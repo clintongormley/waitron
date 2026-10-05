@@ -1605,7 +1605,7 @@ describe("catalogue-screen", () => {
       });
     });
 
-    it("names the clash in the screen's banner when a restore from the list is refused", async () => {
+    it("shows product.name_taken's message in the screen's banner when a restore from the list is refused", async () => {
       const api = stubApi({
         updateProductEditor: vi.fn().mockRejectedValue({
           code: "product.name_taken",

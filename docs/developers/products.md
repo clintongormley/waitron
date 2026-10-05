@@ -40,9 +40,11 @@ A variant's names are never inherited: a blank customer or kitchen name falls ba
 staff name, never to the parent's. A line that names no variant renders exactly as it did before
 variants existed.
 
-**No two Active rows share a staff name.** An Active product's Name, and an Active variant's of an
-Active product, is refused with `product.name_taken` when another such row in the venue has it,
-ignoring case and surrounding spaces (`packages/catalogue/src/product-names.ts`).
+**A write may not give an Active row a staff name another Active row has.** A write that would
+leave an Active product, or an Active variant of an Active product, with a staff name another such
+row in the venue already has is refused with `product.name_taken`, ignoring case and surrounding
+spaces (`packages/catalogue/src/product-names.ts`). Rows that already share a name are not refused,
+and neither are rows a configuration import brings in.
 
 The three resolvers, one per audience:
 

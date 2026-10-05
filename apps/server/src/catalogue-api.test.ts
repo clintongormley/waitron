@@ -91,7 +91,7 @@ describe("folder selection routes", () => {
     async (contents) => {
       const app = mountApp();
       const empty = await folder(app, "Mains");
-      // Siblings can no longer be given one name through the routes, so the other two are written
+      // The routes refuse siblings sharing a name, so the other two are written
       // straight into the tables, as data stored before the rule.
       const withActive = await plantFolder("Mains");
       const withInactive = await plantFolder("Mains");
@@ -362,8 +362,8 @@ const suite = useVenueDb({
 });
 
 // Every test here shares one database, and a category's name is unique among its siblings and an
-// Active product's across the venue. Each test starts as it would on its own database: the rows
-// earlier tests left keep their ids and lose their names.
+// Active product's across the venue. Before each test the rows earlier tests left are renamed, so
+// a name an earlier test used is free again; the rows themselves remain.
 beforeEach(async () => {
   await suite.db.execute(
     sql`update categories set name = 'earlier test ' || id where name <> 'earlier test ' || id`,

@@ -3229,13 +3229,16 @@ inside the write's own transaction, which runs alone in the venue's write queue;
 index and no migration. Refusals are `category.name_taken` and `product.name_taken`, both 409 with
 `{ field, name }`, shown beside the Name field (or the variant row) in English and Spanish, the
 draft kept. Only a clash the write creates is refused, so rows that already shared a name do not
-block an unrelated save, and the product editor checks its whole save at once, so variants may swap
+block an unrelated save; a category that changes parent counts as new where it lands, so moving
+(or moving up) two categories that already share a name into one parent together is refused. The
+product editor checks its whole save at once, so variants may swap
 names. The demo seed's lunch "Mains" reporting category is now "Lunch mains"; both menus still call
 their section "Mains", and a seed test checks both rules on a fresh demo. Stored data is not
 renamed: a venue that already holds duplicates keeps them until someone renames one.
-Left open, for the owner: a configuration import (`apps/server/src/configuration-import.ts`, through
-`packages/db/src/configuration-transfer.ts` and `packages/catalogue/src/configuration-transfer.ts`)
-copies a bundle's categories and products as they are and is not checked, so a bundle holding
+Left open, for the owner: a configuration import copies a bundle's categories and products as they
+are and is not checked (the rows are written by `importConfigurationTables`,
+`apps/server/src/configuration-transfer.ts`; `categories` and `products` are in core's table list,
+`packages/db/src/configuration-transfer.ts`), so a bundle holding
 duplicates still brings them in. At 390 px the category name box cuts its refusal off against the
 pinned Actions column, as it already did for `category.invalid` (compared in
 `~/waitron-campaign/w72-shots/`, local screenshots); the same cause as the phone-width entry above.

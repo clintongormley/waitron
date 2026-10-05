@@ -16,7 +16,11 @@ products; categories stay. The address names the category last opened, as
 category's parent.
 
 A category has at most one parent, stored in `category_details.parent_id`. A save that would make
-it its own ancestor is refused with `category.parent_cycle`. A product's category is
+it its own ancestor is refused with `category.parent_cycle`. A category's name must differ,
+ignoring case and surrounding spaces, from every other category with the same parent; a save that
+breaks this is refused with `category.name_taken`. A category moving into a parent, including the
+children a delete moves up, is checked against the categories already there, and two categories
+that share a name are refused when they move in together. A product's category is
 `products.category_id`. When this is null, the product is Uncategorised, which is not a category
 row you can rename or delete.
 
@@ -302,9 +306,11 @@ Content-Type: application/json
 
 The successful response is `204 No Content`. A missing product or variant ID is `product.not_found`
 (404); a missing category is `category.not_found` (404); a category move into itself or its descendants
-is `category.parent_cycle` (409). Malformed arrays or repeated IDs are `management.request_invalid`
-(400), and a malformed UUID is `shared.invalid_id` (400). Category-summary counts cover each complete
-subtree; the browser counts selected roots when ancestors and descendants are selected together.
+is `category.parent_cycle` (409). A category name that would match a sibling's is
+`category.name_taken` (409, `{ field, name }`), from the category create and update routes, from
+`folders/move`, and from `folders/delete` when `contents` is `move_up`. Malformed arrays or
+repeated IDs are `management.request_invalid` (400), and a malformed UUID is `shared.invalid_id`
+(400). Category-summary counts cover each complete subtree; the browser counts selected roots when ancestors and descendants are selected together.
 
 The former per-category delete, dependants and product-membership routes are retired. Use the
 category selection operations above. The product editor still saves `primaryCategoryId`, which
