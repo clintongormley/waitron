@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { live } from "lit/directives/live.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
@@ -56,6 +57,15 @@ export type PriceOutcome =
 
 const blankToNull = (text: string): string | null => (text.trim() === "" ? null : text.trim());
 
+/** A product field's text as the price its sizes follow: undefined while untouched or holding text
+ * that is not a price, null once emptied, else the price typed. */
+const parentPriceOf = (draft: string | undefined): ParentPrice => {
+  const text = draft?.trim();
+  if (text === undefined) return undefined;
+  if (text === "") return null;
+  return isProductPrice(text) ? text : undefined;
+};
+
 /** By amount, so "2.5" typed over a stored "2.50" is no change. */
 const samePrice = (a: string | null, b: string | null): boolean =>
   a === null || b === null ? a === b : stringToCents(a) === stringToCents(b);
@@ -69,6 +79,12 @@ interface Line {
 /** The row's key in the table, and the key of its field's saves and refusals. */
 const keyOf = ({ item, variant }: Line): string =>
   variant ? `${item.menuItemId}:${variant.variantId}` : item.menuItemId;
+
+// Not written inline where the table is drawn: a new function there each time the widget draws
+// would redraw the whole table with it.
+const parentKey = ({ item, variant }: Line): string | null => (variant ? item.menuItemId : null);
+const toggleLabel = ({ item }: Line, expanded: boolean): string =>
+  t(expanded ? "menu_prices.collapse" : "menu_prices.expand").replace("{name}", item.name);
 
 /** Whether this menu stores a price for any of the product's sizes. */
 const pricesASize = (item: MenuPriceRow): boolean =>
@@ -215,14 +231,41 @@ export class MenuPricesTable extends LitElement {
   #categoryChains: ReadonlyMap<string, string[]> = new Map();
   #variants: ReadonlyMap<string, Product["variants"][number]> = new Map();
   #lines: Line[] = [];
+  #lineOf: ReadonlyMap<string, Line> = new Map();
   #columns: DataTableColumn<Line>[] = [];
+  /** For the summary: per menu this one includes, how many of its products this menu prices, and
+   * how many of this menu's own products it prices. */
+  #counts: { included: { name: string | null; prices: number }[]; own: number } = {
+    included: [],
+    own: 0,
+  };
+  /** Per product, what it charges with its field blank and where each Active size's price comes
+   * from, neither of which typing changes. */
+  #productInheritance: ReadonlyMap<
+    MenuPriceRow,
+    { inherited: Inherited; sizes: ReturnType<typeof sizesInheritedFrom> }
+  > = new Map();
+  /** Per row key, what depends on its product's field, with the reading of that field it was
+   * worked out for. */
+  readonly #underParent = new Map<
+    string,
+    { parent: ParentPrice; from?: InheritedFrom; inherited?: Inherited; sizeClash?: boolean }
+  >();
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("sections"))
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
     if (changed.has("categories")) this.#readCategories();
-    if (changed.has("rows"))
+    if (changed.has("rows")) {
       this.#reached = new Map(this.rows.map((row) => [row, row.placements.flat()]));
+      this.#productInheritance = new Map(
+        this.rows.map((row) => [
+          row,
+          { inherited: productInherited(row), sizes: sizesInheritedFrom(row) },
+        ]),
+      );
+      this.#underParent.clear();
+    }
     if (changed.has("products"))
       this.#variants = new Map(
         this.products.flatMap(({ variants }) => variants.map((variant) => [variant.id, variant])),
@@ -230,6 +273,7 @@ export class MenuPricesTable extends LitElement {
     if (changed.has("rows") || changed.has("products")) this.#readLines();
     if (changed.has("sections") || changed.has("categories") || changed.has("rows"))
       this.#columns = this.#buildColumns();
+    if (changed.has("nodes") || changed.has("rows")) this.#countPrices();
     if (changed.has("refusals")) {
       const before = changed.get("refusals") ?? {};
       // A refusal sent anew shows again under a field changed since the last one.
@@ -278,9 +322,9 @@ export class MenuPricesTable extends LitElement {
   protected override updated(changed: PropertyValues): void {
     // The cells read these, and the table redraws only when its own properties change.
     if (
-      ["drafts", "invalid", "hiddenRefusals", "saving", "refusals"].some((name) =>
-        changed.has(name),
-      )
+      ["invalid", "hiddenRefusals", "saving", "refusals"].some((name) => changed.has(name)) ||
+      (changed.has("drafts") &&
+        this.#draftsRedraw(changed.get("drafts") as MenuPricesTable["drafts"]))
     )
       this.#table()?.requestUpdate();
     if (changed.has("refusals")) {
@@ -288,6 +332,28 @@ export class MenuPricesTable extends LitElement {
       const key = Object.keys(this.refusals).find((key) => before[key] !== this.refusals[key]);
       if (key !== undefined) void this.#focusField(key);
     }
+  }
+
+  /** Whether the drafts changed from `before` in a way the table draws: a drawn field not showing
+   * its row's text, whether a row's field holds a price, or the price a product's sizes follow. A
+   * keystroke usually changes none of them, since its field already shows what was typed. */
+  #draftsRedraw(before: MenuPricesTable["drafts"]): boolean {
+    for (const key of new Set([...before.keys(), ...this.drafts.keys()])) {
+      const was = before.get(key);
+      const now = this.drafts.get(key);
+      const line = this.#lineOf.get(key);
+      if (was === now || line === undefined) continue;
+      const field = this.#field(key);
+      if (field !== null && field.value !== (now ?? this.#stored(line) ?? "")) return true;
+      if (this.#holds(line, was) !== this.#holds(line, now)) return true;
+      if (
+        line.item.variants.length > 0 &&
+        line.variant === null &&
+        parentPriceOf(was) !== parentPriceOf(now)
+      )
+        return true;
+    }
+    return false;
   }
 
   #table(): HTMLElementTagNameMap["wt-data-table"] | null {
@@ -333,6 +399,7 @@ export class MenuPricesTable extends LitElement {
       { item, variant: null },
       ...item.variants.map((variant) => ({ item, variant })),
     ]);
+    this.#lineOf = new Map(this.#lines.map((line) => [keyOf(line), line]));
   }
 
   #active({ item, variant }: Line): boolean {
@@ -349,19 +416,30 @@ export class MenuPricesTable extends LitElement {
     return this.#stored(line) !== null || (line.variant === null && pricesASize(line.item));
   }
 
-  /** The product's price as its field reads now, which a size following it inherits. */
-  #parentPrice(item: MenuPriceRow): ParentPrice {
-    const text = this.drafts.get(item.menuItemId)?.trim();
-    if (text === undefined) return undefined;
-    if (text === "") return null;
-    return isProductPrice(text) ? text : undefined;
+  /** What depends on the row's product's field, worked out again only once that field reads
+   * another price. */
+  #withParent(line: Line) {
+    const parent = parentPriceOf(this.drafts.get(line.item.menuItemId));
+    const key = keyOf(line);
+    const known = this.#underParent.get(key);
+    if (known !== undefined && known.parent === parent) return known;
+    const { item, variant } = line;
+    const worked = variant
+      ? {
+          parent,
+          from: variantInheritedFrom(item, variant.variantId, parent),
+          inherited: variantInherited(item, variant.variantId, parent),
+        }
+      : { parent, sizeClash: sizeClash(item, parent) };
+    this.#underParent.set(key, worked);
+    return worked;
   }
 
   /** What the row charges with its field left blank. */
   #inherited(line: Line): Inherited {
     return line.variant
-      ? variantInherited(line.item, line.variant.variantId, this.#parentPrice(line.item))
-      : productInherited(line.item);
+      ? this.#withParent(line).inherited!
+      : this.#productInheritance.get(line.item)!.inherited;
   }
 
   /** What the row charges: its stored price, else what it inherits. */
@@ -373,16 +451,16 @@ export class MenuPricesTable extends LitElement {
   /** "size" for a product row whose own price is decided but an Active size's is not; "own" for a
    * row whose own price, or what it inherits, is undecided and whose field holds no price. */
   #clash(line: Line): "size" | "own" | null {
-    if (line.variant === null && sizeClash(line.item, this.#parentPrice(line.item))) return "size";
-    if (this.#held(line)) return null;
+    if (line.variant === null && this.#withParent(line).sizeClash) return "size";
+    if (this.#holds(line, this.drafts.get(keyOf(line)))) return null;
     return this.#priceSetting(line).state === "clash" || this.#inherited(line).state === "clash"
       ? "own"
       : null;
   }
 
-  /** Whether the row's field holds a price, typed or stored. */
-  #held(line: Line): boolean {
-    const text = this.drafts.get(keyOf(line))?.trim();
+  /** Whether the row's field holds a price, typed (`draft`) or stored. */
+  #holds(line: Line, draft: string | undefined): boolean {
+    const text = draft?.trim();
     return text === undefined ? this.#stored(line) !== null : text !== "" && isProductPrice(text);
   }
 
@@ -400,10 +478,9 @@ export class MenuPricesTable extends LitElement {
         ? `${t("menu_prices.source_parent").replace("{name}", item.name)}. ${describeSetting(setting, names, t)}`
         : describeSetting(setting, names, t);
     let explanation: string;
-    if (variant)
-      explanation = explain(variantInheritedFrom(item, variant.variantId, this.#parentPrice(item)));
+    if (variant) explanation = explain(this.#withParent(line).from!);
     else {
-      const sizes = sizesInheritedFrom(item);
+      const { sizes } = this.#productInheritance.get(item)!;
       explanation =
         sizes.length === 0
           ? describeSetting(withoutOwn(item.combined.price), names, t)
@@ -480,7 +557,7 @@ export class MenuPricesTable extends LitElement {
         fixed-unit
         locale=${currentLocale()}
         label=${t("menu_prices.override_label").replace("{name}", this.#lineName(line))}
-        .value=${this.drafts.get(key) ?? this.#stored(line) ?? ""}
+        .value=${live(this.drafts.get(key) ?? this.#stored(line) ?? "")}
         .error=${this.#error(key)}
         placeholder=${placeholder}
         hint=${hint}
@@ -528,7 +605,7 @@ export class MenuPricesTable extends LitElement {
     event.stopPropagation();
     const text = event.detail.value;
     this.drafts = new Map(this.drafts).set(key, text);
-    this.hiddenRefusals = new Set([...this.hiddenRefusals, key]);
+    if (!this.hiddenRefusals.has(key)) this.hiddenRefusals = new Set([...this.hiddenRefusals, key]);
     if (this.#checking.has(key)) this.#mark(key, !this.#valid(text));
   }
 
@@ -790,9 +867,9 @@ export class MenuPricesTable extends LitElement {
     ];
   }
 
-  #summary() {
+  #countPrices(): void {
     const own = new Set<string>();
-    const included = new Map<string, { name: string; products: Set<string> }>();
+    const included = new Map<string, { name: string | null; products: Set<string> }>();
     const collect = (nodes: readonly MenuStructureNode[], products: Set<string>): void => {
       for (const node of nodes) {
         if (node.ref.kind === "product") products.add(node.ref.productId);
@@ -805,7 +882,7 @@ export class MenuPricesTable extends LitElement {
         else if (node.includedMenuId) {
           let menu = included.get(node.includedMenuId);
           if (!menu) {
-            menu = { name: node.internalName ?? t("members.missing"), products: new Set() };
+            menu = { name: node.internalName ?? null, products: new Set() };
             included.set(node.includedMenuId, menu);
           }
           collect(node.children ?? [], menu.products);
@@ -814,20 +891,27 @@ export class MenuPricesTable extends LitElement {
     };
     walk(this.nodes);
     const priced = (item: MenuPriceRow) => this.#overridden({ item, variant: null });
+    this.#counts = {
+      included: [...included.values()].map(({ name, products }) => ({
+        name,
+        prices: this.rows.filter((row) => products.has(row.productId) && priced(row)).length,
+      })),
+      own: this.rows.filter((row) => own.has(row.productId) && priced(row)).length,
+    };
+  }
+
+  #summary() {
     return html`<div data-test="price-summary">
-      ${[...included.values()].map((menu) => {
-        const rows = this.rows.filter((row) => menu.products.has(row.productId));
-        const prices = rows.filter(priced).length;
-        return html`<p>
-          ${t("menu_prices.summary_included")
-            .replace("{prices}", String(prices))
-            .replace("{priceItems}", t(prices === 1 ? "menu_prices.item" : "menu_prices.items"))
-            .replace("{menu}", menu.name)}
-        </p>`;
-      })}
-      <p>
-        ${t("menu_prices.summary_own").replace("{prices}", String(this.rows.filter((row) => own.has(row.productId) && priced(row)).length))}
-      </p>
+      ${this.#counts.included.map(
+        ({ name, prices }) =>
+          html`<p>
+            ${t("menu_prices.summary_included")
+              .replace("{prices}", String(prices))
+              .replace("{priceItems}", t(prices === 1 ? "menu_prices.item" : "menu_prices.items"))
+              .replace("{menu}", name ?? t("members.missing"))}
+          </p>`,
+      )}
+      <p>${t("menu_prices.summary_own").replace("{prices}", String(this.#counts.own))}</p>
     </div>`;
   }
 
@@ -857,10 +941,9 @@ export class MenuPricesTable extends LitElement {
         .rows=${this.#lines}
         .columns=${this.#columns}
         .rowKey=${keyOf}
-        .rowParent=${({ item, variant }: Line) => (variant ? item.menuItemId : null)}
+        .rowParent=${parentKey}
         initiallyCollapsed
-        .rowToggleLabel=${({ item }: Line, expanded: boolean) =>
-          t(expanded ? "menu_prices.collapse" : "menu_prices.expand").replace("{name}", item.name)}
+        .rowToggleLabel=${toggleLabel}
         .loading=${this.loading}
         loadingMessage=${t("menu_prices.loading")}
         errorMessage=${this.failed ? t("menu_prices.error") : ""}

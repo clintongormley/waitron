@@ -38,8 +38,20 @@ function parentSetting(row: MenuPriceRow, parent: ParentPrice): Setting<Decimal>
     : { state: "decided", value: parent as Decimal, source: { kind: "own" }, otherwise: under };
 }
 
-export const sizeSetting = (row: MenuPriceRow, variantId: string) =>
-  row.combined.variants.find((v) => v.variantId === variantId)!.price;
+type SizeSetting = MenuPriceRow["combined"]["variants"][number]["price"];
+
+/** Each row's size settings by variant id, so a lookup does not search the sizes. A row is an
+ * answer read from the server and never changed in place, so its index stays right. */
+const sizeIndex = new WeakMap<MenuPriceRow, ReadonlyMap<string, SizeSetting>>();
+
+export function sizeSetting(row: MenuPriceRow, variantId: string): SizeSetting {
+  let index = sizeIndex.get(row);
+  if (index === undefined) {
+    index = new Map(row.combined.variants.map((v) => [v.variantId, v.price]));
+    sizeIndex.set(row, index);
+  }
+  return index.get(variantId)!;
+}
 
 export function variantInheritedFrom(
   row: MenuPriceRow,

@@ -1069,6 +1069,43 @@ it("keeps the sent price in the field while its save is out, whatever a re-read 
   expect(override(el, "mi-burger").value).toBe("10.00");
 });
 
+it("redraws the table for a keystroke only when it changes what the table shows", async () => {
+  const el = await mount();
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  const burger = override(el, "mi-burger").shadowRoot!.querySelector("input")!;
+  const lemonade = override(el, "mi-lemonade").shadowRoot!.querySelector("input")!;
+  await userEvent.fill(burger, "11");
+  await userEvent.fill(lemonade, "3.10");
+  await el.updateComplete;
+  await table(el).updateComplete;
+  const draws = vi.spyOn(table(el) as unknown as { render(): unknown }, "render");
+  await userEvent.type(burger, "5");
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(override(el, "mi-burger").value).toBe("115");
+  expect(draws).not.toHaveBeenCalled();
+  // A size following its product shows the product's typed price.
+  await userEvent.fill(lemonade, "3.20");
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(draws).toHaveBeenCalled();
+  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("3.20");
+});
+
+it("puts the stored price back on Escape after typing that redrew nothing", async () => {
+  const el = await mount({ rows: [{ ...burger, override: "10.00" }, lemonade, lager] });
+  const input = override(el, "mi-burger").shadowRoot!.querySelector("input")!;
+  for (const round of ["first", "second"]) {
+    await userEvent.type(input, "{Backspace}");
+    await el.updateComplete;
+    expect(override(el, "mi-burger").value, round).toBe("10.0");
+    await press(el, "mi-burger", "Escape");
+    await table(el).updateComplete;
+    expect(override(el, "mi-burger").value, round).toBe("10.00");
+  }
+});
+
 it("saves a size's field alone, and a size following its product hints the product's typed price", async () => {
   const el = await mount();
   toggleOf(el, "mi-lemonade")!.click();
