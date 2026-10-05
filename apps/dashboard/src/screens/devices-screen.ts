@@ -543,7 +543,9 @@ export class DevicesScreen extends LitElement {
   #toSettings(request: JoinRequestRow): void {
     const back = request.returning ?? null;
     const profileId =
-      back !== null && this.deviceProfiles.some((p) => p.id === back.profileId)
+      back !== null &&
+      !back.profileRetired &&
+      this.deviceProfiles.some((p) => p.id === back.profileId)
         ? back.profileId
         : "";
     this.pairStep = "settings";

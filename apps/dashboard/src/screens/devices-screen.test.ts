@@ -2866,6 +2866,21 @@ describe("add a device", () => {
       });
     });
 
+    it("whose profile the server reports deleted opens with the profile empty, even while this screen's list still holds it", async () => {
+      const api = waiting({
+        ...returning,
+        returning: { ...returning.returning!, profileRetired: true },
+      });
+      const el = await openAdd(api);
+      await toEnableSettings(el);
+
+      const profile = q(el, "[data-test=pair-profile]") as Field & {
+        options: { value: string }[];
+      };
+      expect(profile.options.map((o) => o.value)).toContain("dp3");
+      expect(profile.value).toBe("");
+    });
+
     it("whose station was switched off opens with Shows empty", async () => {
       const api = waiting();
       vi.mocked(api.listStations).mockResolvedValue([
