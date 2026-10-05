@@ -254,7 +254,13 @@ describe("deleteCatalogueItems", () => {
 describe("deleteCatalogueItems with the counts the person was shown", () => {
   const shownFor = async (ids: string[]) =>
     (await app((tx) => summariseFolders(tx, ids))).map(
-      ({ id, folders, activeProducts, routes }) => ({ id, folders, activeProducts, routes }),
+      ({ id, folders, activeProducts, routes, ownRoutes }) => ({
+        id,
+        folders,
+        activeProducts,
+        routes,
+        ownRoutes,
+      }),
     );
   const addProduct = (tx: Transaction, categoryId: string) =>
     createCatalogue(tx, { name: "Later" }).then((menu) =>
@@ -323,6 +329,21 @@ describe("deleteCatalogueItems with the counts the person was shown", () => {
     expect(await app(listCategories)).toHaveLength(3);
   });
 
+  it.each<FolderContents>(["move_up", "delete"])(
+    "refuses when the category's own routing rules differ from those shown, and deletes nothing (%s)",
+    async (contents) => {
+      const [shown] = await shownFor([d]);
+      await expect(
+        app((tx) =>
+          deleteCatalogueItems(tx, { productIds: [], categoryIds: [d] }, contents, [
+            { ...shown!, ownRoutes: shown!.ownRoutes + 1 },
+          ]),
+        ),
+      ).rejects.toMatchObject({ code: "category.contents_changed", params: { categoryId: d } });
+      expect(await app(listCategories)).toHaveLength(3);
+    },
+  );
+
   it("deletes when the counts shown still hold", async () => {
     const shown = await shownFor([d]);
     await app((tx) =>
@@ -349,9 +370,9 @@ describe("summariseFolders", () => {
     await app((tx) => deactivateProduct(tx, lager));
     await app((tx) => plantStoredCategory(tx, variant, b));
     expect(await app((tx) => summariseFolders(tx, [f, d, b]))).toEqual([
-      { id: f, folders: 0, products: 1, activeProducts: 1, routes: 0 },
-      { id: d, folders: 1, products: 2, activeProducts: 1, routes: 0 },
-      { id: b, folders: 0, products: 1, activeProducts: 0, routes: 0 },
+      { id: f, folders: 0, products: 1, activeProducts: 1, routes: 0, ownRoutes: 0 },
+      { id: d, folders: 1, products: 2, activeProducts: 1, routes: 0, ownRoutes: 0 },
+      { id: b, folders: 0, products: 1, activeProducts: 0, routes: 0, ownRoutes: 0 },
     ]);
   });
   it("counts active products across the whole subtree, leaving out an inactive one two levels down", async () => {
@@ -369,8 +390,8 @@ describe("summariseFolders", () => {
       await deactivateProduct(tx, id);
     });
     expect(await app((tx) => summariseFolders(tx, [d, b]))).toEqual([
-      { id: d, folders: 2, products: 3, activeProducts: 2, routes: 0 },
-      { id: b, folders: 1, products: 2, activeProducts: 1, routes: 0 },
+      { id: d, folders: 2, products: 3, activeProducts: 2, routes: 0, ownRoutes: 0 },
+      { id: b, folders: 1, products: 2, activeProducts: 1, routes: 0, ownRoutes: 0 },
     ]);
   });
   it("refuses unknown folders rather than reporting them as empty", async () => {

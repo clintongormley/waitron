@@ -255,25 +255,28 @@ restore the products later. Before deleting a non-empty category, choose what ha
 
 - **Move it up to the parent category** keeps the products active and moves the category's direct
   products and subcategories to its parent. For a top-level category they move to **All products**.
+  Only the routing rules naming a selected category itself are removed; its subcategories that are
+  not selected keep theirs. The dialog's routing-rule warning counts only the removed ones.
 - **Delete it too** removes the subtree and makes its products Inactive. The summary shows the
   numbers of subcategories, active products and routing rules removed (category claims and
-  exceptions). A product that is already Inactive is not counted. Every product in the subtree,
+  exceptions, in the whole subtree). A product that is already Inactive is not counted. Every product in the subtree,
   Inactive ones included, is moved to the parent of the outermost selected category that holds it.
 
 An empty category is deleted without confirmation. A category's row-menu Delete uses the same path.
 If the summary cannot be read, deletion waits for a successful new attempt rather than asking you
 to approve unknown contents. The dialog lists each category being deleted by its full path, adding
 "(2 of 3)" where several categories share a path. Pressing **Delete** in the dialog reads the counts
-again; if the numbers of subcategories, active products or routing rules have changed, it deletes
-nothing, shows the new counts and asks you to confirm again. The delete request carries the counts
+again; if the numbers of subcategories, active products or routing rules (in the subtree, or
+naming the category itself) have changed, it deletes nothing, shows the new counts and asks you to
+confirm again. The delete request carries the counts
 the dashboard read before deleting, and the server compares them again inside the delete itself: if
 they no longer match, nothing is deleted and the dialog shows the new counts with the refusal's own
 message. If an empty category, which is deleted without confirmation, has gained subcategories,
 active products or routing rules by then, the dialog opens with its new counts. A refused action
 keeps its dialog open with a message at the bottom.
 Deleting a category removes its station claim and every exception naming it, because both tables
-have a cascading foreign key to `categories`. The summary counts those removed rules; it does
-not list products whose station would change. **Move to…** also has no routing preview. Check
+have a cascading foreign key to `categories`. The dialog's routing-rule warning counts the rules the
+chosen option removes; it does not list products whose station would change. **Move to…** also has no routing preview. Check
 Prep Stations' tester after changing the category tree. A variant is routed by its product's
 category, and a variant still storing a deleted category has it cleared.
 
@@ -292,11 +295,11 @@ a non-string name is `management.request_invalid` (400).
 | `PATCH /management-api/categories/:id` | supplied name or parent fields; 200, saved category |
 | `POST /management-api/folders/move` | `{ productIds, categoryIds, to }`; 204 |
 | `POST /management-api/folders/delete` | `{ productIds, categoryIds, contents, shown }`; 204 |
-| `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes }[]`; `products` includes Inactive products, `activeProducts` leaves them out |
+| `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes, ownRoutes }[]`; `products` includes Inactive products, `activeProducts` leaves them out; `routes` counts the rules naming the category or any category below it, `ownRoutes` those naming the category itself |
 
 Both ID arrays are required and contain distinct UUIDs. `to` is a category ID or null. `contents`
 is `move_up` or `delete`. `shown` is the counts the client read before deleting (the ones its
-dialog showed, when it asked): one `{ id, folders, activeProducts, routes }` per selected category,
+dialog showed, when it asked): one `{ id, folders, activeProducts, routes, ownRoutes }` per selected category,
 exactly, with whole numbers of zero or more. It is required when `categoryIds` is not empty and
 ignored when it is. For example, once you have created Cocktails and your products, use their
 returned IDs to move two products and a category together:
@@ -320,7 +323,11 @@ is `category.parent_cycle` (409). A category name that would match a sibling's i
 `shown` counts differ from the server's own for any selected category is `category.contents_changed`
 (409, `{ categoryId }`, the first such category), and deletes nothing. Malformed arrays or
 repeated IDs are `management.request_invalid` (400), and a malformed UUID is `shared.invalid_id`
-(400); a missing or malformed `shown` is `management.request_invalid` with `field: "shown"`. Category-summary counts cover each complete subtree; the browser counts selected roots when ancestors and descendants are selected together.
+(400); a missing or malformed `shown` is `management.request_invalid` with `field: "shown"`.
+Category-summary counts cover each complete subtree, except `ownRoutes`, which counts only the
+routing rules naming the category itself. The browser counts the outermost selected categories when
+ancestors and descendants are selected together, except that under **Move it up to the parent
+category** its routing-rule warning sums `ownRoutes` over every selected category.
 
 The former per-category delete, dependants and product-membership routes are retired. Use the
 category selection operations above. The product editor still saves `primaryCategoryId`, which

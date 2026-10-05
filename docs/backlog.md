@@ -1594,6 +1594,15 @@ deleted the right category; the dashboard was at fault. Fixed:
   closes the menu too (W74b, #1219). Those items stopped the click as the category Delete had, so
   the menu stayed open after each of them. Tested in the list itself, which sends exactly one
   request per choice; not tested through the whole Products screen that handles the requests.
+- The routing-rules warning counts only the rules the chosen option removes (W74c). Reproduced
+  first in `apps/server/src/catalogue-api.full-manifest.test.ts`: with one rule on a category and
+  two on its subcategory, the summary reported 3 and moving the contents up removed 1, the
+  subcategory keeping both of its own. Each category's summary now also reports `ownRoutes`, the
+  rules naming the category itself (`summariseFolders`, `packages/catalogue/src/catalogue-items.ts`).
+  Under "Move it up to the parent category" the dialog warns of the selected categories' own rules,
+  summed over every selected one; under "Delete it too", of every rule in the deleted subtrees, as
+  before. The delete sends `ownRoutes` with the other counts it showed, and the dashboard's second
+  read at Delete and the server both treat a change to it like a change to the others.
 
 Still open from W74:
 - **An empty category's no-dialog delete does not see an inactive product added meanwhile**
@@ -1603,11 +1612,6 @@ Still open from W74:
 - **A category holding only routing rules is deleted without the dialog** (raised in #1217's
   review): the no-dialog path checks subcategories and products only, so its rules go unannounced.
   The check dates from commit `5ffa5c633c` (2026-10-01).
-- **The routing-rules warning counts too many rules when contents move up.** From reading the code,
-  not run: the summary counts the rules of the category and every category below it
-  (`summariseFolders`, `packages/catalogue/src/catalogue-items.ts`), and the dialog shows that number
-  under either choice, but moving contents up deletes only the chosen category, so only its own
-  rules go (they are removed with it: `packages/venue-service/src/schema/routing.ts`).
 - **The Printers screen's discovered-device rows can share a key.** From reading the code, not run:
   `#deviceKey` (`apps/dashboard/src/screens/printers-screen.ts`) leaves out which print agent
   reported the device, while the server lists one entry per agent, so two agents that see the same

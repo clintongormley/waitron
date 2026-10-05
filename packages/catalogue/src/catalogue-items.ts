@@ -21,13 +21,20 @@ export interface FolderSummary {
    * included. */
   products: number;
   activeProducts: number;
+  /** Routing rules naming the category or any category below it: what deleting its contents too
+   * removes. */
   routes: number;
+  /** Routing rules naming the category itself: what moving its contents up removes. */
+  ownRoutes: number;
 }
 /**
  * One selected category's counts as the client read them before deleting it (its dialog showed
  * them, when it asked).
  */
-export type ShownFolderCounts = Pick<FolderSummary, "id" | "folders" | "activeProducts" | "routes">;
+export type ShownFolderCounts = Pick<
+  FolderSummary,
+  "id" | "folders" | "activeProducts" | "routes" | "ownRoutes"
+>;
 
 /** The folder tree, read once: each folder's parent, depth and whole subtree. */
 class FolderTree {
@@ -201,7 +208,8 @@ async function assertContentsAsShown(
       seen === undefined ||
       seen.folders !== summary.folders ||
       seen.activeProducts !== summary.activeProducts ||
-      seen.routes !== summary.routes
+      seen.routes !== summary.routes ||
+      seen.ownRoutes !== summary.ownRoutes
     )
       throw new AppError("category.contents_changed", { categoryId: summary.id });
   }
@@ -285,6 +293,7 @@ async function summarise(
       products: 0,
       activeProducts: 0,
       routes: 0,
+      ownRoutes: counts.get(subtree[0]!)!.routes,
     };
     for (const folder of subtree) {
       const entry = counts.get(folder)!;
