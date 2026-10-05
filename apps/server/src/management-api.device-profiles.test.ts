@@ -522,7 +522,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
 
   it("DELETE a profile a device still references → 409 device_profile.in_use, profile survives", async () => {
     const app = mountApp();
-    // `devices.device_profile_id` is ON DELETE RESTRICT.
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
       headers: { ...JSON_HEADERS, cookie: managerCookie },

@@ -102,16 +102,19 @@ async function unlistDemoPrinter(tx: Transaction, printerId: string): Promise<vo
 }
 
 /**
- * Lists the printer last on every profile's receipt and payment slip lists, puts each active device
- * at the location on it for whichever of the two kinds it has no printer for, and gives it to every
- * preparation station there. A printer a device already holds stays. Safe to repeat.
+ * Lists the printer last on every live profile's receipt and payment slip lists, puts each active
+ * device at the location on it for whichever of the two kinds it has no printer for, and gives it to
+ * every preparation station there. A printer a device already holds stays. Safe to repeat.
  */
 export async function routeToDemoPrinter(
   tx: Transaction,
   locationId: string,
   printerId: string,
 ): Promise<void> {
-  const profiles = await tx.select({ id: deviceProfiles.id }).from(deviceProfiles);
+  const profiles = await tx
+    .select({ id: deviceProfiles.id })
+    .from(deviceProfiles)
+    .where(isNull(deviceProfiles.deletedAt));
   for (const profile of profiles) {
     const lists = await readProfilePrinterLists(tx, profile.id);
     if (
