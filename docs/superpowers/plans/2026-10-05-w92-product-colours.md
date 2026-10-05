@@ -729,7 +729,8 @@ shows the current colour.)
   the line names at one depth share (Task 5's ruling, 2026-10-05). The product colour is
   `effectiveColor(product.color, product.categoryId, categoryMap)` with `categoryMap` rebuilt in
   `willUpdate` when `categories` changes. `menus-screen` passes `.categories=${this.categories}`
-  (already watched, `:780-781`), holds `colouring: Product | null`, `colorBusy`, `colorErrors`, and
+  (already watched, `:780-781`), holds `colouring: Product | null` (since the finish-branch review, the product's id: `string |
+  null`), `colorBusy`, `colorErrors`, and
   renders the dialog; Save calls `api.setProductColor`, closes on success (the products and status
   queries refresh themselves), and on refusal maps `field: "color"` to
   `{ color: t("editor.field_rejected") }`, anything else to `_form` with `codeMessage`. Strings:
