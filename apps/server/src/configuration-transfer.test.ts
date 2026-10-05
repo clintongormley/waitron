@@ -78,6 +78,7 @@ import {
   decodeConfigurationBundle,
   encodeConfigurationBundle,
   importConfigurationTables,
+  validateConfigurationBundle,
   type ConfigurationBundle,
 } from "./configuration-transfer.js";
 import { seedSessionDevice } from "./testing/session-device.js";
@@ -1560,4 +1561,74 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
     expect(bundleIds.has(policy.default_menu_id!)).toBe(false);
     expect(targetMenus.has(policy.default_menu_id!)).toBe(true);
   }
+});
+
+it("refuses a bundle holding duplicate names whole, at staging and at import", async () => {
+  const source = await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Duplicates" });
+    const category = await createCategory(tx, { name: "Bebidas" });
+    await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: category.id,
+      name: "Agua",
+      pricingUnit: "each",
+      unitPrice: "1.00",
+      vatClass: "general",
+    });
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const clean = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-05T12:00:00Z"),
+    versions,
+  );
+  const category = clean.tables.categories!.find((row) => row.name === "Bebidas")!;
+  const product = clean.tables.products!.find((row) => row.name === "Agua")!;
+  const withCategory: ConfigurationBundle = {
+    ...clean,
+    tables: {
+      ...clean.tables,
+      categories: [...clean.tables.categories!, { ...category, id: "copy", name: " bebidas" }],
+    },
+  };
+  const withProduct: ConfigurationBundle = {
+    ...clean,
+    tables: {
+      ...clean.tables,
+      products: [...clean.tables.products!, { ...product, id: "copy", name: "AGUA " }],
+    },
+  };
+
+  expect(() => validateConfigurationBundle(withCategory, ALL_MODULES, versions)).toThrowError(
+    expect.objectContaining({
+      code: "category.name_taken",
+      params: { field: "name", name: "bebidas" },
+    }),
+  );
+  expect(() => validateConfigurationBundle(withProduct, ALL_MODULES, versions)).toThrowError(
+    expect.objectContaining({
+      code: "product.name_taken",
+      params: { field: "name", name: "AGUA" },
+    }),
+  );
+
+  const target = venue("B64208642");
+  await expect(
+    applyVenue(planVenue(target, ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, withProduct, result, ALL_MODULES, versions),
+    }),
+  ).rejects.toMatchObject({ code: "product.name_taken" });
+  const persisted = await targetSuite.db.execute<{ count: number }>(sql`
+    select count(*) as count from tenants where tax_id = ${target.taxId}
+  `);
+  expect(persisted.rows[0]!.count).toBe(0);
 });
