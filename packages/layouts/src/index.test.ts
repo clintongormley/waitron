@@ -12,5 +12,9 @@ describe("@waitron/layouts barrel", () => {
   it("exports the receipt-trim surface", () => {
     expect(api.DEFAULT_RECEIPT).toBeDefined();
     expect(typeof api.validateReceiptConfig).toBe("function");
+    expect(typeof api.getReceiptLogo).toBe("function");
+    expect(typeof api.encodeLogoRaster).toBe("function");
+    expect(api.MAX_RECEIPT_PHONE_LENGTH).toBe(30);
+    expect(api.MAX_RECEIPT_EMAIL_LENGTH).toBe(254);
   });
 });

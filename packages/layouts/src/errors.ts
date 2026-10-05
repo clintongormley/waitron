@@ -8,8 +8,17 @@ import type { CardType } from "./canvas.js";
 declare module "@waitron/shared" {
   interface ErrorParams {
     "receipt.invalid": {
-      reason: "not_object" | "not_string" | "too_long" | "unknown_field";
-      field?: "headerSubtitle" | "footerMessage";
+      reason:
+        | "not_object"
+        | "not_string"
+        | "too_long"
+        | "unknown_field"
+        | "invalid_phone"
+        | "invalid_email"
+        | "not_boolean"
+        | "invalid_logo"
+        | "image_not_found";
+      field?: "headerSubtitle" | "footerMessage" | "phone" | "email" | "printAddress" | "logo";
       maxLength?: number;
     };
     // `bad_capabilities` is no longer thrown: a bad capability set is `device_profile.invalid`.
