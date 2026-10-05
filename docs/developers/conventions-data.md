@@ -919,7 +919,7 @@ dependency of this shape surfaces only when the trigger first fires.
 
 ## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry, a location column or left out of the export
 
-A configuration import gives every row that has an `id` a new one, and rewrites a value to the new
+A configuration import gives every row whose `id` is text a new one, and rewrites a value to the new
 id only in a table's `id` column, its foreign-key columns, and the columns its module lists as
 `references` (`importConfigurationTables`, `apps/server/src/configuration-transfer.ts`, which reads
 `pragma_foreign_key_list` for the keys). It overwrites the columns a table lists in

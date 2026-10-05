@@ -681,8 +681,8 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A column of a transferred table that holds another row's id is a foreign key, a declared
   `references` entry, a location column or left out of the export** (`locationColumns`, `omit`);
   any other column the export carries arrives holding the exporting venue's id. Cost: W72a's
-  narrowing (#1230) left two such columns that only a throwaway probe found; undeclared, two
-  transfer cases failed. Guard: `scripts/id-columns-are-references.test.ts`, weaker than its name —
+  narrowing (#1230) made two existing columns need a `references` entry; without them two transfer
+  cases failed. Guard: `scripts/id-columns-are-references.test.ts`, weaker than its name —
   it knows an id column only by a name ending `_id` or `_ids`, trusts each column its
   `NOT_REFERENCES` list names, and passes a declared `_ids` list though the import replaces only a
   whole value. See [conventions-data.md](docs/developers/conventions-data.md).
