@@ -25,10 +25,11 @@ are not refused when a save leaves them as they are. A product's category is
 `products.category_id`. When this is null, the product is Uncategorised, which is not a category
 row you can rename or delete.
 
-A red asterisk beside a category means no active kitchen routing rule covers the category or its
-parent categories. Its tooltip explains the warning. Set a claim or an exception that covers the
-category in every service zone on Prep Stations to route those dishes before they fall through to
-the default station.
+A red asterisk beside a category means no claim or exception covering the category or its parent
+categories reaches a station or No preparation, worked out as the Made at column does: a claim on a
+switched-off station counts when its chain of fallbacks reaches a station that is switched on. Its
+tooltip explains the warning. Set a claim or an exception that covers the category in every service
+zone on Prep Stations to route those dishes before they fall through to the default station.
 
 A variant is always in its product's reporting category. Its effective category
 (`effectiveProductColumns.categoryId`, `packages/catalogue/src/variant-fallback.ts`), which
