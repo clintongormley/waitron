@@ -2292,6 +2292,12 @@ export class PrintersScreen extends LitElement {
                 @click=${() => {
                   this.detailName = { id: p.id, value: p.name, saving: false, error: null };
                   this.discardDetailNameArmed = false;
+                  void this.updateComplete.then(() => {
+                    if (this.detailName?.id === p.id)
+                      this.renderRoot
+                        .querySelector<HTMLElement>('[name="printer-detail-name"]')
+                        ?.focus();
+                  });
                 }}
                 >${t("action.edit")}</wt-button
               >`
