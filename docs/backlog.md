@@ -5425,11 +5425,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   lists are let go (`deleteDeviceProfile`, `packages/layouts/src/device-profile-store.ts`). A
   profile an active device holds is still refused `device_profile.in_use`. A returning device whose
   profile was retired opens Enable with Profile empty; Enable with the old profile is refused
-  `device_profile.not_found`. Left open: the Devices table shows an empty Profile for a disabled
-  device on a retired profile; a retired profile's home-layout choices stay in
-  `device_profile_home_layouts`; and the configuration transfer has no row filter, so it copies a
-  retired profile with its `retired_at` (`packages/db/src/configuration-transfer.ts`; read, not
-  tested). The Enable hint's wording, done by W105g (#1254, owner decision
+  `device_profile.not_found`. Done by W105h: the Devices table reads "Profile deleted" / "Perfil
+  eliminado", muted, for a device on a retired profile, from `profileRetired` on each row of
+  `GET /management-api/devices`; and a configuration export leaves a retired profile behind
+  (`leaveBehindWhenSet: "retired_at"`, `packages/db/src/configuration-transfer.ts`) together with
+  every bundled row whose foreign key names it, which is its `device_profile_home_layouts` rows. Those
+  rows still stay in the exporting venue's own table. The Enable hint's wording, done by W105g (#1254, owner decision
   2026-10-05): when the returning device's profile was retired, the waiting list's hint reads
   "Disabled device. Its profile was deleted: choose one to enable it." / "Dispositivo deshabilitado.
   Su perfil se eliminó: elige uno para habilitarlo." (`devices.enable_hint_profile_deleted`), and

@@ -930,6 +930,11 @@ column, so a product named like an id arrived renamed; the narrowing is what mak
 necessary. A reference the schema cannot give a foreign key goes in `references`, as
 `option_lists.default_label_id` and `device_profile_home_layouts.layout_id` do.
 
+The export also leaves behind each row whose `leaveBehindWhenSet` column is not null (a retired
+device profile, `retired_at`), and then every row of a transferred table whose foreign key names a
+row left behind, until none does. It reads the keys from `pragma_foreign_key_list`, never the
+`references` lists (`exportConfigurationTables`, `apps/server/src/configuration-transfer.ts`).
+
 Guard: `scripts/id-columns-are-references.test.ts`, which migrates a real database and reads every
 transferred table's columns and keys. Weaker than its name: it knows an id column only by a name
 ending `_id` or `_ids`, so a reference named otherwise is unseen; a column on its `NOT_REFERENCES`
