@@ -65,6 +65,9 @@ export class StationHealthTable extends LitElement {
         color: var(--wt-color-text-muted);
       }
       wt-data-table::part(problem) {
+        max-inline-size: var(--wt-cell-name-max-width);
+        white-space: normal;
+        overflow-wrap: anywhere;
         color: var(--wt-color-danger);
         margin-block: var(--wt-space-1);
       }

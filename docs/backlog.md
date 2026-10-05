@@ -6353,7 +6353,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   own choice editor. Rename and Disable sit in the row menu. Screens includes retained inactive
   bindings and links to Devices. Cell drafts and save refusals survive live reads; Rename writes
   saved values for every other field, leaving unsaved drafts out of its request. The watcher-printer
-  handover is implemented; the legacy controls in Routing remain open. Stations now
+  handover is implemented. Stations now
   offers confirmed Open/Close for today and Back to the schedule actions, with retry after a write refusal. Default and unscheduled stations
   say Always open without an action; disabled stations and an unreadable clock offer no hours
   action. Today now shows the next scheduled opening or closing, distinguishing tomorrow and later
@@ -6385,8 +6385,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Disabled; changing their fallback does not enable them. Confirming an unchanged fallback sends
   no write, including a retained disabled destination. Routing no longer repeats Today, Make default,
   Disable or Enable actions; they use the Stations table, with the same confirmation and refusal
-  paths. The whole-record edit control and repeated station status still need to leave Routing
-  before its card replacement is complete.
+  paths. Whole-record editing and duplicate station status/output warnings have also left Routing.
+  Rename, ordering and Settings cells retain their separate write paths; station creation retains
+  its form. Rename refuses a draft whose station disappeared during a live refresh. Stations gets
+  its output problems from the health snapshot, with warning text wrapped within the shared name
+  width so it does not stretch the table into a single long line. Whole-branch review, rebase,
+  push-hook validation, current-head CI and landing remain.
   Venue settings › Kitchen now reads and
   replaces the venue-wide late flags. Its required whole-minute fields validate every invalid
   value and their order, naming a station when the server refuses the effective result. A refusal

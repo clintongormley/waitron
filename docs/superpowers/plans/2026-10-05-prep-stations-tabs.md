@@ -648,3 +648,34 @@ tested actions on Routing cards; the first moved selection exposed that fixture 
 Task 4 remains partial: whole-record editing and duplicate station status still need handover.
 Task 8 whole-branch checks, initial rebase and any migration regeneration, Claude run-it review,
 normal push hook, current-head CI and authorised landing remain. No readiness claim is made.
+
+
+## 2026-10-05 implementation checkpoint: remaining Routing handover
+
+Routing now keeps category claims, exceptions, their priority and the tester without a duplicate
+whole-station editor or station status/output problems. Rename and ordering use Stations; late
+flags use the individual Settings cells. Station creation keeps its form, numeric validation and
+Enter submission. Rename now refuses a draft if live metadata no longer contains that station.
+Stations reads output problems from the health snapshot, retiring the separate output read/timer.
+
+The existing whole-record/Enter/validation/stale-draft checks now exercise Rename, ordering,
+Settings and creation. The Default wording check reads Always open and a separate Default badge;
+its no-close assertion remains. Exact status, fallback, request, refusal, timer cleanup and
+per-station warning checks remain on their replacement surfaces. Campaign-local changed-check
+notes record the old and new assertions for the eventual PR.
+
+New editor/stale-name and duplicate-status/read checks failed before implementation. The four
+Prep browser files passed 396 cases; the final creation/rename controls passed four cases. A
+phone capture exposed an unconstrained warning paragraph. Eight real-browser width checks
+failed at 510/530 pixels against the shared 140-pixel name width before the wrapping change;
+the corrected width/line-fragment checks passed in all eight EN/ES, light/dark, 390/1280 states,
+with inspected captures. The first height assertion parsed a computed normal line height as NaN;
+it was a new harness error, replaced with actual text-line rectangles. The health component's
+complete two-file run passed 29 cases. Root guards, types, focused lint and formatting passed.
+In an independently installed disposable candidate, deleting the stale-name gate failed both
+stale-draft cases while an ordinary Enter rename passed; restoring it passed all three.
+
+Tasks 1–7 are implemented. Task 8 remains: whole-branch prose/consumer audit, initial rebase and
+any migration regeneration, required focused/schema/fiscal evidence, one Claude run-it review,
+normal push hook, current-head CI and authorised landing. Earlier partial-checkpoint descriptions
+above record their date's tree; this checkpoint describes the current Routing handover.

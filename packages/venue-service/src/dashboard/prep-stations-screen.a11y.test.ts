@@ -153,7 +153,7 @@ describe.each(["light", "dark"] as const)("prep stations accessibility (%s)", (t
       );
     }
     if (state === "editor" || state === "invalid") {
-      el.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-bar"]')!.click();
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-station"]')!.click();
       await el.updateComplete;
     }
     if (state === "claim") {
@@ -273,7 +273,18 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
           oldestMinutes: null,
           items: [],
         })),
-        outputsDown: { printersDown: [], screensDark: [] },
+        outputsDown: {
+          printersDown: [
+            {
+              stationId: "bar",
+              stationName: "Upstairs bar",
+              printerId: "epson",
+              printerName: "Epson",
+              since: "2026-10-01T20:14:00",
+            },
+          ],
+          screensDark: [{ stationId: "bar", stationName: "Upstairs bar", lastSeenAt: null }],
+        },
       }),
       load: vi.fn().mockResolvedValue({
         ...empty,
@@ -328,18 +339,6 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
       setStationHours: vi
         .fn()
         .mockRejectedValue({ code: "station.invalid", params: { field: "hours.0" } }),
-      listOutputsDown: vi.fn().mockResolvedValue({
-        printersDown: [
-          {
-            stationId: "bar",
-            stationName: "Upstairs bar",
-            printerId: "epson",
-            printerName: "Epson",
-            since: "2026-10-01T20:14:00",
-          },
-        ],
-        screensDark: [{ stationId: "bar", stationName: "Upstairs bar", lastSeenAt: null }],
-      }),
     } as unknown as PrepStationsApi;
     host.append(el);
     await new Promise((r) => setTimeout(r, 0));
@@ -348,6 +347,20 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
     const settingsQ = (selector: string) =>
       settingsTable.shadowRoot!.querySelector<HTMLElement>(selector)!;
     const fallbackState = state.includes("fallback");
+    if (!fallbackState) {
+      el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
+        new CustomEvent("wt-tab-change", { detail: { value: "stations" } }),
+      );
+      await el.updateComplete;
+      if (state === "warnings") {
+        const table = el.shadowRoot!.querySelector("prep-station-health-table")!;
+        await (table as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+        const summary = table.shadowRoot!.querySelector("wt-data-table")!;
+        await (summary as HTMLElement & { updateComplete: Promise<boolean> }).updateComplete;
+        expect(summary.shadowRoot!.textContent).toContain("Printer Epson");
+        expect(summary.shadowRoot!.textContent).toContain("has ever checked in");
+      }
+    }
     if (fallbackState) {
       el.shadowRoot!.querySelector("wt-tabs")!.dispatchEvent(
         new CustomEvent("wt-tab-change", { detail: { value: "settings" } }),

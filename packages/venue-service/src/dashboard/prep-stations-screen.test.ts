@@ -489,7 +489,26 @@ it.each(
         stationTimes: timed.routing.stationTimes,
       },
     };
-    const el = await mount(api({ load: vi.fn().mockResolvedValue(visualView) }), theme);
+    const el = await mount(
+      api({
+        load: vi.fn().mockResolvedValue(visualView),
+        readStationHealth: vi.fn().mockResolvedValue(
+          healthFor(visualView, {
+            printersDown: [
+              {
+                stationId: "upstairs",
+                stationName: "Upstairs bar",
+                printerId: "epson",
+                printerName: "Epson",
+                since: "2026-10-01T20:14:00",
+              },
+            ],
+            screensDark: [{ stationId: "retired", stationName: "Retired", lastSeenAt: null }],
+          }),
+        ),
+      }),
+      theme,
+    );
     const host = el.parentElement!;
     host.style.background = "var(--wt-color-bg)";
     const canvas = getComputedStyle(host).backgroundColor;
@@ -514,6 +533,37 @@ it.each(
     await page.screenshot({
       path: `look/routing-fallback-${locale}-${theme}-${width}-inactive.png`,
     });
+    tabs.scrollIntoView();
+    tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "stations" } }));
+    await settle(el);
+    expect(healthRow(el, "upstairs").querySelector('[part="problem"]')?.textContent).toContain(
+      "Epson",
+    );
+    expect(healthRow(el, "retired").querySelector('[part="problem"]')).not.toBeNull();
+    const problem = healthRow(el, "upstairs").querySelector<HTMLElement>('[part="problem"]')!;
+    const probe = document.createElement("span");
+    probe.style.display = "inline-block";
+    probe.style.width = "var(--wt-cell-name-max-width)";
+    host.append(probe);
+    expect(problem.getBoundingClientRect().width).toBeLessThanOrEqual(
+      probe.getBoundingClientRect().width,
+    );
+    const message = document.createRange();
+    message.selectNodeContents(problem);
+    expect(message.getClientRects().length).toBeGreaterThan(1);
+    probe.remove();
+    await expectNoA11yViolations(el);
+    await page.screenshot({
+      path: `look/routing-complete-${locale}-${theme}-${width}-stations.png`,
+    });
+    await page.elementLocator(q(el, '[data-test="new-station"]')!).click();
+    await settle(el);
+    expect(q(el, '[data-test="name"]')).not.toBeNull();
+    expect(q(el, '[data-test="overdue"]')).not.toBeNull();
+    await expectNoA11yViolations(el);
+    await page.screenshot({ path: `look/routing-complete-${locale}-${theme}-${width}-create.png` });
+    q(el, "wt-modal")!.dispatchEvent(new CustomEvent("wt-close"));
+    await settle(el);
     tabs.scrollIntoView();
     tabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "tickets" } }));
     await settle(el);
@@ -602,10 +652,9 @@ it.each([
 ] as const)("shows station status %j", async (status, expected) => {
   setLocale("en");
   const el = await mount(api({ load: vi.fn().mockResolvedValue(withUpstairs(status)) }));
-  expect(q(el, '[data-test="station-upstairs"]')?.textContent).toContain(expected);
-  expect(q(el, '[data-test="station-bar"]')?.textContent).toContain(
-    "Always open: this is the default station",
-  );
+  expect(healthRow(el, "upstairs").textContent).toContain(expected);
+  expect(healthRow(el, "bar").textContent).toContain("Always open");
+  expect(healthRow(el, "bar").querySelector('[part="badge"]')?.textContent).toBe("Default");
   expect(q(el, '[data-test="edit-hours-bar"]')).toBeNull();
   expect(q(el, '[data-test="close-today-bar"]')).toBeNull();
 });
@@ -1182,18 +1231,119 @@ it("assigns an unassigned folder and removes a claim", async () => {
   await settle(el);
   expect(a.removeClaim).toHaveBeenCalledWith("cocktails");
 });
-it("moves station actions into this screen and rejects unordered thresholds beside overdue", async () => {
+it("keeps station status and output problems in Stations instead of repeating them in Routing", async () => {
+  setLocale("en");
+  const next = withUpstairs({ open: false, why: "out_of_hours" });
+  const outputs = {
+    printersDown: [
+      {
+        stationId: "upstairs",
+        stationName: "Upstairs bar",
+        printerId: "epson",
+        printerName: "Epson",
+        since: "2026-10-01T20:14:00",
+      },
+    ],
+    screensDark: [{ stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: null }],
+  };
+  const a = api({
+    load: vi.fn().mockResolvedValue(next),
+    readStationHealth: vi.fn().mockResolvedValue(healthFor(next, outputs)),
+    listOutputsDown: vi.fn().mockResolvedValue(outputs),
+  });
+  const el = await mount(a);
+  const routing = q(el, '[slot="routing"]')!;
+  expect(routing.querySelector('[data-test="status-upstairs"]')).toBeNull();
+  expect(routing.textContent).not.toContain("Printer Epson");
+  expect(routing.textContent).not.toContain("has ever checked in");
+  expect(healthRow(el, "upstairs").textContent).toContain("Printer Epson");
+  expect(healthRow(el, "upstairs").textContent).toContain("has ever checked in");
+  expect(healthRow(el, "upstairs").textContent).toContain("Closed now");
+  expect(routing.querySelector('[data-test="claim-upstairs"]')).not.toBeNull();
+});
+it("uses the health snapshot for output problems without a second management read", async () => {
+  const a = api({
+    listOutputsDown: vi.fn().mockResolvedValue({ printersDown: [], screensDark: [] }),
+  });
+  const el = await mount(a);
+  expect(healthRow(el, "bar").textContent).toContain("Bar");
+  expect(a.readStationHealth).toHaveBeenCalledTimes(1);
+  expect(a.listOutputsDown).not.toHaveBeenCalled();
+});
+function healthFor(
+  loaded: PrepStationsView,
+  outputsDown: StationHealthSnapshot["outputsDown"],
+): StationHealthSnapshot {
+  return {
+    capturedAt: "2026-10-05T12:00:00Z",
+    stations: loaded.stations.map((station) => ({
+      id: station.id,
+      name: station.name,
+      hasScreen: false,
+      waiting: 0,
+      preparing: null,
+      ready: null,
+      late: { warm: 0, overdue: 0, forgotten: 0 },
+      oldestMinutes: null,
+      items: [],
+    })),
+    outputsDown,
+  };
+}
+function healthRow(el: PrepStationsScreen, stationId: string) {
+  return healthSummary(el)!
+    .querySelector(`[data-test="station-menu-${stationId}"]`)!
+    .closest("tr")!;
+}
+
+it("keeps whole-station editing out of Routing while retaining category claims and creation", async () => {
   const a = api();
   const el = await mount(a);
-  q(el, '[data-test="make-default-bar"]')?.click();
-  q(el, '[data-test="edit-bar"]')!.click();
+  const routing = q(el, '[slot="routing"]')!;
+  expect(routing.querySelector('[data-test="edit-bar"]')).toBeNull();
+  expect(routing.querySelector('[data-test="claim-bar"]')).not.toBeNull();
+  expect(q(el, '[data-test="rename-bar"]')).not.toBeNull();
+  q(el, '[data-test="new-station"]')!.click();
   await settle(el);
-  q(el, '[data-test="overdue"]')!.dispatchEvent(
+  expect(q(el, '[data-test="name"]')).not.toBeNull();
+  expect(q(el, '[data-test="displayOrder"]')).not.toBeNull();
+  expect(q(el, '[data-test="overdue"]')).not.toBeNull();
+  expect(a.updateStation).not.toHaveBeenCalled();
+});
+
+it("does not rename a station removed while its draft is open", async () => {
+  const liveData = new LiveData();
+  const load = vi
+    .fn()
+    .mockResolvedValueOnce(view)
+    .mockResolvedValue({ ...view, stations: [] });
+  const a = api({ liveData, load });
+  const el = await mount(a);
+  q(el, '[data-test="rename-bar"]')!.click();
+  await settle(el);
+  const input = q(el, '[data-test="station-rename"] wt-input') as WtInput;
+  input.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Terrace bar" } }));
+  await settle(el);
+  const save = q(el, '[data-test="save-station-name"]')!;
+  liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
+  await vi.waitFor(() => expect(q(el, '[data-test="rename-bar"]')).toBeNull());
+  save.click();
+  await settle(el);
+  expect(a.updateStation).not.toHaveBeenCalled();
+});
+
+it("rejects unordered thresholds beside overdue in Settings and retains station disable", async () => {
+  const a = api();
+  const el = await mount(a);
+  settingsQ(el, '[data-test="edit-settings-overdueAfterMinutes-bar"]')!.click();
+  await settle(el);
+  settingsQ(el, '[data-test="settings-minutes"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "5" } }),
   );
-  q(el, '[data-test="save-station"]')!.click();
   await settle(el);
-  expect(q(el, '[data-field-error="overdueAfterMinutes"]')).not.toBeNull();
+  settingsQ(el, '[data-test="save-settings-cell"]')!.click();
+  await settle(el);
+  expect((settingsQ(el, '[data-test="settings-minutes"]') as WtInput).error).not.toBe("");
   expect(a.updateStation).not.toHaveBeenCalled();
   q(el, '[data-test="disable-bar"]')!.click();
   await settle(el);
@@ -1325,27 +1475,42 @@ it("puts an inactive-station refusal beside an unassigned product choice", async
   await settle(el);
   expect(q(el, '[data-field-error="bread"]')).not.toBeNull();
 });
-it("saves station name, order and all three thresholds together", async () => {
-  const a = api();
+it("saves station name, order and thresholds through their individual controls", async () => {
+  const next = withUpstairs({ open: true, why: "in_hours" });
+  const a = api({ load: vi.fn().mockResolvedValue(next), reorderStations: vi.fn() });
   const el = await mount(a);
-  q(el, '[data-test="edit-bar"]')!.click();
+  q(el, '[data-test="rename-bar"]')!.click();
   await settle(el);
-  q(el, '[data-test="name"]')!.dispatchEvent(
+  q(el, 'wt-input[name="stationName"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "Terrace bar" } }),
   );
-  q(el, '[data-test="displayOrder"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "3" } }),
-  );
-  q(el, '[data-test="save-station"]')!.click();
   await settle(el);
-  expect(a.updateStation).toHaveBeenCalledWith("bar", {
-    name: "Terrace bar",
-    displayOrder: 3,
-    warmAfterMinutes: 5,
-    overdueAfterMinutes: 10,
-    forgottenAfterMinutes: 15,
-  });
+  q(el, '[data-test="save-station-name"]')!.click();
+  await settle(el);
+  expect(a.updateStation).toHaveBeenNthCalledWith(1, "bar", { name: "Terrace bar" });
+  q(el, '[data-test="drag-bar"]')!.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, composed: true }),
+  );
+  await settle(el);
+  expect(a.reorderStations).toHaveBeenCalledExactlyOnceWith(["upstairs", "bar"]);
+  for (const [field, value, payload] of [
+    ["warmAfterMinutes", "4", { warmAfterMinutes: 4 }],
+    ["overdueAfterMinutes", "11", { overdueAfterMinutes: 11 }],
+    ["forgottenAfterMinutes", "16", { forgottenAfterMinutes: 16 }],
+  ] as const) {
+    settingsQ(el, `[data-test="edit-settings-${field}-bar"]`)!.click();
+    await settle(el);
+    settingsQ(el, '[data-test="settings-minutes"]')!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value } }),
+    );
+    await settle(el);
+    settingsQ(el, '[data-test="save-settings-cell"]')!.click();
+    await settle(el);
+    expect(a.updateStation).toHaveBeenLastCalledWith("bar", payload);
+  }
+  expect(a.updateStation).toHaveBeenCalledTimes(4);
 });
+
 it("places a taken-name refusal below Name", async () => {
   const a = api({ createStation: vi.fn().mockRejectedValue({ code: "station.name_taken" }) });
   const el = await mount(a);
@@ -1390,10 +1555,17 @@ it("refreshes station cards after a kitchen-stations live change", async () => {
   );
   expect(load).toHaveBeenCalledTimes(2);
 });
-it("saves a station when Enter is pressed in its order field", async () => {
+it("creates a station with its name, order and thresholds when Enter is pressed in Order", async () => {
   const a = api();
   const el = await mount(a);
-  q(el, '[data-test="edit-bar"]')!.click();
+  q(el, '[data-test="new-station"]')!.click();
+  await settle(el);
+  q(el, '[data-test="name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Terrace bar" } }),
+  );
+  q(el, '[data-test="displayOrder"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "3" } }),
+  );
   await settle(el);
   q(el, '[data-test="displayOrder"]')!
     .shadowRoot!.querySelector("input")!
@@ -1406,28 +1578,51 @@ it("saves a station when Enter is pressed in its order field", async () => {
       }),
     );
   await settle(el);
-  expect(a.updateStation).toHaveBeenCalledWith("bar", {
-    name: "Bar",
-    displayOrder: 1,
+  expect(a.createStation).toHaveBeenCalledExactlyOnceWith({
+    name: "Terrace bar",
+    displayOrder: 3,
     warmAfterMinutes: 5,
     overdueAfterMinutes: 10,
     forgottenAfterMinutes: 15,
   });
+  expect(a.updateStation).not.toHaveBeenCalled();
 });
-it("does not save a nonnumeric threshold", async () => {
+
+it("renames a station when Enter is pressed in its name field", async () => {
   const a = api();
   const el = await mount(a);
-  q(el, '[data-test="edit-bar"]')!.click();
+  q(el, '[data-test="rename-bar"]')!.click();
   await settle(el);
-  q(el, '[data-test="overdue"]')!.dispatchEvent(
+  q(el, 'wt-input[name="stationName"]')!
+    .shadowRoot!.querySelector("input")!
+    .dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+        composed: true,
+        cancelable: true,
+      }),
+    );
+  await settle(el);
+  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { name: "Bar" });
+});
+
+it("does not save a nonnumeric threshold in Settings", async () => {
+  const a = api();
+  const el = await mount(a);
+  settingsQ(el, '[data-test="edit-settings-overdueAfterMinutes-bar"]')!.click();
+  await settle(el);
+  settingsQ(el, '[data-test="settings-minutes"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "soon" } }),
   );
-  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  settingsQ(el, '[data-test="save-settings-cell"]')!.click();
   await settle(el);
   expect(a.updateStation).not.toHaveBeenCalled();
-  expect(q(el, '[data-field-error="overdueAfterMinutes"]')).not.toBeNull();
+  expect((settingsQ(el, '[data-test="settings-minutes"]') as WtInput).error).not.toBe("");
 });
-it("does not save an edited station removed by live refresh", async () => {
+
+it("does not submit Enter for a rename draft whose station was removed by live refresh", async () => {
   const liveData = new LiveData();
   const load = vi
     .fn()
@@ -1435,16 +1630,19 @@ it("does not save an edited station removed by live refresh", async () => {
     .mockResolvedValue({ ...view, stations: [] });
   const a = api({ liveData, load });
   const el = await mount(a);
-  q(el, '[data-test="edit-bar"]')!.click();
+  q(el, '[data-test="rename-bar"]')!.click();
   await settle(el);
-  const staleSave = q(el, '[data-test="save-station"]')!;
+  const input = q(el, 'wt-input[name="stationName"]')!.shadowRoot!.querySelector("input")!;
   liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
   await vi.waitFor(() => expect(q(el, '[data-test="station-bar"]')).toBeNull());
-  staleSave.click();
+  input.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true, cancelable: true }),
+  );
   await settle(el);
   expect(a.updateStation).not.toHaveBeenCalled();
 });
-it("guards repeated Enter saves while a station write is pending and allows retry", async () => {
+
+it("guards repeated Enter rename saves while a station write is pending and allows retry", async () => {
   let reject!: (error: unknown) => void;
   const pending = new Promise((_, fail) => {
     reject = fail;
@@ -1452,9 +1650,9 @@ it("guards repeated Enter saves while a station write is pending and allows retr
   const updateStation = vi.fn().mockReturnValueOnce(pending).mockResolvedValue(undefined);
   const a = api({ updateStation });
   const el = await mount(a);
-  q(el, '[data-test="edit-bar"]')!.click();
+  q(el, '[data-test="rename-bar"]')!.click();
   await settle(el);
-  const input = q(el, '[data-test="displayOrder"]')!.shadowRoot!.querySelector("input")!;
+  const input = q(el, 'wt-input[name="stationName"]')!.shadowRoot!.querySelector("input")!;
   const enter = () =>
     input.dispatchEvent(
       new KeyboardEvent("keydown", {
@@ -1466,13 +1664,15 @@ it("guards repeated Enter saves while a station write is pending and allows retr
     );
   enter();
   enter();
-  q(el, '[data-test="save-station"]')!.click();
+  q(el, '[data-test="save-station-name"]')!.click();
   expect(updateStation).toHaveBeenCalledTimes(1);
+  expect(updateStation).toHaveBeenCalledWith("bar", { name: "Bar" });
   reject({ code: "management.request_invalid" });
   await settle(el);
   enter();
   await settle(el);
   expect(updateStation).toHaveBeenCalledTimes(2);
+  expect(updateStation).toHaveBeenLastCalledWith("bar", { name: "Bar" });
 });
 
 const exceptionView: PrepStationsView = {
@@ -2111,11 +2311,14 @@ it("saves a product exception after changing its subject and clearing its zone",
   });
 });
 
-it("refuses negative order and invalid warm and forgotten thresholds together", async () => {
+it("refuses negative order and invalid warm and forgotten thresholds together when creating", async () => {
   const a = api();
   const el = await mount(a);
-  q(el, '[data-test="edit-bar"]')!.click();
+  q(el, '[data-test="new-station"]')!.click();
   await settle(el);
+  q(el, '[data-test="name"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "Terrace bar" } }),
+  );
   for (const [field, value] of [
     ["displayOrder", "-1"],
     ["warmAfterMinutes", "0"],
@@ -2130,6 +2333,7 @@ it("refuses negative order and invalid warm and forgotten thresholds together", 
   await settle(el);
   for (const field of ["displayOrder", "warmAfterMinutes", "forgottenAfterMinutes"])
     expect(q(el, `[data-field-error="${field}"]`)).not.toBeNull();
+  expect(a.createStation).not.toHaveBeenCalled();
   expect(a.updateStation).not.toHaveBeenCalled();
 });
 
@@ -2278,20 +2482,20 @@ it.each(["opened_by_hand", "closed_by_hand"] as const)(
     );
     next.routing.todayEnds = { timeOfDay: "06:00", tomorrow: false };
     const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
-    expect(q(el, '[data-test="station-upstairs"]')!.textContent).toContain("until 06:00 today");
+    expect(healthRow(el, "upstairs").textContent).toContain("until 06:00 today");
     if (why === "closed_by_hand")
-      expect(q(el, '[data-test="station-upstairs"]')!.textContent).toContain(
+      expect(healthRow(el, "upstairs").textContent).toContain(
         "No replacement: the till will ask where to send its dishes.",
       );
     expect(q(el, '[data-test="change-fallback-bar"]')).toBeNull();
   },
 );
-it("reports unreadable venue time on every station card", async () => {
+it("reports unreadable venue time on every Stations row", async () => {
   const next = withUpstairs({ open: true, why: "in_hours" });
   next.routing.clockReadable = false;
   const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
   for (const id of ["bar", "upstairs"])
-    expect(q(el, `[data-test="station-${id}"]`)!.textContent).toContain(
+    expect(healthRow(el, id).textContent).toContain(
       "Opening hours are not applied: the venue's time zone or day cutover cannot be read.",
     );
 });
@@ -2512,24 +2716,26 @@ it.each([
     expect(q(el, '[data-test="station-action-modal"]')!.getAttribute("heading")).toBe(enable);
   },
 );
-it("enables a disabled station and keeps its dark-screen warning in that card", async () => {
+it("switches an inactive station on and keeps its dark-screen warning in its Stations row", async () => {
   const next = withUpstairs({ open: false, why: "switched_off" }, { closedSendsTo: null });
   next.stations[1]!.active = false;
   next.routing.stations[1]!.active = false;
   const a = api({
     load: vi.fn().mockResolvedValue(next),
     activateStation: vi.fn(),
-    listOutputsDown: vi.fn().mockResolvedValue({
-      printersDown: [],
-      screensDark: [{ stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: null }],
-    }),
+    readStationHealth: vi.fn().mockResolvedValue(
+      healthFor(next, {
+        printersDown: [],
+        screensDark: [{ stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: null }],
+      }),
+    ),
   });
   const el = await mount(a);
   expect(q(el, '[data-test="inactive-upstairs"]')!.textContent).toContain(
     "No replacement: the till asks.",
   );
-  expect(q(el, '[data-test="inactive-upstairs"]')!.textContent).toContain("has ever checked in");
-  expect(q(el, '[data-test="station-bar"]')!.textContent).not.toContain("has ever checked in");
+  expect(healthRow(el, "upstairs").textContent).toContain("has ever checked in");
+  expect(healthRow(el, "bar").textContent).not.toContain("has ever checked in");
   q(el, '[data-test="enable-upstairs"]')!.click();
   await settle(el);
   q(el, '[data-test="confirm-station-action"]')!.click();
@@ -2537,33 +2743,36 @@ it("enables a disabled station and keeps its dark-screen warning in that card", 
   expect(a.activateStation).toHaveBeenCalledWith("upstairs");
 });
 it("shows each output warning only on its station", async () => {
+  const next = withUpstairs({ open: true, why: "in_hours" });
   const a = api({
-    load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
-    listOutputsDown: vi.fn().mockResolvedValue({
-      printersDown: [
-        {
-          stationId: "upstairs",
-          stationName: "Upstairs bar",
-          printerId: "epson",
-          printerName: "Epson",
-          since: "2026-10-01T20:14:00",
-        },
-      ],
-      screensDark: [
-        { stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: "2026-10-01T20:10:00" },
-      ],
-    }),
+    load: vi.fn().mockResolvedValue(next),
+    readStationHealth: vi.fn().mockResolvedValue(
+      healthFor(next, {
+        printersDown: [
+          {
+            stationId: "upstairs",
+            stationName: "Upstairs bar",
+            printerId: "epson",
+            printerName: "Epson",
+            since: "2026-10-01T20:14:00",
+          },
+        ],
+        screensDark: [
+          { stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: "2026-10-01T20:10:00" },
+        ],
+      }),
+    ),
   });
   const el = await mount(a);
-  const card = q(el, '[data-test="station-upstairs"]')!;
+  const card = healthRow(el, "upstairs");
   expect(card.textContent).toContain(
     "Printer Epson has printed nothing since something sent to it at 20:14 got stuck.",
   );
   expect(card.textContent).toContain(
     "Dishes are waiting, and no kitchen screen here has checked in since 20:10.",
   );
-  expect(q(el, '[data-test="station-bar"]')!.textContent).not.toContain("got stuck");
-  expect(q(el, '[data-test="station-bar"]')!.textContent).not.toContain("Dishes are waiting");
+  expect(healthRow(el, "bar").textContent).not.toContain("got stuck");
+  expect(healthRow(el, "bar").textContent).not.toContain("Dishes are waiting");
 });
 it("saves the whole hours list and places a server row refusal beside that row", async () => {
   const a = api({
@@ -2594,33 +2803,34 @@ it("saves the whole hours list and places a server row refusal beside that row",
   expect(form.shadowRoot!.querySelectorAll('[data-field-error="hours.0"]')).toHaveLength(2);
 });
 
-it("refreshes output warnings every minute and clears the timer when removed", async () => {
+it("refreshes output warnings every fifteen seconds and clears the timer when removed", async () => {
   const timers = new Map<ReturnType<typeof setInterval>, TimerHandler>();
   const original = window.setInterval.bind(window);
   const interval = vi.spyOn(window, "setInterval").mockImplementation((handler, delay, ...args) => {
     const id = original(handler, delay, ...args) as unknown as ReturnType<typeof setInterval>;
-    if (delay === 60_000) timers.set(id, handler);
+    if (delay === 15_000) timers.set(id, handler);
     return id;
   });
   const clear = vi.spyOn(window, "clearInterval");
   try {
+    const next = withUpstairs({ open: true, why: "in_hours" });
     const a = api({
-      load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })),
-      listOutputsDown: vi
+      load: vi.fn().mockResolvedValue(next),
+      readStationHealth: vi
         .fn()
-        .mockResolvedValueOnce({ printersDown: [], screensDark: [] })
-        .mockResolvedValue({
-          printersDown: [],
-          screensDark: [{ stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: null }],
-        }),
+        .mockResolvedValueOnce(healthFor(next, { printersDown: [], screensDark: [] }))
+        .mockResolvedValue(
+          healthFor(next, {
+            printersDown: [],
+            screensDark: [{ stationId: "upstairs", stationName: "Upstairs bar", lastSeenAt: null }],
+          }),
+        ),
     });
     const el = await mount(a);
-    expect(q(el, '[data-test="station-upstairs"]')!.textContent).not.toContain(
-      "has ever checked in",
-    );
+    expect(healthRow(el, "upstairs").textContent).not.toContain("has ever checked in");
     for (const handler of timers.values()) if (typeof handler === "function") handler();
     await settle(el);
-    expect(q(el, '[data-test="station-upstairs"]')!.textContent).toContain("has ever checked in");
+    expect(healthRow(el, "upstairs").textContent).toContain("has ever checked in");
     el.remove();
     expect(
       [...timers.keys()].some((id) => clear.mock.calls.some(([cleared]) => cleared === id)),
@@ -2685,7 +2895,7 @@ it("refreshes the saved fallback when the following disable fails", async () => 
   q(el, '[data-test="confirm-station-action"]')!.click();
   await settle(el);
   expect((await openSettingsFallback(el)).value).toBe("bar");
-  expect(q(el, '[data-test="station-upstairs"]')!.textContent).toContain("Its work goes to Bar.");
+  expect(healthRow(el, "upstairs").textContent).toContain("Its work goes to Bar.");
   expect(
     q(el, '[data-test="station-action-modal"]')!.querySelector('[role="alert"]')!.textContent,
   ).toContain("could not be saved");

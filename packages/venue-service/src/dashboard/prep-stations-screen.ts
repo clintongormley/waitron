@@ -40,7 +40,6 @@ import type {
   PrepStationsApi,
   PrepStationsView,
   StationInput,
-  OutputsDown,
   StationHealthSnapshot,
   WatcherInput,
 } from "./routing-client.js";
@@ -62,7 +61,7 @@ const format = (key: Parameters<typeof t>[0], values: Record<string, string> = {
   );
 
 type Editor =
-  | { kind: "station"; id?: string }
+  | { kind: "station" }
   | { kind: "claim"; stationId: string | null }
   | { kind: "exception"; id?: string }
   | { kind: "exception_delete"; id: string };
@@ -324,8 +323,6 @@ export class PrepStationsScreen extends LitElement {
   @state() private health?: StationHealthSnapshot;
   #healthTimer?: ReturnType<typeof setInterval>;
   #routingTimer?: ReturnType<typeof setInterval>;
-  @state() private outputsDown: OutputsDown = { printersDown: [], screensDark: [] };
-  #outputsTimer?: ReturnType<typeof setInterval>;
   #testRequest = 0;
   readonly #url = new UrlStateController(
     this,
@@ -409,13 +406,8 @@ export class PrepStationsScreen extends LitElement {
       this.#healthTimer = setInterval(() => void this.#loadHealth(), 15_000);
       this.#routingTimer = setInterval(() => void this.#load(), 60_000);
     }
-    if (!this.readOnly) {
-      void this.#loadOutputs();
-      this.#outputsTimer = setInterval(() => void this.#loadOutputs(), 60_000);
-    }
   }
   override disconnectedCallback() {
-    if (this.#outputsTimer) clearInterval(this.#outputsTimer);
     if (this.#healthTimer) clearInterval(this.#healthTimer);
     if (this.#routingTimer) clearInterval(this.#routingTimer);
     super.disconnectedCallback();
@@ -437,13 +429,6 @@ export class PrepStationsScreen extends LitElement {
       );
     } catch {
       this.#showReadError(t("prep.load_error"));
-    }
-  }
-  async #loadOutputs() {
-    try {
-      this.outputsDown = await this.api.listOutputsDown();
-    } catch {
-      // The card's last observed output status remains until a later passive read succeeds.
     }
   }
   async #load() {
@@ -742,7 +727,8 @@ export class PrepStationsScreen extends LitElement {
   }
   async #saveStationName() {
     const draft = this.rename;
-    if (!draft || this.busy) return;
+    if (!draft || this.busy || !this.view?.stations.some((station) => station.id === draft.id))
+      return;
     if (!draft.name.trim()) {
       this.rename = { ...draft, error: t("prep.name_required"), invalid: true, fieldError: true };
       return;
@@ -813,23 +799,15 @@ export class PrepStationsScreen extends LitElement {
       </wt-form-actions>
     </wt-modal>`;
   }
-  #openStation(station?: PrepStation) {
-    this.editor = { kind: "station", id: station?.id };
-    this.draft = station
-      ? {
-          name: station.name,
-          displayOrder: station.displayOrder,
-          warmAfterMinutes: station.warmAfterMinutes,
-          overdueAfterMinutes: station.overdueAfterMinutes,
-          forgottenAfterMinutes: station.forgottenAfterMinutes,
-        }
-      : {
-          name: "",
-          displayOrder: 0,
-          warmAfterMinutes: 5,
-          overdueAfterMinutes: 10,
-          forgottenAfterMinutes: 15,
-        };
+  #openStation() {
+    this.editor = { kind: "station" };
+    this.draft = {
+      name: "",
+      displayOrder: 0,
+      warmAfterMinutes: 5,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+    };
     this.fieldError = {};
     this.#showError("");
   }
@@ -858,14 +836,11 @@ export class PrepStationsScreen extends LitElement {
       this.#showError(t("prep.fix_fields"));
       return;
     }
-    const id = this.editor?.kind === "station" ? this.editor.id : undefined;
-    if (id && !this.view?.stations.some((station) => station.id === id)) return;
     if (this.busy) return;
     this.busy = true;
     this.#showError("");
     try {
-      if (id) await this.api.updateStation(id, d);
-      else await this.api.createStation(d);
+      await this.api.createStation(d);
       this.editor = undefined;
       await this.#load();
     } catch (e) {
@@ -1469,23 +1444,11 @@ export class PrepStationsScreen extends LitElement {
       this.busy = false;
     }
   }
-  #warnings(id: string) {
-    const printers = this.outputsDown.printersDown.filter((row) => row.stationId === id);
-    const screens = this.outputsDown.screensDark.filter((row) => row.stationId === id);
-    return html`<div class="station-warnings">
-      ${printers.map((row) => html`<p class="warning">${format("prep.printer_down", { printer: row.printerName, time: new Date(row.since).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false }) })}</p>`)}
-      ${screens.map((row) => html`<p class="warning">${row.lastSeenAt ? format("prep.screen_dark", { time: new Date(row.lastSeenAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false }) }) : t("prep.screen_never")}</p>`)}
-    </div>`;
-  }
   #stationCard(s: PrepStation) {
     return html`<wt-card data-test=${`station-${s.id}`}
       ><h2>
         ${s.name} ${s.isDefault ? html`<span class="muted">${t("prep.default")}</span>` : nothing}
       </h2>
-      <div class="status">
-        <p data-test=${`status-${s.id}`}>${this.#stationStatus(s)}</p>
-        ${this.#warnings(s.id)}
-      </div>
       ${this.#chips(s.id)}
       <div class="actions">
         <wt-button
@@ -1496,11 +1459,6 @@ export class PrepStationsScreen extends LitElement {
             this.#showError("");
           }}
           >${t("prep.claim_folder")}</wt-button
-        ><wt-button
-          data-test=${`edit-${s.id}`}
-          variant="secondary"
-          @click=${() => this.#openStation(s)}
-          >${t("prep.edit")}</wt-button
         >
       </div>
     </wt-card>`;
@@ -2677,7 +2635,7 @@ export class PrepStationsScreen extends LitElement {
     return html`<wt-modal
       size=${editor.kind === "claim" || editor.kind === "exception_delete" ? "compact" : "standard"}
       open
-      heading=${editor.kind === "claim" ? t("prep.claim_folder") : editor.kind === "exception_delete" ? t("prep.confirm_delete_exception") : editor.kind === "exception" ? (editor.id ? t("prep.edit_exception") : t("prep.add_exception")) : editor.id ? t("prep.edit_station") : t("prep.new_station")}
+      heading=${editor.kind === "claim" ? t("prep.claim_folder") : editor.kind === "exception_delete" ? t("prep.confirm_delete_exception") : editor.kind === "exception" ? (editor.id ? t("prep.edit_exception") : t("prep.add_exception")) : t("prep.new_station")}
       @wt-close=${() => {
         this.editor = undefined;
       }}
@@ -3060,7 +3018,6 @@ export class PrepStationsScreen extends LitElement {
                                         <p>
                                           ${this.#times(station.id)?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}
                                         </p>
-                                        ${this.#warnings(station.id)}
                                       </wt-card>`,
                                   )}
                                 </section>`
