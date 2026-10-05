@@ -295,6 +295,21 @@ function describeBucketRefusal(
   return key === undefined ? sayWith("shell.bucket.refused_code", { code }) : say(key);
 }
 
+const CONFIGURATION_NAME_MESSAGES: Record<string, StringKey> = {
+  "category.name_taken": "shell.configuration.category_name_taken",
+  "product.name_taken": "shell.configuration.product_name_taken",
+};
+
+/** The sentence for a refusal of a configuration export the operator chose to load. */
+function describeConfigurationRefusal(error: unknown): Message {
+  const { code, params } = (error ?? {}) as ApiError;
+  const key = typeof code === "string" ? CONFIGURATION_NAME_MESSAGES[code] : undefined;
+  const name = params?.name;
+  return key !== undefined && typeof name === "string" && name !== ""
+    ? sayWith(key, { name })
+    : say("shell.configuration.could_not_open");
+}
+
 /** The restored copy's names, when the refusal carries all three and a tax id to confirm. */
 function venueToConfirm(params: Record<string, unknown> | undefined): RestoredVenue | undefined {
   const { legalName, taxId, locationName } = params ?? {};
@@ -958,9 +973,9 @@ export class SetupApp extends LitElement {
       }) as DeepPartial<ProvisionBody>;
       this.configurationPreview = preview;
       this.screen = "configuration-preview";
-    } catch {
+    } catch (error) {
       if (!this.isConnected) return;
-      this.configurationError = say("shell.configuration.could_not_open");
+      this.configurationError = describeConfigurationRefusal(error);
       this.screen = "live-source";
     }
   }
