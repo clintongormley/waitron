@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
-import type { WtTabs } from "@waitron/ui";
 import type { VenueServiceApi, VenueServiceView } from "./client.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import "./venue-operations-screen.js";
@@ -53,104 +52,42 @@ async function mount(): Promise<VenueOperationsScreen> {
   await screen.updateComplete;
   await new Promise((resolve) => setTimeout(resolve, 0));
   await screen.updateComplete;
-  await tabs(screen).updateComplete;
   return screen;
 }
 
-function tabs(screen: VenueOperationsScreen): WtTabs {
-  return screen.shadowRoot!.querySelector("wt-tabs")!;
-}
-
-function expectSelected(screen: VenueOperationsScreen, key: string): void {
-  const strip = tabs(screen);
-  expect(strip.value).toBe(key);
-  expect(
-    strip.shadowRoot!.querySelector('[role="tab"][aria-selected="true"]')?.getAttribute("data-key"),
-  ).toBe(key);
-  const panels = strip.shadowRoot!.querySelectorAll('[role="tabpanel"]:not([hidden])');
-  expect(panels).toHaveLength(1);
-  expect(panels[0]!.querySelector("slot")?.name).toBe(key);
-}
-
-async function select(screen: VenueOperationsScreen, key: string): Promise<void> {
-  tabs(screen)
-    .shadowRoot!.querySelector<HTMLButtonElement>(`[role="tab"][data-key="${key}"]`)!
-    .click();
-  await screen.updateComplete;
-  await tabs(screen).updateComplete;
-}
-
-async function traverse(
-  direction: "back" | "forward",
-  screen: VenueOperationsScreen,
-): Promise<void> {
-  const completed = new Promise<void>((resolve) =>
-    window.addEventListener("popstate", () => resolve(), { once: true }),
-  );
-  history[direction]();
-  await completed;
-  await screen.updateComplete;
-  await tabs(screen).updateComplete;
-}
-
 describe("venue operations URL navigation", () => {
-  it("restores the requested tab when mounted and remounted without adding history", async () => {
-    navigate("/manage/venue-operations/view/zones");
-    const before = location.href;
-    const push = vi.spyOn(history, "pushState");
-    const replace = vi.spyOn(history, "replaceState");
-    const screen = await mount();
-    expectSelected(screen, "zones");
-    screen.remove();
-    expectSelected(await mount(), "zones");
-    expect(location.href).toBe(before);
-    expect(push).not.toHaveBeenCalled();
-    expect(replace).not.toHaveBeenCalled();
-  });
-
-  // The last is a saved link to the Menus tab this screen no longer has.
   it.each([
-    "/manage/venue-operations",
+    "/manage/venue-operations/view/departments",
+    "/manage/venue-operations/view/zones",
+    "/manage/venue-operations/view/status",
     "/manage/venue-operations/view/missing",
     "/manage/venue-operations/view/menus",
     "/manage/venue-operations/view/kitchen",
-  ])("replaces %s with the Status tab and preserves query parameters", async (path) => {
+  ])("opens the old %s bookmark at the unified page without a new history entry", async (path) => {
     navigate(path);
     const query = location.search;
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
     const screen = await mount();
-    expectSelected(screen, "status");
-    expect(location.pathname).toBe("/manage/venue-operations/view/status");
+    expect(screen.shadowRoot!.querySelector('[data-test="policy-tree"]')).not.toBeNull();
+    expect(location.pathname).toBe("/manage/venue-operations");
     expect(location.search).toBe(query);
-    expect(replace).toHaveBeenCalledTimes(1);
     expect(push).not.toHaveBeenCalled();
+    expect(replace).toHaveBeenCalledTimes(1);
+    screen.remove();
+    await mount();
+    expect(replace).toHaveBeenCalledTimes(1);
   });
 
-  it("pushes each selected tab once and restores real Back and Forward navigation", async () => {
-    navigate("/manage/venue-operations/view/status");
-    const query = location.search;
-    const screen = await mount();
+  it("keeps the unified page URL when opened directly", async () => {
+    navigate("/manage/venue-operations");
+    const before = location.href;
     const push = vi.spyOn(history, "pushState");
     const replace = vi.spyOn(history, "replaceState");
-    await select(screen, "zones");
-    expectSelected(screen, "zones");
-    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
-    expect(push).toHaveBeenCalledTimes(1);
-    await select(screen, "zones");
-    expect(push).toHaveBeenCalledTimes(1);
-    await select(screen, "departments");
-    expectSelected(screen, "departments");
-    expect(location.pathname).toBe("/manage/venue-operations/view/departments");
-    expect(push).toHaveBeenCalledTimes(2);
-    await traverse("back", screen);
-    expectSelected(screen, "zones");
-    expect(location.pathname).toBe("/manage/venue-operations/view/zones");
-    await traverse("forward", screen);
-    expectSelected(screen, "departments");
-    expect(location.pathname).toBe("/manage/venue-operations/view/departments");
-    expect(location.search).toBe(query);
-    expect(push).toHaveBeenCalledTimes(2);
+    const screen = await mount();
+    expect(screen.shadowRoot!.querySelector('[data-test="policy-tree"]')).not.toBeNull();
+    expect(location.href).toBe(before);
+    expect(push).not.toHaveBeenCalled();
     expect(replace).not.toHaveBeenCalled();
   });
 });

@@ -34,8 +34,7 @@ const format = (key: Parameters<typeof t>[0], values: Record<string, string>) =>
 
 const MODES: ServiceMode[] = ["table_tab", "prepay", "invoice_first", "ticket_then_pay"];
 const DAYS = [0, 1, 2, 3, 4, 5, 6] as const;
-const VIEWS = ["departments", "zones"] as const;
-type View = (typeof VIEWS)[number];
+type View = "departments" | "zones";
 type Editor =
   | { kind: "department"; row?: Department }
   | { kind: "new-zone" }
@@ -185,9 +184,7 @@ export class VenueOperationsScreen extends LitElement {
     this,
     () => {
       if (this.#url.read("dashboard") !== "venue-operations") return;
-      const value = this.#url.read("view");
-      this.view = VIEWS.includes(value as View) ? (value as View) : "departments";
-      this.#url.write({ dashboard: "venue-operations", view: this.view }, true);
+      this.#url.write({ dashboard: "venue-operations", view: null }, true);
     },
     { basePath: "/manage", primary: "dashboard", children: { "*": { view: "view" } } },
   );
@@ -266,7 +263,6 @@ export class VenueOperationsScreen extends LitElement {
   }
   #selectView(event: CustomEvent<{ value: View }>): void {
     this.view = event.detail.value;
-    this.#url.write({ dashboard: "venue-operations", view: this.view });
   }
   #restart(): void {
     this.attempted = false;
