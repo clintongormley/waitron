@@ -1347,6 +1347,50 @@ describe("the Edit dialog", () => {
     expect(api.setDeviceReader).not.toHaveBeenCalled();
   });
 
+  it("told the session cannot manage card readers, never draws the reader field nor asks about readers", async () => {
+    const api = editApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api,
+      panels: PANELS,
+      canManageReaders: false,
+    });
+    await flush(el);
+    dq(el.shadowRoot!, "[data-test=edit-device-t1]")!.click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
+    expect(q(el, "[data-test=edit-reader]")).toBeNull();
+    await flush(el);
+    await flush(el);
+    expect(q(el, "[data-test=edit-reader]")).toBeNull();
+    expect(api.getDeviceReader).not.toHaveBeenCalled();
+    expect(api.listReaders).not.toHaveBeenCalled();
+    await save(el);
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(api.updateDevice).toHaveBeenCalledTimes(1);
+    expect(api.setDeviceReader).not.toHaveBeenCalled();
+  });
+
+  it("told the session can manage card readers, draws the reader field disabled while it loads, then ready", async () => {
+    let answer!: (value: { readerId: string | null }) => void;
+    const api = editApi({
+      getDeviceReader: vi.fn().mockReturnValue(new Promise((resolve) => (answer = resolve))),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api,
+      panels: PANELS,
+      canManageReaders: true,
+    });
+    await flush(el);
+    dq(el.shadowRoot!, "[data-test=edit-device-t1]")!.click();
+    await flush(el);
+    expect(field(el, "edit-reader").disabled).toBe(true);
+    expect(api.getDeviceReader).toHaveBeenCalledExactlyOnceWith("t1");
+    answer({ readerId: "r2" });
+    await flush(el);
+    expect(field(el, "edit-reader").disabled).toBe(false);
+    expect(field(el, "edit-reader").value).toBe("r2");
+  });
+
   it("preselects no reader when the device has none", async () => {
     const el = await openEdit(
       editApi({ getDeviceReader: vi.fn().mockResolvedValue({ readerId: null }) }),

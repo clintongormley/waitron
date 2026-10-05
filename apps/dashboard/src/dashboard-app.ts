@@ -1845,7 +1845,10 @@ export class DashboardApp extends LitElement {
       case "purchases":
         return html`<dashboard-purchases-screen .api=${this.api}></dashboard-purchases-screen>`;
       case "devices":
-        return html`<dashboard-devices-screen .api=${this.api}></dashboard-devices-screen>`;
+        return html`<dashboard-devices-screen
+          .api=${this.api}
+          .canManageReaders=${this.#sessionPermissions.includes("payments.manage")}
+        ></dashboard-devices-screen>`;
       case "printing-rules":
         return html`<dashboard-printing-rules-screen
           .api=${this.api}

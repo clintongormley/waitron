@@ -1780,6 +1780,26 @@ describe("dashboard-app", () => {
     expect(countH1(el)).toBe(1);
   });
 
+  it.each([
+    { permissions: ["booking.manage"], canManageReaders: false },
+    { permissions: ["booking.manage", "payments.manage"], canManageReaders: true },
+  ])(
+    "tells the devices screen whether the session may manage card readers ($permissions)",
+    async ({ permissions, canManageReaders }) => {
+      const api = stubApi({
+        listStaff: vi.fn().mockResolvedValue([]),
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await flush(el);
+      navDevices(el)!.click();
+      await flush(el);
+      expect((devices(el) as HTMLElement & { canManageReaders: boolean }).canManageReaders).toBe(
+        canManageReaders,
+      );
+    },
+  );
+
   it("navigates to printing rules beside printers", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });

@@ -270,6 +270,12 @@ export class DevicesScreen extends LitElement {
   );
 
   @property({ attribute: false }) panels: readonly CardProviderPanel[] = CARD_PROVIDER_PANELS;
+  /**
+   * Whether the session holds `payments.manage`. When false Edit never draws or reads the card
+   * reader. When true the reader is read, and a refusal still hides it, because the session's
+   * permissions can change while the page is open.
+   */
+  @property({ attribute: false }) canManageReaders = true;
 
   @state() private devices: DeviceRow[] = [];
   @state() private stations: Station[] = [];
@@ -810,12 +816,12 @@ export class DevicesScreen extends LitElement {
     this.editRefusal = null;
     this.editError = null;
     this.editSaving = false;
-    this.readerState = "loading";
+    this.readerState = this.canManageReaders ? "loading" : "hidden";
     this.readers = [];
     this.readerReadError = null;
     this.chosenReaderId = "";
     this.#storedReaderId = null;
-    void this.#loadReader(device.id, epoch);
+    if (this.canManageReaders) void this.#loadReader(device.id, epoch);
   }
 
   /** The reader is the payments module's, under its own permission: without it the field is gone. */
