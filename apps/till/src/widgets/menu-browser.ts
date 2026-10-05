@@ -68,12 +68,19 @@ function indexMenu(menu: TillZoneMenu, products: TillProduct[]): MenuIndex {
   return index;
 }
 
+const paints = new Map<string, string | undefined>();
+
 /** Custom properties for a tile painted in a stored colour, with black or white ink for contrast;
- * undefined draws the neutral tile. Checked, because the value lands in a style attribute. */
+ * undefined draws the neutral tile. Checked, because the value lands in a style attribute. Worked
+ * out once per colour, not on every render of every tile. */
 function tilePaint(color: string | null | undefined): string | undefined {
-  return typeof color === "string" && isHexColor(color)
-    ? `--tile-fill:${color};--tile-ink:${readableTextColor(color)}`
-    : undefined;
+  if (typeof color !== "string") return undefined;
+  if (!paints.has(color))
+    paints.set(
+      color,
+      isHexColor(color) ? `--tile-fill:${color};--tile-ink:${readableTextColor(color)}` : undefined,
+    );
+  return paints.get(color);
 }
 
 /** Case- and accent-blind, so "jamon" finds "Jamón". */
