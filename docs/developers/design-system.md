@@ -785,8 +785,8 @@ A width change across 768px while it is open moves it to the other form, still o
 choices. It stays open when a choice in it hides every row (beside the no-matches message from
 768px wide), so the choice can be changed back, and focus stays on the filter used, as it does when a choice brings rows back;
 the default Filters popover keeps focus on the filter the same way. Only the Products table sets
-`leadingFilters`. On that screen the catalogue browser puts its Select button next (Selection mode, below), and in a window up to 30rem wide moves its search to a line of
-its own under the buttons (CSS `order`), so the buttons and the table's Expand all and Customise
+`leadingFilters`. On that screen the catalogue browser puts its Select button next (Selection mode, below), and wherever its own width is 40rem or less (a container query, so a narrow list in a wide
+window counts) moves its search to a line of its own under the buttons (CSS `order`), so the buttons and the table's Expand all and Customise
 share one line; Tab still reaches the search before Expand all. Guards: the leading cases in
 `packages/ui/src/components/wt-data-table.test.ts` and `wt-data-table.a11y.test.ts`, and the toolbar,
 Select and Filters cases in `apps/dashboard/src/widgets/catalogue-browser.test.ts` and

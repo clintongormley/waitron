@@ -40,6 +40,7 @@ export class CatalogueBrowser extends LitElement {
       :host {
         display: block;
         min-width: 0;
+        container-type: inline-size;
       }
       :host([sticky-header]) {
         display: flex;
@@ -78,9 +79,11 @@ export class CatalogueBrowser extends LitElement {
         flex: 1 1 calc(var(--wt-tap-min) * 7);
         min-width: min(100%, calc(var(--wt-tap-min) * 7));
       }
-      /* On a phone the search cannot share a line with the leading buttons, so it takes the line
-         under them and the table's own buttons join them; Tab still reaches it before those. */
-      @media (max-width: 30rem) {
+      /* Below the width all five controls need on one line (about 620px in Spanish), the search
+         takes the line under the buttons; Tab still reaches it before the table's own. Keyed on
+         the list's width, not the window's, since the sidebar can leave a wide window a narrow
+         list. */
+      @container (max-width: 40rem) {
         wt-input {
           order: 1;
         }
