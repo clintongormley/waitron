@@ -1471,8 +1471,15 @@ and a later answer cannot close a different opening. `closeAfter("saved")` and
 `closeAfter("security")` bypass a pending question for a successful write or forced teardown.
 An owner's `open` binding still controls rendering; it is not a user-dismissal path.
 
-Render one `wt-unsaved-changes` per application, supplying `heading`, `message`, `keepLabel`
-and `discardLabel` from that application's translations. The compact confirmation focuses Keep
+Use one `LeaveController` from `@waitron/ui` in each application shell. Render its confirmation
+with `render(copy)` and resolve that same coordinator from a connected descendant with
+`leaveCoordinatorFor(element)`; the request crosses shadow roots and stops at the nearest shell.
+Dispose each form scope when its owner leaves. The controller disposes its registry on shell
+disconnect and creates a new one on reconnect. Call its `forceReset()` for a forced security exit;
+that call also tolerates a shell whose teardown has already run.
+
+The controller renders one `wt-unsaved-changes` per application, supplying `heading`, `message`,
+`keepLabel` and `discardLabel` from that application's translations. The compact confirmation focuses Keep
 editing, offers a danger-styled Discard changes action and emits `wt-unsaved-choice` with
 `detail: { decision: "keep" | "discard" }`. Escape chooses Keep. Closing its `open` property
 for an aborted request emits no choice. Its message is the inner dialog's accessible description.
@@ -1480,8 +1487,8 @@ Keep the original editor mounted until the coordinator approves leaving, so Keep
 and preserves the draft. Read-only and automatically saved forms need no draft scope.
 
 W69 is being rolled out in stages. These shared APIs are available on its implementation branch;
-application renderer and owner integration remain tracked in the W69 backlog entry. Page
-navigation is a separate part of that rollout. The coordinator's dirty-only unload registration
+the application renderers are wired, while form-owner integration remains tracked in the W69
+backlog entry. Page navigation is a separate part of that rollout. The coordinator's dirty-only unload registration
 requests the browser's own warning; the [design](../superpowers/specs/2026-10-05-unsaved-changes-warning-design.md)
 records its activation and platform limits.
 

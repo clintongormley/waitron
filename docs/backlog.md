@@ -1181,11 +1181,11 @@ implemented on `feat/unsaved-changes-protection`: scoped draft comparisons, subm
 stale-answer invalidation and dirty-only unload handling. Shared dialog close interception and the
 Keep editing/Discard changes confirmation are implemented on that branch, with native Escape,
 reopening, delayed close reports, focus, token painting and EN/ES light/dark Chromium checks.
-Application confirmation renderers, modal owners and page/navigation protection remain
-unimplemented. Keep automatic saves and forced session exits
-on their existing paths.
-2026-10-06: Hours (A261 step 5) deleted `station-hours-form`, which the audit lists, and added
-the Hours page’s editors, which it does not.
+Application confirmation renderers now share one registry per connected shell, with EN/ES copy,
+abort cleanup and stale-renderer protection. Dashboard session expiry and till server/operator
+changes clear that registry immediately; a completed logout after shell teardown can reset it
+without throwing. Modal owners and page/navigation protection remain unimplemented. Keep
+automatic saves on their existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**

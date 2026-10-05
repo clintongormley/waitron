@@ -1,3 +1,4 @@
+import { LeaveController } from "@waitron/ui";
 import { dashboardPath } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -1111,6 +1112,7 @@ export class DashboardApp extends LitElement {
   }
 
   #returnToLogin(code: string | null): void {
+    this.leave.forceReset();
     this.#languageQueries.release("getContentLanguages");
     this.#clearAlerts();
     this.contentLanguagesReady = false;
@@ -1265,10 +1267,22 @@ export class DashboardApp extends LitElement {
     }
   }
 
+  private readonly leave = new LeaveController(this);
+
+  private leaveConfirmation() {
+    return this.leave.render({
+      heading: t("unsaved.heading"),
+      message: t("unsaved.message"),
+      keepLabel: t("unsaved.keep"),
+      discardLabel: t("unsaved.discard"),
+    });
+  }
+
   override render(): TemplateResult {
     if (this.screen === "login") {
       // The login controller repaints translated text without discarding credentials or account setup.
       return html`
+        ${this.leaveConfirmation()}
         <div
           class="login-page"
           @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
@@ -1285,6 +1299,7 @@ export class DashboardApp extends LitElement {
       `;
     }
     return html`
+      ${this.leaveConfirmation()}
       <div
         class="shell"
         @focusin=${(e: FocusEvent) => this.#onShellFocusIn(e)}

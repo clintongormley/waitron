@@ -666,8 +666,8 @@ they never rewrite the record. Regression: `packages/shared/src/content-language
 
 ## Unsaved changes: shared close interception, owner-provided draft comparisons
 
-W69's shared dialog API and confirmation are implemented on its feature branch. Application
-renderers and modal/page owners remain in progress; the [backlog](../backlog.md) records that
+W69's shared dialog API, confirmation and application renderers are implemented on its feature
+branch. Modal/page owners remain in progress; the [backlog](../backlog.md) records that
 boundary. Use `beforeClose` with a scoped ui-core coordinator request and `requestClose(reason)`
 for voluntary dismissal. Commit the exact submitted snapshot after a successful write, before
 refreshing. Use `closeAfter("saved" | "security")` for success or forced teardown; forced exits
@@ -679,3 +679,11 @@ produced two `wt-close` events in the new consecutive-opening test before the re
 check. The confirmation tests cover Keep/Discard, silent abort, keyboard focus, tokens and axe in
 both themes; the integration suite exercises a retained edited field at phone and desktop widths
 with EN/ES copy. Those shared-component checks do not establish protection in an unwired app form.
+
+Each connected application shell owns one `LeaveController`; resolve its coordinator from a
+contributed form with `leaveCoordinatorFor(element)` (`@waitron/ui`). A disconnected shell
+releases its drafts and pending confirmation. A forced session exit calls `forceReset()` before
+tearing down the session's forms; an asynchronous logout may call it after disconnect as well.
+A renderer answer is tied to the question it rendered, so a removed renderer cannot answer a
+later question. Behavioral cases: `packages/ui/src/leave-controller.test.ts`, and the application
+renderer/security cases in each shell's suite.

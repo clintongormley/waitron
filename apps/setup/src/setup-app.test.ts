@@ -1,3 +1,4 @@
+import { leaveCoordinatorFor } from "@waitron/ui";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
@@ -4239,4 +4240,65 @@ describe("the wizard's language", () => {
     expect(provision).toHaveBeenCalledOnce();
     expect(provision.mock.calls[0]).toHaveLength(1);
   });
+});
+
+describe("application unsaved changes renderer", () => {
+  for (const locale of ["en-GB", "es-ES"] as const) {
+    for (const decision of ["keep", "discard"] as const) {
+      it(`${locale}: ${decision} uses the shell's single localized confirmation`, async () => {
+        const el = await mountSetupApp();
+        await flush(el);
+        setLocale(locale);
+        await el.updateComplete;
+        const child = el.shadowRoot!.querySelector<HTMLElement>("div, main")!;
+        const coordinator = leaveCoordinatorFor(child);
+        expect(coordinator, "descendant resolves the application registry").toBeDefined();
+        let draft = "Original";
+        const scope = coordinator!.register({
+          id: child,
+          current: () => draft,
+          snapshot: (value) => value,
+          equal: (a, b) => a === b,
+          restore: (value) => {
+            draft = value;
+          },
+        });
+        draft = "Edited";
+        scope.changed();
+        let left = 0;
+        const pending = coordinator!.request({
+          scopes: [scope.id],
+          reason: "cancel",
+          proceed() {
+            left++;
+          },
+        });
+        await el.updateComplete;
+        const questions = el.shadowRoot!.querySelectorAll("wt-unsaved-changes");
+        expect(questions).toHaveLength(1);
+        const question = questions[0]!;
+        await question.updateComplete;
+        const modal = question.shadowRoot!.querySelector("wt-modal")!;
+        await modal.updateComplete;
+        expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+        expect(question.heading).toBe(
+          locale === "en-GB" ? "Discard unsaved changes?" : "¿Descartar los cambios sin guardar?",
+        );
+        expect(question.message).toBe(
+          locale === "en-GB"
+            ? "Your changes have not been saved."
+            : "Tus cambios no se han guardado.",
+        );
+        expect(question.keepLabel).toBe(locale === "en-GB" ? "Keep editing" : "Seguir editando");
+        expect(question.discardLabel).toBe(
+          locale === "en-GB" ? "Discard changes" : "Descartar cambios",
+        );
+        question.shadowRoot!.querySelector<HTMLElement>(`[data-choice="${decision}"]`)!.click();
+        expect(await pending).toBe(decision === "keep" ? "kept" : "proceeded");
+        expect(left).toBe(decision === "keep" ? 0 : 1);
+        expect(draft).toBe(decision === "keep" ? "Edited" : "Original");
+        scope.dispose();
+      });
+    }
+  }
 });

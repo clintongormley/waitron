@@ -7,6 +7,10 @@ import { venueEn, venueEs } from "./strings/venue.js";
 // English is the source of truth: `StringKey` is derived from `en`'s keys, and `es` is typed
 // `Record<StringKey, string>`, so a key added without its Spanish sibling fails typecheck.
 export const en = {
+  "unsaved.heading": "Discard unsaved changes?",
+  "unsaved.message": "Your changes have not been saved.",
+  "unsaved.keep": "Keep editing",
+  "unsaved.discard": "Discard changes",
   ...shellEn,
   ...startEn,
   ...venueEn,
@@ -17,6 +21,10 @@ export const en = {
 export type StringKey = keyof typeof en;
 
 export const es: Record<StringKey, string> = {
+  "unsaved.heading": "¿Descartar los cambios sin guardar?",
+  "unsaved.message": "Tus cambios no se han guardado.",
+  "unsaved.keep": "Seguir editando",
+  "unsaved.discard": "Descartar cambios",
   ...shellEs,
   ...startEs,
   ...venueEs,

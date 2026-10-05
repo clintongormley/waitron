@@ -1,3 +1,4 @@
+import { LeaveController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
@@ -1139,40 +1140,52 @@ export class SetupApp extends LitElement {
     }
   }
 
+  private readonly leave = new LeaveController(this);
+
+  private leaveConfirmation() {
+    return this.leave.render({
+      heading: t("unsaved.heading"),
+      message: t("unsaved.message"),
+      keepLabel: t("unsaved.keep"),
+      discardLabel: t("unsaved.discard"),
+    });
+  }
+
   override render(): TemplateResult {
     // Listening on the container lets each screen talk back without the shell knowing which is mounted.
-    return html`<main
-      @setup-defaults-requested=${(event: CustomEvent) => {
-        event.stopPropagation();
-        void this.#loadVenueDefaults();
-      }}
-      @setup-patch=${(e: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>) => this.#onPatch(e)}
-      @setup-goto=${(e: CustomEvent<{ screen: Screen }>) => this.#onGoto(e)}
-      @setup-advance=${(e: CustomEvent) => this.#onAdvance(e)}
-      @provision-requested=${(e: CustomEvent) => void this.#onProvisionRequested(e)}
-      @adopt-requested=${(e: CustomEvent<{ body: AdoptBody }>) => void this.#onAdoptRequested(e)}
-      @restore-requested=${(e: CustomEvent<{ request: RestoreRequestDetail }>) =>
-        void this.#onRestoreRequested(e)}
-      @bucket-restore-requested=${(e: CustomEvent<{ request: BucketRestoreRequestDetail }>) =>
-        void this.#onBucketRestoreRequested(e)}
-      @cloud-restore-action=${(e: CustomEvent<{ action: "start" | "status" | "start-again" | "restore"; pointId?: string; oldBoxGone?: boolean }>) => void this.#onCloudRestoreAction(e)}
-      @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
-        void this.#onConfigurationRequested(e)}
-      @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
-      @reset-requested=${(e: CustomEvent<{ credential: ResetCredential }>) =>
-        void this.#onResetRequested(e)}
-    >
-      <header>
-        <div class="logo" data-test="setup-logo" role="img" aria-label="Waitron">
-          ${unsafeHTML(waitronLockup)}
-        </div>
-        <wt-language-chooser
-          .active=${currentLocale()}
-          @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => this.#onLocaleSelected(e)}
-        ></wt-language-chooser>
-      </header>
-      ${this.#renderScreen()}
-    </main>`;
+    return html`${this.leaveConfirmation()}
+      <main
+        @setup-defaults-requested=${(event: CustomEvent) => {
+          event.stopPropagation();
+          void this.#loadVenueDefaults();
+        }}
+        @setup-patch=${(e: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>) => this.#onPatch(e)}
+        @setup-goto=${(e: CustomEvent<{ screen: Screen }>) => this.#onGoto(e)}
+        @setup-advance=${(e: CustomEvent) => this.#onAdvance(e)}
+        @provision-requested=${(e: CustomEvent) => void this.#onProvisionRequested(e)}
+        @adopt-requested=${(e: CustomEvent<{ body: AdoptBody }>) => void this.#onAdoptRequested(e)}
+        @restore-requested=${(e: CustomEvent<{ request: RestoreRequestDetail }>) =>
+          void this.#onRestoreRequested(e)}
+        @bucket-restore-requested=${(e: CustomEvent<{ request: BucketRestoreRequestDetail }>) =>
+          void this.#onBucketRestoreRequested(e)}
+        @cloud-restore-action=${(e: CustomEvent<{ action: "start" | "status" | "start-again" | "restore"; pointId?: string; oldBoxGone?: boolean }>) => void this.#onCloudRestoreAction(e)}
+        @configuration-requested=${(e: CustomEvent<{ request: ConfigurationRequestDetail }>) =>
+          void this.#onConfigurationRequested(e)}
+        @fiscal-test-requested=${(e: CustomEvent) => void this.#onFiscalTestRequested(e)}
+        @reset-requested=${(e: CustomEvent<{ credential: ResetCredential }>) =>
+          void this.#onResetRequested(e)}
+      >
+        <header>
+          <div class="logo" data-test="setup-logo" role="img" aria-label="Waitron">
+            ${unsafeHTML(waitronLockup)}
+          </div>
+          <wt-language-chooser
+            .active=${currentLocale()}
+            @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => this.#onLocaleSelected(e)}
+          ></wt-language-chooser>
+        </header>
+        ${this.#renderScreen()}
+      </main>`;
   }
 
   #renderScreen(): TemplateResult {

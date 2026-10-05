@@ -1,4 +1,5 @@
 import type { AuthorityClockStatus } from "./api/client.js";
+import { LeaveController } from "@waitron/ui";
 import { defaultMenu, type DietPredicate } from "./menu-filter.js";
 import { isTillDestination, type TillDestination, tillPath } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
@@ -7032,6 +7033,7 @@ export class TillApp extends LitElement {
 
   #endOperatorSession(): void {
     this.#stopClockStatus();
+    this.leave.forceReset();
     this.#dismissStationChoices();
     this.#endReloadLock();
     this.#menuPoll.stop();
@@ -7976,9 +7978,21 @@ export class TillApp extends LitElement {
     ></till-station-choice-dialog>`;
   }
 
+  private readonly leave = new LeaveController(this);
+
+  private leaveConfirmation() {
+    return this.leave.render({
+      heading: t("unsaved.heading"),
+      message: t("unsaved.message"),
+      keepLabel: t("unsaved.keep"),
+      discardLabel: t("unsaved.discard"),
+    });
+  }
+
   override render() {
     const shellCanvas = this.#inShell() ? this.canvas : undefined;
     return html`
+      ${this.leaveConfirmation()}
       <div
         class="app"
         @logged-in=${(event: Event) => void this.#onLoggedIn(event)}

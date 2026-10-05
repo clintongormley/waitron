@@ -100,3 +100,5 @@ export { WtLanguageChooser, type WtLocaleOption } from "./components/wt-language
 
 export { ReorderController, type ReorderModel } from "./reorder-table.js";
 export { reorder } from "./reorder.js";
+
+export { LeaveController, leaveCoordinatorFor, type LeaveCopy } from "./leave-controller.js";

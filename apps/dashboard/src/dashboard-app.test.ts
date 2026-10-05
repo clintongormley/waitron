@@ -1,3 +1,4 @@
+import { leaveCoordinatorFor } from "@waitron/ui";
 import { commands, page, userEvent } from "vitest/browser";
 import { applyTokens, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
@@ -6024,4 +6025,115 @@ describe("the Products screen in the shell", () => {
     expect(staff(el)).not.toBeNull();
     expect(getComputedStyle(el.shadowRoot!.querySelector(".body")!).display).toBe("block");
   });
+});
+
+describe("application unsaved changes renderer", () => {
+  for (const locale of ["en-GB", "es-ES"] as const) {
+    for (const decision of ["keep", "discard"] as const) {
+      it(`${locale}: ${decision} uses the shell's single localized confirmation`, async () => {
+        const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+        await flush(el);
+        setLocale(locale);
+        await el.updateComplete;
+        const child = el.shadowRoot!.querySelector<HTMLElement>("div, main")!;
+        const coordinator = leaveCoordinatorFor(child);
+        expect(coordinator, "descendant resolves the application registry").toBeDefined();
+        let draft = "Original";
+        const scope = coordinator!.register({
+          id: child,
+          current: () => draft,
+          snapshot: (value) => value,
+          equal: (a, b) => a === b,
+          restore: (value) => {
+            draft = value;
+          },
+        });
+        draft = "Edited";
+        scope.changed();
+        let left = 0;
+        const pending = coordinator!.request({
+          scopes: [scope.id],
+          reason: "cancel",
+          proceed() {
+            left++;
+          },
+        });
+        await el.updateComplete;
+        const questions = el.shadowRoot!.querySelectorAll("wt-unsaved-changes");
+        expect(questions).toHaveLength(1);
+        const question = questions[0]!;
+        await question.updateComplete;
+        const modal = question.shadowRoot!.querySelector("wt-modal")!;
+        await modal.updateComplete;
+        expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+        expect(question.heading).toBe(
+          locale === "en-GB" ? "Discard unsaved changes?" : "¿Descartar los cambios sin guardar?",
+        );
+        expect(question.message).toBe(
+          locale === "en-GB"
+            ? "Your changes have not been saved."
+            : "Tus cambios no se han guardado.",
+        );
+        expect(question.keepLabel).toBe(locale === "en-GB" ? "Keep editing" : "Seguir editando");
+        expect(question.discardLabel).toBe(
+          locale === "en-GB" ? "Discard changes" : "Descartar cambios",
+        );
+        question.shadowRoot!.querySelector<HTMLElement>(`[data-choice="${decision}"]`)!.click();
+        expect(await pending).toBe(decision === "keep" ? "kept" : "proceeded");
+        expect(left).toBe(decision === "keep" ? 0 : 1);
+        expect(draft).toBe(decision === "keep" ? "Edited" : "Original");
+        scope.dispose();
+      });
+    }
+  }
+});
+
+it("forced session exit aborts an open unsaved question and clears its registry immediately", async () => {
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+  await flush(el);
+  const child = el.shadowRoot!.querySelector<HTMLElement>("div")!;
+  const coordinator = leaveCoordinatorFor(child)!;
+  let value = "Original";
+  const scope = coordinator.register({
+    id: child,
+    current: () => value,
+    snapshot: (v) => v,
+    equal: (a, b) => a === b,
+    restore: (v) => {
+      value = v;
+    },
+  });
+  value = "Typed secret";
+  scope.changed();
+  let left = 0;
+  const pending = coordinator.request({
+    scopes: [scope.id],
+    reason: "cancel",
+    proceed() {
+      left++;
+    },
+  });
+  await el.updateComplete;
+  const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await question.updateComplete;
+  expect(question.open).toBe(true);
+  window.dispatchEvent(
+    new CustomEvent("waitron-session-invalid", { detail: { code: "management_session.expired" } }),
+  );
+  await flush(el);
+  expect(login(el)).not.toBeNull();
+  expect(coordinator.isDirty()).toBe(false);
+  expect(await pending).toBe("stale");
+  const activeQuestion = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await activeQuestion.updateComplete;
+  expect(activeQuestion.open).toBe(false);
+  question.dispatchEvent(
+    new CustomEvent("wt-unsaved-choice", {
+      detail: { decision: "discard" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  expect(left).toBe(0);
+  expect(value).toBe("Typed secret");
 });

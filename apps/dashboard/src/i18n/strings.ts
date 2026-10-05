@@ -1,4 +1,8 @@
 export const en = {
+  "unsaved.heading": "Discard unsaved changes?",
+  "unsaved.message": "Your changes have not been saved.",
+  "unsaved.keep": "Keep editing",
+  "unsaved.discard": "Discard changes",
   "orders.detail.lines": "Items",
   "orders.detail.served_by": "Served by {name}",
   "orders.detail.was": "was {price}",
@@ -2360,6 +2364,10 @@ export type StringKey = keyof typeof en;
 
 // Not Partial: an untranslated key fails typecheck rather than falling through to English.
 export const es: Record<StringKey, string> = {
+  "unsaved.heading": "¿Descartar los cambios sin guardar?",
+  "unsaved.message": "Tus cambios no se han guardado.",
+  "unsaved.keep": "Seguir editando",
+  "unsaved.discard": "Descartar cambios",
   "orders.detail.lines": "Artículos",
   "orders.detail.served_by": "Servido por {name}",
   "orders.detail.was": "antes {price}",
