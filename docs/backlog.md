@@ -3441,8 +3441,8 @@ when one word is wider than a whole line. Because every row now carries its whol
 tree prints far more lines than before: the page of the test "never prints a line wider than the
 paper, however long the names or deep the tree" in `apps/server/src/category-sales-page.test.ts`,
 printed at 58mm and 203dpi and counted in drawn lines, went from about 1,000 lines to about 14,500
-(and to about 5,500 on 80mm), measured 2026-10-05, and its print preview is cut short; whether to shorten deep paths on paper is open for
-the owner. No other output names report categories: the reports API
+(and to about 5,500 on 80mm), measured 2026-10-05, and its print preview is cut short; the owner chose to leave it as it is rather than shorten deep
+paths on paper (2026-10-05). No other output names report categories: the reports API
 answers with the tree, and no other screen or printed page reads it. One existing test check
 changed, because this item changes what it checks: the screen's indent test asserted the parents'
 names were hidden and now asserts they are shown; and five existing checks now expect the full
@@ -5019,7 +5019,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (branch `feat/add-a-device`, #1225); W105 and W106 QUEUED (lane C).**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 and W106 QUEUED (lane C).**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
