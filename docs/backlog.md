@@ -5356,9 +5356,16 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   device on a retired profile; a retired profile's home-layout choices stay in
   `device_profile_home_layouts`; and the configuration transfer has no row filter, so it copies a
   retired profile with its `retired_at` (`packages/db/src/configuration-transfer.ts`; read, not
-  tested). Also left open, the owner's wording call: the Enable hint "Disabled device. Enabling it
-  restores its settings." (`apps/dashboard/src/i18n/strings.ts`) says more than happens when the
-  device's profile was retired, since Profile then starts empty. (9) a device holding a printer its unchanged profile no longer lists
+  tested). The Enable hint's wording, done by W105g (owner decision
+  2026-10-05): when the returning device's profile was retired, the waiting list's hint reads
+  "Disabled device. Its profile was deleted: choose one to enable it." / "Dispositivo deshabilitado.
+  Su perfil se eliminó: elige uno para habilitarlo." (`devices.enable_hint_profile_deleted`), and
+  every other returning device keeps "Enabling it restores its settings."; the server says which, as
+  `returning.profileRetired` in the device join list (`returningDevicesOf`,
+  `apps/server/src/join-requests.ts`). Left open by W105g: the list's live updates name only
+  `join_requests` and `devices` (`joinRequests`, `apps/dashboard/src/api/live-queries.ts`), and
+  deleting a profile writes neither, so a profile deleted while the device's request is already
+  showing keeps the old hint until the list re-reads for another reason (read, not tested). (9) a device holding a printer its unchanged profile no longer lists
   opens with that field empty, and Save keeps the old printer without saying so. (10) for a manager
   without `payments.manage` the card reader field is drawn greyed while it loads and then disappears,
   so the layout jumps. Review suggestions #1235 did not take, listed in its description: the edit
