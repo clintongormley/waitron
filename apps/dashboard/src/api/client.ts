@@ -318,13 +318,19 @@ export interface FolderSummary {
    * included. */
   products: number;
   activeProducts: number;
+  /** Routing rules naming the category or any category below it. */
   routes: number;
+  /** Routing rules naming the category itself: what moving its contents up removes. */
+  ownRoutes: number;
 }
 /**
  * One selected category's counts as the client read them before deleting it (its dialog showed
  * them, when it asked).
  */
-export type ShownFolderCounts = Pick<FolderSummary, "id" | "folders" | "activeProducts" | "routes">;
+export type ShownFolderCounts = Pick<
+  FolderSummary,
+  "id" | "folders" | "activeProducts" | "routes" | "ownRoutes"
+>;
 export interface Unit {
   id: string;
   name: Record<string, string>;

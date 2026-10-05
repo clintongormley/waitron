@@ -289,11 +289,12 @@ export class CatalogueBrowser extends LitElement {
           await this.api.deleteCatalogueItems(
             this.operationSelection,
             this.contents,
-            this.summaries.map(({ id, folders, activeProducts, routes }) => ({
+            this.summaries.map(({ id, folders, activeProducts, routes, ownRoutes }) => ({
               id,
               folders,
               activeProducts,
               routes,
+              ownRoutes,
             })),
           );
         } catch (error) {
@@ -344,7 +345,8 @@ export class CatalogueBrowser extends LitElement {
         shown !== undefined &&
         summary.folders === shown.folders &&
         summary.activeProducts === shown.activeProducts &&
-        summary.routes === shown.routes
+        summary.routes === shown.routes &&
+        summary.ownRoutes === shown.ownRoutes
       );
     });
     if (same) return true;
@@ -427,6 +429,11 @@ export class CatalogueBrowser extends LitElement {
       }),
       { folders: 0, products: 0, routes: 0 },
     );
+    // Moving contents up removes only the selected categories themselves, each with its own rules.
+    const routesRemoved =
+      this.contents === "move_up"
+        ? this.summaries.reduce((sum, summary) => sum + summary.ownRoutes, 0)
+        : totals.routes;
     const heading = this.#plural(
       this.operation === "move"
         ? "folders.move_heading"
@@ -500,7 +507,7 @@ export class CatalogueBrowser extends LitElement {
                             />${t("folders.contents_delete").replace("{categories}", this.#plural("folders.count", totals.folders)).replace("{products}", this.#plural("folders.product_count", totals.products))}</label
                           >
                         </fieldset>
-                        ${totals.routes ? html`<p>${this.#plural("folders.routes_warning", totals.routes)}</p>` : nothing}`
+                        ${routesRemoved ? html`<p>${this.#plural("folders.routes_warning", routesRemoved)}</p>` : nothing}`
                     : nothing
                 }
               `
