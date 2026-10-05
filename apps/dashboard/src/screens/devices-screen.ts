@@ -1,5 +1,5 @@
 import { DashboardQueries } from "../api/query-controller.js";
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
@@ -270,6 +270,13 @@ export class DevicesScreen extends LitElement {
   );
 
   @property({ attribute: false }) panels: readonly CardProviderPanel[] = CARD_PROVIDER_PANELS;
+  /**
+   * Whether the session holds `payments.manage`. While false Edit draws no card reader and sends
+   * none; turned back on, the reader shows from the next Edit. A reader read refused with
+   * `authorization.not_permitted` also hides it, because the server may know of a change before
+   * this flag does; any other failure of that read is shown at the bottom of Edit.
+   */
+  @property({ attribute: false }) canManageReaders = true;
 
   @state() private devices: DeviceRow[] = [];
   @state() private stations: Station[] = [];
@@ -400,6 +407,14 @@ export class DevicesScreen extends LitElement {
   /** A read's failure never replaces an action's message. */
   #showReadError(error: unknown): void {
     if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
+  }
+
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("canManageReaders") && !this.canManageReaders) {
+      this.readerState = "hidden";
+      this.readerReadError = null;
+      this.editRefusal = clearedRefusal(this.editRefusal, "reader");
+    }
   }
 
   override updated(): void {
@@ -810,12 +825,12 @@ export class DevicesScreen extends LitElement {
     this.editRefusal = null;
     this.editError = null;
     this.editSaving = false;
-    this.readerState = "loading";
+    this.readerState = this.canManageReaders ? "loading" : "hidden";
     this.readers = [];
     this.readerReadError = null;
     this.chosenReaderId = "";
     this.#storedReaderId = null;
-    void this.#loadReader(device.id, epoch);
+    if (this.canManageReaders) void this.#loadReader(device.id, epoch);
   }
 
   /** The reader is the payments module's, under its own permission: without it the field is gone. */
@@ -825,13 +840,13 @@ export class DevicesScreen extends LitElement {
         this.api.getDeviceReader(deviceId),
         this.api.listReaders(),
       ]);
-      if (epoch !== this.#editEpoch) return;
+      if (epoch !== this.#editEpoch || this.readerState !== "loading") return;
       this.readers = readers.filter((reader) => reader.active);
       this.#storedReaderId = readerId;
       this.chosenReaderId = readerId ?? "";
       this.readerState = "ready";
     } catch (error) {
-      if (epoch !== this.#editEpoch) return;
+      if (epoch !== this.#editEpoch || this.readerState !== "loading") return;
       const code = codeOf(error);
       if (code === "authorization.not_permitted") this.readerState = "hidden";
       else {
@@ -883,16 +898,30 @@ export class DevicesScreen extends LitElement {
     );
   }
 
-  /** Switched-off printers are left out, except one the device holds on the profile it keeps. */
+  /**
+   * Switched-off printers are left out. While the profile is unchanged the device keeps the printer
+   * it holds, so that one is offered even when switched off, and marked when the profile no longer
+   * lists it.
+   */
   #printerOptions(ids: readonly string[], held: string | null): { value: string; label: string }[] {
     const keep = this.editForm.profileId === this.editing?.deviceProfileId ? held : null;
     const listed = ids.flatMap((id) => {
       const printer = this.printers.find((p) => p.id === id);
       return printer !== undefined && (printer.active || printer.id === keep) ? [printer] : [];
     });
+    const unlisted =
+      keep === null || ids.includes(keep) ? undefined : this.printers.find((p) => p.id === keep);
     return [
       { value: "", label: t("devices.no_printer") },
       ...listed.map((p) => ({ value: p.id, label: printerLabel(p) })),
+      ...(unlisted === undefined
+        ? []
+        : [
+            {
+              value: unlisted.id,
+              label: `${printerLabel(unlisted)} (${t("devices.printer_not_on_profile_mark")})`,
+            },
+          ]),
     ];
   }
 
@@ -931,7 +960,7 @@ export class DevicesScreen extends LitElement {
       ...bindingIds(this.#editBindingShown() ? form.binding : ""),
       receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
       paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
-      madeHereStationIds: this.#madeHereToSend(),
+      ...(this.#editBindingShown() ? {} : { madeHereStationIds: this.#madeHereToSend() }),
     };
     try {
       await this.api.updateDevice(device.id, sent);
@@ -959,14 +988,18 @@ export class DevicesScreen extends LitElement {
       // Saved separately: the reader belongs to the payments module and its own permission (spec §5).
       try {
         await this.api.setDeviceReader(device.id, readerId);
+        if (epoch !== this.#editEpoch) return;
+        this.#storedReaderId = readerId;
       } catch (error) {
         if (epoch !== this.#editEpoch) return;
-        this.editSaving = false;
-        this.editRefusal = { field: "reader", code: codeOf(error) };
-        return;
+        // Hidden since Save was pressed: the reader is no longer this session's to set, so the saved
+        // device closes the dialog as any saved edit does.
+        if (this.readerState === "ready") {
+          this.editSaving = false;
+          this.editRefusal = { field: "reader", code: codeOf(error) };
+          return;
+        }
       }
-      if (epoch !== this.#editEpoch) return;
-      this.#storedReaderId = readerId;
     }
     this.editSaving = false;
     await this.#closeModal("edit-device-modal");

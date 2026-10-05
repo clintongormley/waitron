@@ -945,6 +945,8 @@ export class DashboardApp extends LitElement {
     this.sessionRole = me.role;
     this.liveUpdates?.start();
     this.#sessionPermissions = me.permissions;
+    // A plain field: redraw so the screens given a permission see the change.
+    this.requestUpdate();
     this.onboardingIntent = me.onboardingIntent;
     // Activate the enabled modules before resolving the permitted screen, so a URL naming an enabled
     // module's screen id is recognised while a disabled module's is not.
@@ -1845,7 +1847,10 @@ export class DashboardApp extends LitElement {
       case "purchases":
         return html`<dashboard-purchases-screen .api=${this.api}></dashboard-purchases-screen>`;
       case "devices":
-        return html`<dashboard-devices-screen .api=${this.api}></dashboard-devices-screen>`;
+        return html`<dashboard-devices-screen
+          .api=${this.api}
+          .canManageReaders=${this.#sessionPermissions.includes("payments.manage")}
+        ></dashboard-devices-screen>`;
       case "printing-rules":
         return html`<dashboard-printing-rules-screen
           .api=${this.api}

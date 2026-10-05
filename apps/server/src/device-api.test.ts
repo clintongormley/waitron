@@ -1141,7 +1141,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     madeHereStationIds: string[];
   };
 
-  /** What the Edit dialog would send for the device as stored, so a case changes only its own field. */
+  /** The device's stored settings as an edit body, so a case changes only its own field. */
   async function storedBody(deviceId: string): Promise<EditBody> {
     const [row] = await suite.db
       .select({
@@ -1443,7 +1443,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     ).toEqual([bar.id]);
   });
 
-  it("refuses a stored made-here station since switched off as station.not_found", async () => {
+  it("refuses a stored made-here station since switched off as station.not_found when the body sends it", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId } = await enrolTill(app, venue, "Caja");
@@ -1464,6 +1464,39 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     expect(await labelOf(deviceId)).toBe("Caja");
   });
 
+  it("leaves the made-here stations untouched when the field is absent, one since switched off included", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolTill(app, venue, "Caja");
+    const [bar, off] = await withTransaction(suite.db, async (tx) => [
+      await createStation(tx, venue.cfg, { name: "Bar" }),
+      await createStation(tx, venue.cfg, { name: "Off" }),
+    ]);
+    expect(
+      (
+        await edit(app, venue.managerCookie, deviceId, {
+          madeHereStationIds: [bar!.id, off!.id],
+        })
+      ).status,
+    ).toBe(204);
+    await suite.db
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(eq(kitchenStations.id, off!.id));
+
+    const { madeHereStationIds: before, ...rest } = await storedBody(deviceId);
+    expect(before).toHaveLength(2);
+    const res = await send(app, "PATCH", `/management-api/devices/${deviceId}`, {
+      cookie: venue.managerCookie,
+      body: { ...rest, name: "Renamed" },
+    });
+    expect(res.status).toBe(204);
+    expect(await labelOf(deviceId)).toBe("Renamed");
+    expect([...(await storedBody(deviceId)).madeHereStationIds].sort()).toEqual(
+      [bar!.id, off!.id].sort(),
+    );
+  });
+
   it("refuses a malformed body field as management.request_invalid naming it", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
@@ -1475,7 +1508,6 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       [{ watcherId: "bad" }, "watcherId"],
       [{ receiptPrinterId: undefined }, "receiptPrinterId"],
       [{ paymentSlipPrinterId: "bad" }, "paymentSlipPrinterId"],
-      [{ madeHereStationIds: undefined }, "madeHereStationIds"],
       [{ madeHereStationIds: null }, "madeHereStationIds"],
       [{ madeHereStationIds: ["bad"] }, "madeHereStationIds"],
     ];

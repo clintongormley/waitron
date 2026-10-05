@@ -2635,11 +2635,14 @@ export class DashboardApi {
     input: {
       name: string;
       profileId: string;
+      /** Absent or null clears it; a kitchen screen needs exactly one of this and `watcherId`. */
       stationId?: string | null;
+      /** Absent or null clears it; a kitchen screen needs exactly one of this and `stationId`. */
       watcherId?: string | null;
       receiptPrinterId: string | null;
       paymentSlipPrinterId: string | null;
-      madeHereStationIds: string[];
+      /** Absent leaves the device's stored made-here stations as they are. */
+      madeHereStationIds?: string[];
     },
   ): Promise<void> {
     return this.#request<void>(`/management-api/devices/${id}`, "PATCH", input);

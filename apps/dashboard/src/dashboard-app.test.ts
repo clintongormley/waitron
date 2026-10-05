@@ -1780,6 +1780,58 @@ describe("dashboard-app", () => {
     expect(countH1(el)).toBe(1);
   });
 
+  it.each([
+    { permissions: ["booking.manage"], canManageReaders: false },
+    { permissions: ["booking.manage", "payments.manage"], canManageReaders: true },
+  ])(
+    "tells the devices screen whether the session may manage card readers ($permissions)",
+    async ({ permissions, canManageReaders }) => {
+      const api = stubApi({
+        listStaff: vi.fn().mockResolvedValue([]),
+        getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions }),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await flush(el);
+      navDevices(el)!.click();
+      await flush(el);
+      expect((devices(el) as HTMLElement & { canManageReaders: boolean }).canManageReaders).toBe(
+        canManageReaders,
+      );
+    },
+  );
+
+  it("tells the open devices screen when a session re-read finds payments.manage gone", async () => {
+    const getMe = vi
+      .fn()
+      .mockResolvedValueOnce({ ...meResponse, permissions: ["booking.manage", "payments.manage"] })
+      .mockResolvedValue({ ...meResponse, permissions: ["booking.manage"] });
+    // After the re-read the alert and content-language reads stay unanswered, so neither redraws the
+    // shell; `setLocale` in `#applyMe` still does, so this case passes without `#applyMe`'s own redraw.
+    let reread = false;
+    const answer = <T>(value: T) =>
+      reread ? new Promise<T>(() => undefined) : Promise.resolve(value);
+    const api = stubApi({
+      listStaff: vi.fn().mockResolvedValue([]),
+      getMe,
+      listAlerts: vi.fn(() => answer({ visible: false, alerts: [] })),
+      getContentLanguages: vi.fn(() => answer({ defaultLanguage: "es", languages: ["es"] })),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    navDevices(el)!.click();
+    await flush(el);
+    const screen = devices(el) as HTMLElement & { canManageReaders: boolean };
+    expect(screen.canManageReaders).toBe(true);
+
+    reread = true;
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    await flush(el);
+    expect(getMe).toHaveBeenCalledTimes(2);
+    expect(devices(el)).toBe(screen);
+    expect(screen.canManageReaders).toBe(false);
+  });
+
   it("navigates to printing rules beside printers", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });

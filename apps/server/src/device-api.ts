@@ -523,8 +523,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           receipt: requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId"),
           payment_slip: requireNullableBodyUuid(body.paymentSlipPrinterId, "paymentSlipPrinterId"),
         };
+        // Absent leaves the stored stations alone: a kitchen screen's dialog does not show them.
         const madeHere = body.madeHereStationIds;
-        if (!Array.isArray(madeHere) || !madeHere.every(isUuid)) {
+        if (madeHere !== undefined && (!Array.isArray(madeHere) || !madeHere.every(isUuid))) {
           throw new AppError("management.request_invalid", { field: "madeHereStationIds" });
         }
         const binding = await resolveDeviceBinding(tx, deps.cfg, {
@@ -553,7 +554,9 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           const result = await chooseDevicePrinter(tx, id, role, chosen[role]);
           if (!result.ok) throw new AppError("device.binding_invalid", { field: result.field });
         }
-        await setMadeHereStations(tx, deps.cfg, id, madeHere as string[]);
+        if (madeHere !== undefined) {
+          await setMadeHereStations(tx, deps.cfg, id, madeHere as string[]);
+        }
       });
       return c.body(null, 204);
     }),

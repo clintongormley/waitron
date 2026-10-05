@@ -1122,6 +1122,109 @@ describe("the Edit dialog", () => {
     expect(slip.options.map((o) => o.value)).toEqual([""]);
   });
 
+  describe("a printer the device holds that its profile no longer lists", () => {
+    const moved: Printer = { ...printers[0]!, id: "pr4", name: "Salón" };
+    // pa lists pr4 nowhere, and pr3 (switched off) only as a receipt printer, which it does not hold.
+    const holding: DeviceRow = { ...till, receiptPrinterId: "pr4", paymentSlipPrinterId: "pr3" };
+    const holdingApi = () =>
+      editApi({
+        listDevices: vi.fn().mockResolvedValue([holding]),
+        listPrinters: vi.fn().mockResolvedValue([...editPrinters, moved]),
+      });
+
+    it("is offered and chosen, marked as not on the profile, in English and Spanish", async () => {
+      const before = currentLocale();
+      try {
+        for (const [locale, receiptLabel, slipLabel] of [
+          ["en", "Salón (not on this profile)", "Barra (Disabled) (not on this profile)"],
+          [
+            "es-ES",
+            "Salón (no está en este perfil)",
+            "Barra (Deshabilitada) (no está en este perfil)",
+          ],
+        ] as const) {
+          setLocale(locale);
+          const el = await openEdit(holdingApi());
+          const receipt = field(el, "edit-receipt-printer");
+          expect(receipt.value).toBe("pr4");
+          expect(receipt.options).toEqual([
+            { value: "", label: t("devices.no_printer") },
+            { value: "pr1", label: "Cocina" },
+            { value: "pr2", label: "Terraza" },
+            { value: "pr4", label: receiptLabel },
+          ]);
+          const slip = field(el, "edit-slip-printer");
+          expect(slip.value).toBe("pr3");
+          expect(slip.options).toEqual([
+            { value: "", label: t("devices.no_printer") },
+            { value: "pr2", label: "Terraza" },
+            { value: "pr3", label: slipLabel },
+          ]);
+          for (const [id, label] of [
+            ["edit-receipt-printer", receiptLabel],
+            ["edit-slip-printer", slipLabel],
+          ] as const) {
+            const shown = q(el, `[data-test=${id}]`)!.shadowRoot!.querySelector(
+              "button.trigger .value",
+            )!;
+            expect(shown.textContent!.trim()).toBe(label);
+          }
+          cleanupWidgets();
+        }
+      } finally {
+        setLocale(before);
+      }
+    });
+
+    it("Save keeps both, unchanged", async () => {
+      const api = holdingApi();
+      const el = await openEdit(api);
+      await save(el);
+      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).toMatchObject({
+        receiptPrinterId: "pr4",
+        paymentSlipPrinterId: "pr3",
+      });
+    });
+
+    it("can be swapped for one the profile lists, and taken back while the profile is unchanged", async () => {
+      const api = holdingApi();
+      const el = await openEdit(api);
+      await chooseOption(q(el, "[data-test=edit-receipt-printer]")!, "pr1");
+      await flush(el);
+      expect(field(el, "edit-receipt-printer").options.map((o) => o.value)).toContain("pr4");
+      await chooseOption(q(el, "[data-test=edit-receipt-printer]")!, "pr4");
+      await flush(el);
+      expect(field(el, "edit-receipt-printer").value).toBe("pr4");
+    });
+
+    it("is no longer offered once the profile changes", async () => {
+      const el = await openEdit(holdingApi());
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
+      await flush(el);
+      const receipt = field(el, "edit-receipt-printer");
+      expect(receipt.value).toBe("pr2");
+      expect(receipt.options.map((o) => o.value)).toEqual(["", "pr2"]);
+      const slip = field(el, "edit-slip-printer");
+      expect(slip.value).toBe("");
+      expect(slip.options.map((o) => o.value)).toEqual([""]);
+    });
+
+    it("is not offered while the printer list does not hold it, and Save still keeps it", async () => {
+      const api = editApi({
+        listDevices: vi.fn().mockResolvedValue([holding]),
+        listPrinters: vi.fn().mockResolvedValue(editPrinters),
+      });
+      const el = await openEdit(api);
+      const receipt = field(el, "edit-receipt-printer");
+      expect(receipt.value).toBe("pr4");
+      expect(receipt.options.map((o) => o.value)).toEqual(["", "pr1", "pr2"]);
+      await save(el);
+      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+      expect(vi.mocked(api.updateDevice).mock.calls[0]![1].receiptPrinterId).toBe("pr4");
+    });
+  });
+
   it("Save sends exactly the edit, then closes and refreshes the list", async () => {
     const api = editApi();
     const el = await openEdit(api);
@@ -1147,7 +1250,7 @@ describe("the Edit dialog", () => {
     expect(api.listDevices).toHaveBeenCalledTimes(2);
   });
 
-  it("sends a kitchen screen's station or watcher, and keeps its stored made-here stations", async () => {
+  it("sends a kitchen screen's station or watcher, and no made-here stations, which it does not show", async () => {
     const api = editApi();
     const el = await openEdit(api, "k1");
     await chooseOption(q(el, "[data-test=edit-binding]")!, "watcher:w1");
@@ -1161,8 +1264,27 @@ describe("the Edit dialog", () => {
       watcherId: "w1",
       receiptPrinterId: null,
       paymentSlipPrinterId: null,
-      madeHereStationIds: ["s2"],
     });
+    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("madeHereStationIds");
+  });
+
+  it("saves a kitchen screen whose stored made-here station was switched off after this screen read its stations", async () => {
+    // The server refuses a switched-off made-here station; this screen's list still has it on.
+    const api = editApi({
+      updateDevice: vi
+        .fn()
+        .mockImplementation((_id: string, body: Record<string, unknown>) =>
+          Array.isArray(body.madeHereStationIds) && body.madeHereStationIds.includes("s2")
+            ? Promise.reject({ code: "station.not_found" })
+            : Promise.resolve(undefined),
+        ),
+    });
+    const el = await openEdit(api, "k1");
+    wtChange(el, "[data-test=edit-name]", "Pantalla 2");
+    await flush(el);
+    await save(el);
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(api.updateDevice).toHaveBeenCalledTimes(1);
   });
 
   it("omits a switched-off or unlisted stored station from Made here and from what Save sends", async () => {
@@ -1229,7 +1351,7 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-reader").error).toBe("");
   });
 
-  it("without payments.manage the reader field is absent, and nothing else is refused", async () => {
+  it("not told up front, a reader read the server refuses for want of payments.manage drops the reader field, and nothing else is refused", async () => {
     const notPermitted = { code: "authorization.not_permitted" };
     const api = editApi({
       getDeviceReader: vi.fn().mockRejectedValue(notPermitted),
@@ -1242,6 +1364,135 @@ describe("the Edit dialog", () => {
     await save(el);
     await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
     expect(api.setDeviceReader).not.toHaveBeenCalled();
+  });
+
+  it("told the session cannot manage card readers, never draws the reader field nor asks about readers", async () => {
+    const api = editApi();
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api,
+      panels: PANELS,
+      canManageReaders: false,
+    });
+    await flush(el);
+    dq(el.shadowRoot!, "[data-test=edit-device-t1]")!.click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
+    expect(q(el, "[data-test=edit-reader]")).toBeNull();
+    await flush(el);
+    await flush(el);
+    expect(q(el, "[data-test=edit-reader]")).toBeNull();
+    expect(api.getDeviceReader).not.toHaveBeenCalled();
+    expect(api.listReaders).not.toHaveBeenCalled();
+    await save(el);
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(api.updateDevice).toHaveBeenCalledTimes(1);
+    expect(api.setDeviceReader).not.toHaveBeenCalled();
+  });
+
+  it("told the session can manage card readers, draws the reader field disabled while it loads, then ready", async () => {
+    let answer!: (value: { readerId: string | null }) => void;
+    const api = editApi({
+      getDeviceReader: vi.fn().mockReturnValue(new Promise((resolve) => (answer = resolve))),
+    });
+    const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+      api,
+      panels: PANELS,
+      canManageReaders: true,
+    });
+    await flush(el);
+    dq(el.shadowRoot!, "[data-test=edit-device-t1]")!.click();
+    await flush(el);
+    expect(field(el, "edit-reader").disabled).toBe(true);
+    expect(api.getDeviceReader).toHaveBeenCalledExactlyOnceWith("t1");
+    answer({ readerId: "r2" });
+    await flush(el);
+    expect(field(el, "edit-reader").disabled).toBe(false);
+    expect(field(el, "edit-reader").value).toBe("r2");
+  });
+
+  it("losing payments.manage while Edit is open removes the reader field and Save leaves the reader alone", async () => {
+    const api = editApi();
+    const el = await openEdit(api);
+    await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+    await flush(el);
+    el.canManageReaders = false;
+    await flush(el);
+    expect(q(el, "[data-test=edit-reader]")).toBeNull();
+    await save(el);
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(api.updateDevice).toHaveBeenCalledTimes(1);
+    expect(api.setDeviceReader).not.toHaveBeenCalled();
+  });
+
+  it("a reader read still pending when payments.manage is lost does not bring the field back", async () => {
+    let answer!: (value: { readerId: string | null }) => void;
+    const api = editApi({
+      getDeviceReader: vi.fn().mockReturnValue(new Promise((resolve) => (answer = resolve))),
+    });
+    const el = await openEdit(api);
+    expect(field(el, "edit-reader").disabled).toBe(true);
+    el.canManageReaders = false;
+    await flush(el);
+    answer({ readerId: "r2" });
+    await flush(el);
+    expect(q(el, "[data-test=edit-reader]")).toBeNull();
+  });
+
+  it("regaining payments.manage while Edit is open does not draw the reader until Edit is opened again", async () => {
+    let answer!: (value: { readerId: string | null }) => void;
+    const api = editApi({
+      getDeviceReader: vi
+        .fn()
+        .mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+        .mockResolvedValue({ readerId: "r1" }),
+    });
+    const el = await openEdit(api);
+    el.canManageReaders = false;
+    await flush(el);
+    el.canManageReaders = true;
+    await flush(el);
+    answer({ readerId: "r2" });
+    await flush(el);
+    expect(q(el, "[data-test=edit-reader]")).toBeNull();
+    expect(api.getDeviceReader).toHaveBeenCalledTimes(1);
+
+    q(el, "[data-test=edit-cancel]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    dq(el.shadowRoot!, "[data-test=edit-device-t1]")!.click();
+    await vi.waitFor(() => expect(field(el, "edit-reader")?.disabled).toBe(false));
+    expect(api.getDeviceReader).toHaveBeenCalledTimes(2);
+    expect(field(el, "edit-reader").value).toBe("r1");
+  });
+
+  it("losing payments.manage clears a reader read's failure from the bottom of Edit", async () => {
+    const api = editApi({
+      getDeviceReader: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const el = await openEdit(api);
+    expect(await bottom(el)).toBe(codeMessage("connection.failed"));
+    el.canManageReaders = false;
+    await flush(el);
+    expect(await bottom(el)).toBe("");
+  });
+
+  it("losing payments.manage clears a refused reader save, and Save then closes Edit", async () => {
+    const api = editApi({
+      setDeviceReader: vi.fn().mockRejectedValue({ code: "reader.not_found" }),
+    });
+    const el = await openEdit(api);
+    await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+    await flush(el);
+    await save(el);
+    await vi.waitFor(() =>
+      expect(field(el, "edit-reader").error).toBe(codeMessage("reader.not_found")),
+    );
+    el.canManageReaders = false;
+    await flush(el);
+    expect(await bottom(el)).toBe("");
+    await save(el);
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(api.updateDevice).toHaveBeenCalledTimes(2);
+    expect(api.setDeviceReader).toHaveBeenCalledTimes(1);
   });
 
   it("preselects no reader when the device has none", async () => {
@@ -1605,6 +1856,22 @@ describe("the Edit dialog", () => {
       pending.resolve(undefined);
       await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
       expect(api.setDeviceReader).toHaveBeenCalledExactlyOnceWith("t1", "r1");
+    });
+
+    it("a reader save refused after payments.manage was lost closes Edit as a saved edit", async () => {
+      const pending = deferred<undefined>();
+      const api = editApi({ setDeviceReader: vi.fn().mockReturnValue(pending.promise) });
+      const el = await openEdit(api);
+      await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+      await save(el);
+      await vi.waitFor(() => expect(api.setDeviceReader).toHaveBeenCalledTimes(1));
+      el.canManageReaders = false;
+      await flush(el);
+
+      pending.reject({ code: "authorization.not_permitted" });
+      await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+      expect(api.updateDevice).toHaveBeenCalledTimes(1);
+      expect(q(el, "[data-test=page-error]")).toBeNull();
     });
 
     it.each([
