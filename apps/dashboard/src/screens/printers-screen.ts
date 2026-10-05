@@ -459,7 +459,29 @@ export class PrintersScreen extends LitElement {
   @state() private selectedPrinterId: string | null = null;
   readonly #url = new UrlStateController(
     this,
-    () => {
+    (event?: Event) => {
+      if (event && this.selectedPrinterId) {
+        const printer = this.printers.find(({ id }) => id === this.selectedPrinterId);
+        if (
+          printer &&
+          this.#connectionIsDirty(printer) &&
+          !this.discardDetailConnectionNavigationArmed
+        ) {
+          this.discardDetailConnectionNavigationArmed = true;
+          this.#url.write({ dashboard: "printers", view: this.view, printer: printer.id });
+          return;
+        }
+        if (
+          printer &&
+          this.detailName?.id === printer.id &&
+          this.detailName.value !== printer.name &&
+          !this.discardDetailNameArmed
+        ) {
+          this.discardDetailNameArmed = true;
+          this.#url.write({ dashboard: "printers", view: this.view, printer: printer.id });
+          return;
+        }
+      }
       if (this.#url.read("dashboard") !== "printers") return;
       const printerId = this.#url.read("printer");
       if (printerId !== this.selectedPrinterId) this.#resetPrinterSections();
@@ -2145,42 +2167,43 @@ export class PrintersScreen extends LitElement {
     const listUrl = new URL(location.href);
     listUrl.pathname = listUrl.pathname.replace(/\/printer\/[^/]+$/, "");
     const back = html`<nav aria-label=${t("printers.filter_all")} data-test="printer-breadcrumb">
-      <a
-        data-test="all-printers-link"
-        href=${`${listUrl.pathname}${listUrl.search}`}
-        @click=${(event: MouseEvent) => {
-          if (
-            event.button !== 0 ||
-            event.metaKey ||
-            event.ctrlKey ||
-            event.shiftKey ||
-            event.altKey
-          )
-            return;
-          event.preventDefault();
-          if (this.detailName?.saving) return;
-          if (this.detailConnection?.saving) return;
-          if (p && this.#connectionIsDirty(p) && !this.discardDetailConnectionNavigationArmed) {
-            this.discardDetailConnectionNavigationArmed = true;
-            return;
-          }
-          if (
-            p &&
-            this.detailName &&
-            this.detailName.id === p.id &&
-            this.detailName.value !== p.name &&
-            !this.discardDetailNameArmed
-          ) {
-            this.discardDetailNameArmed = true;
-            return;
-          }
-          this.selectedPrinterId = null;
-          this.#url.write({ printer: null });
-        }}
-        >${t("printers.filter_all")}</a
-      >
-      ${p ? html`<span aria-hidden="true"> › </span><span>${p.name}</span>` : nothing}
-    </nav>`;
+        <a
+          data-test="all-printers-link"
+          href=${`${listUrl.pathname}${listUrl.search}`}
+          @click=${(event: MouseEvent) => {
+            if (
+              event.button !== 0 ||
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.altKey
+            )
+              return;
+            event.preventDefault();
+            if (this.detailName?.saving) return;
+            if (this.detailConnection?.saving) return;
+            if (p && this.#connectionIsDirty(p) && !this.discardDetailConnectionNavigationArmed) {
+              this.discardDetailConnectionNavigationArmed = true;
+              return;
+            }
+            if (
+              p &&
+              this.detailName &&
+              this.detailName.id === p.id &&
+              this.detailName.value !== p.name &&
+              !this.discardDetailNameArmed
+            ) {
+              this.discardDetailNameArmed = true;
+              return;
+            }
+            this.selectedPrinterId = null;
+            this.#url.write({ printer: null });
+          }}
+          >${t("printers.filter_all")}</a
+        >
+        ${p ? html`<span aria-hidden="true"> › </span><span>${p.name}</span>` : nothing}
+      </nav>
+      ${this.discardDetailConnectionNavigationArmed ? html`<p data-test="discard-printer-connection-navigation" role="status">${t("printers.discard_connection_prompt")}</p>` : nothing}`;
     if (!p)
       return html`${back}
         <p role="status">

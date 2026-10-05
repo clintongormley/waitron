@@ -3682,6 +3682,67 @@ it("asks before leaving a printer with an unsaved name through All printers", as
   expect(location.pathname).toBe("/manage/printers/view/printers");
 });
 
+it("keeps an unsaved printer name when browser Back first leaves its details", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers");
+  history.pushState(null, "", "/manage/printers/view/printers/printer/p1");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  q(el, "[data-test=edit-printer-name]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-name"]', "Unsaved kitchen");
+
+  const firstPop = new Promise<void>((resolve) =>
+    window.addEventListener("popstate", () => resolve(), { once: true }),
+  );
+  history.back();
+  await firstPop;
+  await flush(el);
+  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).value).toBe(
+    "Unsaved kitchen",
+  );
+  expect(q(el, "[data-test=discard-printer-name]")).not.toBeNull();
+
+  history.back();
+  await vi.waitFor(() => expect(location.pathname).toBe("/manage/printers/view/printers"));
+  await flush(el);
+  expect(q(el, "[data-test=printer-status]")).toBeNull();
+});
+
+it("keeps an unsaved printer connection when browser Back first leaves its details", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers");
+  history.pushState(null, "", "/manage/printers/view/printers/printer/p1");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  q(el, "[data-test=printer-section-connection]")!
+    .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+    .click();
+  q(el, "[data-test=edit-printer-connection]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-host"]', "10.0.0.88");
+
+  const firstPop = new Promise<void>((resolve) =>
+    window.addEventListener("popstate", () => resolve(), { once: true }),
+  );
+  history.back();
+  await firstPop;
+  await flush(el);
+  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  expect((q(el, '[name="printer-detail-host"]') as import("@waitron/ui").WtInput).value).toBe(
+    "10.0.0.88",
+  );
+  expect(q(el, "[data-test=discard-printer-connection-navigation]")).not.toBeNull();
+
+  history.back();
+  await vi.waitFor(() => expect(location.pathname).toBe("/manage/printers/view/printers"));
+  await flush(el);
+  expect(q(el, "[data-test=printer-status]")).toBeNull();
+});
+
 it("explains an empty inline printer name beside its field", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
