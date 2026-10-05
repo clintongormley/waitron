@@ -1395,20 +1395,9 @@ describe("mountCatalogueApi — products", () => {
         )
       ).status,
     ).toBe(204);
-    expect(
-      (
-        await send(
-          app,
-          "PATCH",
-          `/management-api/catalogues/${downstairsMenuId}/items/${downstairsItemId}`,
-          { body: { offered: false } },
-        )
-      ).status,
-    ).toBe(204);
     expect((await menuPricesVia(app, upstairsMenuId))[0]!.override).toBe("12.50");
-    // The dashboard still lists it, switched off, so it can be switched back on.
     expect(await menuPricesVia(app, downstairsMenuId)).toMatchObject([
-      { menuItemId: downstairsItemId, offered: false },
+      { menuItemId: downstairsItemId, override: "9.00" },
     ]);
   });
 
@@ -1547,21 +1536,21 @@ describe("mountCatalogueApi — products", () => {
       `/management-api/catalogues/${catalogueId}/items/${offerId}/variants`,
       {
         body: {
-          variants: [{ variantId: saved.variants[0]!.id, price: "4.10", offered: true }],
+          variants: [{ variantId: saved.variants[0]!.id, price: "4.10" }],
         },
       },
     );
     expect(published.status).toBe(200);
     // Every Active variant is listed, the one this menu sets nothing for with the defaults.
     expect(await published.json()).toEqual([
-      { variantId: saved.variants[0]!.id, price: "4.10", offered: true },
+      { variantId: saved.variants[0]!.id, price: "4.10", offered: null },
       { variantId: saved.variants[1]!.id, price: null, offered: null },
     ]);
     const malformed = await send(
       app,
       "PUT",
       `/management-api/catalogues/${catalogueId}/items/${offerId}/variants`,
-      { body: { variants: [{ variantId: saved.variants[0]!.id, price: 4.1, offered: true }] } },
+      { body: { variants: [{ variantId: saved.variants[0]!.id, price: 4.1 }] } },
     );
     expect(malformed.status).toBe(400);
     expect(await malformed.json()).toMatchObject({
@@ -4090,40 +4079,6 @@ describe("a menu's structure", () => {
     );
   });
 
-  it("switches a product back on for a menu after it was switched off there", async () => {
-    const app = mountApp();
-    const menuId = await createCatalogueVia(app, "Switched menu");
-    const productId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
-    const items = `/management-api/catalogues/${menuId}/items`;
-    const itemId = await offerVia(app, menuId, productId, "2.00");
-    const offered = async () =>
-      (await menuPricesVia(app, menuId)).map(({ menuItemId, override, offered }) => ({
-        menuItemId,
-        override,
-        offered,
-      }));
-    expect(
-      (await send(app, "PATCH", `${items}/${itemId}`, { body: { offered: false } })).status,
-    ).toBe(204);
-    expect(await offered()).toEqual([{ menuItemId: itemId, override: "2.00", offered: false }]);
-    // Still on the menu's top level, so adding it again is refused rather than duplicated.
-    const rootSectionId = await menuRootVia(app, menuId);
-    const again = await send(app, "POST", `/management-api/sections/${rootSectionId}/members`, {
-      body: { ref: { kind: "product", productId } },
-    });
-    expect(again.status).toBe(409);
-    expect(await again.json()).toMatchObject({ error: { code: "menu_section.member_duplicate" } });
-    const bad = await send(app, "PATCH", `${items}/${itemId}`, { body: { offered: "yes" } });
-    expect(bad.status).toBe(400);
-    expect(await bad.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "offered" } },
-    });
-    expect(
-      (await send(app, "PATCH", `${items}/${itemId}`, { body: { offered: true } })).status,
-    ).toBe(204);
-    expect(await offered()).toEqual([{ menuItemId: itemId, override: "2.00", offered: true }]);
-  });
-
   it("takes a product off a menu's top level, and then adds it again on the same row", async () => {
     const app = mountApp();
     const menuId = await createCatalogueVia(app, "Removed menu");
@@ -4262,12 +4217,12 @@ describe("publishing a menu", () => {
       .orderBy(menuVersions.number);
   }
 
-  it("shows included on/off clashes in prices and refuses publication without a version", async () => {
+  it("shows an included price clash in prices and refuses publication without a version", async () => {
     const app = mountApp();
     const child = await createCatalogueVia(app, `Drinks ${crypto.randomUUID()}`);
     const parent = await createCatalogueVia(app, `Evening ${crypto.randomUUID()}`);
     const productId = await createNamedProductVia(app, `Lager ${crypto.randomUUID()}`);
-    const childItem = await offerVia(app, child, productId, "2.00");
+    await offerVia(app, child, productId, "2.00");
     await offerVia(app, parent, productId);
     const childRoot = await menuRootVia(app, child);
     const parentRoot = await menuRootVia(app, parent);
@@ -4275,13 +4230,6 @@ describe("publishing a menu", () => {
       body: { ref: { kind: "section", sectionId: childRoot } },
     });
     expect(included.status).toBe(201);
-    expect(
-      (
-        await send(app, "PATCH", `/management-api/catalogues/${child}/items/${childItem}`, {
-          body: { offered: false },
-        })
-      ).status,
-    ).toBe(204);
     const rows = await (
       await send(app, "GET", `/management-api/catalogues/${parent}/prices`)
     ).json();
@@ -4290,7 +4238,13 @@ describe("publishing a menu", () => {
         expect.objectContaining({
           productId,
           combined: expect.objectContaining({
-            offered: { state: "clash", candidates: expect.any(Array) },
+            price: {
+              state: "clash",
+              candidates: [
+                expect.objectContaining({ value: "1.00" }),
+                expect.objectContaining({ value: "2.00" }),
+              ],
+            },
           }),
         }),
       ]),
@@ -4298,7 +4252,7 @@ describe("publishing a menu", () => {
     const proposed = await preview(app, parent);
     expect(proposed.clashes).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ productId, field: "offered", variantId: null }),
+        expect.objectContaining({ productId, field: "price", variantId: null }),
       ]),
     );
     const refused = await send(app, "POST", `/management-api/catalogues/${parent}/publish`, {
@@ -4807,7 +4761,7 @@ describe("catalogue routes that already refused a negative price", () => {
       `/management-api/catalogues/${catalogueId}/items/${itemId}/variants`,
       {
         body: {
-          variants: [{ variantId: saved.variants[0]!.id, price: "-1.00", offered: true }],
+          variants: [{ variantId: saved.variants[0]!.id, price: "-1.00" }],
         },
       },
     );
@@ -5534,11 +5488,11 @@ describe("mountCatalogueApi — home layouts", () => {
   });
 });
 
-it("refuses the retired menu-item active field and preserves an unset switch on price edits", async () => {
+it("refuses the retired menu-item active and offered fields, writing nothing", async () => {
   const app = mountApp();
-  const menuId = await createCatalogueVia(app, "Nullable switches");
+  const menuId = await createCatalogueVia(app, "Retired switches");
   const productId = await createNamedProductVia(app, `Offer ${crypto.randomUUID()}`);
-  const itemId = await offerVia(app, menuId, productId);
+  const itemId = await offerVia(app, menuId, productId, "2.00");
   const path = `/management-api/catalogues/${menuId}/items/${itemId}`;
   for (const active of [false, true, null]) {
     const refused = await send(app, "PATCH", path, { body: { active } });
@@ -5547,58 +5501,99 @@ it("refuses the retired menu-item active field and preserves an unset switch on 
       error: { code: "management.request_invalid", params: { field: "active" } },
     });
   }
-  expect((await send(app, "PATCH", path, { body: { grossPrice: "2.00" } })).status).toBe(204);
-  expect((await menuPricesVia(app, menuId))[0]!.offered).toBeNull();
-  expect((await send(app, "PATCH", path, { body: { offered: false } })).status).toBe(204);
-  expect((await send(app, "PATCH", path, { body: { offered: null } })).status).toBe(204);
-  expect((await menuPricesVia(app, menuId))[0]!.offered).toBeNull();
+  for (const body of [
+    { offered: false },
+    { offered: null },
+    { grossPrice: "3.00", offered: true },
+  ]) {
+    const refused = await send(app, "PATCH", path, { body });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "offered" } },
+    });
+  }
+  expect((await menuPricesVia(app, menuId))[0]!.override).toBe("2.00");
 });
 
-it("variant price-only requests preserve the own switch and explicit null clears it", async () => {
+it("refuses a variants entry carrying offered, and stores a price-only entry's price", async () => {
   const app = mountApp();
-  const menuId = await createCatalogueVia(app, "Variant switches");
+  const menuId = await createCatalogueVia(app, "Variant prices");
   const productId = await createNamedProductVia(app, `Wine ${crypto.randomUUID()}`);
   const editorPath = `/management-api/products/${productId}/editor`;
   const editor = (await (await send(app, "GET", editorPath)).json()) as Record<string, unknown>;
+  const glass = {
+    customerName: null,
+    kitchenName: null,
+    image: null,
+    unitPrice: null,
+    available: true,
+    active: true,
+  };
   const saved = await send(app, "PUT", editorPath, {
     body: {
       ...editor,
       variants: [
-        {
-          name: "Glass",
-          customerName: null,
-          kitchenName: null,
-          image: null,
-          unitPrice: null,
-          available: true,
-          active: true,
-        },
+        { ...glass, name: "Glass" },
+        { ...glass, name: "Bottle" },
       ],
     },
   });
   expect(saved.status).toBe(200);
-  const variantId = ((await saved.json()) as { variants: { id: string }[] }).variants[0]!.id;
+  const [variantId, otherId] = (
+    (await saved.json()) as { variants: { id: string }[] }
+  ).variants.map((variant) => variant.id);
   const itemId = await offerVia(app, menuId, productId);
   const path = `/management-api/catalogues/${menuId}/items/${itemId}/variants`;
+
+  const priced = await send(app, "PUT", path, {
+    body: { variants: [{ variantId, price: "2.50" }] },
+  });
+  expect(priced.status).toBe(200);
+  expect(await priced.json()).toMatchObject([
+    { variantId, price: "2.50" },
+    { variantId: otherId, price: null },
+  ]);
+  const read = await send(app, "GET", path);
+  expect(read.status).toBe(200);
+  expect(await read.json()).toMatchObject([
+    { variantId, price: "2.50" },
+    { variantId: otherId, price: null },
+  ]);
+
   for (const offered of [null, false, true]) {
-    expect(
-      (
-        await send(app, "PUT", path, {
-          body: { variants: [{ variantId, price: "2.00", offered }] },
-        })
-      ).status,
-    ).toBe(200);
-    const priceOnly = await send(app, "PUT", path, {
-      body: { variants: [{ variantId, price: "3.00" }] },
+    const first = await send(app, "PUT", path, {
+      body: { variants: [{ variantId, price: "3.00", offered }] },
     });
-    expect(priceOnly.status).toBe(200);
-    expect(await priceOnly.json()).toEqual([{ variantId, price: "3.00", offered }]);
+    expect(first.status).toBe(400);
+    expect(await first.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "variants.0" } },
+    });
+    const second = await send(app, "PUT", path, {
+      body: {
+        variants: [
+          { variantId, price: "3.00" },
+          { variantId: otherId, price: "9.00", offered },
+        ],
+      },
+    });
+    expect(second.status).toBe(400);
+    expect(await second.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "variants.1" } },
+    });
   }
+  expect(await (await send(app, "GET", path)).json()).toMatchObject([
+    { variantId, price: "2.50" },
+    { variantId: otherId, price: null },
+  ]);
+
   const cleared = await send(app, "PUT", path, {
-    body: { variants: [{ variantId, price: null, offered: null }] },
+    body: { variants: [{ variantId, price: null }] },
   });
   expect(cleared.status).toBe(200);
-  expect(await cleared.json()).toEqual([{ variantId, price: null, offered: null }]);
+  expect(await cleared.json()).toMatchObject([
+    { variantId, price: null },
+    { variantId: otherId, price: null },
+  ]);
 });
 
 describe("owned section routes", () => {
