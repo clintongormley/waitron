@@ -742,6 +742,7 @@ interface MenuPriceRow {
   productId: string;
   override: string | null;
   effectivePrice: string;
+  active: boolean;
 }
 
 async function menuPricesVia(app: Hono, menuId: string): Promise<MenuPriceRow[]> {
@@ -2306,9 +2307,7 @@ describe("mountCatalogueApi — products", () => {
     });
   });
 
-  // Available "never hides the item from the dashboard", so the menu's price list keeps a
-  // sold-out product; an Inactive product stays hidden.
-  it("keeps an Unavailable product on the menu's price list and hides an Inactive one", async () => {
+  it("keeps an Unavailable and an Inactive product on the menu's price list, each with its Active state", async () => {
     const app = mountApp("es-ES");
     const catalogueId = await createCatalogueVia(app, "Management offers");
     const created = await send(
@@ -2319,20 +2318,20 @@ describe("mountCatalogueApi — products", () => {
     );
     const productId = ((await created.json()) as { id: string }).id;
     const offerId = await offerVia(app, catalogueId, productId, "4.50");
-    const offeredIds = async (): Promise<string[]> =>
-      (await menuPricesVia(app, catalogueId)).map((row) => row.menuItemId);
+    const listed = async (): Promise<[string, boolean][]> =>
+      (await menuPricesVia(app, catalogueId)).map(({ menuItemId, active }) => [menuItemId, active]);
 
     const soldOut = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
       body: await editorBody(app, { active: true, available: false }),
     });
     expect(soldOut.status).toBe(200);
-    expect(await offeredIds()).toEqual([offerId]);
+    expect(await listed()).toEqual([[offerId, true]]);
 
     const deleted = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
       body: await editorBody(app, { active: false, available: true }),
     });
     expect(deleted.status).toBe(200);
-    expect(await offeredIds()).toEqual([]);
+    expect(await listed()).toEqual([[offerId, false]]);
   });
 
   it("creates a product with its kitchen course in one save", async () => {
