@@ -935,6 +935,8 @@ describe("till-menu-browser", () => {
         expect(background(tile)).toBe("rgb(177, 37, 37)");
         expect(ink(tile, ".name")).toBe(WHITE);
         expect(ink(tile, ".kind")).toBe(WHITE);
+        const icon = tile.querySelector("wt-icon")!.shadowRoot!.querySelector("svg")!;
+        expect(getComputedStyle(icon).fill).toBe(WHITE);
       });
 
       it("draws a null, a missing and a malformed colour neutral", async () => {

@@ -186,9 +186,11 @@ export class TillMenuBrowser extends LitElement {
         color: var(--tile-ink);
       }
 
+      /* wt-icon sets its own text colour on its host, so it is named here as the labels are. */
       .tile[data-painted] .price,
       .tile[data-painted] .kind,
-      .tile[data-painted] .sold-out {
+      .tile[data-painted] .sold-out,
+      .tile[data-painted] wt-icon {
         color: inherit;
       }
 
