@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { uniqueIndex } from "drizzle-orm/sqlite-core";
-import { flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
+import { flag, id, label, newId, nowIso, smallCount, table, tsString } from "./columns.js";
 import { deviceProfiles } from "./device-profiles.js";
 import { kitchenStations } from "./kitchen-stations.js";
 import { printers } from "./printers.js";
@@ -51,6 +51,9 @@ export const devices = table(
     tokenHash: label("token_hash").notNull(),
     active: flag("active").notNull().default(true),
     lastSeenAt: tsString("last_seen_at"),
+    batteryLevel: smallCount("battery_level"),
+    batteryCharging: flag("battery_charging"),
+    batteryReportedAt: tsString("battery_reported_at"),
     enrolledAt: tsString("enrolled_at").notNull().$defaultFn(nowIso),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
