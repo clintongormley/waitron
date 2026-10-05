@@ -17,6 +17,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -283,16 +284,9 @@ export class PrintersScreen extends LitElement {
       }
       .status-grid {
         display: grid;
-        grid-template-columns: repeat(
-          auto-fit,
-          minmax(min(100%, calc(var(--wt-space-6) * 12)), 1fr)
-        );
         gap: var(--wt-space-4);
-      }
-      .status-group {
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-        text-transform: uppercase;
+        width: 100%;
+        max-width: var(--wt-form-max-width);
       }
       .status-fields {
         display: grid;
@@ -467,7 +461,9 @@ export class PrintersScreen extends LitElement {
     this,
     () => {
       if (this.#url.read("dashboard") !== "printers") return;
-      this.selectedPrinterId = this.#url.read("printer");
+      const printerId = this.#url.read("printer");
+      if (printerId !== this.selectedPrinterId) this.#resetPrinterSections();
+      this.selectedPrinterId = printerId;
       const view = this.#url.read("view");
       this.view =
         view !== null && ["queue", "printers", "agents"].includes(view)
@@ -497,6 +493,9 @@ export class PrintersScreen extends LitElement {
   @state() private namingPrinter: DiscoveredPrinter | null = null;
   @state() private discoveredNames: Record<string, string> = {};
   @state() private calibrationStep = 0;
+  @state() private statusOpen = true;
+  @state() private connectionOpen = false;
+  @state() private calibrationOpen = false;
   @state() private testingDrawer = false;
   @state() private drawerTestSent = false;
   @state() private drawerOutcome = "";
@@ -2015,8 +2014,15 @@ export class PrintersScreen extends LitElement {
   }
 
   #showPrinterStatus(id: string): void {
+    if (id !== this.selectedPrinterId) this.#resetPrinterSections();
     this.selectedPrinterId = id;
     this.#url.write({ dashboard: "printers", view: this.view, printer: id });
+  }
+
+  #resetPrinterSections(): void {
+    this.statusOpen = true;
+    this.connectionOpen = false;
+    this.calibrationOpen = false;
   }
 
   #renderPrinterStatus(): TemplateResult {
@@ -2070,41 +2076,61 @@ export class PrintersScreen extends LitElement {
         >
       </div>
       <div class="status-grid">
-        <section>
-          <h2 class="status-group">${t("printers.status")}</h2>
-          <wt-card
-            ><dl class="status-fields">
-              ${field(t("printers.status"), t(p.active ? "printers.status_active" : "printers.status_inactive"))}
-              ${field(t("printers.pending_jobs"), p.pendingJobs)}
-              ${field(t("printers.last_print"), this.#timestamp(p.lastPrintAt))}
-              ${field(t("printers.last_seen_by"), p.transport === "cloud_poll" ? "—" : (seen?.agentName ?? t("printers.agent_unknown")))}
-              ${seen ? field(t("printers.last_seen"), this.#timestamp(seen.lastSeenAt)) : nothing}
-            </dl></wt-card
-          >
-        </section>
-        <section>
-          <h2 class="status-group">${t("printers.connection")}</h2>
-          <wt-card
-            ><dl class="status-fields">
-              ${field(t("printers.transport"), transportName(p.transport), `printer-transport-${p.id}`)}
-              ${field(t("printers.connection"), t(p.transport === "cloud_poll" ? "printers.connection_direct" : p.transport === "network_tcp" ? "printers.connection_network" : "printers.connection_roaming"), `printer-connection-${p.id}`)}
-              ${p.host ? field(t("printers.address"), `${p.host}${p.port === null ? "" : `:${p.port}`}`) : nothing}
-              ${p.localKey ? field(t("printers.local_key"), p.localKey) : nothing}
-              ${p.pollId ? field(t("printers.poll_id"), p.pollId) : nothing}
-            </dl></wt-card
-          >
-        </section>
-        <section>
-          <h2 class="status-group">${t("printers.calibrate")}</h2>
-          <wt-card
-            ><dl class="status-fields">
-              ${field(t("printers.paper_width"), t(p.paperWidth === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80"))}
-              ${field(t("printers.resolution"), t(p.resolution === "180dpi" ? "printers.resolution_180" : "printers.resolution_203"))}
-              ${field(t("printers.drawer_attached"), t(p.hasCashDrawer ? "printers.yes" : "printers.no"), "printer-drawer")}
-              ${field(t("printers.profiles"), offeredOn.join(", ") || t("printers.no"), "printer-profiles")}
-            </dl></wt-card
-          >
-        </section>
+        <wt-disclosure
+          data-test="printer-section-status"
+          heading=${t("printers.status")}
+          summary=${`${t(p.active ? "printers.status_active" : "printers.status_inactive")} · ${p.pendingJobs} ${t("printers.pending_jobs")}`}
+          ?open=${this.statusOpen}
+          @wt-toggle=${(event: CustomEvent<{ open: boolean }>) => {
+            this.statusOpen = event.detail.open;
+          }}
+          ><dl class="status-fields">
+            ${field(t("printers.status"), t(p.active ? "printers.status_active" : "printers.status_inactive"))}
+            ${field(t("printers.pending_jobs"), p.pendingJobs)}
+            ${field(t("printers.last_print"), this.#timestamp(p.lastPrintAt))}
+            ${field(t("printers.last_seen_by"), p.transport === "cloud_poll" ? "—" : (seen?.agentName ?? t("printers.agent_unknown")))}
+            ${seen ? field(t("printers.last_seen"), this.#timestamp(seen.lastSeenAt)) : nothing}
+          </dl></wt-disclosure
+        >
+        <wt-disclosure
+          data-test="printer-section-connection"
+          heading=${t("printers.connection")}
+          summary=${`${transportName(p.transport)} · ${p.host ? `${p.host}${p.port === null ? "" : `:${p.port}`}` : t(p.transport === "cloud_poll" ? "printers.connection_direct" : "printers.connection_roaming")}`}
+          ?open=${this.connectionOpen}
+          @wt-toggle=${(event: CustomEvent<{ open: boolean }>) => {
+            this.connectionOpen = event.detail.open;
+          }}
+          ><dl class="status-fields">
+            ${field(t("printers.transport"), transportName(p.transport), `printer-transport-${p.id}`)}
+            ${field(t("printers.connection"), t(p.transport === "cloud_poll" ? "printers.connection_direct" : p.transport === "network_tcp" ? "printers.connection_network" : "printers.connection_roaming"), `printer-connection-${p.id}`)}
+            ${p.host ? field(t("printers.address"), `${p.host}${p.port === null ? "" : `:${p.port}`}`) : nothing}
+            ${p.localKey ? field(t("printers.local_key"), p.localKey) : nothing}
+            ${p.pollId ? field(t("printers.poll_id"), p.pollId) : nothing}
+          </dl></wt-disclosure
+        >
+        <wt-disclosure
+          data-test="printer-section-calibration"
+          heading=${t("printers.calibration")}
+          summary=${`${t(p.paperWidth === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80")} · ${t(p.resolution === "180dpi" ? "printers.resolution_180" : "printers.resolution_203")}`}
+          ?open=${this.calibrationOpen}
+          @wt-toggle=${(event: CustomEvent<{ open: boolean }>) => {
+            this.calibrationOpen = event.detail.open;
+          }}
+          ><dl class="status-fields">
+            ${field(t("printers.paper_width"), t(p.paperWidth === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80"))}
+            ${field(t("printers.resolution"), t(p.resolution === "180dpi" ? "printers.resolution_180" : "printers.resolution_203"))}
+            ${field(t("printers.drawer_attached"), t(p.hasCashDrawer ? "printers.yes" : "printers.no"), "printer-drawer")}
+            ${field(t("printers.profiles"), offeredOn.join(", ") || t("printers.no"), "printer-profiles")}
+          </dl>
+          <wt-button
+            data-test="calibrate-printer-details"
+            @click=${(event: Event) => {
+              this.#openPrinter(p, event);
+              this.calibrationStep = 1;
+            }}
+            >${t("printers.calibrate")}</wt-button
+          ></wt-disclosure
+        >
       </div>
     </section>`;
   }

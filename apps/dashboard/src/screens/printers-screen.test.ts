@@ -3540,6 +3540,49 @@ it("links the printer breadcrumb back to the selected list", async () => {
   expect(q(el, "[data-test=printers-table]")!.checkVisibility()).toBe(true);
 });
 
+it("opens status first and resets independent printer sections on navigation", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  const disclosure = (name: string) => q(el, `[data-test=printer-section-${name}]`)!;
+  expect(disclosure("status").hasAttribute("open")).toBe(true);
+  expect(disclosure("connection").hasAttribute("open")).toBe(false);
+  expect(disclosure("calibration").hasAttribute("open")).toBe(false);
+  expect(disclosure("connection").textContent).toContain("10.0.0.9:9100");
+  expect(disclosure("calibration").textContent).toContain(t("printers.profiles"));
+  disclosure("connection").shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  await flush(el);
+  expect(disclosure("status").hasAttribute("open")).toBe(true);
+  expect(disclosure("connection").hasAttribute("open")).toBe(true);
+  disclosure("status").shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  await flush(el);
+  expect(disclosure("status").hasAttribute("open")).toBe(false);
+  history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  expect(disclosure("status").hasAttribute("open")).toBe(true);
+  expect(disclosure("connection").hasAttribute("open")).toBe(false);
+  expect(disclosure("calibration").hasAttribute("open")).toBe(false);
+});
+
+it("starts calibration from printer details at the paper settings step", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  q(el, "[data-test=printer-section-calibration]")!
+    .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+    .click();
+  await flush(el);
+  q(el, "[data-test=calibrate-printer-details]")!.click();
+  await flush(el);
+  expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true);
+  expect(q(el, "[data-test=printer-name-p1]")).toBeNull();
+});
+
 it("shows the saved drawer independently of the profiles offering it, and the delivering agent without discovery", async () => {
   const api = stubApi({
     listPrinters: vi.fn().mockResolvedValue([
