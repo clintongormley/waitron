@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { newId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import type { RegistroAlta } from "@waitron/verifactu";
@@ -11,6 +11,8 @@ import { staticResolver } from "../test/write-path-fixtures.js";
 import { DEFAULT_SKIP_RETRY_MS, RECUPERACION_ENVIANDO_MS, drain } from "./drain.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
+import { envios } from "./schema/envios.js";
+import { registrosFacturacion } from "./schema/registros.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const NOW = new Date("2026-07-21T00:01:00Z");
@@ -182,6 +184,106 @@ describe("drain chain ordering", () => {
     expect(result.recordsHalted).toBe(0);
   });
 
+  it("keeps a duplicate pending when the lookup row has no fingerprint", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const real = aeat.client();
+    const deps = {
+      db: suite.db,
+      resolveClient: staticResolver(real),
+      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      environment: "production" as const,
+    };
+    await drain(deps, NOW);
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(sql`
+        update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
+        where registro_id = ${seeded.registroIds[0]}
+      `),
+    );
+    const withoutFingerprint: VerifactuClient = {
+      submit: (...args) => real.submit(...args),
+      consultar: async (...args) => {
+        const response = await real.consultar(...args);
+        return {
+          ...response,
+          registros: response.registros.map((record) => ({
+            ...record,
+            DatosRegistroFacturacion: {
+              ...record.DatosRegistroFacturacion,
+              Huella: undefined,
+            },
+          })),
+        };
+      },
+    };
+
+    const retry = await drain(
+      { ...deps, resolveClient: staticResolver(withoutFingerprint) },
+      new Date("2026-07-21T00:02:00Z"),
+    );
+
+    expect(retry.recordsAccepted).toBe(0);
+    expect(retry.recordsHalted).toBe(0);
+    expect(retry.recordsSubmitted).toBe(1);
+    const state = await suite.db.execute<{ estado: string; incidencia: number }>(sql`
+      select estado, incidencia from envios where registro_id = ${seeded.registroIds[0]}
+    `);
+    expect(state.rows[0]).toEqual({ estado: "pendiente", incidencia: 1 });
+  });
+
+  it("retries a duplicate when a later lookup page fails", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const real = aeat.client();
+    const deps = {
+      db: suite.db,
+      resolveClient: staticResolver(real),
+      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      environment: "production" as const,
+    };
+    await drain(deps, NOW);
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(sql`
+        update envios set estado = 'pendiente', proximo_intento_en = ${NOW.toISOString()}
+        where registro_id = ${seeded.registroIds[0]}
+      `),
+    );
+    let lookups = 0;
+    const pageFails: VerifactuClient = {
+      submit: (...args) => real.submit(...args),
+      consultar: async (...args) => {
+        lookups += 1;
+        if (lookups === 2) throw new Error("second lookup page unavailable");
+        const response = await real.consultar(...args);
+        return {
+          ...response,
+          registros: [],
+          IndicadorPaginacion: "S",
+          ClavePaginacion: {
+            IDEmisorFactura: seeded.nif,
+            NumSerieFactura: seeded.facturaKeys[0]!.split("|")[1]!,
+            FechaExpedicionFactura: "20-07-2026",
+          },
+        };
+      },
+    };
+
+    const retry = await drain(
+      { ...deps, resolveClient: staticResolver(pageFails) },
+      new Date("2026-07-21T00:02:00Z"),
+    );
+
+    expect(lookups).toBe(2);
+    expect(retry.recordsAccepted).toBe(0);
+    expect(retry.recordsHalted).toBe(0);
+    expect(retry.recordsSubmitted).toBe(1);
+    const state = await suite.db.execute<{ estado: string }>(sql`
+      select estado from envios where registro_id = ${seeded.registroIds[0]}
+    `);
+    expect(state.rows[0]?.estado).toBe("pendiente");
+  });
+
   it("does not submit a due successor before its earlier retry, and wakes when the retry is due", async () => {
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     await withTransaction(suite.db, (tx) =>
@@ -265,5 +367,53 @@ describe("drain chain ordering", () => {
     expect(result.recordsSubmitted).toBe(0);
     expect(result.nextDueAt).toEqual(new Date(NOW.getTime() + RECUPERACION_ENVIANDO_MS + 1));
     expect(aeat.stored()).toHaveLength(0);
+  });
+
+  it("does not borrow another chain's accepted original to release a cancellation", async () => {
+    const first = await seedPendingEnvios(suite.db, { count: 1 });
+    const other = await seedSecondChain(suite.db, first, 3);
+    const aeat = createFakeAeat({ serverNow: new Date("2026-07-21T00:00:00Z") });
+    const deps = {
+      db: suite.db,
+      resolveClient: staticResolver(aeat.client()),
+      skipRetryMs: DEFAULT_SKIP_RETRY_MS,
+      environment: "production" as const,
+    };
+    const initial = await drain(deps, NOW);
+    expect(initial.recordsAccepted).toBe(2);
+    const records = await suite.db.select().from(registrosFacturacion);
+    const original = records.find((row) => row.id === first.registroIds[0])!;
+    const foreign = records.find((row) => row.id === other.registroId)!;
+    const cancellationId = newId();
+    await suite.db.insert(registrosFacturacion).values({
+      ...foreign,
+      id: cancellationId,
+      secuencia: foreign.secuencia + 1,
+      tipoRegistro: "anulacion",
+      idEmisorFactura: original.idEmisorFactura,
+      numSerieFactura: original.numSerieFactura,
+      fechaExpedicionFactura: original.fechaExpedicionFactura,
+      tipoFactura: null,
+      descripcionOperacion: null,
+      desglose: null,
+      cuotaTotal: null,
+      importeTotal: null,
+      primerRegistro: false,
+      anteriorIdEmisorFactura: foreign.idEmisorFactura,
+      anteriorNumSerieFactura: foreign.numSerieFactura,
+      anteriorFechaExpedicionFactura: foreign.fechaExpedicionFactura,
+      anteriorHuella: foreign.huella,
+      huella: "C".repeat(64),
+    });
+    await suite.db.insert(envios).values({ registroId: cancellationId, proximoIntentoEn: NOW });
+
+    const retry = await drain(deps, new Date("2026-07-21T00:02:00Z"));
+
+    expect(retry.recordsSubmitted).toBe(0);
+    const state = await suite.db.execute<{ estado: string }>(sql`
+      select estado from envios where registro_id = ${cancellationId}
+    `);
+    expect(state.rows[0]?.estado).toBe("pendiente");
+    expect(aeat.stored().find((row) => row.key === first.facturaKeys[0])?.estado).toBe("Correcto");
   });
 });

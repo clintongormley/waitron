@@ -390,6 +390,7 @@ async function claimBatch(
         select 1 from registros_facturacion original
         join envios original_envio on original_envio.registro_id = original.id
         where original.tipo_registro = 'alta'
+          and original.sif_id = r.sif_id
           and original.id_emisor_factura = r.id_emisor_factura
           and original.num_serie_factura = r.num_serie_factura
           and original.fecha_expedicion_factura = r.fecha_expedicion_factura
