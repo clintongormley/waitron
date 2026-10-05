@@ -76,6 +76,9 @@ const devices: DeviceRow[] = [
     deviceProfileId: "dp1",
     receiptPrinterId: "pr1",
     paymentSlipPrinterId: null,
+    batteryLevel: null,
+    batteryCharging: null,
+    batteryReportedAt: null,
   },
   {
     id: "d2",
@@ -90,6 +93,9 @@ const devices: DeviceRow[] = [
     deviceProfileId: null,
     receiptPrinterId: null,
     paymentSlipPrinterId: null,
+    batteryLevel: null,
+    batteryCharging: null,
+    batteryReportedAt: null,
   },
 ];
 
@@ -257,6 +263,54 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     await expectNoA11yViolations(host);
     await page.viewport(1280, 900);
   });
+
+  it.each([390, 1280])(
+    "renders every Battery state accessibly, a stale one greyed, at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const now = new Date("2026-10-05T12:00:00.000Z");
+      const ago = (minutes: number) => new Date(now.getTime() - minutes * 60_000).toISOString();
+      const row = (
+        id: string,
+        batteryLevel: number | null,
+        batteryCharging: boolean | null,
+        minutes: number | null,
+      ): DeviceRow => ({
+        ...devices[0]!,
+        id,
+        label: `Caja ${id}`,
+        batteryLevel,
+        batteryCharging,
+        batteryReportedAt: minutes === null ? null : ago(minutes),
+      });
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        {
+          api: stubApi({
+            listDevices: vi
+              .fn()
+              .mockResolvedValue([
+                row("charging", 82, true, 1),
+                row("draining", 41, false, 2),
+                row("silent", null, null, null),
+                row("stale", 64, true, 11),
+              ]),
+          }),
+          now: () => now,
+        },
+        theme,
+      );
+      await flush(el);
+      const table = el.shadowRoot!.querySelector("[data-test=devices-table]")!;
+      expect(table.shadowRoot!.querySelectorAll("tbody tr")).toHaveLength(4);
+      expect(deep(el.shadowRoot!, "[data-test=device-battery-stale]")!.getAttribute("part")).toBe(
+        "battery-stale",
+      );
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
 
   it.each([390, 1280])(
     "renders a till's Edit dialog with a Name error accessibly at %ipx",

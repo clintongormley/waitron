@@ -10,6 +10,7 @@ import {
 } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
+import { formatIsoMinute } from "../date-utils.js";
 import { t } from "../i18n/t.js";
 import type {
   DashboardApi,
@@ -100,6 +101,9 @@ const devices: DeviceRow[] = [
     deviceProfileId: "dp1",
     receiptPrinterId: "pr1",
     paymentSlipPrinterId: null,
+    batteryLevel: null,
+    batteryCharging: null,
+    batteryReportedAt: null,
   },
   {
     id: "d2",
@@ -114,6 +118,9 @@ const devices: DeviceRow[] = [
     deviceProfileId: null,
     receiptPrinterId: null,
     paymentSlipPrinterId: null,
+    batteryLevel: null,
+    batteryCharging: null,
+    batteryReportedAt: null,
   },
 ];
 
@@ -457,7 +464,7 @@ describe("the device table", () => {
     deviceProfileId: "dp1",
   };
 
-  it("is a remembered table of name, profile, what it shows, status and last seen, with its menu pinned last", async () => {
+  it("is a remembered table of name, profile, what it shows, battery, status and last seen, with its menu pinned last", async () => {
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
       api: stubApi({ listDevices: vi.fn().mockResolvedValue([...devices, till]) }),
     });
@@ -470,6 +477,7 @@ describe("the device table", () => {
       ["name", t("devices.name")],
       ["profile", t("devices.device_profile")],
       ["shows", t("devices.shows")],
+      ["battery", t("devices.column_battery")],
       ["status", t("devices.column_status")],
       ["lastSeen", t("devices.column_last_seen")],
       ["actions", t("devices.actions")],
@@ -479,6 +487,93 @@ describe("the device table", () => {
     // What a device shows is a kitchen screen's; a till's cell is empty.
     expect(deepText(el, "[data-test=device-station-t1]")).toBe("");
     expect(deepText(el, "[data-test=device-label-t1]")).toBe("Caja 1");
+  });
+
+  describe("the Battery column", () => {
+    const NOW = new Date("2026-10-05T12:00:00.000Z");
+    const minutesAgo = (minutes: number) =>
+      new Date(NOW.getTime() - minutes * 60_000).toISOString();
+    const reported = (
+      id: string,
+      batteryLevel: number | null,
+      batteryCharging: boolean | null,
+      minutes: number | null,
+    ): DeviceRow => ({
+      ...devices[0]!,
+      id,
+      label: id,
+      batteryLevel,
+      batteryCharging,
+      batteryReportedAt: minutes === null ? null : minutesAgo(minutes),
+    });
+
+    async function mountBattery(rows: DeviceRow[]): Promise<DevicesScreen> {
+      const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+        api: stubApi({ listDevices: vi.fn().mockResolvedValue(rows) }),
+        now: () => NOW,
+      });
+      await flush(el);
+      await devicesTable(el).updateComplete;
+      return el;
+    }
+
+    const cell = (el: DevicesScreen, id: string) =>
+      dq(el.shadowRoot!, `[data-test=device-battery-${id}]`)!;
+
+    it("shows a charging device's level with a charging mark whose accessible text says so", async () => {
+      const el = await mountBattery([reported("c", 82, true, 1)]);
+      expect(deepText(el, "[data-test=device-battery-level-c]")).toBe("82%");
+      const mark = dq(el.shadowRoot!, "[data-test=device-battery-mark-c]")!;
+      expect(mark.getAttribute("aria-hidden")).toBe("true");
+      const spoken = dq(el.shadowRoot!, "[data-test=device-battery-charging-c]")!;
+      expect(spoken.textContent!.trim()).toBe(t("devices.battery_charging", "es-ES"));
+      // Read by a screen reader, drawn nowhere: the part's rule reaches the cell.
+      expect(spoken.getBoundingClientRect().width).toBeLessThanOrEqual(1);
+      expect(cell(el, "c").textContent!.replace(/\s+/g, " ").trim()).toBe(
+        `82% ${mark.textContent!.trim()} ${t("devices.battery_charging", "es-ES")}`,
+      );
+    });
+
+    it("shows the level alone when the device is not charging", async () => {
+      const el = await mountBattery([reported("n", 82, false, 1)]);
+      expect(cell(el, "n").textContent!.trim()).toBe("82%");
+      expect(dq(el.shadowRoot!, "[data-test=device-battery-mark-n]")).toBeNull();
+    });
+
+    it("says Not reported for a device that has never reported", async () => {
+      const el = await mountBattery([reported("x", null, null, null)]);
+      expect(cell(el, "x").textContent!.trim()).toBe(t("devices.battery_not_reported", "es-ES"));
+    });
+
+    it("greys a report more than ten minutes old and says when it was taken", async () => {
+      const el = await mountBattery([reported("old", 82, false, 11)]);
+      const shown = cell(el, "old");
+      expect(shown.getAttribute("part")).toBe("battery-stale");
+      expect(shown.textContent!.replace(/\s+/g, " ").trim()).toBe(
+        `82% ${t("devices.battery_as_of", "es-ES").replace("{time}", formatIsoMinute(minutesAgo(11)))}`,
+      );
+      const probe = document.createElement("span");
+      probe.style.color = "var(--wt-color-text-muted)";
+      el.parentElement!.appendChild(probe);
+      expect(getComputedStyle(shown).color).toBe(getComputedStyle(probe).color);
+      probe.remove();
+    });
+
+    it("leaves a nine-minute-old report as it is", async () => {
+      const el = await mountBattery([reported("fresh", 82, false, 9)]);
+      const shown = cell(el, "fresh");
+      expect(shown.getAttribute("part")).toBeNull();
+      expect(shown.textContent!.trim()).toBe("82%");
+    });
+
+    it("is a column a person may hide, sorted by the level", async () => {
+      const row = reported("s", 82, false, 1);
+      const el = await mountBattery([row]);
+      const column = devicesTable(el).columns.find((c) => c.key === "battery")!;
+      expect(column.choosable).toBe("shown");
+      expect(column.sortValue!(row)).toBe(82);
+      expect(column.sortValue!(reported("x", null, null, null))).toBeNull();
+    });
   });
 
   it("opens Edit when an active device's row is clicked", async () => {

@@ -530,6 +530,10 @@ export interface DeviceRow {
   deviceProfileId: string | null;
   receiptPrinterId: string | null;
   paymentSlipPrinterId: string | null;
+  /** A whole percentage, 0 to 100. */
+  batteryLevel: number | null;
+  batteryCharging: boolean | null;
+  batteryReportedAt: string | null;
 }
 
 export interface Canvas {
