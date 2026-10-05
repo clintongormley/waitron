@@ -1,17 +1,23 @@
 import { LitElement } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { afterEach, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { baseStyles, CATEGORY_PALETTE } from "@waitron/ui";
 import { cleanupWidgets, customSquarePixels, mountWidget } from "./test-helpers.js";
 import { colorField, colorFieldStyles } from "./color-field.js";
+import { t } from "../i18n/t.js";
 
 /** The smallest host the field renders into: it owns the colour and adds the field's styles. */
 @customElement("test-color-field-host")
 class ColorFieldHost extends LitElement {
   static override styles = [baseStyles, colorFieldStyles];
   @property({ attribute: false }) color: string | null = null;
+  @property({ attribute: false }) noneLabel: string | undefined = undefined;
+  @property({ attribute: false }) inherited: string | null | undefined = undefined;
   override render() {
     return colorField({
+      ...(this.noneLabel === undefined ? {} : { noneLabel: this.noneLabel }),
+      ...(this.inherited === undefined ? {} : { inherited: this.inherited }),
       color: this.color,
       busy: false,
       error: "",
@@ -31,8 +37,19 @@ declare global {
 
 afterEach(cleanupWidgets);
 
-const mount = (color: string | null, theme?: "light" | "dark") =>
-  mountWidget<ColorFieldHost>("test-color-field-host", { color }, theme);
+const mount = (
+  color: string | null,
+  theme?: "light" | "dark",
+  extra: Partial<Pick<ColorFieldHost, "noneLabel" | "inherited">> = {},
+) => mountWidget<ColorFieldHost>("test-color-field-host", { color, ...extra }, theme);
+
+const noneButton = (el: ColorFieldHost) =>
+  el.shadowRoot!.querySelector<HTMLButtonElement>('[data-color=""]')!;
+/** The fieldset's own children, by tag and class: what a field draws, line by line. */
+const fieldLines = (el: ColorFieldHost) =>
+  [...el.shadowRoot!.querySelector("fieldset")!.children].map(
+    (child) => `${child.tagName.toLowerCase()}.${child.className}`,
+  );
 
 async function click(el: ColorFieldHost, value: string): Promise<void> {
   el.shadowRoot!.querySelector<HTMLElement>(`[data-color="${value}"]`)!.click();
@@ -166,3 +183,51 @@ it.each(["light", "dark"] as const)(
     }
   },
 );
+
+it("names the no-colour choice by its label and describes it by the colour it then takes, drawn in a chip", async () => {
+  const { el } = await mount(null, undefined, {
+    noneLabel: "Use category colour",
+    inherited: "#25b125",
+  });
+  const none = noneButton(el);
+  await expect.element(page.elementLocator(none)).toHaveAccessibleName("Use category colour");
+  await expect.element(page.elementLocator(none)).toHaveAccessibleDescription("#25b125");
+  const chip = none.querySelector<HTMLElement>(".chip")!;
+  expect(chip.getAttribute("aria-hidden")).toBe("true");
+  expect(getComputedStyle(chip).backgroundColor).toBe("rgb(37, 177, 37)");
+  const swatch = el.shadowRoot!.querySelector<HTMLElement>('[data-color="#b12525"]')!;
+  await expect.element(page.elementLocator(swatch)).toHaveAccessibleName("#b12525");
+});
+
+it("says inside the no-colour choice, as its description, that the category has no colour", async () => {
+  const plain = await mount(null);
+  const plainLines = fieldLines(plain.el);
+  cleanupWidgets();
+  const { el } = await mount(null, undefined, {
+    noneLabel: "Use category colour",
+    inherited: null,
+  });
+  const none = noneButton(el);
+  await expect.element(page.elementLocator(none)).toHaveAccessibleName("Use category colour");
+  await expect
+    .element(page.elementLocator(none))
+    .toHaveAccessibleDescription(t("editor.color_category_none"));
+  const note = none.querySelector<HTMLElement>(".note")!;
+  expect(note.textContent!.trim()).toBe(t("editor.color_category_none"));
+  expect(none.querySelector(".chip")).toBeNull();
+  // The note is the button's second line, not a line drawn under the field.
+  expect(note.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+    none
+      .querySelector<HTMLElement>(`#${CSS.escape("test-color-none-label")}`)!
+      .getBoundingClientRect().bottom,
+  );
+  expect(fieldLines(el)).toEqual(plainLines);
+});
+
+it("draws today's No colour choice when given neither setting", async () => {
+  const { el } = await mount(null);
+  const none = noneButton(el);
+  await expect.element(page.elementLocator(none)).toHaveAccessibleName(t("editor.color_none"));
+  await expect.element(page.elementLocator(none)).toHaveAccessibleDescription("");
+  expect(none.querySelector(".chip, .note")).toBeNull();
+});

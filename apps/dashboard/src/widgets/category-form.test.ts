@@ -6,18 +6,20 @@ import {
   categoryWithDescendants,
 } from "./category-form.js";
 import { codeMessage } from "../i18n/codes.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { CategorySummary } from "../api/client.js";
 
 const food: CategorySummary = {
   id: "food",
   name: "Food",
   parentId: null,
+  color: null,
 };
 const child: CategorySummary = {
   id: "child",
   name: "Sandwiches",
   parentId: "food",
+  color: null,
 };
 
 it("names a category by the path of names down to it, joined by the separator it is given", () => {
@@ -70,6 +72,19 @@ it("puts a refused category write beside the form field it concerns", () => {
   });
 });
 
+it("puts a refused colour under the colour chooser, and a refused name still beside the Name field", () => {
+  expect(categoryRefusalErrors(refusal("category.invalid", { field: "color" }))).toEqual({
+    color: t("editor.field_rejected"),
+  });
+  expect(categoryRefusalErrors(refusal("management.request_invalid", { field: "color" }))).toEqual({
+    color: t("editor.field_rejected"),
+  });
+  for (const params of [{ field: "name" }, undefined])
+    expect(categoryRefusalErrors(refusal("category.invalid", params))).toEqual({
+      name: codeMessage("category.invalid"),
+    });
+});
+
 it("puts a duplicate sibling name beside the Name field with a message of its own", () => {
   const locale = currentLocale();
   onTestFinished(() => setLocale(locale));
@@ -86,7 +101,6 @@ it("keeps a refused category write that names no field of the form for the botto
     refusal("content.translation_required", { language: "en" }),
     refusal("management.request_invalid", { field: "toString" }),
     refusal("management.request_invalid", { field: "image" }),
-    refusal("management.request_invalid", { field: "color" }),
     refusal("management.request_invalid"),
     refusal("toString"),
     refusal("server.internal"),

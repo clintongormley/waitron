@@ -7,6 +7,7 @@ const category = {
   id: "food",
   name: "Food",
   parentId: null,
+  color: null,
 };
 describe.each(["light", "dark"] as const)("category path field (%s)", (theme) => {
   it.each(["none", "chosen", "invalid", "disabled"] as const)(

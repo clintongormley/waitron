@@ -74,10 +74,10 @@ const large: EditorVariant = {
 // Named in the venue's own content language (the harness mounts a Spanish venue), so a chip shows
 // a real word rather than falling back to its id.
 const categories: CategorySummary[] = [
-  { id: "drinks", name: "Bebidas", parentId: null },
-  { id: "snacks", name: "Aperitivos", parentId: null },
+  { id: "drinks", name: "Bebidas", parentId: null, color: null },
+  { id: "snacks", name: "Aperitivos", parentId: null, color: null },
   // A category with no colour of its own: the reporting mark has to survive this one being chosen.
-  { id: "plates", name: "Platos", parentId: null },
+  { id: "plates", name: "Platos", parentId: null, color: null },
 ];
 const reduced = [{ id: "reduced" as const, rate: "10.00", label: "Reduced" }];
 
@@ -2000,12 +2000,12 @@ it("offers Uncategorised as the main category, and saves it as none", async () =
 // Listed out of order, with sibling names that sort differently by name and by id, so a tree read
 // in list order, or siblings sorted by id, fails.
 const tree: CategorySummary[] = [
-  { id: "c-plates", name: "Platos", parentId: null },
-  { id: "a-soft", name: "Refrescos", parentId: "drinks" },
-  { id: "cocktails", name: "Cócteles", parentId: "b-alcohol" },
-  { id: "drinks", name: "Bebidas", parentId: null },
-  { id: "b-alcohol", name: "Bebidas alcohólicas", parentId: "drinks" },
-  { id: "z-snacks", name: "Aperitivos", parentId: null },
+  { id: "c-plates", name: "Platos", parentId: null, color: null },
+  { id: "a-soft", name: "Refrescos", parentId: "drinks", color: null },
+  { id: "cocktails", name: "Cócteles", parentId: "b-alcohol", color: null },
+  { id: "drinks", name: "Bebidas", parentId: null, color: null },
+  { id: "b-alcohol", name: "Bebidas alcohólicas", parentId: "drinks", color: null },
+  { id: "z-snacks", name: "Aperitivos", parentId: null, color: null },
 ];
 const cocktailsPath = "Bebidas › Bebidas alcohólicas › Cócteles";
 
@@ -2085,8 +2085,8 @@ it("lists Uncategorised and then every category as a tree, each under its parent
 it("orders numbered sibling categories by value, as the category list does", async () => {
   const el = await mountCategorised();
   el.categories = [
-    { id: "c10", name: "Cat 10", parentId: null },
-    { id: "c9", name: "Cat 9", parentId: null },
+    { id: "c10", name: "Cat 10", parentId: null, color: null },
+    { id: "c9", name: "Cat 9", parentId: null, color: null },
   ];
   await el.updateComplete;
   expect((await categoryLink(el)).options.map((option) => option.label)).toEqual([

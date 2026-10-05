@@ -1,5 +1,6 @@
 import type { CategorySummary } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { t } from "../i18n/t.js";
 
 /** The category, then each category above it, stopping at a parent the list lacks or a loop. */
 export function categoryAncestors(
@@ -58,10 +59,11 @@ const FIELD_BY_CODE = new Map([
 const FIELD_BY_REQUEST_FIELD = new Map([
   ["name", "name"],
   ["parentId", "parent"],
+  ["color", "color"],
 ]);
 
-/** A refused category write, keyed by the field it concerns (`name` or `parent`), or `_form` when it
- * concerns neither. `parentId` is the parent the refused write named. */
+/** A refused category write, keyed by the field it concerns (`name`, `parent` or `color`), or
+ * `_form` when it concerns none. `parentId` is the parent the refused write named. */
 export function categoryRefusalErrors(
   error: unknown,
   parentId: string | null = null,
@@ -72,7 +74,8 @@ export function categoryRefusalErrors(
   let field = FIELD_BY_CODE.get(code);
   if (code === "category.not_found" && parentId !== null && params.categoryId === parentId)
     field = "parent";
+  if (code === "category.invalid" && params.field === "color") field = "color";
   if (code === "management.request_invalid" && typeof params.field === "string")
     field = FIELD_BY_REQUEST_FIELD.get(params.field);
-  return { [field ?? "_form"]: message };
+  return { [field ?? "_form"]: field === "color" ? t("editor.field_rejected") : message };
 }

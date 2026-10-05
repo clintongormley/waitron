@@ -57,8 +57,7 @@ const folderIcon = html`<span part="folder-frame"
 export const HOVER_OPEN_MS = 600;
 const DRAFT_KEY = "draft:new";
 
-export type CategoryNameDraft =
-  { kind: "create"; parentId: string | null } | { kind: "rename"; categoryId: string };
+export type CategoryNameDraft = { kind: "create"; parentId: string | null };
 
 type RootRow = { kind: "root"; key: typeof ROOT_KEY; parentKey: null };
 type CategoryRow = { kind: "folder"; key: string; parentKey: string; folder: CategorySummary };
@@ -240,25 +239,35 @@ export class ProductList extends LitElement {
         max-inline-size: var(--name-room);
         overflow-wrap: anywhere;
       }
+      wt-data-table::part(swatch-button) {
+        display: inline-flex;
+        vertical-align: middle;
+        align-items: center;
+        justify-content: center;
+        width: var(--wt-tap-min);
+        height: var(--wt-tap-min);
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+      wt-data-table::part(color-swatch) {
+        width: var(--wt-space-5);
+        height: var(--wt-space-5);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+      }
       wt-data-table::part(name-box) {
         flex: 1 1 calc(var(--wt-tap-min) * 4);
         min-width: 0;
         max-inline-size: max(var(--wt-tap-min), var(--name-box-room));
       }
-      wt-data-table::part(name-after) {
-        display: contents;
-      }
-      /* On a phone the name box takes a line of its own. The \`folder-cell\` span is held to the
-         room #fitNames measures, so the count and asterisk wrap there instead of running under the
-         pinned column. */
+      /* On a phone the name box takes a line of its own, held to the room #fitNames measures so it
+         does not run under the pinned column. */
       wt-data-table[narrow]::part(naming) {
         display: grid;
-        grid-template-columns: auto auto minmax(0, auto) 1fr;
+        grid-template-columns: auto auto 1fr;
         inline-size: max(var(--wt-tap-min), var(--name-box-room));
-      }
-      wt-data-table[narrow]::part(name-after) {
-        display: block;
-        overflow-wrap: anywhere;
       }
       wt-data-table[narrow]::part(name-box) {
         grid-row: 2;
@@ -563,12 +572,8 @@ export class ProductList extends LitElement {
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("categories") || changed.has("products")) this.#counts = this.#count();
     if (changed.has("nameDraft")) {
-      const draft = this.nameDraft;
       this.#nameSent = false;
-      this.#nameValue =
-        draft?.kind === "rename"
-          ? (this.categories.find(({ id }) => id === draft.categoryId)?.name ?? "")
-          : "";
+      this.#nameValue = "";
     }
     if (changed.has("nameError") && this.nameError !== "") this.#nameSent = false;
   }
@@ -582,11 +587,10 @@ export class ProductList extends LitElement {
   }
 
   async #focusNameBox(): Promise<void> {
-    const draft = this.nameDraft;
     const table = this.#table();
-    if (!draft || !table) return;
+    if (!this.nameDraft || !table) return;
     await table.updateComplete;
-    await table.revealRow(draft.kind === "create" ? DRAFT_KEY : `folder:${draft.categoryId}`);
+    await table.revealRow(DRAFT_KEY);
     const box = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
       'wt-input[name="category-name"]',
     );
@@ -711,10 +715,6 @@ export class ProductList extends LitElement {
     if (hidden > 0) scroll.scrollLeft -= hidden;
   }
 
-  #renaming(id: string): boolean {
-    return this.nameDraft?.kind === "rename" && this.nameDraft.categoryId === id;
-  }
-
   #rows(): ListRow[] {
     const known = new Set(this.categories.map(({ id }) => id));
     const keyOf = (id: string | null): string =>
@@ -727,7 +727,7 @@ export class ProductList extends LitElement {
         parentKey: keyOf(folder.parentId),
         folder,
       })),
-      ...(this.nameDraft?.kind === "create"
+      ...(this.nameDraft
         ? [
             {
               kind: "draft",
@@ -1147,7 +1147,7 @@ export class ProductList extends LitElement {
                   >`
                 : nothing
             }`;
-          return html`<span part=${this.#renaming(folder.id) ? "folder-cell naming" : "folder-cell"}
+          return html`<span part="folder-cell"
             ><button
               class="drag-grip"
               part="drag-grip"
@@ -1155,12 +1155,22 @@ export class ProductList extends LitElement {
               aria-label=${`${t("folders.drag")}: ${folder.name}`}
             >
               <wt-icon name="grip"></wt-icon></button
-            >${folderIcon}${
-              this.#renaming(folder.id)
-                ? html`${this.#nameBox()}<span part="name-after">${after}</span>`
-                : html`<span part="folder-name"><strong>${folder.name}</strong>${after}</span>`
-            }</span
-          >`;
+            >${folderIcon}<span part="folder-name"
+              ><strong>${folder.name}</strong>${after}<button
+                part="swatch-button"
+                type="button"
+                data-test=${`color-${folder.id}`}
+                aria-label=${t("folders.edit_color").replace("{name}", folder.name)}
+                @click=${(event: Event) => {
+                  event.stopPropagation();
+                  this.#send("edit-folder", { folderId: folder.id });
+                }}
+              >
+                <span
+                  part=${folder.color ? "color-swatch" : "color-swatch empty"}
+                  style=${folder.color ? `background:${folder.color}` : nothing}
+                ></span></button></span
+          ></span>`;
         }
         if (column.key === "actions")
           return html`<wt-row-actions
@@ -1172,9 +1182,9 @@ export class ProductList extends LitElement {
             <wt-button
               align="start"
               variant="secondary"
-              data-test=${`rename-${folder.id}`}
-              @click=${() => this.#send("rename-folder", { folderId: folder.id })}
-              >${t("folders.rename")}</wt-button
+              data-test=${`edit-${folder.id}`}
+              @click=${() => this.#send("edit-folder", { folderId: folder.id })}
+              >${t("action.edit")}</wt-button
             ><wt-button
               align="start"
               variant="secondary"
@@ -1327,11 +1337,7 @@ export class ProductList extends LitElement {
         .rowKeepsChildOrder=${(row: ListRow) => row.kind === "product" && row.variant === null}
         .expandAllIncludes=${(row: ListRow) => row.kind === "folder"}
         .rowActivation=${(row: ListRow) =>
-          row.kind === "folder" && !this.#renaming(row.folder.id)
-            ? "toggle"
-            : row.kind === "product"
-              ? "click"
-              : "none"}
+          row.kind === "folder" ? "toggle" : row.kind === "product" ? "click" : "none"}
         .rowToggleLabel=${(row: ListRow, expanded: boolean) =>
           row.kind === "folder"
             ? t(expanded ? "folders.close_named" : "folders.open_named").replace(

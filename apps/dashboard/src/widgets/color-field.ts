@@ -53,10 +53,33 @@ export const colorFieldStyles = css`
     outline-offset: var(--wt-selected-ring-offset);
   }
   .swatch.none {
+    display: inline-grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    column-gap: var(--wt-space-2);
     width: auto;
+    height: auto;
+    min-height: var(--wt-space-6);
     padding: 0 var(--wt-space-2);
     background: var(--wt-color-surface);
     color: var(--wt-color-text);
+    font-size: var(--wt-font-size-sm);
+    text-align: start;
+  }
+  .swatch.none > :not(.chip) {
+    grid-column: 1 / -1;
+  }
+  .swatch.none > .chip ~ :not(.chip) {
+    grid-column: 2;
+  }
+  .chip {
+    width: var(--wt-space-4);
+    height: var(--wt-space-4);
+    border: 1px solid var(--wt-color-border);
+    border-radius: var(--wt-radius-sm);
+  }
+  .note {
+    color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
   }
   .custom {
@@ -107,6 +130,11 @@ export const colorFieldStyles = css`
 export interface ColorFieldOptions {
   /** A hex colour, or null for none. */
   color: string | null;
+  /** The no-colour choice's label; absent, it reads "No colour". */
+  noneLabel?: string;
+  /** What the no-colour choice falls back to: a colour, drawn in a chip and read as the choice's
+   * description, or null for none, said as the choice's second line. Absent, it says nothing. */
+  inherited?: string | null;
   busy: boolean;
   error: string;
   /** The custom colour input's `name`. */
@@ -121,7 +149,30 @@ export interface ColorFieldOptions {
  * HTML, `input type=color`), so it cannot join the radio group.
  */
 export function colorField(options: ColorFieldOptions): TemplateResult {
-  const { color, busy, error, name, errorId, change } = options;
+  const { color, busy, error, name, errorId, change, noneLabel, inherited } = options;
+  const labelId = `${name}-none-label`;
+  const fallback =
+    inherited === undefined
+      ? null
+      : inherited !== null
+        ? {
+            id: `${name}-none-value`,
+            before: html`<span
+              class="chip"
+              aria-hidden="true"
+              style=${`background:${inherited}`}
+            ></span>`,
+            after: html`<span id=${`${name}-none-value`} hidden>${inherited}</span>`,
+          }
+        : noneLabel !== undefined
+          ? {
+              id: `${name}-none-note`,
+              before: nothing,
+              after: html`<span class="note" id=${`${name}-none-note`}
+                >${t("editor.color_category_none")}</span
+              >`,
+            }
+          : null;
   const swatch = (value: string) =>
     html`<button
       type="button"
@@ -145,6 +196,8 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
         class="swatch none ${color === null ? "on" : ""}"
         role="radio"
         aria-checked=${color === null}
+        aria-labelledby=${labelId}
+        aria-describedby=${fallback?.id ?? nothing}
         data-color=""
         .disabled=${busy}
         @click=${(event: Event) => {
@@ -152,7 +205,9 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
           change(null);
         }}
       >
-        ${t("editor.color_none")}
+        ${fallback?.before ?? nothing}<span id=${labelId}
+          >${noneLabel ?? t("editor.color_none")}</span
+        >${fallback?.after ?? nothing}
       </button>
       <div class="swatches">
         ${PALETTE_GROUPS.map(

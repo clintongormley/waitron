@@ -31,9 +31,9 @@ const sections: SectionDetails[] = [
 }));
 
 const categories: CategorySummary[] = [
-  { id: "c-drinks", name: "Bebidas", parentId: null },
-  { id: "c-beer", name: "Cerveza", parentId: "c-drinks" },
-  { id: "c-mains", name: "Principales", parentId: null },
+  { id: "c-drinks", name: "Bebidas", parentId: null, color: null },
+  { id: "c-beer", name: "Cerveza", parentId: "c-drinks", color: null },
+  { id: "c-mains", name: "Principales", parentId: null, color: null },
 ];
 
 /** The staff, customer and kitchen names differ, so a surface reading the wrong one fails. */
@@ -413,6 +413,7 @@ it("a category filter long enough to search shows its search box and empty list 
     id: `c-${index}`,
     name: `Categoría ${index}`,
     parentId: null,
+    color: null,
   }));
   const el = await mount({ categories: many });
   const filter = table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-combobox"]>(

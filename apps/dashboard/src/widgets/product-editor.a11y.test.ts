@@ -169,9 +169,9 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
         extraLists,
         optionLists,
         categories: [
-          { id: "drinks", name: "Drinks", parentId: null },
-          { id: "food", name: "Food", parentId: null },
-          { id: "wine", name: "Wine", parentId: "drinks" },
+          { id: "drinks", name: "Drinks", parentId: null, color: null },
+          { id: "food", name: "Food", parentId: null, color: null },
+          { id: "wine", name: "Wine", parentId: "drinks", color: null },
         ],
         courses: [{ id: "starters", name: "Starters" }],
         fieldErrors:

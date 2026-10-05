@@ -134,7 +134,9 @@ export const en = {
   "folders.add_category": "Add category",
   "folders.expand_all": "Expand all",
   "folders.collapse_all": "Collapse all",
-  "folders.rename": "Rename",
+  "folders.edit_heading": "Edit category",
+  "folders.name_required": "Enter a name for the category.",
+  "folders.edit_color": "Change the colour of {name}",
   "folders.open_named": "Open {name}",
   "folders.close_named": "Close {name}",
 
@@ -204,6 +206,8 @@ export const en = {
   "editor.color": "Colour",
   "editor.color_none": "No colour",
   "editor.color_custom": "Custom",
+  "editor.color_use_category": "Use category colour",
+  "editor.color_category_none": "Its category has no colour.",
 
   "nav.modifiers": "Modifiers",
   "modifiers.title": "Modifiers",
@@ -2288,7 +2292,9 @@ export const es: Record<StringKey, string> = {
   "folders.add_category": "Añadir categoría",
   "folders.expand_all": "Expandir todo",
   "folders.collapse_all": "Contraer todo",
-  "folders.rename": "Cambiar nombre",
+  "folders.edit_heading": "Editar categoría",
+  "folders.name_required": "Introduce un nombre para la categoría.",
+  "folders.edit_color": "Cambiar el color de {name}",
   "folders.open_named": "Abrir {name}",
   "folders.close_named": "Cerrar {name}",
 
@@ -2360,6 +2366,8 @@ export const es: Record<StringKey, string> = {
   "editor.color": "Color",
   "editor.color_none": "Sin color",
   "editor.color_custom": "Personalizado",
+  "editor.color_use_category": "Usar el color de la categoría",
+  "editor.color_category_none": "Su categoría no tiene color.",
 
   "nav.modifiers": "Modificadores",
   "modifiers.title": "Modificadores",

@@ -55,9 +55,9 @@ function cellUnder(root: ShadowRoot, rowKey: string, header: string): HTMLElemen
   return [...row.querySelectorAll("td")][index]!;
 }
 
-const drinks = { id: "d", name: "Drinks", parentId: null };
-const beer = { id: "b", name: "Beer", parentId: "d" };
-const food = { id: "f", name: "Food", parentId: null };
+const drinks = { id: "d", name: "Drinks", parentId: null, color: null };
+const beer = { id: "b", name: "Beer", parentId: "d", color: null };
+const food = { id: "f", name: "Food", parentId: null, color: null };
 
 function treeProducts(): Product[] {
   return [
@@ -476,8 +476,8 @@ describe("product-list", () => {
         }),
       ],
       categories: [
-        { id: "reporting", name: "Comida", parentId: null },
-        { id: "seasonal", name: "Temporada", parentId: null },
+        { id: "reporting", name: "Comida", parentId: null, color: null },
+        { id: "seasonal", name: "Temporada", parentId: null, color: null },
       ],
       extraLists: [{ id: "ex-1", name: "Salsas" }],
       optionLists: [
@@ -889,8 +889,8 @@ describe("product-list", () => {
         }),
       ],
       categories: [
-        { id: "food", name: "Comida", parentId: null },
-        { id: "drinks", name: "Bebidas", parentId: null },
+        { id: "food", name: "Comida", parentId: null, color: null },
+        { id: "drinks", name: "Bebidas", parentId: null, color: null },
       ],
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -1575,12 +1575,12 @@ describe("the product list at phone width", () => {
   it.each(
     ["en-GB", "es-ES"].flatMap((locale) =>
       ["category.name_taken", "category.invalid"].flatMap((code) =>
-        ["f", "b"].map((categoryId) => ({ locale, code, categoryId })),
+        [null, "d"].map((parentId) => ({ locale, code, parentId })),
       ),
     ),
   )(
-    "shows a rename's whole refusal beside the pinned actions at 390 px without scrolling ($locale, $code, $categoryId)",
-    async ({ locale, code, categoryId }) => {
+    "shows a new category's whole refusal beside the pinned actions at 390 px without scrolling ($locale, $code, $parentId)",
+    async ({ locale, code, parentId }) => {
       const width = window.innerWidth,
         height = window.innerHeight;
       const before = currentLocale();
@@ -1588,11 +1588,11 @@ describe("the product list at phone width", () => {
         setLocale(locale);
         await page.viewport(390, 844);
         const { el, root } = await mountTree();
-        el.nameDraft = { kind: "rename", categoryId };
+        el.nameDraft = { kind: "create", parentId };
         el.nameError = codeMessage(code);
         await el.updateComplete;
         await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-        const row = root.querySelector<HTMLElement>(`tr[data-row-key="folder:${categoryId}"]`)!;
+        const row = root.querySelector<HTMLElement>('tr[data-row-key="draft:new"]')!;
         const box = row.querySelector<HTMLElementTagNameMap["wt-input"]>(
           'wt-input[name="category-name"]',
         )!;
@@ -1683,7 +1683,7 @@ describe("the product list at phone width", () => {
     (locale) =>
       onPhone(locale, 430, async () => {
         const { el, root } = await mountTree();
-        await openWithRefusal(el, { kind: "rename", categoryId: "f" });
+        await openWithRefusal(el, { kind: "create", parentId: null });
         await page.viewport(390, 844);
         expectInView(await nameBoxEdges(root));
       }),
@@ -1694,7 +1694,7 @@ describe("the product list at phone width", () => {
     (locale) =>
       onPhone(locale, 390, async () => {
         const { el, root } = await mountBoundedTree();
-        await openWithRefusal(el, { kind: "rename", categoryId: "f" });
+        await openWithRefusal(el, { kind: "create", parentId: null });
         const before = await nameBoxEdges(root);
         el.selecting = true;
         await el.updateComplete;
@@ -1712,7 +1712,7 @@ describe("the product list at phone width", () => {
       (["before", "after"] as const).map((scrolled) => ({ locale, scrolled })),
     ),
   )(
-    "shows the name box and its refusal from their first letter when the table is scrolled sideways $scrolled the rename opens at 390 px ($locale)",
+    "shows the name box and its refusal from their first letter when the table is scrolled sideways $scrolled the box opens at 390 px ($locale)",
     ({ locale, scrolled }) =>
       onPhone(locale, 390, async () => {
         const { el, root } = await mountTree();
@@ -1723,7 +1723,7 @@ describe("the product list at phone width", () => {
           expect(scroll.scrollLeft).toBe(172);
         };
         if (scrolled === "before") scrollSideways();
-        el.nameDraft = { kind: "rename", categoryId: "f" };
+        el.nameDraft = { kind: "create", parentId: null };
         await el.updateComplete;
         await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
         if (scrolled === "after") scrollSideways();
@@ -1738,7 +1738,7 @@ describe("the product list at phone width", () => {
     (locale) =>
       onPhone(locale, 430, async () => {
         const { el, root } = await mountTree();
-        await openWithRefusal(el, { kind: "rename", categoryId: "f" });
+        await openWithRefusal(el, { kind: "create", parentId: null });
         const host = el.parentElement!;
         el.remove();
         host.append(el);
@@ -1779,8 +1779,8 @@ describe("the product list at phone width", () => {
     };
   }
 
-  /** The tree mounted and laid out at phone width before a box opens, as when a person picks Rename
-   * or Add category from a row's menu. */
+  /** The tree mounted and laid out at phone width before a box opens, as when a person picks Add
+   * category from a row's menu. */
   async function mountNarrowTree(props: Partial<ProductList> = {}) {
     const tree = await mountTree(props);
     await vi.waitFor(() => expect(tree.table.hasAttribute("narrow")).toBe(true));
@@ -1802,28 +1802,6 @@ describe("the product list at phone width", () => {
 
   it.each(
     ["en-GB", "es-ES"].flatMap((locale) =>
-      ["f", "d", "b"].map((categoryId) => ({ locale, categoryId })),
-    ),
-  )(
-    "puts a renamed category's name box and its refusal on their own line under the grip at 390 px ($locale, $categoryId)",
-    ({ locale, categoryId }) =>
-      onPhone(locale, 390, async () => {
-        // An asterisk and Drinks' two-part count leave the least room beside the grip and icon.
-        const { el, root } = await mountNarrowTree({ unroutedFolderIds: ["f", "d", "b"] });
-        await openWithRefusal(el, { kind: "rename", categoryId });
-        const line = await nameBoxLine(root);
-        expectOwnLine(line);
-        const row = root.querySelector(`tr[data-row-key="folder:${categoryId}"]`)!;
-        for (const after of row.querySelectorAll('[part~="count"], [part~="unrouted-folder"]')) {
-          const rect = after.getBoundingClientRect();
-          expect(rect.right).toBeLessThanOrEqual(line.edges.pinned);
-          expect(rect.bottom).toBeLessThanOrEqual(line.box.top);
-        }
-      }),
-  );
-
-  it.each(
-    ["en-GB", "es-ES"].flatMap((locale) =>
       [null, "d", "b"].map((parentId) => ({ locale, parentId })),
     ),
   )(
@@ -1840,27 +1818,20 @@ describe("the product list at phone width", () => {
     "moves an open name box onto its own line when the screen narrows from 1280 to 390 px (%s)",
     (locale) =>
       onPhone(locale, 1280, async () => {
-        const { el, table, root } = await mountTree({ unroutedFolderIds: ["f", "d", "b"] });
-        await openWithRefusal(el, { kind: "rename", categoryId: "d" });
+        const { el, table, root } = await mountTree();
+        await openWithRefusal(el, { kind: "create", parentId: "d" });
         expect(table.hasAttribute("narrow")).toBe(false);
         await page.viewport(390, 844);
         await vi.waitFor(async () => expectOwnLine(await nameBoxLine(root)));
       }),
   );
 
-  it.each(
-    ["en-GB", "es-ES"].flatMap((locale) =>
-      [
-        { kind: "rename", categoryId: "b" } as const,
-        { kind: "create", parentId: "d" } as const,
-      ].map((draft) => ({ locale, draft })),
-    ),
-  )(
-    "keeps the name box beside the grip and folder icon at 1280 px ($locale, $draft.kind)",
-    ({ locale, draft }) =>
+  it.each(["en-GB", "es-ES"])(
+    "keeps a new category's name box beside the grip space and folder icon at 1280 px (%s)",
+    (locale) =>
       onPhone(locale, 1280, async () => {
         const { el, root } = await mountTree();
-        await openWithRefusal(el, draft);
+        await openWithRefusal(el, { kind: "create", parentId: "d" });
         const line = await nameBoxLine(root);
         expect(line.box.top).toBeLessThan(line.grip.bottom);
         expect(line.box.bottom).toBeGreaterThan(line.grip.top);
@@ -1873,6 +1844,7 @@ describe("the product list at phone width", () => {
     id: "long",
     name: "Embutidos ibéricos y quesos curados de la casa",
     parentId: null,
+    color: null,
   };
   const longProduct = () =>
     product({
@@ -1887,7 +1859,9 @@ describe("the product list at phone width", () => {
       ],
     });
   const singleWords = () => ({
-    categories: [{ id: "long", name: "Embutidosibéricosyquesoscuradosdelacasa", parentId: null }],
+    categories: [
+      { id: "long", name: "Embutidosibéricosyquesoscuradosdelacasa", parentId: null, color: null },
+    ],
     products: [
       product({
         id: "croquetas",
@@ -2014,6 +1988,29 @@ describe("the product list at phone width", () => {
   );
 
   it.each(["en-GB", "es-ES"])(
+    "keeps a long category's swatch, after its wrapped name, before the pinned actions at 390 px (%s)",
+    (locale) =>
+      onPhone(locale, 390, async () => {
+        const { root } = await mountLong();
+        const row = root.querySelector('tr[data-row-key="folder:long"]')!;
+        const swatch = row
+          .querySelector<HTMLElement>('[data-test="color-long"]')!
+          .getBoundingClientRect();
+        const start = root.querySelector(".scroll")!.getBoundingClientRect().left;
+        const pinned = row.querySelector('td[data-pinned="end"]')!.getBoundingClientRect().left;
+        expect(root.querySelector<HTMLElement>(".scroll")!.scrollLeft).toBe(0);
+        expect(swatch.left).toBeGreaterThanOrEqual(start);
+        expect(swatch.right).toBeLessThanOrEqual(pinned);
+        const name = (await nameTexts(root)).find(
+          ({ key, text }) => key === "folder:long" && text === longCategory.name,
+        )!;
+        expect(name.lines).toBeGreaterThan(1);
+        expect(name.right).toBeLessThanOrEqual(pinned);
+        expect(swatch.top).toBeGreaterThanOrEqual(name.top);
+      }),
+  );
+
+  it.each(["en-GB", "es-ES"])(
     "wraps a single long word inside the room before the pinned actions at 390 px (%s)",
     (locale) =>
       onPhone(locale, 390, async () => {
@@ -2121,7 +2118,7 @@ describe("the product list at phone width", () => {
     (locale) =>
       onPhone(locale, 1280, async () => {
         const { el, root } = await mountLong({
-          categories: [{ id: "long", name: "Embutidos", parentId: null }],
+          categories: [{ id: "long", name: "Embutidos", parentId: null, color: null }],
           products: [
             product({
               id: "croquetas",
@@ -2385,7 +2382,7 @@ describe("the product list as a tree", () => {
     expect(opened).not.toHaveBeenCalled();
   });
 
-  it("offers Add product and Add category on All products, and those, a divider, Rename, Move to… and Delete on a category", async () => {
+  it("offers Add product and Add category on All products, and those, a divider, Edit, Move to… and Delete on a category", async () => {
     const { root } = await mountTree();
     const all = root.querySelector('[data-test="actions-root"]')!;
     expect(all.getAttribute("label")).toBe(`${t("staff.actions")}: ${t("folders.all_products")}`);
@@ -2394,7 +2391,7 @@ describe("the product list as a tree", () => {
       t("catalogue.add_product"),
       t("folders.add_category"),
       "—",
-      t("folders.rename"),
+      t("action.edit"),
       t("folders.move"),
       t("action.delete"),
     ]);
@@ -2460,7 +2457,7 @@ describe("the product list as a tree", () => {
         setLocale(locale);
         await page.viewport(390, 844);
         const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-          categories: [drinks, beer, { id: "k", name: "Kegs", parentId: "b" }],
+          categories: [drinks, beer, { id: "k", name: "Kegs", parentId: "b", color: null }],
           products: [
             product({
               id: "keg",
@@ -2594,15 +2591,18 @@ describe("the product list as a tree", () => {
     expect(sent).toEqual([{ name: "Juice" }, { name: "Juice" }]);
   });
 
-  it("turns a category's name into the box, holding its name, for a rename", async () => {
+  it("asks to edit a category from Edit, and its row still shows its name, with no box", async () => {
     const { el, root } = await mountTree();
-    el.nameDraft = { kind: "rename", categoryId: "d" };
+    const edits: unknown[] = [];
+    el.addEventListener("edit-folder", (event) => edits.push((event as CustomEvent).detail));
+    root.querySelector<HTMLElement>('[data-test="edit-d"]')!.click();
     await el.updateComplete;
-    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    expect(edits).toEqual([{ folderId: "d" }]);
     const row = root.querySelector('tr[data-row-key="folder:d"]')!;
-    expect(row.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")!.value).toBe("Drinks");
-    expect(row.querySelector("strong")).toBeNull();
-    expect(row.querySelector(".row-activate")).toBeNull();
+    expect(row.querySelector("strong")!.textContent).toBe("Drinks");
+    expect(row.querySelector("wt-input")).toBeNull();
+    expect(row.querySelector(".row-activate")).not.toBeNull();
   });
 
   it("sends a cancel on Enter in a blank box, and nothing more once a name is sent", async () => {
@@ -2631,24 +2631,24 @@ describe("the product list as a tree", () => {
     el.nameDraft = { kind: "create", parentId: null };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-    el.nameDraft = { kind: "rename", categoryId: "d" };
+    el.nameDraft = { kind: "create", parentId: "d" };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     expect(sent).toEqual([]);
   });
 
-  it("closes a category's menu when Rename is chosen from it", async () => {
+  it("closes a category's menu when Edit is chosen from it", async () => {
     const { el, root } = await mountTree();
-    const renames: unknown[] = [];
-    el.addEventListener("rename-folder", (event) => renames.push((event as CustomEvent).detail));
+    const edits: unknown[] = [];
+    el.addEventListener("edit-folder", (event) => edits.push((event as CustomEvent).detail));
     const menu = root.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
       '[data-test="actions-folder-d"]',
     )!;
     menu.show();
     const popup = menu.shadowRoot!.querySelector("[popover]")!;
     expect(popup.matches(":popover-open")).toBe(true);
-    root.querySelector<HTMLElement>('[data-test="rename-d"]')!.click();
-    expect(renames).toEqual([{ folderId: "d" }]);
+    root.querySelector<HTMLElement>('[data-test="edit-d"]')!.click();
+    expect(edits).toEqual([{ folderId: "d" }]);
     expect(popup.matches(":popover-open")).toBe(false);
   });
 
@@ -2665,6 +2665,65 @@ describe("the product list as a tree", () => {
     root.querySelector<HTMLElement>('[data-test="delete-folder-d"]')!.click();
     expect(deletes).toEqual([{ folderId: "d" }]);
     expect(popup.matches(":popover-open")).toBe(false);
+  });
+
+  it("draws a swatch beside a category's name in its colour, outlined when it has none, and its click sends edit-folder without opening or closing the row", async () => {
+    const { el, root, table } = await mountTree({
+      categories: [{ ...drinks, color: "#b12525" }, beer, food],
+    });
+    const sent: unknown[] = [];
+    for (const name of ["edit-folder", "category-toggle", "drag-items"])
+      el.addEventListener(name, (event) => sent.push([name, (event as CustomEvent).detail]));
+    const button = (id: string) =>
+      root.querySelector<HTMLButtonElement>(
+        `tr[data-row-key="folder:${id}"] [data-test="color-${id}"]`,
+      )!;
+    const chip = (id: string) => button(id).querySelector<HTMLElement>('[part~="color-swatch"]')!;
+    expect(button("d").getAttribute("part")).toBe("swatch-button");
+    expect(button("d").getAttribute("aria-label")).toBe(
+      t("folders.edit_color").replace("{name}", "Drinks"),
+    );
+    expect(chip("d").getAttribute("part")).toBe("color-swatch");
+    expect(getComputedStyle(chip("d")).backgroundColor).toBe("rgb(177, 37, 37)");
+    expect(chip("f").getAttribute("part")).toBe("color-swatch empty");
+    expect(getComputedStyle(chip("f")).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(getComputedStyle(chip("f")).borderTopWidth).toBe("1px");
+    // Drawn after the name and its count, so names at one depth still line up.
+    const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+    expect(button("d").getBoundingClientRect().left).toBeGreaterThanOrEqual(
+      row.querySelector('[data-test="count-d"]')!.getBoundingClientRect().right,
+    );
+
+    const expanded = () => row.getAttribute("aria-expanded");
+    expect(expanded()).toBe("false");
+    await userEvent.click(button("d"));
+    await table.updateComplete;
+    expect(expanded()).toBe("false");
+    expect(sent).toEqual([["edit-folder", { folderId: "d" }]]);
+    await openRow(el, "folder:d");
+    expect(expanded()).toBe("true");
+    sent.length = 0;
+    await userEvent.click(button("d"));
+    await table.updateComplete;
+    expect(expanded()).toBe("true");
+    expect(sent).toEqual([["edit-folder", { folderId: "d" }]]);
+
+    // Pressed and dragged, the swatch starts no drag.
+    const box = button("d").getBoundingClientRect();
+    button("d").dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        composed: true,
+        pointerId: 3,
+        clientX: box.x + 4,
+        clientY: box.y + 4,
+      }),
+    );
+    document.dispatchEvent(
+      new PointerEvent("pointermove", { pointerId: 3, clientX: box.x + 4, clientY: box.y + 80 }),
+    );
+    document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 3 }));
+    expect(sent).toEqual([["edit-folder", { folderId: "d" }]]);
   });
 
   it.each([
@@ -2723,25 +2782,6 @@ describe("the product list as a tree", () => {
       expect(popup.matches(":popover-open")).toBe(false);
     },
   );
-
-  it("a rename's box sends a cancel on Esc, and on leaving it blank", async () => {
-    const { el } = await mountTree();
-    const sent: unknown[] = [];
-    el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
-    el.addEventListener("name-cancel", () => sent.push("cancel"));
-    const rename = async () => {
-      el.nameDraft = null;
-      await el.updateComplete;
-      el.nameDraft = { kind: "rename", categoryId: "d" };
-      await el.updateComplete;
-      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-    };
-    await rename();
-    await userEvent.keyboard("Beverages{Escape}");
-    await rename();
-    await userEvent.keyboard("{Backspace}{Tab}");
-    expect(sent).toEqual(["cancel", "cancel"]);
-  });
 
   it("opens the All products menu, without moving focus, when the catalogue loads empty, and only that once", async () => {
     const outside = document.createElement("button");
@@ -2813,7 +2853,7 @@ describe("a product's variants in the list", () => {
         loin(),
         product({ id: "chorizo", name: "Iberian chorizo", primaryCategoryId: "deli" }),
       ],
-      categories: [{ id: "deli", name: "Deli", parentId: null }],
+      categories: [{ id: "deli", name: "Deli", parentId: null, color: null }],
       madeAt: {
         thin: {
           stationId: "deli",
@@ -3102,8 +3142,8 @@ describe("the product list with sticky headings", () => {
 });
 
 describe("the Products tree's Name column", () => {
-  const deep = { id: "g", name: "Grill", parentId: "m" };
-  const meat = { id: "m", name: "Meat", parentId: "f" };
+  const deep = { id: "g", name: "Grill", parentId: "m", color: null };
+  const meat = { id: "m", name: "Meat", parentId: "f", color: null };
   const solomillo = () =>
     product({
       id: "loin",

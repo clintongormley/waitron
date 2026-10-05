@@ -34,7 +34,9 @@ const catalogues: CatalogueSummary[] = [
   { id: "cat-a", name: "Comida", active: true, version: 1 },
   { id: "cat-b", name: "Bebidas", active: true, version: 1 },
 ];
-const categories: CategorySummary[] = [{ id: "c1", name: "Entrantes", parentId: null }];
+const categories: CategorySummary[] = [
+  { id: "c1", name: "Entrantes", parentId: null, color: null },
+];
 const units: Unit[] = [
   { id: "u1", name: { es: "unidad" }, abbreviation: { es: "u" }, precision: 0 },
 ];

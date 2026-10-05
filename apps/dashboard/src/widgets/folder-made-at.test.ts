@@ -15,6 +15,7 @@ const folder = (id: string, name: string, parentId: string | null): CategorySumm
   id,
   name,
   parentId,
+  color: null,
 });
 /** Drinks > Beer > Craft, and Food beside them. */
 const CATEGORIES = [

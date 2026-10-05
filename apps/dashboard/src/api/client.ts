@@ -297,10 +297,12 @@ export interface CategorySummary {
   id: string;
   name: string;
   parentId: string | null;
+  color: string | null;
 }
 export interface CategoryInput {
   name: string;
   parentId?: string | null;
+  color?: string | null;
 }
 export interface CatalogueSelection {
   productIds: string[];

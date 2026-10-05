@@ -102,9 +102,9 @@ const products: Product[] = [
 ];
 
 const categories: CategorySummary[] = [
-  { id: "c-drinks", name: "Bebidas", parentId: null },
-  { id: "c-beer", name: "Cerveza", parentId: "c-drinks" },
-  { id: "c-mains", name: "Principales", parentId: null },
+  { id: "c-drinks", name: "Bebidas", parentId: null, color: null },
+  { id: "c-beer", name: "Cerveza", parentId: "c-drinks", color: null },
+  { id: "c-mains", name: "Principales", parentId: null, color: null },
 ];
 
 const menus: CatalogueSummary[] = [

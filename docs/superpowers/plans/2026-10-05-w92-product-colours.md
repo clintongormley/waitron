@@ -602,7 +602,11 @@ function tilePaint(color: string | null | undefined): string | undefined {
     `willUpdate`'s rename branch (`:537-540`) goes, leaving `#nameValue = ""`; `rowActivation`
     (`:1274-1275`) makes every folder row `"toggle"`; W72e's `#fitNameBox` and `#scheduleFit` stay
     as they are. The folder cell (`:1094-1096`)
-    always shows `<strong>${folder.name}</strong>` unless it is the create draft, and draws before it
+    always shows `<strong>${folder.name}</strong>` unless it is the create draft, and draws AFTER the
+    name and its count and asterisk, inside the `folder-name` span W85b's `#fitNames` fits (so names
+    at one depth still line up, W84's check, and the swatch wraps inside the room before the pinned
+    Actions column; ruling 2026-10-05: a swatch drawn before the name moved every category name one
+    tap target further in than a product's at the same depth)
     `<button part="swatch-button" type="button" data-test=${`color-${folder.id}`}
     aria-label=${t("folders.edit_color").replace("{name}", folder.name)}
     @click=${(e: Event) => { e.stopPropagation(); this.#send("edit-folder", { folderId: folder.id }); }}><span
@@ -627,7 +631,7 @@ function tilePaint(color: string | null | undefined): string | undefined {
 - [ ] **Step 3: run** Step 1's command plus the two a11y files and `src/screens/catalogue-screen.test.ts`;
   typecheck, lint `@waitron/dashboard`; format check; `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts`.
 - [ ] **Step 4: W72e at phone width, after the swatch.** The swatch button makes every category
-  row's name cell a `--wt-tap-min` wider, which can widen the table and move the pinned column.
+  row's name a `--wt-tap-min` longer, which can widen the table and move the pinned column.
   Re-run W72e's phone-width cases on their own, with the swatch in place:
   `pnpm --filter @waitron/dashboard exec vitest run src/widgets/product-list.test.ts -t "the product list at phone width"`,
   and read the `Tests` count: it must include every case of that `describe` (the moved ones and
@@ -695,8 +699,9 @@ function tilePaint(color: string | null | undefined): string | undefined {
   - a11y files: axe light and dark with swatches and the open dialog.
   Check memory; run `pnpm --filter @waitron/dashboard exec vitest run src/api/client-routes.test.ts src/widgets/product-color-form.test.ts src/widgets/menu-structure-table.test.ts src/screens/menus-screen.test.ts`.
 - [ ] **Step 2: implement.** The swatch markup and styles are Task 5's (`swatch-button`,
-  `color-swatch`, styled through `wt-data-table::part`), placed after the grip and before the
-  thumbnail or folder icon. The product colour is
+  `color-swatch`, styled through `wt-data-table::part`), placed after the row's name (and its
+  count, if any) — not before the thumbnail or folder icon, which would move that row's name off
+  the line names at one depth share (Task 5's ruling, 2026-10-05). The product colour is
   `effectiveColor(product.color, product.categoryId, categoryMap)` with `categoryMap` rebuilt in
   `willUpdate` when `categories` changes. `menus-screen` passes `.categories=${this.categories}`
   (already watched, `:780-781`), holds `colouring: Product | null`, `colorBusy`, `colorErrors`, and
@@ -792,3 +797,4 @@ behaviour.
 | 5 | `…catalogue-browser.test.ts:2273` (`:2290-2298`, `:2305-2308`, `:2311`) | rename box steps (Esc; "Fresh" Enter) during a pending create | create box steps in `f` (Esc; "Fresh" Enter); `createCategory` calls are Juice/d, Fresh/f, Tea/null; `updateCategory` never called | R3 |
 | 5 | `…catalogue-browser.test.ts:2315` (`:2327-2335`) | a refusal shows at the bottom, not under a rename box opened since | not under a create box opened since | R3 |
 | 5 | `…catalogue-browser.test.ts:2349` | a refused rename left with Esc keeps the old name, one update sent | a refused Edit dialog left with Esc keeps "Drinks" in the row, one update sent | R3 |
+| 5 | `apps/dashboard/src/widgets/category-form.test.ts:82` (`:89`; line numbers at d9cca52ea) | `management.request_invalid` with `field: "color"` is a refusal no field of the form shows, so it goes to the bottom message (`_form`) | removed from that list; the new case "puts a refused colour under the colour chooser…" expects `{ color: t("editor.field_rejected") }` for it, and for `category.invalid` `field: "color"` | Decision 9: the Edit dialog has a colour field, and a refused colour shows under it |

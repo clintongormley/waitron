@@ -27,6 +27,7 @@ import "@waitron/ui/src/components/wt-spinner.js";
 import { acceptsCatalogueDrop, type CategoryNameDraft, type ProductList } from "./product-list.js";
 import { folderMadeAt, isRouted, type FolderMadeAt } from "./folder-made-at.js";
 import { categoryTree, PATH_SEPARATOR } from "./classification-fields.js";
+import "./category-details-form.js";
 
 @customElement("dashboard-catalogue-browser")
 export class CatalogueBrowser extends LitElement {
@@ -111,6 +112,9 @@ export class CatalogueBrowser extends LitElement {
   @state() private search = "";
   @state() private nameDraft: CategoryNameDraft | null = null;
   @state() private nameError = "";
+  @state() private editingCategory: CategorySummary | null = null;
+  @state() private categoryBusy = false;
+  @state() private categoryErrors: Record<string, string> = {};
 
   @state() private selecting = false;
   @state() private selected: string[] = [];
@@ -553,16 +557,40 @@ export class CatalogueBrowser extends LitElement {
     const draft = this.nameDraft;
     if (!draft) return;
     this.nameError = "";
-    const parentId = draft.kind === "create" ? draft.parentId : null;
+    const { parentId } = draft;
     try {
-      if (draft.kind === "create")
-        await this.api.createCategory({ name: event.detail.name, parentId });
-      else await this.api.updateCategory(draft.categoryId, { name: event.detail.name });
+      await this.api.createCategory({ name: event.detail.name, parentId });
       if (this.nameDraft === draft) this.nameDraft = null;
     } catch (error) {
       const message = Object.values(categoryRefusalErrors(error, parentId))[0]!;
       if (this.nameDraft === draft) this.nameError = message;
       else this.dropError = message;
+    }
+  }
+  #editCategory(id: string): void {
+    const category = this.categories.find((candidate) => candidate.id === id);
+    if (!category) return;
+    this.categoryErrors = {};
+    this.editingCategory = category;
+  }
+  /** Sends the name and colour alone, never the parent, so a move made while the dialog was open
+   * is kept. */
+  async #saveCategory(event: CustomEvent<{ name: string; color: string | null }>): Promise<void> {
+    event.stopPropagation();
+    const category = this.editingCategory;
+    if (!category || this.categoryBusy) return;
+    this.categoryBusy = true;
+    this.categoryErrors = {};
+    try {
+      await this.api.updateCategory(category.id, {
+        name: event.detail.name,
+        color: event.detail.color,
+      });
+      this.editingCategory = null;
+    } catch (error) {
+      this.categoryErrors = categoryRefusalErrors(error, null);
+    } finally {
+      this.categoryBusy = false;
     }
   }
   override render() {
@@ -612,10 +640,9 @@ export class CatalogueBrowser extends LitElement {
         .optionLists=${this.optionLists}
         .units=${this.units}
         .unitLanguage=${this.unitLanguage}
-        @rename-folder=${(event: CustomEvent<{ folderId: string }>) => {
+        @edit-folder=${(event: CustomEvent<{ folderId: string }>) => {
           event.stopPropagation();
-          this.nameError = "";
-          this.nameDraft = { kind: "rename", categoryId: event.detail.folderId };
+          this.#editCategory(event.detail.folderId);
         }}
         @name-commit=${(event: CustomEvent<{ name: string }>) => void this.#saveName(event)}
         @name-cancel=${(event: Event) => {
@@ -697,9 +724,19 @@ export class CatalogueBrowser extends LitElement {
             : nothing
         }
       </dashboard-product-list>
-      ${this.#operationDialog()}${
-        this.dropError ? html`<p class="error" role="alert">${this.dropError}</p>` : nothing
-      }`;
+      ${this.#operationDialog()}<dashboard-category-details-form
+        .open=${this.editingCategory !== null}
+        .busy=${this.categoryBusy}
+        .value=${this.editingCategory}
+        .errors=${this.categoryErrors}
+        @wt-submit=${(event: CustomEvent<{ name: string; color: string | null }>) =>
+          void this.#saveCategory(event)}
+        @wt-cancel=${(event: Event) => {
+          event.stopPropagation();
+          this.editingCategory = null;
+        }}
+      ></dashboard-category-details-form
+      >${this.dropError ? html`<p class="error" role="alert">${this.dropError}</p>` : nothing}`;
   }
 }
 declare global {
