@@ -1,9 +1,12 @@
 import { css } from "lit";
-import { customElement } from "lit/decorators.js";
+import { customElement, property } from "lit/decorators.js";
 import { WtDialog } from "./wt-dialog.js";
 
 @customElement("wt-modal")
 export class WtModal extends WtDialog {
+  /** Unset, or any other value, is wide. */
+  @property({ reflect: true }) size?: "compact" | "standard" | "wide";
+
   override firstUpdated(): void {
     super.firstUpdated();
     // A text-only modal still needs a keyboard target inside its scrolling body.
@@ -20,6 +23,19 @@ export class WtModal extends WtDialog {
         width: min(var(--wt-modal-max-width), calc(100dvw - 2 * var(--wt-modal-inline-margin)));
         max-width: none;
         overflow: hidden;
+      }
+
+      /* Set on this modal's own dialog rather than passed down as a custom property, which a modal
+         slotted inside this one would inherit. */
+      :host([size="compact"]) dialog {
+        width: min(var(--wt-modal-compact-width), calc(100dvw - 2 * var(--wt-modal-inline-margin)));
+      }
+
+      :host([size="standard"]) dialog {
+        width: min(
+          var(--wt-modal-standard-width),
+          calc(100dvw - 2 * var(--wt-modal-inline-margin))
+        );
       }
 
       dialog[open] {
