@@ -3409,8 +3409,8 @@ variants open, "Ración 10" showed as "Ración 1(" and the product's "4 variante
 against the pinned Actions column (`~/waitron-campaign/w85a-shots/shot-dark-390.png`, a local
 screenshot). W85a changes only the variants' order, so I believe this predates it; not compared
 with `main`. Seen in the same check, also not traced: in the product editor's variant table the
-Unit button sits against the Price heading with no gap. Needs the owner to say whether either
-wants an item.
+Unit button sits against the Price heading with no gap. The owner queued both on 2026-10-05: the
+long name as W85b and the Unit button gap as W85c.
 
 **Catalogue: no two categories with one parent, and no two Active products, share a name — DONE
 (W72, #1214, owner 2026-10-05).** A category's name is now refused when another category with the same
@@ -3487,10 +3487,16 @@ and `setup_port`, and the Printers screen links an agent's host cell to its `set
 (`apps/dashboard/src/screens/printers-screen.ts`), so an imported agent that had reported one, which
 arrives inactive and is shown once the status filter includes revoked agents, would link to the
 exporting machine's setup page (read, not run).
-Still open, for the owner: in the dashboard's category editor, at 390 px the category name box cuts
-its duplicate-name refusal off against the pinned Actions column, as it already did for
-`category.invalid` (compared in `~/waitron-campaign/w72-shots/`, local screenshots); the same cause
-as the phone-width entry above.
+Fixed in W72e (2026-10-05): at 390 px the Products tree's category name box used to cut its
+duplicate-name refusal, and `category.invalid`'s, off against the pinned Actions column. The table
+is as wide as its widest row, and the refusal's one long line widened the Name column past the
+screen. The box now takes only the room before the pinned column, measured when it opens and again
+after the table resizes or redraws, and its refusal wraps inside it; a box the table is scrolled
+past is scrolled back to its start (`#fitNameBox`,
+`apps/dashboard/src/widgets/product-list.ts`). The new box for a category being added is the same
+box. Pinned by the 390 px cases in `apps/dashboard/src/widgets/product-list.test.ts`. The fix
+changes only the name box, so the long product names in the phone-width entry above are not
+affected (W85b).
 
 **Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
 owner 2026-10-04; since 2026-10-05 a tree, W82a, see the last paragraph).** The bulk Move
