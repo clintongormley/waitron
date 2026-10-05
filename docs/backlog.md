@@ -6352,7 +6352,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   own choice editor. Rename and Disable sit in the row menu. Screens includes retained inactive
   bindings and links to Devices. Cell drafts and save refusals survive live reads; Rename writes
   saved values for every other field, leaving unsaved drafts out of its request. The watcher-printer
-  handover is implemented; timing cells and the legacy controls in Routing remain open. Stations now
+  handover is implemented; the legacy controls in Routing remain open. Stations now
   offers confirmed Open/Close for today and Back to the schedule actions, with retry after a write refusal. Default and unscheduled stations
   say Always open without an action; disabled stations and an unreadable clock offer no hours
   action. Today now shows the next scheduled opening or closing, distinguishing tomorrow and later
@@ -6368,8 +6368,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   confirmation. Refusals retain a retryable draft, local validation focuses the choice, Cancel and
   Escape discard, and live reads preserve typed choices and save errors. English/Spanish,
   light/dark, phone/desktop saved, picker, refusal and confirmation captures were inspected.
-  Routing-only card replacement, the three late-flag Settings editors and their inheritance display,
-  and supervisor page-loading permissions remain open. Venue settings › Kitchen now reads and
+  Settings now shows the three effective late flags, distinguishing inherited minutes from an
+  explicit override even when it equals the venue default. Each numeric cell saves its own field;
+  clearing it inherits the default. Local checks enforce whole positive minutes and effective order,
+  focus the invalid cell and disable Save after an invalid submission. Server refusals keep the
+  draft retryable. Live defaults refresh inherited values while retaining drafts and action errors.
+  Routing-only card replacement and supervisor page-loading permissions remain open. Venue settings › Kitchen now reads and
   replaces the venue-wide late flags. Its required whole-minute fields validate every invalid
   value and their order, naming a station when the server refuses the effective result. A refusal
   retains a retryable draft; live reads update saved values without replacing it. Supervisors see

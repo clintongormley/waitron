@@ -15,6 +15,8 @@ export const QUERY_DEPENDENCIES = {
   ],
   settings: ["service_settings"],
   routing: [
+    "kitchen_timing_defaults",
+    "kitchen_station_timing",
     "station_claims",
     "route_exceptions",
     "kitchen_stations",

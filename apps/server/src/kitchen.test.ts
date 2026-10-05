@@ -100,6 +100,12 @@ describe("kitchen-station config", () => {
     await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Barra" }));
     const list = await asApp(cfg, (tx) => listStations(tx, cfg));
     const defaultThresholds = {
+      timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+      timingOverrides: {
+        warmAfterMinutes: null,
+        overdueAfterMinutes: null,
+        forgottenAfterMinutes: null,
+      },
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
@@ -165,6 +171,12 @@ describe("kitchen-station config", () => {
       {
         id,
         name: "Parrilla",
+        timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+        timingOverrides: {
+          warmAfterMinutes: null,
+          overdueAfterMinutes: null,
+          forgottenAfterMinutes: null,
+        },
         displayOrder: 9,
         isDefault: false,
         active: true,
@@ -239,6 +251,34 @@ describe("kitchen-station config", () => {
       warmAfterMinutes: 2,
       overdueAfterMinutes: 7,
       forgottenAfterMinutes: 14,
+    });
+  });
+
+  it("lists raw timing overrides separately even when an override equals the venue default", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Same minutes" }));
+    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { warmAfterMinutes: 5 }));
+    const station = (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id);
+    expect(station).toMatchObject({
+      warmAfterMinutes: 5,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+      timingOverrides: {
+        warmAfterMinutes: 5,
+        overdueAfterMinutes: null,
+        forgottenAfterMinutes: null,
+      },
+      timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+    });
+    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { warmAfterMinutes: null }));
+    const inherited = (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id);
+    expect(inherited).toMatchObject({
+      warmAfterMinutes: 5,
+      timingOverrides: {
+        warmAfterMinutes: null,
+        overdueAfterMinutes: null,
+        forgottenAfterMinutes: null,
+      },
     });
   });
 

@@ -68,6 +68,13 @@ type Editor =
   | { kind: "exception_delete"; id: string };
 const PREP_TABS = ["stations", "routing", "tickets", "watchers", "settings"] as const;
 type PrepTab = (typeof PREP_TABS)[number];
+const TIMING_FIELDS = ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"] as const;
+type TimingField = (typeof TIMING_FIELDS)[number];
+const TIMING_LABELS = {
+  warmAfterMinutes: "prep.warm",
+  overdueAfterMinutes: "prep.overdue",
+  forgottenAfterMinutes: "prep.forgotten",
+} as const;
 type WatcherCell = "follows" | "zones" | "pass";
 const EVERY_MEMBER = "__every__";
 
@@ -107,6 +114,9 @@ export class PrepStationsScreen extends LitElement {
         min-height: var(--wt-tap-min);
         padding: 0;
         text-decoration: underline;
+      }
+      wt-data-table::part(inherited) {
+        --wt-color-text: var(--wt-color-text-muted);
       }
       wt-data-table::part(disabled-station) {
         color: var(--wt-color-text-muted);
@@ -223,7 +233,7 @@ export class PrepStationsScreen extends LitElement {
   @state() private view?: PrepStationsView;
   @state() private settingsEditor?: {
     stationId: string;
-    field: "rest" | "fallback";
+    field: "rest" | "fallback" | TimingField;
     value: string;
     fieldError: string;
     error: string;
@@ -2109,7 +2119,11 @@ export class PrepStationsScreen extends LitElement {
         "wt-data-table[data-test=settings-table]",
       );
       if (table) await table.updateComplete;
-      table?.shadowRoot?.querySelector<HTMLElement>('[data-test="settings-choice"]')?.focus();
+      table?.shadowRoot
+        ?.querySelector<HTMLElement>(
+          '[data-test="settings-choice"], [data-test="settings-minutes"]',
+        )
+        ?.focus();
       return;
     }
     this.settingsBusy = true;
@@ -2119,12 +2133,21 @@ export class PrepStationsScreen extends LitElement {
         await this.api.updateStation(editor.stationId, {
           showsRestOfOrder: editor.value === "yes",
         });
-      else await this.api.setStationFallback(editor.stationId, editor.value || null);
+      else if (editor.field === "fallback")
+        await this.api.setStationFallback(editor.stationId, editor.value || null);
+      else
+        await this.api.updateStation(editor.stationId, {
+          [editor.field]: editor.value.trim() === "" ? null : Number(editor.value),
+        });
     } catch (error) {
       const code = codeOf(error);
       const field = (error as { params?: { field?: string } })?.params?.field;
-      const fieldError =
-        editor.field === "rest"
+      const fieldError = TIMING_FIELDS.includes(editor.field as TimingField)
+        ? code === "station.thresholds_invalid" ||
+          (code === "management.request_invalid" && field === editor.field)
+          ? t("prep.threshold_invalid")
+          : ""
+        : editor.field === "rest"
           ? code === "management.request_invalid" && field === "showsRestOfOrder"
             ? t("prep.save_error")
             : ""
@@ -2147,8 +2170,26 @@ export class PrepStationsScreen extends LitElement {
   }
   #settingsInvalid() {
     const editor = this.settingsEditor;
-    return editor?.attempted && editor.field === "rest" && !["yes", "no"].includes(editor.value)
-      ? t("prep.choose_yes_no")
+    if (!editor?.attempted) return "";
+    if (editor.field === "rest")
+      return ["yes", "no"].includes(editor.value) ? "" : t("prep.choose_yes_no");
+    if (editor.field === "fallback") return "";
+    const station = this.view?.stations.find((s) => s.id === editor.stationId);
+    if (!station) return t("prep.save_error");
+    const value =
+      editor.value.trim() === "" ? station.timingDefaults[editor.field] : Number(editor.value);
+    const values = {
+      warmAfterMinutes: station.warmAfterMinutes,
+      overdueAfterMinutes: station.overdueAfterMinutes,
+      forgottenAfterMinutes: station.forgottenAfterMinutes,
+      [editor.field]: value,
+    };
+    return !Number.isInteger(value) ||
+      value < 1 ||
+      value > 2_147_483_647 ||
+      values.warmAfterMinutes >= values.overdueAfterMinutes ||
+      values.overdueAfterMinutes >= values.forgottenAfterMinutes
+      ? t("prep.threshold_invalid")
       : "";
   }
   #settingsCell(station: PrepStation, field: "rest" | "fallback") {
@@ -2268,12 +2309,94 @@ export class PrepStationsScreen extends LitElement {
       </wt-form-actions>
     </div>`;
   }
+  #timingCell(station: PrepStation, field: TimingField) {
+    const label = `${station.name}: ${t(TIMING_LABELS[field])}`;
+    const editor =
+      this.settingsEditor?.stationId === station.id && this.settingsEditor.field === field
+        ? this.settingsEditor
+        : undefined;
+    if (!editor)
+      return html`<wt-button
+        part=${station.timingOverrides[field] === null ? "inherited" : "timing-override"}
+        data-test=${`edit-settings-${field}-${station.id}`}
+        aria-label=${label}
+        ?disabled=${this.settingsBusy}
+        @click=${() => {
+          this.settingsEditor = {
+            stationId: station.id,
+            field,
+            value:
+              station.timingOverrides[field] === null ? "" : String(station.timingOverrides[field]),
+            fieldError: "",
+            error: "",
+            confirming: false,
+            attempted: false,
+          };
+        }}
+        >${station[field]}</wt-button
+      >`;
+    const invalid = this.#settingsInvalid();
+    return html`<div
+      part="watcher-cell"
+      @keydown=${(event: KeyboardEvent) => {
+        if (event.key === "Escape" && !this.settingsBusy) {
+          event.stopPropagation();
+          this.settingsEditor = undefined;
+        } else
+          submitOnEnter(
+            event,
+            (event.currentTarget as HTMLElement).querySelector("[data-test=save-settings-cell]"),
+          );
+      }}
+    >
+      <wt-input
+        data-test="settings-minutes"
+        name=${field}
+        label=${label}
+        type="number"
+        placeholder=${String(station.timingDefaults[field])}
+        hint=${t("prep.inherit_minutes")}
+        .value=${editor.value}
+        .error=${invalid || editor.fieldError}
+        .disabled=${this.settingsBusy}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.settingsEditor = { ...editor, value: event.detail.value, fieldError: "", error: "" };
+        }}
+      ></wt-input>
+      <wt-form-actions
+        .error=${invalid || editor.fieldError ? t("watchers.fix_fields") : editor.error}
+      >
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test="cancel-settings-cell"
+          ?disabled=${this.settingsBusy}
+          @click=${() => {
+            this.settingsEditor = undefined;
+          }}
+          >${t("venue.cancel")}</wt-button
+        >
+        <wt-button
+          data-test="save-settings-cell"
+          ?disabled=${this.settingsBusy || !!invalid}
+          @click=${() => void this.#saveSettingsCell()}
+          >${t("venue.save")}</wt-button
+        >
+      </wt-form-actions>
+    </div>`;
+  }
   #settings() {
     const stations = [...this.view!.stations]
       .filter((station) => station.active)
       .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name));
     const columns: DataTableColumn<PrepStation>[] = [
       { key: "name", label: t("prep.name"), cell: (station) => station.name },
+      ...TIMING_FIELDS.map((field) => ({
+        key: field,
+        label: t(TIMING_LABELS[field]),
+        cell: (station: PrepStation) => this.#timingCell(station, field),
+      })),
       {
         key: "rest",
         label: t("prep.shows_rest_of_order"),

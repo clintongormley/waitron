@@ -535,3 +535,22 @@ to the new test harness's URL, field-message expectation and table lookup type.
 This is a Task 7 subtask checkpoint. The three timing cells/inheritance display, supervisor
 Prep-page loading, Task 4 Routing cleanup and Task 8 whole-branch finish/CI/land remain open.
 Do not ship this partial page.
+
+
+## 2026-10-05 Settings timing-cell checkpoint
+
+Task 7's late-flag cells now read effective values with separate raw overrides and venue defaults
+from the existing station list. A same-valued override remains explicit. Each cell saves only its
+own field; blank saves null. Local validation checks the latest effective trio, whole positive
+minutes and the existing integer bound. Invalid submissions retain/focus the field and recheck on
+change; a server refusal remains retryable with a field message and bottom summary. Cancel/Escape
+discard. The routing read subscribes to timing defaults and overrides as well as station metadata,
+so a venue default change updates inherited values without resetting an open draft or action error.
+
+The two existing whole-station response checks in `apps/server/src/kitchen.test.ts` gain exact
+`timingDefaults`/`timingOverrides` objects without changing existing values. Three Prep browser
+fixture files gain the same complete response metadata, including the accessibility fixture's
+station pair. Campaign-local test and deletion-control logs record the verification.
+
+Routing-only cleanup, supervisor page loading and Task 8 whole-branch review/hook/current-head
+CI/landing remain. This checkpoint does not mark the branch ready to ship.

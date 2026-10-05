@@ -10,6 +10,7 @@ import {
   kitchenStations,
   kitchenStationTiming,
 } from "@waitron/db";
+import type { StationThresholds } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { productWithId, type ProductScope } from "@waitron/catalogue";
 import type { TillConfig } from "./till-config.js";
@@ -29,6 +30,8 @@ export interface Station {
   isDefault: boolean;
   active: boolean;
   showsRestOfOrder: boolean;
+  timingDefaults: StationThresholds;
+  timingOverrides: { [Field in keyof StationThresholds]: number | null };
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
@@ -140,6 +143,12 @@ export async function listStations(
     .orderBy(kitchenStations.displayOrder, kitchenStations.name);
   return stations.map((station) => ({
     ...station,
+    timingDefaults: defaults,
+    timingOverrides: {
+      warmAfterMinutes: station.warmAfterMinutes,
+      overdueAfterMinutes: station.overdueAfterMinutes,
+      forgottenAfterMinutes: station.forgottenAfterMinutes,
+    },
     warmAfterMinutes: station.warmAfterMinutes ?? defaults.warmAfterMinutes,
     overdueAfterMinutes: station.overdueAfterMinutes ?? defaults.overdueAfterMinutes,
     forgottenAfterMinutes: station.forgottenAfterMinutes ?? defaults.forgottenAfterMinutes,

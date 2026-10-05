@@ -54,6 +54,12 @@ const view: PrepStationsView = {
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
+      timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+      timingOverrides: {
+        warmAfterMinutes: null,
+        overdueAfterMinutes: null,
+        forgottenAfterMinutes: null,
+      },
       showsRestOfOrder: false,
     },
   ],

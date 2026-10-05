@@ -2,7 +2,7 @@ import { page } from "vitest/browser";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
-import { applyTokens, type WtDataTable, type WtCombobox } from "@waitron/ui";
+import { applyTokens, type WtDataTable, type WtInput, type WtCombobox } from "@waitron/ui";
 import type { PrepStationsApi, PrepStationsView } from "./routing-client.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import "./prep-stations-screen.js";
@@ -48,6 +48,12 @@ const view: PrepStationsView = {
       warmAfterMinutes: 5,
       overdueAfterMinutes: 10,
       forgottenAfterMinutes: 15,
+      timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+      timingOverrides: {
+        warmAfterMinutes: null,
+        overdueAfterMinutes: null,
+        forgottenAfterMinutes: null,
+      },
       showsRestOfOrder: false,
     },
   ],
@@ -500,6 +506,230 @@ it.each([
     } finally {
       document.body.style.margin = "";
       document.body.style.background = "";
+      await page.viewport(previous.width, previous.height);
+    }
+  },
+);
+
+type TimingField = "warmAfterMinutes" | "overdueAfterMinutes" | "forgottenAfterMinutes";
+function timingView(): PrepStationsView {
+  const v = structuredClone(view);
+  Object.assign(v.stations[0]!, {
+    warmAfterMinutes: 5,
+    overdueAfterMinutes: 9,
+    forgottenAfterMinutes: 15,
+    timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+    timingOverrides: { warmAfterMinutes: 5, overdueAfterMinutes: 9, forgottenAfterMinutes: null },
+  });
+  return v;
+}
+async function openTiming(el: PrepStationsScreen, field: TimingField) {
+  expect(q(el, `[data-test=edit-settings-${field}-bar]`)).not.toBeNull();
+  q(el, `[data-test=edit-settings-${field}-bar]`)!.click();
+  await settle(el);
+}
+function minutes(el: PrepStationsScreen, value: string) {
+  q(el, "[data-test=settings-minutes]")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value } }),
+  );
+}
+it("distinguishes inherited minutes from an explicit override equal to the default", async () => {
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(timingView()) }));
+  expect(q(el, "[data-test=edit-settings-warmAfterMinutes-bar]")!.textContent?.trim()).toBe("5");
+  expect(
+    q(el, "[data-test=edit-settings-warmAfterMinutes-bar]")!.getAttribute("part"),
+  ).not.toContain("inherited");
+  expect(q(el, "[data-test=edit-settings-forgottenAfterMinutes-bar]")!.textContent?.trim()).toBe(
+    "15",
+  );
+  expect(
+    q(el, "[data-test=edit-settings-forgottenAfterMinutes-bar]")!.getAttribute("part"),
+  ).toContain("inherited");
+  await openTiming(el, "forgottenAfterMinutes");
+  const input = q(el, "[data-test=settings-minutes]") as WtInput;
+  expect(input.value).toBe("");
+  expect(input.placeholder).toBe("15");
+  expect(input.name).toBe("forgottenAfterMinutes");
+  expect(input.required).toBe(false);
+});
+it.each([
+  ["warmAfterMinutes", "3", { warmAfterMinutes: 3 }],
+  ["overdueAfterMinutes", "", { overdueAfterMinutes: null }],
+  ["forgottenAfterMinutes", "20", { forgottenAfterMinutes: 20 }],
+] as const)("saves only the %s override, with blank inheriting", async (field, value, payload) => {
+  const a = api({ load: vi.fn().mockResolvedValue(timingView()) });
+  const el = await mount(a);
+  await openTiming(el, field);
+  minutes(el, value);
+  await settle(el);
+  q(el, "[data-test=save-settings-cell]")!.click();
+  await settle(el);
+  expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", payload);
+  expect(q(el, "[data-test=settings-minutes]")).toBeNull();
+});
+it.each(["0", "1.5", "abc", "9", "2147483648"])(
+  "refuses invalid or unordered warm minutes %s locally and rechecks",
+  async (value) => {
+    const a = api({ load: vi.fn().mockResolvedValue(timingView()) });
+    const el = await mount(a);
+    await openTiming(el, "warmAfterMinutes");
+    minutes(el, value);
+    await settle(el);
+    q(el, "[data-test=save-settings-cell]")!.click();
+    await settle(el);
+    expect(a.updateStation).not.toHaveBeenCalled();
+    expect((q(el, "[data-test=settings-minutes]") as WtInput).error).not.toBe("");
+    expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(true);
+    expect(q(el, "[data-test=settings-minutes]")!.shadowRoot!.activeElement).not.toBeNull();
+    minutes(el, "4");
+    await settle(el);
+    expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(false);
+    q(el, "[data-test=save-settings-cell]")!.click();
+    await settle(el);
+    expect(a.updateStation).toHaveBeenCalledExactlyOnceWith("bar", { warmAfterMinutes: 4 });
+  },
+);
+it("keeps a timing refusal retryable beside its field with a bottom summary", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue(timingView()),
+    updateStation: vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "station.thresholds_invalid",
+        params: { field: "overdueAfterMinutes" },
+      })
+      .mockResolvedValue(undefined),
+  });
+  const el = await mount(a);
+  await openTiming(el, "warmAfterMinutes");
+  minutes(el, "7");
+  await settle(el);
+  q(el, "[data-test=save-settings-cell]")!.click();
+  await settle(el);
+  expect((q(el, "[data-test=settings-minutes]") as WtInput).value).toBe("7");
+  expect((q(el, "[data-test=settings-minutes]") as WtInput).error).toContain("whole minutes");
+  expect(q(el, "wt-form-actions")?.shadowRoot?.textContent).toContain(
+    "Fix the fields marked above",
+  );
+  expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(false);
+  q(el, "[data-test=save-settings-cell]")!.click();
+  await settle(el);
+  expect(a.updateStation).toHaveBeenCalledTimes(2);
+});
+it.each(["cancel", "escape"])(
+  "%s discards a timing draft and restores the saved override",
+  async (how) => {
+    const a = api({ load: vi.fn().mockResolvedValue(timingView()) });
+    const el = await mount(a);
+    await openTiming(el, "overdueAfterMinutes");
+    minutes(el, "");
+    await settle(el);
+    if (how === "cancel") q(el, "[data-test=cancel-settings-cell]")!.click();
+    else
+      q(el, "[data-test=settings-minutes]")!.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }),
+      );
+    await settle(el);
+    await openTiming(el, "overdueAfterMinutes");
+    expect((q(el, "[data-test=settings-minutes]") as WtInput).value).toBe("9");
+    expect(a.updateStation).not.toHaveBeenCalled();
+  },
+);
+
+it("live venue-default changes refresh inherited timing without replacing an override draft or refusal", async () => {
+  const liveData = new LiveData();
+  const server = timingView();
+  const load = vi.fn(async () => structuredClone(server));
+  const el = await mount(
+    api({
+      liveData,
+      load,
+      updateStation: vi.fn().mockRejectedValue({
+        code: "station.thresholds_invalid",
+        params: { field: "warmAfterMinutes" },
+      }),
+    }),
+  );
+  await openTiming(el, "warmAfterMinutes");
+  minutes(el, "7");
+  await settle(el);
+  q(el, "[data-test=save-settings-cell]")!.click();
+  await settle(el);
+  server.stations[0]!.forgottenAfterMinutes = 18;
+  server.stations[0]!.timingDefaults.forgottenAfterMinutes = 18;
+  liveData.invalidate([{ type: "kitchen_timing_defaults", id: "venue" }]);
+  await vi.waitFor(() =>
+    expect(q(el, "[data-test=edit-settings-forgottenAfterMinutes-bar]")!.textContent?.trim()).toBe(
+      "18",
+    ),
+  );
+  expect((q(el, "[data-test=settings-minutes]") as WtInput).value).toBe("7");
+  expect((q(el, "[data-test=settings-minutes]") as WtInput).error).toContain("whole minutes");
+  expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(false);
+});
+
+it.each([
+  ["en", "light", 390],
+  ["en", "dark", 390],
+  ["es", "light", 390],
+  ["es", "dark", 390],
+  ["en", "light", 1280],
+  ["en", "dark", 1280],
+  ["es", "light", 1280],
+  ["es", "dark", 1280],
+] as const)(
+  "timing cells render inherited values and retryable errors in %s %s at %ipx",
+  async (locale, theme, width) => {
+    const previous = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(width, 900);
+      const el = await mount(
+        api({
+          load: vi.fn().mockResolvedValue(timingView()),
+          updateStation: vi.fn().mockRejectedValue({
+            code: "station.thresholds_invalid",
+            params: { field: "overdueAfterMinutes" },
+          }),
+        }),
+      );
+      setLocale(locale);
+      el.requestUpdate();
+      await settle(el);
+      const host = el.parentElement!;
+      host.style.width = `${width}px`;
+      host.setAttribute("data-theme", theme);
+      host.style.background = "var(--wt-color-bg)";
+      document.body.style.margin = "0";
+      document.body.style.background = getComputedStyle(host).backgroundColor;
+      const inherited = q(el, "[data-test=edit-settings-forgottenAfterMinutes-bar]")!;
+      const override = q(el, "[data-test=edit-settings-warmAfterMinutes-bar]")!;
+      await (inherited as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+      await (override as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+      expect(getComputedStyle(inherited.shadowRoot!.querySelector("button")!).color).not.toBe(
+        getComputedStyle(override.shadowRoot!.querySelector("button")!).color,
+      );
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+      await page.screenshot({ path: `look/timing-${locale}-${theme}-${width}-saved.png` });
+      await page.elementLocator(override).click();
+      await settle(el);
+      const input = q(el, "[data-test=settings-minutes]") as WtInput;
+      await input.updateComplete;
+      expect(input.label).toContain(locale === "en" ? "Warm" : "Aviso");
+      await expectNoA11yViolations(host);
+      await page.screenshot({ path: `look/timing-${locale}-${theme}-${width}-editor.png` });
+      minutes(el, "7");
+      await settle(el);
+      await page.elementLocator(q(el, "[data-test=save-settings-cell]")!).click();
+      await settle(el);
+      expect(input.error).not.toBe("");
+      expect(q(el, "[data-test=save-settings-cell]")!.hasAttribute("disabled")).toBe(false);
+      await expectNoA11yViolations(host);
+      const save = q(el, "[data-test=save-settings-cell]")!.getBoundingClientRect();
+      expect(save.left).toBeGreaterThanOrEqual(0);
+      expect(save.right).toBeLessThanOrEqual(width);
+      await page.screenshot({ path: `look/timing-${locale}-${theme}-${width}-refused.png` });
+    } finally {
       await page.viewport(previous.width, previous.height);
     }
   },

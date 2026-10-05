@@ -1,4 +1,4 @@
-import type { TimingBand } from "@waitron/shared";
+import type { StationThresholds, TimingBand } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { RouteTarget, RoutingModel, ExceptionInput, RouteExplanation } from "../routing.js";
 import type { RoutingChange, RoutingMove } from "../routing-types.js";
@@ -55,6 +55,8 @@ export interface PrepStation {
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
   showsRestOfOrder: boolean;
+  timingDefaults: StationThresholds;
+  timingOverrides: { [Field in keyof StationThresholds]: number | null };
 }
 export interface PrepStationsView {
   routing: RoutingModel;
@@ -185,7 +187,12 @@ export class PrepStationsApi {
   }
   updateStation(
     id: string,
-    input: Partial<StationInput & Pick<PrepStation, "showsRestOfOrder">>,
+    input: Partial<
+      Pick<StationInput, "name" | "displayOrder"> &
+        Pick<PrepStation, "showsRestOfOrder"> & {
+          [Field in keyof StationThresholds]: number | null;
+        }
+    >,
   ): Promise<void> {
     return this.request(`/management-api/stations/${id}`, "PATCH", input);
   }
