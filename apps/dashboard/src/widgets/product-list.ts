@@ -298,6 +298,19 @@ export class ProductList extends LitElement {
     super.disconnectedCallback();
   }
 
+  protected override firstUpdated(): void {
+    // The table keeps a surviving row's cells, marks included, when its rows change mid-drag, so
+    // after each of its updates the drop is judged again on the rows the list now holds and the
+    // marks redrawn.
+    this.#table()!.addController({
+      hostUpdated: () => {
+        if (!this.#pointerDrag?.active) return;
+        if (this.#target !== undefined) this.#target = this.#dropTargetFor(this.#target);
+        this.#paint();
+      },
+    });
+  }
+
   /** A mouse drags a category or product from anywhere on its row; a finger only from the grip, so it
    * can still scroll; a control on the row is never a drag handle. */
   readonly #pointerDown = (event: PointerEvent): void => {
@@ -340,17 +353,16 @@ export class ProductList extends LitElement {
     if (!drag.active && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 5) return;
     event.preventDefault();
     if (!drag.active) {
+      if (!this.#rowByKey.has(drag.key)) {
+        this.#finishDrag();
+        return;
+      }
       drag.active = true;
       holdPageCursor();
       this.#dragged = this.selected.includes(drag.key) ? [...this.selected] : [drag.key];
       this.ghost = this.#ghostOf(this.#dragged);
       this.#send("drag-items", { keys: this.#dragged });
-      void this.updateComplete
-        .then(() => {
-          placeDragGhost(this.renderRoot, this.#pointer);
-          return this.#table()?.updateComplete;
-        })
-        .then(() => this.#paint());
+      void this.updateComplete.then(() => placeDragGhost(this.renderRoot, this.#pointer));
     }
     this.#pointer = { x: event.clientX, y: event.clientY };
     placeDragGhost(this.renderRoot, this.#pointer);
@@ -362,7 +374,6 @@ export class ProductList extends LitElement {
     const changed = target !== this.#target;
     this.#target = target;
     this.#hoverOpen(over);
-    // The marks and the gap change only with the target, or when a branch opens (#hoverOpen).
     if (changed) this.#paint();
   };
 
@@ -370,7 +381,9 @@ export class ProductList extends LitElement {
     const drag = this.#pointerDrag;
     if (!drag || event.pointerId !== drag.pointerId) return;
     const keys = this.#dragged;
-    const target = this.#target;
+    // A backstop: the table-update hook in firstUpdated has already judged the drop again after
+    // any refresh it saw.
+    const target = this.#target === undefined ? undefined : this.#dropTargetFor(this.#target);
     this.#finishDrag();
     if (!drag.active || event.type !== "pointerup") return;
     blockClickAfterDrag(false);
@@ -405,9 +418,11 @@ export class ProductList extends LitElement {
 
   /** Over a category or All products a drop files into it; over a product or variant, into the
    * category that product is in. A drop that would move nothing is not offered, nor one over the
-   * row the drag started on, even when other selected rows sit in other categories. */
+   * row the drag started on, even when other selected rows sit in other categories. Nothing is
+   * offered once a refresh has removed any dragged row. */
   #dropTargetFor(key: string): string | undefined {
     if (key === this.#pointerDrag?.key) return undefined;
+    if (!this.#dragged.every((dragged) => this.#rowByKey.has(dragged))) return undefined;
     const row = this.#rowByKey.get(key);
     if (!row || row.kind === "draft") return undefined;
     const target =
@@ -447,7 +462,6 @@ export class ProductList extends LitElement {
         this.#hover = null;
         if (!this.#pointerDrag?.active) return;
         table.setExpanded(over, true);
-        void table.updateComplete.then(() => this.#paint());
       }, HOVER_OPEN_MS),
     };
   }
