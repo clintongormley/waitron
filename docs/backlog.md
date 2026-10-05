@@ -1570,11 +1570,11 @@ deleted the right category; the dashboard was at fault. Fixed:
   `apps/dashboard/src/widgets/catalogue-browser.ts`), nothing is deleted and the dialog shows the
   new counts with a message saying so.
 - The server now makes the same comparison inside the delete's own transaction, before anything is
-  written (W74a). The dashboard sends the counts it showed with every delete that names a category,
-  and when they no longer match the server deletes nothing and refuses with
-  `category.contents_changed` (409); the dashboard then reads the contents again and shows the new
-  counts with the same message. Before this, a change between the dashboard's second read and the
-  delete was not seen.
+  written (W74a). The dashboard sends the counts it read before deleting (the ones its dialog
+  showed, when it asked) with every delete that names a category, and when they no longer match the
+  server deletes nothing and refuses with `category.contents_changed` (409); the dashboard then
+  reads the contents again and shows the new counts with the refusal's own message. Before this, a
+  change between the dashboard's second read and the delete was not seen.
 
 Still open from W74:
 - **A product's row menu stays open after Delete, Edit or Restore** on the Products list: `#emit`
