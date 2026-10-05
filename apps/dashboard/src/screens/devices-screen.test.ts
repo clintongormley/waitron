@@ -1582,6 +1582,10 @@ describe("add a device", () => {
     q(el, "[data-test=pair-submit]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
     await vi.waitFor(() => expect(slotted.isConnected).toBe(false));
+    // wt-dialog's own fallback takes the first focusable element in the screen, which is the
+    // heading's button too; a decoy ahead of it means only the dialog's `opener` lands there.
+    const decoy = document.createElement("button");
+    el.shadowRoot!.prepend(decoy);
 
     q(el, "[data-test=add-device-close]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=add-device-modal]")).toBeNull());
