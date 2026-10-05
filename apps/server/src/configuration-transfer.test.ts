@@ -1386,7 +1386,6 @@ it("gives each imported product the folded key of its own name, whatever the bun
     db: suite.db,
     modules: ALL_MODULES,
   });
-  // A staff name spelled as its catalogue's id in capitals folds to that id.
   const idShaped = await withTransaction(suite.db, async (tx) => {
     const menu = await createCatalogue(tx, { name: "Keys" });
     const fields = { catalogueId: menu.id, categoryId: null, pricingUnit: "each" as const };

@@ -3405,13 +3405,9 @@ nothing written, when setup opens the export and again when it is imported
 `validateConfigurationBundle`); both setup routes that reach it answer the two codes 409, as the
 management API does (`PROVISION_STATUS`, `apps/server/src/setup-api.ts`). It judges what the import
 will store: a product row with no `active` value counts as Active, the column's default, and a row
-whose product `active` is not 0 or 1, or whose category or product name is not text, is refused
-with `setup.request_invalid` naming the column. Setup's live-source screen then names the duplicate
-and asks for it
-to be renamed in the prepared restaurant and exported again, in English and Spanish. At 390 px the
-category name box cuts its refusal off against the pinned Actions column, as it already did for
-`category.invalid` (compared in `~/waitron-campaign/w72-shots/`, local screenshots); the same cause
-as the phone-width entry above.
+whose product `active` is not 0 or 1, or whose category or product name is not text, is refused with
+`setup.request_invalid` naming the column. Setup's live-source screen then names the duplicate and
+asks for it to be renamed in the prepared restaurant and exported again, in English and Spanish.
 Also found in W72's review, and fixed in W72a: a configuration import used to replace ANY text
 value equal to one of the bundle's ids with the new id, in every column (since `fabdb224d1`,
 2026-09-10), so a product or category named exactly like an id in the bundle arrived renamed to a
@@ -3421,6 +3417,10 @@ columns a module lists as `references` for a reference the schema gives no forei
 such columns a probe found, run over every import in the transfer tests and an import of the demo
 seed; a reference column added later with neither a foreign key nor a `references` entry keeps the
 old id, and nothing checks for one.
+Still open, for the owner: in the dashboard's category editor, at 390 px the category name box cuts
+its duplicate-name refusal off against the pinned Actions column, as it already did for
+`category.invalid` (compared in `~/waitron-campaign/w72-shots/`, local screenshots); the same cause
+as the phone-width entry above.
 
 **Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
 owner 2026-10-04; since 2026-10-05 a tree, W82a, see the last paragraph).** The bulk Move
