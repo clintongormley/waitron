@@ -3708,7 +3708,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   — at the cost of a QR whose size we no longer control. Left as an owner decision, not applied.
 - **A calibration drawer opening records who asked and when, not that the drawer opened.** There is
   no drawer sensor; the audit row is the request.
-- **The Edit-printer dialog follows the dashboard's own language, not the venue's** (ruling I) — a
+- **Printer details follow the dashboard's own language, not the venue's** (ruling I) — a
   recorded departure from the spec, which asked for the venue language.
 - **Still counted by the printer's `printer.jobs_waiting` alert after A167 (#975)**, measured with
   throwaway cases and not pinned: (1) when every dish a failed ticket carried for a station moves to
@@ -3785,7 +3785,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   raw text as a detail; nothing here says what a given BlueZ error always means on a real printer.
 - **At phone width a Bluetooth address breaks mid-group** ("00:11:22:33:44:5" then "5"), because
   of the width limit on the device details added on 2026-09-11.
-- **Left open by C109 (#960):** the edit dialog's Active switch can still switch a paired Bluetooth
+- **Left open by C109 (#960):** the printer details' Active switch can still switch a paired Bluetooth
   printer off without unpairing it. Leaving the Printers screen mid-calibration asks the server to
   switch the printer off; if that request fails nothing reports it and the printer stays on, and
   closing the browser tab mid-wizard does not switch it off. Leaving the screen while a Save is in
