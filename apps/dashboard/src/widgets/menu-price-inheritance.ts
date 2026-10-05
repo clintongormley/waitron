@@ -35,8 +35,9 @@ export function variantInherited(
 ): Inherited {
   const setting = sizeSetting(row, variantId);
   const under = withoutOwn(setting);
-  // A size with no price of its own carries its product's setting at level "product", a clash
-  // included (`parent` in packages/catalogue/src/menu-combine.ts).
+  // A size with no override on this menu and no size price from any source carries its product's
+  // setting at level "product", a clash included (`parent` in
+  // packages/catalogue/src/menu-combine.ts).
   const follows =
     setting.level === "product" || (under.state === "decided" && under.source.kind === "parent");
   return follows ? parentPrice(row, parent) : single(under);

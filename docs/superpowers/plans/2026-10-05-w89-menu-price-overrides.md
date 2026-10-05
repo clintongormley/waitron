@@ -776,10 +776,11 @@ The five inputs most likely to bite, each pinned by a test in the task that owns
     );
   }
   ```
-  **Amended during implementation (review finding).** `combineOffer` gives a size with no price of
-  its own its product's setting at `level: "product"`, and when the product's price is a clash it is
-  that clash object itself, not a decided `parent` setting (`parent`,
-  `packages/catalogue/src/menu-combine.ts:48`–`54`; `level`, `:77`–`80`). So a size follows its product, and
+  **Amended during implementation (review finding).** `combineOffer` gives a size with no override
+  on this menu and no size price from any source its product's setting at `level: "product"`, and
+  when the product's price is a clash it is a copy of that clash with `level: "product"`, not a
+  decided `parent` setting (`parent`, `packages/catalogue/src/menu-combine.ts:48`–`54`; the copy,
+  `:75`–`81`). So a size follows its product, and
   `variantInherited` returns `parentPrice(row, parent)`, when its setting's `level` is `"product"`
   OR `withoutOwn(setting)` is decided with `source.kind === "parent"`. A size with its own price
   over a clash stays a clash whatever the product's field holds. The tests build every clash row with
