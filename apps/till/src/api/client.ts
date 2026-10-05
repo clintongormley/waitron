@@ -371,6 +371,7 @@ export interface ZoneOfferCatalogue {
     zoneId: string;
     departmentId: string;
     serviceMode: "table_tab" | "prepay" | "invoice_first" | "ticket_then_pay";
+    receiptPrintMode?: "auto" | "on_request" | "never";
   };
   defaultMenuId: string | null;
   menus: TillZoneMenu[];

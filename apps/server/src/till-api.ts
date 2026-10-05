@@ -1222,8 +1222,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const context = await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
           deviceId: device.deviceId,
         });
+        const salePolicy = await VENUE_SERVICE.resolveSalePolicy(tx, deps.cfg, context.zoneId);
         return {
-          context,
+          context: { ...context, receiptPrintMode: salePolicy.receiptPrintMode },
           zones: (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).filter(
             (zone) => zone.serviceMode !== "table_tab",
           ),
@@ -1245,8 +1246,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
       const result = await withTransaction(deps.db, async (tx) => {
         const context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
+        const salePolicy = await VENUE_SERVICE.resolveSalePolicy(tx, deps.cfg, zoneId);
         return {
-          context,
+          context: { ...context, receiptPrintMode: salePolicy.receiptPrintMode },
           ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, zoneId, {
             deviceProfileId: device.deviceProfileId,
           })),

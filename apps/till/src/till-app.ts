@@ -1465,7 +1465,7 @@ export class TillApp extends LitElement {
   @state() private courses: TillCourse[] = [];
   /** The ticket's lines come from this filed result, never the client basket. */
   @state() private result?: TillSaleResult;
-  /** The location's issuance behavior; non-auto modes offer the original on the completion screen. */
+  /** The current counter zone's choice; non-auto modes offer the original on completion. */
   @state() private receiptPrintMode: "auto" | "on_request" | "never" = "auto";
   /** Whether the issuance-time original action is still available for the ticket currently shown. */
   @state() private originalReceiptAvailable = false;
@@ -1726,7 +1726,7 @@ export class TillApp extends LitElement {
       this.onboardingIntent = till.onboardingIntent;
       this.issuer = { venueName: till.venueName, nif: till.nif };
       this.orderFlow = "prepay";
-      this.receiptPrintMode = till.receiptPrintMode ?? "auto";
+      this.receiptPrintMode = "auto";
       this.bumpMode = till.bumpMode;
       this.fireControl = till.fireControl;
       this.courses = till.courses;
@@ -1830,6 +1830,7 @@ export class TillApp extends LitElement {
       this.counterServiceZones = zones ?? [];
       this.counterServiceZoneId = context.zoneId;
       this.api.setServiceZone(context.zoneId);
+      this.receiptPrintMode = context.receiptPrintMode ?? "auto";
       if (zones !== undefined && context.serviceMode !== "table_tab")
         this.orderFlow = context.serviceMode;
     } catch {
@@ -2186,6 +2187,7 @@ export class TillApp extends LitElement {
       this.#loadCounterOffers(catalogue);
       this.counterServiceZoneId = context.zoneId;
       this.api.setServiceZone(context.zoneId);
+      this.receiptPrintMode = context.receiptPrintMode ?? "auto";
       if (context.serviceMode !== "table_tab") this.orderFlow = context.serviceMode;
       this.stage = "order";
       this.collectFlow = undefined;

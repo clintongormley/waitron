@@ -1677,6 +1677,45 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
 });
 
 describe("GET /api/products (session-guarded catalogue)", () => {
+  it("offers the selected zone's effective receipt choice instead of the venue-wide choice", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const token = await openSession(suite.db);
+    const headers = { cookie: `${SESSION_COOKIE}=${token}` };
+    await suite.db.execute(sql`
+      update department_sale_policies set receipt_print_mode = 'on_request'
+      where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+    await suite.db.execute(sql`
+      update zone_sale_policies set receipt_print_mode = 'never' where zone_id = ${counterZoneId}`);
+    try {
+      for (const path of [
+        "/api/default-service-zone/offers",
+        `/api/service-zones/${counterZoneId}/offers`,
+      ]) {
+        const response = await app.request(path, { headers });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({
+          context: { zoneId: counterZoneId, receiptPrintMode: "never" },
+        });
+      }
+      await suite.db.execute(sql`
+        update zone_sale_policies set receipt_print_mode = null where zone_id = ${counterZoneId}`);
+      const inherited = await app.request(`/api/service-zones/${counterZoneId}/offers`, {
+        headers,
+      });
+      expect(inherited.status).toBe(200);
+      expect(await inherited.json()).toMatchObject({
+        context: { zoneId: counterZoneId, receiptPrintMode: "on_request" },
+      });
+    } finally {
+      await suite.db.execute(sql`
+        update zone_sale_policies set receipt_print_mode = null where zone_id = ${counterZoneId}`);
+      await suite.db.execute(sql`
+        update department_sale_policies set receipt_print_mode = 'auto'
+        where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+    }
+  });
+
   it("returns the configured default counter zone and its offers", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
@@ -1709,6 +1748,8 @@ describe("GET /api/products (session-guarded catalogue)", () => {
       select ${cfg.locationId}, ${second!.id}, department_id, 'prepay'
       from zone_service_policies
       where zone_id = ${counterZoneId}`);
+    await suite.db.execute(sql`
+      insert into zone_sale_policies (zone_id) values (${second!.id})`);
     await suite.db.execute(sql`
       insert into zone_menus (zone_id, menu_id)
       values (${second!.id}, ${aguaProduct.catalogueId})`);
