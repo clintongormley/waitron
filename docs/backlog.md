@@ -2310,7 +2310,7 @@ the product editor uses it; (4) the test title "…when the table's heading drop
 says dropdown for what is now a button; (5) the product editor's VAT dropdown is not disabled while
 saving (same on `main` before W66, not checked further).
 
-**Modals come in three sizes chosen for their content (W70, owner 2026-10-04) — DONE (PR pending).**
+**Modals come in three sizes chosen for their content (W70, owner 2026-10-04) — DONE (#1222).**
 The owner, on the Product editor: _"the modal is too wide for these forms. we need modals of different
 sizes for different display purposes"_. `wt-modal` takes `size="compact"` (28rem, 448px: a
 confirmation, or one or two short fields), `"standard"` (42rem, 672px: an ordinary editor, the Product
