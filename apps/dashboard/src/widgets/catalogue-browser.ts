@@ -25,7 +25,7 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import { acceptsCatalogueDrop, type CategoryNameDraft, type ProductList } from "./product-list.js";
-import { coveredByRule, folderMadeAt, type FolderMadeAt } from "./folder-made-at.js";
+import { folderMadeAt, isRouted, type FolderMadeAt } from "./folder-made-at.js";
 import { categoryTree, PATH_SEPARATOR } from "./classification-fields.js";
 
 @customElement("dashboard-catalogue-browser")
@@ -530,7 +530,7 @@ export class CatalogueBrowser extends LitElement {
   }
 
   #unroutedFolderIds(): string[] {
-    return [...this.#folderMadeAt].filter(([, made]) => !coveredByRule(made)).map(([id]) => id);
+    return [...this.#folderMadeAt].filter(([, made]) => !isRouted(made)).map(([id]) => id);
   }
   #emit(name: string, detail: unknown): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));

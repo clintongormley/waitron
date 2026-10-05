@@ -122,7 +122,7 @@ async function nameBox(el: CatalogueBrowser) {
   )!;
 }
 
-it("marks a category with no claim, or whose claim names a switched-off station with no fallback, and clears the mark once claimed", async () => {
+it("marks a category with no claim while the default station is switched off, or whose claim names a switched-off station with no fallback, and clears the mark once claimed", async () => {
   setLocale("en-GB");
   const routing = {
     stationTimes: [],
@@ -140,7 +140,7 @@ it("marks a category with no claim, or whose claim names a switched-off station 
     defaultStationId: "default",
     stations: [
       { id: "bar", name: "Bar", active: true },
-      { id: "default", name: "Kitchen", active: true },
+      { id: "default", name: "Kitchen", active: false },
     ],
   };
   const el = await mountBrowser({ routing });
@@ -196,7 +196,7 @@ it("does not mark a folder covered by a global folder exception", async () => {
         },
       ],
       unassigned: { folders: [], products: [] },
-      defaultStationId: "kitchen",
+      defaultStationId: null,
       stations: [{ id: "kitchen", name: "Kitchen", active: true }],
     },
   });
@@ -299,10 +299,28 @@ it("decides the asterisk as Made at does, following a switched-off station's fal
   expect(await unroutedMarker(el, "folder:d")).toBeNull();
   expect(await madeAtText(el, "folder:b")).toBe("Terrace from Drinks");
   expect(await unroutedMarker(el, "folder:b")).toBeNull();
-  expect(await unroutedMarker(el, "folder:f")).not.toBeNull();
+  expect(await madeAtText(el, "folder:f")).toBe("Kitchen default station");
+  expect(await unroutedMarker(el, "folder:f")).toBeNull();
   el.routing = barOff(null);
   expect(await unroutedMarker(el, "folder:d")).not.toBeNull();
   expect(await unroutedMarker(el, "folder:b")).not.toBeNull();
+});
+
+it("clears the asterisk on a category that falls through to a switched-on default station, and keeps it once that station is switched off", async () => {
+  const kitchenOn = (active: boolean) =>
+    routingWith({
+      stations: [
+        { id: "bar", name: "Bar", active: true },
+        { id: "kitchen", name: "Kitchen", active },
+      ],
+    });
+  const el = await mountBrowser({ routing: kitchenOn(true) });
+  expect(await madeAtText(el, "folder:f")).toBe("Kitchen default station");
+  expect(await unroutedMarker(el, "folder:f")).toBeNull();
+  el.routing = kitchenOn(false);
+  expect(await madeAtText(el, "folder:f")).toBe("Nowhere");
+  expect(await unroutedMarker(el, "folder:f")).not.toBeNull();
+  expect(await unroutedMarker(el, "folder:d")).toBeNull();
 });
 
 it("leaves categories blank while routing loads, and says so when its read failed", async () => {
