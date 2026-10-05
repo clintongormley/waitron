@@ -1182,7 +1182,7 @@ while the drag handle, the Default radio and the row menu keep doing their own t
 list form (`extra-list-form.ts`) draws the same kind of table, but its rows have no editor.
 
 **Clicking an Extras or Options list's row opens its editor, in the product editor and on the
-Modifiers page (W71, owner 2026-10-04) — DONE (#1192; W71f #1198).** In the product editor's Modifiers table
+Modifiers page (W71, owner 2026-10-04) — DONE (#1192; W71f #1198; W71h #1211).** In the product editor's Modifiers table
 (`apps/dashboard/src/widgets/product-editor.ts`) a click on a list's name or the empty part of its
 row, or Enter or Space on it, does what Edit in the row's menu does (`wt-edit-related`), through a
 row-sized button named "Edit: <list> · <kind>", built as the variants table's is; the drag handle,
