@@ -2037,6 +2037,54 @@ describe("the product list as a tree", () => {
     expect(popup.matches(":popover-open")).toBe(false);
   });
 
+  it.each([
+    ["Edit", "edit-small", "edit-product", "small"],
+    ["Remove", "delete-small", "delete-product", "small"],
+    ["Restore", "restore-large", "restore-product", "large"],
+  ])(
+    "closes a product row's menu when %s is chosen from it, and sends only that request",
+    async (_label, button, request, productId) => {
+      const removed = { ...bunVariant, id: "large", name: "Large", active: false };
+      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+        products: [product({ id: "bun", variants: [bunVariant, removed] })],
+      });
+      await choose(el, "active", "");
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      const root = await tableRoot(el);
+      root.querySelector<HTMLElement>(".tree-toggle")!.click();
+      await table.updateComplete;
+      const seen: [string, string][] = [];
+      for (const name of ["edit-product", "delete-product", "restore-product"])
+        el.addEventListener(name, (event) =>
+          seen.push([name, (event as CustomEvent<{ productId: string }>).detail.productId]),
+        );
+      const menu = root.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+        `[data-test="actions-${productId}"]`,
+      )!;
+      menu.show();
+      const popup = menu.shadowRoot!.querySelector("[popover]")!;
+      expect(popup.matches(":popover-open")).toBe(true);
+      await userEvent.click(root.querySelector<HTMLElement>(`[data-test="${button}"]`)!);
+      expect(seen).toEqual([[request, productId]]);
+      expect(popup.matches(":popover-open")).toBe(false);
+    },
+  );
+
+  it("closes a top-level product's menu when Delete is chosen from it", async () => {
+    const { el, root } = await mountTree();
+    const deletes: unknown[] = [];
+    el.addEventListener("delete-product", (event) => deletes.push((event as CustomEvent).detail));
+    const menu = root.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      '[data-test="actions-bread"]',
+    )!;
+    menu.show();
+    const popup = menu.shadowRoot!.querySelector("[popover]")!;
+    expect(popup.matches(":popover-open")).toBe(true);
+    await userEvent.click(root.querySelector<HTMLElement>('[data-test="delete-bread"]')!);
+    expect(deletes).toEqual([{ productId: "bread" }]);
+    expect(popup.matches(":popover-open")).toBe(false);
+  });
+
   it("a rename's box sends a cancel on Esc, and on leaving it blank", async () => {
     const { el } = await mountTree();
     const sent: unknown[] = [];

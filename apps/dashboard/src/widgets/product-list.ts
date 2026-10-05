@@ -603,21 +603,6 @@ export class ProductList extends LitElement {
     return this.nameDraft?.kind === "rename" && this.nameDraft.categoryId === id;
   }
 
-  #emit(
-    event: Event,
-    name: "edit-product" | "delete-product" | "restore-product",
-    productId: string,
-  ): void {
-    event.stopPropagation();
-    this.dispatchEvent(
-      new CustomEvent<{ productId: string }>(name, {
-        detail: { productId },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
   #rows(): ListRow[] {
     const known = new Set(this.categories.map(({ id }) => id));
     const keyOf = (id: string | null): string =>
@@ -967,13 +952,13 @@ export class ProductList extends LitElement {
               align="start"
               variant="secondary"
               data-test=${`edit-${id}`}
-              @click=${(event: Event) => this.#emit(event, "edit-product", id)}
+              @click=${() => this.#send("edit-product", { productId: id })}
               >${t("action.edit")}</wt-button
             ><wt-button
               align="start"
               variant=${restore ? "secondary" : "danger"}
               data-test=${`${removal.test}-${id}`}
-              @click=${(event: Event) => this.#emit(event, removal.event, id)}
+              @click=${() => this.#send(removal.event, { productId: id })}
               >${removal.label}</wt-button
             ></wt-row-actions
           >`;
