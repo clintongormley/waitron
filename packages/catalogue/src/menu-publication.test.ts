@@ -40,6 +40,7 @@ import {
   updateProduct,
 } from "./operations.js";
 import { updateCategory } from "./categories.js";
+import { moveCatalogueItems } from "./catalogue-items.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { extraListItems } from "./schema/extras.js";
 import { createUnit, updateUnit } from "./units.js";
@@ -591,6 +592,25 @@ describe("a category's colour", () => {
         [f.soup, "#25b125"],
       ]),
     );
+  });
+
+  it("moving it with the Products tree's Move is a colour change to publish", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => updateCategory(tx, f.coldDrinks, { color: "#25b125" }));
+    await publish(f.lunch);
+    expect(await states(f)).toMatchObject({ lunch: "current" });
+    await app((tx) =>
+      moveCatalogueItems(tx, { productIds: [], categoryIds: [f.softDrinks] }, f.coldDrinks),
+    );
+    expect(await states(f)).toMatchObject({ lunch: "changed" });
+    expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
+      colorChange(f.lemonade, "Lemonade"),
+      colorChange(f.lager, "Lager"),
+      colorChange(f.soup, "Soup"),
+    ]);
+    expect((await liveColors(f.lunch)).get(f.lemonade)).toBeNull();
+    await publish(f.lunch);
+    expect((await liveColors(f.lunch)).get(f.lemonade)).toBe("#25b125");
   });
 });
 
