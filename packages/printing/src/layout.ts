@@ -76,7 +76,9 @@ export function dpiValue(resolution: Resolution): 180 | 203 {
  * Break `text` into lines of at most `columns` characters. Spaces at the start of `text` are kept as
  * the first line's indent; every later line starts with `indent` spaces. Lines break at spaces, runs
  * of spaces inside a line are kept, spaces at a break are dropped, and a word longer than the room
- * left on a line is split. Both indents are capped at `columns - 1` so a line always has room.
+ * left on a line is split. A no-break space (U+00A0) is not a break, and a split falls at the latest
+ * point within the room that is not just before or just after one; where every point within the room
+ * is, the split falls at the room. Both indents are capped at `columns - 1` so a line always has room.
  */
 export function wrapText(text: string, columns: number, indent = 0): string[] {
   const lead = /^ */.exec(text)![0].length;
@@ -103,7 +105,7 @@ export function wrapText(text: string, columns: number, indent = 0): string[] {
     }
     if (word === "") continue;
     while (word.length > room()) {
-      const take = room();
+      const take = splitPoint(word, room());
       line = word.slice(0, take);
       word = word.slice(take);
       flush();
@@ -112,6 +114,15 @@ export function wrapText(text: string, columns: number, indent = 0): string[] {
   }
   if (line !== "" || lines.length === 0) flush();
   return lines;
+}
+
+const NO_BREAK_SPACE = "\u00a0";
+
+function splitPoint(word: string, room: number): number {
+  for (let at = room; at > 0; at--) {
+    if (word[at - 1] !== NO_BREAK_SPACE && word[at] !== NO_BREAK_SPACE) return at;
+  }
+  return room;
 }
 
 /**

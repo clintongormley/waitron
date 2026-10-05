@@ -66,6 +66,7 @@ const STRINGS: Readonly<Record<SupportedLocale, Strings>> = {
 };
 
 const INDENT = 2;
+const PATH_GLUE = "\u00a0";
 
 /**
  * The category sales report as one ESC/POS document for a printer's paper width and resolution.
@@ -93,21 +94,32 @@ export function formatCategorySalesPage({
         ? s.notRecorded
         : node.name;
 
+  // A category is printed by its whole path, so two with one name under different parents differ.
+  // Not recorded is no category, so what sits under it is printed by its own name. The no-break
+  // space keeps each separator on a line with at least the end of the name before it, whether the
+  // label wraps or a long name is split (`wrapText`); a split on a line with under three columns of
+  // room, or where a name's own no-break spaces leave no other place to split, can still start a
+  // line with one.
+  const labelOf = (node: CategoryTotal, ancestors: readonly string[]): string =>
+    node.kind === "category" ? [...ancestors, node.name].join(`${PATH_GLUE}› `) : nameOf(node);
+
   // One pass collects every row, so the amount columns can be sized to the widest figure first.
   const rows: { label: string; depth: number; gross: string; net: string }[] = [];
-  const walk = (node: CategoryTotal): void => {
-    rows.push({ label: nameOf(node), depth: node.depth, gross: node.gross, net: node.net });
+  const walk = (node: CategoryTotal, ancestors: readonly string[]): void => {
+    const label = labelOf(node, ancestors);
+    rows.push({ label, depth: node.depth, gross: node.gross, net: node.net });
     if (node.children.length > 0 && node.direct.lines > 0) {
       rows.push({
-        label: node.kind === "not_recorded" ? s.noCategoryRecorded : s.directlyIn(nameOf(node)),
+        label: node.kind === "not_recorded" ? s.noCategoryRecorded : s.directlyIn(label),
         depth: node.depth + 1,
         gross: node.direct.gross,
         net: node.direct.net,
       });
     }
-    for (const child of node.children) walk(child);
+    const inside = node.kind === "category" ? [...ancestors, node.name] : ancestors;
+    for (const child of node.children) walk(child, inside);
   };
-  for (const root of report.tree) walk(root);
+  for (const root of report.tree) walk(root, []);
   const totalRow = { label: s.total, depth: 0, gross: report.gross, net: report.net };
 
   const all = [...rows, totalRow];

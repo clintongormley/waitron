@@ -327,7 +327,7 @@ describe("dashboard-sales-screen — category report", () => {
       ["Cocina Casa", 0, "category", "20,00\u00a0€", "18,00\u00a0€"],
       ["Entrantes Casa", 1, "category", "20,00\u00a0€", "18,00\u00a0€"],
       // Its direct amounts cancel to zero, but it has lines, so the row stays.
-      ["Directamente en Entrantes Casa", 2, "direct", "0,00\u00a0€", "0,00\u00a0€"],
+      ["Directamente en Cocina Casa › Entrantes Casa", 2, "direct", "0,00\u00a0€", "0,00\u00a0€"],
       // A leaf with lines of its own has no Directly-in row.
       ["Croquetas Casa", 2, "category", "20,00\u00a0€", "18,00\u00a0€"],
       ["Sin categoría", 0, "uncategorised", "3,00\u00a0€", "2,70\u00a0€"],
@@ -339,7 +339,7 @@ describe("dashboard-sales-screen — category report", () => {
     expect(q(el, "category-total-net")!.textContent!.trim()).toBe("43,70\u00a0€");
   });
 
-  it("indents each row by its depth, and names its parents for a screen reader", async () => {
+  it("indents each row by its depth, and shows a category's parents before its own name", async () => {
     const el = await mount(stubApi());
     const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=category-row] th")];
     const indent = (i: number): number => parseFloat(getComputedStyle(cells[i]!).paddingLeft);
@@ -347,10 +347,99 @@ describe("dashboard-sales-screen — category report", () => {
     expect(indent(4)).toBeGreaterThan(indent(0));
     expect(indent(6)).toBeGreaterThan(indent(4));
     expect(indent(3)).toBe(indent(0));
-    const hidden = cells[6]!.querySelector<HTMLElement>(".visually-hidden")!;
-    expect(hidden.textContent).toBe("Cocina Casa › Entrantes Casa › ");
-    expect(hidden.offsetWidth).toBeLessThanOrEqual(1);
+    const path = cells[6]!.querySelector<HTMLElement>("[data-test=category-path]")!;
+    expect(path.textContent).toBe("Cocina Casa › Entrantes Casa › ");
+    expect(path.offsetWidth).toBeGreaterThan(1);
+    expect(cells[6]!.textContent!.trim()).toBe("Cocina Casa › Entrantes Casa › Croquetas Casa");
+    expect(cells[6]!.querySelector(".visually-hidden")).toBeNull();
+    expect(cells[0]!.querySelector("[data-test=category-path]")).toBeNull();
     expect(cells[0]!.querySelector(".visually-hidden")).toBeNull();
+    // A Directly-in row names its category by the whole path, so it needs no path of its own.
+    expect(cells[5]!.textContent!.trim()).toBe("Directamente en Cocina Casa › Entrantes Casa");
+    expect(cells[5]!.querySelector("[data-test=category-path]")).toBeNull();
+  });
+
+  it("tells two categories with one name apart by their paths, each mode naming its own parents", async () => {
+    const mains = (id: string, parent: string, name: string, mode: CategorySalesDto["mode"]) =>
+      ({
+        mode,
+        tree: [
+          node({
+            kind: "category",
+            id: parent,
+            name,
+            depth: 0,
+            gross: "10.00",
+            net: "9.00",
+            children: [
+              node({
+                kind: "category",
+                id,
+                name: "Principales",
+                depth: 1,
+                gross: "10.00",
+                net: "9.00",
+                direct: { gross: "10.00", net: "9.00", lines: 1 },
+              }),
+            ],
+          }),
+        ],
+        gross: "10.00",
+        net: "9.00",
+        grossComplete: true,
+        linesWithoutGross: 0,
+      }) satisfies CategorySalesDto;
+    // Today's tree renamed Almuerzo to Mediodía, so each mode's rows name their own parents.
+    const twoBranches = (mode: CategorySalesDto["mode"]): CategorySalesDto => {
+      const food = mains("c-food-mains", "c-food", "Comida", mode);
+      const lunchName = mode === "current" ? "Mediodía" : "Almuerzo";
+      const lunch = mains("c-lunch-mains", "c-lunch", lunchName, mode);
+      return { ...food, tree: [...lunch.tree, ...food.tree], gross: "20.00", net: "18.00" };
+    };
+    const api = stubApi({
+      getCategorySales: vi.fn(async (_f: string, _t: string, mode: CategorySalesDto["mode"]) =>
+        twoBranches(mode),
+      ) as unknown as DashboardApi["getCategorySales"],
+    });
+    const el = await mount(api);
+    // What is drawn: the text a screen reader alone hears is left out.
+    const shown = (): string[] =>
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=category-row] th")].map((th) => {
+        const copy = th.cloneNode(true) as HTMLElement;
+        for (const hidden of copy.querySelectorAll(".visually-hidden")) hidden.remove();
+        return copy.textContent!.replace(/\s+/g, " ").trim();
+      });
+    expect(shown()).toEqual([
+      "Almuerzo",
+      "Almuerzo › Principales",
+      "Comida",
+      "Comida › Principales",
+    ]);
+    pickMode(el, "current");
+    await flush(el);
+    expect(api.getCategorySales).toHaveBeenLastCalledWith(today(), today(), "current", false);
+    expect(shown()).toEqual([
+      "Mediodía",
+      "Mediodía › Principales",
+      "Comida",
+      "Comida › Principales",
+    ]);
+  });
+
+  it("shows no path for Uncategorised, Not recorded or what sits under Not recorded", async () => {
+    const el = await mount(stubApi());
+    const cells = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-test=category-row] th")];
+    // Rows 7 to 10: Sin categoría, No registrada, Sin categoría registrada, Tapas viejas.
+    for (const cell of cells.slice(7)) {
+      expect(cell.querySelector("[data-test=category-path]")).toBeNull();
+    }
+    expect(cells[7]!.textContent!.trim()).toBe("Sin categoría");
+    expect(cells[8]!.textContent!.trim()).toBe("No registrada");
+    // A screen reader still hears which row they sit under; nothing is shown.
+    const hidden = cells[10]!.querySelector<HTMLElement>(".visually-hidden")!;
+    expect(hidden.textContent).toBe("No registrada › ");
+    expect(hidden.offsetWidth).toBeLessThanOrEqual(1);
+    expect(cells[9]!.querySelector(".visually-hidden")!.textContent).toBe("No registrada › ");
   });
 
   it("names the screen's own rows and the mode in English", async () => {

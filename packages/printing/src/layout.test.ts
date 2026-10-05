@@ -44,6 +44,17 @@ describe("wrapText", () => {
     expect(wrapText("y".repeat(25), 10)).toEqual(["y".repeat(10), "y".repeat(10), "y".repeat(5)]);
   });
 
+  it("splits a long word earlier rather than just before or just after a no-break space", () => {
+    expect(wrapText("abcd\u00a0› e", 5)).toEqual(["abc", "d\u00a0› e"]);
+    expect(wrapText("abcde\u00a0f", 5)).toEqual(["abcd", "e\u00a0f"]);
+    expect(wrapText("  abcdefgh\u00a0›", 10, 4)).toEqual(["  abcdefg", "    h\u00a0›"]);
+  });
+
+  it("splits at the room when every point within it is beside a no-break space", () => {
+    expect(wrapText("a\u00a0b", 2)).toEqual(["a\u00a0", "b"]);
+    expect(wrapText("abc\u00a0d", 2)).toEqual(["ab", "c\u00a0", "d"]);
+  });
+
   it.each([30, 42])("keeps the leading-space indent of sub-lines at %i columns", (columns) => {
     expect(wrapText("  + Grande", columns, 4)).toEqual(["  + Grande"]);
     expect(wrapText("  Extra queso", columns, 2)).toEqual(["  Extra queso"]);
