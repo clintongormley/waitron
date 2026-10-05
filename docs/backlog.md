@@ -8416,16 +8416,16 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
 **Dashboard, till and setup:**
 
 - **One word for "switched off, kept for the record" across the dashboard — done by W110
-  (#1255), five points left open.** The owner's rule (2026-10-05): a record switched off but kept
+  (#1255), four points left open.** The owner's rule (2026-10-05): a record switched off but kept
   says **Disable / Deshabilitar**, comes back with **Enable / Habilitar**, and reads **Active** or
   **Disabled** (Deshabilitado or Deshabilitada, agreeing with the noun); **Delete / Eliminar** only
   for a real delete. W110 moved products, variants, options and extras lists, departments, zones,
   stations, floor tables, table statuses, adjustment reasons, users and card readers onto it (W105a,
   #1244, and W105b had done printers, print agents and devices), renaming the string keys that no
   longer said what they show; the rule is in `docs/developers/design-system.md`, "Switching off
-  versus deleting". Left open: (a) a printer's Active status still reads the masculine "Activo"
-  beside "Deshabilitada", because `printers.status_active` is shared with print agents (left by
-  W105a; printers were out of W110's scope). (b) A kitchen-screen watcher's **Remove** marks the
+  versus deleting". (a) is done by W110a: a printer's Active status reads "Activa", agreeing with
+  "Deshabilitada", and print agents read "Activo" from a key of their own
+  (`printers.agent_status_active`). Left open: (b) A kitchen-screen watcher's **Remove** marks the
   watcher inactive and drops its printers, its screens then say it was removed, and nothing lists or
   brings it back (`removeWatcher`, `apps/server/src/watchers.ts`), so it is neither a delete nor a
   switch-off; a kitchen course's **Remove** is the same kind of action: it sets `active: false` and

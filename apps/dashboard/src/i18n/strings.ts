@@ -951,6 +951,7 @@ export const en = {
   "printers.agents_title": "Print Agents",
   "printers.no_agents": "No print agents yet.",
   "printers.status_active": "Active",
+  "printers.agent_status_active": "Active",
   "printers.agent_status_disabled": "Disabled",
   "printers.last_seen_never": "Never",
   "printers.pairing_hint": "New print agents can ask to join while this dialog is open.",
@@ -3136,7 +3137,8 @@ export const es: Record<StringKey, string> = {
   "printers.title": "Configuración de impresoras",
   "printers.agents_title": "Agentes de impresión",
   "printers.no_agents": "Todavía no hay agentes de impresión.",
-  "printers.status_active": "Activo",
+  "printers.status_active": "Activa",
+  "printers.agent_status_active": "Activo",
   "printers.agent_status_disabled": "Deshabilitado",
   "printers.last_seen_never": "Nunca",
   "printers.pairing_hint":
