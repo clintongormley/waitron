@@ -276,3 +276,22 @@ Disable/Enable text. The timed-tester accessibility fixture selects Routing befo
 controls; it retains every size, position, answer and accessibility assertion. The dashboard
 fixture supplies the complete station-health response. The build PR must name these changes
 alongside the earlier Task 1 changes.
+
+### Today actions checkpoint, 2026-10-05
+
+Task 4 remains partial. The Stations table now renders confirmed Open/Close for today actions and
+Back to the schedule for a whole-day override, using the existing write and confirmation path.
+Default and unscheduled stations say Always open without an action; disabled stations and an
+unreadable clock offer no hours action. A refused write retains the confirmation and permits retry.
+The effective fallback still comes from the server's `closedSendsTo`, not the configured first hop.
+
+Six new browser checks failed before implementation and then passed. The four existing screen/table
+suites ran 246 tests successfully. Eight new viewport/axe checks cover EN/ES, both themes and
+390/1280 widths; their captures were inspected. Unchanged UI guards ran 41 tests successfully.
+In a frozen-installed disposable candidate, removing the always-open guard or the disabled-station
+guard failed the relevant check; restoring both passed all 14 Today checks. No existing assertion
+was changed. Types, focused ESLint/Prettier and `git diff --check` exited zero.
+
+Today still needs schedule-derived next-opening/closing wording; legacy card controls remain until
+the routing-only card replacement. Row menus/reorder, Tasks 5–7 and the whole-branch Task 8 gates
+remain open. This checkpoint is not ready to finish or land.

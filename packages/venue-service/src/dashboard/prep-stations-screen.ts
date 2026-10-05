@@ -1035,6 +1035,25 @@ export class PrepStationsScreen extends LitElement {
     if (row.status.open) return t("prep.open_now");
     return format("prep.closed_hours", { destination });
   }
+  #todayCell(station: PrepStation) {
+    const times = this.#times(station.id);
+    if (!times) return nothing;
+    if (!station.active) return t("prep.health.disabled");
+    if (!this.view?.routing.clockReadable) return t("prep.clock_unreadable");
+    if (station.isDefault || times.status.why === "no_hours") return t("prep.always_open");
+    const state = times.today ? null : times.status.open ? "closed" : "open";
+    const action = state === null ? "schedule" : state === "closed" ? "close-today" : "open-today";
+    return html`<div part="today">
+      <span>${this.#stationStatus(station)}</span>
+      <wt-button
+        variant="secondary"
+        data-test=${`${action}-${station.id}`}
+        ?disabled=${this.busy}
+        @click=${() => this.#openStationAction({ kind: "today", stationId: station.id, state })}
+        >${t(state === null ? "prep.back_to_schedule" : state === "closed" ? "prep.close_today" : "prep.open_today")}</wt-button
+      >
+    </div>`;
+  }
   #hoursSummary(hours: readonly WeeklyInterval[]) {
     if (!hours.length) return t("prep.always_open");
     return hours
@@ -1795,7 +1814,7 @@ export class PrepStationsScreen extends LitElement {
                     .stations=${view.stations}
                     .today=${Object.fromEntries(
                       view.stations.map((station) => {
-                        const status = this.#stationStatus(station);
+                        const status = this.#todayCell(station);
                         return [station.id, status === nothing ? "" : status];
                       }),
                     )}

@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -21,6 +21,12 @@ export class StationHealthTable extends LitElement {
       :host {
         display: block;
         min-width: 0;
+      }
+      wt-data-table::part(today) {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        align-items: flex-start;
       }
       wt-data-table::part(number) {
         border: 0;
@@ -56,7 +62,7 @@ export class StationHealthTable extends LitElement {
     `,
   ];
   @property({ attribute: false }) snapshot?: StationHealthSnapshot;
-  @property({ attribute: false }) today: Readonly<Record<string, string>> = {};
+  @property({ attribute: false }) today: Readonly<Record<string, string | TemplateResult>> = {};
   @property({ attribute: false }) stations: readonly PrepStation[] = [];
   @state() private selection?: { stationId: string; population: Population };
 

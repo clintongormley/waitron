@@ -3023,3 +3023,186 @@ it.each([
     }
   },
 );
+
+async function mountToday(
+  next: PrepStationsView,
+  overrides: Partial<PrepStationsApi> = {},
+  theme?: "light" | "dark",
+) {
+  const a = api({
+    load: vi.fn().mockResolvedValue(next),
+    readStationHealth: vi.fn().mockResolvedValue({
+      ...healthSnapshot,
+      stations: next.stations.map((station) => ({
+        ...healthSnapshot.stations[0]!,
+        id: station.id,
+        name: station.name,
+      })),
+    }),
+    setStationToday: vi.fn(),
+    ...overrides,
+  });
+  return { a, el: await mount(a, theme) };
+}
+it("Today leaves default and unscheduled stations always open without a closure action", async () => {
+  setLocale("en");
+  const { el } = await mountToday(withUpstairs({ open: true, why: "no_hours" }));
+  const rows = healthSummary(el)!.querySelectorAll("tbody tr");
+  for (const row of rows) {
+    expect(row.querySelectorAll("td")[1]!.textContent!.trim()).toBe("Always open");
+    expect(row.querySelectorAll("td")[1]!.querySelector("wt-button")).toBeNull();
+  }
+});
+it.each([
+  ["open", { open: false, why: "out_of_hours" }, "open", "Open for today"],
+  ["close", { open: true, why: "in_hours" }, "closed", "Close for today"],
+] as const)(
+  "Today confirms a %s action on the selected station before writing",
+  async (action, status, state, label) => {
+    setLocale("en");
+    const { a, el } = await mountToday(
+      withUpstairs(status, {
+        hours: [{ weekday: 1, opensAt: "12:00", closesAt: "01:00" }],
+      }),
+    );
+    const button = healthSummary(el)!.querySelector<HTMLElement>(
+      `[data-test="${action}-today-upstairs"]`,
+    );
+    expect(button).not.toBeNull();
+    expect(button!.textContent!.trim()).toBe(label);
+    button!.click();
+    await settle(el);
+    expect(q(el, '[data-test="station-action-modal"]')!.getAttribute("heading")).toBe(label);
+    expect(a.setStationToday).not.toHaveBeenCalled();
+    q(el, '[data-test="confirm-station-action"]')!.click();
+    await settle(el);
+    expect(a.setStationToday).toHaveBeenCalledExactlyOnceWith("upstairs", state);
+  },
+);
+it("Today names the effective fallback and returns a by-hand closure to the schedule", async () => {
+  setLocale("en");
+  const { a, el } = await mountToday(
+    withUpstairs(
+      { open: false, why: "closed_by_hand" },
+      {
+        today: "closed",
+        fallbackStationId: "another-closed-station",
+        closedSendsTo: "bar",
+      },
+    ),
+  );
+  const cell = healthSummary(el)!.querySelectorAll("tbody tr")[1]!.querySelectorAll("td")[1]!;
+  expect(cell.textContent).toContain("Its work goes to Bar.");
+  const button = cell.querySelector<HTMLElement>('[data-test="schedule-upstairs"]');
+  expect(button).not.toBeNull();
+  expect(cell.querySelector('[data-test="open-today-upstairs"]')).toBeNull();
+  button!.click();
+  await settle(el);
+  expect(a.setStationToday).not.toHaveBeenCalled();
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  expect(a.setStationToday).toHaveBeenCalledExactlyOnceWith("upstairs", null);
+});
+it("Today offers no hours action for disabled stations or an unreadable venue clock", async () => {
+  setLocale("en");
+  const next = withUpstairs({ open: false, why: "switched_off" });
+  next.stations[1]!.active = false;
+  next.routing.clockReadable = false;
+  const { el } = await mountToday(next);
+  const cells = [...healthSummary(el)!.querySelectorAll("tbody tr")].map(
+    (row) => row.querySelectorAll("td")[1]!,
+  );
+  expect(cells[0]!.textContent).toContain("cannot be read");
+  expect(cells[1]!.textContent!.trim()).toBe("Disabled");
+  for (const cell of cells) expect(cell.querySelector("wt-button")).toBeNull();
+});
+it("Today keeps its confirmation and refusal after a write fails and allows a retry", async () => {
+  setLocale("en");
+  const { a, el } = await mountToday(
+    withUpstairs(
+      { open: true, why: "in_hours" },
+      {
+        hours: [{ weekday: 1, opensAt: "12:00", closesAt: "01:00" }],
+      },
+    ),
+    {
+      setStationToday: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("offline"))
+        .mockResolvedValue(undefined),
+    },
+  );
+  const button = healthSummary(el)!.querySelector<HTMLElement>(
+    '[data-test="close-today-upstairs"]',
+  );
+  expect(button).not.toBeNull();
+  button!.click();
+  await settle(el);
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  expect(q(el, '[data-test="station-action-modal"]')!.textContent).toContain("could not be saved");
+  q(el, '[data-test="confirm-station-action"]')!.click();
+  await settle(el);
+  expect(a.setStationToday).toHaveBeenCalledTimes(2);
+  expect(q(el, '[data-test="station-action-modal"]')).toBeNull();
+});
+
+it.each([
+  ["en", "light", 390],
+  ["en", "dark", 390],
+  ["es", "light", 390],
+  ["es", "dark", 390],
+  ["en", "light", 1280],
+  ["en", "dark", 1280],
+  ["es", "light", 1280],
+  ["es", "dark", 1280],
+] as const)("Today controls remain accessible in %s %s at %ipx", async (locale, theme, width) => {
+  const previous = {
+    width: window.innerWidth,
+    height: window.innerHeight,
+    body: document.body.style.background,
+    canvas: document.documentElement.style.background,
+  };
+  try {
+    await page.viewport(width, 900);
+    setLocale(locale);
+    history.replaceState(null, "", "/manage/prep-stations");
+    const next = withUpstairs(
+      { open: true, why: "in_hours" },
+      {
+        hours: [{ weekday: 1, opensAt: "12:00", closesAt: "01:00" }],
+      },
+    );
+    const closed = { ...upstairs, id: "closed", name: "Kitchen", displayOrder: 3 };
+    next.stations.push(closed);
+    next.routing.stationTimes.push({
+      ...next.routing.stationTimes[1]!,
+      stationId: "closed",
+      status: { open: false, why: "closed_by_hand" },
+      today: "closed",
+    });
+    const { el } = await mountToday(next, {}, theme);
+    const host = el.parentElement!;
+    host.style.background = "var(--wt-color-bg)";
+    const canvas = getComputedStyle(host).backgroundColor;
+    document.body.style.background = canvas;
+    document.documentElement.style.background = canvas;
+    const summary = healthSummary(el)!;
+    const close = summary.querySelector<HTMLElement>('[data-test="close-today-upstairs"]')!;
+    const schedule = summary.querySelector<HTMLElement>('[data-test="schedule-closed"]')!;
+    expect(close.textContent!.trim()).toBe(locale === "en" ? "Close for today" : "Cerrar por hoy");
+    expect(schedule.textContent!.trim()).toBe(
+      locale === "en" ? "Back to the schedule" : "Volver al horario",
+    );
+    expect(el.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+    expect(close.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    await expectNoA11yViolations(host);
+    await page.elementLocator(close).click();
+    await settle(el);
+    await expectNoA11yViolations(host);
+  } finally {
+    document.body.style.background = previous.body;
+    document.documentElement.style.background = previous.canvas;
+    await page.viewport(previous.width, previous.height);
+  }
+});

@@ -6329,7 +6329,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   open Routing, whose existing controls remain mounted. Interim station hours sit below the panels.
   Category wording and Disable/Enable actions apply in both languages. Tickets and Settings are
   still empty panels awaiting their controls; legacy station settings/output links remain in
-  Routing, and Watchers still uses cards. The new Today controls, station row menus/reorder,
+  Routing, and Watchers still uses cards. Stations now offers confirmed Open/Close for today and
+  Back to the schedule actions, with retry after a write refusal. Default and unscheduled stations
+  say Always open without an action; disabled stations and an unreadable clock offer no hours
+  action. Today still needs schedule-derived next-opening/closing wording. Station row menus/reorder,
   Tickets/Watchers/Settings cell editors, venue-defaults UI and printing handover remain open.
   The generated station-parent rebuild failed the populated upgrade with a foreign-key refusal;
   the ongoing build uses the plan’s storage-redesign option. Approved decisions
