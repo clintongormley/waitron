@@ -321,6 +321,17 @@ async function openPrinter(el: PrintersScreen, id = "p1"): Promise<void> {
   q(el, "[data-test=edit-printer-details]")!.click();
   await flush(el);
 }
+async function openCalibration(el: PrintersScreen, id = "p1"): Promise<void> {
+  await selectTab(el, "printers");
+  q(el, `[data-test="printer-row-${id}"]`)!.click();
+  await flush(el);
+  q(el, "[data-test=printer-section-calibration]")!
+    .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+    .click();
+  await flush(el);
+  q(el, "[data-test=calibrate-printer-details]")!.click();
+  await flush(el);
+}
 async function openDiscovery(el: PrintersScreen): Promise<void> {
   await selectTab(el, "printers");
   q(el, "[data-test=open-add-printer]")!.click();
@@ -5612,13 +5623,18 @@ describe("printers-screen printer editor edges", () => {
 
   it("prints one sample receipt when the button is pressed twice", async () => {
     let release!: () => void;
-    const { el, api } = await mountEditing("p1", {
+    const api = stubApi({
       sampleReceipt: vi.fn().mockReturnValueOnce(
         new Promise((resolve) => {
           release = () => resolve({ jobId: "j10" });
         }),
       ),
     });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openCalibration(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
     const sample = q(el, "[data-test=print-sample-receipt-p1]")!;
 
     sample.click();
@@ -5630,9 +5646,14 @@ describe("printers-screen printer editor edges", () => {
   });
 
   it("shows a localized alert in the editor when a sample receipt is rejected", async () => {
-    const { el } = await mountEditing("p1", {
+    const api = stubApi({
       sampleReceipt: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
     });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openCalibration(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
 
     q(el, "[data-test=print-sample-receipt-p1]")!.click();
 
@@ -5646,7 +5667,7 @@ describe("printers-screen printer editor edges", () => {
 
   it("does not adopt a width ruler's result after its dialog was cancelled", async () => {
     let release!: () => void;
-    const { el, api } = await mountEditing("p1", {
+    const api = stubApi({
       testPrinterDrawer: vi.fn().mockResolvedValue({ jobId: "drawer-test" }),
       testPrint: vi.fn().mockReturnValueOnce(
         new Promise((resolve) => {
@@ -5654,6 +5675,9 @@ describe("printers-screen printer editor edges", () => {
         }),
       ),
     });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await openCalibration(el);
     q(el, "[data-test=print-ruler-p1]")!.click();
     await flush(el);
     q(el, "[data-test=cancel-edit-printer]")!.click();
@@ -5666,9 +5690,10 @@ describe("printers-screen printer editor edges", () => {
   });
 
   it("saves only the paper width the ruler's answer changed, leaving resolution alone", async () => {
-    const { el, api } = await mountEditing("p1");
-    q(el, "[data-test=calibrate-printer]")!.click();
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
+    await openCalibration(el);
     await chooseOption(el, "printer-ruler-number", "360");
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
