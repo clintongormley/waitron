@@ -8553,8 +8553,8 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   switch-off; a kitchen course's **Remove** is the same kind of action: it sets `active: false` and
   keeps the row, and no screen lists it or brings it back (`deactivateCourse`; `listCourses` returns
   active courses only, `apps/server/src/kitchen.ts`). Both keep
-  "Remove" until the owner decides which they are. (d) Zones and adjustment reasons now offer Enable (W110d, branch
-  `fix/enable-zones-and-reasons`): a disabled zone's row in the venue screen's policy tree, and a
+  "Remove" until the owner decides which they are. (d) Zones and adjustment reasons now offer Enable (W110d,
+  #1273): a disabled zone's row in the venue screen's policy tree, and a
   disabled reason's row menu on the reasons screen (through a new
   `POST /management-api/adjustments/reasons/:reasonId/reactivate`). Departments and floor tables
   still cannot be enabled: a department needs an `active` field on
@@ -8571,7 +8571,7 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   `PATCH /management-api/zones/:id` sets `active: true` on a zone whose department is disabled,
   with no refusal (read in `updateZone`, `apps/server/src/tables.ts`, not run), though the screen
   does not offer Enable there; a department's row in the policy tree still offers Disable when the
-  department is already disabled (zones had the same fault and W110d fixed it); and creating a
+  department is already disabled (zones had the same fault and W110d fixed it); creating a
   department with a name another department has answers 500 `server.internal`, because there is
   no `department.name_taken` code (run on W110d's branch: a second
   `POST /management-api/venue-service/departments` with the same name); and a disabled zone's
