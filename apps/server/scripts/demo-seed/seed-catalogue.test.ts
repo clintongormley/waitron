@@ -9,6 +9,7 @@ import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  foldName,
   listAccessibleCatalogues,
   listAvailableProducts,
   listMenuOffers,
@@ -112,6 +113,27 @@ describe("seedCatalogues", () => {
     expect(read.lunchNegroni?.placements).toContainEqual([]);
     expect(read.lunchNegroni?.placements).toContainEqual(read.drinksPath);
     expect(read.lunchNegroni?.placements).toHaveLength(2);
+  });
+
+  it("seeds no two categories with one parent, and no two Active products, sharing a name", async () => {
+    const { locationId } = await provisionVenue();
+    const { categories, products } = await withTransaction(suite.db, async (tx) => {
+      await seedCatalogues(tx, { locationId, locale: LOCALE });
+      const categories = await tx.execute<{ parent: string | null; name: string }>(sql`
+        select d.parent_id as parent, c.name from categories c
+        left join category_details d on d.category_id = c.id`);
+      const products = await tx.execute<{ name: string }>(sql`
+        select p.name from products p left join products parent on parent.id = p.parent_id
+        where p.active and (p.parent_id is null or parent.active)`);
+      return { categories: categories.rows, products: products.rows };
+    });
+    const repeated = (keys: string[]) => keys.filter((key, index) => keys.indexOf(key) !== index);
+    expect(categories.length).toBeGreaterThan(1);
+    expect(products.length).toBeGreaterThan(1);
+    expect(
+      repeated(categories.map(({ parent, name }) => `${parent ?? ""}/${foldName(name)}`)),
+    ).toEqual([]);
+    expect(repeated(products.map(({ name }) => foldName(name)))).toEqual([]);
   });
 
   it("names each menu's top level after the menu, the provisioned one included", async () => {

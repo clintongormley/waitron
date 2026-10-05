@@ -9,9 +9,9 @@ import {
   listCategories,
   readCategory,
   updateCategory,
-  deleteCategory,
   setMainReportingCategory,
 } from "./categories.js";
+import { deleteCategory } from "./catalogue-items.js";
 import { writeContentLanguages, listContentTranslationGaps } from "./content-languages.js";
 
 // Authoring results. The cases with two transactions started together are in

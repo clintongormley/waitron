@@ -588,6 +588,10 @@ export type ModuleConfigurationTransfer =
       readonly validate?: (
         tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
       ) => void;
+      /** Runs in the import's transaction after every module's rows are inserted, each module's in
+       * module order, to set what the module derives from those rows rather than letting a bundle
+       * carry it. */
+      readonly afterImport?: (tx: Transaction) => Promise<void>;
     };
 
 /**

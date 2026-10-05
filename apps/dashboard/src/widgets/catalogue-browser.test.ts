@@ -997,6 +997,27 @@ it("keeps a refused name in its box with the refusal under it, and Enter tries a
   await vi.waitFor(() => expect(el.api.createCategory).toHaveBeenCalledTimes(2));
 });
 
+it.each([
+  ["en-GB", "Another category in the same place already has this name."],
+  ["es", "Otra categoría en el mismo lugar ya tiene este nombre."],
+] as const)(
+  "keeps a duplicate name in its rename box with the refusal under it (%s)",
+  async (locale, message) => {
+    setLocale(locale);
+    const el = await mountBrowser();
+    vi.mocked(el.api.updateCategory).mockRejectedValueOnce({
+      code: "category.name_taken",
+      params: { field: "name", name: "Food" },
+      status: 409,
+    });
+    await menuAction(el, "rename-d");
+    const box = await nameBox(el);
+    await userEvent.keyboard("Food{Enter}");
+    await vi.waitFor(() => expect(box.error).toBe(message));
+    expect(box.value).toBe("Food");
+    expect(await rowKeys(el)).toContain("folder:d");
+  },
+);
 it("Add category on All products makes a top-level category", async () => {
   const el = await mountBrowser({ categoryId: "gone" });
   await menuAction(el, "add-category-root");
@@ -1211,6 +1232,42 @@ it("requires a move destination, excludes selected folders and descendants, and 
   );
   await vi.waitFor(() => expect(dialog(el)).toBeNull());
   expect(count(el)).toBe("0 selected");
+});
+it("shows a move refused for a duplicate name in the move dialog, keeping the choice", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.moveCatalogueItems).mockRejectedValueOnce({
+    code: "category.name_taken",
+    params: { field: "name", name: "Beer" },
+    status: 409,
+  });
+  await selectKeys(el, ["folder:f"]);
+  await press(el, "move");
+  await destination(el, "d");
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(dialog(el)!.querySelector('[role="alert"]')!.textContent).toBe(
+      "Another category in the same place already has this name.",
+    ),
+  );
+  expect(el.shadowRoot!.querySelector("wt-combobox")!.value).toBe("d");
+  expect(count(el)).toBe("1 selected");
+});
+it("shows a delete refused because a moved-up category's name is taken in the delete dialog", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.deleteCatalogueItems).mockRejectedValueOnce({
+    code: "category.name_taken",
+    params: { field: "name", name: "Food" },
+    status: 409,
+  });
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 category and 2 products"));
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(dialog(el)!.querySelector('[role="alert"]')!.textContent).toBe(
+      "Another category in the same place already has this name.",
+    ),
+  );
 });
 it("lists move destinations by full path in label order, after the top level, leaving out the moved subtree", async () => {
   const el = await mountBrowser({

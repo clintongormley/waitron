@@ -7,10 +7,10 @@ import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
   createCategory,
   updateCategory,
-  deleteCategory,
   readCategory,
   setMainReportingCategory,
 } from "./categories.js";
+import { deleteCategory } from "./catalogue-items.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { setProductVariants } from "./variants.js";
 import { plantStoredCategory, racePair, seedLegacySellingUnits } from "../test/fixtures.js";
@@ -121,14 +121,14 @@ const unpricedVariant = (name: string) => ({
   unitPrice: null,
   available: true,
 });
-const seedProduct = () =>
+const seedProduct = (name = "P") =>
   app(async (tx) => {
     const menu = await createCatalogue(tx, { name: "Menu" });
     return (
       await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: null,
-        name: "P",
+        name,
         pricingUnit: "each",
         unitPrice: "1",
         vatClass: "general",
@@ -173,7 +173,7 @@ it("deleting a category moves its products to its parent, and clears a variant's
   const { a, b } = await fixture();
   const child = await app((tx) => createCategory(tx, { name: "A1", parentId: a.id }));
   const product1 = await seedProduct();
-  const product2 = await seedProduct();
+  const product2 = await seedProduct("Q");
   const variantId = await app(async (tx) => {
     await setMainReportingCategory(tx, product1, child.id);
     await setMainReportingCategory(tx, product2, b.id);

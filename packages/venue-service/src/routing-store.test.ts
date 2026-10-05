@@ -56,7 +56,9 @@ beforeAll(() => {
 });
 const noPrep: RouteTarget = { kind: "no_preparation" };
 
-async function fixture(tx: Transaction) {
+/** `suffix` tells apart the names of a second fixture in one database, where root categories and
+ * Active products may not share a name with the first's. */
+async function fixture(tx: Transaction, suffix = "") {
   const [loc] = await tx
     .insert(locations)
     .values({ name: "Venue", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
@@ -82,10 +84,10 @@ async function fixture(tx: Transaction) {
   const bar = stations[0]!.id,
     terraceBar = stations[1]!.id,
     switchedOff = stations[2]!.id;
-  const drinks = (await createCategory(tx, { name: "Drinks" })).id;
+  const drinks = (await createCategory(tx, { name: `Drinks${suffix}` })).id;
   const beer = (await createCategory(tx, { name: "Beer", parentId: drinks })).id;
   const cocktails = (await createCategory(tx, { name: "Cocktails", parentId: drinks })).id;
-  const food = (await createCategory(tx, { name: "Food" })).id;
+  const food = (await createCategory(tx, { name: `Food${suffix}` })).id;
   const menu = await createCatalogue(tx, { name: "Menu" });
   const product = async (name: string, categoryId: string | null) =>
     (
@@ -98,8 +100,8 @@ async function fixture(tx: Transaction) {
         vatClass: "general",
       })
     ).id;
-  const mojito = await product("Mojito", cocktails);
-  const bread = await product("Bread", null);
+  const mojito = await product(`Mojito${suffix}`, cocktails);
+  const bread = await product(`Bread${suffix}`, null);
   const [variant] = await tx
     .insert(products)
     .values({ catalogueId: menu.id, parentId: mojito, name: "Large", categoryId: null })
@@ -422,7 +424,7 @@ describe("stored preparation rules", () => {
   it("scopes reads and every write to its location", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx),
-        other = await fixture(tx);
+        other = await fixture(tx, " (other venue)");
       await setClaim(tx, f.cfg, f.drinks, noPrep);
       await removeClaim(tx, other.cfg, f.drinks);
       const ownRules = await loadRoutingRules(tx, f.cfg, null);

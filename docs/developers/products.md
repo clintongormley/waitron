@@ -40,6 +40,17 @@ A variant's names are never inherited: a blank customer or kitchen name falls ba
 staff name, never to the parent's. A line that names no variant renders exactly as it did before
 variants existed.
 
+**A write may not give an Active row a staff name another Active row has.** A write that would
+leave an Active product, or an Active variant of an Active product, with a staff name another such
+row in the venue already has is refused with `product.name_taken`, ignoring case and surrounding
+spaces (`packages/catalogue/src/product-names.ts`). Rows that already share a name are not refused,
+and neither are rows a configuration import brings in. The check finds other rows by
+`products.name_key`, the folded name each catalogue write of the name stores beside it. A
+configuration import sets it from each imported row's name (`storeProductNameKeys`, run through
+the catalogue module's `afterImport`); a bundle never carries it, and one that does is refused. A
+row whose name has not been written since that column was added holds a null key and is not
+compared.
+
 The three resolvers, one per audience:
 
 - `staffPresentationName` — the variant's staff name, else the product's. Takes only the two staff

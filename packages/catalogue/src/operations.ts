@@ -40,6 +40,12 @@ import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { priceOrNull, resolveOfferPrice } from "./offer-price.js";
 import { assertNotOfferedAsExtra, menuVariantsOfItems } from "./variants.js";
 import {
+  assertFamilyNamesFree,
+  assertUpdatedNamesFree,
+  nameColumns,
+  readUpdatedName,
+} from "./product-names.js";
+import {
   assignProductUnit,
   clearProductUnit,
   EACH_UNIT,
@@ -970,6 +976,26 @@ export async function applyDietDerivation(
 }
 
 export async function createProduct(tx: Transaction, input: CreateProductInput): Promise<Product> {
+  return insertProduct(tx, input, true);
+}
+
+/**
+ * {@link createProduct} without the unique-name check, for `saveProductEditor`, which checks every
+ * name its whole save leaves before writing any of it. Left out of the package's exports
+ * (`index.ts`).
+ */
+export async function createProductSkippingNameCheck(
+  tx: Transaction,
+  input: CreateProductInput,
+): Promise<Product> {
+  return insertProduct(tx, input, false);
+}
+
+async function insertProduct(
+  tx: Transaction,
+  input: CreateProductInput,
+  checkNames: boolean,
+): Promise<Product> {
   if (input.unitId === undefined && input.pricingUnit === undefined) {
     throw new AppError("product.invalid", { field: "unitId" });
   }
@@ -994,7 +1020,7 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
   const values = {
     catalogueId: input.catalogueId,
     categoryId: input.categoryId,
-    name: input.name,
+    ...nameColumns(input.name),
     customerName: input.customerName ?? null,
     description: input.description ?? null,
     kitchenName: input.kitchenName?.trim() || null,
@@ -1012,6 +1038,8 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
     image: input.image ?? null,
   };
   if (input.categoryId !== null) await readCategory(tx, input.categoryId);
+  if (checkNames)
+    await assertFamilyNamesFree(tx, null, { name: input.name, active: values.active }, []);
   const [row] = await tx.insert(products).values(values).returning({ id: products.id });
   if (selectedUnit !== null) await assignProductUnit(tx, row!.id, selectedUnit.id);
   const [created] = await tx
@@ -1101,13 +1129,31 @@ export async function updateProduct(
   id: string,
   patch: UpdateProductInput,
 ): Promise<void> {
-  if (patch.active === true) {
-    const [row] = await tx
-      .select({ parentId: products.parentId })
-      .from(products)
-      .where(eq(products.id, id));
-    if (row?.parentId != null) await assertNotOfferedAsExtra(tx, row.parentId, "active");
-  }
+  await patchProduct(tx, id, patch, true);
+}
+
+/** {@link updateProduct} without the unique-name check, for the reason
+ * {@link createProductSkippingNameCheck} gives. Left out of the package's exports (`index.ts`). */
+export async function updateProductSkippingNameCheck(
+  tx: Transaction,
+  id: string,
+  patch: UpdateProductInput,
+): Promise<void> {
+  await patchProduct(tx, id, patch, false);
+}
+
+async function patchProduct(
+  tx: Transaction,
+  id: string,
+  patch: UpdateProductInput,
+  checkNames: boolean,
+): Promise<void> {
+  const namesChange = checkNames && (patch.name !== undefined || patch.active !== undefined);
+  const row = patch.active === true || namesChange ? await readUpdatedName(tx, id) : undefined;
+  if (patch.active === true && row?.parentId != null)
+    await assertNotOfferedAsExtra(tx, row.parentId, "active");
+  if (namesChange && row !== undefined)
+    await assertUpdatedNamesFree(tx, row, { name: patch.name, active: patch.active });
   // `allergens` and `dietOverride` are the staff overlays, not the published columns.
   const {
     allergens,
@@ -1148,6 +1194,7 @@ export async function updateProduct(
     .update(products)
     .set({
       ...rest,
+      ...(rest.name === undefined ? {} : nameColumns(rest.name)),
       ...(unitPrice === undefined
         ? {}
         : { unitPrice: unitPrice === null ? null : stringToCents(unitPrice) }),

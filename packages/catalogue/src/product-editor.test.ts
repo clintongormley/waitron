@@ -231,7 +231,7 @@ it("saves a product with exactly one variant, or none", async () => {
     (await withTransaction(fx.db, (tx) => listProducts(tx, catalogueId))).map((p) => p.id),
   ).toEqual([one.id]);
   const none = await withTransaction(fx.db, (tx) =>
-    saveProductEditor(tx, null, catalogueId, { ...input, variants: [] }, "en"),
+    saveProductEditor(tx, null, catalogueId, { ...input, name: "Tea", variants: [] }, "en"),
   );
   expect(none.variants).toEqual([]);
 });

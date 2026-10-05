@@ -67,6 +67,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Choose a parent outside this category and its descendants.",
     es: "Elige una categoría superior fuera de esta categoría y sus descendientes.",
   },
+  "category.name_taken": {
+    en: "Another category in the same place already has this name.",
+    es: "Otra categoría en el mismo lugar ya tiene este nombre.",
+  },
   "menu_section.not_found": {
     en: "This section, or the item in it, no longer exists. Refresh the list.",
     es: "Esta sección, o el elemento que contiene, ya no existe. Actualiza la lista.",
@@ -569,6 +573,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "extras.product_has_variants": {
     en: "This product has active variants, so it can't be offered as an extra.",
     es: "Este producto tiene variantes activas, así que no se puede ofrecer como extra.",
+  },
+  "product.name_taken": {
+    en: "Another active product or variant already has this name.",
+    es: "Ya hay otro producto o variante activo con este nombre.",
   },
   // The screen shows the names of the lists after this sentence.
   "product.offered_as_extra": {

@@ -56,6 +56,9 @@ export const products = table(
     /* v8 ignore stop */
     // Staff-facing product name, shown on the dashboard, till buttons/basket and reports.
     name: label("name").notNull(),
+    // `name` folded as `@waitron/catalogue`'s `foldName` folds it; the unique staff-name check looks
+    // rows up by it. May be null, and the check does not see a row whose key is null.
+    nameKey: label("name_key"),
     // Customer-facing translated name; null or a blank entry means "use `name`". Shown on receipts,
     // invoice lines, the customer display and customer menus.
     customerName: json<Record<string, string>>("customer_name"),
@@ -122,6 +125,7 @@ export const products = table(
   },
   (t) => [
     index("products_catalogue_id_idx").on(t.catalogueId),
+    index("products_name_key_idx").on(t.nameKey),
     unique("products_id_catalogue_key").on(t.id, t.catalogueId),
     // Target of catalogue's `menu_item_variant_overrides` key `(product_id, variant_id)`.
     unique("products_parent_id_key").on(t.parentId, t.id),

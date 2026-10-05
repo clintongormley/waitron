@@ -2,7 +2,55 @@ export * from "./pricing.js";
 export * from "./vat-rates.js";
 export * from "./product-ordering.js";
 export * from "./units.js";
-export * from "./operations.js";
+// Listed rather than `export *`: `createProductSkippingNameCheck`,
+// `updateProductSkippingNameCheck` and `writeProductVariantsSkippingNameCheck` skip the
+// unique-name rule and are kept out of the package entry point.
+export {
+  addCatalogueToLocation,
+  addProductToMenu,
+  applyDietDerivation,
+  applyRecipeDerivation,
+  assignCatalogueToLocation,
+  catalogueExists,
+  createCatalogue,
+  createProduct,
+  deactivateCatalogue,
+  deactivateProduct,
+  listAccessibleCatalogues,
+  listAvailableProducts,
+  listCatalogues,
+  listCataloguesForLocation,
+  listMenuOffers,
+  listProducts,
+  menuPrices,
+  readInvoiceLocales,
+  readReceiptLanguage,
+  removeCatalogueFromLocation,
+  resolveAccessibleCatalogueIds,
+  setLocationDefaultCatalogue,
+  updateMenuDetails,
+  updateMenuItem,
+  updateProduct,
+} from "./operations.js";
+export type {
+  AccessibleCatalogue,
+  AvailableProduct,
+  Catalogue,
+  CreateProductInput,
+  ListedVariant,
+  LocationCatalogue,
+  MenuItem,
+  MenuOffer,
+  MenuOfferVariant,
+  MenuPriceRow,
+  OfferedExtraItem,
+  OfferedExtrasList,
+  OfferedModifier,
+  OfferedOptionsList,
+  Product,
+  UpdateProductInput,
+} from "./operations.js";
+export { foldName } from "./name-uniqueness.js";
 export * from "./content-languages.js";
 export * from "./content-translation-report.js";
 export * from "./allergens.js";

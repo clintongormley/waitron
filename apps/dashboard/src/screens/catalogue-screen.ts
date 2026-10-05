@@ -543,7 +543,7 @@ export class CatalogueScreen extends LitElement {
       const code = codeOf(error);
       return {
         [name]:
-          code === "product.offered_as_extra"
+          code === "product.offered_as_extra" || code === "product.name_taken"
             ? refusalText(code, extraListNames(error))
             : t("editor.field_rejected"),
       };

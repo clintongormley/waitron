@@ -505,4 +505,8 @@ export async function importConfigurationTables(
         ? null
         : (idMap.get(bundle.venue.location.catalogueId) ?? bundle.venue.location.catalogueId),
   });
+  for (const module of modules) {
+    const contribution = module.configurationTransfer;
+    if (contribution?.kind === "tables") await contribution.afterImport?.(tx);
+  }
 }

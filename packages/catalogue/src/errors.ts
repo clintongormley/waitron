@@ -11,6 +11,10 @@ declare module "@waitron/shared" {
     /** A category's name is blank once trimmed. */
     "category.invalid": { field: "name" };
     "category.parent_cycle": Record<string, never>;
+    /** Another category with the same parent already has this name, ignoring case and surrounding
+     * whitespace. `field` beside the siblings' `{ name }` lets the dashboard place it, as
+     * `product.invalid` does. */
+    "category.name_taken": { field: "name"; name: string };
     /** A sale line's classification snapshot names a category that does not exist, holds
      * an empty name, repeats a category in its chain, or ends at a category that is not the
      * product's main reporting category. */
@@ -98,6 +102,10 @@ declare module "@waitron/shared" {
      * parent's save leaves Active, or `active` on a variant's own save.
      */
     "product.offered_as_extra": { field: string; extraLists: { id: string; name: string }[] };
+    /** Another Active product or variant already has this staff name, ignoring case and surrounding
+     * whitespace. `field` (`name`, or `variants.<i>.name` in the product editor) beside the siblings'
+     * `{ name }` lets the editor place it, as `product.invalid` does. */
+    "product.name_taken": { field: string; name: string };
     /** A product-editor field is missing or malformed. */
     "product.invalid": { field: string };
     "product.not_found": { productId: string };

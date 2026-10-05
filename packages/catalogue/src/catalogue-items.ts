@@ -1,15 +1,10 @@
-import { now, products, tableExists, type Transaction } from "@waitron/db";
+import { categories, now, products, tableExists, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { categoryDetails } from "./schema/categories.js";
-import {
-  deleteCategory,
-  listCategories,
-  vacateCategories,
-  validateParent,
-  type Category,
-} from "./categories.js";
+import { listCategories, vacateCategories, validateParent, type Category } from "./categories.js";
+import { assertCategoryNamesFree } from "./category-names.js";
 import { deactivateProduct } from "./operations.js";
 import { isTopLevelProduct } from "./variant-fallback.js";
 import "./errors.js";
@@ -40,6 +35,16 @@ class FolderTree {
   }
   parent(id: string): string | null {
     return this.#parent.get(id) ?? null;
+  }
+  /** The nearest folder above `id` that is not in `removed`, or null for the root. */
+  survivingParent(id: string, removed: ReadonlySet<string>): string | null {
+    const seen = new Set([id]);
+    let at = this.parent(id);
+    while (at !== null && removed.has(at) && !seen.has(at)) {
+      seen.add(at);
+      at = this.parent(at);
+    }
+    return at;
   }
   depth(id: string): number {
     let n = 0;
@@ -95,6 +100,12 @@ export async function moveCatalogueItems(
   const tree = await readTree(tx, selection);
   if (to !== null) tree.require(to);
   for (const id of selection.categoryIds) await validateParent(tx, id, to, tree.folders);
+  const names = new Map(tree.folders.map((folder) => [folder.id, folder.name]));
+  await assertCategoryNamesFree(
+    tx,
+    [...new Set(selection.categoryIds)].map((id) => ({ id, name: names.get(id)!, parentId: to })),
+    { snapshot: tree.folders },
+  );
   for (const batch of batches(selection.productIds))
     await tx
       .update(products)
@@ -113,9 +124,11 @@ export async function deleteCatalogueItems(
   contents: FolderContents,
 ): Promise<void> {
   const tree = await readTree(tx, selection);
+  if (contents === "move_up") await assertMovedUpNamesFree(tx, tree, selection.categoryIds);
   for (const id of selection.productIds) await deactivateProduct(tx, id);
   if (contents === "move_up") {
-    for (const id of tree.byDepth(selection.categoryIds, "deepest")) await deleteCategory(tx, id);
+    for (const id of tree.byDepth(selection.categoryIds, "deepest"))
+      await removeFolder(tx, id, tree.parent(id));
     return;
   }
   const gone = new Set<string>();
@@ -132,10 +145,53 @@ export async function deleteCatalogueItems(
       await vacateCategories(tx, batch, parent);
     }
     for (const folder of tree.byDepth(subtree, "deepest")) {
-      await deleteCategory(tx, folder);
+      await removeFolder(tx, folder, tree.parent(folder));
       gone.add(folder);
     }
   }
+}
+
+/**
+ * Refuses a deletion that moves contents up when a category it moves would share a name with
+ * another in its new parent. Judged once, on the tree as the whole deletion leaves it, so a category
+ * the same deletion removes never blocks one moving up past it.
+ */
+async function assertMovedUpNamesFree(
+  tx: Transaction,
+  tree: FolderTree,
+  removedIds: readonly string[],
+): Promise<void> {
+  const removed = new Set(removedIds);
+  await assertCategoryNamesFree(
+    tx,
+    tree.folders
+      .filter(
+        (folder) =>
+          !removed.has(folder.id) && folder.parentId !== null && removed.has(folder.parentId),
+      )
+      .map((folder) => ({ ...folder, parentId: tree.survivingParent(folder.id, removed) })),
+    { snapshot: tree.folders, removed: removedIds },
+  );
+}
+
+/** Deletes one category, moving its products and the categories under it up to its parent. */
+export async function deleteCategory(tx: Transaction, id: string): Promise<void> {
+  await deleteCatalogueItems(tx, { productIds: [], categoryIds: [id] }, "move_up");
+}
+
+/**
+ * Deletes `id`, moving what it holds up to `parent`, its parent now: the deletions above run
+ * deepest first, so a folder's parent is still in place when the folder goes.
+ */
+async function removeFolder(tx: Transaction, id: string, parent: string | null): Promise<void> {
+  await vacateCategories(tx, [id], parent);
+  // Clears the RESTRICT parent key before the delete below.
+  await tx
+    .update(categoryDetails)
+    .set({ parentId: parent })
+    .where(eq(categoryDetails.parentId, id));
+  // category_details cascades via its FK.
+  await tx.delete(categories).where(eq(categories.id, id));
 }
 
 export async function summariseFolders(

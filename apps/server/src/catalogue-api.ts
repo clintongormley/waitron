@@ -266,6 +266,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // 409: the body was well formed, and what another stored row holds refused it.
   "extras.product_has_variants": 409,
   "product.offered_as_extra": 409,
+  "category.name_taken": 409,
+  "product.name_taken": 409,
 };
 
 const run = createErrorBoundary(STATUS, "catalogue.failed");
