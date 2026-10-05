@@ -2530,7 +2530,8 @@ plans to retire the editor.
   variant (`applyLineEdits`, `apps/server/src/working-order.ts`), and a throwaway test (not kept)
   saw a raise refused `product.variant_unavailable` once the variant was sold out, and
   `service_zone.offer_not_allowed` once its menu was made inactive. Since W90 a menu has no switch
-  of its own to check.
+  of its own to check. No kept test pins the refusal of a raise for an Unavailable size or an
+  inactive menu.
 - **A menu offer created with no price field at all is refused** (`management.request_invalid`);
   only an explicit `null` means "blank, charge the product's own price" — **decided 2026-09-23 by
   the owner:** _"we don't want to confuse 0.00 with `""`"_.
@@ -3167,8 +3168,8 @@ sections and the menus it includes) and the product's Active state, and whether 
 by Available. A size (variant) is sold wherever its product is placed, while it is Active and
 Available. The Prices tab lost its "On this menu" column, the Sold / Switched off choices in its
 edit window and the Sell it / Switch it off clash buttons, and a menu can no longer avoid a price
-clash between the menus it includes by switching the item off. The item PATCH and the size-prices
-PUT refuse a body carrying `offered` (`management.request_invalid`). Catalogue migration
+clash between the menus it includes by switching the item off. The item PATCH refuses a body carrying
+`offered`, and the size-prices PUT a size entry carrying it (`management.request_invalid`). Catalogue migration
 `0024_drop_menu_offered.sql` removes `menu_items.offered` and rebuilds
 `menu_item_variant_overrides` without its `offered` column, so a row there always holds a price.
 The rule is in [products.md](developers/products.md), _Active and Available_ under _Variants_. The
@@ -3180,9 +3181,10 @@ cannot migrate: migrating it fails on
 `wa-wt reset demo <name>`; reset any other venue, or clear those choices before upgrading. After
 upgrading, publish every menu again: a version published before still carries the old keys, so
 each menu reads as changed, and a size switched off in it is no longer held back (both read, not
-run). A configuration bundle exported before W90 must be exported again after upgrading: the old
-one is refused `setup.request_invalid` with `field: "module:catalogue"`, because its catalogue
-migration count is one short (seen 2026-10-05 in a throwaway test, not kept).
+run). A configuration bundle exported before W90 must be exported again after upgrading: one exported
+just before W90 is refused `setup.request_invalid` with `field: "module:catalogue"`, because its
+catalogue migration count is one short (seen 2026-10-05 in a throwaway test, not kept); an older
+one is refused at the first module, in the order they are checked, whose count differs.
 
 **A Products drag does not notice when a refresh removes what it is dragging or where it is going —
 OPEN (found 2026-10-05 by W88's pre-merge review).** W88's review found the Menus tree's drag broke
