@@ -224,24 +224,20 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     }),
     getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
     listStaff: vi.fn().mockResolvedValue([]),
-    listDefaultZoneOffers: vi
-      .fn()
-      .mockResolvedValue({
-        ...offers,
-        context: {
-          ...offers.context,
-          ...(overrides.zonePolicy as Partial<ZoneOfferCatalogue["context"]>),
-        },
-      }),
-    listZoneOffers: vi
-      .fn()
-      .mockResolvedValue({
-        ...offers,
-        context: {
-          ...offers.context,
-          ...(overrides.zonePolicy as Partial<ZoneOfferCatalogue["context"]>),
-        },
-      }),
+    listDefaultZoneOffers: vi.fn().mockResolvedValue({
+      ...offers,
+      context: {
+        ...offers.context,
+        ...(overrides.zonePolicy as Partial<ZoneOfferCatalogue["context"]>),
+      },
+    }),
+    listZoneOffers: vi.fn().mockResolvedValue({
+      ...offers,
+      context: {
+        ...offers.context,
+        ...(overrides.zonePolicy as Partial<ZoneOfferCatalogue["context"]>),
+      },
+    }),
     setServiceZone: vi.fn(),
     listWorkingOrders: vi.fn().mockResolvedValue([]),
     listCounterWaiting: vi.fn().mockResolvedValue([]),
