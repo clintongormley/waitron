@@ -3450,7 +3450,7 @@ code, not run: the category tree's red asterisk ("No kitchen routing rule covers
 `#unroutedFolderIds` in `apps/dashboard/src/widgets/catalogue-browser.ts`) works the route out with
 no station timing, so it does not follow a switched-off station's fallback, while Made at does; a
 category claiming a switched-off station that has a fallback can show the asterisk and a station in
-Made at in the same row. _2026-10-05: settled by W86a (owner: "follow fallbacks"): the asterisk
+Made at in the same row. _2026-10-05: settled by W86a (#1223; owner: "follow fallbacks"): the asterisk
 now reads the same route as Made at (`coveredByRule`, in
 `apps/dashboard/src/widgets/folder-made-at.ts`), so a category whose claimed station is switched
 off and whose fallback chain reaches a station that is switched on shows that station in Made at
