@@ -9,6 +9,7 @@ import { DIETARY_LABELS } from "@waitron/catalogue/src/dietary-declarations.js";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { VAT_CLASSES, localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
 import { PRODUCT_ORDERINGS } from "@waitron/catalogue/src/product-ordering.js";
+import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -27,6 +28,7 @@ import "./image-upload.js";
 import "./variant-form.js";
 import { EACH_CHOICE } from "./variant-table.js";
 import { categoryPathField, categoryPathText } from "./classification-fields.js";
+import { colorField, colorFieldStyles } from "./color-field.js";
 import {
   defaultLanguageHint,
   languageText,
@@ -107,6 +109,7 @@ const SERVER_FIELDS: Record<string, string> = {
   unitPrice: "unit-price",
   vatClass: "tax",
   primaryCategoryId: "primary",
+  color: "color",
   active: "active",
   ordering: "ordering",
   courseId: "product-course",
@@ -169,6 +172,7 @@ const DRAFT_ERROR_KEYS: Partial<Record<keyof ProductEditorDraft, string>> = {
   unitPrice: "unit-price",
   vatClass: "tax",
   primaryCategoryId: "primary",
+  color: "color",
   modifiers: "modifier",
   ordering: "ordering",
   courseId: "product-course",
@@ -214,6 +218,7 @@ export class ProductEditor extends LitElement {
     baseStyles,
     ReorderController.styles,
     ReorderController.tableStyles,
+    colorFieldStyles,
     css`
       :host {
         display: block;
@@ -423,6 +428,7 @@ export class ProductEditor extends LitElement {
   /** The variant rows marked as of this render. */
   #rowsNow: Record<number, string> = {};
   #listNames: ReadonlyMap<string, string> = new Map();
+  #categoryNodes: ReadonlyMap<string, CategorySummary> = new Map();
 
   readonly #reorder = new ReorderController(
     this,
@@ -448,6 +454,8 @@ export class ProductEditor extends LitElement {
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
+    if (changed.has("categories"))
+      this.#categoryNodes = new Map(this.categories.map((category) => [category.id, category]));
     if (changed.has("value") || (changed.has("open") && this.open)) {
       this.#unitUsageGeneration++;
       this.unitUsage = [];
@@ -501,7 +509,9 @@ export class ProductEditor extends LitElement {
       await this.focusImage();
       return;
     }
-    const field = this.shadowRoot?.querySelector<HTMLElement>(`[name="${name}"]`);
+    const field = this.shadowRoot?.querySelector<HTMLElement>(
+      `[name="${name === "color" ? "product-color" : name}"]`,
+    );
     if (!field) {
       await this.focusVariantRow(name);
       return;
@@ -557,7 +567,7 @@ export class ProductEditor extends LitElement {
       ...this.locales.flatMap((locale) => [`customer-name-${locale}`, `description-${locale}`]),
     ];
     if (this.api) keys.push("image");
-    if (this.inherited === null) keys.push("primary", "unit", "ordering", "modifier");
+    if (this.inherited === null) keys.push("primary", "color", "unit", "ordering", "modifier");
     return new Set(keys);
   }
   private dismiss(...keys: string[]): void {
@@ -1052,6 +1062,21 @@ export class ProductEditor extends LitElement {
           ? html`<span class="error" data-test="image-error">${this.error("image")}</span>`
           : nothing
       }
+    </div>`;
+  }
+
+  private renderColor() {
+    return html`<div class="group" data-section="color">
+      ${colorField({
+        color: this.draft.color,
+        name: "product-color",
+        errorId: "product-color-error",
+        noneLabel: t("editor.color_use_category"),
+        inherited: categoryColor(this.draft.primaryCategoryId, this.#categoryNodes),
+        error: this.error("color"),
+        busy: this.suspended,
+        change: (color) => this.change("color", color),
+      })}
     </div>`;
   }
 
@@ -1741,6 +1766,7 @@ export class ProductEditor extends LitElement {
                 </p>`
           }
           ${keyed(this.generation, this.renderName(fields))}
+          ${this.inherited ? nothing : this.renderColor()}
           <div class="group" data-section="available">
             ${switchField(
               fields,

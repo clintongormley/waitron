@@ -138,6 +138,10 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     "photo-none",
     "photo-inherited",
     "photo-refused",
+    "color-category",
+    "color-category-none",
+    "color-own",
+    "color-refused",
   ])("renders %s", async (state) => {
     const { el, host } = await mountWidget<ProductEditor>(
       "dashboard-product-editor",
@@ -165,11 +169,20 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
                           ? { ...coffee, image: "coffee.png" }
                           : state === "photo-inherited"
                             ? variantPage
-                            : coffee,
+                            : state === "color-own"
+                              ? { ...coffee, color: "#b12525" }
+                              : state === "color-category-none"
+                                ? { ...coffee, primaryCategoryId: "food" }
+                                : coffee,
         extraLists,
         optionLists,
         categories: [
-          { id: "drinks", name: "Drinks", parentId: null, color: null },
+          {
+            id: "drinks",
+            name: "Drinks",
+            parentId: null,
+            color: state.startsWith("color") ? "#25b125" : null,
+          },
           { id: "food", name: "Food", parentId: null, color: null },
           { id: "wine", name: "Wine", parentId: "drinks", color: null },
         ],
@@ -179,7 +192,9 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
             ? { ordering: "The server rejected this value." }
             : state === "photo-refused"
               ? { image: "The photo is gone." }
-              : {},
+              : state === "color-refused"
+                ? { color: "The server rejected this value." }
+                : {},
         ...(state.startsWith("photo")
           ? { api: { imageLibraryRequest: vi.fn().mockResolvedValue({}) } as never }
           : {}),
@@ -239,6 +254,21 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       )!;
       await price.updateComplete;
       expect(price.shadowRoot!.querySelector("span.unit")).not.toBeNull();
+    }
+    if (state.startsWith("color")) {
+      // Without these the scan could pass on an editor that drew no chooser, or a Use category
+      // colour choice with no chip, no note or no refusal under it.
+      const group = el.shadowRoot!.querySelector("fieldset.color")!;
+      const none = group.querySelector('[data-color=""]')!;
+      expect(none.querySelector(".chip") !== null).toBe(state !== "color-category-none");
+      expect(none.querySelector(".note") !== null).toBe(state === "color-category-none");
+      if (state === "color-own")
+        expect(group.querySelector('[data-color="#b12525"]')!.getAttribute("aria-checked")).toBe(
+          "true",
+        );
+      expect(group.querySelector("#product-color-error")!.textContent!.trim() !== "").toBe(
+        state === "color-refused",
+      );
     }
     if (state === "inactive") {
       // Without this the scan could pass on an editor that never drew the notice and Restore.
