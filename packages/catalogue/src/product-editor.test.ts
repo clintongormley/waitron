@@ -74,6 +74,7 @@ beforeEach(async () => {
     modifiers: [],
     allergens: null,
     dietaryDeclarations: ["vegan"],
+    color: null,
   };
 });
 
@@ -190,6 +191,25 @@ it("saves and reads the canonical editor shape with independent content and vari
     available: true,
     allergens: {},
     dietaryDeclarations: [],
+  });
+});
+
+it("saves a product's own colour, lists it, and clears it", async () => {
+  const saved = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, null, catalogueId, { ...input, color: "#256bb1" }, "en"),
+  );
+  expect(saved.color).toBe("#256bb1");
+  expect(await withTransaction(fx.db, (tx) => readProductEditor(tx, saved.id))).toMatchObject({
+    color: "#256bb1",
+  });
+  const [listed] = await withTransaction(fx.db, (tx) => listProducts(tx, catalogueId));
+  expect(listed).toMatchObject({ id: saved.id, color: "#256bb1" });
+  const cleared = await withTransaction(fx.db, (tx) =>
+    saveProductEditor(tx, saved.id, catalogueId, { ...saved, color: null }, "en"),
+  );
+  expect(cleared.color).toBeNull();
+  expect(await withTransaction(fx.db, (tx) => readProductEditor(tx, saved.id))).toMatchObject({
+    color: null,
   });
 });
 
@@ -633,6 +653,7 @@ describe("a variant's own page", () => {
       unitPrice: "2.00",
       vatClass: null,
       primaryCategoryId: null,
+      color: null,
       allergens: null,
       dietaryDeclarations: null,
       courseId: null,
@@ -770,6 +791,30 @@ describe("a variant's own page", () => {
       expect(await save(variantId, value)).toEqual(value);
       expect(await storedRow(variantId)).toMatchObject({ pricingUnit: null });
       expect(await storedUnit(variantId)).toBeNull();
+    });
+  });
+
+  describe("holding a colour of its own, which no save writes", () => {
+    beforeEach(() =>
+      fx.db.update(products).set({ color: "#b12525" }).where(eq(products.id, variantId)),
+    );
+    const storedColor = async () =>
+      (
+        await fx.db
+          .select({ color: products.color })
+          .from(products)
+          .where(eq(products.id, variantId))
+      )[0]!.color;
+
+    it("reads no colour of its own", async () => {
+      expect(await storedColor()).toBe("#b12525");
+      expect((await read(variantId)).color).toBeNull();
+    });
+
+    it("clears the stored colour when the read value is saved back", async () => {
+      const value = await read(variantId);
+      expect(await save(variantId, value)).toEqual(value);
+      expect(await storedColor()).toBeNull();
     });
   });
 

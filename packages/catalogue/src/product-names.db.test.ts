@@ -237,6 +237,7 @@ describe("product editor save", () => {
       modifiers: [],
       allergens: null,
       dietaryDeclarations: [],
+      color: null,
     }) satisfies ProductEditorInput;
   const save = (productId: string | null, input: ProductEditorInput) =>
     app((tx) => saveProductEditor(tx, productId, lunch, input, "en"));

@@ -7,6 +7,7 @@ import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
 import { AppError, centsToDecimal, stringToCents, type Decimal } from "@waitron/shared";
 import { catalogues, categories, locationCatalogues, locations, now, products } from "@waitron/db";
 import { readCategory, setMainReportingCategory } from "./categories.js";
+import { setProductColor } from "./product-colors.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
@@ -143,6 +144,9 @@ export interface UpdateProductInput {
   unitId?: string | null;
   pricingUnit?: PricingUnit;
   categoryId?: string | null;
+  /** `null` takes its category's colour. On a variant's id any value, null included, is refused
+   * `product.not_found`: a variant's colour is always its parent's. */
+  color?: string | null;
   /** `null` clears the declaration back to unreviewed. */
   allergens?: ProductAllergens | null;
   /** `null` clears the staff diet override; published `diet` reverts to the recipe-derived
@@ -172,6 +176,7 @@ const PRODUCT_BASE_COLUMNS = {
   id: products.id,
   catalogueId: products.catalogueId,
   categoryId: effective.categoryId,
+  color: effective.color,
   name: products.name,
   customerName: products.customerName,
   ordering: products.ordering,
@@ -202,6 +207,7 @@ interface RawProduct {
   id: string;
   catalogueId: string;
   categoryId: string | null;
+  color: string | null;
   name: string;
   customerName: Record<string, string> | null;
   ordering: ProductOrdering;
@@ -1139,12 +1145,14 @@ async function patchProduct(
     dietOverride,
     dietaryDeclarations,
     categoryId,
+    color,
     unitId,
     pricingUnit,
     unitPrice,
     ...rest
   } = patch;
   if (categoryId !== undefined) await setMainReportingCategory(tx, id, categoryId);
+  if (color !== undefined) await setProductColor(tx, id, color);
   if (allergens != null) validateAllergens(allergens);
   if (dietOverride !== undefined) validateDietOverride(dietOverride);
   const directDietary =

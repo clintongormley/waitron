@@ -34,6 +34,7 @@ const products: Product[] = [
     dietOverride: null,
     manualAllergens: null,
     image: "abc123.webp",
+    color: null,
     variants: [],
   },
   {
@@ -59,6 +60,7 @@ const products: Product[] = [
     dietOverride: null,
     manualAllergens: {},
     image: null,
+    color: null,
     variants: [],
   },
   {
@@ -90,6 +92,7 @@ const products: Product[] = [
       milk: { presence: "contains" },
     },
     image: null,
+    color: null,
     variants: [],
   },
   {
@@ -115,6 +118,7 @@ const products: Product[] = [
     dietOverride: null,
     manualAllergens: {},
     image: null,
+    color: null,
     variants: [
       {
         id: "v1",

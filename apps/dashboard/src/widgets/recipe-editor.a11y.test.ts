@@ -51,6 +51,7 @@ const PRODUCT: Product = {
   dietOverride: null,
   manualAllergens: null,
   image: null,
+  color: null,
   variants: [],
 };
 

@@ -37,6 +37,7 @@ function product(id: string, name: string, image: string | null = null): Product
     dietOverride: null,
     manualAllergens: null,
     image,
+    color: null,
     variants: [],
   };
 }

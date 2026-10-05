@@ -1409,6 +1409,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         allergens?: unknown;
         dietOverride?: unknown;
         image?: unknown;
+        color?: unknown;
         active?: unknown;
         available?: unknown;
         ordering?: unknown;
@@ -1464,6 +1465,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           throw new AppError("management.request_invalid", { field: "image" });
         }
         patch.image = body.image;
+      }
+      if (body.color !== undefined) {
+        if (typeof body.color !== "string" && body.color !== null) {
+          throw new AppError("management.request_invalid", { field: "color" });
+        }
+        patch.color = body.color;
       }
       if (body.active !== undefined) {
         if (typeof body.active !== "boolean") {

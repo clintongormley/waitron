@@ -28,6 +28,7 @@ const coffee: ProductEditorDraft = {
   allergens: { milk: { presence: "may_contain" } },
   dietaryDeclarations: ["vegan"],
   primaryCategoryId: "drinks",
+  color: null,
   modifiers: [],
   courseId: null,
 };

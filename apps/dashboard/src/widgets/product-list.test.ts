@@ -163,6 +163,7 @@ function product(
     dietOverride: null,
     manualAllergens: null,
     image: null,
+    color: null,
     ...rest,
   };
   return {

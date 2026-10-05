@@ -189,6 +189,7 @@ function emptyDraft(): ProductEditorDraft {
     vatClass: "general",
     variants: [],
     primaryCategoryId: null,
+    color: null,
     modifiers: [],
     allergens: null,
     dietaryDeclarations: [],

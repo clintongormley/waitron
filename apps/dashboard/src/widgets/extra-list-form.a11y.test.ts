@@ -38,6 +38,7 @@ function product(id: string, name: string, unitPrice: string): Product {
     dietOverride: null,
     manualAllergens: null,
     image: null,
+    color: null,
     variants: [],
   };
 }

@@ -11,7 +11,7 @@ import {
   updateCategory,
   setMainReportingCategory,
 } from "./categories.js";
-import { deleteCategory } from "./catalogue-items.js";
+import { deleteCategory, moveCatalogueItems } from "./catalogue-items.js";
 import { writeContentLanguages, listContentTranslationGaps } from "./content-languages.js";
 
 // Authoring results. The cases with two transactions started together are in
@@ -185,7 +185,22 @@ describe("category authoring", () => {
     });
     expect(await app((tx) => readCategory(tx, child.id))).toMatchObject({ color: null });
   });
-  it.each(["#B12525", "red", 5])(
+  it("keeps a category's colour when it is moved", async () => {
+    const { app, food, drinks } = await fixture();
+    const child = await app((tx) =>
+      createCategory(tx, { name: "Starters", parentId: food.id, color: "#b12525" }),
+    );
+    await app((tx) =>
+      moveCatalogueItems(tx, { productIds: [], categoryIds: [child.id] }, drinks.id),
+    );
+    expect(await app((tx) => readCategory(tx, child.id))).toEqual({
+      id: child.id,
+      name: "Starters",
+      parentId: drinks.id,
+      color: "#b12525",
+    });
+  });
+  it.each(["#B12525", "red", 5, ""])(
     "refuses the colour %j as category.invalid on color, on create and on update",
     async (color) => {
       const { app, food } = await fixture();

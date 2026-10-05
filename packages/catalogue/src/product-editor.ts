@@ -10,6 +10,7 @@ import {
   updateProductSkippingNameCheck,
 } from "./operations.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
+import { setProductColor } from "./product-colors.js";
 import { productUnits } from "./schema/units.js";
 import { priceOrNull } from "./offer-price.js";
 import { productWithId } from "./variant-fallback.js";
@@ -41,6 +42,7 @@ const columns = {
   courseId: products.courseId,
   unitId: productUnits.unitId,
   primaryCategoryId: products.categoryId,
+  color: products.color,
 };
 
 /** The row as stored, and beside it the PUBLISHED allergens (the manual overlay merged with the
@@ -86,7 +88,7 @@ async function readInherited(tx: Transaction, parentId: string): Promise<Inherit
 }
 
 /** A product's editor value, or a variant's: its own stored values, and its parent's beside them.
- * A variant has no category or unit of its own, so one it still stores is never read back. */
+ * A variant has no category, unit or colour of its own, so one it still stores is never read back. */
 export async function readProductEditor(
   tx: Transaction,
   productId: string,
@@ -97,6 +99,7 @@ export async function readProductEditor(
       ...row,
       primaryCategoryId: null,
       unitId: null,
+      color: null,
       inherited: await readInherited(tx, row.parentId),
       modifiers: [],
       variants: [],
@@ -204,13 +207,14 @@ export async function saveProductEditor(
     });
   }
   if (isVariant) {
-    // A variant's category is always its parent's, so it stores none.
+    // A variant's category and colour are always its parent's, so it stores neither.
     await tx
       .update(products)
-      .set({ categoryId: null, updatedAt: now() })
+      .set({ categoryId: null, color: null, updatedAt: now() })
       .where(eq(products.id, productId));
   } else {
     await setMainReportingCategory(tx, productId, value.primaryCategoryId);
+    await setProductColor(tx, productId, value.color);
     await writeProductVariantsSkippingNameCheck(tx, productId, value.variants, config);
     await writeProductModifiers(tx, productId, value.modifiers);
   }
