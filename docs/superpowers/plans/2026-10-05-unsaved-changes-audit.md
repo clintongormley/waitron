@@ -4,6 +4,13 @@
 
 Baseline: `5597e06923b64acacf9df54ed6e8fb42e7fa411e`, inspected 2026-10-05 in the W69 documentation worktree. This inventory records **observed source owners** and **proposed protection**. None of its rows is a claim that a browser behavior was run or verified. Read it with the [design](../specs/2026-10-05-unsaved-changes-warning-design.md) and [implementation plan](2026-10-05-unsaved-changes-warning.md).
 
+2026-10-06 implementation checkpoint: Product Add/Edit and its nested Variant form now register
+scopes on the W69 branch. The cross-owner suite
+`apps/dashboard/src/widgets/product-editor.unsaved.test.ts` covers Cancel/Escape, Keep/Discard,
+reverts, comparison ordering, child saves and the Catalogue write/refresh boundary. The remaining
+modal rows and all page/navigation rows below remain pending; shared APIs alone do not complete
+them. Follow the [W69 backlog entry](../../backlog.md) for the current rollout boundary.
+
 ## How to reproduce discovery
 
 Run each command separately and inspect its exit status. The broad search deliberately includes helpers before classifying their owners.

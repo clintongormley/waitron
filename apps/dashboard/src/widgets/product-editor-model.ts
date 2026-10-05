@@ -1,4 +1,6 @@
 export type LocalizedText = Record<string, string>;
+import { decimal, MONEY_SCALE, toScale } from "@waitron/shared";
+import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { t } from "../i18n/t.js";
 import type { DietaryLabel } from "@waitron/catalogue/src/dietary-declarations.js";
 export type { DietaryLabel };
@@ -102,4 +104,8 @@ export interface UnitChoice extends EditorChoice {
 export interface ProductRoutingChoice {
   id: string;
   name: string;
+}
+
+export function comparablePrice(raw: string | null): string | null {
+  return raw !== null && isProductPrice(raw) ? toScale(decimal(raw), MONEY_SCALE) : raw;
 }

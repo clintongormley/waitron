@@ -1184,8 +1184,11 @@ reopening, delayed close reports, focus, token painting and EN/ES light/dark Chr
 Application confirmation renderers now share one registry per connected shell, with EN/ES copy,
 abort cleanup and stale-renderer protection. Dashboard session expiry and till server/operator
 changes clear that registry immediately; a completed logout after shell teardown can reset it
-without throwing. Modal owners and page/navigation protection remain unimplemented. Keep
-automatic saves on their existing paths.
+without throwing. Product Add/Edit and its nested Variant form now use that registry on the
+branch: Cancel/Escape retain edited values until Discard, reverts close directly, and child saves
+leave the Product unsaved. The Catalogue screen commits the submitted Product before refreshing;
+a rejected write retains its draft. Other audited modal owners and page/navigation protection
+remain to be wired. Keep automatic saves on their existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**

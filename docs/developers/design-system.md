@@ -1459,7 +1459,9 @@ added on a line that already has one passes.
 #### Protect an edited dialog before closing it
 
 When a dialog holds staged edits, give its owner a draft scope from
-`@waitron/ui-core/unsaved-changes`. Compare the values your form would submit with its detached
+the shared coordinator. Resolve it through `@waitron/ui`; that package also exports the
+`DraftScope`, `LeaveCoordinator` and `LeaveReason` types for form owners. Compare the values your
+form would submit with its detached
 starting snapshot. Call `changed()` after edits and reverts, and `commit(submitted)` as soon as
 that write succeeds, before refreshing. Saving a child form commits its child scope; the
 parent's server write still has its own baseline.
@@ -1487,8 +1489,9 @@ Keep the original editor mounted until the coordinator approves leaving, so Keep
 and preserves the draft. Read-only and automatically saved forms need no draft scope.
 
 W69 is being rolled out in stages. These shared APIs are available on its implementation branch;
-the application renderers are wired, while form-owner integration remains tracked in the W69
-backlog entry. Page navigation is a separate part of that rollout. The coordinator's dirty-only unload registration
+the application renderers, Product editor and nested Variant form are wired. The remaining
+form owners stay tracked in the W69 backlog entry. Page navigation is a separate part of that
+rollout. The coordinator's dirty-only unload registration
 requests the browser's own warning; the [design](../superpowers/specs/2026-10-05-unsaved-changes-warning-design.md)
 records its activation and platform limits.
 

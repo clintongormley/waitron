@@ -667,8 +667,9 @@ they never rewrite the record. Regression: `packages/shared/src/content-language
 ## Unsaved changes: shared close interception, owner-provided draft comparisons
 
 W69's shared dialog API, confirmation and application renderers are implemented on its feature
-branch. Modal/page owners remain in progress; the [backlog](../backlog.md) records that
-boundary. Use `beforeClose` with a scoped ui-core coordinator request and `requestClose(reason)`
+branch. The Product editor and nested Variant form use the shared registry; other modal/page
+owners remain in progress. The [backlog](../backlog.md) records that boundary. Use `beforeClose`
+with a scoped ui-core coordinator request and `requestClose(reason)`
 for voluntary dismissal. Commit the exact submitted snapshot after a successful write, before
 refreshing. Use `closeAfter("saved" | "security")` for success or forced teardown; forced exits
 also invalidate the coordinator's pending decision and clear sensitive owner values.

@@ -26,6 +26,7 @@ import type {
 import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import "../widgets/product-color-form.js";
 import { fieldOf } from "../widgets/section-writes.js";
+import type { ProductEditorDraft } from "../widgets/product-editor-model.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { dashboardPath } from "../navigation.js";
@@ -469,7 +470,7 @@ export class CatalogueScreen extends LitElement {
     }
   }
 
-  async #save(event: CustomEvent<{ value: ProductEditorInput }>): Promise<void> {
+  async #save(event: CustomEvent<{ value: ProductEditorDraft }>): Promise<void> {
     event.stopPropagation();
     if (this.busy) return;
     this.busy = true;
@@ -482,6 +483,7 @@ export class CatalogueScreen extends LitElement {
         created = await this.api.createProductEditor(this.selectedCatalogueId, event.detail.value);
       else await this.api.updateProductEditor(this.editorValue.id, event.detail.value);
       written = true;
+      this.#editor()?.closeSaved(event.detail.value);
       this.#closeEditor();
       if (created) void this.#openPlacement(created);
       await this.#reloadProducts();
@@ -798,7 +800,7 @@ export class CatalogueScreen extends LitElement {
         .optionLists=${this.optionLists}
         .courses=${this.courses}
         .api=${this.api}
-        @wt-submit=${(event: CustomEvent<{ value: ProductEditorInput }>) => void this.#save(event)}
+        @wt-submit=${(event: CustomEvent<{ value: ProductEditorDraft }>) => void this.#save(event)}
         @wt-cancel=${(event: Event) => {
           event.stopPropagation();
           this.#closeEditor();

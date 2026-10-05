@@ -33,7 +33,8 @@ async function draft() {
   const field = app.shadowRoot!.querySelector("wt-input")!;
   await field.updateComplete;
   field.value = "Original";
-  const scope = app.leave.coordinator.register({
+  const coordinator: ui.LeaveCoordinator = app.leave.coordinator;
+  const scope: ui.DraftScope<string> = coordinator.register({
     id: field,
     current: () => field.value,
     snapshot: (value) => value,
