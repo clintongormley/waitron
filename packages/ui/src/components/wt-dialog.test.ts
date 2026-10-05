@@ -569,6 +569,7 @@ async function scene() {
 const lost = [
   ["removed", (button: HTMLButtonElement) => button.remove()],
   ["disabled", (button: HTMLButtonElement) => (button.disabled = true)],
+  ["hidden", (button: HTMLButtonElement) => (button.hidden = true)],
 ] as const;
 const closings = ["Escape", "open"] as const;
 const lostByClosing = closings.flatMap((how) =>
@@ -689,6 +690,49 @@ test("has put focus beside what had it before telling wt-close listeners", async
   await openAndClose(el, target, "Escape", () => target.remove());
   expect(seen).toBe(nearby);
 });
+
+/** A dialog and the button that has focus at opening, both inside an element that can take focus
+ * itself and holds nothing else that can. */
+async function enclosedScene() {
+  const enclosing = await mount(`<div tabindex="0">
+    <button>Target</button>
+    <wt-dialog heading="Choose a unit"><button>Each</button></wt-dialog>
+  </div>`);
+  const el = enclosing.querySelector("wt-dialog") as Openable;
+  await el.updateComplete;
+  return { el, enclosing, target: enclosing.querySelector("button")! };
+}
+
+test.each(lostByClosing)(
+  "closed by %s, puts focus on the element enclosing what had it at opening when that was %s",
+  async (how, _, change) => {
+    const { el, enclosing, target } = await enclosedScene();
+    await openAndClose(el, target, how, () => change(target));
+    expect(deepActiveElement()).toBe(enclosing);
+  },
+);
+
+test("prefers an element beside what had focus at opening to the element enclosing both", async () => {
+  const { el, target } = await enclosedScene();
+  const nearby = document.createElement("button");
+  target.after(nearby);
+  await openAndClose(el, target, "Escape", () => (target.disabled = true));
+  expect(deepActiveElement()).toBe(nearby);
+});
+
+test.each(lost)(
+  "has put focus on the element enclosing what had it, once an update setting open false completes, when that was %s",
+  async (_, change) => {
+    const { el, enclosing, target } = await enclosedScene();
+    target.focus();
+    el.open = true;
+    await el.updateComplete;
+    change(target);
+    el.open = false;
+    await el.updateComplete;
+    expect(deepActiveElement()).toBe(enclosing);
+  },
+);
 
 test("leaves focus where the browser left it when nothing outside the dialog can take it", async () => {
   const el = (await mount(

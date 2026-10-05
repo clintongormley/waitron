@@ -26,16 +26,19 @@ function composedContains(ancestor: Node, node: Node | null): boolean {
   return false;
 }
 
-/** The elements in `root`, and in the open shadow roots inside it, that a Tab press could reach, in
- * tree order and a host's shadow root first, leaving out `skip` and everything inside it. */
+function isTabbable(node: Node): node is HTMLElement {
+  return node instanceof HTMLElement && node.tabIndex >= 0 && !node.matches(":disabled");
+}
+
+/** The elements in `root`, and in the open shadow roots inside it, with a tabindex of 0 or above
+ * that are not disabled, in tree order and a host's shadow root first, leaving out `skip` and
+ * everything inside it. */
 function* tabbables(root: Node, skip: Set<Node>): Generator<HTMLElement> {
   const shadow = root instanceof Element ? root.shadowRoot : null;
   if (shadow && !skip.has(shadow)) yield* tabbables(shadow, skip);
   for (const child of root.childNodes) {
     if (skip.has(child)) continue;
-    if (child instanceof HTMLElement && child.tabIndex >= 0 && !child.matches(":disabled")) {
-      yield child;
-    }
+    if (isTabbable(child)) yield child;
     yield* tabbables(child, skip);
   }
 }
@@ -103,8 +106,9 @@ export class WtDialog extends LitElement {
    * browser without `closedby`, or a `close()` from outside — shows the dialog again. */
   @property({ type: Boolean }) dismissible = true;
 
-  /** Where focus goes on close when what had it at opening has been removed or disabled. Unset, or
-   * itself removed or disabled, focus goes to the nearest element that can take it. */
+  /** Where focus goes on close when the browser leaves it on the page body or inside this closed
+   * dialog. Unset, or unable to take focus, focus goes to the first element found walking outward
+   * from what had it at opening. */
   @property({ attribute: false }) opener: HTMLElement | null = null;
 
   /** What had focus when the dialog opened, unless that was the page body. */
@@ -203,12 +207,13 @@ export class WtDialog extends LitElement {
     const focused = deepActiveElement();
     if (focused !== document.body && !composedContains(this, focused)) return;
     if (this.opener?.isConnected && this.takesFocus(this.opener)) return;
-    // Nearest first. A connected element's ancestors reach the document, so searching from it
-    // also covers everything near the dialog.
+    // A connected element's ancestors reach the document, so searching from it also covers
+    // everything near the dialog.
     const skip = new Set<Node>([this]);
     const from = this.returnTarget?.isConnected ? this.returnTarget : this;
     for (let at = composedParent(from); at; at = composedParent(at)) {
       for (const candidate of tabbables(at, skip)) if (this.takesFocus(candidate)) return;
+      if (!skip.has(at) && isTabbable(at) && this.takesFocus(at)) return;
       skip.add(at);
     }
   }
