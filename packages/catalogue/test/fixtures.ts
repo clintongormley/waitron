@@ -1,6 +1,13 @@
 import { expect } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, invoiceSeries, locations, products, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  categories,
+  invoiceSeries,
+  locations,
+  products,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId, SeriesId } from "@waitron/shared";
@@ -15,6 +22,7 @@ import {
 import { CATALOGUE_MIGRATIONS } from "../src/migrations.js";
 import { createUnit } from "../src/units.js";
 import { productUnits, units } from "../src/schema/units.js";
+import { categoryDetails } from "../src/schema/categories.js";
 
 /** The unit a product's OWN `product_units` row names, or null when it has none (a
  * top-level product then reads as Each). A variant reads its parent's unit whatever row it stores.
@@ -50,6 +58,42 @@ export async function plantStoredUnit(
 ): Promise<void> {
   await tx.insert(productUnits).values({ productId, unitId });
   await tx.update(products).set({ pricingUnit }).where(eq(products.id, productId));
+}
+
+/** Writes a category straight into its tables, past every category path: how a test sets up two
+ * siblings that already share a name, as data written before the unique-name rule existed. */
+export async function plantStoredSiblingCategory(
+  tx: Transaction,
+  name: string,
+  parentId: string | null,
+): Promise<string> {
+  const id = crypto.randomUUID();
+  await tx.insert(categories).values({ id, name });
+  await tx.insert(categoryDetails).values({ categoryId: id, parentId });
+  return id;
+}
+
+/** Writes an Active product, or a variant of `parentId`, straight into its table, past every
+ * product path: how a test sets up two Active rows that already share a staff name, as data
+ * written before the unique-name rule existed. */
+export async function plantStoredProduct(
+  tx: Transaction,
+  catalogueId: string,
+  name: string,
+  parentId: string | null = null,
+): Promise<string> {
+  const [row] = await tx
+    .insert(products)
+    .values({
+      catalogueId,
+      name,
+      parentId,
+      ...(parentId === null
+        ? { pricingUnit: "each", unitPrice: 200, vatClass: "general", dietaryDeclarations: [] }
+        : { dietaryDeclarations: null }),
+    })
+    .returning({ id: products.id });
+  return row!.id;
 }
 
 export interface SeededVenue {

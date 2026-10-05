@@ -59,14 +59,15 @@ function blankInherited(written: object): Partial<Record<(typeof INHERITED_KEYS)
 }
 
 /**
- * The product exists and is not itself a variant; returns the catalogue its variants are created in.
+ * The product exists and is not itself a variant; returns the catalogue its variants are created in,
+ * and its name and Active state for the unique-name check.
  */
 async function assertProductForWrite(
   tx: Transaction,
   productId: string,
-): Promise<{ catalogueId: string }> {
+): Promise<{ catalogueId: string; name: string; active: boolean }> {
   const [product] = await tx
-    .select({ catalogueId: products.catalogueId })
+    .select({ catalogueId: products.catalogueId, name: products.name, active: products.active })
     .from(products)
     .where(productWithId(productId, "top-level"));
   if (!product) throw new AppError("product.not_found", { productId });
@@ -159,17 +160,30 @@ export async function setProductVariants(
     productId,
     inputs,
     await readContentLanguages(tx, fallbackLanguage),
+    true,
   );
 }
 
-/** {@link setProductVariants} with the venue's content languages already read. `namesChecked` is
- * `ProductWriteOptions`' (`operations.ts`). */
-export async function writeProductVariants(
+/**
+ * {@link setProductVariants} with the venue's content languages already read and without the
+ * unique-name check, for `saveProductEditor`, which checks every name its whole save leaves before
+ * writing any of it. Left out of the package's exports (`index.ts`).
+ */
+export async function writeProductVariantsSkippingNameCheck(
   tx: Transaction,
   productId: string,
   inputs: readonly VariantWrite[],
   config: ContentLanguages,
-  { namesChecked = false }: { namesChecked?: boolean } = {},
+): Promise<ProductVariant[]> {
+  return writeProductVariants(tx, productId, inputs, config, false);
+}
+
+async function writeProductVariants(
+  tx: Transaction,
+  productId: string,
+  inputs: readonly VariantWrite[],
+  config: ContentLanguages,
+  checkNames: boolean,
 ): Promise<ProductVariant[]> {
   const seen = new Set<string>();
   const checked: (VariantWrite & { cents: number | null })[] = [];
@@ -206,7 +220,13 @@ export async function writeProductVariants(
   const firstActive = normalized.findIndex((input) => input.active);
   if (firstActive !== -1)
     await assertNotOfferedAsExtra(tx, productId, `variants.${firstActive}.active`);
-  if (!namesChecked) await assertFamilyNamesFree(tx, productId, {}, normalized);
+  if (checkNames)
+    await assertFamilyNamesFree(
+      tx,
+      { product: { id: productId, name: parent.name, active: parent.active }, variants: current },
+      {},
+      normalized,
+    );
   for (const [index, input] of normalized.entries()) {
     const values = {
       name: input.name,

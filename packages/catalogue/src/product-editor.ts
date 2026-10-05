@@ -4,13 +4,17 @@ import { AppError } from "@waitron/shared";
 import { setMainReportingCategory } from "./categories.js";
 import { assertContentTranslations, readContentLanguages } from "./content-languages.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
-import { createProduct, updateProduct } from "./operations.js";
+import {
+  createProductSkippingNameCheck,
+  updateProduct,
+  updateProductSkippingNameCheck,
+} from "./operations.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
 import { productUnits } from "./schema/units.js";
 import { priceOrNull } from "./offer-price.js";
 import { productWithId } from "./variant-fallback.js";
-import { assertFamilyNamesFree } from "./product-names.js";
-import { listProductVariants, writeProductVariants } from "./variants.js";
+import { assertFamilyNamesFree, type StoredName } from "./product-names.js";
+import { listProductVariants, writeProductVariantsSkippingNameCheck } from "./variants.js";
 import { parseProductEditorInput } from "./product-editor-input.js";
 export { parseProductEditorInput, type ProductEditorInput } from "./product-editor-input.js";
 import type { InheritedValues, ProductEditorValue } from "./product-types.js";
@@ -119,13 +123,20 @@ export async function saveProductEditor(
   // An update reads the stored row first, because whether the body may leave inherited fields
   // blank depends on it; a create has no stored row and parses first.
   let storedParentId: string | null = null;
+  let stored: StoredName | null = null;
   if (productId !== null) {
     const [product] = await tx
-      .select({ parentId: products.parentId })
+      .select({
+        id: products.id,
+        parentId: products.parentId,
+        name: products.name,
+        active: products.active,
+      })
       .from(products)
       .where(productWithId(productId, "any"));
     if (!product) throw new AppError("product.not_found", { productId });
     storedParentId = product.parentId;
+    stored = product;
   }
   const isVariant = storedParentId !== null;
   const value = parseProductEditorInput(input, { isVariant });
@@ -148,59 +159,49 @@ export async function saveProductEditor(
   }
   // A variant's own save changes one row, which `updateProduct` checks. A product's save is checked
   // here, whole, before anything is written, and the writes below skip their own row-by-row check.
-  const namesChecked = !isVariant;
-  if (namesChecked)
+  if (!isVariant)
     await assertFamilyNamesFree(
       tx,
-      productId,
+      stored && { product: stored },
       { name: value.name, active: value.active },
       value.variants,
     );
   if (productId === null) {
-    const created = await createProduct(
-      tx,
-      {
-        catalogueId,
-        categoryId: null,
-        name: value.name,
-        customerName: value.customerName,
-        description: value.description,
-        kitchenName: value.kitchenName,
-        unitId: value.unitId,
-        // The parser refuses a blank on a product with no parent, which every created one is.
-        unitPrice: value.unitPrice!,
-        vatClass: value.vatClass!,
-        active: value.active,
-        available: value.available,
-        ordering: value.ordering,
-        ...(value.image === null ? {} : { image: value.image }),
-        ...(value.allergens === null ? {} : { allergens: value.allergens }),
-        dietaryDeclarations: value.dietaryDeclarations!,
-      },
-      { namesChecked },
-    );
+    const created = await createProductSkippingNameCheck(tx, {
+      catalogueId,
+      categoryId: null,
+      name: value.name,
+      customerName: value.customerName,
+      description: value.description,
+      kitchenName: value.kitchenName,
+      unitId: value.unitId,
+      // The parser refuses a blank on a product with no parent, which every created one is.
+      unitPrice: value.unitPrice!,
+      vatClass: value.vatClass!,
+      active: value.active,
+      available: value.available,
+      ordering: value.ordering,
+      ...(value.image === null ? {} : { image: value.image }),
+      ...(value.allergens === null ? {} : { allergens: value.allergens }),
+      dietaryDeclarations: value.dietaryDeclarations!,
+    });
     productId = created.id;
   } else {
-    await updateProduct(
-      tx,
-      productId,
-      {
-        name: value.name,
-        customerName: value.customerName,
-        description: value.description,
-        kitchenName: value.kitchenName,
-        unitId: value.unitId,
-        unitPrice: value.unitPrice,
-        vatClass: value.vatClass,
-        active: value.active,
-        available: value.available,
-        ordering: value.ordering,
-        image: value.image,
-        allergens: value.allergens,
-        dietaryDeclarations: value.dietaryDeclarations,
-      },
-      { namesChecked },
-    );
+    await (isVariant ? updateProduct : updateProductSkippingNameCheck)(tx, productId, {
+      name: value.name,
+      customerName: value.customerName,
+      description: value.description,
+      kitchenName: value.kitchenName,
+      unitId: value.unitId,
+      unitPrice: value.unitPrice,
+      vatClass: value.vatClass,
+      active: value.active,
+      available: value.available,
+      ordering: value.ordering,
+      image: value.image,
+      allergens: value.allergens,
+      dietaryDeclarations: value.dietaryDeclarations,
+    });
   }
   if (isVariant) {
     // A variant's category is always its parent's, so it stores none.
@@ -210,7 +211,7 @@ export async function saveProductEditor(
       .where(eq(products.id, productId));
   } else {
     await setMainReportingCategory(tx, productId, value.primaryCategoryId);
-    await writeProductVariants(tx, productId, value.variants, config, { namesChecked });
+    await writeProductVariantsSkippingNameCheck(tx, productId, value.variants, config);
     await writeProductModifiers(tx, productId, value.modifiers);
   }
   return readProductEditor(tx, productId);

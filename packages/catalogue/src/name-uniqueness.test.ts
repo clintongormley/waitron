@@ -15,37 +15,33 @@ describe("foldName", () => {
 });
 
 describe("firstNewClash", () => {
-  const entry = (name: string, group: string | null, field = name) => ({ name, group, field });
+  const entry = (name: string, changed: boolean, field = name) => ({ name, changed, field });
 
   it("finds nothing among distinct names", () => {
-    expect(firstNewClash([entry("A", "1"), entry("B", "2")])).toBeUndefined();
+    expect(firstNewClash([entry("A", true), entry("B", true)])).toBeUndefined();
   });
   it("leaves a clash between two rows the write leaves alone", () => {
-    expect(firstNewClash([entry("A", null), entry(" a ", null)])).toBeUndefined();
+    expect(firstNewClash([entry("A", false), entry(" a ", false)])).toBeUndefined();
   });
-  it("leaves a clash between two rows that arrive together from one place", () => {
-    expect(firstNewClash([entry("A", "p"), entry("a", "p")])).toBeUndefined();
+  it("names the changed entry when it meets an unchanged one before it", () => {
+    expect(firstNewClash([entry("A", false, "old"), entry("a", true, "new")])?.field).toBe("new");
   });
-  it("names the arriving entry when it meets a staying one before it", () => {
-    expect(firstNewClash([entry("A", null, "old"), entry("a", "1", "new")])?.field).toBe("new");
+  it("names the changed entry when it meets an unchanged one after it", () => {
+    expect(firstNewClash([entry("A", true, "new"), entry("a", false, "old")])?.field).toBe("new");
   });
-  it("names the arriving entry when it meets a staying one after it", () => {
-    expect(firstNewClash([entry("A", "1", "new"), entry("a", null, "old")])?.field).toBe("new");
-  });
-  it("names the later of two arriving entries", () => {
-    expect(firstNewClash([entry("A", "1", "first"), entry("a", "2", "second")])?.field).toBe(
+  it("names the later of two changed entries", () => {
+    expect(firstNewClash([entry("A", true, "first"), entry("a", true, "second")])?.field).toBe(
       "second",
     );
   });
-  it("finds an arriving entry clashing with the second of a staying pair", () => {
+  it("finds a changed entry clashing with the second of an unchanged pair", () => {
     expect(
-      firstNewClash([entry("A", null), entry("a", null), entry("B", "1"), entry("A ", "2", "x")])
-        ?.field,
+      firstNewClash([
+        entry("A", false),
+        entry("a", false),
+        entry("B", true),
+        entry("A ", true, "x"),
+      ])?.field,
     ).toBe("x");
-  });
-  it("finds a clash with a group arriving after two of another", () => {
-    expect(
-      firstNewClash([entry("A", "p", "p1"), entry("a", "p", "p2"), entry("A", "q", "q1")])?.field,
-    ).toBe("q1");
   });
 });

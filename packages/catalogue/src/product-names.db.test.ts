@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { products, withTransaction, type Transaction } from "@waitron/db";
+import { withTransaction, type Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
+import {
+  plantStoredProduct,
+  racePair,
+  seedLegacySellingUnits,
+  useCatalogueDb,
+} from "../test/fixtures.js";
 import { createCategory } from "./categories.js";
 import { createCatalogue, createProduct, updateProduct } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { listProductVariants, setProductVariants, type VariantWrite } from "./variants.js";
-import { assertFamilyNamesFree } from "./product-names.js";
 
 /** An Active product's or Active variant's staff name is unique across the whole venue. */
 const suite = useCatalogueDb();
@@ -45,23 +49,6 @@ async function make(
     }),
   );
   return created.id;
-}
-
-/** Writes a product past every product path: how a test models two Active products that already
- * share a name, as data written before the rule existed. */
-async function plantProduct(name: string, parentId: string | null = null): Promise<string> {
-  const [row] = await suite.db
-    .insert(products)
-    .values({
-      catalogueId: dinner,
-      name,
-      parentId,
-      ...(parentId === null
-        ? { pricingUnit: "each", unitPrice: 200, vatClass: "general", dietaryDeclarations: [] }
-        : { dietaryDeclarations: null }),
-    })
-    .returning({ id: products.id });
-  return row!.id;
 }
 
 const variant = (name: string, extra: Partial<VariantWrite> = {}): VariantWrite => ({
@@ -106,7 +93,7 @@ describe("update", () => {
     await app((tx) => updateProduct(tx, cola, { name: "Cola", active: true, unitPrice: "3" }));
   });
   it("does not refuse a save that keeps a name two Active products already shared", async () => {
-    const twin = await plantProduct("cola");
+    const twin = await plantStoredProduct(suite.db, dinner, "cola");
     await app((tx) => updateProduct(tx, twin, { name: "cola", unitPrice: "3" }));
   });
   it("refuses reactivating a product whose name became taken while it was Inactive", async () => {
@@ -125,6 +112,14 @@ describe("update", () => {
       taken("variants.0.name", "Small"),
     );
   });
+  it("refuses reactivating a variant whose name became taken while it was Inactive", async () => {
+    const lemonade = await make("Lemonade");
+    const [small] = await variants(lemonade, [variant("Small", { active: false })]);
+    await make("small");
+    await expect(app((tx) => updateProduct(tx, small!.id, { active: true }))).rejects.toMatchObject(
+      taken("name", "Small"),
+    );
+  });
   it("refuses a variant renamed onto its own parent's name", async () => {
     const lemonade = await make("Lemonade");
     const [small] = await variants(lemonade, [variant("Small")]);
@@ -141,9 +136,8 @@ describe("rows the rule leaves to the write", () => {
     await app((tx) => updateProduct(tx, lemonade, { active: false }));
     await app((tx) => updateProduct(tx, small!.id, { name: "Cola" }));
   });
-  it("leaves an id that names no row to the write, as before", async () => {
+  it("leaves an id that names no row to the write", async () => {
     await app((tx) => updateProduct(tx, crypto.randomUUID(), { name: "Cola" }));
-    await app((tx) => assertFamilyNamesFree(tx, crypto.randomUUID(), { name: "Cola" }));
   });
   it("keeps a variant sent by id without its Active switch as it was", async () => {
     const lemonade = await make("Lemonade");
@@ -340,5 +334,22 @@ describe("product editor save", () => {
         ),
       ),
     ).rejects.toMatchObject(taken("name", "cola"));
+  });
+});
+
+describe("two writes started together", () => {
+  it("lets one of two creates of one staff name through, and refuses the other", async () => {
+    const create = (name: string) => (tx: Transaction) =>
+      createProduct(tx, {
+        catalogueId: dinner,
+        categoryId: null,
+        name,
+        pricingUnit: "each",
+        unitPrice: "2",
+        vatClass: "general",
+      });
+    const [first, second] = await racePair(suite.db, create("Tonic"), create("tonic"));
+    expect(first.status).toBe("fulfilled");
+    expect(second).toMatchObject({ status: "rejected", reason: taken("name", "tonic") });
   });
 });

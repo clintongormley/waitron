@@ -10,18 +10,15 @@ export function foldName(name: string): string {
 
 export interface NameEntry {
   name: string;
-  /**
-   * Where the entry's name came from. `null` is a row this write leaves as it was; any other value
-   * is a row the write creates, renames, moves or makes count again, and entries sharing a value
-   * already sat together under these names (the children of one category moved up together).
-   */
-  group: string | null;
+  /** False for a row this write leaves as it was; true for one it creates, renames, moves or makes
+   * count again. */
+  changed: boolean;
 }
 
 /**
- * The first entry whose folded name another entry from a different group already holds: a write is
- * refused only for a clash it creates, so rows that already shared a name do not block an unrelated
- * save. The entry named is the later of the two, unless that one is a row the write leaves alone.
+ * The first entry whose folded name another entry already holds, where at least one of the two is
+ * changed: a write is refused only for a clash it creates, so rows that already shared a name do not
+ * block an unrelated save. The entry named is the later of the two, unless that one is unchanged.
  */
 export function firstNewClash<T extends NameEntry>(entries: readonly T[]): T | undefined {
   const held = new Map<string, T>();
@@ -29,7 +26,8 @@ export function firstNewClash<T extends NameEntry>(entries: readonly T[]): T | u
     const key = foldName(entry.name);
     const earlier = held.get(key);
     if (earlier === undefined) held.set(key, entry);
-    else if (earlier.group !== entry.group) return entry.group === null ? earlier : entry;
+    else if (entry.changed) return entry;
+    else if (earlier.changed) return earlier;
   }
   return undefined;
 }

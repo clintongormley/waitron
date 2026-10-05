@@ -1,8 +1,9 @@
 import { categories, now, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { batches } from "./batches.js";
-import { firstNewClash, foldName, type NameEntry } from "./name-uniqueness.js";
+import { assertCategoryNamesFree } from "./category-names.js";
+import { foldName } from "./name-uniqueness.js";
 import { categoryDetails } from "./schema/categories.js";
 import { isTopLevelProduct, productWithId } from "./variant-fallback.js";
 import "./errors.js";
@@ -62,37 +63,6 @@ export async function validateParent(
     parentId = parent.parentId;
   }
 }
-/**
- * Refuses a write that would leave two categories with one parent sharing a name. `arriving` are
- * the categories the write puts under `parentId`, each with the group `firstNewClash` reads; every
- * other category already there, except the `leaving` ones, counts as staying. `snapshot`, when
- * given, is the whole tree already read in this transaction.
- */
-export async function assertCategoryNamesFree(
-  tx: Transaction,
-  parentId: string | null,
-  arriving: readonly (NameEntry & { id: string })[],
-  { leaving = [], snapshot }: { leaving?: readonly string[]; snapshot?: readonly Category[] } = {},
-): Promise<void> {
-  if (arriving.every((category) => category.group === null)) return;
-  const ids = new Set([...leaving, ...arriving.map((category) => category.id)]);
-  const siblings =
-    snapshot?.filter((folder) => folder.parentId === parentId) ??
-    (await tx
-      .select({ id: categories.id, name: categories.name })
-      .from(categories)
-      .leftJoin(categoryDetails, eq(categoryDetails.categoryId, categories.id))
-      .where(
-        parentId === null
-          ? isNull(categoryDetails.parentId)
-          : eq(categoryDetails.parentId, parentId),
-      ));
-  const staying = siblings
-    .filter((sibling) => !ids.has(sibling.id))
-    .map((sibling) => ({ name: sibling.name, group: null }));
-  const clash = firstNewClash([...staying, ...arriving]);
-  if (clash) throw new AppError("category.name_taken", { field: "name", name: clash.name });
-}
 function categoryName(name: unknown): string {
   const trimmed = typeof name === "string" ? name.trim() : "";
   if (trimmed === "") throw new AppError("category.invalid", { field: "name" });
@@ -102,7 +72,7 @@ export async function createCategory(tx: Transaction, input: CategoryInput): Pro
   const name = categoryName(input.name);
   const id = crypto.randomUUID();
   await validateParent(tx, id, input.parentId ?? null);
-  await assertCategoryNamesFree(tx, input.parentId ?? null, [{ id, name, group: id }]);
+  await assertCategoryNamesFree(tx, [{ id, name, parentId: input.parentId ?? null }]);
   await tx.insert(categories).values({ id, name });
   await tx.insert(categoryDetails).values({ categoryId: id, parentId: input.parentId ?? null });
   return readCategory(tx, id);
@@ -117,11 +87,11 @@ export async function updateCategory(
   const parentId = patch.parentId === undefined ? current.parentId : patch.parentId;
   await validateParent(tx, id, parentId);
   const finalName = name ?? current.name;
-  const moved = parentId !== current.parentId || foldName(finalName) !== foldName(current.name);
-  await assertCategoryNamesFree(tx, parentId, [{ id, name: finalName, group: moved ? id : null }]);
+  if (parentId !== current.parentId || foldName(finalName) !== foldName(current.name))
+    await assertCategoryNamesFree(tx, [{ id, name: finalName, parentId }]);
   await tx
     .update(categories)
-    .set({ name: name ?? current.name, updatedAt: now() })
+    .set({ name: finalName, updatedAt: now() })
     .where(eq(categories.id, id));
   await tx
     .insert(categoryDetails)
@@ -147,28 +117,6 @@ export async function vacateCategories(
     .update(products)
     .set({ categoryId: null, updatedAt: now() })
     .where(and(inArray(products.categoryId, ids), isNotNull(products.parentId)));
-}
-export async function deleteCategory(tx: Transaction, id: string): Promise<void> {
-  const category = await readCategory(tx, id);
-  const children = await tx
-    .select({ id: categories.id, name: categories.name })
-    .from(categoryDetails)
-    .innerJoin(categories, eq(categories.id, categoryDetails.categoryId))
-    .where(eq(categoryDetails.parentId, id));
-  await assertCategoryNamesFree(
-    tx,
-    category.parentId,
-    children.map((child) => ({ ...child, group: id })),
-    { leaving: [id] },
-  );
-  await vacateCategories(tx, [id], category.parentId);
-  // Clears the RESTRICT parent key before the delete below.
-  await tx
-    .update(categoryDetails)
-    .set({ parentId: category.parentId })
-    .where(eq(categoryDetails.parentId, id));
-  // category_details cascades via its FK.
-  await tx.delete(categories).where(eq(categories.id, id));
 }
 /** Are these all distinct top-level products? A repeat leaves the count short, as an absent id does. */
 export async function allTopLevelProducts(

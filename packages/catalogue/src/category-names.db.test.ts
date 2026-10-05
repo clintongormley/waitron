@@ -1,16 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { categories, withTransaction, type Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
-import { useCatalogueDb } from "../test/fixtures.js";
-import {
-  createCategory,
-  deleteCategory,
-  listCategories,
-  readCategory,
-  updateCategory,
-} from "./categories.js";
-import { deleteCatalogueItems, moveCatalogueItems } from "./catalogue-items.js";
-import { categoryDetails } from "./schema/categories.js";
+import { plantStoredSiblingCategory, racePair, useCatalogueDb } from "../test/fixtures.js";
+import { createCategory, listCategories, readCategory, updateCategory } from "./categories.js";
+import { deleteCatalogueItems, deleteCategory, moveCatalogueItems } from "./catalogue-items.js";
 
 /** A category's name is unique among the categories with the same parent, the root included. */
 const suite = useCatalogueDb();
@@ -27,15 +20,8 @@ beforeEach(async () => {
   });
 });
 
-/** Writes a category past every category path: how a test models two siblings that already share
- * a name, as data written before the rule existed. */
-async function plantCategory(name: string, parentId: string | null): Promise<string> {
-  const id = crypto.randomUUID();
-  await suite.db.insert(categories).values({ id, name });
-  await suite.db.insert(categoryDetails).values({ categoryId: id, parentId });
-  return id;
-}
-
+const plant = (name: string, parentId: string | null) =>
+  plantStoredSiblingCategory(suite.db, name, parentId);
 const snapshot = () => app((tx) => listCategories(tx));
 
 describe("create", () => {
@@ -88,7 +74,7 @@ describe("update", () => {
     ).rejects.toMatchObject(taken("BEER"));
   });
   it("does not refuse a save that keeps a name two siblings already shared", async () => {
-    const twin = await plantCategory("drinks", null);
+    const twin = await plant("drinks", null);
     expect(await app((tx) => updateCategory(tx, twin, { name: "drinks" }))).toMatchObject({
       name: "drinks",
     });
@@ -139,8 +125,71 @@ describe("bulk move", () => {
     expect((await app((tx) => readCategory(tx, beer))).parentId).toBe(food);
   });
   it("does not refuse a move within the parent a category already has", async () => {
-    await plantCategory("beer", drinks);
+    await plant("beer", drinks);
     await app((tx) => moveCatalogueItems(tx, { productIds: [], categoryIds: [beer] }, drinks));
     expect((await app((tx) => readCategory(tx, beer))).parentId).toBe(drinks);
+  });
+});
+
+describe("bulk delete moving the contents up, judged as a whole", () => {
+  it.each([
+    ["Parent", "Collision"],
+    ["Collision", "Parent"],
+  ])("accepts deleting %s and %s together, in either order", async (first, second) => {
+    const ids = await app(async (tx) => {
+      const parent = (await createCategory(tx, { name: "Parent" })).id;
+      const collision = (await createCategory(tx, { name: "Collision" })).id;
+      const child = (await createCategory(tx, { name: "Collision", parentId: parent })).id;
+      return { Parent: parent, Collision: collision, child };
+    });
+    const categoryIds = [ids[first as "Parent"], ids[second as "Parent"]];
+    await app((tx) => deleteCatalogueItems(tx, { productIds: [], categoryIds }, "move_up"));
+    const after = await snapshot();
+    expect(after.find((folder) => folder.id === ids.child)).toMatchObject({ parentId: null });
+    expect(after.map((folder) => folder.id)).not.toContain(ids.Parent);
+    expect(after.map((folder) => folder.id)).not.toContain(ids.Collision);
+  });
+  it("refuses two children sharing a name moving up together, and deletes nothing", async () => {
+    // One spelling, so the refusal names it whichever twin the tree lists first.
+    await plant("Wine", drinks);
+    await plant("Wine", drinks);
+    const before = await snapshot();
+    await expect(
+      app((tx) => deleteCatalogueItems(tx, { productIds: [], categoryIds: [drinks] }, "move_up")),
+    ).rejects.toMatchObject(taken("Wine"));
+    expect(await snapshot()).toEqual(before);
+  });
+});
+
+describe("categories already sharing a name", () => {
+  it("refuses moving two of them together into another parent, and moves nothing", async () => {
+    const left = await plant("Wine", drinks);
+    const right = await plant("wine", drinks);
+    const before = await snapshot();
+    await expect(
+      app((tx) => moveCatalogueItems(tx, { productIds: [], categoryIds: [left, right] }, food)),
+    ).rejects.toMatchObject(taken("wine"));
+    expect(await snapshot()).toEqual(before);
+  });
+  it("does not block a rename or a move beside them that names neither", async () => {
+    await plant("Wine", drinks);
+    await plant("wine", drinks);
+    expect(await app((tx) => updateCategory(tx, beer, { name: "Ale" }))).toMatchObject({
+      name: "Ale",
+    });
+    await app((tx) => moveCatalogueItems(tx, { productIds: [], categoryIds: [food] }, drinks));
+    expect((await app((tx) => readCategory(tx, food))).parentId).toBe(drinks);
+  });
+});
+
+describe("two writes started together", () => {
+  it("lets one of two creates of one name in one parent through, and refuses the other", async () => {
+    const [first, second] = await racePair(
+      suite.db,
+      (tx) => createCategory(tx, { name: "Wine", parentId: drinks }),
+      (tx) => createCategory(tx, { name: "wine", parentId: drinks }),
+    );
+    expect(first.status).toBe("fulfilled");
+    expect(second).toMatchObject({ status: "rejected", reason: taken("wine") });
   });
 });

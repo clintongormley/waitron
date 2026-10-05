@@ -7,10 +7,10 @@ import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import {
   createCategory,
   updateCategory,
-  deleteCategory,
   readCategory,
   setMainReportingCategory,
 } from "./categories.js";
+import { deleteCategory } from "./catalogue-items.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { setProductVariants } from "./variants.js";
 import { plantStoredCategory, racePair, seedLegacySellingUnits } from "../test/fixtures.js";
