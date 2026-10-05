@@ -179,6 +179,7 @@ import {
   assertTakesCash,
   requireDeviceProof,
   tryReadDevice,
+  type DeviceBinding,
 } from "./device-session.js";
 import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
@@ -902,6 +903,12 @@ function mountCourseVerb(
   );
 }
 
+/** A kitchen display cannot open a shift session. */
+function refuseKitchenSignIn(device: DeviceBinding): void {
+  if (kindOfFormFactor(device.formFactor) === "kds_station")
+    throw new AppError("device.forbidden_action", { action: "sign_in" });
+}
+
 /** Mount the till routes with the shared error boundary. */
 export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   app.use("/api/*", madeHereAnswer(deps.db, deps.cfg.locale));
@@ -987,15 +994,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (personId === null) throw new AppError("pin.invalid", {});
       const proof = await requireDeviceProof(deps, c);
       const { device } = proof;
-      // A kitchen display holds no shift.
-      if (kindOfFormFactor(device.formFactor) === "kds_station")
-        throw new AppError("device.forbidden_action", { action: "sign_in" });
+      // Before the PIN work, and again under the lock: the profile can change while the PIN is
+      // checked.
+      refuseKitchenSignIn(device);
       pinThrottle.check(device.deviceId, personId);
       const checked = await checkPin(deps.db, personId, pin);
       let session;
       try {
         session = await withTransaction(deps.db, async (tx) => {
-          await assertDeviceStillProven(tx, proof);
+          refuseKitchenSignIn(await assertDeviceStillProven(tx, proof));
           return loginWithPin(tx, {
             deviceId: device.deviceId,
             personId,

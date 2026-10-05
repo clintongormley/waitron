@@ -335,16 +335,23 @@ export async function requireDeviceProof(
  * still active and still holds the token hash `proof` verified: a device disabled and enabled again
  * since holds a new one. A dev-header proof has no hash, so only `active` is checked again. Call it
  * inside the transaction that writes on the device's behalf, so the check and those writes share
- * the venue's write lock.
+ * the venue's write lock. Returns the device's binding as it stands now, which may name another
+ * profile than `proof` does.
  */
-export async function assertDeviceStillProven(tx: Transaction, proof: DeviceProof): Promise<void> {
+export async function assertDeviceStillProven(
+  tx: Transaction,
+  proof: DeviceProof,
+): Promise<DeviceBinding> {
+  const { deviceId } = proof.device;
   const [row] = await tx
-    .select({ tokenHash: devices.tokenHash })
+    .select({ tokenHash: devices.tokenHash, ...deviceBindingColumns })
     .from(devices)
-    .where(and(eq(devices.id, proof.device.deviceId), eq(devices.active, true)));
+    .innerJoin(deviceProfiles, deviceProfileJoin)
+    .where(and(eq(devices.id, deviceId), eq(devices.active, true)));
   if (row === undefined || (proof.tokenHash !== null && row.tokenHash !== proof.tokenHash)) {
     throw new AppError("device.unauthorized", {});
   }
+  return toDeviceBinding(deviceId, row);
 }
 
 /**
