@@ -1514,6 +1514,51 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 // that shows and what it does not. No primitive is reimplemented here: the dispatch ORCHESTRATES `recordSale`
 // (immediate + deferred), `settleSale` and `listOutstandingSales`.
 describe("prepare & collect — three-mode dispatch (order_flow)", () => {
+  it("uses each zone's pay timing through payment, placement and collection in one department", async () => {
+    const { cfg, cafe, zoneId: prepayZoneId } = await setupVenue();
+    const collectZone = await withTransaction(suite.db, (tx) =>
+      offerProducts(tx, cfg, { zone: "tables", serviceMode: "prepay" }),
+    );
+    await suite.db.execute(sql`
+      update zone_sale_policies set paid_when = 'ticket_then_pay'
+      where zone_id = ${collectZone.zoneId}`);
+
+    const prepayId = randomUUID();
+    const prepay = await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
+      id: prepayId,
+      zoneId: prepayZoneId,
+      lines: [{ menuItemId: cafe.menuItemId, quantity: "1" }],
+      tender: { method: "cash", amount: "1.50" },
+    });
+    expect(prepay.invoiceNumber).toBe("A/1");
+    expect(await orderState(prepayId)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(prepayId)).toBe(1);
+
+    const collectId = randomUUID();
+    await parkOrder({ db: suite.db }, cfg, {
+      id: collectId,
+      zoneId: collectZone.zoneId,
+      lines: [{ menuItemId: collectZone.offerFor(cafe.id), quantity: "1" }],
+    });
+    const { rows: contexts } = await suite.db.execute<{ service_mode: string }>(sql`
+      select service_mode from order_service_contexts where working_order_id = ${collectId}`);
+    expect(contexts).toEqual([{ service_mode: "ticket_then_pay" }]);
+    const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, collectId, OPERATOR);
+    expect(placed.invoiceNumber).toBeUndefined();
+    expect(await orderState(collectId)).toEqual({ status: "placed", settledAtSet: false });
+    expect(await saleCount(collectId)).toBe(0);
+
+    const collected = await collectOrder({ db: suite.db, backend, clock }, cfg, {
+      id: collectId,
+      lines: [],
+      tender: { method: "cash", amount: "1.50" },
+    });
+    expect(collected.invoiceNumber).toBe("A/2");
+    expect(await orderState(collectId)).toEqual({ status: "settled", settledAtSet: true });
+    expect(await saleCount(collectId)).toBe(1);
+    expect(await registroCount(collectId)).toBe(1);
+  });
+
   // MODE P (prepay): pay + issue at ORDER — open → settled, no placed state. The
   // walk-up/park-pay `payWorkingOrder`, asserted under an explicit `prepay` cfg so P's contract is
   // pinned beside I and T.
