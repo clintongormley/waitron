@@ -1341,7 +1341,7 @@ before the Each check in `itemPortions` — as it was before #1221. Tried 2026-1
 with a throwaway test: a kg item saved at `0.050`, its product's unit cleared, then
 `updateExtraList` with `{ id, productId, portion: "0.050" }` was not refused and read back `0.050`.
 The Extras editor sends no portion for an Each product, so this is reachable through the API only.
-_2026-10-05: SETTLED by W75e (owner chose to refuse it)._ `itemPortions` now judges an Each product
+_2026-10-05: SETTLED by W75e (#1226; owner chose to refuse it)._ `itemPortions` now judges an Each product
 before the equal-to-saved shortcut, deciding Each with `isEachUnit` (`packages/catalogue/src/units.ts`):
 such an item sent with any portion but one is refused on `items.<n>.portion` with `extras.invalid`
 and nothing is saved, while the same item sent without a portion, or with `1.000`, stores one. Tests
