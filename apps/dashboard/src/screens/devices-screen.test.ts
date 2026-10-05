@@ -1441,7 +1441,10 @@ describe("the Edit dialog", () => {
   it("regaining payments.manage while Edit is open does not draw the reader until Edit is opened again", async () => {
     let answer!: (value: { readerId: string | null }) => void;
     const api = editApi({
-      getDeviceReader: vi.fn().mockReturnValue(new Promise((resolve) => (answer = resolve))),
+      getDeviceReader: vi
+        .fn()
+        .mockReturnValueOnce(new Promise((resolve) => (answer = resolve)))
+        .mockResolvedValue({ readerId: "r1" }),
     });
     const el = await openEdit(api);
     el.canManageReaders = false;
@@ -1452,6 +1455,44 @@ describe("the Edit dialog", () => {
     await flush(el);
     expect(q(el, "[data-test=edit-reader]")).toBeNull();
     expect(api.getDeviceReader).toHaveBeenCalledTimes(1);
+
+    q(el, "[data-test=edit-cancel]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    dq(el.shadowRoot!, "[data-test=edit-device-t1]")!.click();
+    await vi.waitFor(() => expect(field(el, "edit-reader")?.disabled).toBe(false));
+    expect(api.getDeviceReader).toHaveBeenCalledTimes(2);
+    expect(field(el, "edit-reader").value).toBe("r1");
+  });
+
+  it("losing payments.manage clears a reader read's failure from the bottom of Edit", async () => {
+    const api = editApi({
+      getDeviceReader: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    });
+    const el = await openEdit(api);
+    expect(await bottom(el)).toBe(codeMessage("connection.failed"));
+    el.canManageReaders = false;
+    await flush(el);
+    expect(await bottom(el)).toBe("");
+  });
+
+  it("losing payments.manage clears a refused reader save, and Save then closes Edit", async () => {
+    const api = editApi({
+      setDeviceReader: vi.fn().mockRejectedValue({ code: "reader.not_found" }),
+    });
+    const el = await openEdit(api);
+    await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+    await flush(el);
+    await save(el);
+    await vi.waitFor(() =>
+      expect(field(el, "edit-reader").error).toBe(codeMessage("reader.not_found")),
+    );
+    el.canManageReaders = false;
+    await flush(el);
+    expect(await bottom(el)).toBe("");
+    await save(el);
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    expect(api.updateDevice).toHaveBeenCalledTimes(2);
+    expect(api.setDeviceReader).toHaveBeenCalledTimes(1);
   });
 
   it("preselects no reader when the device has none", async () => {
@@ -1815,6 +1856,22 @@ describe("the Edit dialog", () => {
       pending.resolve(undefined);
       await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
       expect(api.setDeviceReader).toHaveBeenCalledExactlyOnceWith("t1", "r1");
+    });
+
+    it("a reader save refused after payments.manage was lost closes Edit as a saved edit", async () => {
+      const pending = deferred<undefined>();
+      const api = editApi({ setDeviceReader: vi.fn().mockReturnValue(pending.promise) });
+      const el = await openEdit(api);
+      await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+      await save(el);
+      await vi.waitFor(() => expect(api.setDeviceReader).toHaveBeenCalledTimes(1));
+      el.canManageReaders = false;
+      await flush(el);
+
+      pending.reject({ code: "authorization.not_permitted" });
+      await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+      expect(api.updateDevice).toHaveBeenCalledTimes(1);
+      expect(q(el, "[data-test=page-error]")).toBeNull();
     });
 
     it.each([

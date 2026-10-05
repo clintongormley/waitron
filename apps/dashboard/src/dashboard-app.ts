@@ -945,6 +945,8 @@ export class DashboardApp extends LitElement {
     this.sessionRole = me.role;
     this.liveUpdates?.start();
     this.#sessionPermissions = me.permissions;
+    // A plain field: redraw so the screens given a permission see the change.
+    this.requestUpdate();
     this.onboardingIntent = me.onboardingIntent;
     // Activate the enabled modules before resolving the permitted screen, so a URL naming an enabled
     // module's screen id is recognised while a disabled module's is not.

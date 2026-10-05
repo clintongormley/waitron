@@ -1800,6 +1800,37 @@ describe("dashboard-app", () => {
     },
   );
 
+  it("tells the open devices screen when a session re-read finds payments.manage gone", async () => {
+    const getMe = vi
+      .fn()
+      .mockResolvedValueOnce({ ...meResponse, permissions: ["booking.manage", "payments.manage"] })
+      .mockResolvedValue({ ...meResponse, permissions: ["booking.manage"] });
+    // After the re-read the shell's alert and language reads stay unanswered, so neither redraws it.
+    let reread = false;
+    const answer = <T>(value: T) =>
+      reread ? new Promise<T>(() => undefined) : Promise.resolve(value);
+    const api = stubApi({
+      listStaff: vi.fn().mockResolvedValue([]),
+      getMe,
+      listAlerts: vi.fn(() => answer({ visible: false, alerts: [] })),
+      getContentLanguages: vi.fn(() => answer({ defaultLanguage: "es", languages: ["es"] })),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    navDevices(el)!.click();
+    await flush(el);
+    const screen = devices(el) as HTMLElement & { canManageReaders: boolean };
+    expect(screen.canManageReaders).toBe(true);
+
+    reread = true;
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    await flush(el);
+    expect(getMe).toHaveBeenCalledTimes(2);
+    expect(devices(el)).toBe(screen);
+    expect(screen.canManageReaders).toBe(false);
+  });
+
   it("navigates to printing rules beside printers", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });

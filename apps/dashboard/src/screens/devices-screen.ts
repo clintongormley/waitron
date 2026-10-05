@@ -271,9 +271,10 @@ export class DevicesScreen extends LitElement {
 
   @property({ attribute: false }) panels: readonly CardProviderPanel[] = CARD_PROVIDER_PANELS;
   /**
-   * Whether the session holds `payments.manage`. While false Edit neither draws nor saves the card
-   * reader; turned back on, it shows from the next Edit. A refusal of the read still hides the
-   * reader, because the server may know of a change before this flag does.
+   * Whether the session holds `payments.manage`. While false Edit draws no card reader and sends
+   * none; turned back on, the reader shows from the next Edit. A reader read refused with
+   * `authorization.not_permitted` also hides it, because the server may know of a change before
+   * this flag does; any other failure of that read is shown at the bottom of Edit.
    */
   @property({ attribute: false }) canManageReaders = true;
 
@@ -987,14 +988,18 @@ export class DevicesScreen extends LitElement {
       // Saved separately: the reader belongs to the payments module and its own permission (spec §5).
       try {
         await this.api.setDeviceReader(device.id, readerId);
+        if (epoch !== this.#editEpoch) return;
+        this.#storedReaderId = readerId;
       } catch (error) {
         if (epoch !== this.#editEpoch) return;
-        this.editSaving = false;
-        this.editRefusal = { field: "reader", code: codeOf(error) };
-        return;
+        // Hidden since Save was pressed: the reader is no longer this session's to set, so the saved
+        // device closes the dialog as any saved edit does.
+        if (this.readerState === "ready") {
+          this.editSaving = false;
+          this.editRefusal = { field: "reader", code: codeOf(error) };
+          return;
+        }
       }
-      if (epoch !== this.#editEpoch) return;
-      this.#storedReaderId = readerId;
     }
     this.editSaving = false;
     await this.#closeModal("edit-device-modal");
