@@ -3773,6 +3773,41 @@ it("keeps a refused network connection edit available to retry", async () => {
   await vi.waitFor(() => expect(api.updatePrinter).toHaveBeenCalledTimes(2));
 });
 
+it("asks before discarding a changed network connection or leaving its printer", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  q(el, "[data-test=printer-section-connection]")!
+    .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+    .click();
+  await flush(el);
+  q(el, "[data-test=edit-printer-connection]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-host"]', "10.0.0.88");
+  q(el, "[data-test=cancel-printer-connection]")!.click();
+  await flush(el);
+  expect(q(el, '[name="printer-detail-host"]')).not.toBeNull();
+  expect(text(el, "[data-test=discard-printer-connection]")).toBe(
+    t("printers.discard_connection_prompt"),
+  );
+  q(el, "[data-test=all-printers-link]")!.click();
+  await flush(el);
+  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  q(el, "[data-test=cancel-printer-connection]")!.click();
+  await flush(el);
+  q(el, "[data-test=edit-printer-connection]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-host"]', "10.0.0.89");
+  q(el, "[data-test=all-printers-link]")!.click();
+  await flush(el);
+  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  q(el, "[data-test=all-printers-link]")!.click();
+  await flush(el);
+  expect(location.pathname).toBe("/manage/printers/view/printers");
+});
+
 it("shows the saved drawer independently of the profiles offering it, and the delivering agent without discovery", async () => {
   const api = stubApi({
     listPrinters: vi.fn().mockResolvedValue([

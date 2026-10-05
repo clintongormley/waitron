@@ -510,6 +510,8 @@ export class PrintersScreen extends LitElement {
     saving: boolean;
     error: string | null;
   } | null = null;
+  @state() private discardDetailConnectionArmed = false;
+  @state() private discardDetailConnectionNavigationArmed = false;
   @state() private connectionOpen = false;
   @state() private calibrationOpen = false;
   @state() private testingDrawer = false;
@@ -2042,7 +2044,18 @@ export class PrintersScreen extends LitElement {
     this.detailActiveError = null;
     this.detailName = null;
     this.detailConnection = null;
+    this.discardDetailConnectionArmed = false;
+    this.discardDetailConnectionNavigationArmed = false;
     this.discardDetailNameArmed = false;
+  }
+
+  #connectionIsDirty(printer: Printer): boolean {
+    const draft = this.detailConnection;
+    return (
+      draft?.id === printer.id &&
+      (draft.host !== (printer.host ?? "") ||
+        draft.port !== (printer.port === null ? "" : String(printer.port)))
+    );
   }
 
   async #saveDetailConnection(printer: Printer): Promise<void> {
@@ -2068,6 +2081,8 @@ export class PrintersScreen extends LitElement {
       return;
     }
     this.detailConnection = null;
+    this.discardDetailConnectionArmed = false;
+    this.discardDetailConnectionNavigationArmed = false;
     await this.#load();
   }
 
@@ -2144,6 +2159,11 @@ export class PrintersScreen extends LitElement {
             return;
           event.preventDefault();
           if (this.detailName?.saving) return;
+          if (this.detailConnection?.saving) return;
+          if (p && this.#connectionIsDirty(p) && !this.discardDetailConnectionNavigationArmed) {
+            this.discardDetailConnectionNavigationArmed = true;
+            return;
+          }
           if (
             p &&
             this.detailName &&
@@ -2311,6 +2331,8 @@ export class PrintersScreen extends LitElement {
                             host: event.detail.value,
                             error: null,
                           };
+                        this.discardDetailConnectionArmed = false;
+                        this.discardDetailConnectionNavigationArmed = false;
                       }}
                     ></wt-input>
                     <wt-input
@@ -2327,6 +2349,8 @@ export class PrintersScreen extends LitElement {
                             port: event.detail.value,
                             error: null,
                           };
+                        this.discardDetailConnectionArmed = false;
+                        this.discardDetailConnectionNavigationArmed = false;
                       }}
                     ></wt-input>
                     ${this.detailConnection.error ? html`<p role="alert">${this.detailConnection.error}</p>` : nothing}
@@ -2340,10 +2364,17 @@ export class PrintersScreen extends LitElement {
                         data-test="cancel-printer-connection"
                         ?disabled=${this.detailConnection.saving}
                         @click=${() => {
-                          this.detailConnection = null;
+                          if (this.#connectionIsDirty(p) && !this.discardDetailConnectionArmed) {
+                            this.discardDetailConnectionArmed = true;
+                          } else {
+                            this.detailConnection = null;
+                            this.discardDetailConnectionArmed = false;
+                            this.discardDetailConnectionNavigationArmed = false;
+                          }
                         }}
-                        >${t("action.cancel")}</wt-button
+                        >${this.discardDetailConnectionArmed ? t("printers.discard_name") : t("action.cancel")}</wt-button
                       >
+                      ${this.discardDetailConnectionArmed ? html`<span data-test="discard-printer-connection" role="status">${t("printers.discard_connection_prompt")}</span>` : nothing}
                       <wt-button
                         variant="primary"
                         data-test="save-printer-connection"
@@ -2363,6 +2394,8 @@ export class PrintersScreen extends LitElement {
                         saving: false,
                         error: null,
                       };
+                      this.discardDetailConnectionArmed = false;
+                      this.discardDetailConnectionNavigationArmed = false;
                     }}
                     >${t("action.edit")}</wt-button
                   >`

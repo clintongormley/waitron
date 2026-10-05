@@ -945,6 +945,8 @@ export const en = {
   "printers.name": "Name",
   "printers.discard_name": "Discard changes",
   "printers.discard_name_prompt": "Press Discard changes again to lose the edited name.",
+  "printers.discard_connection_prompt":
+    "Press Discard changes again to lose the edited connection.",
   "printers.transport": "Connection type",
   "printers.host": "Host / IP",
   "printers.port": "Port",
@@ -3098,6 +3100,8 @@ export const es: Record<StringKey, string> = {
   "printers.name": "Nombre",
   "printers.discard_name": "Descartar cambios",
   "printers.discard_name_prompt": "Pulsa Descartar cambios otra vez para perder el nombre editado.",
+  "printers.discard_connection_prompt":
+    "Pulsa Descartar cambios otra vez para perder la conexión editada.",
   "printers.transport": "Tipo de conexión",
   "printers.host": "Host / IP",
   "printers.port": "Puerto",
