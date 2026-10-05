@@ -21,7 +21,8 @@ export type ImageUsage =
       name: string;
       active: boolean;
     }
-  | { kind: "menu_version"; id: string; menuId: string; menuName: string; number: number };
+  | { kind: "menu_version"; id: string; menuId: string; menuName: string; number: number }
+  | { kind: "receipt" };
 export interface ImageQuery {
   search: string;
   language: string;

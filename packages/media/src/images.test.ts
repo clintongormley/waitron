@@ -5,6 +5,7 @@ import {
   CORE_MIGRATIONS,
   catalogues,
   products,
+  tenantReceipts,
   type Transaction,
 } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS, writeContentLanguages } from "@waitron/catalogue";
@@ -44,7 +45,7 @@ describe("image library", () => {
       );
       const selects = vi.spyOn(tx, "select");
       expect((await readImage(tx, image.image.id)).usageCount).toBe(0);
-      expect(selects).toHaveBeenCalledTimes(4);
+      expect(selects).toHaveBeenCalledTimes(5);
       selects.mockRestore();
     });
   });
@@ -616,6 +617,35 @@ it("protects an image used by sections, a menu's own list among them, and counts
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
     await updateSection(tx, drinks.id, { image: null });
     await tx.update(sections).set({ image: null }).where(eq(sections.id, root!.id));
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
+  });
+});
+
+it("protects the image the receipt names as its logo, counts the use, and releases it when the logo is removed", async () => {
+  await seedTenant(suite.db);
+  await withTransaction(suite.db, async (tx) => {
+    const { image } = await uploadImage(tx, { image: photo, names: { en: "Logo" } }, {});
+    const { image: other } = await uploadImage(
+      tx,
+      { image: await prepare(21), names: { en: "Other" } },
+      {},
+    );
+    await tx.insert(tenantReceipts).values({ receipt: { logo: image.filename, phone: "912" } });
+    const uses = [{ kind: "receipt" as const }];
+    expect(await listImageUsages(tx, image.id)).toEqual(uses);
+    expect(await listImageUsages(tx, other.id)).toEqual([]);
+    expect((await readImage(tx, image.id)).usageCount).toBe(1);
+    const counts = (images: { id: string; usageCount: number }[]) =>
+      Object.fromEntries(images.map((each) => [each.id, each.usageCount]));
+    expect(counts((await listImages(tx, {})).images)).toEqual({ [image.id]: 1, [other.id]: 0 });
+    expect(counts((await listImages(tx, { sort: "name" })).images)).toEqual({
+      [image.id]: 1,
+      [other.id]: 0,
+    });
+    expect(await deleteImage(tx, image.id)).toEqual({ deleted: false, uses });
+    expect(await readImageBytes(tx, image.filename)).not.toBeNull();
+    await tx.update(tenantReceipts).set({ receipt: { phone: "912" } });
+    expect((await readImage(tx, image.id)).usageCount).toBe(0);
     expect(await deleteImage(tx, image.id)).toEqual({ deleted: true, uses: [] });
   });
 });

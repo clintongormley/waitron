@@ -6,5 +6,6 @@ export const QUERY_DEPENDENCIES = {
     "content_languages",
     "menu_publications",
     "menu_version_images",
+    "tenant_receipts",
   ],
 } as const;
