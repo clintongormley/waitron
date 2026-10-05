@@ -8,6 +8,7 @@ import type { Transaction } from "@waitron/db";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { EscSetting, PrintConfig } from "@waitron/printing";
 import { getReceipt } from "@waitron/layouts";
+import { receiptLabelsFor } from "@waitron/country-packs";
 import type { Origin } from "@waitron/shared";
 import { formatReceipt } from "./receipt-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -154,6 +155,29 @@ export async function enqueueSaleReceipt(
     : "auto";
   if (mode !== "auto") return;
   await enqueueOriginalReceipt(tx, cfg, ticket, saleId);
+}
+
+/** A collection number is a separate document, never a fiscal receipt or a drawer command. */
+export async function enqueueCollectionTicket(
+  tx: Transaction,
+  cfg: OriginConfig,
+  zoneId: string,
+  orderNumber: number,
+): Promise<void> {
+  const policy = await VENUE_SERVICE.resolveSalePolicy(tx, cfg, zoneId);
+  if (policy.collectionNumber !== "numbered") return;
+  const printer = await resolveReceiptPrinter(tx, cfg.origin);
+  if (printer === undefined) return;
+  const builder = esc(printer);
+  const bytes = builder
+    .init()
+    .printArea(builder.grid.widthDots)
+    .align("center")
+    .line(receiptLabelsFor(cfg.locale).order)
+    .line(String(orderNumber))
+    .feedAndCut()
+    .bytes();
+  await enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document");
 }
 
 /**

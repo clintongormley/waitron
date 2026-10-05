@@ -423,6 +423,45 @@ describe("the words around a receipt's QR come from the venue's fiscal backend",
   });
 });
 
+it("prints one non-fiscal numbered collection ticket when a pay-on-collection order is placed", async () => {
+  const { cfg, each, zoneId } = await setupVenue("ticket_then_pay");
+  const printerId = await makePrinter(cfg);
+  await configureReceipt(cfg, { printerId });
+  await suite.db.execute(sql`
+    update department_sale_policies
+    set paid_when = 'ticket_then_pay', collection_number = 'numbered'
+    where department_id = (select department_id from zone_service_policies where zone_id = ${zoneId})
+  `);
+  const id = randomUUID();
+  const { orderNumber } = await parkOrder({ db: suite.db }, cfg, {
+    id,
+    zoneId,
+    lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+  });
+
+  await placeOrder(deps(), cfg, id, OPERATOR);
+
+  const jobs = (await printJobsFor(cfg)).filter((job) => job.printerId === printerId);
+  expect(jobs).toHaveLength(1);
+  const [job] = await suite.db
+    .select({ kind: printJobs.kind, saleId: printJobs.saleId })
+    .from(printJobs)
+    .where(eq(printJobs.printerId, printerId));
+  expect(job).toEqual({ kind: "document", saleId: null });
+  const ticket = decodeTicket(new Uint8Array(jobs[0]!.payload));
+  expect(ticket).toContain("Pedido");
+  expect(ticket).toContain(String(orderNumber));
+  expect(ticket).not.toContain("FACTURA");
+  expect(ticket).not.toContain("TOTAL");
+  expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
+  expect(await registroCount(cfg)).toBe(0);
+  expect(await drawerOpensFor(cfg)).toEqual([]);
+  await expect(placeOrder(deps(), cfg, id, OPERATOR)).rejects.toMatchObject({
+    code: "working_order.not_open",
+  });
+  expect((await printJobsFor(cfg)).filter((job) => job.printerId === printerId)).toHaveLength(1);
+});
+
 describe("receipt grouping after table changes", () => {
   it.each(["prepay", "ticket_then_pay", "invoice_first"] as const)(
     "%s freezes the table label at issuance across renaming, collection and table turnover",

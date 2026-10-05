@@ -183,7 +183,7 @@ import type { Logger } from "./logger.js";
 import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
-import { enqueueOriginalReceipt } from "./receipt-print.js";
+import { enqueueCollectionTicket, enqueueOriginalReceipt } from "./receipt-print.js";
 import { ordersWithUnfiledPayment, paymentAttemptIsLive, receiptQr } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { readIssuedSales } from "./sale-due.js";
@@ -5402,7 +5402,7 @@ export async function placeOrder(
 ): Promise<PlaceOrderResult> {
   return withTransaction(deps.db, async (tx) => {
     const [locked] = await tx
-      .select({ status: workingOrders.status })
+      .select({ status: workingOrders.status, orderNumber: workingOrders.orderNumber })
       .from(workingOrders)
       .where(eq(workingOrders.id, id));
     if (locked === undefined || locked.status !== "open") {
@@ -5450,6 +5450,10 @@ export async function placeOrder(
     }
 
     await markOrderPlaced(tx, deps.clock, cfg, id, operatorId);
+
+    if (orderFlow === "ticket_then_pay" && serviceContext !== null) {
+      await enqueueCollectionTicket(tx, cfg, serviceContext.zoneId, locked.orderNumber);
+    }
 
     await fireLines(tx, cfg, id, lines);
 
