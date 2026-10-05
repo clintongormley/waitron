@@ -25,7 +25,8 @@ import {
   type DragGhost,
   type DropGap,
 } from "./tree-drag.js";
-import type { MenuStructureNode, Product } from "../api/client.js";
+import { effectiveColor } from "@waitron/catalogue/src/color-inheritance.js";
+import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
 const ROOT_KEY = "root";
@@ -161,6 +162,32 @@ export class MenuStructureTable extends LitElement {
         display: inline-flex;
         flex-direction: column;
       }
+      wt-data-table::part(swatch-button),
+      wt-data-table::part(swatch-box) {
+        display: inline-flex;
+        flex: none;
+        vertical-align: middle;
+        align-items: center;
+        justify-content: center;
+        width: var(--wt-tap-min);
+        height: var(--wt-tap-min);
+        padding: 0;
+        border: 0;
+        background: transparent;
+      }
+      wt-data-table::part(swatch-button) {
+        cursor: pointer;
+      }
+      wt-data-table::part(swatch-button):disabled {
+        cursor: default;
+        opacity: var(--wt-opacity-disabled);
+      }
+      wt-data-table::part(color-swatch) {
+        width: var(--wt-space-5);
+        height: var(--wt-space-5);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-sm);
+      }
       wt-data-table::part(current) {
         font-weight: var(--wt-font-weight-bold);
         text-decoration: underline;
@@ -214,6 +241,8 @@ export class MenuStructureTable extends LitElement {
   @property({ attribute: false }) nodes: MenuStructureNode[] = [];
   /** Where members' staff names and images come from. */
   @property({ attribute: false }) products: Product[] = [];
+  /** Where a product without its own colour takes one from. */
+  @property({ attribute: false }) categories: CategorySummary[] = [];
   @property() menuName = "";
   /** The path of the current section; empty for the menu's own top level. */
   @property({
@@ -226,6 +255,7 @@ export class MenuStructureTable extends LitElement {
   #rowByKey = new Map<string, Row>();
   #productById = new Map<string, Product>();
   #productNames = new Map<string, string>();
+  #categoryById: ReadonlyMap<string, CategorySummary> = new Map();
   #sectionNames = new Map<string, string>();
   /** While the way to the current section is being opened, a closed row on it is not the person's. */
   #revealing = 0;
@@ -253,6 +283,8 @@ export class MenuStructureTable extends LitElement {
       this.#productById = new Map(this.products.map((product) => [product.id, product]));
       this.#productNames = new Map(this.products.map(({ id, name }) => [id, name]));
     }
+    if (changed.has("categories"))
+      this.#categoryById = new Map(this.categories.map((category) => [category.id, category]));
     if (changed.has("nodes")) {
       const names = new Map<string, string>();
       const walk = (nodes: MenuStructureNode[]) => {
@@ -617,7 +649,7 @@ export class MenuStructureTable extends LitElement {
       }</span
     >`;
     if (node.ref.kind === "section")
-      return html`<span part="folder-cell">${grip}${folderIcon}${stack}</span>`;
+      return html`<span part="folder-cell">${grip}${folderIcon}${stack}${this.#swatch(row)}</span>`;
     const image = this.#productById.get(node.ref.productId)?.image ?? null;
     return html`<span part="product-cell"
       >${grip}${
@@ -630,8 +662,50 @@ export class MenuStructureTable extends LitElement {
           : html`<span part="thumb-frame" data-test="thumb"
               ><img part="thumbnail" src=${`/media/${image}`} alt="" draggable="false"
             /></span>`
-      }${stack}</span
+      }${stack}${this.#swatch(row)}</span
     >`;
+  }
+
+  /** After the name, so names at one depth still start on one line. */
+  #swatch(row: MemberRow) {
+    const { node, key, name } = row;
+    let color: string | null;
+    let send: () => void;
+    let editable: boolean;
+    if (node.ref.kind === "section") {
+      const detail = { sectionId: node.ref.sectionId, path: row.path };
+      color = node.color ?? null;
+      send = () => this.#send("wt-member-edit", detail);
+      editable = this.#ownedSection(row);
+    } else {
+      const productId = node.ref.productId;
+      const product = this.#productById.get(productId);
+      color = effectiveColor(
+        product?.color ?? null,
+        product?.categoryId ?? null,
+        this.#categoryById,
+      );
+      send = () => this.#send("wt-product-color", { productId });
+      editable = !row.readOnly;
+    }
+    const chip = html`<span
+      part=${color ? "color-swatch" : "color-swatch empty"}
+      style=${color ? `background:${color}` : nothing}
+    ></span>`;
+    if (!editable)
+      return html`<span part="swatch-box" data-test=${`color-${key}`} aria-hidden="true"
+        >${chip}</span
+      >`;
+    return html`<button
+      part="swatch-button"
+      type="button"
+      data-test=${`color-${key}`}
+      aria-label=${t("folders.edit_color").replace("{name}", name)}
+      ?disabled=${this.busy}
+      @click=${send}
+    >
+      ${chip}
+    </button>`;
   }
 
   #button(test: string, label: string, variant: "secondary" | "danger", act: () => void) {

@@ -321,6 +321,7 @@ const WRITES = [
   "replaceHomeTile",
   "removeHomeTile",
   "moveHomeTile",
+  "setProductColor",
 ] as const;
 
 const PUBLISHED_AT = "2026-09-26T10:15:00.000Z";
@@ -541,6 +542,7 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
         ref: homeLayouts()[0]!.tiles.find((tile) => tile.memberId === id)!.ref,
       }));
     }),
+    setProductColor: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
   return client as unknown as DashboardApi & {
@@ -7041,5 +7043,91 @@ describe("after the server comes back", () => {
 
     await vi.waitFor(() => expect(q(el, '[data-test="home-load-error"]')).toBeNull());
     expect(q<HomeLayoutEditor>(el, "dashboard-home-layout-editor")?.layouts.length).toBe(2);
+  });
+});
+
+describe("colour swatches on the Structure tab", () => {
+  const paintedCategories = (): CategorySummary[] =>
+    categories.map((each) => (each.id === "c-drinks" ? { ...each, color: "#256bb1" } : each));
+  type ColorForm = HTMLElementTagNameMap["dashboard-product-color-form"];
+  const colorForm = (el: MenusScreen) => q<ColorForm>(el, "dashboard-product-color-form")!;
+  const inColorForm = <T extends Element = HTMLElement>(el: MenusScreen, selector: string) =>
+    colorForm(el).shadowRoot!.querySelector<T>(selector)!;
+
+  async function openLemonade(client: Api): Promise<MenusScreen> {
+    const el = await mountLunch(client);
+    await toggleRow(el, "m-drinks");
+    inStructure(el, `[data-test="${CSS.escape("color-m-drinks/m-lemonade")}"]`)!.click();
+    await el.updateComplete;
+    await vi.waitFor(() => expect(colorForm(el).open).toBe(true));
+    return el;
+  }
+
+  it("opens the product's colour dialog from its swatch, and Save sets its colour and closes it", async () => {
+    const client = api({
+      listCategories: vi.fn().mockResolvedValue(paintedCategories()),
+      setProductColor: vi.fn().mockResolvedValue(undefined),
+    });
+    const el = await openLemonade(client);
+    const form = colorForm(el);
+    expect(form.name).toBe("Lemonade");
+    expect(form.color).toBeNull();
+    expect(form.inherited).toBe("#256bb1");
+    expect(form.shadowRoot!.querySelector("wt-modal")!.heading).toBe(
+      t("product_color.heading").replace("{name}", "Lemonade"),
+    );
+    inColorForm(el, '[data-color="#b12525"]').click();
+    await form.updateComplete;
+    inColorForm(el, '[data-test="save"]').click();
+    await vi.waitFor(() => expect(form.open).toBe(false));
+    expect(client.setProductColor.mock.calls).toEqual([["p-lemonade", "#b12525"]]);
+    expect(writeCalls(client)).toEqual(["setProductColor"]);
+  });
+
+  it("keeps the dialog open with a refused colour under the chooser, and any other refusal at its end", async () => {
+    const client = api({
+      setProductColor: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "product.invalid", params: { field: "color" } })
+        .mockRejectedValueOnce({ code: "server.internal" }),
+    });
+    const el = await openLemonade(client);
+    const form = colorForm(el);
+    inColorForm(el, '[data-color="#b12525"]').click();
+    await form.updateComplete;
+    inColorForm(el, '[data-test="save"]').click();
+    await vi.waitFor(() => expect(form.errors).toEqual({ color: t("editor.field_rejected") }));
+    await form.updateComplete;
+    expect(form.open).toBe(true);
+    expect(form.busy).toBe(false);
+    expect(inColorForm(el, "#product-color-error").textContent!.trim()).toBe(
+      t("editor.field_rejected"),
+    );
+
+    inColorForm(el, '[data-test="save"]').click();
+    await vi.waitFor(() => expect(form.errors).toEqual({ _form: codeMessage("server.internal") }));
+    expect(form.open).toBe(true);
+  });
+
+  it("closes the dialog on Cancel, writing nothing", async () => {
+    const client = api({ setProductColor: vi.fn() });
+    const el = await openLemonade(client);
+    inColorForm(el, '[data-test="cancel"]').click();
+    await vi.waitFor(() => expect(colorForm(el).open).toBe(false));
+    expect(writeCalls(client)).toEqual([]);
+  });
+
+  it("opens the section's own form from a section's swatch", async () => {
+    const el = await mountLunch();
+    await settleStructure(el);
+    inStructure(el, '[data-test="color-m-drinks"]')!.click();
+    await el.updateComplete;
+    const form = q<HTMLElementTagNameMap["dashboard-section-details-form"]>(
+      el,
+      '[data-test="section-form"]',
+    )!;
+    await vi.waitFor(() => expect(form.open).toBe(true));
+    expect(form.value?.id).toBe("s-drinks");
+    expect(form.getAttribute("heading")).toBe(t("menus.edit_section"));
   });
 });

@@ -31,6 +31,7 @@ const lager = {
   kitchenName: "LAG",
   categoryId: null,
   active: true,
+  color: "#b12525",
   variants: [],
 } as unknown as Product;
 
@@ -300,6 +301,15 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
       if (!treeRows(el).querySelector('tr[data-row-key="m-drinks"] [aria-current="true"]'))
         throw new Error("list");
     });
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible product colour dialog, opened from a product's swatch", async () => {
+    const { el, host } = await mount("populated", theme, LUNCH);
+    await editDrinks(el);
+    treeRows(el).querySelector<HTMLElement>('[data-test="color-m-drinks/m-lager"]')!.click();
+    const form = q(el, "dashboard-product-color-form") as HTMLElement & { open: boolean };
+    await vi.waitFor(() => expect(form.open).toBe(true));
     await expectNoA11yViolations(host);
   });
 

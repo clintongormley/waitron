@@ -1,10 +1,10 @@
 import { page, userEvent } from "vitest/browser";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { MenuStructureTable } from "./menu-structure-table.js";
-import type { MenuStructureNode, Product } from "../api/client.js";
+import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { t } from "../i18n/t.js";
 
@@ -1232,4 +1232,161 @@ it("closes a row's menu after an action is chosen, and the choice opens or close
   expect(adds).toEqual([{ action: "new-section", path: ["m-drinks"] }]);
   expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("true");
   expect(row(el, "included-wine")!.getAttribute("aria-expanded")).toBe("false");
+});
+
+describe("colour swatches", () => {
+  const categories: CategorySummary[] = [
+    { id: "c-drinks", name: "Bebidas", parentId: null, color: "#256bb1" },
+    { id: "c-soft", name: "Refrescos", parentId: "c-drinks", color: null },
+  ];
+  /** Lager has its own colour, Lemonade takes its category's parent's, and Burger has none. */
+  const coloured: Product[] = [
+    { ...product("p-lager", "Lager"), color: "#b12525", categoryId: "c-soft" },
+    { ...product("p-lemonade", "Lemonade"), categoryId: "c-soft" },
+    product("p-burger", "Burger", "burger.webp"),
+    product("p-rioja", "Rioja"),
+  ];
+  const paintedLunch = (): MenuStructureNode[] =>
+    lunchNodes().map((node) =>
+      node.memberId === "m-drinks" ? { ...node, color: "#aa3300" } : node,
+    );
+
+  async function mountColoured(props: Partial<MenuStructureTable> = {}) {
+    return mount({ products: coloured, categories, nodes: paintedLunch(), ...props });
+  }
+  const swatchOf = (el: MenuStructureTable, key: string) =>
+    row(el, key)!.querySelector<HTMLElement>(`[data-test="color-${CSS.escape(key)}"]`)!;
+  const chipOf = (el: MenuStructureTable, key: string) =>
+    swatchOf(el, key).querySelector<HTMLElement>('[part~="color-swatch"]')!;
+  function sentEvents(el: MenuStructureTable): unknown[] {
+    const sent: unknown[] = [];
+    for (const name of [
+      "wt-product-color",
+      "wt-member-edit",
+      "wt-structure-edit",
+      "wt-member-move",
+    ])
+      el.addEventListener(name, (event) => sent.push([name, (event as CustomEvent).detail]));
+    return sent;
+  }
+
+  it("paints a product's own colour, else its category's, else draws it outlined", async () => {
+    const el = await mountColoured();
+    await toggle(el, "m-drinks");
+    expect(getComputedStyle(chipOf(el, "m-drinks/m-lager")).backgroundColor).toBe(
+      "rgb(177, 37, 37)",
+    );
+    expect(getComputedStyle(chipOf(el, "m-drinks/m-lemonade")).backgroundColor).toBe(
+      "rgb(37, 107, 177)",
+    );
+    expect(chipOf(el, "m-burger").getAttribute("part")).toBe("color-swatch empty");
+    expect(getComputedStyle(chipOf(el, "m-burger")).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(getComputedStyle(chipOf(el, "m-burger")).borderTopWidth).toBe("1px");
+
+    el.categories = [{ ...categories[0]!, color: "#2a8a3e" }, categories[1]!];
+    await settle(el);
+    expect(getComputedStyle(chipOf(el, "m-drinks/m-lemonade")).backgroundColor).toBe(
+      "rgb(42, 138, 62)",
+    );
+  });
+
+  it("draws a swatch after the row's name", async () => {
+    const el = await mountColoured();
+    for (const key of ["m-burger", "m-drinks"]) {
+      const name = row(el, key)!.querySelector('[part~="name-stack"]')!.getBoundingClientRect();
+      expect(swatchOf(el, key).getBoundingClientRect().left, key).toBeGreaterThanOrEqual(
+        name.right,
+      );
+    }
+  });
+
+  it("sends a product's colour request from its swatch, toggling no row and starting no drag", async () => {
+    const el = await mountColoured();
+    await toggle(el, "m-drinks");
+    const sent = sentEvents(el);
+    const swatch = swatchOf(el, "m-drinks/m-lemonade");
+    expect(swatch.tagName).toBe("BUTTON");
+    expect(swatch.getAttribute("part")).toBe("swatch-button");
+    expect(swatch.getAttribute("aria-label")).toBe(
+      t("folders.edit_color").replace("{name}", "Lemonade"),
+    );
+    await userEvent.click(swatch);
+    await settle(el);
+    expect(sent).toEqual([["wt-product-color", { productId: "p-lemonade" }]]);
+    expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("true");
+
+    pointer(swatch, "pointerdown");
+    pointer(swatch, "pointermove", nameAt(el, "m-fav"));
+    pointer(swatch, "pointerup", nameAt(el, "m-fav"));
+    await settle(el);
+    expect(ghost(el)).toBeNull();
+    expect(sent).toEqual([["wt-product-color", { productId: "p-lemonade" }]]);
+  });
+
+  it("paints a section's own colour, and its swatch asks for the section's Edit without opening or closing it", async () => {
+    const el = await mountColoured();
+    const sent = sentEvents(el);
+    expect(getComputedStyle(chipOf(el, "m-drinks")).backgroundColor).toBe("rgb(170, 51, 0)");
+    expect(chipOf(el, "m-fav").getAttribute("part")).toBe("color-swatch empty");
+    const swatch = swatchOf(el, "m-drinks");
+    expect(swatch.tagName).toBe("BUTTON");
+    expect(swatch.getAttribute("aria-label")).toBe(
+      t("folders.edit_color").replace("{name}", "Drinks"),
+    );
+    const edits = listen(el, "wt-member-edit");
+    item(el, "edit-m-drinks").click();
+    expect(edits).toEqual([{ sectionId: "s-drinks", path: ["m-drinks"] }]);
+    sent.length = 0;
+
+    await userEvent.click(swatch);
+    await settle(el);
+    expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("false");
+    expect(sent).toEqual([["wt-member-edit", edits[0]]]);
+    await toggle(el, "m-drinks");
+    sent.length = 0;
+    await userEvent.click(swatchOf(el, "m-drinks"));
+    await settle(el);
+    expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("true");
+    expect(sent).toEqual([["wt-member-edit", edits[0]]]);
+  });
+
+  it("draws the swatches inside an included menu as colour alone, not as buttons", async () => {
+    const red = { ...wines() };
+    red.children = red.children!.map((child) =>
+      child.memberId === "wine-red" ? { ...child, color: "#7a1f3d" } : child,
+    );
+    const el = await mountColoured({
+      nodes: [...paintedLunch(), red],
+      products: coloured.map((each) =>
+        each.id === "p-rioja" ? { ...each, color: "#4a2a6b" } : each,
+      ),
+    });
+    await toggle(el, "included-wine");
+    await toggle(el, "included-wine/wine-red");
+    const sent = sentEvents(el);
+    for (const [key, colour] of [
+      ["included-wine", "rgba(0, 0, 0, 0)"],
+      ["included-wine/wine-red", "rgb(122, 31, 61)"],
+      ["included-wine/wine-red/wine-rioja", "rgb(74, 42, 107)"],
+    ] as const) {
+      const swatch = swatchOf(el, key);
+      expect(swatch.tagName, key).not.toBe("BUTTON");
+      expect(swatch.querySelector("button"), key).toBeNull();
+      expect(getComputedStyle(chipOf(el, key)).backgroundColor, key).toBe(colour);
+      swatch.click();
+    }
+    await settle(el);
+    expect(sent).toEqual([]);
+  });
+
+  it("disables the swatches while busy, and a click on one sends nothing", async () => {
+    const el = await mountColoured({ busy: true });
+    const sent = sentEvents(el);
+    for (const key of ["m-burger", "m-drinks"]) {
+      const swatch = swatchOf(el, key) as HTMLButtonElement;
+      expect(swatch.disabled, key).toBe(true);
+      swatch.click();
+    }
+    expect(sent).toEqual([]);
+  });
 });

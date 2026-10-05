@@ -208,6 +208,8 @@ export const en = {
   "editor.color_custom": "Custom",
   "editor.color_use_category": "Use category colour",
   "editor.color_category_none": "Its category has no colour.",
+  "product_color.heading": "Colour of {name}",
+  "product_color.scope": "Changes this product's colour on every menu that uses it.",
 
   "nav.modifiers": "Modifiers",
   "modifiers.title": "Modifiers",
@@ -2368,6 +2370,8 @@ export const es: Record<StringKey, string> = {
   "editor.color_custom": "Personalizado",
   "editor.color_use_category": "Usar el color de la categoría",
   "editor.color_category_none": "Su categoría no tiene color.",
+  "product_color.heading": "Color de {name}",
+  "product_color.scope": "Cambia el color de este producto en todas las cartas que lo usan.",
 
   "nav.modifiers": "Modificadores",
   "modifiers.title": "Modificadores",

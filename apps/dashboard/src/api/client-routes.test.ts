@@ -267,6 +267,19 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("sets a product's own colour, and clears it with null", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.setProductColor("p1", "#b12525")).resolves.toBeUndefined();
+    await expect(api.setProductColor("p1", null)).resolves.toBeUndefined();
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/products/p1", "PATCH", { color: "#b12525" }],
+      ["/management-api/products/p1", "PATCH", { color: null }],
+    ]);
+  });
+
   it("reads a product's extra-list and menu usage", async () => {
     const usage = [
       {

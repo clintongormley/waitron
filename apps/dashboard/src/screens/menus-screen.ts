@@ -29,6 +29,8 @@ import "../widgets/home-layout-editor.js";
 import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
 import "../widgets/section-details-form.js";
+import "../widgets/product-color-form.js";
+import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import { textField } from "../widgets/form-fields.js";
 import { fieldOf, ListWriteQueue } from "../widgets/section-writes.js";
 import type {
@@ -493,6 +495,10 @@ export class MenusScreen extends LitElement {
   @state() private creatingSection: ListTarget | null = null;
   @state() private editingSection: SectionDetails | null = null;
   @state() private deletingSection: SectionDetails | null = null;
+  /** The product whose own colour is being chosen. */
+  @state() private colouring: Product | null = null;
+  @state() private colorBusy = false;
+  @state() private colorErrors: Record<string, string> = {};
   @state() private deleteSectionError = "";
   @state() private includingMenu: ListTarget | null = null;
   #menuFormGeneration = 0;
@@ -1959,6 +1965,7 @@ export class MenusScreen extends LitElement {
       <dashboard-menu-structure-table
         .nodes=${structure.nodes}
         .products=${this.products}
+        .categories=${this.categories}
         .current=${this.path}
         .busy=${this.busy}
         menuName=${this.#menuName()}
@@ -1991,6 +1998,12 @@ export class MenusScreen extends LitElement {
           this.editingSection =
             this.sections.find((section) => section.id === event.detail.sectionId) ?? null;
           this.newSectionErrors = {};
+        }}
+        @wt-product-color=${(event: CustomEvent<{ productId: string }>) => {
+          event.stopPropagation();
+          this.colouring =
+            this.products.find((product) => product.id === event.detail.productId) ?? null;
+          this.colorErrors = {};
         }}
         @wt-member-delete=${(event: CustomEvent<{ sectionId: string; path: string[] }>) => {
           event.stopPropagation();
@@ -2249,6 +2262,50 @@ export class MenusScreen extends LitElement {
     return html`<p class="status-line" data-test="menu-status">${words}</p>`;
   }
 
+  async #saveProductColor(color: string | null): Promise<void> {
+    const product = this.colouring;
+    if (!product || this.colorBusy) return;
+    this.colorBusy = true;
+    try {
+      await this.api.setProductColor(product.id, color);
+      this.colouring = null;
+    } catch (error) {
+      this.colorErrors =
+        fieldOf(error) === "color"
+          ? { color: t("editor.field_rejected") }
+          : { _form: codeMessage(codeOf(error)) };
+    } finally {
+      this.colorBusy = false;
+    }
+  }
+
+  #renderProductColor() {
+    const product = this.colouring;
+    return html`<dashboard-product-color-form
+      .open=${product !== null}
+      .busy=${this.colorBusy}
+      .name=${product?.name ?? ""}
+      .color=${product?.color ?? null}
+      .inherited=${
+        product
+          ? categoryColor(
+              product.categoryId,
+              new Map(this.categories.map((category) => [category.id, category])),
+            )
+          : null
+      }
+      .errors=${this.colorErrors}
+      @wt-submit=${(event: CustomEvent<{ color: string | null }>) => {
+        event.stopPropagation();
+        void this.#saveProductColor(event.detail.color);
+      }}
+      @wt-cancel=${(event: Event) => {
+        event.stopPropagation();
+        this.colouring = null;
+      }}
+    ></dashboard-product-color-form>`;
+  }
+
   #renderNewSection() {
     return html`<dashboard-section-details-form
         data-test="section-form"
@@ -2452,8 +2509,8 @@ export class MenusScreen extends LitElement {
         <div slot="home" class="home">${this.#renderHome()}</div>
         <div slot="preview">${this.#renderPreview()}</div>
       </wt-tabs>
-      ${this.#renderNewSection()} ${this.#renderAddProducts()} ${this.#renderLayoutForm()}
-      ${this.#renderDeleteLayout()}`;
+      ${this.#renderNewSection()} ${this.#renderProductColor()} ${this.#renderAddProducts()}
+      ${this.#renderLayoutForm()} ${this.#renderDeleteLayout()}`;
   }
 
   override render() {

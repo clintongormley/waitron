@@ -2055,6 +2055,10 @@ export class DashboardApi {
     return this.#request<ProductEditorValue>(`/management-api/products/${id}/editor`, "PUT", input);
   }
 
+  setProductColor(id: string, color: string | null): Promise<void> {
+    return this.#request<void>(`/management-api/products/${id}`, "PATCH", { color });
+  }
+
   // ── Options lists and extras lists (`/management-api/modifiers/{options,extras}`) ───────────────
 
   async listOptionLists(): Promise<OptionListRow[]> {
