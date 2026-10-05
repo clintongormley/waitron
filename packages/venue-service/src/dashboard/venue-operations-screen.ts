@@ -42,7 +42,7 @@ type Editor =
   | { kind: "zone"; row: FloorZone }
   | { kind: "assignment"; zoneId: string; menuId?: string }
   | {
-      kind: "delete";
+      kind: "delete" | "disable";
       name: string;
       action: () => Promise<unknown>;
       impact?: DepartmentRemovalImpact;
@@ -518,7 +518,7 @@ export class VenueOperationsScreen extends LitElement {
     try {
       const impact = await this.api.departmentRemovalImpact(row.id);
       this.#open({
-        kind: "delete",
+        kind: "disable",
         name: row.name,
         action: () => this.api.deactivateDepartment(row.id),
         impact,
@@ -534,7 +534,7 @@ export class VenueOperationsScreen extends LitElement {
           ? await this.api.zoneRemovalImpact(row.id)
           : await this.api.departmentRemovalImpact(departmentId);
       this.#open({
-        kind: "delete",
+        kind: "disable",
         name: row.name,
         action: () => this.api.deactivateZone(row.id),
         impact: { zones: impact.zones.filter((zone) => zone.id === row.id) },
@@ -664,7 +664,7 @@ export class VenueOperationsScreen extends LitElement {
                   >
                     ${row.zone.name}
                   </button>`
-            }${row.zone.active === false ? html` ${t("venue.inactive")}` : row.departmentId === null ? html` ${t("venue.unconfigured")}` : nothing}${model.readiness
+            }${row.zone.active === false ? html` ${t("venue.zone_disabled")}` : row.departmentId === null ? html` ${t("venue.unconfigured")}` : nothing}${model.readiness
               .filter((issue) => "zoneId" in issue && issue.zoneId === row.zone.id)
               .map(
                 (issue) =>
@@ -705,7 +705,9 @@ export class VenueOperationsScreen extends LitElement {
               >${
                 row.department.active
                   ? nothing
-                  : html`<span part="inactive-department-label">${t("venue.inactive")}</span>`
+                  : html`<span part="inactive-department-label"
+                      >${t("venue.department_disabled")}</span
+                    >`
               }`;
           return html`<wt-input
               name="departmentName"
@@ -1124,7 +1126,7 @@ export class VenueOperationsScreen extends LitElement {
                 },
                 {
                   key: `remove-tree-department-${row.department.id}`,
-                  label: t("venue.remove"),
+                  label: t("venue.disable"),
                   run: () => void this.#confirmDepartment(row.department),
                 },
               ])
@@ -1159,7 +1161,7 @@ export class VenueOperationsScreen extends LitElement {
                 },
                 {
                   key: `remove-tree-zone-${row.zone.id}`,
-                  label: t("venue.remove"),
+                  label: t("venue.disable"),
                   run: () => void this.#confirmZone(row.zone, row.departmentId),
                 },
               ]),
@@ -1223,7 +1225,7 @@ export class VenueOperationsScreen extends LitElement {
             key: "state",
             label: t("venue.status"),
             choosable: "shown",
-            cell: (row) => t(row.active ? "venue.active" : "venue.inactive"),
+            cell: (row) => t(row.active ? "venue.active" : "venue.department_disabled"),
           },
           {
             key: "actions",
@@ -1238,7 +1240,7 @@ export class VenueOperationsScreen extends LitElement {
                 },
                 {
                   key: `deactivate-department-${row.id}`,
-                  label: t("venue.deactivate_department"),
+                  label: t("venue.disable_department"),
                   disabled: !row.active,
                   run: () => void this.#confirmDepartment(row),
                 },
@@ -1691,8 +1693,12 @@ export class VenueOperationsScreen extends LitElement {
         };
       }
       case "delete":
+      case "disable":
         return {
-          heading: t("venue.confirm_remove"),
+          heading:
+            editor.kind === "disable"
+              ? format("venue.disable_confirm", { name: editor.name })
+              : t("venue.confirm_remove"),
           body: html`<p>${editor.name}</p>
             ${editor.impact?.zones.map(
               (zone) =>
@@ -1745,10 +1751,11 @@ export class VenueOperationsScreen extends LitElement {
       }
       if (this.attempted) this.fieldErrors = content.check();
     };
+    const confirming = editor.kind === "delete" || editor.kind === "disable";
     return keyed(
       editor,
       html`<wt-modal
-        size=${editor.kind === "delete" ? "compact" : "standard"}
+        size=${confirming ? "compact" : "standard"}
         open
         heading=${content.heading}
         @wt-close=${() => {
@@ -1775,10 +1782,10 @@ export class VenueOperationsScreen extends LitElement {
             >${t("venue.cancel")}</wt-button
           ><wt-button
             data-test="save-editor"
-            variant=${editor.kind === "delete" ? "danger" : "primary"}
+            variant=${confirming ? "danger" : "primary"}
             ?disabled=${this.busy || invalid}
             @click=${() => this.#submit(content)}
-            >${t(editor.kind === "delete" ? "venue.confirm" : "venue.save")}</wt-button
+            >${t(confirming ? "venue.confirm" : "venue.save")}</wt-button
           ></wt-form-actions
         >
       </wt-modal>`,

@@ -3,6 +3,7 @@ import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
+import { setLocale } from "../i18n/t.js";
 import type { DashboardApi, ServiceStatus } from "../api/client.js";
 import { ServiceStatusScreen } from "./service-status-screen.js";
 
@@ -143,7 +144,35 @@ describe("service-status-screen", () => {
     });
   });
 
-  it("deactivates a row", async () => {
+  it.each([
+    ["es-ES", "Deshabilitar", ["Activo", "Deshabilitado"]],
+    ["en-GB", "Disable", ["Active", "Disabled"]],
+  ])(
+    "in %s, offers Disable and reads a status Active or Disabled",
+    async (locale, action, words) => {
+      setLocale(locale);
+      try {
+        const statuses = [TWO_SEED[0]!, { ...TWO_SEED[1]!, active: false }];
+        const { el } = await mountWidget<ServiceStatusScreen>("dashboard-service-status-screen", {
+          api: stubApi({}, statuses),
+        });
+        await flush(el);
+        expect(q(el, "[data-test=deactivate-s1]")!.textContent!.trim()).toBe(action);
+        const { el: shown } = await mountWidget<ServiceStatusScreen>(
+          "dashboard-service-status-screen",
+          { api: stubApi({}, statuses), readOnly: true },
+        );
+        await flush(shown);
+        const state = (id: string) =>
+          q(shown, `[data-test=row-${id}] .read-row span:last-child`)!.textContent!.trim();
+        expect([state("s1"), state("s2")]).toEqual(words);
+      } finally {
+        setLocale("es-ES");
+      }
+    },
+  );
+
+  it("disables a row", async () => {
     const api = stubApi();
     const { el } = await mountWidget<ServiceStatusScreen>("dashboard-service-status-screen", {
       api,
@@ -185,7 +214,7 @@ describe("service-status-screen", () => {
     expect(banner).toContain(codeMessage("status.not_found", "es-ES"));
   });
 
-  it("surfaces a rejected deactivate as a localised role=alert", async () => {
+  it("surfaces a rejected disable as a localised role=alert", async () => {
     const api = stubApi({
       deactivateStatus: vi.fn().mockRejectedValue({ code: "status.inactive" }),
     });
@@ -198,6 +227,7 @@ describe("service-status-screen", () => {
     expect(errorKey(el)).toBe("status.inactive");
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("status.inactive", "es-ES"));
+    expect(banner).toContain("Ese estado está deshabilitado");
   });
 
   it("falls back to server.internal when a rejected mutation carries no code", async () => {

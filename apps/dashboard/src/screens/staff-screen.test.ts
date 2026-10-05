@@ -1083,7 +1083,7 @@ describe("staff-screen — row actions, filters and edit races", () => {
     expect(rowDialog(el).open).toBe(true);
   });
 
-  it("confirms reactivation, then reports that the invitation email could not be sent", async () => {
+  it("confirms enabling, then reports that the invitation email could not be sent", async () => {
     const api = stubApi({
       reactivatePerson: vi.fn().mockResolvedValue({ invitationSent: false }),
     });
@@ -1091,9 +1091,7 @@ describe("staff-screen — row actions, filters and edit races", () => {
     await flush(el);
     rowAction(el, "p2", "reactivate");
     await flush(el);
-    expect(rowDialog(el).querySelector("p")!.textContent!.trim()).toBe(
-      t("person.confirm_reactivate"),
-    );
+    expect(rowDialog(el).querySelector("p")!.textContent!.trim()).toBe(t("person.confirm_enable"));
     confirmRow(el);
     await flush(el);
     expect(api.reactivatePerson).toHaveBeenCalledExactlyOnceWith("p2");
@@ -1375,6 +1373,10 @@ describe("staff-screen filter fields", () => {
     expect(help.parentElement).toBe(status);
     expect(help.getAttribute("slot")).toBe("help");
     expect(help.getAttribute("aria-label")).toBe(t("staff.filter_current_help_label"));
+    // es-ES is the suite's language.
+    expect(help.textContent!.trim()).toBe(
+      "Los usuarios actuales son todos los que no están deshabilitados: los activos y los pendientes (invitados que aún no han terminado de configurar su cuenta).",
+    );
     await chooseOption(status, "suspended");
     await flush(el);
     expect(shown(el)).toEqual(["p2"]);

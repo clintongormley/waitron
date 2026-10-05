@@ -776,7 +776,9 @@ export class CatalogueScreen extends LitElement {
         data-test="delete-dialog"
         .open=${this.deletingProduct !== null}
         heading=${t(
-          this.deletingProduct?.isVariant ? "product.remove_variant_named" : "product.delete_named",
+          this.deletingProduct?.isVariant
+            ? "product.disable_variant_named"
+            : "product.disable_named",
         ).replace("{name}", this.deletingProduct?.name ?? "")}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
@@ -786,8 +788,8 @@ export class CatalogueScreen extends LitElement {
         <p>
           ${t(
             this.deletingProduct?.isVariant
-              ? "product.remove_variant_warning"
-              : "product.delete_warning",
+              ? "product.disable_variant_warning"
+              : "product.disable_warning",
           )}
         </p>
         <wt-form-actions
@@ -804,7 +806,7 @@ export class CatalogueScreen extends LitElement {
             variant="danger"
             .loading=${this.busy}
             @click=${() => void this.#deleteProduct()}
-            >${t(this.deletingProduct?.isVariant ? "action.remove" : "action.delete")}</wt-button
+            >${t("product.disable")}</wt-button
           ></wt-form-actions
         >
       </wt-modal>

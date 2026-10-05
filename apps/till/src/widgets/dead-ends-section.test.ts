@@ -44,7 +44,7 @@ it("shows each reason, closed option, required station, and removal events", asy
   const text = root.textContent!.replace(/\s+/g, " ");
   expect(root.querySelector(".name")!.textContent).toBe("Beer ×2");
   expect(text).toContain("Upstairs bar is closed, and no station can replace it.");
-  expect(text).toContain("Upstairs bar is switched off, and no station can replace it.");
+  expect(text).toContain("Upstairs bar is disabled, and no station can replace it.");
   const selects = root.querySelectorAll<WtCombobox>('wt-combobox[name="make-at"]');
   expect(selects).toHaveLength(2);
   expect(selects[0]!.required).toBe(true);
@@ -55,4 +55,15 @@ it("shows each reason, closed option, required station, and removal events", asy
   selects[0]!.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "kitchen" } }));
   expect(events).toEqual([{ key: "first", stationId: "kitchen" }]);
   expect(root.textContent).toContain("Choose where to make each dish, or remove it.");
+});
+
+it("says a disabled station is disabled in Spanish", async () => {
+  setLocale("es");
+  const { el: host } = await mountWidget<TillDeadEndsSection>("till-dead-ends-section", {
+    answer,
+    allowRemove: true,
+  });
+  expect(host.shadowRoot!.textContent!.replace(/\s+/g, " ")).toContain(
+    "Upstairs bar está deshabilitada y ninguna estación puede sustituirla.",
+  );
 });

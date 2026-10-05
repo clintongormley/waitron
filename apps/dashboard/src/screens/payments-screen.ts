@@ -1424,7 +1424,7 @@ export class PaymentsScreen extends LitElement {
                               data-test=${`adopt-${reader.providerRef}`}
                               ?disabled=${this.busy || this.#nameInvalid(reader.providerRef)}
                               @click=${() => void this.#adopt(reader)}
-                              >${t(reader.status === "disabled" ? "payments.add_again" : "action.add")}</wt-button
+                              >${t(reader.status === "disabled" ? "payments.enable" : "action.add")}</wt-button
                             >`
                       }
                     </div>`,

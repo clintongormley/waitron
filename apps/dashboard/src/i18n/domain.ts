@@ -15,7 +15,7 @@ const ROLE_NAMES: NameTable = {
 const STATUS_NAMES: NameTable = {
   pending: { en: "Pending", es: "Pendiente" },
   active: { en: "Active", es: "Activo" },
-  suspended: { en: "Disabled", es: "Desactivado" },
+  suspended: { en: "Disabled", es: "Deshabilitado" },
 };
 
 const VAT_CLASS_NAMES: NameTable = {
@@ -182,6 +182,12 @@ export function swapDirectionName(direction: string, locale: string = currentLoc
 
 export function statusName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(STATUS_NAMES, value, locale);
+}
+
+/** Spanish words a variant's state in the feminine and a product's in the masculine. */
+export function productStatusName(active: boolean, variant: boolean): string {
+  if (variant) return t(active ? "product.variant_active_badge" : "product.variant_disabled_badge");
+  return t(active ? "product.active_badge" : "product.disabled_badge");
 }
 
 export function vatClassName(value: string, locale: string = currentLocale()): string {

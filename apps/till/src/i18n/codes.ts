@@ -256,8 +256,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este plato se prepara aquí en la caja, así que no se puede pasar a una estación",
   },
   "route.station_inactive": {
-    en: "That station has been switched off. Choose another",
-    es: "Esa estación se ha desactivado. Elige otra",
+    en: "That station has been disabled. Choose another",
+    es: "Esa estación se ha deshabilitado. Elige otra",
   },
   "station.not_found": {
     en: "That station no longer exists. Choose another",

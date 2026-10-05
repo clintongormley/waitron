@@ -45,7 +45,7 @@ it("lists the roles alphabetically by the name shown in the language asked for",
 it("resolves a status token to Spanish and English, unknown value raw", () => {
   expect(statusName("pending", "es")).toBe("Pendiente");
   expect(statusName("active", "es")).toBe("Activo");
-  expect(statusName("suspended", "es")).toBe("Desactivado");
+  expect(statusName("suspended", "es")).toBe("Deshabilitado");
   expect(statusName("suspended", "en")).toBe("Disabled");
   expect(statusName("active", "en")).toBe("Active");
   expect(statusName("frozen", "es")).toBe("frozen");

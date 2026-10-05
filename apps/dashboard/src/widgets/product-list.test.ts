@@ -195,7 +195,7 @@ describe("product-list", () => {
     });
     const root = await tableRoot(el);
     expect(cellUnder(root, "mojito", "Made at").textContent).toContain(
-      "No replacement (Cocktail bar is switched off)",
+      "No replacement (Cocktail bar is disabled)",
     );
   });
   it("shows the made-at station, zone variation, and tester link", async () => {
@@ -286,7 +286,7 @@ describe("product-list", () => {
     });
   });
 
-  it("uses a named kebab menu containing Edit and Delete", async () => {
+  it("uses a named kebab menu containing Edit and Disable", async () => {
     const products = [product({ id: "p7", name: "Tarta de queso" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
     const actions = (await tableRoot(el)).querySelector<HTMLElement>('[data-test="actions-p7"]')!;
@@ -294,7 +294,7 @@ describe("product-list", () => {
     expect(actions.getAttribute("label")).toContain("Tarta de queso");
     expect(actions.querySelector('[data-test="edit-p7"]')?.textContent).toContain(t("action.edit"));
     expect(actions.querySelector('[data-test="delete-p7"]')?.textContent).toContain(
-      t("action.delete"),
+      t("product.disable"),
     );
   });
 
@@ -739,7 +739,7 @@ describe("product-list", () => {
     expect(select.options.map((option) => option.label)).toEqual([
       t("product.filter_status_all"),
       t("product.active_badge"),
-      t("product.inactive_badge"),
+      t("product.disabled_badge"),
     ]);
     expect(select.value).toBe("active");
     expect(rowKeys(root)).toEqual(["sold-out"]);
@@ -968,7 +968,60 @@ describe("product-list", () => {
     );
   });
 
-  it("gives a variant row its own Edit and Remove, and Restore once it is removed", async () => {
+  it.each([
+    [
+      "en-GB",
+      {
+        disable: "Disable",
+        enable: "Enable",
+        products: ["Active", "Disabled"],
+        variants: ["Active", "Disabled"],
+        filter: ["Any status", "Active", "Disabled"],
+      },
+    ],
+    [
+      "es-ES",
+      {
+        disable: "Deshabilitar",
+        enable: "Habilitar",
+        products: ["Activo", "Deshabilitado"],
+        variants: ["Activa", "Deshabilitada"],
+        filter: ["Cualquier estado", "Activo", "Deshabilitado"],
+      },
+    ],
+  ])(
+    "in %s, offers Disable and Enable and shows Active or Disabled, agreeing with the noun",
+    async (locale, words) => {
+      setLocale(locale);
+      const removed = { ...bunVariant, id: "large", name: "Large", active: false };
+      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+        products: [
+          product({ id: "bun", variants: [bunVariant, removed] }),
+          product({ id: "off", name: "Anchoas", active: false }),
+        ],
+      });
+      await choose(el, "active", "");
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      const root = await tableRoot(el);
+      root.querySelector<HTMLElement>('tr[data-row-key="bun"] .tree-toggle')!.click();
+      await table.updateComplete;
+      const label = (test: string) =>
+        root.querySelector<HTMLElement>(`[data-test="${test}"]`)!.textContent!.trim();
+      expect(label("delete-bun")).toBe(words.disable);
+      expect(label("delete-small")).toBe(words.disable);
+      expect(label("restore-large")).toBe(words.enable);
+      const badge = (key: string) =>
+        root
+          .querySelector<HTMLElement>(`tr[data-row-key="${key}"] [data-test=active-badge]`)!
+          .textContent!.trim();
+      expect([badge("bun"), badge("off")]).toEqual(words.products);
+      expect([badge("bun:small"), badge("bun:large")]).toEqual(words.variants);
+      const select = root.querySelector<WtCombobox>('wt-combobox[data-filter="active"]')!;
+      expect(select.options.map((option) => option.label)).toEqual(words.filter);
+    },
+  );
+
+  it("gives a variant row its own Edit and Disable, and Enable once it is disabled", async () => {
     const removed = { ...bunVariant, id: "large", name: "Large", active: false };
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "bun", variants: [bunVariant, removed] })],
@@ -985,13 +1038,13 @@ describe("product-list", () => {
       t("action.edit"),
     );
     expect(actions.querySelector('[data-test="delete-small"]')!.textContent).toContain(
-      t("action.remove"),
+      t("product.disable"),
     );
     expect(actions.querySelector('[data-test="restore-small"]')).toBeNull();
     const large = root.querySelector<HTMLElement>('[data-test="actions-large"]')!;
     expect(large.querySelector('[data-test="delete-large"]')).toBeNull();
     expect(large.querySelector('[data-test="restore-large"]')!.textContent).toContain(
-      t("product.restore"),
+      t("product.enable"),
     );
 
     const seen: [string, string][] = [];
@@ -2615,8 +2668,8 @@ describe("the product list as a tree", () => {
 
   it.each([
     ["Edit", "edit-small", "edit-product", "small"],
-    ["Remove", "delete-small", "delete-product", "small"],
-    ["Restore", "restore-large", "restore-product", "large"],
+    ["Disable", "delete-small", "delete-product", "small"],
+    ["Enable", "restore-large", "restore-product", "large"],
   ])(
     "closes a product row's menu when %s is chosen from it, and sends only that request",
     async (_label, button, request, productId) => {
@@ -2648,7 +2701,7 @@ describe("the product list as a tree", () => {
 
   it.each([
     ["Edit", "edit-bread", "edit-product"],
-    ["Delete", "delete-bread", "delete-product"],
+    ["Disable", "delete-bread", "delete-product"],
   ])(
     "closes a top-level product's menu when %s is chosen from it, and sends only that request",
     async (_label, button, request) => {
@@ -3288,7 +3341,7 @@ describe("a category's Made at", () => {
       "No preparation",
     );
     expect(madeAtCell(root, "folder:b").querySelector("a")!.textContent!.trim()).toBe(
-      "No replacement (Cocktail bar is switched off)",
+      "No replacement (Cocktail bar is disabled)",
     );
     const nowhere = madeAtCell(root, "folder:f");
     expect(nowhere.querySelector("a")!.textContent!.trim()).toBe("Nowhere");
@@ -3402,7 +3455,7 @@ it("falls back as product rows do when a switched-off station's or a category's 
   });
   const root = await tableRoot(el);
   expect(cellUnder(root, "folder:d", "Made at").textContent!.replace(/\s+/g, " ").trim()).toBe(
-    "No replacement (Nowhere is switched off) from Unavailable selection",
+    "No replacement (Nowhere is disabled) from Unavailable selection",
   );
 });
 

@@ -436,7 +436,7 @@ it("explains exceptions, claims, defaults and an unroutable product", async () =
     "Because: the exception 'Cocktails → Bar'",
     "Because: Bar claims Cocktails",
     "Because: nothing else matched, so the default station takes it",
-    "Nothing can make this: no rule matched and no default station is switched on.",
+    "Nothing can make this: no rule matched and no default station is active.",
   ]) {
     select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bread" } }));
     await settle(el);
@@ -947,7 +947,7 @@ it("puts an inactive-station refusal beside the claim choice", async () => {
   await settle(el);
   expect(q(el, '[data-field-error="claim"]')).not.toBeNull();
 });
-it("keeps No preparation available and names claims on switched-off stations", async () => {
+it("keeps No preparation available and names claims on disabled stations", async () => {
   const changed = {
     ...view,
     routing: {
@@ -967,7 +967,7 @@ it("keeps No preparation available and names claims on switched-off stations", a
   expect(q(el, '[data-test="no-preparation"]')).not.toBeNull();
   expect(q(el, '[data-test="station-old"]')).toBeNull();
   expect(el.shadowRoot!.textContent).toContain("Old pass");
-  expect(el.shadowRoot!.textContent).toContain("Switched off: no replacement, the till asks");
+  expect(el.shadowRoot!.textContent).toContain("Disabled: no replacement, the till asks");
 });
 it("creates a station from the modal with the chosen thresholds", async () => {
   const a = api();
@@ -1206,7 +1206,7 @@ it("lists exceptions by position as sentences and identifies both warnings", asy
   expect(rows[0]!.textContent).toContain("Bread → No preparation");
   expect(rows[1]!.textContent).toContain("Cocktails from Terrace → Old bar");
   expect(rows[1]!.textContent).toContain("Never used: an exception above always catches it first");
-  expect(rows[1]!.textContent).toContain("Its station is switched off");
+  expect(rows[1]!.textContent).toContain("Its station is disabled");
 });
 it.each([
   [1280, "light"],
@@ -1432,7 +1432,7 @@ it.each(["create", "update"] as const)(
     q(el, '[data-test="confirm-routing"]')!.click();
     await settle(el);
     expect(q(el, '[data-test="routing-preview"]')).toBeNull();
-    expect(q(el, '[role="alert"]')?.textContent).toContain("This station is switched off");
+    expect(q(el, '[role="alert"]')?.textContent).toContain("This station is disabled");
     expect(q(el, '[role="alert"]')?.textContent).not.toContain("could not be saved");
   },
 );
@@ -1893,7 +1893,7 @@ it("shows an inactive station refusal from exception preview without calling its
   await settle(el);
   q(el, '[data-test="save-exception"]')!.click();
   await settle(el);
-  expect(q(el, '[role="alert"]')?.textContent).toContain("This station is switched off");
+  expect(q(el, '[role="alert"]')?.textContent).toContain("This station is disabled");
   expect(q(el, '[data-test="routing-preview"]')).toBeNull();
   expect(a.updateException).not.toHaveBeenCalled();
 });
@@ -1910,14 +1910,16 @@ it("keeps a refused folder claim next to its choice after confirmation", async (
   await settle(el);
   q(el, '[data-test="confirm-routing"]')!.click();
   await settle(el);
-  expect(q(el, '[data-field-error="claim"]')?.textContent).toContain("switched off");
+  expect(q(el, '[data-field-error="claim"]')?.textContent).toContain(
+    "This station is disabled. Choose an active station.",
+  );
   expect(q(el, '[data-test="claim-choice"]')).not.toBeNull();
   expect(q(el, '[data-test="routing-preview"]')).toBeNull();
 });
 it.each([
-  ["en", "Old bar (Switched off)"],
-  ["es-ES", "Old bar (Desactivada)"],
-] as const)("names a retained inactive exception station in %s", async (locale, expected) => {
+  ["en", "Old bar (Disabled)"],
+  ["es-ES", "Old bar (Deshabilitada)"],
+] as const)("names a retained disabled exception station in %s", async (locale, expected) => {
   setLocale(locale);
   const el = await mount(api({ load: vi.fn().mockResolvedValue(exceptionView) }));
   q(el, '[data-test="edit-exception-b"]')!.click();
@@ -1926,7 +1928,7 @@ it.each([
   expect(target.shadowRoot!.querySelector(".trigger .value")!.textContent?.trim()).toBe(expected);
 });
 
-it("retains a switched-off fallback in its editor but clears it for Switch off", async () => {
+it("retains a disabled fallback in its editor but clears it for Disable", async () => {
   const next = withUpstairs(
     { open: false, why: "out_of_hours" },
     { fallbackStationId: "old", closedSendsTo: null },
@@ -1949,7 +1951,7 @@ it("retains a switched-off fallback in its editor but clears it for Switch off",
     value: string;
     options: { value: string; label: string }[];
   };
-  expect(combo.options).toContainEqual({ value: "old", label: "Old bar (switched off)" });
+  expect(combo.options).toContainEqual({ value: "old", label: "Old bar (disabled)" });
   expect(combo.value).toBe("old");
   q(el, '[data-test="station-action-modal"]')!.dispatchEvent(new CustomEvent("wt-close"));
   await settle(el);
@@ -2127,11 +2129,13 @@ it.each(["station.fallback_loop", "route.station_inactive"])(
     q(el, '[data-test="confirm-station-action"]')!.click();
     await settle(el);
     expect(q(el, '[data-field-error="fallback"]')?.textContent).toContain(
-      code === "station.fallback_loop" ? "loop" : "switched off",
+      code === "station.fallback_loop"
+        ? "loop"
+        : "This station is disabled. Choose an active station.",
     );
   },
 );
-it("keeps the new fallback after a failed switch-off and reports the failure in the body", async () => {
+it("keeps the new fallback after a failed disable and reports the failure in the body", async () => {
   const calls: string[] = [];
   const next = withUpstairs({ open: true, why: "in_hours" }, { fallbackStationId: null });
   const a = api({
@@ -2161,7 +2165,52 @@ it("keeps the new fallback after a failed switch-off and reports the failure in 
   expect(alert.textContent).toContain("could not be saved");
   expect(alert.nextElementSibling?.localName).toBe("wt-form-actions");
 });
-it("switches an inactive station on and keeps its dark-screen warning in that card", async () => {
+it.each([
+  {
+    locale: "en",
+    disable: "Disable",
+    confirm: "Disable Upstairs bar? Its work will go to:",
+    heading: "Disabled",
+    hint: "Disabled: no replacement, the till asks",
+    enable: "Enable",
+  },
+  {
+    locale: "es-ES",
+    disable: "Deshabilitar",
+    confirm: "¿Deshabilitar Upstairs bar? Su trabajo irá a:",
+    heading: "Deshabilitadas",
+    hint: "Deshabilitada: sin sustituta, el TPV pregunta",
+    enable: "Habilitar",
+  },
+] as const)(
+  "in $locale, offers Disable on a station and Enable on a disabled one",
+  async ({ locale, disable, confirm, heading, hint, enable }) => {
+    setLocale(locale);
+    const on = await mount(
+      api({ load: vi.fn().mockResolvedValue(withUpstairs({ open: true, why: "in_hours" })) }),
+    );
+    const off = q(on, '[data-test="switch-off-upstairs"]')!;
+    expect(off.textContent!.trim()).toBe(disable);
+    off.click();
+    await settle(on);
+    const modal = q(on, '[data-test="station-action-modal"]')!;
+    expect(modal.getAttribute("heading")).toBe(disable);
+    expect(modal.textContent).toContain(confirm);
+    const next = withUpstairs({ open: false, why: "switched_off" }, { closedSendsTo: null });
+    next.stations[1]!.active = false;
+    next.routing.stations[1]!.active = false;
+    const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
+    const card = q(el, '[data-test="inactive-upstairs"]')!;
+    expect(card.closest("section")!.querySelector("h2")!.textContent!.trim()).toBe(heading);
+    expect(card.textContent).toContain(hint);
+    const back = q(el, '[data-test="switch-on-upstairs"]')!;
+    expect(back.textContent!.trim()).toBe(enable);
+    back.click();
+    await settle(el);
+    expect(q(el, '[data-test="station-action-modal"]')!.getAttribute("heading")).toBe(enable);
+  },
+);
+it("enables a disabled station and keeps its dark-screen warning in that card", async () => {
   const next = withUpstairs({ open: false, why: "switched_off" }, { closedSendsTo: null });
   next.stations[1]!.active = false;
   next.routing.stations[1]!.active = false;
@@ -2304,7 +2353,7 @@ it("offers the fallback directly on the active station card and confirms a chang
   expect(a.setStationFallback).toHaveBeenCalledWith("upstairs", null);
 });
 
-it("refreshes the saved fallback when the following switch-off fails", async () => {
+it("refreshes the saved fallback when the following disable fails", async () => {
   const server = withUpstairs(
     { open: false, why: "out_of_hours" },
     { fallbackStationId: null, closedSendsTo: null },
@@ -2493,7 +2542,7 @@ it.each([
     "Upstairs bar is closed outside its opening hours, so its work goes to Downstairs bar.",
   ],
   ["closed_by_hand", "Upstairs bar is closed by hand today, so its work goes to Downstairs bar."],
-  ["switched_off", "Upstairs bar is switched off, so its work goes to Downstairs bar."],
+  ["switched_off", "Upstairs bar is disabled, so its work goes to Downstairs bar."],
 ])("explains %s before the destination", async (why, sentence) => {
   const el = await mount(
     api({
@@ -2570,7 +2619,7 @@ it("keeps the no-default explanation and reports unreadable opening hours", asyn
   );
   await settle(el);
   expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
-    "Nothing can make this: no rule matched and no default station is switched on.",
+    "Nothing can make this: no rule matched and no default station is active.",
   );
   expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
     "The venue's time zone or day cutover cannot be read, so opening hours are not applied.",

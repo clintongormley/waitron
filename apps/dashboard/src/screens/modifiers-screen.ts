@@ -358,7 +358,7 @@ export class ModifiersScreen extends LitElement {
     return list.labels.map((label) => label.name).join(", ");
   }
   #statusText(kind: Kind, list: ModifierList): string {
-    return list.active ? t(`${kind}.active`) : t(`${kind}.inactive`);
+    return list.active ? t(`${kind}.active`) : t(`${kind}.disabled`);
   }
   #count(key: "products", count: number): string {
     return count === 1
@@ -446,7 +446,7 @@ export class ModifiersScreen extends LitElement {
           value: (list) => (list.active ? "active" : "inactive"),
           options: [
             { value: "active", label: t(`${kind}.active`) },
-            { value: "inactive", label: t(`${kind}.inactive`) },
+            { value: "inactive", label: t(`${kind}.disabled`) },
           ],
         },
       },
