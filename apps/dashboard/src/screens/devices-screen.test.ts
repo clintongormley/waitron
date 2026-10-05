@@ -1235,6 +1235,68 @@ describe("the Edit dialog", () => {
     );
   });
 
+  it("once a save moves a screen off its switched-off station, the dialog no longer offers that station", async () => {
+    const api = editApi({
+      listDevices: vi.fn().mockResolvedValue([onOffStation]),
+      listStations: vi.fn().mockResolvedValue([...stations, offStation]),
+      setDeviceReader: vi.fn().mockRejectedValue({ code: "reader.not_found" }),
+    });
+    const el = await openEdit(api, "k1");
+    await chooseOption(q(el, "[data-test=edit-binding]")!, "station:s2");
+    await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+    await flush(el);
+    await save(el);
+    await vi.waitFor(() =>
+      expect(field(el, "edit-reader").error).toBe(codeMessage("reader.not_found")),
+    );
+    expect(api.updateDevice).toHaveBeenCalledExactlyOnceWith(
+      "k1",
+      expect.objectContaining({ stationId: "s2" }),
+    );
+    expect(field(el, "edit-binding").value).toBe("station:s2");
+    expect(field(el, "edit-binding").options.map((o) => o.value)).not.toContain("station:s-off");
+  });
+
+  it("once a save moves a screen on a switched-off station to a profile without Shows, the station is no longer offered", async () => {
+    const api = editApi({
+      listDevices: vi.fn().mockResolvedValue([onOffStation]),
+      listStations: vi.fn().mockResolvedValue([...stations, offStation]),
+      setDeviceReader: vi.fn().mockRejectedValue({ code: "reader.not_found" }),
+    });
+    const el = await openEdit(api, "k1");
+    await chooseOption(q(el, "[data-test=edit-profile]")!, "pa");
+    await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+    await flush(el);
+    await save(el);
+    await vi.waitFor(() =>
+      expect(field(el, "edit-reader").error).toBe(codeMessage("reader.not_found")),
+    );
+    expect(api.updateDevice).toHaveBeenCalledExactlyOnceWith(
+      "k1",
+      expect.objectContaining({ profileId: "pa", stationId: null, watcherId: null }),
+    );
+    await chooseOption(q(el, "[data-test=edit-profile]")!, "pk");
+    await flush(el);
+    expect(field(el, "edit-binding").options.map((o) => o.value)).not.toContain("station:s-off");
+  });
+
+  it("a save that keeps a switched-off station still offers it while the dialog stays open", async () => {
+    const api = editApi({
+      listDevices: vi.fn().mockResolvedValue([onOffStation]),
+      listStations: vi.fn().mockResolvedValue([...stations, offStation]),
+      setDeviceReader: vi.fn().mockRejectedValue({ code: "reader.not_found" }),
+    });
+    const el = await openEdit(api, "k1");
+    await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+    await flush(el);
+    await save(el);
+    await vi.waitFor(() =>
+      expect(field(el, "edit-reader").error).toBe(codeMessage("reader.not_found")),
+    );
+    expect(field(el, "edit-binding").value).toBe("station:s-off");
+    expect(field(el, "edit-binding").options.map((o) => o.value)).toContain("station:s-off");
+  });
+
   it("marks a held station as disabled and a held watcher as removed, in English and Spanish", async () => {
     const before = currentLocale();
     try {

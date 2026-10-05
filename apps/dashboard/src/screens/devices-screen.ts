@@ -998,6 +998,8 @@ export class DevicesScreen extends LitElement {
     }
     this.#reloadDevices().catch((error: unknown) => this.#showReadError(error));
     if (epoch !== this.#editEpoch) return;
+    const savedBinding = this.#bindingShownFor(form.profileId) ? form.binding : "";
+    if (savedBinding !== this.editHeld?.value) this.editHeld = null;
     // The reader save below can fail and keep the dialog open, which then edits what was just saved.
     const { name: label, profileId: deviceProfileId, ...rest } = sent;
     this.editing = { ...device, ...rest, label, deviceProfileId };
