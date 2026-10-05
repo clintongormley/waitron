@@ -33,10 +33,13 @@ export function variantInherited(
   variantId: string,
   parent: ParentPrice,
 ): Inherited {
-  const setting = withoutOwn(sizeSetting(row, variantId));
-  return setting.state === "decided" && setting.source.kind === "parent"
-    ? parentPrice(row, parent)
-    : single(setting);
+  const setting = sizeSetting(row, variantId);
+  const under = withoutOwn(setting);
+  // A size with no price of its own carries its product's setting at level "product", a clash
+  // included (`parent` in packages/catalogue/src/menu-combine.ts).
+  const follows =
+    setting.level === "product" || (under.state === "decided" && under.source.kind === "parent");
+  return follows ? parentPrice(row, parent) : single(under);
 }
 
 /** An Active size's own price clashes, which a price for the product would not settle. */
@@ -59,7 +62,6 @@ export function productInherited(row: MenuPriceRow): Inherited {
   });
   const prices = each.filter((value): value is Priced => value.state === "price");
   if (prices.length < each.length) return CLASH;
-  // Each size's price is one amount, so its `low` is its whole price.
   const amounts = prices.map(({ low: value }) => ({ value, cents: stringToCents(value) }));
   const low = amounts.reduce((least, next) => (next.cents < least.cents ? next : least));
   const high = amounts.reduce((most, next) => (next.cents > most.cents ? next : most));
