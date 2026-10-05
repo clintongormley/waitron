@@ -1748,6 +1748,53 @@ describe("where focus goes when the list editor an attached row asked for closes
   });
 });
 
+// The screen shuts the nested form and hands focus back at once, so the hand-back can arrive while
+// the control it aims at is still drawn disabled.
+describe("focus handed back before the editor draws its controls enabled again", () => {
+  async function openNestedForm(el: ProductEditor) {
+    el.childOpen = true;
+    await el.updateComplete;
+  }
+  const isDisabled = (control: HTMLElement) =>
+    (control as HTMLElement & { disabled: boolean }).disabled;
+
+  it("goes to the Modifiers control once it is drawn enabled", async () => {
+    const { el } = await mountTwoAttached();
+    await openNestedForm(el);
+    el.childOpen = false;
+    expect(isDisabled(addModifier(el))).toBe(true);
+    el.returnRelatedFocus("extras");
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(addModifier(el));
+  });
+
+  it("goes back to the row's button once it is drawn enabled", async () => {
+    const { el, edits } = await mountTwoAttached();
+    const activator = openModifier(el, "options:cooked");
+    activator.click();
+    expect(edits).toEqual([{ kind: "options", id: "cooked" }]);
+    await openNestedForm(el);
+    el.childOpen = false;
+    expect(activator.disabled).toBe(true);
+    el.returnRelatedFocus("options");
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(activator);
+  });
+
+  it("leaves focus where it was moved while it waited", async () => {
+    const { el } = await mountTwoAttached();
+    await openNestedForm(el);
+    el.childOpen = false;
+    el.returnRelatedFocus("extras");
+    const name = el.shadowRoot!.querySelector<HTMLElement>('[name="name"]')!;
+    name.focus();
+    expect(el.shadowRoot!.activeElement).toBe(name);
+    await el.updateComplete;
+    await addModifier(el).updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(isDisabled(addModifier(el))).toBe(false);
+    expect(el.shadowRoot!.activeElement).toBe(name);
+  });
+});
+
 const addModifier = (el: ProductEditor) =>
   el.shadowRoot!.querySelector<
     HTMLElement & { value: string; error: string; updateComplete: Promise<unknown> }

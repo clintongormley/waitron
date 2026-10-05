@@ -1258,31 +1258,41 @@ describe("catalogue-screen", () => {
       expect(product.shadowRoot!.activeElement).toBe(addUnit);
     });
 
-    it("goes back to Add unit even when the editor draws it enabled again only after the form has shut", async () => {
-      const el = await mountWithProduct(stubApi());
-      const form = await openUnitForm(el);
-      const product = editor(el) as ProductEditor & { scheduleUpdate(): Promise<unknown> | void };
-      const scheduleUpdate = product.scheduleUpdate;
-      let release!: () => void;
-      const held = new Promise<void>((resolve) => (release = resolve));
-      product.scheduleUpdate = async function (this: typeof product) {
-        await held;
-        return scheduleUpdate.call(this);
-      };
-      try {
-        form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
-        await vi.waitFor(() => expect(form.open).toBe(false));
-        await flush(el);
-        await afterDialogCloses(el);
-        const addUnit = product.shadowRoot!.querySelector<HTMLElement>("[data-test=add-unit]")!;
-        expect(addUnit.hasAttribute("disabled")).toBe(true);
-        release();
-        await vi.waitFor(() => expect(product.shadowRoot!.activeElement).toBe(addUnit));
-      } finally {
-        release();
-        product.scheduleUpdate = scheduleUpdate;
-      }
-    });
+    it.each([
+      [
+        "its Cancel",
+        (form: HTMLElement) =>
+          form.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click(),
+      ],
+      ["Escape", () => userEvent.keyboard("{Escape}")],
+    ])(
+      "goes back to Add unit after %s closes it, even when the editor draws it enabled again only after the form has shut",
+      async (_, close) => {
+        const el = await mountWithProduct(stubApi());
+        const form = await openUnitForm(el);
+        const product = editor(el) as ProductEditor & { scheduleUpdate(): Promise<unknown> | void };
+        const scheduleUpdate = product.scheduleUpdate;
+        let release!: () => void;
+        const held = new Promise<void>((resolve) => (release = resolve));
+        product.scheduleUpdate = async function (this: typeof product) {
+          await held;
+          return scheduleUpdate.call(this);
+        };
+        try {
+          await close(form);
+          await vi.waitFor(() => expect(form.open).toBe(false));
+          await flush(el);
+          await afterDialogCloses(el);
+          const addUnit = product.shadowRoot!.querySelector<HTMLElement>("[data-test=add-unit]")!;
+          expect(addUnit.hasAttribute("disabled")).toBe(true);
+          release();
+          await vi.waitFor(() => expect(product.shadowRoot!.activeElement).toBe(addUnit));
+        } finally {
+          release();
+          product.scheduleUpdate = scheduleUpdate;
+        }
+      },
+    );
 
     it("goes back to the price's unit button, the chooser's opener, after a save closes it and the chooser", async () => {
       const api = stubApi();
