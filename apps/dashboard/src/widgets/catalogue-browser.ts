@@ -690,6 +690,7 @@ export class CatalogueBrowser extends LitElement {
           this.colorTarget = { kind: "row", category };
         }}
         .nameColor=${this.#boxColor()}
+        .choosingColor=${this.colorTarget?.kind === "box"}
         @name-color=${(event: Event) => {
           event.stopPropagation();
           this.colorErrors = {};

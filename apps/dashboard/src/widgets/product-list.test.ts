@@ -2821,12 +2821,14 @@ describe("the product list as a tree", () => {
       'wt-input[name="category-name"]',
     )!;
     const square = box.querySelector<HTMLElement>('[data-test="name-box-color"]')!;
+    el.addEventListener("name-color", () => (el.choosingColor = true));
     await userEvent.click(square);
     // The colour chooser takes the cursor while it is open, and hands it back to the square.
     outside.focus();
     square.focus();
     expect(sent).toEqual([["name-color", {}]]);
     expect(root.querySelector('wt-input[name="category-name"]')).toBe(box);
+    el.choosingColor = false;
     await el.returnToNameBox();
     expect(focusedName(el)).toBe("category-name");
     expect(box.value).toBe("Juice");
@@ -2919,8 +2921,11 @@ describe("the product list as a tree", () => {
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     await userEvent.keyboard("Juice");
+    el.addEventListener("name-color", () => (el.choosingColor = true));
     await userEvent.click(root.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
     outside.focus();
+    expect(sent).toEqual([["name-color", {}]]);
+    el.choosingColor = false;
     await el.returnToNameBox();
     outside.focus();
     expect(sent).toEqual([

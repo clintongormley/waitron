@@ -310,6 +310,9 @@ export class ProductList extends LitElement {
   @property() nameError = "";
   /** The colour the box's square shows, which the box's name is saved with. */
   @property({ attribute: false }) nameColor: string | null = null;
+  /** Whether the box's colour chooser is open: it takes the cursor without the person leaving the
+   * box. */
+  @property({ type: Boolean }) choosingColor = false;
   /** Whether the catalogue has loaded, so that an empty one is known to be empty. */
   @property({ type: Boolean }) loaded = false;
 
@@ -317,11 +320,6 @@ export class ProductList extends LitElement {
   #nameValue = "";
   /** Set once the box has sent its name or its cancel, until a refusal or a new box. */
   #nameSent = false;
-  /** Set from a click on the box's colour square until the cursor is back in the box's input: the
-   * chooser it opens takes the cursor without the person leaving the box. A press on the square
-   * keeps the cursor in the input. The square is no Tab stop, so Tab still leaves the box; the
-   * keyboard reaches a category's colour by its row's square. */
-  #choosingColor = false;
   #emptyChecked = false;
   #rowByKey = new Map<string, ListRow>();
   #counts = new Map<string | null, { categories: number; products: number }>();
@@ -574,7 +572,6 @@ export class ProductList extends LitElement {
     if (changed.has("nameDraft")) {
       const draft = this.nameDraft;
       this.#nameSent = false;
-      this.#choosingColor = false;
       this.#nameValue =
         draft?.kind === "rename"
           ? (this.categories.find(({ id }) => id === draft.categoryId)?.name ?? "")
@@ -652,6 +649,8 @@ export class ProductList extends LitElement {
 
   #nameBox() {
     const draft = this.nameDraft;
+    // A press on the square keeps the cursor in the input. The square is no Tab stop, so Tab still
+    // leaves the box; the keyboard reaches a category's colour by its row's square.
     return html`<wt-input
       part="name-box"
       name="category-name"
@@ -673,12 +672,9 @@ export class ProductList extends LitElement {
           this.#cancelName();
         }
       }}
-      @focusin=${(event: FocusEvent) => {
-        if (event.target === event.currentTarget) this.#choosingColor = false;
-      }}
       @focusout=${() => {
         // A box removed while it holds the cursor also loses it, after the next box's draft is set.
-        if (this.nameDraft !== draft || this.#nameSent || this.#choosingColor) return;
+        if (this.nameDraft !== draft || this.#nameSent || this.choosingColor) return;
         if (this.#nameValue.trim() === "") this.#cancelName();
         else this.#commitName();
       }}
@@ -693,7 +689,6 @@ export class ProductList extends LitElement {
         @click=${(event: Event) => {
           event.stopPropagation();
           if (this.#nameSent) return;
-          this.#choosingColor = true;
           this.#send("name-color", {});
         }}
       >
