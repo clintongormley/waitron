@@ -3536,7 +3536,7 @@ gets a new node id. Giving the imported row the importing box's node was ruled o
 self-enrolment found that row inactive and refused it with `device.join_revoked`. An export made
 before this change that lists a print agent carries `node_id`, so setup refuses it with
 `setup.request_invalid` naming `print_agents.node_id`; export it again.
-Since W72f (2026-10-05) an export also leaves out each print agent's `setup_url` and `setup_port`.
+Since W72f (#1252, 2026-10-05) an export also leaves out each print agent's `setup_url` and `setup_port`.
 Before, a run of an export and import read the exporting agent's setup page address and port on the
 imported row, and the Printers screen links an agent's host cell to that address
 (`apps/dashboard/src/screens/printers-screen.ts`), so an imported agent would have linked to the
