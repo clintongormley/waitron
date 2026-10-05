@@ -1677,6 +1677,32 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
 });
 
 describe("GET /api/products (session-guarded catalogue)", () => {
+  it("offers the effective zone pay timing to the counter", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const token = await openSession(suite.db);
+    const headers = { cookie: `${SESSION_COOKIE}=${token}` };
+    await suite.db.execute(sql`
+      update department_sale_policies set paid_when = 'ticket_then_pay'
+      where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+    try {
+      for (const path of [
+        "/api/default-service-zone/offers",
+        `/api/service-zones/${counterZoneId}/offers`,
+      ]) {
+        const response = await app.request(path, { headers });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({
+          context: { zoneId: counterZoneId, serviceMode: "ticket_then_pay" },
+        });
+      }
+    } finally {
+      await suite.db.execute(sql`
+        update department_sale_policies set paid_when = 'prepay'
+        where department_id = (select department_id from zone_service_policies where zone_id = ${counterZoneId})`);
+    }
+  });
+
   it("offers the selected zone's effective receipt choice instead of the venue-wide choice", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
