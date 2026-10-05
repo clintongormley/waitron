@@ -270,17 +270,20 @@ closed category is still selected. **Cancel** clears it and restores the ordinar
 does pressing **Select** again. A Delete you already
 requested keeps its captured selection, including while the category summary is being read.
 
-**Delete** makes selected products Inactive. Their rows and previous sales remain, and you can
-restore the products later. Before deleting a non-empty category, choose what happens to its contents:
+With only products selected, the toolbar's action reads **Disable**: it switches them off (the
+product's `active` flag), and its dialog asks "Disable N products?". Their rows and previous sales
+remain, and you can enable the products again later. Once a category is in the selection the action
+reads **Delete**, because the category itself is deleted; the products in it are still only
+disabled. Before deleting a non-empty category, choose what happens to its contents:
 
 - **Move it up to the parent category** keeps the products active and moves the category's direct
   products and subcategories to its parent. For a top-level category they move to **All products**.
   Only the routing rules naming a selected category itself are removed; its subcategories that are
   not selected keep theirs. The dialog's routing-rule warning counts only the removed ones.
-- **Delete it too** removes the subtree and makes its products Inactive. The summary shows the
+- **Delete it too** removes the subtree and disables its products. The summary shows the
   numbers of subcategories, active products and routing rules removed (category claims and
-  exceptions, in the whole subtree). A product that is already Inactive is not counted. Every product in the subtree,
-  Inactive ones included, is moved to the parent of the outermost selected category that holds it.
+  exceptions, in the whole subtree). A product that is already disabled is not counted. Every product in the subtree,
+  disabled ones included, is moved to the parent of the outermost selected category that holds it.
 
 An empty category is deleted without confirmation. A category's row-menu Delete uses the same path.
 If the summary cannot be read, deletion waits for a successful new attempt rather than asking you

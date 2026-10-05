@@ -355,8 +355,8 @@ product; one that comes through an included menu goes when that menu's structure
 the menu is no longer included.
 
 A menu's Price overrides tab lists every product an active menu's working structure reaches,
-Inactive ones and their sizes too, with a Status column; a size reads Inactive when it or its
-product is. The tab reads `menuPrices`; a menu's offers, and the published document built from
+disabled ones and their sizes too, with a Status column reading Active or Disabled; a size reads
+Disabled when it or its product is disabled. The tab reads `menuPrices`; a menu's offers, and the published document built from
 them (`packages/catalogue/src/menu-document.ts`), still come from `listMenuOffers`, which leaves
 Inactive items out (both in `packages/catalogue/src/operations.ts`).
 
@@ -462,15 +462,16 @@ The editor allows any number of variants, one included (`apps/dashboard/src/widg
   whose closed line names the base price and the VAT (`pricingSummary`). The fold opens on a VAT,
   unit or price error (`SECTION_FIELDS`) and starts open on a product never saved. The table, Add
   variant and the inactive link are a separate Variants section under it, always open.
-- Each row's menu offers **Open**, **Edit** and **Remove** (or **Restore**). **Open** goes to the
+- Each row's menu offers **Open**, **Edit** and **Disable** (or **Enable**; **Remove** for a variant
+  never saved). **Open** goes to the
   variant's own page and is shown only for a saved variant; it is disabled, with a line saying to
   save first, while the product form has unsaved changes, because opening the page replaces the form.
 - A click on a variant's row, or Enter on it, opens its edit window, as the menu's **Edit** does. The
   drag handle, the Available switch and the row menu keep their own clicks.
-- **Remove** marks a saved variant Inactive in the draft, and **Restore** marks it Active again; one
-  that was never saved is simply dropped from the draft. The table hides Inactive
-  rows until the editor's "Show N inactive" link, beside Add variant and drawn only while some
-  variant is Inactive, shows them; the link then reads "Hide inactive". The table shows them itself,
+- **Disable** marks a saved variant disabled (`active` false) in the draft, and **Enable** marks it
+  Active again; **Remove** drops one that was never saved from the draft. The table hides disabled
+  rows until the editor's "Show N disabled" link, beside Add variant and drawn only while some
+  variant is disabled, shows them; the link then reads "Hide disabled". The table shows them itself,
   and tells the editor with `wt-show-inactive`, when a reported problem or a newly added unsaved
   variant would otherwise be hidden (`dashboard-variant-table`,
   `apps/dashboard/src/widgets/variant-table.ts`).
@@ -525,8 +526,8 @@ opening the section is what shows every value. Top to bottom: the category path,
 photo beside it as a small button that opens the image library (absent when the editor is given no
 `api`), Available, Standalone ordering (absent on a variant's page), ▸ Kitchen, ▸ Descriptors,
 ▸ Nutritional info, Pricing (a ▸ fold once some variant is Active), Variants, Modifiers, then Cancel
-and Save. An Inactive product's editor also shows a line saying so, under the category path, and
-offers Restore beside Save. Opened on a variant, the same form is the variant's own
+and Save. A disabled product's editor also shows a line saying so, under the category path, and
+offers Enable beside Save. Opened on a variant, the same form is the variant's own
 page: it has no Standalone ordering, Modifiers or Variants section, and each field the variant may
 leave blank to take the parent's value shows that value as its hint; the course, description,
 allergens and dietary preferences also show it in italic on their folded section's closed line.

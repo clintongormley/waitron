@@ -414,7 +414,7 @@ screens do with events such as `fire-course` and `mark-collected`.
 ## A retained hardware registration must remain re-addable after deactivation
 
 Discovery matches disabled records as well as active ones; the dashboard offers disabled matches
-(printers as Enable, card readers as Add again) and reactivates their existing id, preserving
+(printers and card readers as Enable) and reactivates their existing id, preserving
 history and routing. Only active matches
 disappear from the add list. Cost: deleting a USB printer left it in the registered table and hid it
 from discovery, blocking re-add. The table now defaults to Active with Disabled/All filters. Built in
