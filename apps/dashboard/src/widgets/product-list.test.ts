@@ -1575,12 +1575,12 @@ describe("the product list at phone width", () => {
   it.each(
     ["en-GB", "es-ES"].flatMap((locale) =>
       ["category.name_taken", "category.invalid"].flatMap((code) =>
-        [null, "d"].map((parentId) => ({ locale, code, parentId })),
+        ["f", "b"].map((categoryId) => ({ locale, code, categoryId })),
       ),
     ),
   )(
-    "shows a new category's whole refusal beside the pinned actions at 390 px without scrolling ($locale, $code, $parentId)",
-    async ({ locale, code, parentId }) => {
+    "shows a rename's whole refusal beside the pinned actions at 390 px without scrolling ($locale, $code, $categoryId)",
+    async ({ locale, code, categoryId }) => {
       const width = window.innerWidth,
         height = window.innerHeight;
       const before = currentLocale();
@@ -1588,11 +1588,11 @@ describe("the product list at phone width", () => {
         setLocale(locale);
         await page.viewport(390, 844);
         const { el, root } = await mountTree();
-        el.nameDraft = { parentId };
+        el.nameDraft = { kind: "rename", categoryId };
         el.nameError = codeMessage(code);
         await el.updateComplete;
         await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-        const row = root.querySelector<HTMLElement>('tr[data-row-key="draft:new"]')!;
+        const row = root.querySelector<HTMLElement>(`tr[data-row-key="folder:${categoryId}"]`)!;
         const box = row.querySelector<HTMLElementTagNameMap["wt-input"]>(
           'wt-input[name="category-name"]',
         )!;
@@ -1683,7 +1683,7 @@ describe("the product list at phone width", () => {
     (locale) =>
       onPhone(locale, 430, async () => {
         const { el, root } = await mountTree();
-        await openWithRefusal(el, { parentId: null });
+        await openWithRefusal(el, { kind: "rename", categoryId: "f" });
         await page.viewport(390, 844);
         expectInView(await nameBoxEdges(root));
       }),
@@ -1694,7 +1694,7 @@ describe("the product list at phone width", () => {
     (locale) =>
       onPhone(locale, 390, async () => {
         const { el, root } = await mountBoundedTree();
-        await openWithRefusal(el, { parentId: null });
+        await openWithRefusal(el, { kind: "rename", categoryId: "f" });
         const before = await nameBoxEdges(root);
         el.selecting = true;
         await el.updateComplete;
@@ -1712,7 +1712,7 @@ describe("the product list at phone width", () => {
       (["before", "after"] as const).map((scrolled) => ({ locale, scrolled })),
     ),
   )(
-    "shows the name box and its refusal from their first letter when the table is scrolled sideways $scrolled the box opens at 390 px ($locale)",
+    "shows the name box and its refusal from their first letter when the table is scrolled sideways $scrolled the rename opens at 390 px ($locale)",
     ({ locale, scrolled }) =>
       onPhone(locale, 390, async () => {
         const { el, root } = await mountTree();
@@ -1723,7 +1723,7 @@ describe("the product list at phone width", () => {
           expect(scroll.scrollLeft).toBe(172);
         };
         if (scrolled === "before") scrollSideways();
-        el.nameDraft = { parentId: null };
+        el.nameDraft = { kind: "rename", categoryId: "f" };
         await el.updateComplete;
         await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
         if (scrolled === "after") scrollSideways();
@@ -1738,7 +1738,7 @@ describe("the product list at phone width", () => {
     (locale) =>
       onPhone(locale, 430, async () => {
         const { el, root } = await mountTree();
-        await openWithRefusal(el, { parentId: null });
+        await openWithRefusal(el, { kind: "rename", categoryId: "f" });
         const host = el.parentElement!;
         el.remove();
         host.append(el);
@@ -1755,7 +1755,7 @@ describe("the product list at phone width", () => {
     ({ locale, parentId }) =>
       onPhone(locale, 390, async () => {
         const { el, root } = await mountTree();
-        await openWithRefusal(el, { parentId });
+        await openWithRefusal(el, { kind: "create", parentId });
         expectInView(await nameBoxEdges(root));
       }),
   );
@@ -1779,8 +1779,8 @@ describe("the product list at phone width", () => {
     };
   }
 
-  /** The tree mounted and laid out at phone width before a box opens, as when a person picks Add
-   * category from a row's menu. */
+  /** The tree mounted and laid out at phone width before a box opens, as when a person picks Rename
+   * or Add category from a row's menu. */
   async function mountNarrowTree(props: Partial<ProductList> = {}) {
     const tree = await mountTree(props);
     await vi.waitFor(() => expect(tree.table.hasAttribute("narrow")).toBe(true));
@@ -1802,6 +1802,28 @@ describe("the product list at phone width", () => {
 
   it.each(
     ["en-GB", "es-ES"].flatMap((locale) =>
+      ["f", "d", "b"].map((categoryId) => ({ locale, categoryId })),
+    ),
+  )(
+    "puts a renamed category's name box and its refusal on their own line under the grip at 390 px ($locale, $categoryId)",
+    ({ locale, categoryId }) =>
+      onPhone(locale, 390, async () => {
+        // An asterisk and Drinks' two-part count leave the least room beside the grip and icon.
+        const { el, root } = await mountNarrowTree({ unroutedFolderIds: ["f", "d", "b"] });
+        await openWithRefusal(el, { kind: "rename", categoryId });
+        const line = await nameBoxLine(root);
+        expectOwnLine(line);
+        const row = root.querySelector(`tr[data-row-key="folder:${categoryId}"]`)!;
+        for (const after of row.querySelectorAll('[part~="count"], [part~="unrouted-folder"]')) {
+          const rect = after.getBoundingClientRect();
+          expect(rect.right).toBeLessThanOrEqual(line.edges.pinned);
+          expect(rect.bottom).toBeLessThanOrEqual(line.box.top);
+        }
+      }),
+  );
+
+  it.each(
+    ["en-GB", "es-ES"].flatMap((locale) =>
       [null, "d", "b"].map((parentId) => ({ locale, parentId })),
     ),
   )(
@@ -1809,7 +1831,7 @@ describe("the product list at phone width", () => {
     ({ locale, parentId }) =>
       onPhone(locale, 390, async () => {
         const { el, root } = await mountNarrowTree();
-        await openWithRefusal(el, { parentId });
+        await openWithRefusal(el, { kind: "create", parentId });
         expectOwnLine(await nameBoxLine(root));
       }),
   );
@@ -1818,20 +1840,27 @@ describe("the product list at phone width", () => {
     "moves an open name box onto its own line when the screen narrows from 1280 to 390 px (%s)",
     (locale) =>
       onPhone(locale, 1280, async () => {
-        const { el, table, root } = await mountTree();
-        await openWithRefusal(el, { parentId: "d" });
+        const { el, table, root } = await mountTree({ unroutedFolderIds: ["f", "d", "b"] });
+        await openWithRefusal(el, { kind: "rename", categoryId: "d" });
         expect(table.hasAttribute("narrow")).toBe(false);
         await page.viewport(390, 844);
         await vi.waitFor(async () => expectOwnLine(await nameBoxLine(root)));
       }),
   );
 
-  it.each(["en-GB", "es-ES"])(
-    "keeps a new category's name box beside the grip space and folder icon at 1280 px (%s)",
-    (locale) =>
+  it.each(
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      [
+        { kind: "rename", categoryId: "b" } as const,
+        { kind: "create", parentId: "d" } as const,
+      ].map((draft) => ({ locale, draft })),
+    ),
+  )(
+    "keeps the name box beside the grip and folder icon at 1280 px ($locale, $draft.kind)",
+    ({ locale, draft }) =>
       onPhone(locale, 1280, async () => {
         const { el, root } = await mountTree();
-        await openWithRefusal(el, { parentId: "d" });
+        await openWithRefusal(el, draft);
         const line = await nameBoxLine(root);
         expect(line.box.top).toBeLessThan(line.grip.bottom);
         expect(line.box.bottom).toBeGreaterThan(line.grip.top);
@@ -2382,7 +2411,7 @@ describe("the product list as a tree", () => {
     expect(opened).not.toHaveBeenCalled();
   });
 
-  it("offers Add product and Add category on All products, and those, a divider, Edit, Move to… and Delete on a category", async () => {
+  it("offers Add product and Add category on All products, and those, a divider, Rename, Move to… and Delete on a category", async () => {
     const { root } = await mountTree();
     const all = root.querySelector('[data-test="actions-root"]')!;
     expect(all.getAttribute("label")).toBe(`${t("staff.actions")}: ${t("folders.all_products")}`);
@@ -2391,7 +2420,7 @@ describe("the product list as a tree", () => {
       t("catalogue.add_product"),
       t("folders.add_category"),
       "—",
-      t("action.edit"),
+      t("folders.rename"),
       t("folders.move"),
       t("action.delete"),
     ]);
@@ -2487,7 +2516,7 @@ describe("the product list as a tree", () => {
 
   it("puts a new category's name box inside the category it is added to, opened, holding the cursor", async () => {
     const { el, root } = await mountTree();
-    el.nameDraft = { parentId: "d" };
+    el.nameDraft = { kind: "create", parentId: "d" };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     expect(rowKeys(root)).toEqual([
@@ -2508,7 +2537,7 @@ describe("the product list as a tree", () => {
 
   it("lines a new category's folder icon up with its sibling categories' icons", async () => {
     const { el, root } = await mountTree();
-    el.nameDraft = { parentId: null };
+    el.nameDraft = { kind: "create", parentId: null };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     const iconLeft = (key: string) =>
@@ -2522,7 +2551,7 @@ describe("the product list as a tree", () => {
   it("draws large folder icons on root, nested and new category rows and on a category drag", async () => {
     const { el, root } = await mountTree();
     await openRow(el, "folder:d");
-    el.nameDraft = { parentId: "d" };
+    el.nameDraft = { kind: "create", parentId: "d" };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     for (const key of [ROOT_KEY, "folder:d", "folder:b", "draft:new"]) {
@@ -2556,7 +2585,7 @@ describe("the product list as a tree", () => {
     const start = async (parentId: string | null) => {
       el.nameDraft = null;
       await el.updateComplete;
-      el.nameDraft = { parentId };
+      el.nameDraft = { kind: "create", parentId };
       await el.updateComplete;
       await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     };
@@ -2575,7 +2604,7 @@ describe("the product list as a tree", () => {
     const { el, root } = await mountTree();
     const sent: unknown[] = [];
     el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
-    el.nameDraft = { parentId: null };
+    el.nameDraft = { kind: "create", parentId: null };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     await userEvent.keyboard("Juice{Enter}{Enter}");
@@ -2591,18 +2620,15 @@ describe("the product list as a tree", () => {
     expect(sent).toEqual([{ name: "Juice" }, { name: "Juice" }]);
   });
 
-  it("asks to edit a category from Edit, and its row still shows its name, with no box", async () => {
+  it("turns a category's name into the box, holding its name, for a rename", async () => {
     const { el, root } = await mountTree();
-    const edits: unknown[] = [];
-    el.addEventListener("edit-folder", (event) => edits.push((event as CustomEvent).detail));
-    root.querySelector<HTMLElement>('[data-test="edit-d"]')!.click();
+    el.nameDraft = { kind: "rename", categoryId: "d" };
     await el.updateComplete;
-    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
-    expect(edits).toEqual([{ folderId: "d" }]);
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     const row = root.querySelector('tr[data-row-key="folder:d"]')!;
-    expect(row.querySelector("strong")!.textContent).toBe("Drinks");
-    expect(row.querySelector("wt-input")).toBeNull();
-    expect(row.querySelector(".row-activate")).not.toBeNull();
+    expect(row.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")!.value).toBe("Drinks");
+    expect(row.querySelector("strong")).toBeNull();
+    expect(row.querySelector(".row-activate")).toBeNull();
   });
 
   it("sends a cancel on Enter in a blank box, and nothing more once a name is sent", async () => {
@@ -2610,13 +2636,13 @@ describe("the product list as a tree", () => {
     const sent: unknown[] = [];
     el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
     el.addEventListener("name-cancel", () => sent.push("cancel"));
-    el.nameDraft = { parentId: null };
+    el.nameDraft = { kind: "create", parentId: null };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     await userEvent.keyboard("   {Enter}");
     el.nameDraft = null;
     await el.updateComplete;
-    el.nameDraft = { parentId: "d" };
+    el.nameDraft = { kind: "create", parentId: "d" };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     await userEvent.keyboard("Juice{Enter}{Escape}{Tab}");
@@ -2628,27 +2654,27 @@ describe("the product list as a tree", () => {
     const sent: unknown[] = [];
     el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
     el.addEventListener("name-cancel", () => sent.push("cancel"));
-    el.nameDraft = { parentId: null };
+    el.nameDraft = { kind: "create", parentId: null };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-    el.nameDraft = { parentId: "d" };
+    el.nameDraft = { kind: "rename", categoryId: "d" };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     expect(sent).toEqual([]);
   });
 
-  it("closes a category's menu when Edit is chosen from it", async () => {
+  it("closes a category's menu when Rename is chosen from it", async () => {
     const { el, root } = await mountTree();
-    const edits: unknown[] = [];
-    el.addEventListener("edit-folder", (event) => edits.push((event as CustomEvent).detail));
+    const renames: unknown[] = [];
+    el.addEventListener("rename-folder", (event) => renames.push((event as CustomEvent).detail));
     const menu = root.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
       '[data-test="actions-folder-d"]',
     )!;
     menu.show();
     const popup = menu.shadowRoot!.querySelector("[popover]")!;
     expect(popup.matches(":popover-open")).toBe(true);
-    root.querySelector<HTMLElement>('[data-test="edit-d"]')!.click();
-    expect(edits).toEqual([{ folderId: "d" }]);
+    root.querySelector<HTMLElement>('[data-test="rename-d"]')!.click();
+    expect(renames).toEqual([{ folderId: "d" }]);
     expect(popup.matches(":popover-open")).toBe(false);
   });
 
@@ -2680,12 +2706,12 @@ describe("the product list as a tree", () => {
     expect(chip.getAttribute("part")).toBe("color-swatch empty");
   });
 
-  it("draws a swatch beside a category's name in its colour, outlined when it has none, and its click sends edit-folder without opening or closing the row", async () => {
+  it("draws a swatch beside a category's name in its colour, outlined when it has none, and its click sends folder-color without opening or closing the row", async () => {
     const { el, root, table } = await mountTree({
       categories: [{ ...drinks, color: "#b12525" }, beer, food],
     });
     const sent: unknown[] = [];
-    for (const name of ["edit-folder", "category-toggle", "drag-items"])
+    for (const name of ["folder-color", "category-toggle", "drag-items"])
       el.addEventListener(name, (event) => sent.push([name, (event as CustomEvent).detail]));
     const button = (id: string) =>
       root.querySelector<HTMLButtonElement>(
@@ -2712,14 +2738,14 @@ describe("the product list as a tree", () => {
     await userEvent.click(button("d"));
     await table.updateComplete;
     expect(expanded()).toBe("false");
-    expect(sent).toEqual([["edit-folder", { folderId: "d" }]]);
+    expect(sent).toEqual([["folder-color", { folderId: "d" }]]);
     await openRow(el, "folder:d");
     expect(expanded()).toBe("true");
     sent.length = 0;
     await userEvent.click(button("d"));
     await table.updateComplete;
     expect(expanded()).toBe("true");
-    expect(sent).toEqual([["edit-folder", { folderId: "d" }]]);
+    expect(sent).toEqual([["folder-color", { folderId: "d" }]]);
 
     // Pressed and dragged, the swatch starts no drag.
     const box = button("d").getBoundingClientRect();
@@ -2736,7 +2762,115 @@ describe("the product list as a tree", () => {
       new PointerEvent("pointermove", { pointerId: 3, clientX: box.x + 4, clientY: box.y + 80 }),
     );
     document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 3 }));
-    expect(sent).toEqual([["edit-folder", { folderId: "d" }]]);
+    expect(sent).toEqual([["folder-color", { folderId: "d" }]]);
+  });
+
+  it.each([
+    ["en-GB", "Choose the colour"],
+    ["es-ES", "Elegir el color"],
+  ])(
+    "puts a colour square showing the box's colour inside the name box, for a new category and a rename (%s)",
+    async (locale, label) => {
+      const before = currentLocale();
+      onTestFinished(() => setLocale(before));
+      setLocale(locale);
+      const { el, root } = await mountTree({
+        categories: [{ ...drinks, color: "#b12525" }, beer, food],
+      });
+      const square = () => {
+        const box = root.querySelector('wt-input[name="category-name"]')!;
+        const button = box.querySelector<HTMLButtonElement>(
+          ':scope > [slot="end"][data-test="name-box-color"]',
+        )!;
+        return { button, chip: button.querySelector<HTMLElement>('[part~="color-swatch"]')! };
+      };
+      el.nameDraft = { kind: "create", parentId: "d" };
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+      expect(square().button.getAttribute("aria-label")).toBe(label);
+      expect(square().chip.getAttribute("part")).toBe("color-swatch empty");
+      el.nameColor = "#256bb1";
+      await el.updateComplete;
+      await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+      expect(getComputedStyle(square().chip).backgroundColor).toBe("rgb(37, 107, 177)");
+
+      el.nameDraft = { kind: "rename", categoryId: "d" };
+      el.nameColor = "#b12525";
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+      const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+      expect(row.querySelector('[data-test="name-box-color"]')).toBe(square().button);
+      expect(getComputedStyle(square().chip).backgroundColor).toBe("rgb(177, 37, 37)");
+      expect(row.querySelector('[data-test="color-d"]')).toBeNull();
+    },
+  );
+
+  it("keeps the name box open, saving nothing, while its colour square is used, and saves on Enter once focus is back", async () => {
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    onTestFinished(() => outside.remove());
+    const { el, root } = await mountTree();
+    const sent: unknown[] = [];
+    for (const name of ["name-commit", "name-cancel", "name-color"])
+      el.addEventListener(name, (event) => sent.push([name, (event as CustomEvent).detail]));
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    await userEvent.keyboard("Juice");
+    const box = root.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      'wt-input[name="category-name"]',
+    )!;
+    const square = box.querySelector<HTMLElement>('[data-test="name-box-color"]')!;
+    await userEvent.click(square);
+    // The colour chooser takes the cursor while it is open, and hands it back to the square.
+    outside.focus();
+    square.focus();
+    expect(sent).toEqual([["name-color", {}]]);
+    expect(root.querySelector('wt-input[name="category-name"]')).toBe(box);
+    await el.returnToNameBox();
+    expect(focusedName(el)).toBe("category-name");
+    expect(box.value).toBe("Juice");
+    await userEvent.keyboard("{Enter}");
+    expect(sent).toEqual([
+      ["name-color", {}],
+      ["name-commit", { name: "Juice" }],
+    ]);
+  });
+
+  it("leaves the name box, and saves it, once focus has come back from its colour square", async () => {
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    onTestFinished(() => outside.remove());
+    const { el, root } = await mountTree();
+    const sent: unknown[] = [];
+    for (const name of ["name-commit", "name-cancel", "name-color"])
+      el.addEventListener(name, (event) => sent.push([name, (event as CustomEvent).detail]));
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    await userEvent.keyboard("Juice");
+    await userEvent.click(root.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+    outside.focus();
+    await el.returnToNameBox();
+    outside.focus();
+    expect(sent).toEqual([
+      ["name-color", {}],
+      ["name-commit", { name: "Juice" }],
+    ]);
+  });
+
+  it("leaves the box's colour square out of the Tab order, so Tab still leaves the box and saves it, and the row's square is a Tab stop", async () => {
+    const { el, root } = await mountTree();
+    const sent: unknown[] = [];
+    for (const name of ["name-commit", "name-cancel", "name-color"])
+      el.addEventListener(name, (event) => sent.push([name, (event as CustomEvent).detail]));
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    expect(root.querySelector<HTMLElement>('[data-test="name-box-color"]')!.tabIndex).toBe(-1);
+    expect(root.querySelector<HTMLElement>('[data-test="color-d"]')!.tabIndex).toBe(0);
+    await userEvent.keyboard("Juice{Tab}");
+    expect(sent).toEqual([["name-commit", { name: "Juice" }]]);
   });
 
   it.each([
@@ -2795,6 +2929,25 @@ describe("the product list as a tree", () => {
       expect(popup.matches(":popover-open")).toBe(false);
     },
   );
+
+  it("a rename's box sends a cancel on Esc, and on leaving it blank", async () => {
+    const { el } = await mountTree();
+    const sent: unknown[] = [];
+    el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
+    el.addEventListener("name-cancel", () => sent.push("cancel"));
+    const rename = async () => {
+      el.nameDraft = null;
+      await el.updateComplete;
+      el.nameDraft = { kind: "rename", categoryId: "d" };
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    };
+    await rename();
+    await userEvent.keyboard("Beverages{Escape}");
+    await rename();
+    await userEvent.keyboard("{Backspace}{Tab}");
+    expect(sent).toEqual(["cancel", "cancel"]);
+  });
 
   it("opens the All products menu, without moving focus, when the catalogue loads empty, and only that once", async () => {
     const outside = document.createElement("button");

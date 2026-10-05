@@ -897,11 +897,17 @@ category with no active station and the swatch of its colour; a product's varian
 only the room between its own start and the row's pinned Actions cell, measured as if the table
 were unscrolled, and wraps inside it, a single long word included; a name that fits stays on one
 line (`#fitNames`, `apps/dashboard/src/widgets/product-list.ts`). The box that names a new category
-is capped at the same room, though never below `--wt-tap-min`. At phone width (while the table
-carries `narrow`) that box goes on a line of its own under the grip space instead, held to the same
-room from the grip space's start, with the grip space and folder icon on the line above. A
-category's swatch sits after its name and count rather than before the name, so names at one depth
-still start at one place.
+or renames one is capped at the same room, though never below `--wt-tap-min`. The one exception,
+while the table does not carry `narrow`: while a category is being renamed, its count and asterisk
+follow the name box and are not capped. At phone width (while the table carries `narrow`) the name
+box of a category being renamed or added goes on a line of its own under the grip instead, taking
+the room from the grip's start to the pinned cell; the grip, the folder icon and a renamed
+category's count and asterisk stay on the line above, and the count and asterisk wrap in what the
+grip and icon leave of that room. A category's swatch sits after its name and count rather than
+before the name, so names at one depth still start at one place; a category being renamed draws
+none there. The name box carries its own colour square in `wt-input`'s `end` slot, inside the box at
+its trailing end, so every fit above holds for the box with its square. That square is not a Tab
+stop, so Tab still leaves the box.
 
 Use `wt-modal` for an add or edit form. Its fields stop at `--wt-form-max-width` (see "Structure"
 above). Give it a `size` chosen by its content:

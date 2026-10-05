@@ -27,7 +27,7 @@ import "@waitron/ui/src/components/wt-spinner.js";
 import { acceptsCatalogueDrop, type CategoryNameDraft, type ProductList } from "./product-list.js";
 import { folderMadeAt, isRouted, type FolderMadeAt } from "./folder-made-at.js";
 import { categoryTree, PATH_SEPARATOR } from "./classification-fields.js";
-import "./category-details-form.js";
+import "./category-color-form.js";
 
 @customElement("dashboard-catalogue-browser")
 export class CatalogueBrowser extends LitElement {
@@ -112,9 +112,13 @@ export class CatalogueBrowser extends LitElement {
   @state() private search = "";
   @state() private nameDraft: CategoryNameDraft | null = null;
   @state() private nameError = "";
-  @state() private editingCategory: CategorySummary | null = null;
-  @state() private categoryBusy = false;
-  @state() private categoryErrors: Record<string, string> = {};
+  /** The colour chosen in the open name box; undefined until one is. */
+  @state() private nameColor: string | null | undefined = undefined;
+  /** Whose colour the chooser is open for: a category's row, or the name box. */
+  @state() private colorTarget:
+    { kind: "row"; category: CategorySummary } | { kind: "box" } | null = null;
+  @state() private colorBusy = false;
+  @state() private colorErrors: Record<string, string> = {};
 
   @state() private selecting = false;
   @state() private selected: string[] = [];
@@ -151,6 +155,7 @@ export class CatalogueBrowser extends LitElement {
   }
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("search")) this.selected = [];
+    if (changed.has("nameDraft")) this.nameColor = undefined;
     // Worked out once per change of its inputs, not on every redraw of the browser.
     if (changed.has("routing") || changed.has("categories") || changed.has("products"))
       this.#folderMadeAt = this.routing
@@ -557,9 +562,14 @@ export class CatalogueBrowser extends LitElement {
     const draft = this.nameDraft;
     if (!draft) return;
     this.nameError = "";
-    const { parentId } = draft;
+    const parentId = draft.kind === "create" ? draft.parentId : null;
+    const color = this.nameColor;
+    // Sent only when the box changed it, so a plain create or rename sends what it always did.
+    const colored = color !== undefined && color !== this.#boxCurrentColor(draft) ? { color } : {};
     try {
-      await this.api.createCategory({ name: event.detail.name, parentId });
+      if (draft.kind === "create")
+        await this.api.createCategory({ name: event.detail.name, parentId, ...colored });
+      else await this.api.updateCategory(draft.categoryId, { name: event.detail.name, ...colored });
       if (this.nameDraft === draft) this.nameDraft = null;
     } catch (error) {
       const message = Object.values(categoryRefusalErrors(error, parentId))[0]!;
@@ -567,31 +577,58 @@ export class CatalogueBrowser extends LitElement {
       else this.dropError = message;
     }
   }
-  #editCategory(id: string): void {
-    const category = this.categories.find((candidate) => candidate.id === id);
-    if (!category) return;
-    this.categoryErrors = {};
-    this.editingCategory = category;
+  #boxCurrentColor(draft: CategoryNameDraft): string | null {
+    return draft.kind === "rename"
+      ? (this.categories.find(({ id }) => id === draft.categoryId)?.color ?? null)
+      : null;
   }
-  /** Sends the name and colour alone, never the parent, so a move made while the dialog was open
-   * is kept. */
-  async #saveCategory(event: CustomEvent<{ name: string; color: string | null }>): Promise<void> {
-    event.stopPropagation();
-    const category = this.editingCategory;
-    if (!category || this.categoryBusy) return;
-    this.categoryBusy = true;
-    this.categoryErrors = {};
-    try {
-      await this.api.updateCategory(category.id, {
-        name: event.detail.name,
-        color: event.detail.color,
-      });
-      this.editingCategory = null;
-    } catch (error) {
-      this.categoryErrors = categoryRefusalErrors(error, null);
-    } finally {
-      this.categoryBusy = false;
+  #boxColor(): string | null {
+    if (this.nameColor !== undefined) return this.nameColor;
+    return this.nameDraft ? this.#boxCurrentColor(this.nameDraft) : null;
+  }
+  /** Sends the colour alone, never a name or a parent, so a rename or a move made while the
+   * chooser was open is kept. */
+  async #chooseColor(color: string | null): Promise<void> {
+    const target = this.colorTarget;
+    if (!target) return;
+    if (target.kind === "box") {
+      this.nameColor = color;
+      void this.#closeBoxColor();
+      return;
     }
+    if (this.colorBusy) return;
+    this.colorBusy = true;
+    this.colorErrors = {};
+    try {
+      await this.api.updateCategory(target.category.id, { color });
+      if (this.colorTarget === target) this.colorTarget = null;
+    } catch (error) {
+      this.colorErrors = categoryRefusalErrors(error, null);
+    } finally {
+      this.colorBusy = false;
+    }
+  }
+  /** The modal hands focus back to the square that opened it; the box wants it in its input. */
+  async #closeBoxColor(): Promise<void> {
+    this.colorTarget = null;
+    await this.updateComplete;
+    const form = this.shadowRoot!.querySelector("dashboard-category-color-form")!;
+    await form.updateComplete;
+    await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+    await this.shadowRoot!.querySelector("dashboard-product-list")!.returnToNameBox();
+  }
+  #colorHeading(): string {
+    const target = this.colorTarget;
+    const draft = this.nameDraft;
+    const name =
+      target?.kind === "row"
+        ? target.category.name
+        : draft?.kind === "rename"
+          ? this.categories.find(({ id }) => id === draft.categoryId)?.name
+          : undefined;
+    return name === undefined
+      ? t("folders.new_color_heading")
+      : t("folders.color_heading").replace("{name}", name);
   }
   override render() {
     return html`<dashboard-product-list
@@ -627,7 +664,7 @@ export class CatalogueBrowser extends LitElement {
           event.stopPropagation();
           this.search = "";
           this.nameError = "";
-          this.nameDraft = { parentId: event.detail.parentId };
+          this.nameDraft = { kind: "create", parentId: event.detail.parentId };
         }}
         .categories=${this.categories}
         .products=${this.products}
@@ -640,9 +677,23 @@ export class CatalogueBrowser extends LitElement {
         .optionLists=${this.optionLists}
         .units=${this.units}
         .unitLanguage=${this.unitLanguage}
-        @edit-folder=${(event: CustomEvent<{ folderId: string }>) => {
+        @rename-folder=${(event: CustomEvent<{ folderId: string }>) => {
           event.stopPropagation();
-          this.#editCategory(event.detail.folderId);
+          this.nameError = "";
+          this.nameDraft = { kind: "rename", categoryId: event.detail.folderId };
+        }}
+        @folder-color=${(event: CustomEvent<{ folderId: string }>) => {
+          event.stopPropagation();
+          const category = this.categories.find(({ id }) => id === event.detail.folderId);
+          if (!category) return;
+          this.colorErrors = {};
+          this.colorTarget = { kind: "row", category };
+        }}
+        .nameColor=${this.#boxColor()}
+        @name-color=${(event: Event) => {
+          event.stopPropagation();
+          this.colorErrors = {};
+          this.colorTarget = { kind: "box" };
         }}
         @name-commit=${(event: CustomEvent<{ name: string }>) => void this.#saveName(event)}
         @name-cancel=${(event: Event) => {
@@ -724,18 +775,22 @@ export class CatalogueBrowser extends LitElement {
             : nothing
         }
       </dashboard-product-list>
-      ${this.#operationDialog()}<dashboard-category-details-form
-        .open=${this.editingCategory !== null}
-        .busy=${this.categoryBusy}
-        .value=${this.editingCategory}
-        .errors=${this.categoryErrors}
-        @wt-submit=${(event: CustomEvent<{ name: string; color: string | null }>) =>
-          void this.#saveCategory(event)}
+      ${this.#operationDialog()}<dashboard-category-color-form
+        .open=${this.colorTarget !== null}
+        .busy=${this.colorBusy}
+        heading=${this.colorTarget ? this.#colorHeading() : ""}
+        .color=${this.colorTarget?.kind === "row" ? this.colorTarget.category.color : this.#boxColor()}
+        .errors=${this.colorErrors}
+        @wt-choose=${(event: CustomEvent<{ color: string | null }>) => {
+          event.stopPropagation();
+          void this.#chooseColor(event.detail.color);
+        }}
         @wt-cancel=${(event: Event) => {
           event.stopPropagation();
-          this.editingCategory = null;
+          if (this.colorTarget?.kind === "box") void this.#closeBoxColor();
+          else this.colorTarget = null;
         }}
-      ></dashboard-category-details-form
+      ></dashboard-category-color-form
       >${this.dropError ? html`<p class="error" role="alert">${this.dropError}</p>` : nothing}`;
   }
 }

@@ -140,6 +140,9 @@ export interface ColorFieldOptions {
   error: string;
   /** The custom colour input's `name`. */
   name: string;
+  /** When the custom colour reaches `change`: on each `input` as the person picks (the default), or
+   * only on the input's `change`, once they settle on one. */
+  customEvent?: "input" | "change";
   errorId: string;
   change: (color: string | null) => void;
 }
@@ -150,7 +153,7 @@ export interface ColorFieldOptions {
  * HTML, `input type=color`), so it cannot join the radio group.
  */
 export function colorField(options: ColorFieldOptions): TemplateResult {
-  const { color, busy, error, name, errorId, change } = options;
+  const { color, busy, error, name, errorId, change, customEvent = "input" } = options;
   // Checked, because the chip paints it into a style attribute; anything else reads as no colour.
   const inherited =
     typeof options.categoryColor === "string" && !isHexColor(options.categoryColor)
@@ -236,6 +239,11 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
         .value=${color ?? "#000000"}
         .disabled=${busy}
         @input=${(event: Event) => {
+          event.stopPropagation();
+          if (customEvent === "input") change((event.target as HTMLInputElement).value);
+        }}
+        @change=${(event: Event) => {
+          if (customEvent !== "change") return;
           event.stopPropagation();
           change((event.target as HTMLInputElement).value);
         }}

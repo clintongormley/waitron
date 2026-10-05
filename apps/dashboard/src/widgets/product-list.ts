@@ -58,7 +58,8 @@ const folderIcon = html`<span part="folder-frame"
 export const HOVER_OPEN_MS = 600;
 const DRAFT_KEY = "draft:new";
 
-export type CategoryNameDraft = { parentId: string | null };
+export type CategoryNameDraft =
+  { kind: "create"; parentId: string | null } | { kind: "rename"; categoryId: string };
 
 type RootRow = { kind: "root"; key: typeof ROOT_KEY; parentKey: null };
 type CategoryRow = { kind: "folder"; key: string; parentKey: string; folder: CategorySummary };
@@ -246,12 +247,20 @@ export class ProductList extends LitElement {
         min-width: 0;
         max-inline-size: max(var(--wt-tap-min), var(--name-box-room));
       }
-      /* On a phone the name box takes a line of its own, held to the room #fitNames measures so it
-         does not run under the pinned column. */
+      wt-data-table::part(name-after) {
+        display: contents;
+      }
+      /* On a phone the name box takes a line of its own. The \`folder-cell\` span is held to the
+         room #fitNames measures, so the count and asterisk wrap there instead of running under the
+         pinned column. */
       wt-data-table[narrow]::part(naming) {
         display: grid;
-        grid-template-columns: auto auto 1fr;
+        grid-template-columns: auto auto minmax(0, auto) 1fr;
         inline-size: max(var(--wt-tap-min), var(--name-box-room));
+      }
+      wt-data-table[narrow]::part(name-after) {
+        display: block;
+        overflow-wrap: anywhere;
       }
       wt-data-table[narrow]::part(name-box) {
         grid-row: 2;
@@ -299,6 +308,8 @@ export class ProductList extends LitElement {
   @property({ attribute: false }) nameDraft: CategoryNameDraft | null = null;
   /** The server's refusal of the name the box last sent, shown under the box. */
   @property() nameError = "";
+  /** The colour the box's square shows, which the box's name is saved with. */
+  @property({ attribute: false }) nameColor: string | null = null;
   /** Whether the catalogue has loaded, so that an empty one is known to be empty. */
   @property({ type: Boolean }) loaded = false;
 
@@ -306,6 +317,10 @@ export class ProductList extends LitElement {
   #nameValue = "";
   /** Set once the box has sent its name or its cancel, until a refusal or a new box. */
   #nameSent = false;
+  /** Set from a press on the box's colour square until the cursor is back in the box's input: the
+   * chooser it opens takes the cursor without the person leaving the box. The square is no Tab stop,
+   * so Tab still leaves the box; the keyboard reaches a category's colour by its row's square. */
+  #choosingColor = false;
   #emptyChecked = false;
   #rowByKey = new Map<string, ListRow>();
   #counts = new Map<string | null, { categories: number; products: number }>();
@@ -556,8 +571,13 @@ export class ProductList extends LitElement {
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("categories") || changed.has("products")) this.#counts = this.#count();
     if (changed.has("nameDraft")) {
+      const draft = this.nameDraft;
       this.#nameSent = false;
-      this.#nameValue = "";
+      this.#choosingColor = false;
+      this.#nameValue =
+        draft?.kind === "rename"
+          ? (this.categories.find(({ id }) => id === draft.categoryId)?.name ?? "")
+          : "";
     }
     if (changed.has("nameError") && this.nameError !== "") this.#nameSent = false;
   }
@@ -571,10 +591,11 @@ export class ProductList extends LitElement {
   }
 
   async #focusNameBox(): Promise<void> {
+    const draft = this.nameDraft;
     const table = this.#table();
-    if (!this.nameDraft || !table) return;
+    if (!draft || !table) return;
     await table.updateComplete;
-    await table.revealRow(DRAFT_KEY);
+    await table.revealRow(draft.kind === "create" ? DRAFT_KEY : `folder:${draft.categoryId}`);
     const box = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
       'wt-input[name="category-name"]',
     );
@@ -584,6 +605,18 @@ export class ProductList extends LitElement {
     this.#fitNames();
     box.focus();
     box.shadowRoot!.querySelector("input")!.select();
+  }
+
+  /** Puts the cursor back in the name box, its text as it was, once its colour chooser closes. */
+  async returnToNameBox(): Promise<void> {
+    const box = this.#table()?.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+      'wt-input[name="category-name"]',
+    );
+    if (!box) return;
+    await box.updateComplete;
+    // Not the host's own focus(): it delegates focus, and does nothing while the square inside it
+    // holds the cursor.
+    box.shadowRoot!.querySelector("input")!.focus();
   }
 
   /** `show()` moves no focus, so the person's place on the page is kept. */
@@ -639,13 +672,34 @@ export class ProductList extends LitElement {
           this.#cancelName();
         }
       }}
+      @focusin=${(event: FocusEvent) => {
+        if (event.target === event.currentTarget) this.#choosingColor = false;
+      }}
       @focusout=${() => {
         // A box removed while it holds the cursor also loses it, after the next box's draft is set.
-        if (this.nameDraft !== draft || this.#nameSent) return;
+        if (this.nameDraft !== draft || this.#nameSent || this.#choosingColor) return;
         if (this.#nameValue.trim() === "") this.#cancelName();
         else this.#commitName();
       }}
-    ></wt-input>`;
+      ><button
+        slot="end"
+        part="swatch-button"
+        type="button"
+        tabindex="-1"
+        data-test="name-box-color"
+        aria-label=${t("folders.choose_color")}
+        @pointerdown=${() => {
+          this.#choosingColor = true;
+        }}
+        @click=${(event: Event) => {
+          event.stopPropagation();
+          this.#choosingColor = true;
+          this.#send("name-color", {});
+        }}
+      >
+        ${swatchChip(this.nameColor)}
+      </button></wt-input
+    >`;
   }
 
   /** Re-measured a frame after the table resizes or updates, never inside the resize observer's
@@ -699,6 +753,10 @@ export class ProductList extends LitElement {
     if (hidden > 0) scroll.scrollLeft -= hidden;
   }
 
+  #renaming(id: string): boolean {
+    return this.nameDraft?.kind === "rename" && this.nameDraft.categoryId === id;
+  }
+
   #rows(): ListRow[] {
     const known = new Set(this.categories.map(({ id }) => id));
     const keyOf = (id: string | null): string =>
@@ -711,7 +769,7 @@ export class ProductList extends LitElement {
         parentKey: keyOf(folder.parentId),
         folder,
       })),
-      ...(this.nameDraft
+      ...(this.nameDraft?.kind === "create"
         ? [
             {
               kind: "draft",
@@ -1131,7 +1189,7 @@ export class ProductList extends LitElement {
                   >`
                 : nothing
             }`;
-          return html`<span part="folder-cell"
+          return html`<span part=${this.#renaming(folder.id) ? "folder-cell naming" : "folder-cell"}
             ><button
               class="drag-grip"
               part="drag-grip"
@@ -1139,20 +1197,24 @@ export class ProductList extends LitElement {
               aria-label=${`${t("folders.drag")}: ${folder.name}`}
             >
               <wt-icon name="grip"></wt-icon></button
-            >${folderIcon}<span part="folder-name"
-              ><strong>${folder.name}</strong>${after}<button
-                part="swatch-button"
-                type="button"
-                data-test=${`color-${folder.id}`}
-                aria-label=${t("folders.edit_color").replace("{name}", folder.name)}
-                @click=${(event: Event) => {
-                  event.stopPropagation();
-                  this.#send("edit-folder", { folderId: folder.id });
-                }}
-              >
-                ${swatchChip(folder.color)}
-              </button></span
-            ></span
+            >${folderIcon}${
+              this.#renaming(folder.id)
+                ? html`${this.#nameBox()}<span part="name-after">${after}</span>`
+                : html`<span part="folder-name"
+                    ><strong>${folder.name}</strong>${after}<button
+                      part="swatch-button"
+                      type="button"
+                      data-test=${`color-${folder.id}`}
+                      aria-label=${t("folders.edit_color").replace("{name}", folder.name)}
+                      @click=${(event: Event) => {
+                        event.stopPropagation();
+                        this.#send("folder-color", { folderId: folder.id });
+                      }}
+                    >
+                      ${swatchChip(folder.color)}
+                    </button></span
+                  >`
+            }</span
           >`;
         }
         if (column.key === "actions")
@@ -1165,9 +1227,9 @@ export class ProductList extends LitElement {
             <wt-button
               align="start"
               variant="secondary"
-              data-test=${`edit-${folder.id}`}
-              @click=${() => this.#send("edit-folder", { folderId: folder.id })}
-              >${t("action.edit")}</wt-button
+              data-test=${`rename-${folder.id}`}
+              @click=${() => this.#send("rename-folder", { folderId: folder.id })}
+              >${t("folders.rename")}</wt-button
             ><wt-button
               align="start"
               variant="secondary"
@@ -1320,7 +1382,11 @@ export class ProductList extends LitElement {
         .rowKeepsChildOrder=${(row: ListRow) => row.kind === "product" && row.variant === null}
         .expandAllIncludes=${(row: ListRow) => row.kind === "folder"}
         .rowActivation=${(row: ListRow) =>
-          row.kind === "folder" ? "toggle" : row.kind === "product" ? "click" : "none"}
+          row.kind === "folder" && !this.#renaming(row.folder.id)
+            ? "toggle"
+            : row.kind === "product"
+              ? "click"
+              : "none"}
         .rowToggleLabel=${(row: ListRow, expanded: boolean) =>
           row.kind === "folder"
             ? t(expanded ? "folders.close_named" : "folders.open_named").replace(

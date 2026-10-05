@@ -24,15 +24,21 @@ children a delete moves up, is checked against the categories already there, and
 that share a name are refused when they move in together. Categories that already share a name
 are not refused when a save leaves them as they are. A product's category is
 `products.category_id`. When this is null, the product is Uncategorised, which is not a category
-row you can edit or delete.
+row you can rename or delete.
 
-A category row's menu offers Edit, which opens a dialog holding the category's name, which is
-required, and the shared colour chooser. The swatch drawn after the category's name and count, an
-empty outline when it has no colour, opens the same dialog. Save sends the name and colour and never
-the parent, so a move made while the dialog is open is kept. A refused name shows under Name, a
-refused colour under the chooser, and any other refusal at the end of the dialog's body
-(`apps/dashboard/src/widgets/category-details-form.ts`). The box that types a name into the tree
-itself is only for Add category.
+A category is named in the tree itself: Add category and a row's Rename open a box in place, which
+Enter or leaving the box saves, and Esc or a blank name cancels. A colour square sits after each
+category's name and count, an empty outline when it has no colour, and another inside the open box,
+at its end. Either square opens a small chooser (`apps/dashboard/src/widgets/category-color-form.ts`)
+holding the shared swatches, No colour and Custom. Choosing a swatch or No colour is the answer and
+closes it; Custom answers once the colour picker settles on a colour; Cancel and Esc change nothing.
+From a row's square the choice is saved at once, as the colour alone, never the name or the parent,
+so a rename or a move made while the chooser is open is kept; a refused colour stays in the chooser,
+under it. From the box's square nothing is saved: the box takes the colour, the cursor goes back to
+the box with its text as it was, and Enter saves the name with the colour, sending the colour only
+when one was chosen in that box and it differs from the category's current one. Esc or a blank name
+drops the chosen colour with the box. The box's square is not a Tab stop, so Tab still leaves the
+box and saves it; from the keyboard a category's colour is set from its row's square.
 
 A red asterisk beside a category means the route the Made at column shows for it reaches no
 active station, so it reads No replacement or Nowhere. That route is the category's baseline:

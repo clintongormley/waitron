@@ -91,123 +91,137 @@ describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
     }
   });
 
-  it.each([
-    "top",
-    "open",
-    "search",
-    "naming",
-    "editing",
-    "edit-refused",
-    "selection",
-    "move",
-    "delete",
-  ])("renders %s accessibly", async (state) => {
-    const { el, host } = await mountWidget<CatalogueBrowser>(
-      "dashboard-catalogue-browser",
-      {
-        products: PRODUCTS,
-        api: {
-          createCategory: vi.fn(),
-          updateCategory: vi.fn().mockRejectedValue({
-            code: "category.name_taken",
-            params: { field: "name", name: "Beer" },
-            status: 409,
-          }),
-          summariseFolders: vi
-            .fn()
-            .mockResolvedValue([
-              { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 },
-            ]),
-        } as unknown as DashboardApi,
-        categories: [
-          { id: "d", name: "Drinks", parentId: null, color: "#b12525" },
-          { id: "b", name: "Beer", parentId: "d", color: null },
-        ],
-        routing: {
-          stationTimes: [],
-          todayEnds: null,
-          clockReadable: true,
-          claims: [],
-          exceptions: [],
-          unassigned: { folders: [], products: [] },
-          defaultStationId: null,
-          stations: [],
+  it.each(["top", "open", "search", "naming", "selection", "move", "delete"])(
+    "renders %s accessibly",
+    async (state) => {
+      const { el, host } = await mountWidget<CatalogueBrowser>(
+        "dashboard-catalogue-browser",
+        {
+          products: PRODUCTS,
+          api: {
+            createCategory: vi.fn(),
+            summariseFolders: vi
+              .fn()
+              .mockResolvedValue([
+                { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 },
+              ]),
+          } as unknown as DashboardApi,
+          categories: [
+            { id: "d", name: "Drinks", parentId: null, color: "#b12525" },
+            { id: "b", name: "Beer", parentId: "d", color: null },
+          ],
+          routing: {
+            stationTimes: [],
+            todayEnds: null,
+            clockReadable: true,
+            claims: [],
+            exceptions: [],
+            unassigned: { folders: [], products: [] },
+            defaultStationId: null,
+            stations: [],
+          },
         },
-      },
-      theme,
-    );
-    if (state === "search") {
-      el.shadowRoot!.querySelector('[name="catalogue-search"]')!.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value: "beer" } }),
+        theme,
       );
-      await el.updateComplete;
-    }
-    const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
-    await list.updateComplete;
-    await list.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
-    if (state === "naming") {
-      const table = list.shadowRoot!.querySelector("wt-data-table")!;
-      vi.mocked(el.api.createCategory).mockRejectedValueOnce({ code: "category.invalid" });
-      table.shadowRoot!.querySelector<HTMLElement>('[data-test="add-category-d"]')!.click();
-      await vi.waitFor(() =>
-        expect(table.shadowRoot!.activeElement?.getAttribute("name")).toBe("category-name"),
-      );
-      await userEvent.keyboard("Juice{Enter}");
-      await vi.waitFor(() =>
-        expect(
-          table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")!.error,
-        ).not.toBe(""),
-      );
-    }
-    if (state === "editing" || state === "edit-refused") {
-      const table = list.shadowRoot!.querySelector("wt-data-table")!;
-      table.shadowRoot!.querySelector<HTMLElement>('[data-test="edit-d"]')!.click();
-      await el.updateComplete;
-      const dialog = el.shadowRoot!.querySelector("dashboard-category-details-form")!;
-      await dialog.updateComplete;
-      expect(dialog.open).toBe(true);
-      if (state === "edit-refused") {
-        dialog.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+      if (state === "search") {
+        el.shadowRoot!.querySelector('[name="catalogue-search"]')!.dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value: "beer" } }),
+        );
+        await el.updateComplete;
+      }
+      const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+      await list.updateComplete;
+      await list.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+      if (state === "naming") {
+        const table = list.shadowRoot!.querySelector("wt-data-table")!;
+        vi.mocked(el.api.createCategory).mockRejectedValueOnce({ code: "category.invalid" });
+        table.shadowRoot!.querySelector<HTMLElement>('[data-test="add-category-d"]')!.click();
+        await vi.waitFor(() =>
+          expect(table.shadowRoot!.activeElement?.getAttribute("name")).toBe("category-name"),
+        );
+        await userEvent.keyboard("Juice{Enter}");
         await vi.waitFor(() =>
           expect(
-            dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-              'wt-input[name="category-name"]',
-            )!.error,
+            table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input")!.error,
           ).not.toBe(""),
         );
       }
-      await dialog.shadowRoot!.querySelector("wt-modal")!.updateComplete;
-    }
-    if (state === "open") {
-      const table = list.shadowRoot!.querySelector("wt-data-table")!;
-      table
-        .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:d"] .row-activate')!
-        .click();
-      await table.updateComplete;
-    }
-    if (["selection", "move", "delete"].includes(state)) {
-      el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!.click();
-      await el.updateComplete;
+      if (state === "open") {
+        const table = list.shadowRoot!.querySelector("wt-data-table")!;
+        table
+          .shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="folder:d"] .row-activate')!
+          .click();
+        await table.updateComplete;
+      }
+      if (["selection", "move", "delete"].includes(state)) {
+        el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!.click();
+        await el.updateComplete;
+        await list.updateComplete;
+        const table = list.shadowRoot!.querySelector("wt-data-table")!;
+        await table.updateComplete;
+        for (const key of ["folder:d", "bread"]) {
+          table.shadowRoot!.querySelector<HTMLInputElement>(`[data-test="select-${key}"]`)!.click();
+          await el.updateComplete;
+          await list.updateComplete;
+          await table.updateComplete;
+        }
+        if (state !== "selection") {
+          el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${state}"]`)!.click();
+          await el.updateComplete;
+          await vi.waitFor(() => {
+            if (el.shadowRoot!.querySelector("wt-spinner")) throw new Error("summary pending");
+          });
+          await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+        }
+      }
+      await expectNoA11yViolations(host);
+    },
+  );
+
+  it.each(["row", "box", "refused"] as const)(
+    "renders the colour chooser opened from a %s square accessibly",
+    async (from) => {
+      const { el, host } = await mountWidget<CatalogueBrowser>(
+        "dashboard-catalogue-browser",
+        {
+          products: PRODUCTS,
+          api: {
+            updateCategory: vi
+              .fn()
+              .mockRejectedValue({ code: "category.invalid", params: { field: "color" } }),
+          } as unknown as DashboardApi,
+          categories: [
+            { id: "d", name: "Drinks", parentId: null, color: "#b12525" },
+            { id: "b", name: "Beer", parentId: "d", color: null },
+          ],
+        },
+        theme,
+      );
+      const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
       await list.updateComplete;
       const table = list.shadowRoot!.querySelector("wt-data-table")!;
       await table.updateComplete;
-      for (const key of ["folder:d", "bread"]) {
-        table.shadowRoot!.querySelector<HTMLInputElement>(`[data-test="select-${key}"]`)!.click();
-        await el.updateComplete;
-        await list.updateComplete;
-        await table.updateComplete;
+      if (from === "box") {
+        table.shadowRoot!.querySelector<HTMLElement>('[data-test="add-category-d"]')!.click();
+        await vi.waitFor(() =>
+          expect(table.shadowRoot!.activeElement?.getAttribute("name")).toBe("category-name"),
+        );
+        table.shadowRoot!.querySelector<HTMLElement>('[data-test="name-box-color"]')!.click();
+      } else table.shadowRoot!.querySelector<HTMLElement>('[data-test="color-d"]')!.click();
+      await el.updateComplete;
+      const form = el.shadowRoot!.querySelector("dashboard-category-color-form")!;
+      await form.updateComplete;
+      expect(form.open).toBe(true);
+      if (from === "refused") {
+        form.shadowRoot!.querySelector<HTMLElement>('[data-color="#256bb1"]')!.click();
+        await vi.waitFor(() =>
+          expect(form.shadowRoot!.querySelector("#category-color-error")!.textContent).not.toBe(""),
+        );
       }
-      if (state !== "selection") {
-        el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${state}"]`)!.click();
-        await el.updateComplete;
-        await vi.waitFor(() => {
-          if (el.shadowRoot!.querySelector("wt-spinner")) throw new Error("summary pending");
-        });
-        await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
-      }
-    }
-    await expectNoA11yViolations(host);
-  });
+      await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it.each([
     ["routed", false],

@@ -39,6 +39,10 @@ coordinate with it beyond building on its tree.
 
 ## Questions for the owner (work carries on; none blocks the build)
 
+_(2026-10-05 ~14:20, the owner answered 1 and 2 together: keep naming a category inline, with a
+colour square beside the name that opens a small swatch chooser. Decision 8 carries a dated note;
+the rename checks are back to their text on `main`.)_
+
 1. **Add category still names a new category inline**, with no colour; its colour is then set from
    the swatch or Edit. The item replaces Rename only. Should Add category open the same dialog
    instead? (Not done here: it would replace the inline create flow, which the item does not ask.)
@@ -154,7 +158,16 @@ coordinate with it beyond building on its tree.
    apart by the section icon and "Section" label, not colour. This is design-system.md's
    user-chosen data colour exception (`docs/developers/design-system.md:188-197`).
 8. **Dashboard.**
-   - **Products tree.** The category row's Rename becomes Edit (`action.edit`), opening a new
+   - **Products tree.** _(Superseded 2026-10-05 by the owner's answer of ~14:20: "couldn't we keep
+     it as inline edit with the name plus a colour square next to the name, and clicking the color
+     square opens a small modal with swatches to choose from?" A category is named inline again, for
+     Add category and for Rename, as before W92. A colour square sits after each category's name and
+     count, and inside the open name box at its trailing end; either opens a compact modal,
+     `dashboard-category-color-form`, holding the shared chooser, where choosing is the answer and
+     there is no Save. From a row it sends the colour alone; from the box it sends nothing and the
+     box saves the colour with its name, and only when one was chosen there. The plan's Task 10 has
+     the detail; the paragraph below records the design that was built first and then replaced.)_
+     The category row's Rename becomes Edit (`action.edit`), opening a new
      `dashboard-category-details-form` dialog (`category-details-form.ts`, named as
      `dashboard-section-details-form` is): Name (required) and `colorField`. A swatch button beside the
      category name opens the same dialog. Save sends `{ name, color }` and never `parentId`, so a
@@ -259,6 +272,6 @@ round trip carrying both colours.
 `docs/developers/products.md` (one colour per product and how it is chosen, and that a variant reads
 its parent's, under _What a variant reads from its parent_), `docs/developers/design-system.md` (the
 data-colour exception now has users: swatches and till tiles), `docs/developers/product-categories.md`
-(a category has an optional colour; the Edit dialog; storage), a dated superseding pointer in
+(a category has an optional colour; the colour square and its chooser; storage), a dated superseding pointer in
 `docs/superpowers/specs/2026-09-30-catalogue-menus-routing-design.md` at its "no colour" lines (25, 51,
 514), and a DONE entry in `docs/backlog.md`.

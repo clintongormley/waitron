@@ -291,8 +291,9 @@ null is refused first, as `management.request_invalid`. A configuration import r
 bundle when a product's, a category's or a menu section's colour is anything else, as
 `setup.request_invalid` with `field` set to `products.color`, `category_details.color` or
 `sections.color` (`validateCatalogueConfiguration`,
-`packages/catalogue/src/configuration-transfer.ts`). A category's colour is set from its Edit
-dialog ([product-categories.md](product-categories.md)).
+`packages/catalogue/src/configuration-transfer.ts`). A category's colour is set from the colour
+square after its name in the Products tree, or from the one in the box that names or renames it
+([product-categories.md](product-categories.md)).
 
 **A colour reaches a till only when a menu is published.** Publishing records each offer's colour
 in the menu's version, as it does the photo and description (`freezeOffer`,

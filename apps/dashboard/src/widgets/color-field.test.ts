@@ -13,9 +13,11 @@ class ColorFieldHost extends LitElement {
   static override styles = [baseStyles, colorFieldStyles];
   @property({ attribute: false }) color: string | null = null;
   @property({ attribute: false }) categoryColor: string | null | undefined = undefined;
+  @property({ attribute: false }) customEvent: "input" | "change" | undefined = undefined;
   override render() {
     return colorField({
       ...(this.categoryColor === undefined ? {} : { categoryColor: this.categoryColor }),
+      ...(this.customEvent === undefined ? {} : { customEvent: this.customEvent }),
       color: this.color,
       busy: false,
       error: "",
@@ -38,7 +40,7 @@ afterEach(cleanupWidgets);
 const mount = (
   color: string | null,
   theme?: "light" | "dark",
-  extra: Partial<Pick<ColorFieldHost, "categoryColor">> = {},
+  extra: Partial<Pick<ColorFieldHost, "categoryColor" | "customEvent">> = {},
 ) => mountWidget<ColorFieldHost>("test-color-field-host", { color, ...extra }, theme);
 
 const noneButton = (el: ColorFieldHost) =>
@@ -97,6 +99,19 @@ it("reports a custom colour picked via the native colour input", async () => {
   await el.updateComplete;
   expect((await customSquarePixels(el.shadowRoot!)).inside).toEqual([0x12, 0x34, 0x56, 255]);
   expect(el.color).toBe("#123456");
+});
+
+it("reports a custom colour only once the picker settles on it when asked to", async () => {
+  const { el } = await mount(null, undefined, { customEvent: "change" });
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="color"]')!;
+  input.value = "#123456";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(el.color).toBeNull();
+  input.value = "#654321";
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  await el.updateComplete;
+  expect(el.color).toBe("#654321");
 });
 
 it.each(["light", "dark"] as const)(
