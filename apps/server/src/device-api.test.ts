@@ -1141,7 +1141,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     madeHereStationIds: string[];
   };
 
-  /** What a till's Edit dialog would send for it as stored, so a case changes only its own field. */
+  /** The device's stored settings as an edit body, so a case changes only its own field. */
   async function storedBody(deviceId: string): Promise<EditBody> {
     const [row] = await suite.db
       .select({

@@ -5475,15 +5475,16 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   / "Nombre (no está en este perfil)" (`devices.printer_not_on_profile_mark`; a switched-off one
   also reads "(Disabled)"), and Save keeps it; a changed profile no longer offers it
   (`#printerOptions`, `apps/dashboard/src/screens/devices-screen.ts`). When the held printer is not in the
-  dashboard's printer list (not read yet, or read before that printer was added), nothing extra is
+  dashboard's printer list, nothing extra is
   offered and Save still keeps the held printer. (10) done by W105e (2026-10-05): the dashboard tells the
   Devices screen whether the session holds `payments.manage` (`canManageReaders`, from the "who am I"
   read in `apps/dashboard/src/dashboard-app.ts`); without it Edit never draws the card reader field
-  nor asks about readers. With it the reader is read as before, and a refusal still hides the field.
-  If the session loses `payments.manage` while Edit is open (the dashboard re-reads permissions when
-  the tab comes back into view), the field goes and Save sends no reader. Review suggestions #1235 did not take, listed in its description: the edit
+  nor asks about readers. With it the reader is read as before; a read refused with `authorization.not_permitted` hides the
+  field, and any other failure of that read is shown at the bottom of Edit. If the session loses
+  `payments.manage` while Edit is open (the dashboard re-reads permissions when the tab comes back
+  into view), the field goes and a Save pressed after that sends no reader. Review suggestions #1235 did not take, listed in its description: the edit
   route checks permission before the device id where revoke checks the id first; its body is the
-  whole device rather than only the fields named; it can write the device row up to three times;
+  whole device rather than only the fields named (since W105e, made-here may be left out); it can write the device row up to three times;
   `rowClickable` and `rowActivation` could be one option; a save fetches the list twice; Edit and
   Pair repeat some request-body building; seven unread `devices.*` strings.
   Left OPEN by W104, not acted on: (1) a Pair save that never answers locks both dialogs, because a
