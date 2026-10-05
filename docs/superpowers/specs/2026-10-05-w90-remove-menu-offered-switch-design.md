@@ -110,7 +110,11 @@ languages.
 
 ## Publication and preview
 
-- The working hash's `ownDecisions` (`menu-document.ts:249`–`263`) loses `offered`; prices stay.
+- The working hash drops `ownDecisions` (`menu-document.ts:248`–`263`) and is the document's own
+  hash. Its comment (`:248`) gives its only reason: an included menu's switched-off offers were left
+  out of the document. After W90 the document holds every offer `ownDecisions` maps, with
+  `grossPrice` and each variant's `menuPrice` (`freezeOffer`, `:320`–`330`, strips neither), so it
+  adds nothing; the publication tests on included price edits are the check (plan, Task 4).
 - `productFields` (`menu-document.ts:772`–`774`) loses its two offered comparisons; the price
   comparisons below them stay.
 - `refine` (`menu-publication.ts:285`–`298`) attributes a removed-but-still-reached product to an
@@ -188,4 +192,8 @@ override row with a switch and no menu price (switched off, or explicitly on) ca
 `wa-wt reset demo <worktree-name>`. Any other venue: reset it, or remove those switches before
 upgrading. A fresh demo seed writes no override rows (`apps/server/scripts/demo-seed/` has no
 `setMenuVariants` or override insert), so it migrates cleanly. Republish every menu after the
-upgrade (stored documents, above).
+upgrade (stored documents, above). A configuration bundle exported before W90 cannot be imported
+after it: export writes `select *` of each table (`apps/server/src/configuration-transfer.ts:230`),
+so every `menu_items` row carries an `offered` key, and import refuses a row with a column the table
+lacks, `setup.request_invalid` with `field: "table:menu_items"` (`:411`–`418`; read, not run).
+Export again after upgrading.
