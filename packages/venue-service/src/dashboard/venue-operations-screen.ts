@@ -236,15 +236,16 @@ export class VenueOperationsScreen extends LitElement {
     this.#restart();
     this.#returnFocus();
   }
-  /** An empty table's Add button is gone once the row it made is listed; its twin beside the
-   * tablist takes the focus instead. */
+  /** Once an empty table gains a row, focus returns to its persistent Add button. */
   #returnFocus(): void {
     void this.updateComplete.then(() => {
       const opener = this.#opener;
       const twin =
         opener?.slot === "empty-action"
           ? this.renderRoot.querySelector<HTMLElement>(
-              `wt-tabs > [slot="actions"] [data-test="${opener.dataset.test}"]`,
+              opener.dataset.test === "new-hours"
+                ? '[data-test="hours-actions"] [data-test="new-hours"]'
+                : `wt-tabs > [slot="actions"] [data-test="${opener.dataset.test}"]`,
             )
           : null;
       (opener?.isConnected ? opener : (twin ?? this.renderRoot.querySelector("wt-tabs")))?.focus();
@@ -489,11 +490,7 @@ export class VenueOperationsScreen extends LitElement {
     const model = this.model!;
     const zone = model.floorZones.find((row) => row.id === this.zoneId);
     return html`<div slot="actions">
-      ${
-        this.view === "departments"
-          ? html`${this.#tabAction(this.#addDepartment())}${this.#tabAction(this.#addHours())}`
-          : nothing
-      }
+      ${this.view === "departments" ? this.#tabAction(this.#addDepartment()) : nothing}
       ${this.view === "zones" && zone ? this.#tabAction(this.#addAssignment(zone.id)) : nothing}
     </div>`;
   }
@@ -1202,7 +1199,15 @@ export class VenueOperationsScreen extends LitElement {
         (row) => row.id,
         this.#addDepartment(),
       )}
-      ${this.#toolbar(t("venue.hours"))}
+    </section>`;
+  }
+  #hoursSection() {
+    const model = this.model!;
+    return html`<section>
+      <div class="toolbar" data-test="hours-actions">
+        <h2>${t("venue.hours")}</h2>
+        ${this.#tabAction(this.#addHours())}
+      </div>
       ${this.#table(
         "hours",
         "waitron.venue.hours.table",
@@ -1717,7 +1722,7 @@ export class VenueOperationsScreen extends LitElement {
       ${this.#pageAlert()}
       ${
         this.model
-          ? html`${this.#policyTree()} ${this.#readiness()}
+          ? html`${this.#policyTree()} ${this.#readiness()} ${this.#hoursSection()}
               <wt-tabs
                 label=${t("venue.title")}
                 .value=${this.view}

@@ -228,6 +228,18 @@ describe("venue operations screen", () => {
     expect(tabs.map((tab) => tab.getAttribute("data-key"))).toEqual(["departments", "zones"]);
   });
 
+  it("keeps department hours available outside the legacy tabs", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "zones");
+    const hours = table(el, "hours");
+    expect(hours.closest("wt-tabs")).toBeNull();
+    expect(hours.checkVisibility()).toBe(true);
+    await action(el, "new-hours");
+    expect(modal(el)?.getAttribute("heading")).toBe("Add hours");
+  });
+
   it("opens a new department from the policy tree's top action", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
@@ -1100,7 +1112,7 @@ describe("venue operations screen", () => {
     expect(printTradingName).toBe(false);
   });
 
-  it("puts each tab's available Add actions beside the tablist", async () => {
+  it("keeps Hours Add outside the tabs and each remaining tab action beside its tablist", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
@@ -1108,7 +1120,10 @@ describe("venue operations screen", () => {
     await selectTab(el, "departments");
     expect(tabs.querySelector('[slot="actions"] [data-test="new-department"]')).not.toBeNull();
     expect(find(el, '[data-test="new-department"]')!.checkVisibility()).toBe(true);
-    expect(tabs.querySelector('[slot="actions"] [data-test="new-hours"]')).not.toBeNull();
+    expect(tabs.querySelector('[slot="actions"] [data-test="new-hours"]')).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector('[data-test="hours-actions"] [data-test="new-hours"]'),
+    ).not.toBeNull();
     expect(tabs.querySelector('[slot="departments"] [data-test="new-department"]')).toBeNull();
     await selectTab(el, "zones");
     await action(el, "zone-menus-z1");
@@ -2792,7 +2807,7 @@ describe("where focus goes when an editor opened from an Add button closes", () 
       add: "new-hours",
       empty: { hours: [] },
       write: "replaceHours",
-      show: (el: VenueOperationsScreen) => selectTab(el, "departments"),
+      show: (el: VenueOperationsScreen) => selectTab(el, "zones"),
       fill: (el: VenueOperationsScreen) => {
         field(el, "hours-opens").value = "09:00";
         field(el, "hours-closes").value = "17:00";
@@ -2812,7 +2827,9 @@ describe("where focus goes when an editor opened from an Add button closes", () 
   ];
   function top(el: VenueOperationsScreen, add: string) {
     const button = el.shadowRoot!.querySelector<HTMLElement>(
-      `wt-tabs > [slot="actions"] [data-test="${add}"]`,
+      add === "new-hours"
+        ? `[data-test="hours-actions"] [data-test="${add}"]`
+        : `wt-tabs > [slot="actions"] [data-test="${add}"]`,
     );
     expect(button, add).not.toBeNull();
     return button!;
