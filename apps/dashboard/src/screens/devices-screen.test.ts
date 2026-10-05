@@ -1,5 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { html } from "lit";
 import { registerCatalogue, type CardProviderPanel } from "@waitron/dashboard-kit";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -1246,7 +1247,14 @@ describe("add a device", () => {
   });
 
   it("sends a watcher binding without a station, and no binding for a till", async () => {
-    const api = stubApi();
+    const api = stubApi({
+      listStations: vi
+        .fn()
+        .mockResolvedValue([...stations, { ...stations[0]!, id: "retired", active: false }]),
+      listWatchers: vi
+        .fn()
+        .mockResolvedValue([...watchers, { ...watchers[0]!, id: "retired-w", active: false }]),
+    });
     const el = await openAdd(api);
     await toSettings(el);
     await chooseOption(q(el, "[data-test=pair-profile]")!, "dp3");
@@ -1255,11 +1263,14 @@ describe("add a device", () => {
       name: string;
       label: string;
       required: boolean;
+      placeholder: string;
       options: unknown[];
     };
     expect(binding.name).toBe("binding");
     expect(binding.label).toBe(t("devices.shows"));
     expect(binding.required).toBe(true);
+    expect(binding.placeholder).toBe(t("devices.join_pick_binding"));
+    // The retired station and watcher are left out.
     expect(binding.options).toEqual([
       { value: "station:s1", label: "Cocina", group: t("devices.stations_group") },
       { value: "station:s2", label: "Barra", group: t("devices.stations_group") },
@@ -1301,8 +1312,10 @@ describe("add a device", () => {
       name: string;
       required: boolean;
       label: string;
+      placeholder: string;
       options: unknown[];
     };
+    expect(profile.placeholder).toBe(t("devices.join_pick_profile"));
     expect([name.name, name.required]).toEqual(["name", true]);
     expect(name.getAttribute("label")).toBe(t("devices.name"));
     expect([profile.name, profile.required, profile.label]).toEqual([
@@ -1440,6 +1453,38 @@ describe("add a device", () => {
     );
     expect((q(el, "[data-test=pair-name]") as Field).error).toBe("");
     expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
+  });
+
+  it("lets a Pair save that is under way decide the outcome: Escape and Cancel wait for it", async () => {
+    let answer!: (value: { deviceId: string; name: string; formFactor: string }) => void;
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi.fn().mockReturnValue(new Promise((r) => (answer = r))),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    await el.updateComplete;
+    q(el, "[data-test=pair-submit]")!.click();
+    await flush(el);
+
+    expect((q(el, "[data-test=pair-cancel]") as Button).disabled).toBe(true);
+    const dialog = q(el, "[data-test=pair-modal]")!.shadowRoot!.querySelector("dialog")!;
+    dialog.focus();
+    await userEvent.keyboard("{Escape}");
+    await flush(el);
+    expect(q(el, "[data-test=pair-modal]")).not.toBeNull();
+    expect(dialog.open).toBe(true);
+    // The Escape must not fall through to the Add dialog underneath either.
+    expect(q(el, "[data-test=add-device-modal]")).not.toBeNull();
+    expect(api.releasePairingHold).not.toHaveBeenCalled();
+    expect(api.denyJoinRequest).not.toHaveBeenCalled();
+
+    answer({ deviceId: "d9", name: "Barra 1", formFactor: "till" });
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-modal]")).toBeNull());
+    expect(text(el, "[data-test=added-device]")).toBe(
+      t("devices.added").replace("{name}", "Barra 1"),
+    );
+    expect(api.denyJoinRequest).not.toHaveBeenCalled();
   });
 
   it("Cancel discards the request at the number step", async () => {

@@ -891,6 +891,7 @@ export class DevicesScreen extends LitElement {
       data-test="add-device-modal"
       heading=${t("devices.add_title")}
       .open=${true}
+      .dismissible=${!this.submitting}
       @wt-close=${() => this.#endAdding()}
     >
       ${this.qr === "" ? nothing : html`<img class="qr" data-test="device-qr" src=${this.qr} alt=${t("devices.qr_alt")} />`}
@@ -1035,6 +1036,7 @@ export class DevicesScreen extends LitElement {
       data-test="pair-modal"
       heading=${t("devices.pair_title").replace("{name}", request.label)}
       .open=${true}
+      .dismissible=${!this.submitting}
       @wt-close=${() => this.#closePair()}
     >
       ${settings ? this.#renderSettingsStep(errors) : this.#renderNumberStep()}
@@ -1046,6 +1048,7 @@ export class DevicesScreen extends LitElement {
         <wt-button
           slot="cancel"
           data-test="pair-cancel"
+          ?disabled=${this.submitting}
           @click=${() => void this.#closeModal("pair-modal")}
           >${t("action.cancel")}</wt-button
         >

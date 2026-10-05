@@ -16,8 +16,8 @@ import type {
 } from "../api/client.js";
 
 /**
- * Scanned in the default list, the Add a device dialog (with waiting rows, with none, and lapsed) and
- * both Pair steps. The stub must resolve every list verb or a stray rejection pollutes the run. The
+ * Scanned in the default list, the Add a device dialog (with waiting rows, with none, after its hold
+ * lapsed, and after its hold was refused) and both Pair steps. The stub must resolve every list verb or a stray rejection pollutes the run. The
  * last block pins that each number button has a real accessible NAME and that pairing works from the
  * keyboard alone.
  */
@@ -313,7 +313,36 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
-  it("renders the Add a device dialog's lapsed notice accessibly", async () => {
+  // Only the interval timers are faked, so animation frames stay real. The stub has no `background`,
+  // so the controller renews through the API itself.
+  it("renders the Add a device dialog after its hold lapsed accessibly", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        {
+          api: stubApi({
+            renewPairingHold: vi.fn().mockRejectedValue({ code: "device.pairing_hold_lapsed" }),
+          }),
+        },
+        theme,
+      );
+      await flush(el);
+      await openAdd(el);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.waitFor(() =>
+        expect(
+          el.shadowRoot!.querySelector("[data-test=hold-lapsed]")?.getAttribute("data-status"),
+        ).toBe("lapsed"),
+      );
+      await flush(el);
+      await expectNoA11yViolations(host);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders the Add a device dialog after its hold was refused accessibly", async () => {
     const { el, host } = await mountWidget<DevicesScreen>(
       "dashboard-devices-screen",
       {
@@ -324,7 +353,9 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     await flush(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=open-add-device]")!.click();
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-test=hold-lapsed]")).not.toBeNull(),
+      expect(
+        el.shadowRoot!.querySelector("[data-test=hold-lapsed]")?.getAttribute("data-status"),
+      ).toBe("failed"),
     );
     await flush(el);
     await expectNoA11yViolations(host);
