@@ -1268,6 +1268,61 @@ export class VenueOperationsScreen extends LitElement {
       )}
     </section>`;
   }
+  #deviceStartingZones() {
+    const model = this.model!;
+    return html`<section>
+      <h2>${t("venue.tills")}</h2>
+      ${this.#table(
+        "tills",
+        "waitron.venue.tills.table",
+        t("venue.tills"),
+        t("venue.no_tills"),
+        model.devices.filter((device) => device.active && device.kind !== "kds_station"),
+        [
+          {
+            key: "name",
+            label: t("venue.tills"),
+            cell: (device) => device.label,
+            sortValue: (device) => device.label,
+          },
+          {
+            key: "startsIn",
+            label: t("venue.starts_in"),
+            cell: (device) => {
+              const stored = model.deviceZones.find((row) => row.deviceId === device.id)?.zoneId;
+              return html`<wt-combobox
+                part="till-zone"
+                name=${`till-${device.id}-starts-in`}
+                label=${`${device.label}: ${t("venue.starts_in")}`}
+                hide-label
+                search="auto"
+                placeholder=${t("venue.counter_zone")}
+                searchPlaceholder=${t("venue.combobox_search")}
+                noResultsLabel=${t("venue.combobox_no_results")}
+                .options=${[
+                  { value: "", label: t("venue.counter_zone") },
+                  ...model.zones.map((zone) => ({ value: zone.id, label: zone.name })),
+                ]}
+                .value=${live(stored ?? "")}
+                ?disabled=${this.busy}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                  event.stopPropagation();
+                  const zoneId = event.detail.value;
+                  if (zoneId === (stored ?? "")) return;
+                  void this.#save(() =>
+                    zoneId
+                      ? this.api.setDeviceDefaultZone(device.id, zoneId)
+                      : this.api.clearDeviceDefaultZone(device.id),
+                  );
+                }}
+              ></wt-combobox>`;
+            },
+          },
+        ],
+        (device) => device.id,
+      )}
+    </section>`;
+  }
   #zones() {
     const model = this.model!;
     const zone = model.floorZones.find((row) => row.id === this.zoneId);
@@ -1335,56 +1390,6 @@ export class VenueOperationsScreen extends LitElement {
           },
         ],
         (row) => row.id,
-      )}
-      <h2>${t("venue.tills")}</h2>
-      ${this.#table(
-        "tills",
-        "waitron.venue.tills.table",
-        t("venue.tills"),
-        t("venue.no_tills"),
-        model.devices.filter((device) => device.active && device.kind !== "kds_station"),
-        [
-          {
-            key: "name",
-            label: t("venue.tills"),
-            cell: (device) => device.label,
-            sortValue: (device) => device.label,
-          },
-          {
-            key: "startsIn",
-            label: t("venue.starts_in"),
-            cell: (device) => {
-              const stored = model.deviceZones.find((row) => row.deviceId === device.id)?.zoneId;
-              return html`<wt-combobox
-                part="till-zone"
-                name=${`till-${device.id}-starts-in`}
-                label=${`${device.label}: ${t("venue.starts_in")}`}
-                hide-label
-                search="auto"
-                placeholder=${t("venue.counter_zone")}
-                searchPlaceholder=${t("venue.combobox_search")}
-                noResultsLabel=${t("venue.combobox_no_results")}
-                .options=${[
-                  { value: "", label: t("venue.counter_zone") },
-                  ...model.zones.map((zone) => ({ value: zone.id, label: zone.name })),
-                ]}
-                .value=${live(stored ?? "")}
-                ?disabled=${this.busy}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                  event.stopPropagation();
-                  const zoneId = event.detail.value;
-                  if (zoneId === (stored ?? "")) return;
-                  void this.#save(() =>
-                    zoneId
-                      ? this.api.setDeviceDefaultZone(device.id, zoneId)
-                      : this.api.clearDeviceDefaultZone(device.id),
-                  );
-                }}
-              ></wt-combobox>`;
-            },
-          },
-        ],
-        (device) => device.id,
       )}
       ${
         zone
@@ -1723,6 +1728,7 @@ export class VenueOperationsScreen extends LitElement {
       ${
         this.model
           ? html`${this.#policyTree()} ${this.#readiness()} ${this.#hoursSection()}
+              ${this.#deviceStartingZones()}
               <wt-tabs
                 label=${t("venue.title")}
                 .value=${this.view}

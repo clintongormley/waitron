@@ -240,6 +240,21 @@ describe("venue operations screen", () => {
     expect(modal(el)?.getAttribute("heading")).toBe("Add hours");
   });
 
+  it("keeps device starting zones available below the policy tree outside the legacy tabs", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
+      }),
+    } as unknown as VenueServiceApi);
+    const tree = table(el, "policy-tree");
+    const tills = table(el, "tills");
+    expect(tills.closest("wt-tabs")).toBeNull();
+    expect(tree.compareDocumentPosition(tills) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tills.checkVisibility()).toBe(true);
+    expect(tills.shadowRoot!.querySelector('wt-combobox[name="till-t1-starts-in"]')).not.toBeNull();
+  });
+
   it("opens a new department from the policy tree's top action", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
