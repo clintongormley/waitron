@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, query } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
@@ -13,10 +13,22 @@ export class WtSwitch extends LitElement {
       :host {
         display: inline-flex;
         align-items: center;
-        gap: var(--wt-space-3);
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
         max-width: var(--wt-field-max-width);
+      }
+
+      /* The control and its label, and no more: a host stretched by its container must not
+         toggle from the empty space past the label. */
+      .field {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-3);
+        cursor: pointer;
+      }
+
+      :host([disabled]) .field {
+        cursor: not-allowed;
       }
 
       .control {
@@ -105,6 +117,18 @@ export class WtSwitch extends LitElement {
 
   private readonly inputId = uniqueId("wt-switch");
 
+  @query("input") private readonly input!: HTMLInputElement;
+
+  /** A click on the field outside the input and its label (the gap, the thumb drawn over the
+   * input, the space around the label) is handed to the input, and the original click goes no
+   * further, so the page sees the one click the input makes. */
+  private onFieldClick(event: MouseEvent): void {
+    const target = event.composedPath()[0];
+    if (target === this.input || (target instanceof Element && target.closest("label"))) return;
+    event.stopImmediatePropagation();
+    this.input.click();
+  }
+
   private onChange(event: Event): void {
     this.checked = (event.target as HTMLInputElement).checked;
     dispatchWtChange(this, event, { checked: this.checked });
@@ -112,21 +136,23 @@ export class WtSwitch extends LitElement {
 
   override render() {
     return html`
-      <span class="control">
-        <input
-          id=${this.inputId}
-          name=${this.name || nothing}
-          type="checkbox"
-          role="switch"
-          .checked=${this.checked}
-          ?disabled=${this.disabled}
-          aria-label=${this.accessibleName || this.label || nothing}
-          @change=${this.onChange}
-        />
-        <span class="track"></span>
-        <span class="thumb"></span>
+      <span class="field" @click=${this.onFieldClick}>
+        <span class="control">
+          <input
+            id=${this.inputId}
+            name=${this.name || nothing}
+            type="checkbox"
+            role="switch"
+            .checked=${this.checked}
+            ?disabled=${this.disabled}
+            aria-label=${this.accessibleName || this.label || nothing}
+            @change=${this.onChange}
+          />
+          <span class="track"></span>
+          <span class="thumb"></span>
+        </span>
+        ${this.label && !this.hideLabel ? html`<label part="label" for=${this.inputId}>${this.label}</label>` : nothing}
       </span>
-      ${this.label && !this.hideLabel ? html`<label part="label" for=${this.inputId}>${this.label}</label>` : nothing}
     `;
   }
 }

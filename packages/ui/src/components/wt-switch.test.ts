@@ -1,4 +1,5 @@
 import { expect, test, afterEach } from "vitest";
+import { userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-switch.js";
 
@@ -205,4 +206,176 @@ test("exposes its drawn label as the label part, so a host can hide the text and
   } finally {
     outer.remove();
   }
+});
+
+type Switch = HTMLElement & { checked: boolean; updateComplete: Promise<unknown> };
+
+function countChanges(el: Element): { count: number } {
+  const seen = { count: 0 };
+  el.addEventListener("wt-change", () => seen.count++);
+  return seen;
+}
+
+/** A point inside the switch, given relative to the host's top-left corner, as a real pointer
+ * click takes it. */
+function inside(el: Element, part: Element, where: (box: DOMRect) => { x: number; y: number }) {
+  const hostBox = el.getBoundingClientRect();
+  const point = where(part.getBoundingClientRect());
+  return { x: point.x - hostBox.left, y: point.y - hostBox.top };
+}
+
+const partOf = (el: Element, selector: string) => el.shadowRoot!.querySelector(selector)!;
+
+test.each([
+  [
+    "the thumb",
+    ".thumb",
+    (box: DOMRect) => ({ x: box.left + box.width / 2, y: box.top + box.height / 2 }),
+  ],
+  [
+    "the uncovered track",
+    ".track",
+    (box: DOMRect) => ({ x: box.right - 2, y: box.top + box.height / 2 }),
+  ],
+  [
+    "the gap before the label",
+    "label",
+    (box: DOMRect) => ({ x: box.left - 2, y: box.top + box.height / 2 }),
+  ],
+  [
+    "the label's text",
+    "label",
+    (box: DOMRect) => ({ x: box.left + 4, y: box.top + box.height / 2 }),
+  ],
+  ["the field above the label", "label", (box: DOMRect) => ({ x: box.left + 4, y: box.top - 2 })],
+])("a real click on %s flips the switch exactly once", async (_name, selector, where) => {
+  const el = (await mount('<wt-switch label="Preselected"></wt-switch>')) as Switch;
+  const changes = countChanges(el);
+
+  await userEvent.click(el, { position: inside(el, partOf(el, selector), where) });
+  await el.updateComplete;
+
+  expect(el.checked).toBe(true);
+  expect(changes.count).toBe(1);
+});
+
+test("a real click on the thumb of a switch with a hidden label flips it exactly once", async () => {
+  const el = (await mount('<wt-switch label="Active" hide-label></wt-switch>')) as Switch;
+  const changes = countChanges(el);
+
+  await userEvent.click(el, {
+    position: inside(el, partOf(el, ".thumb"), (box) => ({
+      x: box.left + box.width / 2,
+      y: box.top + box.height / 2,
+    })),
+  });
+  await el.updateComplete;
+
+  expect(el.checked).toBe(true);
+  expect(changes.count).toBe(1);
+});
+
+test("a click in the gap reaches the page as one click, not two", async () => {
+  const el = (await mount('<wt-switch label="Preselected"></wt-switch>')) as Switch;
+  let clicks = 0;
+  host.addEventListener("click", () => clicks++);
+
+  await userEvent.click(el, {
+    position: inside(el, partOf(el, "label"), (box) => ({
+      x: box.left - 2,
+      y: box.top + box.height / 2,
+    })),
+  });
+
+  expect(clicks).toBe(1);
+});
+
+test("a disabled switch does not flip from a click in its gap or on its thumb", async () => {
+  const el = (await mount('<wt-switch label="Preselected" disabled></wt-switch>')) as Switch;
+  const changes = countChanges(el);
+
+  for (const [selector, where] of [
+    ["label", (box: DOMRect) => ({ x: box.left - 2, y: box.top + box.height / 2 })],
+    [".thumb", (box: DOMRect) => ({ x: box.left + box.width / 2, y: box.top + box.height / 2 })],
+  ] as const) {
+    // A disabled control fails the pointer's "enabled" check, so the click is forced past it.
+    await userEvent.click(el, { position: inside(el, partOf(el, selector), where), force: true });
+  }
+  await el.updateComplete;
+
+  expect(el.checked).toBe(false);
+  expect(changes.count).toBe(0);
+});
+
+test("a click in one switch's gap leaves the switch beside it alone, and a click between them flips neither", async () => {
+  await mount(
+    '<div style="display: flex; gap: 24px"><wt-switch label="Active"></wt-switch><wt-switch label="Preselected"></wt-switch></div>',
+  );
+  const [first, second] = [...host.querySelectorAll("wt-switch")] as Switch[];
+  const changes = [countChanges(first), countChanges(second)];
+
+  await userEvent.click(first, {
+    position: inside(first, partOf(first, "label"), (box) => ({
+      x: box.left - 2,
+      y: box.top + box.height / 2,
+    })),
+  });
+  await userEvent.click(host.firstElementChild!, {
+    position: {
+      x:
+        (first.getBoundingClientRect().right + second.getBoundingClientRect().left) / 2 -
+        host.getBoundingClientRect().left,
+      y: first.getBoundingClientRect().height / 2,
+    },
+  });
+  await first.updateComplete;
+
+  expect([first.checked, second.checked]).toEqual([true, false]);
+  expect(changes.map((c) => c.count)).toEqual([1, 0]);
+});
+
+test("Space on the focused switch flips it exactly once", async () => {
+  const el = (await mount('<wt-switch label="Preselected"></wt-switch>')) as Switch;
+  const changes = countChanges(el);
+
+  el.focus();
+  await userEvent.keyboard(" ");
+  await el.updateComplete;
+
+  expect(el.checked).toBe(true);
+  expect(changes.count).toBe(1);
+});
+
+test("a switch stretched wider than its label does not flip from a click in the empty space past the label", async () => {
+  await mount(
+    '<div style="display: flex; flex-direction: column; width: 400px"><wt-switch label="Active"></wt-switch></div>',
+  );
+  const el = host.querySelector("wt-switch") as Switch;
+  const changes = countChanges(el);
+  const labelRight = partOf(el, "label").getBoundingClientRect().right;
+  const hostBox = el.getBoundingClientRect();
+  // The column stretches the switch across the whole width, past its drawn label.
+  expect(hostBox.right - labelRight).toBeGreaterThan(100);
+
+  await userEvent.click(el, { position: { x: hostBox.width - 20, y: hostBox.height / 2 } });
+  await el.updateComplete;
+
+  expect(el.checked).toBe(false);
+  expect(changes.count).toBe(0);
+});
+
+test("a real click on the thumb of a switch that is on turns it off exactly once", async () => {
+  const el = (await mount('<wt-switch label="Active" checked></wt-switch>')) as Switch;
+  const changes = countChanges(el);
+
+  await userEvent.click(el, {
+    position: inside(el, partOf(el, ".thumb"), (box) => ({
+      x: box.left + box.width / 2,
+      y: box.top + box.height / 2,
+    })),
+  });
+  await el.updateComplete;
+
+  expect(el.checked).toBe(false);
+  expect(changes.count).toBe(1);
 });
