@@ -294,6 +294,14 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
         ).not.toBe(""),
       );
       await flush(el);
+      // Nothing is wider than the screen: not the page, not the dialog, not the dialog's body.
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      const dialog = el
+        .shadowRoot!.querySelector("[data-test=edit-device-modal]")!
+        .shadowRoot!.querySelector("dialog")!;
+      expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      const body = dialog.querySelector<HTMLElement>(".body")!;
+      expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
       await expectNoA11yViolations(host);
       await page.viewport(1280, 900);
     },

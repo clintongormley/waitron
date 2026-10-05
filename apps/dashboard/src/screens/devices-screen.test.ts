@@ -8,7 +8,7 @@ import {
   expectRowMenusOnScreen,
   formMessageOf,
 } from "@waitron/ui/src/test-helpers.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import type {
@@ -1095,6 +1095,218 @@ describe("the Edit dialog", () => {
       expect(text(el, "[data-test=page-error]")).toBe(codeMessage("connection.failed")),
     );
     expect(api.updateDevice).toHaveBeenCalledTimes(1);
+  });
+
+  describe("while a request is unanswered", () => {
+    function deferred<T>(): {
+      promise: Promise<T>;
+      resolve: (value: T) => void;
+      reject: (error: unknown) => void;
+    } {
+      let resolve!: (value: T) => void;
+      let reject!: (error: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    }
+
+    async function cancelEdit(el: DevicesScreen): Promise<void> {
+      q(el, "[data-test=edit-cancel]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    }
+
+    async function reopen(el: DevicesScreen, id: string): Promise<void> {
+      dq(el.shadowRoot!, `[data-test=edit-device-${id}]`)!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull());
+      await flush(el);
+      await flush(el);
+    }
+
+    /** Leaving the screen is the one way out of a dialog whose save is unanswered. */
+    async function leaveAndComeBack(el: DevicesScreen): Promise<void> {
+      const host = el.parentElement!;
+      el.remove();
+      host.appendChild(el);
+      await flush(el);
+      await flush(el);
+    }
+
+    it.each([
+      {
+        name: "answers",
+        settle: (d: ReturnType<typeof deferred>) => d.resolve({ readerId: "r1" }),
+      },
+      {
+        name: "is refused",
+        settle: (d: ReturnType<typeof deferred>) =>
+          d.reject({ code: "authorization.not_permitted" }),
+      },
+    ])(
+      "a cancelled dialog's reader read that $name late leaves the next device's dialog alone",
+      async ({ settle }) => {
+        const first = deferred<{ readerId: string | null }>();
+        const api = editApi({
+          getDeviceReader: vi
+            .fn()
+            .mockImplementation((id: string) =>
+              id === "t1" ? first.promise : Promise.resolve({ readerId: "r2" }),
+            ),
+        });
+        const el = await openEdit(api, "t1");
+        await cancelEdit(el);
+        await reopen(el, "k1");
+        expect(field(el, "edit-reader").value).toBe("r2");
+
+        settle(first as ReturnType<typeof deferred>);
+        await flush(el);
+        await flush(el);
+        expect(q(el, "[data-test=edit-device-modal]")!.getAttribute("heading")).toBe(
+          t("devices.edit_title").replace("{name}", "Pantalla Cocina"),
+        );
+        expect(field(el, "edit-reader").value).toBe("r2");
+        // Unchanged, so Save does not write the reader.
+        await save(el);
+        await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+        expect(api.setDeviceReader).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { name: "is saved", settle: (d: ReturnType<typeof deferred>) => d.resolve(undefined) },
+      {
+        name: "is refused",
+        settle: (d: ReturnType<typeof deferred>) => d.reject({ code: "device.name_taken" }),
+      },
+    ])(
+      "an edit left unanswered when the screen was left, then $name, changes nothing in the next dialog",
+      async ({ settle }) => {
+        const pending = deferred<undefined>();
+        const api = editApi({
+          updateDevice: vi.fn().mockReturnValueOnce(pending.promise).mockResolvedValue(undefined),
+        });
+        const el = await openEdit(api, "t1");
+        await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+        await save(el);
+        await leaveAndComeBack(el);
+        await reopen(el, "k1");
+
+        settle(pending as ReturnType<typeof deferred>);
+        await flush(el);
+        await closeReportsDelivered();
+        await flush(el);
+        expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
+        expect(await bottom(el)).toBe("");
+        expect(field(el, "edit-name").error).toBe("");
+        expect(api.setDeviceReader).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { name: "is saved", settle: (d: ReturnType<typeof deferred>) => d.resolve(undefined) },
+      {
+        name: "is refused",
+        settle: (d: ReturnType<typeof deferred>) => d.reject({ code: "reader.not_found" }),
+      },
+    ])(
+      "a reader save left unanswered when the screen was left, then $name, changes nothing in the next dialog",
+      async ({ settle }) => {
+        const pending = deferred<undefined>();
+        const api = editApi({ setDeviceReader: vi.fn().mockReturnValueOnce(pending.promise) });
+        const el = await openEdit(api, "t1");
+        await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+        await save(el);
+        await vi.waitFor(() => expect(api.setDeviceReader).toHaveBeenCalledTimes(1));
+        await leaveAndComeBack(el);
+        await reopen(el, "k1");
+
+        settle(pending as ReturnType<typeof deferred>);
+        await flush(el);
+        await closeReportsDelivered();
+        await flush(el);
+        expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
+        expect(field(el, "edit-reader").error).toBe("");
+        expect(await bottom(el)).toBe("");
+      },
+    );
+
+    it("sends one request however often Save is pressed while it is unanswered", async () => {
+      const pending = deferred<undefined>();
+      const api = editApi({ updateDevice: vi.fn().mockReturnValue(pending.promise) });
+      const el = await openEdit(api);
+      await save(el);
+      await save(el);
+      q(el, "[data-test=edit-name]")!.focus();
+      await userEvent.keyboard("{Enter}");
+      await flush(el);
+      expect(api.updateDevice).toHaveBeenCalledTimes(1);
+      pending.resolve(undefined);
+      await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    });
+
+    it("neither Escape nor Cancel closes the dialog while a save is unanswered", async () => {
+      const pending = deferred<undefined>();
+      const api = editApi({ updateDevice: vi.fn().mockReturnValue(pending.promise) });
+      const el = await openEdit(api);
+      await save(el);
+
+      expect((q(el, "[data-test=edit-cancel]") as Button).disabled).toBe(true);
+      const dialog = q(el, "[data-test=edit-device-modal]")!.shadowRoot!.querySelector("dialog")!;
+      dialog.focus();
+      await userEvent.keyboard("{Escape}");
+      await flush(el);
+      expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
+      expect(dialog.open).toBe(true);
+
+      pending.resolve(undefined);
+      await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    });
+  });
+
+  it("after a saved edit whose reader save failed, the dialog holds what was saved", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      editApi({
+        setDeviceReader: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "reader.not_found" })
+          .mockResolvedValue(undefined),
+      }),
+      { liveData },
+    );
+    const el = await openEdit(api);
+    wtChange(el, "[data-test=edit-name]", "Caja 2");
+    await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
+    await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+    await flush(el);
+    await save(el);
+    await vi.waitFor(() =>
+      expect(field(el, "edit-reader").error).toBe(codeMessage("reader.not_found")),
+    );
+    expect(q(el, "[data-test=edit-device-modal]")!.getAttribute("heading")).toBe(
+      t("devices.edit_title").replace("{name}", "Caja 2"),
+    );
+
+    // The printer it now holds is switched off: as the saved profile's held printer it stays offered.
+    vi.mocked(api.listPrinters).mockResolvedValue([
+      editPrinters[0]!,
+      { ...editPrinters[1]!, active: false },
+      editPrinters[2]!,
+    ]);
+    liveData.refresh();
+    await vi.waitFor(() =>
+      expect(field(el, "edit-receipt-printer").options).toContainEqual({
+        value: "pr2",
+        label: `Terraza (${t("printers.status_inactive")})`,
+      }),
+    );
+    await save(el);
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).toBeNull());
+    const sent = vi.mocked(api.updateDevice).mock.calls.map(([, input]) => input);
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toEqual(sent[0]);
+    expect(sent[1]).toMatchObject({ name: "Caja 2", profileId: "pb", receiptPrinterId: "pr2" });
   });
 
   it("closing Edit opened from a row's menu puts focus back on that menu", async () => {

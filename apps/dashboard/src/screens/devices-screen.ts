@@ -801,15 +801,26 @@ export class DevicesScreen extends LitElement {
     this.editSaving = true;
     this.editError = null;
     this.editRefusal = null;
+    const stationId = binding.startsWith("station:") ? binding.slice("station:".length) : null;
+    const watcherId = binding.startsWith("watcher:") ? binding.slice("watcher:".length) : null;
+    const saved = {
+      label: form.name.trim(),
+      deviceProfileId: form.profileId,
+      stationId,
+      watcherId,
+      receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
+      paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
+      madeHereStationIds: this.#madeHereToSend(),
+    };
     try {
       await this.api.updateDevice(device.id, {
-        name: form.name.trim(),
-        profileId: form.profileId,
-        ...(binding.startsWith("station:") ? { stationId: binding.slice("station:".length) } : {}),
-        ...(binding.startsWith("watcher:") ? { watcherId: binding.slice("watcher:".length) } : {}),
-        receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
-        paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
-        madeHereStationIds: this.#madeHereToSend(),
+        name: saved.label,
+        profileId: saved.deviceProfileId,
+        ...(stationId === null ? {} : { stationId }),
+        ...(watcherId === null ? {} : { watcherId }),
+        receiptPrinterId: saved.receiptPrinterId,
+        paymentSlipPrinterId: saved.paymentSlipPrinterId,
+        madeHereStationIds: saved.madeHereStationIds,
       });
     } catch (error) {
       if (epoch !== this.#editEpoch) return;
@@ -821,6 +832,8 @@ export class DevicesScreen extends LitElement {
     }
     this.#reloadDevices().catch((error: unknown) => this.#showReadError(error));
     if (epoch !== this.#editEpoch) return;
+    // The reader save below can fail and keep the dialog open, which then edits what was just saved.
+    this.editing = { ...device, ...saved };
     const readerId = this.chosenReaderId === "" ? null : this.chosenReaderId;
     if (this.readerState === "ready" && readerId !== this.#storedReaderId) {
       // Saved separately: the reader belongs to the payments module and its own permission (spec §5).
