@@ -5019,7 +5019,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
   `params`. It came in with #296 (`fabdb224d`).
 
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (branch `feat/add-a-device`, PR number to be recorded here when it opens); W105 and W106 QUEUED (lane C).**
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (branch `feat/add-a-device`, #1225); W105 and W106 QUEUED (lane C).**
   Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
   the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
   device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
@@ -5044,7 +5044,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   (`#closePair`, `apps/dashboard/src/screens/devices-screen.ts`), and what then happens to the
   device is untested; (3) the Add a device and Pair dialogs were looked at only through the browser
   test harness with a stubbed server, never on a box, so a real QR code drawn from a real box
-  address has not been looked at.
+  address has not been looked at. (4) a device's knock is refused if the window shut while its body was
+  arriving, but open periods are told apart only by their start time, to the millisecond
+  (`apps/server/src/device-api.ts`), so a shut and reopen within one millisecond would pass.
 - **A print agent cannot be discarded when the join window shuts (A269, owner 2026-10-04) — OPEN.**
   A268 discards a waiting device's request when the last Add dialog closes. An agent told
   `not_approved` stops and needs resetting on its own setup page (`packages/print-agent/src/agent.ts`,
