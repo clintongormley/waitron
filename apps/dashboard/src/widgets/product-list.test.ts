@@ -2837,6 +2837,76 @@ describe("the product list as a tree", () => {
     ]);
   });
 
+  it.each(["touch press cancelled by a scroll", "mouse press dragged off"])(
+    "still saves the name box on leaving it after a %s on its colour square",
+    async (press) => {
+      const outside = document.createElement("button");
+      document.body.append(outside);
+      onTestFinished(() => outside.remove());
+      const { el, root } = await mountTree();
+      const sent: unknown[] = [];
+      for (const name of ["name-commit", "name-cancel", "name-color"])
+        el.addEventListener(name, (event) => sent.push([name, (event as CustomEvent).detail]));
+      el.nameDraft = { kind: "create", parentId: null };
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+      await userEvent.keyboard("Juice");
+      const square = root.querySelector<HTMLElement>('[data-test="name-box-color"]')!;
+      const at = square.getBoundingClientRect();
+      const point = { bubbles: true, composed: true, clientX: at.x + 4, clientY: at.y + 4 };
+      if (press === "touch press cancelled by a scroll") {
+        square.dispatchEvent(
+          new PointerEvent("pointerdown", { ...point, pointerId: 7, pointerType: "touch" }),
+        );
+        square.dispatchEvent(
+          new PointerEvent("pointercancel", { ...point, pointerId: 7, pointerType: "touch" }),
+        );
+      } else {
+        square.dispatchEvent(
+          new PointerEvent("pointerdown", { ...point, pointerId: 8, pointerType: "mouse" }),
+        );
+        square.dispatchEvent(new MouseEvent("mousedown", point));
+        outside.dispatchEvent(
+          new PointerEvent("pointerup", { bubbles: true, pointerId: 8, pointerType: "mouse" }),
+        );
+        outside.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+      }
+      await userEvent.click(outside);
+      expect(sent).toEqual([["name-commit", { name: "Juice" }]]);
+    },
+  );
+
+  it("keeps the cursor in the name box while its colour square is pressed", async () => {
+    const { el, root } = await mountTree();
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    const square = root.querySelector<HTMLElement>('[data-test="name-box-color"]')!;
+    const press = new MouseEvent("mousedown", { bubbles: true, composed: true, cancelable: true });
+    square.dispatchEvent(press);
+    expect(press.defaultPrevented).toBe(true);
+  });
+
+  it("opens no colour chooser from the box once its name has been sent", async () => {
+    const { el, root } = await mountTree();
+    const sent: unknown[] = [];
+    for (const name of ["name-commit", "name-color"])
+      el.addEventListener(name, (event) => sent.push([name, (event as CustomEvent).detail]));
+    el.nameDraft = { kind: "create", parentId: null };
+    await el.updateComplete;
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    await userEvent.keyboard("Juice{Enter}");
+    await userEvent.click(root.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+    expect(sent).toEqual([["name-commit", { name: "Juice" }]]);
+    el.nameError = "That name is taken.";
+    await el.updateComplete;
+    await userEvent.click(root.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+    expect(sent).toEqual([
+      ["name-commit", { name: "Juice" }],
+      ["name-color", {}],
+    ]);
+  });
+
   it("leaves the name box, and saves it, once focus has come back from its colour square", async () => {
     const outside = document.createElement("button");
     document.body.append(outside);

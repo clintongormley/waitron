@@ -317,9 +317,10 @@ export class ProductList extends LitElement {
   #nameValue = "";
   /** Set once the box has sent its name or its cancel, until a refusal or a new box. */
   #nameSent = false;
-  /** Set from a press on the box's colour square until the cursor is back in the box's input: the
-   * chooser it opens takes the cursor without the person leaving the box. The square is no Tab stop,
-   * so Tab still leaves the box; the keyboard reaches a category's colour by its row's square. */
+  /** Set from a click on the box's colour square until the cursor is back in the box's input: the
+   * chooser it opens takes the cursor without the person leaving the box. A press on the square
+   * keeps the cursor in the input. The square is no Tab stop, so Tab still leaves the box; the
+   * keyboard reaches a category's colour by its row's square. */
   #choosingColor = false;
   #emptyChecked = false;
   #rowByKey = new Map<string, ListRow>();
@@ -688,11 +689,10 @@ export class ProductList extends LitElement {
         tabindex="-1"
         data-test="name-box-color"
         aria-label=${t("folders.choose_color")}
-        @pointerdown=${() => {
-          this.#choosingColor = true;
-        }}
+        @mousedown=${(event: Event) => event.preventDefault()}
         @click=${(event: Event) => {
           event.stopPropagation();
+          if (this.#nameSent) return;
           this.#choosingColor = true;
           this.#send("name-color", {});
         }}

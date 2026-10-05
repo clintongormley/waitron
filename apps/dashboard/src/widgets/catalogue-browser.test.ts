@@ -1248,6 +1248,25 @@ it("hands the cursor back to a new category's box, its name kept, when its colou
     [{ name: "Juice", parentId: "d" }],
   ]);
 });
+it("opens no colour chooser from a box whose name is already saving", async () => {
+  const el = await mountBrowser();
+  let finish!: (value: CategorySummary) => void;
+  vi.mocked(el.api.createCategory).mockImplementationOnce(
+    () => new Promise((resolve) => (finish = resolve)),
+  );
+  await menuAction(el, "add-category-d");
+  const box = await nameBox(el);
+  await userEvent.keyboard("Juice{Enter}");
+  await userEvent.click(box.querySelector<HTMLElement>('[data-test="name-box-color"]')!);
+  await el.updateComplete;
+  expect(chooserClosed(el)).toBe(true);
+  finish(folder("j", "Juice", "d"));
+  await vi.waitFor(async () => expect(await rowKeys(el)).not.toContain("draft:new"));
+  expect(vi.mocked(el.api.createCategory).mock.calls).toStrictEqual([
+    [{ name: "Juice", parentId: "d" }],
+  ]);
+  expect(el.api.updateCategory).not.toHaveBeenCalled();
+});
 it("drops a colour chosen in a box that is then left with Esc", async () => {
   const el = await mountBrowser();
   await menuAction(el, "add-category-d");

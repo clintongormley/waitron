@@ -586,8 +586,8 @@ export class CatalogueBrowser extends LitElement {
     if (this.nameColor !== undefined) return this.nameColor;
     return this.nameDraft ? this.#boxCurrentColor(this.nameDraft) : null;
   }
-  /** Sends the colour alone, never a name or a parent, so a rename or a move made while the
-   * chooser was open is kept. */
+  /** From a row the colour is sent alone, never a name or a parent, so a rename or a move made
+   * while the chooser was open is kept. */
   async #chooseColor(color: string | null): Promise<void> {
     const target = this.colorTarget;
     if (!target) return;
