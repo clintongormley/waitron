@@ -3620,6 +3620,30 @@ it("keeps the Active switch retryable and explains a refused save in Status", as
   await vi.waitFor(() => expect(api.updatePrinter).toHaveBeenCalledTimes(2));
 });
 
+it("edits a printer name on its details page without opening the calibration wizard", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  let stored = { ...printers[0]! };
+  const api = stubApi({
+    listPrinters: vi.fn().mockImplementation(async () => [stored]),
+    updatePrinter: vi.fn().mockImplementation(async (_id, patch) => {
+      stored = { ...stored, ...patch };
+    }),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=edit-printer-name]")!.click();
+  await flush(el);
+  expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
+  typeField(el, '[name="printer-detail-name"]', "Kitchen receipt");
+  q(el, "[data-test=save-printer-name]")!.click();
+  await vi.waitFor(() =>
+    expect(api.updatePrinter).toHaveBeenCalledWith("p1", { name: "Kitchen receipt" }),
+  );
+  await flush(el);
+  expect(text(el, "[data-test=printer-status]")).toContain("Kitchen receipt");
+  expect(q(el, '[name="printer-detail-name"]')).toBeNull();
+});
+
 it("shows the saved drawer independently of the profiles offering it, and the delivering agent without discovery", async () => {
   const api = stubApi({
     listPrinters: vi.fn().mockResolvedValue([

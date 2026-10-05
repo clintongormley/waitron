@@ -496,6 +496,12 @@ export class PrintersScreen extends LitElement {
   @state() private statusOpen = true;
   @state() private detailActiveSaving = false;
   @state() private detailActiveError: string | null = null;
+  @state() private detailName: {
+    id: string;
+    value: string;
+    saving: boolean;
+    error: string | null;
+  } | null = null;
   @state() private connectionOpen = false;
   @state() private calibrationOpen = false;
   @state() private testingDrawer = false;
@@ -2026,6 +2032,26 @@ export class PrintersScreen extends LitElement {
     this.connectionOpen = false;
     this.calibrationOpen = false;
     this.detailActiveError = null;
+    this.detailName = null;
+  }
+
+  async #saveDetailName(printer: Printer): Promise<void> {
+    const draft = this.detailName;
+    if (draft?.id !== printer.id || draft.saving) return;
+    const name = draft.value.trim();
+    if (!name) {
+      this.detailName = { ...draft, error: t("form.name_required") };
+      return;
+    }
+    this.detailName = { ...draft, saving: true, error: null };
+    try {
+      await this.api.updatePrinter(printer.id, { name });
+    } catch (error) {
+      this.detailName = { ...draft, saving: false, error: codeMessage(codeOf(error)) };
+      return;
+    }
+    this.detailName = null;
+    await this.#load();
   }
 
   async #setDetailActive(printer: Printer, active: boolean): Promise<void> {
@@ -2092,6 +2118,51 @@ export class PrintersScreen extends LitElement {
       ${back}
       <div class="status-heading">
         <h1 class="title">${p.name}</h1>
+        ${
+          this.detailName?.id === p.id
+            ? html`<div class="form-fields">
+                <wt-input
+                  name="printer-detail-name"
+                  label=${t("printers.name")}
+                  .value=${this.detailName.value}
+                  .invalid=${this.detailName.error !== null}
+                  .error=${this.detailName.error ?? ""}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    if (this.detailName?.id === p.id)
+                      this.detailName = {
+                        ...this.detailName,
+                        value: event.detail.value,
+                        error: null,
+                      };
+                  }}
+                ></wt-input>
+                <wt-form-actions>
+                  <wt-button
+                    data-test="cancel-printer-name"
+                    ?disabled=${this.detailName.saving}
+                    @click=${() => {
+                      this.detailName = null;
+                    }}
+                    >${t("action.cancel")}</wt-button
+                  >
+                  <wt-button
+                    variant="primary"
+                    data-test="save-printer-name"
+                    ?disabled=${this.detailName.saving || !this.detailName.value.trim()}
+                    @click=${() => void this.#saveDetailName(p)}
+                    >${t("action.save")}</wt-button
+                  >
+                </wt-form-actions>
+              </div>`
+            : html`<wt-button
+                data-test="edit-printer-name"
+                @click=${() => {
+                  this.detailName = { id: p.id, value: p.name, saving: false, error: null };
+                }}
+                >${t("action.edit")}</wt-button
+              >`
+        }
         <wt-button
           variant="primary"
           data-test="edit-printer-details"
