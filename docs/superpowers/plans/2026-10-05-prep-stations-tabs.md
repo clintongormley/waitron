@@ -430,3 +430,14 @@ The Watchers table and its cell editors, read-only screen relationships, disable
 Printing rules watcher handover remain open. Settings, Routing cleanup, supervisor loading and
 Task 8's whole-branch review/push/CI/land gates also remain. This checkpoint adds no screen and
 makes no visual or branch-readiness claim. Campaign-local evidence is kept in the A261-3 ledger.
+
+### 2026-10-05: Task 6 printer-editor increment (build remains partial)
+
+The Watchers printer-selection UI uses the preceding whole-set API. New browser cases cover
+multi-printer save/reopen, station conflicts, disabled retained mappings, watcher transfer, Cancel,
+refusal/retry, a live read retaining the draft and its save error, and a successful write closing
+before a failed refresh. The Escape-cancellation case was observed red without its handler.
+The editor is mounted in the existing watcher cards as an intermediate checkpoint; the approved
+table, Follows/zones/pass/name cells, retained Screens and Printing rules watcher handover remain.
+Do not finish or land this partial page. Browser/server/guard counts and deletion-control outputs
+are recorded in the campaign ledger, rather than treating this note as a verification receipt.

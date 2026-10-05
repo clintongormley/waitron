@@ -6343,7 +6343,11 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Watcher printer selections now have a whole-set API using the existing printer-management
   permission and assignment checks in one transaction. A refused new mapping rolls back earlier
   moves; an already selected disabled printer can be retained or cleared. The Prep client exposes
-  that write for the upcoming Watchers cell editor.
+  that write. The Watchers printer editor now submits a whole selection beside its shown output,
+  explains station and disabled-printer conflicts, permits transfer from another watcher, and keeps
+  refused drafts retryable through live reads. Cancel/Escape sends no write; a successful save closes
+  before refreshing. The Watchers table and its other cell editors remain open work; this editor is
+  currently mounted in the existing watcher cards and will move into the Printers cell.
   Settings is still empty; legacy station settings/output links remain in Routing, and Watchers
   still uses cards. Stations now offers confirmed Open/Close for today and
   Back to the schedule actions, with retry after a write refusal. Default and unscheduled stations

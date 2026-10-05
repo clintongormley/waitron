@@ -3975,3 +3975,259 @@ it.each([
     expect(a.setStationPrinters).not.toHaveBeenCalled();
   },
 );
+
+async function mountWatcherPrinters(overrides: Partial<PrepStationsApi> = {}) {
+  setLocale("en");
+  history.replaceState(null, "", "/manage/prep-stations/view/watchers");
+  const a = api({
+    load: vi.fn().mockResolvedValue(ticketView),
+    setWatcherPrinters: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  });
+  const el = await mount(a);
+  await settle(el);
+  return { el, a };
+}
+async function openWatcherPrinters(el: PrepStationsScreen) {
+  const trigger = q(el, '[data-test="edit-watcher-printers-pass"]');
+  expect(trigger, "watcher printer selection opens where its output is shown").not.toBeNull();
+  trigger!.click();
+  await settle(el);
+  return q(el, '[data-test="watcher-printers-pass"]') as WtCombobox;
+}
+
+it("Watchers chooses several printers, explains station and disabled conflicts, and saves the set", async () => {
+  const server = structuredClone(ticketView);
+  const save = vi.fn(async (_id: string, ids: readonly string[]) => {
+    server.watchers[0]!.printerIds = [...ids];
+  });
+  const { el } = await mountWatcherPrinters({
+    load: vi.fn(async () => structuredClone(server)),
+    setWatcherPrinters: save,
+  });
+  const combo = await openWatcherPrinters(el);
+  expect(combo.multiple).toBe(true);
+  expect(combo.name).toBe("printerIds");
+  expect(combo.options.find((row) => row.value === "old")).toMatchObject({
+    disabled: true,
+    description: "Used by station Bar",
+  });
+  expect(combo.options.find((row) => row.value === "disabled")).toMatchObject({
+    disabled: true,
+    description: "Disabled",
+  });
+  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["watcher", "next"] } }));
+  await settle(el);
+  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
+  await vi.waitFor(() => expect(save).toHaveBeenCalledExactlyOnceWith("pass", ["watcher", "next"]));
+  await settle(el);
+  expect(q(el, '[data-test="watcher-printers-pass"]')).toBeNull();
+  expect(q(el, '[data-test="edit-watcher-printers-pass"]')!.textContent).toContain(
+    "Pass printer, Next printer",
+  );
+  const reopened = await openWatcherPrinters(el);
+  await reopened.updateComplete;
+  reopened.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
+  await reopened.updateComplete;
+  const selected = [
+    ...reopened.shadowRoot!.querySelectorAll('[role="option"][aria-selected="true"]'),
+  ].map((row) => row.textContent!.trim());
+  expect(selected).toEqual(["Next printer", "Pass printer"]);
+});
+
+it("Watchers retains a disabled mapping for removal but does not offer it as a new assignment", async () => {
+  const retained = structuredClone(ticketView);
+  retained.watchers[0]!.printerIds = ["disabled"];
+  const { el, a } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(retained) });
+  const combo = await openWatcherPrinters(el);
+  expect(combo.values).toEqual(["disabled"]);
+  expect(combo.options.find((row) => row.value === "disabled")!.disabled).toBe(false);
+  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: [] } }));
+  await settle(el);
+  expect(
+    (q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).options.find(
+      (row) => row.value === "disabled",
+    )!.disabled,
+  ).toBe(true);
+  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
+  await vi.waitFor(() => expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", []));
+});
+
+it("Watchers permits transferring a printer from another watcher and names its current owner", async () => {
+  const other = structuredClone(ticketView);
+  other.watchers.push({
+    ...other.watchers[0]!,
+    id: "runner",
+    name: "Runner",
+    printerIds: ["next"],
+  });
+  other.printers.find((row) => row.id === "next")!.watcherId = "runner";
+  const { el, a } = await mountWatcherPrinters({ load: vi.fn().mockResolvedValue(other) });
+  const combo = await openWatcherPrinters(el);
+  expect(combo.options.find((row) => row.value === "next")).toMatchObject({
+    disabled: false,
+    description: "Used by watcher Runner",
+  });
+  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
+  await settle(el);
+  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
+  await vi.waitFor(() =>
+    expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["next"]),
+  );
+});
+
+it("Watchers cancels a printer draft without submitting it", async () => {
+  const { el, a } = await mountWatcherPrinters();
+  const combo = await openWatcherPrinters(el);
+  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
+  await settle(el);
+  q(el, '[data-test="cancel-watcher-printers-pass"]')!.click();
+  await settle(el);
+  expect(a.setWatcherPrinters).not.toHaveBeenCalled();
+  expect((await openWatcherPrinters(el)).values).toEqual(["watcher"]);
+});
+
+it.each(["printer.makes_and_watches", "printer.not_found", "management.request_invalid"])(
+  "Watchers preserves the printer draft and enables retry after %s",
+  async (code) => {
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce({ code, params: { field: "printerIds" } })
+      .mockResolvedValue(undefined);
+    const { el } = await mountWatcherPrinters({ setWatcherPrinters: save });
+    const combo = await openWatcherPrinters(el);
+    combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
+    await settle(el);
+    q(el, '[data-test="save-watcher-printers-pass"]')!.click();
+    await settle(el);
+    const retained = q(el, '[data-test="watcher-printers-pass"]') as WtCombobox;
+    expect(retained.values).toEqual(["next"]);
+    expect(retained.error).toContain("Choose available printers");
+    expect(q(el, '[data-test="save-watcher-printers-pass"]')!.hasAttribute("disabled")).toBe(false);
+    expect(q(el, '[data-test="watcher-printer-actions-pass"]')!.shadowRoot!.textContent).toContain(
+      "Fix the fields marked above",
+    );
+    q(el, '[data-test="save-watcher-printers-pass"]')!.click();
+    await vi.waitFor(() => expect(save).toHaveBeenNthCalledWith(2, "pass", ["next"]));
+    await settle(el);
+    expect(q(el, '[data-test="watcher-printers-pass"]')).toBeNull();
+  },
+);
+
+it("Watchers keeps a printer draft and its general save error through a successful live read", async () => {
+  const liveData = new LiveData();
+  const load = vi
+    .fn()
+    .mockResolvedValueOnce(ticketView)
+    .mockResolvedValue({
+      ...ticketView,
+      watchers: [{ ...ticketView.watchers[0]!, printerIds: [] }],
+    });
+  const { el } = await mountWatcherPrinters({
+    liveData,
+    load,
+    setWatcherPrinters: vi.fn().mockRejectedValue({ code: "connection.failed" }),
+  });
+  const combo = await openWatcherPrinters(el);
+  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
+  await settle(el);
+  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
+  await settle(el);
+  const message = q(el, '[data-test="watcher-printer-actions-pass"]')!;
+  expect(message.shadowRoot!.textContent).toContain("could not be saved");
+  liveData.invalidate([{ type: "watcher_printers", id: "pass" }]);
+  await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+  await settle(el);
+  expect((q(el, '[data-test="watcher-printers-pass"]') as WtCombobox).values).toEqual(["next"]);
+  expect(q(el, '[data-test="watcher-printer-actions-pass"]')!.shadowRoot!.textContent).toContain(
+    "could not be saved",
+  );
+});
+
+it("Watchers closes its printer editor after a successful write even when refresh fails", async () => {
+  const load = vi.fn().mockResolvedValueOnce(ticketView).mockRejectedValue(new Error("offline"));
+  const { el, a } = await mountWatcherPrinters({ load });
+  await openWatcherPrinters(el);
+  q(el, '[data-test="save-watcher-printers-pass"]')!.click();
+  await settle(el);
+  expect(a.setWatcherPrinters).toHaveBeenCalledExactlyOnceWith("pass", ["watcher"]);
+  expect(q(el, '[data-test="watcher-printers-pass"]')).toBeNull();
+  expect(el.shadowRoot!.textContent).toContain("could not be loaded");
+});
+
+it.each([
+  ["en", "light", 390],
+  ["en", "dark", 390],
+  ["es", "light", 390],
+  ["es", "dark", 390],
+  ["en", "light", 1280],
+  ["en", "dark", 1280],
+  ["es", "light", 1280],
+  ["es", "dark", 1280],
+] as const)(
+  "Watchers printer picker and refusal render accessibly in %s %s at %ipx",
+  async (locale, theme, width) => {
+    const previous = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(width, 900);
+      const { el } = await mountWatcherPrinters({
+        setWatcherPrinters: vi.fn().mockRejectedValue({ code: "printer.makes_and_watches" }),
+      });
+      setLocale(locale);
+      el.requestUpdate();
+      await settle(el);
+      const host = el.parentElement!;
+      host.style.width = `${width}px`;
+      host.setAttribute("data-theme", theme);
+      host.style.background = "var(--wt-color-bg)";
+      expect(window.innerWidth).toBe(width);
+      expect(host.getBoundingClientRect().width).toBe(width);
+      const combo = await openWatcherPrinters(el);
+      await combo.updateComplete;
+      await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
+      await combo.updateComplete;
+      const list = combo.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+      expect(list.matches(":popover-open")).toBe(true);
+      expect(list.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
+      expect(list.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+      expect(list.textContent).toContain(
+        locale === "en" ? "Used by station Bar" : "La usa la estación Bar",
+      );
+      const station = combo.shadowRoot!.querySelector<HTMLElement>(
+        '[role="option"][aria-disabled="true"]',
+      )!;
+      await page.elementLocator(station).click({ force: true });
+      expect(combo.values).toEqual(["watcher"]);
+      await expectNoA11yViolations(host);
+      await page.screenshot({
+        path: `look/watcher-printers-${locale}-${theme}-${width}-picker.png`,
+      });
+      await page.elementLocator(combo.shadowRoot!.querySelector(".trigger")!).click();
+      q(el, '[data-test="save-watcher-printers-pass"]')!.click();
+      await settle(el);
+      expect(
+        q(el, '[data-test="watcher-printer-actions-pass"]')!.shadowRoot!.textContent,
+      ).toContain(locale === "en" ? "Fix the fields" : "Corrige los campos");
+      await expectNoA11yViolations(host);
+      await page.screenshot({
+        path: `look/watcher-printers-${locale}-${theme}-${width}-refusal.png`,
+      });
+    } finally {
+      await page.viewport(previous.width, previous.height);
+    }
+  },
+);
+
+it("Watchers Escape cancels a printer draft without writing and reopens the saved selection", async () => {
+  const { el, a } = await mountWatcherPrinters();
+  const combo = await openWatcherPrinters(el);
+  combo.dispatchEvent(new CustomEvent("wt-change", { detail: { values: ["next"] } }));
+  await settle(el);
+  combo.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Escape", bubbles: true, composed: true }),
+  );
+  await settle(el);
+  expect(q(el, '[data-test="watcher-printers-pass"]')).toBeNull();
+  expect(a.setWatcherPrinters).not.toHaveBeenCalled();
+  expect((await openWatcherPrinters(el)).values).toEqual(["watcher"]);
+});

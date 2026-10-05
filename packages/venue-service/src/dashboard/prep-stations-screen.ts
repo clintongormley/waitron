@@ -220,6 +220,13 @@ export class PrepStationsScreen extends LitElement {
   @state() private view?: PrepStationsView;
   @state() private printerEditor?: { stationId: string; ids: string[]; error: string };
   @state() private printerBusy = false;
+  @state() private watcherPrinterEditor?: {
+    watcherId: string;
+    ids: string[];
+    fieldError: string;
+    error: string;
+  };
+  @state() private watcherPrinterBusy = false;
   @state() private editor?: Editor;
   @state() private watcherEditor?: { id?: string };
   @state() private watcherRemoval?: WatcherView;
@@ -1717,6 +1724,134 @@ export class PrepStationsScreen extends LitElement {
       rowKey="id"
     ></wt-data-table>`;
   }
+  async #saveWatcherPrinters() {
+    const editor = this.watcherPrinterEditor;
+    if (!editor || this.watcherPrinterBusy) return;
+    this.watcherPrinterBusy = true;
+    this.watcherPrinterEditor = { ...editor, fieldError: "", error: "" };
+    try {
+      await this.api.setWatcherPrinters(editor.watcherId, editor.ids);
+    } catch (error) {
+      const code = codeOf(error);
+      const field = (error as { params?: { field?: string } })?.params?.field;
+      const fieldRefusal =
+        code === "printer.not_found" ||
+        code === "printer.makes_and_watches" ||
+        (code === "management.request_invalid" && field === "printerIds");
+      this.watcherPrinterEditor = {
+        ...editor,
+        fieldError: fieldRefusal ? t("watchers.printer_refused") : "",
+        error: fieldRefusal
+          ? ""
+          : t(code === "watcher.not_found" ? "watchers.not_found" : "prep.save_error"),
+      };
+      this.watcherPrinterBusy = false;
+      return;
+    }
+    this.watcherPrinterEditor = undefined;
+    this.watcherPrinterBusy = false;
+    await this.#load();
+  }
+  #watcherPrinterCell(watcher: WatcherView) {
+    const view = this.view!;
+    const names =
+      watcher.printerIds
+        .map((id) => view.printers.find((printer) => printer.id === id)?.name ?? id)
+        .join(", ") || t("prep.none");
+    const editor =
+      this.watcherPrinterEditor?.watcherId === watcher.id ? this.watcherPrinterEditor : undefined;
+    if (!editor)
+      return html`<wt-button
+        variant="secondary"
+        data-test=${`edit-watcher-printers-${watcher.id}`}
+        aria-label=${`${watcher.name}: ${t("watchers.printers")}`}
+        ?disabled=${this.watcherPrinterBusy}
+        @click=${() => {
+          this.watcherPrinterEditor = {
+            watcherId: watcher.id,
+            ids: [...watcher.printerIds],
+            fieldError: "",
+            error: "",
+          };
+        }}
+        >${names}</wt-button
+      >`;
+    const options = view.printers.map((printer) => {
+      const stations = view.stationPrinters
+        .filter((mapping) => mapping.printerId === printer.id)
+        .map((mapping) => this.#stationName(mapping.stationId));
+      const owner = view.watchers.find(
+        (row) =>
+          row.id !== watcher.id &&
+          (row.printerIds.includes(printer.id) || row.id === printer.watcherId),
+      );
+      return {
+        value: printer.id,
+        label: printer.name,
+        disabled:
+          (printer.active === false || stations.length > 0) && !editor.ids.includes(printer.id),
+        description:
+          printer.active === false
+            ? t("prep.health.disabled")
+            : stations.length
+              ? format("watchers.station_printer", { name: stations.join(", ") })
+              : owner
+                ? format("prep.tickets.watcher_printer", { name: owner.name })
+                : undefined,
+      };
+    });
+    return html`<div class="watcher-printer-cell">
+      <wt-combobox
+        multiple
+        name="printerIds"
+        data-test=${`watcher-printers-${watcher.id}`}
+        label=${`${watcher.name}: ${t("watchers.printers")}`}
+        .options=${options}
+        .values=${editor.ids}
+        .disabled=${this.watcherPrinterBusy}
+        .error=${editor.fieldError}
+        .searchPlaceholder=${t("watchers.printers")}
+        .noResultsLabel=${t("venue.combobox_no_results")}
+        .countLabel=${(count: number) => format("prep.tickets.printer_count", { count: String(count) })}
+        @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
+          event.stopPropagation();
+          this.watcherPrinterEditor = {
+            ...editor,
+            ids: event.detail.values,
+            fieldError: "",
+            error: "",
+          };
+        }}
+        @keydown=${(event: KeyboardEvent) => {
+          if (event.key === "Escape" && !this.watcherPrinterBusy) {
+            event.stopPropagation();
+            this.watcherPrinterEditor = undefined;
+          }
+        }}
+      ></wt-combobox>
+      <wt-form-actions
+        data-test=${`watcher-printer-actions-${watcher.id}`}
+        .error=${[editor.fieldError ? t("watchers.fix_fields") : "", editor.error].filter(Boolean).join(" ")}
+      >
+        <wt-button
+          slot="cancel"
+          variant="secondary"
+          data-test=${`cancel-watcher-printers-${watcher.id}`}
+          ?disabled=${this.watcherPrinterBusy}
+          @click=${() => {
+            this.watcherPrinterEditor = undefined;
+          }}
+          >${t("venue.cancel")}</wt-button
+        >
+        <wt-button
+          data-test=${`save-watcher-printers-${watcher.id}`}
+          ?disabled=${this.watcherPrinterBusy}
+          @click=${() => void this.#saveWatcherPrinters()}
+          >${t("venue.save")}</wt-button
+        >
+      </wt-form-actions>
+    </div>`;
+  }
   #watchers() {
     const view = this.view!;
     const ordered = [...view.watchers]
@@ -1744,13 +1879,6 @@ export class PrepStationsScreen extends LitElement {
             .filter((device) => device.watcherId === watcher.id && device.active)
             .map((device) => device.label)
             .join(", ");
-          const printers = view.printers
-            .filter(
-              (printer) =>
-                watcher.printerIds.includes(printer.id) || printer.watcherId === watcher.id,
-            )
-            .map((printer) => printer.name)
-            .join(", ");
           return html`<wt-card data-test=${`watcher-${watcher.id}`}
             ><h3>${watcher.name}</h3>
             <p>${format("watchers.follows", { list: follows })}</p>
@@ -1760,10 +1888,7 @@ export class PrepStationsScreen extends LitElement {
               ${t("watchers.screens")}: ${screens || t("prep.none")}
               <a href="/manage/devices">${t("prep.devices")}</a>
             </p>
-            <p>
-              ${t("watchers.printers")}: ${printers || t("prep.none")}
-              <a href="/manage/printing-rules">${t("prep.printing_rules")}</a>
-            </p>
+            <div>${t("watchers.printers")}: ${this.#watcherPrinterCell(watcher)}</div>
             <div class="actions">
               <wt-button
                 variant="secondary"
