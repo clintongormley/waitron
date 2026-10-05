@@ -2812,22 +2812,30 @@ describe("printers-screen", () => {
     await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(2));
   });
 
-  it("rejects an emptied required network host", async () => {
+  it("rejects an emptied required network host in printer details", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await openPrinter(el, "p1");
+    await selectTab(el, "printers");
+    q(el, "[data-test=printer-row-p1]")!.click();
+    await flush(el);
+    q(el, "[data-test=printer-section-connection]")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    await flush(el);
+    q(el, "[data-test=edit-printer-connection]")!.click();
+    await flush(el);
 
-    typeField(el, "[data-test=printer-host-p1]", "");
-    typeField(el, "[data-test=printer-port-p1]", "");
-    await el.updateComplete;
-    q(el, "[data-test=save-printer-p1]")!.click();
+    typeField(el, '[name="printer-detail-host"]', "");
+    typeField(el, '[name="printer-detail-port"]', "");
     await flush(el);
 
     expect(api.updatePrinter).not.toHaveBeenCalled();
-    expect((q(el, "[data-test=printer-host-p1]") as import("@waitron/ui").WtInput).invalid).toBe(
-      true,
+    expect((q(el, '[name="printer-detail-host"]') as import("@waitron/ui").WtInput).error).toBe(
+      t("printers.host_required"),
     );
+    expect(q(el, "[data-test=save-printer-connection]")!.hasAttribute("disabled")).toBe(true);
+    expect(text(el, "[data-test=printer-section-connection]")).toContain(t("form.fix_fields"));
   });
 
   it("saves a USB printer without changing its read-only identity", async () => {
@@ -2891,37 +2899,50 @@ describe("printers-screen", () => {
     const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([usb]) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await openPrinter(el, "p3");
-
-    typeField(el, "[data-test=printer-local-key-p3]", "");
-    await el.updateComplete;
-    q(el, "[data-test=save-printer-p3]")!.click();
+    await selectTab(el, "printers");
+    q(el, "[data-test=printer-row-p3]")!.click();
+    await flush(el);
+    q(el, "[data-test=printer-section-connection]")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
     await flush(el);
 
-    expect(q(el, "[data-test=printer-local-key-p3] input")).toBeNull();
-    expect(api.updatePrinter).toHaveBeenCalledWith("p3", { name: "USB", active: true });
+    expect(text(el, "[data-test=printer-section-connection]")).toContain("SN-1");
+    expect(q(el, '[name="printer-detail-local-key"]')).toBeNull();
+    q(el, "[data-test=edit-printer-name]")!.click();
+    await flush(el);
+    typeField(el, '[name="printer-detail-name"]', "USB 2");
+    q(el, "[data-test=save-printer-name]")!.click();
+    await flush(el);
+
+    expect(api.updatePrinter).toHaveBeenCalledWith("p3", { name: "USB 2" });
+    const [, patch] = vi.mocked(api.updatePrinter).mock.calls[0]!;
+    expect(patch).not.toHaveProperty("localKey");
   });
 
   it("reactivates a cloud_poll printer without sending identity fields", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await openPrinter(el, "p2");
-
-    // p2 is cloud_poll + inactive: host/port/localKey are empty, pollId is "poll-1".
-    toggleSwitch(el, "[data-test=printer-active-p2]", true);
-    await el.updateComplete;
-    q(el, "[data-test=save-printer-p2]")!.click();
+    await selectTab(el, "printers");
+    await filterPrinters(el, "all");
+    q(el, "[data-test=printer-row-p2]")!.click();
     await flush(el);
 
+    // p2 is cloud_poll + inactive: host/port/localKey are empty, pollId is "poll-1".
+    expect(text(el, "[data-test=printer-section-connection]")).toContain("poll-1");
+    toggleSwitch(el, '[name="printer-detail-active"]', true);
+    await vi.waitFor(() => expect(api.updatePrinter).toHaveBeenCalledOnce());
+
     expect(api.updatePrinter).toHaveBeenCalledWith("p2", {
-      name: "Nube",
       active: true,
     });
     const [, patch] = vi.mocked(api.updatePrinter).mock.calls[0]!;
+    expect(patch).not.toHaveProperty("name");
     expect(patch).not.toHaveProperty("host");
     expect(patch).not.toHaveProperty("port");
     expect(patch).not.toHaveProperty("localKey");
+    expect(patch).not.toHaveProperty("pollId");
   });
 
   it("does not accept changes to the displayed cloud poll ID", async () => {
