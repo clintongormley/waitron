@@ -2994,9 +2994,10 @@ DONE (`fix/import-status-colour`).** A save and an import now share one rule, `i
 (`packages/db/src/status-color.ts`), which still allows a short named colour such as `amber`. The
 core module's import check (`validateCoreConfiguration`, `packages/db/src/configuration-transfer.ts`)
 refuses a `table_service_statuses` row whose colour fails it with `setup.request_invalid`
-`{ field: "table_service_statuses.color" }`, before anything is written; a save's refusal is
-unchanged (`management.request_invalid`). Reproduced first: on `main` a bundle carrying
-`red;position:fixed` imported.
+`{ field: "table_service_statuses.color" }`; the bundle is refused whole, nothing written, when
+setup opens the export and again when it is imported. A save's refusal is unchanged
+(`management.request_invalid`). Reproduced first: on `main` a bundle carrying `red;position:fixed`
+imported.
 
 **Remaining "?" buttons that should be hints (A237, owner 2026-10-03) — OPEN.** The rule — a short
 explanation is the field's hint, and the "?" button is only for one too long for a hint or a field
