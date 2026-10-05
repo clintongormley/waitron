@@ -2143,6 +2143,17 @@ export class PrintersScreen extends LitElement {
           )
             return;
           event.preventDefault();
+          if (this.detailName?.saving) return;
+          if (
+            p &&
+            this.detailName &&
+            this.detailName.id === p.id &&
+            this.detailName.value !== p.name &&
+            !this.discardDetailNameArmed
+          ) {
+            this.discardDetailNameArmed = true;
+            return;
+          }
           this.selectedPrinterId = null;
           this.#url.write({ printer: null });
         }}
@@ -2183,11 +2194,16 @@ export class PrintersScreen extends LitElement {
                       this.detailName = {
                         ...this.detailName,
                         value: event.detail.value,
-                        error: null,
+                        error: event.detail.value.trim() ? null : t("form.name_required"),
                       };
                     this.discardDetailNameArmed = false;
                   }}
                 ></wt-input>
+                ${
+                  this.detailName.error === t("form.name_required")
+                    ? html`<p role="alert">${t("form.fix_fields")}</p>`
+                    : nothing
+                }
                 <wt-form-actions>
                   <wt-button
                     data-test="cancel-printer-name"

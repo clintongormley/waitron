@@ -3662,6 +3662,43 @@ it("asks before discarding an edited printer name", async () => {
   expect(q(el, '[name="printer-detail-name"]')).toBeNull();
 });
 
+it("asks before leaving a printer with an unsaved name through All printers", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  q(el, "[data-test=edit-printer-name]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-name"]', "Unsaved kitchen");
+  const link = q(el, "[data-test=all-printers-link]")!;
+  link.click();
+  await flush(el);
+  expect(location.pathname).toBe("/manage/printers/view/printers/printer/p1");
+  expect(q(el, '[name="printer-detail-name"]')).not.toBeNull();
+  expect(q(el, "[data-test=discard-printer-name]")).not.toBeNull();
+  link.click();
+  await flush(el);
+  expect(location.pathname).toBe("/manage/printers/view/printers");
+});
+
+it("explains an empty inline printer name beside its field", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  q(el, "[data-test=edit-printer-name]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-name"]', " ");
+  await flush(el);
+  expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).error).toBe(
+    t("form.name_required"),
+  );
+  expect(text(el, '[data-test="printer-status"]')).toContain(t("form.fix_fields"));
+  expect(q(el, "[data-test=save-printer-name]")!.hasAttribute("disabled")).toBe(true);
+});
+
 it("saves network connection edits from printer details", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   let stored = { ...printers[0]! };
