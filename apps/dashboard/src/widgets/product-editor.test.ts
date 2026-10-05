@@ -2097,8 +2097,25 @@ it("holds the colour chooser while a save is in flight", async () => {
   expect(colourSwatch(el, "#b12525").disabled).toBe(true);
 });
 
+it("keeps the product's own colour through a category change, and Use category colour then takes the new category's", async () => {
+  const el = await mountColoured({ color: "#b12525" });
+  await pickIn(el, "primary", { value: "snacks" });
+  expect(colourSwatch(el, "#b12525").getAttribute("aria-checked")).toBe("true");
+  expect(submittedValue(el).color).toBe("#b12525");
+  // The screen's save cycle, which lets the form send again.
+  el.busy = true;
+  await el.updateComplete;
+  el.busy = false;
+  await el.updateComplete;
+  useCategory(el).click();
+  await el.updateComplete;
+  await expect.element(page.elementLocator(useCategory(el))).toHaveAccessibleDescription("#256bb1");
+  expect(submittedValue(el).color).toBeNull();
+});
+
 it("shows no colour chooser on a variant's page, and saves no colour of its own", async () => {
-  const el = await mountVariant();
+  // A colour left stored on the variant: the server refuses a variant body that carries one.
+  const el = await mountVariant({ ...glass, color: "#b12525" });
   expect(el.shadowRoot!.querySelector("fieldset.color")).toBeNull();
   expect(el.shadowRoot!.querySelector('[name="product-color"]')).toBeNull();
   expect(submittedValue(el).color).toBeNull();

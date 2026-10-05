@@ -828,9 +828,10 @@ export class ProductEditor extends LitElement {
     delete value.inherited;
     if (this.inherited !== null) {
       if (!(value.unitPrice ?? "").trim()) value.unitPrice = null;
-      // A variant always has its product's category and unit; the server refuses its own.
+      // A variant always has its product's category, unit and colour; the server refuses its own.
       value.primaryCategoryId = null;
       value.unitId = null;
+      value.color = null;
     }
     if (restore) value.active = true;
     value.name = value.name.trim();
