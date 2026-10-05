@@ -3402,8 +3402,8 @@ since ids are random UUIDs, but nothing prevents it; the fix is to rewrite only 
 declares as references. Not fixed in W72.
 
 **Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
-owner 2026-10-04).** The bulk Move dialog's Destination list showed categories in the order the
-server lists them, by creation time and then id (`listCategories`,
+owner 2026-10-04; since 2026-10-05 a tree, W82a, see the last paragraph).** The bulk Move
+dialog's Destination list showed categories in the order the server lists them, by creation time and then id (`listCategories`,
 `packages/catalogue/src/categories.ts`).
 It now sorts them by the full path it shows ("Dinner / Mains"), with `byLabel`
 (`apps/dashboard/src/widgets/category-form.ts`, the comparison the tables sort text with), so
@@ -3424,8 +3424,17 @@ results" (`packages/ui/src/components/wt-combobox.ts`). So in Spanish the search
 (seen in the review's Spanish-session run), and an empty search would say "No results" (judged from
 the code, not run). Other screens pass `t("categories.combobox_search")` and
 `t("categories.combobox_no_results")`. This was on `main` before W82 (the dialog's combobox dates
-from 2026-10-01, `5ffa5c633`). Needs the owner to say whether the two strings want an item, and
-whether the Move list should follow the tree order instead.
+from 2026-10-01, `5ffa5c633`).
+
+Settled by the owner 2026-10-05 and built in W82a: the Move list is now the product editor's
+category tree (`categoryTree`, `apps/dashboard/src/widgets/classification-fields.ts`), each
+category's children indented under it and each level in label order, so "Menu (old)" follows
+"Menu" and its children; a chosen destination and a search show the full path, joined with " › "
+as the product editor does. The search box takes the translated "Search" and "No results"
+(checked in English and Spanish in `apps/dashboard/src/widgets/catalogue-browser.test.ts`; the
+English text is also `wt-combobox`'s own default, so the Spanish case is the one that proves
+it). Two sibling categories with the same name are left as they are (owner: "leave it"): they still show
+as two identical entries, in the tree and in a search.
 
 **Sales: the category report names each category by its full path — DONE (W73, #1212, owner 2026-10-04: "we should
 report on category paths, not just the final name").** The Sales screen's category report showed a

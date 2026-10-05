@@ -5,7 +5,6 @@ import { byLabel, categoryPath } from "./category-form.js";
 import { t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 
-/** How the product editor and the Sales category report join a category path's names. */
 export const PATH_SEPARATOR = " › ";
 
 /** A category's whole path, as the product editor shows it; `missing` for an id the list lacks. */
@@ -20,7 +19,7 @@ export function categoryPathText(
 
 /** Every category depth-first, siblings sorted by name. A category whose parent the
  * list lacks is listed at the top level. */
-function categoryTree(categories: readonly CategorySummary[]): ComboboxOption[] {
+export function categoryTree(categories: readonly CategorySummary[]): ComboboxOption[] {
   const known = new Set(categories.map(({ id }) => id));
   const childrenOf = (parentId: string | null) =>
     categories
