@@ -751,17 +751,41 @@ describe("guided printer calibration", () => {
     expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
   });
 
-  it("preserves connection edits when finishing calibration from the editor", async () => {
-    const api = stubApi();
+  it("does not resend detail edits when finishing calibration", async () => {
+    let stored = { ...printers[0]! };
+    const api = stubApi({
+      listPrinters: vi.fn().mockImplementation(async () => [stored]),
+      updatePrinter: vi.fn().mockImplementation(async (_id, patch) => {
+        stored = { ...stored, ...patch };
+      }),
+    });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await openPrinter(el);
-    typeField(el, "[data-test=printer-name-p1]", "Updated kitchen");
-    typeField(el, "[data-test=printer-host-p1]", "10.0.0.88");
-    typeField(el, "[data-test=printer-port-p1]", "9101");
-    toggleSwitch(el, "[data-test=printer-active-p1]", false);
+    await selectTab(el, "printers");
+    q(el, "[data-test=printer-row-p1]")!.click();
     await flush(el);
-    q(el, "[data-test=calibrate-printer]")!.click();
+    q(el, "[data-test=edit-printer-name]")!.click();
+    await flush(el);
+    typeField(el, '[name="printer-detail-name"]', "Updated kitchen");
+    q(el, "[data-test=save-printer-name]")!.click();
+    await vi.waitFor(() => expect(api.updatePrinter).toHaveBeenCalledTimes(1));
+    q(el, "[data-test=printer-section-connection]")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    await flush(el);
+    q(el, "[data-test=edit-printer-connection]")!.click();
+    await flush(el);
+    typeField(el, '[name="printer-detail-host"]', "10.0.0.88");
+    typeField(el, '[name="printer-detail-port"]', "9101");
+    q(el, "[data-test=save-printer-connection]")!.click();
+    await vi.waitFor(() => expect(api.updatePrinter).toHaveBeenCalledTimes(2));
+    toggleSwitch(el, '[name="printer-detail-active"]', false);
+    await vi.waitFor(() => expect(api.updatePrinter).toHaveBeenCalledTimes(3));
+    q(el, "[data-test=printer-section-calibration]")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+      .click();
+    await flush(el);
+    q(el, "[data-test=calibrate-printer-details]")!.click();
     await flush(el);
     q(el, "[data-test=calibration-next]")!.click();
     await flush(el);
@@ -769,7 +793,11 @@ describe("guided printer calibration", () => {
     await flush(el);
     q(el, "[data-test=save-printer-p1]")!.click();
     await flush(el);
-    expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", {
+    expect(api.updatePrinter).toHaveBeenCalledTimes(3);
+    expect(api.updatePrinter).toHaveBeenNthCalledWith(1, "p1", { name: "Updated kitchen" });
+    expect(api.updatePrinter).toHaveBeenNthCalledWith(2, "p1", { host: "10.0.0.88", port: 9101 });
+    expect(api.updatePrinter).toHaveBeenNthCalledWith(3, "p1", { active: false });
+    expect(stored).toMatchObject({
       name: "Updated kitchen",
       host: "10.0.0.88",
       port: 9101,
