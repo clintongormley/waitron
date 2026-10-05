@@ -125,17 +125,10 @@ function button(el: TillMenuBrowser, name: string): HTMLElement {
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (theme) => {
-  it("home, with a greyed, unavailable tile and a weighed product's tile, has no violations", async () => {
+  it("home, with a plain and two painted (dark and pale) sold-out tiles and a weighed product's tile, has no violations", async () => {
     const { el, host } = await mount(theme);
-    expect((button(el, "Burger") as HTMLElement & { disabled: boolean }).disabled).toBe(true);
     expect(button(el, "Jamón").querySelector(".price")!.textContent).toContain("/kg");
-    expect(button(el, "Burger").querySelector(".sold-out")!.textContent!.trim()).toBe("Sold out");
-    await expectNoA11yViolations(host);
-  });
-
-  it("home, with a dark and a pale painted tile sold out, has no violations", async () => {
-    const { el, host } = await mount(theme);
-    for (const name of ["Blue gone", "Pink gone"]) {
+    for (const name of ["Burger", "Blue gone", "Pink gone"]) {
       expect((button(el, name) as HTMLElement & { disabled: boolean }).disabled).toBe(true);
       expect(button(el, name).querySelector(".sold-out")!.textContent!.trim()).toBe("Sold out");
     }

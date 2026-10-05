@@ -975,7 +975,7 @@ describe("till-menu-browser", () => {
         expect(stripe(entry(el, "structure", "Pink gone")).color).toBe("rgb(237, 171, 171)");
       });
 
-      it("draws every sold-out tile on the neutral grey, never its colour or an available tile's white", async () => {
+      it("draws every sold-out tile on the neutral grey, never its colour or an available tile's surface", async () => {
         const el = await mountPainted(theme);
         const grey = token(el, "background-color", "var(--wt-color-border)");
         const surface = token(el, "background-color", "var(--wt-color-surface)");
@@ -1039,8 +1039,7 @@ describe("till-menu-browser", () => {
         expect(tile.hasAttribute("style")).toBe(false);
       });
 
-      // wt-button's feedback is opacity alone: a dip on hover and a fade when disabled. It has no
-      // pressed style of its own, so there is none here to keep.
+      // wt-button has no pressed style of its own, so there is none here to keep.
       it("keeps the hover dip on a painted tile", async () => {
         const el = await mountPainted(theme);
         await userEvent.hover(entry(el, "structure", "Bare"));

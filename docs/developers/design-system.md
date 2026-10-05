@@ -192,17 +192,18 @@ category swatches in the Products tree, the product and section swatches in a me
 and the till's product and section tiles (`apps/till/src/widgets/menu-browser.ts`). A painted till
 tile takes black or white for its labels and its icon, whichever `readableTextColor`
 (`packages/ui/src/category-color.ts`) picks for that colour, because the label still carries the
-meaning and the colour is never the only signal. A sold-out till tile, painted or not, is grey
-(`--wt-color-border`) with `--wt-color-text` labels in place of `wt-button`'s disabled fade, and a
-painted one keeps its colour only as a stripe on its start edge
-([products.md](products.md), _Colour_). `wt-lozenge` takes a colour the same way, filling
+meaning and the colour is never the only signal. `wt-lozenge` takes a colour the same way, filling
 its background and computing black or white text, though no screen passes it one. This is a
 different idiom from the one the floor plan and service statuses
 already use for a data colour — a neutral chip with the colour shown only as a border and a dot —
 which was tried for categories and declined: a pale colour nearly disappears as a border in the
-theme where it's already pale (light colours in light mode, dark colours in dark mode). Reach for
-the filled-background idiom only for a colour that is itself the data, never as a shortcut around a
-`--wt-color-*` token.
+theme where it's already pale (light colours in light mode, dark colours in dark mode). A sold-out
+till tile uses that border idiom on purpose: painted or not, it is grey (`--wt-color-border`) with
+`--wt-color-text` labels in place of `wt-button`'s disabled fade, and a painted one keeps its colour
+only as a stripe on its start edge ([products.md](products.md), _Colour_). That stripe is faint for
+a pale colour in the light theme and a dark colour in the dark theme, which is accepted because the
+tile's name and "Sold out" carry the meaning. Reach for the filled-background idiom only for a
+colour that is itself the data, never as a shortcut around a `--wt-color-*` token.
 
 ### Structure
 
