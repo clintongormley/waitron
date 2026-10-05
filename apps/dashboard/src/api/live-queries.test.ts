@@ -151,6 +151,8 @@ it.each([
   // A device's ask also carries a returning device's own row (`returningDevicesOf`,
   // apps/server/src/join-requests.ts).
   ["joinRequests", ["device"], ["join_requests", "devices"]],
+  // A print agent's ask reads no `devices` row, which every battery report rewrites.
+  ["joinRequests", ["print_agent"], ["join_requests"]],
   // The server works the rules out once at boot, so no table change moves them.
   ["getContentLanguageRules", [], []],
   // `listTranslationGapReport` (packages/catalogue/src/content-translation-report.ts): the setting,

@@ -3,6 +3,7 @@
  * sharing ONE `PairingMode` holder, as `boot.ts` wires them: the window one surface opens is the
  * window the other honours.
  */
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +14,14 @@ import {
   joinRequests,
   withTransaction,
 } from "@waitron/db";
-import { hashPin, loginWithPin, persons } from "@waitron/identity";
+import {
+  hashPin,
+  hashSessionToken,
+  loginWithPin,
+  persons,
+  startManagementSession,
+} from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { cardReaders, deviceCardReaders } from "@waitron/payments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -772,6 +780,64 @@ describe("a disabled device comes back as the same device", () => {
       expect((await errorOf(accepted)).code).toBe("join_request.unclaimed");
       expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
       expect((await send(app, "GET", "/api/device/me", { cookie: second.jar })).status).toBe(401);
+    });
+
+    it("a number check is answered as for a request already gone even when another login has claimed the new ask", async () => {
+      const { venue, mode, app, holdId, deviceId, second, shown } = await replacedAsk();
+      const [mgr] = await suite.db
+        .select({ id: persons.id })
+        .from(persons)
+        .where(eq(persons.displayName, "The Manager"));
+      const session = await withTransaction(suite.db, (tx) =>
+        startManagementSession(tx, { personId: mgr!.id }),
+      );
+      const other = { ...venue, managerCookie: `${MANAGEMENT_COOKIE}=${session.token}` };
+      const otherHold = await openWindow(app, other);
+      const claimed = await send(
+        app,
+        "POST",
+        `/management-api/device-join-requests/${deviceId}/check`,
+        {
+          cookie: other.managerCookie,
+          body: {
+            choice: second.verificationNumber,
+            holdId: otherHold,
+            createdAt: await shownAsk(app, other, deviceId),
+          },
+        },
+      );
+      expect(claimed.status).toBe(204);
+
+      const checked = await send(
+        app,
+        "POST",
+        `/management-api/device-join-requests/${deviceId}/check`,
+        {
+          cookie: venue.managerCookie,
+          body: { choice: second.verificationNumber, holdId, createdAt: shown },
+        },
+      );
+      expect(checked.status).toBe(404);
+      expect((await errorOf(checked)).code).toBe("join_request.not_found");
+      expect(mode.claimOf(deviceId)?.sessionKey).toBe(hashSessionToken(session.token));
+      expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
+    });
+
+    it("a number check with a hold that has lapsed is answered as for a request already gone", async () => {
+      const { venue, mode, app, deviceId, second, shown } = await replacedAsk();
+      const checked = await send(
+        app,
+        "POST",
+        `/management-api/device-join-requests/${deviceId}/check`,
+        {
+          cookie: venue.managerCookie,
+          body: { choice: second.verificationNumber, holdId: randomUUID(), createdAt: shown },
+        },
+      );
+      expect(checked.status).toBe(404);
+      expect((await errorOf(checked)).code).toBe("join_request.not_found");
+      expect(mode.claimOf(deviceId)).toBeUndefined();
+      expect(await statusOf(app, second.jar)).toEqual({ status: "pending" });
     });
 
     it("the new ask is listed under a createdAt after the replaced one's, even in the same millisecond", async () => {

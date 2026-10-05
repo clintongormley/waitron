@@ -291,11 +291,14 @@ export function mountJoinApi(app: Hono, deps: JoinApiDeps, log: Logger): void {
         const holdId = requireString(body.holdId, "holdId");
         const createdAt = requireString(body.createdAt, "createdAt");
         if (!isUuid(id)) throw new AppError("join_request.not_found", {});
-        const claim = deps.pairingMode.claimOf(id);
-        if (claim !== undefined && claim.sessionKey !== sessionKey)
-          throw new AppError("join_request.claimed", {});
-        if (!deps.pairingMode.hasHold(holdId)) throw new AppError("device.pairing_hold_lapsed", {});
-        const checked = await checkDeviceJoinNumber(tx, deps.cfg, { id, createdAt }, choice);
+        // After the ask is found, so a replaced ask is answered as one already gone, as Cancel's is.
+        const checked = await checkDeviceJoinNumber(tx, deps.cfg, { id, createdAt }, choice, () => {
+          const claim = deps.pairingMode.claimOf(id);
+          if (claim !== undefined && claim.sessionKey !== sessionKey)
+            throw new AppError("join_request.claimed", {});
+          if (!deps.pairingMode.hasHold(holdId))
+            throw new AppError("device.pairing_hold_lapsed", {});
+        });
         if (checked.ok) {
           const [person] = await tx
             .select({ name: persons.displayName })
