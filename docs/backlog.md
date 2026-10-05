@@ -3427,7 +3427,9 @@ by the owner the same day as two items:
   390 px, 430-to-390 px and 1280 px cases in `apps/dashboard/src/widgets/product-list.test.ts`; the
   redraws tested are a branch opened (also with the table scrolled sideways), a search and
   selection turned on. Not covered: while a category is being renamed, its count and
-  asterisk follow the name box and are not capped. Open point for the owner: at 390 px in the demo
+  asterisk follow the name box and are not capped _(2026-10-05: since W72g only at desktop width;
+  at phone width they sit on the line above the box and wrap in what the grip and folder icon leave
+  of the room before the pinned column)_. Open point for the owner: at 390 px in the demo
   venue a name gets about 46 px, so most words break part-way ("Croqu" / "etas"); giving names
   more room at phone width (for example narrower leading slots) is asked in the campaign's
   questions file. Wrapping was chosen over an ellipsis because a phone cannot show a cut name's
@@ -3523,11 +3525,23 @@ past is scrolled back to its start (`#fitNameBox`, since W85b `#fitNames`,
 `apps/dashboard/src/widgets/product-list.ts`). The new box for a category being added is the same
 box. Pinned by the 390 px cases in `apps/dashboard/src/widgets/product-list.test.ts`. The fix
 changes only the name box, so the long product names in the phone-width entry above are not
-affected (W85b) _(2026-10-05: since fixed, in the entry above)_. Still open, for the owner: in
-the demo venue at 390 px the tree's leading slots leave the box about 55 px, so the refusal wraps
-about one word a line (local screenshots in `~/waitron-campaign/w72e-shots/`); whether to give it more room, for example by narrowing those
-slots at phone width alongside W85b, is asked in the campaign's questions file. _(2026-10-05:
-W85b did not change those slots.)_
+affected (W85b) _(2026-10-05: since fixed, in the entry above)_. In the demo
+venue at 390 px the tree's leading slots left the box about 55 px, so the refusal wrapped about one
+word a line (local screenshots in `~/waitron-campaign/w72e-shots/`) _(2026-10-05: since W72g the
+box has a line of its own at phone width, below)_.
+Fixed in W72g (2026-10-05, the owner's choice): at phone width, while the table carries `narrow`,
+the category name box and its refusal sit on a line of their own under the grip, taking the room
+before the pinned column from the grip's start. The grip, the folder icon and a renamed category's
+count and asterisk stay on the line above, and the count and asterisk wrap in what the grip and icon
+leave of that room. Measured in real Chromium at 390 px with the duplicate-name refusal shown, on
+the test fixture's categories (Food and Drinks at the top level, Beer under Drinks): the box was 243
+px for a top-level category and 235 px for Beer in English, 234 px and 226 px in Spanish; before the
+change most of the same cases measured 118 to 135 px beside the icon. In the demo venue at 390 px,
+after the change, renaming a top-level category and one a level down that were added for the check,
+with a search typed and the duplicate-name refusal shown, the box measured 146 to 163 px on its own
+line under the grip (local screenshots in `~/waitron-campaign/w72g-shots/`). Pinned by the "on
+their own line" cases, the 1280-to-390 px case and the 1280 px "beside the grip and folder icon"
+cases in `apps/dashboard/src/widgets/product-list.test.ts`; desktop width is unchanged.
 
 **Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
 owner 2026-10-04; since 2026-10-05 a tree, W82a, see the last paragraph).** The bulk Move

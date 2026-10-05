@@ -240,6 +240,25 @@ export class ProductList extends LitElement {
         min-width: 0;
         max-inline-size: max(var(--wt-tap-min), var(--name-box-room));
       }
+      wt-data-table::part(name-after) {
+        display: contents;
+      }
+      /* On a phone the name box takes a line of its own. The \`folder-cell\` span is held to the
+         room #fitNames measures, so the count and asterisk wrap there instead of running under the
+         pinned column. */
+      wt-data-table[narrow]::part(naming) {
+        display: grid;
+        grid-template-columns: auto auto minmax(0, auto) 1fr;
+        inline-size: max(var(--wt-tap-min), var(--name-box-room));
+      }
+      wt-data-table[narrow]::part(name-after) {
+        display: block;
+        overflow-wrap: anywhere;
+      }
+      wt-data-table[narrow]::part(name-box) {
+        grid-row: 2;
+        grid-column: 1 / -1;
+      }
       wt-data-table::part(maker-link) {
         display: block;
         max-inline-size: 12rem;
@@ -676,9 +695,11 @@ export class ProductList extends LitElement {
       return `${Math.max(0, room)}px`;
     });
     fitted.forEach((element, index) => {
-      const property = element === box ? "--name-box-room" : "--name-room";
-      if (element.style.getPropertyValue(property) !== rooms[index])
-        element.style.setProperty(property, rooms[index]!);
+      // The box's room is set on its `folder-cell` span, which a phone lays out to that width.
+      const [target, property] =
+        element === box ? [box.parentElement!, "--name-box-room"] : [element, "--name-room"];
+      if (target.style.getPropertyValue(property) !== rooms[index])
+        target.style.setProperty(property, rooms[index]!);
     });
     if (!box) return;
     const hidden = scroll.getBoundingClientRect().left - box.getBoundingClientRect().left;
@@ -1084,7 +1105,7 @@ export class ProductList extends LitElement {
         if (row.kind === "product") return column.cell(row, context);
         if (row.kind === "draft")
           return column.key === "name"
-            ? html`<span part="folder-cell"
+            ? html`<span part="folder-cell naming"
                 ><span part="grip-space"></span>${folderIcon}${this.#nameBox()}</span
               >`
             : nothing;
@@ -1121,7 +1142,7 @@ export class ProductList extends LitElement {
                   >`
                 : nothing
             }`;
-          return html`<span part="folder-cell"
+          return html`<span part=${this.#renaming(folder.id) ? "folder-cell naming" : "folder-cell"}
             ><button
               class="drag-grip"
               part="drag-grip"
@@ -1131,7 +1152,7 @@ export class ProductList extends LitElement {
               <wt-icon name="grip"></wt-icon></button
             >${folderIcon}${
               this.#renaming(folder.id)
-                ? html`${this.#nameBox()}${after}`
+                ? html`${this.#nameBox()}<span part="name-after">${after}</span>`
                 : html`<span part="folder-name"><strong>${folder.name}</strong>${after}</span>`
             }</span
           >`;
