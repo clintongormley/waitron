@@ -2213,19 +2213,18 @@ commit with Save, bind it to that Save even when its preview updates as you type
 
 ### Tabbed management pages
 
-When one management area contains several lists, use `wt-tabs` to show one concern at a time.
+When a management page separates concerns into selectable panels, use `wt-tabs`.
 Give each tab a stable key, a localized label and a matching named slot:
 
 ```ts
 html`<wt-tabs
-  label="Departments and zones"
-  .items=${[{ key: "status", label: "Status" }, { key: "departments", label: "Departments" }]}
+  label="Venue settings"
+  .items=${[{ key: "receipts", label: "Receipts" }, { key: "tables", label: "Tables" }]}
   .value=${this.view}
   @wt-tab-change=${this.selectView}
 >
-  <div slot="actions">${this.view === "departments" ? this.renderAddDepartment() : nothing}</div>
-  <section slot="status">${this.renderStatus()}</section>
-  <section slot="departments">${this.renderDepartments()}</section>
+  <section slot="receipts">${this.renderReceipts()}</section>
+  <section slot="tables">${this.renderTables()}</section>
 </wt-tabs>`;
 ```
 
@@ -2320,7 +2319,7 @@ replacement history for defaults and invalid destinations, and push history for 
 Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`. Departments and zones
-(`/manage/venue-operations`) uses `status`, `departments` and `zones`. Venue settings
+uses the single `/manage/venue-operations` page; old tab addresses are replaced with that URL. Venue settings
 (`/manage/venue-settings`) uses `receipts`, `tables`, `adjustment-reasons` and `kitchen`; a tab
 appears only when a panel on it is visible to the session, and an address naming a hidden tab
 opens the first visible tab. The dashboard preserves module-owned
