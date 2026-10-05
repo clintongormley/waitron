@@ -930,17 +930,28 @@ column, so a product named like an id arrived renamed; the narrowing is what mak
 necessary. A reference the schema cannot give a foreign key goes in `references`, as
 `option_lists.default_label_id` and `device_profile_home_layouts.layout_id` do.
 
-The export also leaves behind each row whose `leaveBehindWhenSet` column is not null (a retired
-device profile, `retired_at`), and then every row of a transferred table whose foreign key names a
-row left behind, until none does. It reads the keys from `pragma_foreign_key_list`, never the
-`references` lists (`exportConfigurationTables`, `apps/server/src/configuration-transfer.ts`).
-
 Guard: `scripts/id-columns-are-references.test.ts`, which migrates a real database and reads every
 transferred table's columns and keys. Weaker than its name: it knows an id column only by a name
 ending `_id` or `_ids`, so a reference named otherwise is unseen; a column on its `NOT_REFERENCES`
 list is trusted by the reason written there, so one that later starts holding an id passes; and a
 declared `_ids` column passes, though the import replaces only a whole value equal to an id
 (`configuration-transfer.ts`, the `idMap.has(value)` test), never ids inside a list.
+
+The export also leaves behind each row whose `leaveBehindWhenSet` column is not null (a retired
+device profile, `retired_at`), and then every row of a transferred table whose foreign key names a
+row left behind, repeating until nothing more is left behind (`exportConfigurationTables`,
+`apps/server/src/configuration-transfer.ts`). It reads the keys from `pragma_foreign_key_list`,
+never the `references` lists, and follows only those between transferred tables that lead from a
+table declaring `leaveBehindWhenSet` to its children, and on to theirs. A key's parent table is
+matched ignoring the case of ASCII letters, as SQLite matches table names; a key that names no
+parent columns points at the parent's primary key. SQLite itself decides which rows a key names,
+by joining the two tables, so the parent column's collation and type rules apply, and a key with a
+null in it names nothing. Among the tables it follows, the export refuses with
+`setup.request_invalid`: a `leaveBehindWhenSet` name the table has no column for
+(`<table>.<column>`); a table stored `WITHOUT ROWID` (`table:<table>`); a column named `rowid` in
+any case, or exactly `__export_rowid` (`<table>.<column>`); and a key whose parent columns do not
+number the same as its own, as when it names none and the parent has no primary key
+(`table:<child>`). Both column checks count generated columns. Guard: the leave-behind cases in `apps/server/src/configuration-transfer.test.ts`.
 
 **Transactions**
 
