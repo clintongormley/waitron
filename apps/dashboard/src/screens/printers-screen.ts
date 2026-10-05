@@ -2,6 +2,7 @@ import { LitElement, type PropertyValues, type TemplateResult, css, html, nothin
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { ifDefined } from "lit/directives/if-defined.js";
+import { live } from "lit/directives/live.js";
 import {
   focusFirstInvalid,
   submitOnEnter,
@@ -17,6 +18,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -122,9 +124,6 @@ const COMMAND_TEXT: Record<BluetoothCommandStatus["kind"], Record<CommandState, 
 const commandKey = (agentId: string, address: string): string =>
   `${agentId}:${address.toUpperCase()}`;
 
-/** The printer editor's checks that have a field of their own; the rest name only the bottom message. */
-const PRINTER_FIELDS: readonly string[] = ["name", "host", "port"];
-
 interface EditablePrinter {
   id: string;
   name: string;
@@ -138,10 +137,6 @@ interface EditablePrinter {
   hasCashDrawer: boolean;
   /** The settings as saved, so a save sends only the ones that changed. */
   saved: {
-    name: string;
-    host: string;
-    port: string;
-    active: boolean;
     paperWidth: PrintPaperWidth;
     resolution: PrintResolution;
     hasCashDrawer: boolean;
@@ -280,19 +275,14 @@ export class PrintersScreen extends LitElement {
         align-items: center;
         gap: var(--wt-space-3);
         margin-block: var(--wt-space-4);
+        width: 100%;
+        max-width: var(--wt-form-max-width);
       }
       .status-grid {
         display: grid;
-        grid-template-columns: repeat(
-          auto-fit,
-          minmax(min(100%, calc(var(--wt-space-6) * 12)), 1fr)
-        );
         gap: var(--wt-space-4);
-      }
-      .status-group {
-        font-size: var(--wt-font-size-sm);
-        color: var(--wt-color-text-muted);
-        text-transform: uppercase;
+        width: 100%;
+        max-width: var(--wt-form-max-width);
       }
       .status-fields {
         display: grid;
@@ -465,9 +455,44 @@ export class PrintersScreen extends LitElement {
   @state() private selectedPrinterId: string | null = null;
   readonly #url = new UrlStateController(
     this,
-    () => {
+    (event?: Event) => {
       if (this.#url.read("dashboard") !== "printers") return;
-      this.selectedPrinterId = this.#url.read("printer");
+      if (event && this.selectedPrinterId) {
+        const printer = this.printers.find(({ id }) => id === this.selectedPrinterId);
+        if (
+          printer &&
+          this.#connectionIsDirty(printer) &&
+          !this.discardDetailConnectionNavigationArmed
+        ) {
+          this.discardDetailConnectionNavigationArmed = true;
+          this.#url.write({ dashboard: "printers", view: this.view, printer: printer.id });
+          return;
+        }
+        if (
+          printer &&
+          this.detailName?.id === printer.id &&
+          this.detailName.value !== printer.name &&
+          !this.discardDetailNameNavigationArmed
+        ) {
+          this.discardDetailNameNavigationArmed = true;
+          this.#url.write({ dashboard: "printers", view: this.view, printer: printer.id });
+          return;
+        }
+      }
+      const printerId = this.#url.read("printer");
+      if (printerId !== this.selectedPrinterId) {
+        const editing = this.editingPrinter;
+        if (editing && editing.id !== printerId) {
+          this.editingPrinter = null;
+          this.#closeTest();
+          if (this.#readdingId === editing.id) {
+            this.#readdingId = undefined;
+            void this.#deactivatePrinter(editing.id);
+          }
+        }
+        this.#resetPrinterSections();
+      }
+      this.selectedPrinterId = printerId;
       const view = this.#url.read("view");
       this.view =
         view !== null && ["queue", "printers", "agents"].includes(view)
@@ -496,7 +521,29 @@ export class PrintersScreen extends LitElement {
   @state() private addingPrinter = false;
   @state() private namingPrinter: DiscoveredPrinter | null = null;
   @state() private discoveredNames: Record<string, string> = {};
-  @state() private calibrationStep = 0;
+  @state() private calibrationStep = 1;
+  @state() private statusOpen = true;
+  @state() private detailActiveSavingIds = new Set<string>();
+  @state() private detailActiveError: string | null = null;
+  @state() private detailName: {
+    id: string;
+    value: string;
+    saving: boolean;
+    error: string | null;
+  } | null = null;
+  @state() private discardDetailNameArmed = false;
+  @state() private discardDetailNameNavigationArmed = false;
+  @state() private detailConnection: {
+    id: string;
+    host: string;
+    port: string;
+    saving: boolean;
+    error: string | null;
+  } | null = null;
+  @state() private discardDetailConnectionArmed = false;
+  @state() private discardDetailConnectionNavigationArmed = false;
+  @state() private connectionOpen = false;
+  @state() private calibrationOpen = false;
   @state() private testingDrawer = false;
   @state() private drawerTestSent = false;
   @state() private drawerOutcome = "";
@@ -1142,7 +1189,6 @@ export class PrintersScreen extends LitElement {
             },
       );
       if (disabled) this.#readdingId = disabled.id;
-      this.calibrationStep = 1;
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
@@ -1402,41 +1448,13 @@ export class PrintersScreen extends LitElement {
     if (this.editingPrinter?.id === id) this.editingPrinter = { ...this.editingPrinter, ...patch };
   }
 
-  #editHandler<K extends "name" | "host" | "port">(
-    id: string,
-    field: K,
-  ): (event: CustomEvent<{ value: string }>) => void {
-    return (event: CustomEvent<{ value: string }>) => {
-      event.stopPropagation();
-      this.#editPrinter(id, { [field]: event.detail.value } as Pick<EditablePrinter, K>);
-    };
-  }
-
-  /** Save only this transport's connection fields; routing policy has its own editor. */
+  /** Calibration only writes settings changed during this wizard. */
   async #savePrinter(id: string): Promise<void> {
     this.errorKey = null;
     const row = this.editingPrinter;
     if (row?.id !== id) return;
     if (!this.#validatePrinter(row)) return;
-    const patch: PrinterPatch = this.calibrationStep
-      ? {}
-      : {
-          name: row.name.trim(),
-          active: row.active,
-        };
-    if (!this.calibrationStep && row.transport === "network_tcp") {
-      patch.host = row.host.trim();
-      patch.port = row.port.trim() === "" ? null : Number(row.port);
-    }
-    if (this.calibrationStep) {
-      if (row.name.trim() !== row.saved.name) patch.name = row.name.trim();
-      if (row.active !== row.saved.active) patch.active = row.active;
-      if (row.transport === "network_tcp") {
-        if (row.host.trim() !== row.saved.host) patch.host = row.host.trim();
-        if (row.port !== row.saved.port)
-          patch.port = row.port.trim() === "" ? null : Number(row.port);
-      }
-    }
+    const patch: PrinterPatch = {};
     if (row.paperWidth !== row.saved.paperWidth) patch.paperWidth = row.paperWidth;
     if (row.resolution !== row.saved.resolution) patch.resolution = row.resolution;
     if (row.hasCashDrawer !== row.saved.hasCashDrawer) patch.hasCashDrawer = row.hasCashDrawer;
@@ -1914,7 +1932,7 @@ export class PrintersScreen extends LitElement {
   #openPrinter(p: Printer, event?: Event): void {
     if (event) this.#rememberEditTrigger(event);
     this.#closeTest();
-    this.calibrationStep = 0;
+    this.calibrationStep = 1;
     this.drawerTestSent = false;
     this.drawerOutcome = "";
     this.formAttempted = false;
@@ -1933,10 +1951,6 @@ export class PrintersScreen extends LitElement {
       resolution: p.resolution,
       hasCashDrawer: p.hasCashDrawer,
       saved: {
-        name: p.name,
-        host: p.host ?? "",
-        port: p.port === null ? "" : String(p.port),
-        active: p.active,
         paperWidth: p.paperWidth,
         resolution: p.resolution,
         hasCashDrawer: p.hasCashDrawer,
@@ -1964,7 +1978,14 @@ export class PrintersScreen extends LitElement {
     >
       <wt-button
         data-test=${`edit-printer-${p.id}`}
-        @click=${(event: Event) => this.#openPrinter(p, event)}
+        @click=${() => {
+          this.#showPrinterStatus(p.id);
+          this.detailName = { id: p.id, value: p.name, saving: false, error: null };
+          void this.updateComplete.then(() => {
+            if (this.detailName?.id === p.id)
+              this.renderRoot.querySelector<HTMLElement>('[name="printer-detail-name"]')?.focus();
+          });
+        }}
         >${t("action.edit")}</wt-button
       >
       <wt-button
@@ -2015,20 +2036,164 @@ export class PrintersScreen extends LitElement {
   }
 
   #showPrinterStatus(id: string): void {
+    if (id !== this.selectedPrinterId) this.#resetPrinterSections();
     this.selectedPrinterId = id;
     this.#url.write({ dashboard: "printers", view: this.view, printer: id });
   }
 
+  #resetPrinterSections(): void {
+    this.statusOpen = true;
+    this.connectionOpen = false;
+    this.calibrationOpen = false;
+    this.detailActiveError = null;
+    this.detailName = null;
+    this.detailConnection = null;
+    this.discardDetailConnectionArmed = false;
+    this.discardDetailConnectionNavigationArmed = false;
+    this.discardDetailNameArmed = false;
+    this.discardDetailNameNavigationArmed = false;
+  }
+
+  #connectionIsDirty(printer: Printer): boolean {
+    const draft = this.detailConnection;
+    return (
+      draft?.id === printer.id &&
+      (draft.host !== (printer.host ?? "") ||
+        draft.port !== (printer.port === null ? "" : String(printer.port)))
+    );
+  }
+
+  async #saveDetailConnection(printer: Printer): Promise<void> {
+    const draft = this.detailConnection;
+    if (draft?.id !== printer.id || draft.saving) return;
+    const host = draft.host.trim();
+    const port = draft.port.trim();
+    if (!host || (port && (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535))) {
+      this.detailConnection = {
+        ...draft,
+        error: t(!host ? "printers.host_required" : "printers.port_invalid"),
+      };
+      return;
+    }
+    const savingDraft = { ...draft, saving: true, error: null };
+    this.detailConnection = savingDraft;
+    try {
+      await this.api.updatePrinter(printer.id, { host, port: port ? Number(port) : null });
+    } catch (error) {
+      if (this.detailConnection === savingDraft)
+        this.detailConnection = { ...draft, saving: false, error: codeMessage(codeOf(error)) };
+      return;
+    }
+    if (this.detailConnection === savingDraft) {
+      this.detailConnection = null;
+      this.discardDetailConnectionArmed = false;
+      this.discardDetailConnectionNavigationArmed = false;
+    }
+    await this.#load();
+  }
+
+  #detailConnectionErrors(): { host: string; port: string } {
+    const draft = this.detailConnection;
+    if (!draft) return { host: "", port: "" };
+    const port = draft.port.trim();
+    return {
+      host: draft.host.trim() ? "" : t("printers.host_required"),
+      port:
+        port && (!/^\d+$/.test(port) || Number(port) < 1 || Number(port) > 65535)
+          ? t("printers.port_invalid")
+          : "",
+    };
+  }
+
+  async #saveDetailName(printer: Printer): Promise<void> {
+    const draft = this.detailName;
+    if (draft?.id !== printer.id || draft.saving) return;
+    const name = draft.value.trim();
+    if (!name) {
+      this.detailName = { ...draft, error: t("form.name_required") };
+      return;
+    }
+    const savingDraft = { ...draft, saving: true, error: null };
+    this.detailName = savingDraft;
+    try {
+      await this.api.updatePrinter(printer.id, { name });
+    } catch (error) {
+      if (this.detailName === savingDraft)
+        this.detailName = { ...draft, saving: false, error: codeMessage(codeOf(error)) };
+      return;
+    }
+    if (this.detailName === savingDraft) {
+      this.detailName = null;
+      this.discardDetailNameArmed = false;
+    }
+    await this.#load();
+  }
+
+  async #setDetailActive(printer: Printer, active: boolean): Promise<void> {
+    if (this.detailActiveSavingIds.has(printer.id) || active === printer.active) return;
+    this.detailActiveSavingIds = new Set([...this.detailActiveSavingIds, printer.id]);
+    this.detailActiveError = null;
+    try {
+      await this.api.updatePrinter(printer.id, { active });
+    } catch (error) {
+      if (this.selectedPrinterId === printer.id) {
+        this.detailActiveError = codeOf(error);
+        const toggle = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+          '[name="printer-detail-active"]',
+        );
+        if (toggle) toggle.checked = printer.active;
+      }
+      return;
+    } finally {
+      this.detailActiveSavingIds = new Set(
+        [...this.detailActiveSavingIds].filter((id) => id !== printer.id),
+      );
+    }
+    await this.#load();
+  }
+
   #renderPrinterStatus(): TemplateResult {
     const p = this.printers.find(({ id }) => id === this.selectedPrinterId);
-    const back = html`<wt-button
-      data-test="back-to-printers"
-      @click=${() => {
-        this.selectedPrinterId = null;
-        this.#url.write({ printer: null });
-      }}
-      >${t("action.back")}</wt-button
-    >`;
+    const listUrl = new URL(location.href);
+    listUrl.pathname = listUrl.pathname.replace(/\/printer\/[^/]+$/, "");
+    const back = html`<nav aria-label=${t("printers.filter_all")} data-test="printer-breadcrumb">
+        <a
+          data-test="all-printers-link"
+          href=${`${listUrl.pathname}${listUrl.search}`}
+          @click=${(event: MouseEvent) => {
+            if (
+              event.button !== 0 ||
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.altKey
+            )
+              return;
+            event.preventDefault();
+            if (this.detailName?.saving) return;
+            if (this.detailConnection?.saving) return;
+            if (p && this.#connectionIsDirty(p) && !this.discardDetailConnectionNavigationArmed) {
+              this.discardDetailConnectionNavigationArmed = true;
+              return;
+            }
+            if (
+              p &&
+              this.detailName &&
+              this.detailName.id === p.id &&
+              this.detailName.value !== p.name &&
+              !this.discardDetailNameNavigationArmed
+            ) {
+              this.discardDetailNameNavigationArmed = true;
+              return;
+            }
+            this.selectedPrinterId = null;
+            this.#url.write({ printer: null });
+          }}
+          >${t("printers.filter_all")}</a
+        >
+        ${p ? html`<span aria-hidden="true"> › </span><span>${p.name}</span>` : nothing}
+      </nav>
+      ${this.discardDetailConnectionNavigationArmed ? html`<p data-test="discard-printer-connection-navigation" role="status">${t("printers.discard_connection_prompt")}</p>` : nothing}`;
     if (!p)
       return html`${back}
         <p role="status">
@@ -2047,49 +2212,256 @@ export class PrintersScreen extends LitElement {
       ${back}
       <div class="status-heading">
         <h1 class="title">${p.name}</h1>
-        <wt-button
-          variant="primary"
-          data-test="edit-printer-details"
-          @click=${(event: Event) => this.#openPrinter(p, event)}
-          >${t("action.edit")}</wt-button
-        >
+        ${
+          this.detailName?.id === p.id
+            ? html`<div class="form-fields">
+                <wt-input
+                  name="printer-detail-name"
+                  label=${t("printers.name")}
+                  required
+                  ?disabled=${this.detailName.saving}
+                  @keydown=${(event: KeyboardEvent) =>
+                    submitOnEnter(
+                      event,
+                      this.renderRoot.querySelector("[data-test=save-printer-name]"),
+                    )}
+                  .value=${this.detailName.value}
+                  .invalid=${this.detailName.error === t("form.name_required")}
+                  .error=${this.detailName.error === t("form.name_required") ? this.detailName.error : ""}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    if (this.detailName?.id === p.id)
+                      this.detailName = {
+                        ...this.detailName,
+                        value: event.detail.value,
+                        error: event.detail.value.trim() ? null : t("form.name_required"),
+                      };
+                    this.discardDetailNameArmed = false;
+                    this.discardDetailNameNavigationArmed = false;
+                  }}
+                ></wt-input>
+                ${
+                  this.detailName.error === t("form.name_required")
+                    ? html`<p role="alert">${t("form.fix_fields")}</p>`
+                    : nothing
+                }
+                ${
+                  this.detailName.error !== null &&
+                  this.detailName.error !== t("form.name_required")
+                    ? html`<p role="alert" data-test="printer-name-refusal">
+                        ${this.detailName.error}
+                      </p>`
+                    : nothing
+                }
+                <wt-form-actions>
+                  <wt-button
+                    data-test="cancel-printer-name"
+                    ?disabled=${this.detailName.saving}
+                    @click=${() => {
+                      if (this.detailName?.value !== p.name && !this.discardDetailNameArmed) {
+                        this.discardDetailNameArmed = true;
+                      } else {
+                        this.detailName = null;
+                        this.discardDetailNameArmed = false;
+                      }
+                    }}
+                    >${this.discardDetailNameArmed ? t("printers.discard") : t("action.cancel")}</wt-button
+                  >
+                  ${this.discardDetailNameArmed || this.discardDetailNameNavigationArmed ? html`<span data-test="discard-printer-name" role="status">${t("printers.discard_name_prompt")}</span>` : nothing}
+                  <wt-button
+                    variant="primary"
+                    data-test="save-printer-name"
+                    ?disabled=${this.detailName.saving || !this.detailName.value.trim()}
+                    @click=${() => void this.#saveDetailName(p)}
+                    >${t("action.save")}</wt-button
+                  >
+                </wt-form-actions>
+              </div>`
+            : html`<wt-button
+                data-test="edit-printer-name"
+                @click=${() => {
+                  this.detailName = { id: p.id, value: p.name, saving: false, error: null };
+                  this.discardDetailNameArmed = false;
+                  void this.updateComplete.then(() => {
+                    if (this.detailName?.id === p.id)
+                      this.renderRoot
+                        .querySelector<HTMLElement>('[name="printer-detail-name"]')
+                        ?.focus();
+                  });
+                }}
+                >${t("action.edit")}</wt-button
+              >`
+        }
       </div>
       <div class="status-grid">
-        <section>
-          <h2 class="status-group">${t("printers.status")}</h2>
-          <wt-card
-            ><dl class="status-fields">
-              ${field(t("printers.status"), t(p.active ? "printers.status_active" : "printers.status_inactive"))}
-              ${field(t("printers.pending_jobs"), p.pendingJobs)}
-              ${field(t("printers.last_print"), this.#timestamp(p.lastPrintAt))}
-              ${field(t("printers.last_seen_by"), p.transport === "cloud_poll" ? "—" : (seen?.agentName ?? t("printers.agent_unknown")))}
-              ${seen ? field(t("printers.last_seen"), this.#timestamp(seen.lastSeenAt)) : nothing}
-            </dl></wt-card
-          >
-        </section>
-        <section>
-          <h2 class="status-group">${t("printers.connection")}</h2>
-          <wt-card
-            ><dl class="status-fields">
-              ${field(t("printers.transport"), transportName(p.transport), `printer-transport-${p.id}`)}
-              ${field(t("printers.connection"), t(p.transport === "cloud_poll" ? "printers.connection_direct" : p.transport === "network_tcp" ? "printers.connection_network" : "printers.connection_roaming"), `printer-connection-${p.id}`)}
-              ${p.host ? field(t("printers.address"), `${p.host}${p.port === null ? "" : `:${p.port}`}`) : nothing}
-              ${p.localKey ? field(t("printers.local_key"), p.localKey) : nothing}
-              ${p.pollId ? field(t("printers.poll_id"), p.pollId) : nothing}
-            </dl></wt-card
-          >
-        </section>
-        <section>
-          <h2 class="status-group">${t("printers.calibrate")}</h2>
-          <wt-card
-            ><dl class="status-fields">
-              ${field(t("printers.paper_width"), t(p.paperWidth === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80"))}
-              ${field(t("printers.resolution"), t(p.resolution === "180dpi" ? "printers.resolution_180" : "printers.resolution_203"))}
-              ${field(t("printers.drawer_attached"), t(p.hasCashDrawer ? "printers.yes" : "printers.no"), "printer-drawer")}
-              ${field(t("printers.profiles"), offeredOn.join(", ") || t("printers.no"), "printer-profiles")}
-            </dl></wt-card
-          >
-        </section>
+        <wt-disclosure
+          data-test="printer-section-status"
+          heading=${t("printers.status")}
+          summary=${`${t(p.active ? "printers.status_active" : "printers.status_inactive")} · ${p.pendingJobs} ${t("printers.pending_jobs")}`}
+          ?open=${this.statusOpen}
+          @wt-toggle=${(event: CustomEvent<{ open: boolean }>) => {
+            this.statusOpen = event.detail.open;
+          }}
+          ><dl class="status-fields">
+            ${field(t("printers.status"), t(p.active ? "printers.status_active" : "printers.status_inactive"))}
+            ${field(t("printers.pending_jobs"), p.pendingJobs)}
+            ${field(t("printers.last_print"), this.#timestamp(p.lastPrintAt))}
+            ${field(t("printers.last_seen_by"), p.transport === "cloud_poll" ? "—" : (seen?.agentName ?? t("printers.agent_unknown")))}
+            ${seen ? field(t("printers.last_seen"), this.#timestamp(seen.lastSeenAt)) : nothing}
+          </dl>
+          <wt-switch
+            name="printer-detail-active"
+            label=${t("printers.status_active")}
+            .checked=${live(p.active)}
+            ?disabled=${this.detailActiveSavingIds.has(p.id)}
+            @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+              event.stopPropagation();
+              void this.#setDetailActive(p, event.detail.checked);
+            }}
+          ></wt-switch>
+          ${
+            this.detailActiveError
+              ? html`<p role="alert" data-test="printer-detail-active-error">
+                  ${codeMessage(this.detailActiveError)}
+                </p>`
+              : nothing
+          }</wt-disclosure
+        >
+        <wt-disclosure
+          data-test="printer-section-connection"
+          heading=${t("printers.connection")}
+          summary=${`${transportName(p.transport)} · ${p.host ? `${p.host}${p.port === null ? "" : `:${p.port}`}` : t(p.transport === "cloud_poll" ? "printers.connection_direct" : "printers.connection_roaming")}`}
+          ?open=${this.connectionOpen}
+          @wt-toggle=${(event: CustomEvent<{ open: boolean }>) => {
+            this.connectionOpen = event.detail.open;
+          }}
+          ><dl class="status-fields">
+            ${field(t("printers.transport"), transportName(p.transport), `printer-transport-${p.id}`)}
+            ${field(t("printers.connection"), t(p.transport === "cloud_poll" ? "printers.connection_direct" : p.transport === "network_tcp" ? "printers.connection_network" : "printers.connection_roaming"), `printer-connection-${p.id}`)}
+            ${p.host ? field(t("printers.address"), `${p.host}${p.port === null ? "" : `:${p.port}`}`) : nothing}
+            ${p.localKey ? field(t("printers.local_key"), p.localKey) : nothing}
+            ${p.pollId ? field(t("printers.poll_id"), p.pollId) : nothing}
+          </dl>
+          ${
+            p.transport === "network_tcp"
+              ? this.detailConnection?.id === p.id
+                ? html`<div
+                    class="form-fields"
+                    @keydown=${(event: KeyboardEvent) =>
+                      submitOnEnter(
+                        event,
+                        this.renderRoot.querySelector("[data-test=save-printer-connection]"),
+                      )}
+                  >
+                    <wt-input
+                      name="printer-detail-host"
+                      label=${t("printers.host")}
+                      ?disabled=${this.detailConnection.saving}
+                      .value=${this.detailConnection.host}
+                      .invalid=${!!this.#detailConnectionErrors().host}
+                      .error=${this.#detailConnectionErrors().host}
+                      required
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                        if (this.detailConnection?.id === p.id)
+                          this.detailConnection = {
+                            ...this.detailConnection,
+                            host: event.detail.value,
+                            error: null,
+                          };
+                        this.discardDetailConnectionArmed = false;
+                        this.discardDetailConnectionNavigationArmed = false;
+                      }}
+                    ></wt-input>
+                    <wt-input
+                      name="printer-detail-port"
+                      label=${t("printers.port")}
+                      type="number"
+                      ?disabled=${this.detailConnection.saving}
+                      .value=${this.detailConnection.port}
+                      .invalid=${!!this.#detailConnectionErrors().port}
+                      .error=${this.#detailConnectionErrors().port}
+                      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                        if (this.detailConnection?.id === p.id)
+                          this.detailConnection = {
+                            ...this.detailConnection,
+                            port: event.detail.value,
+                            error: null,
+                          };
+                        this.discardDetailConnectionArmed = false;
+                        this.discardDetailConnectionNavigationArmed = false;
+                      }}
+                    ></wt-input>
+                    ${this.detailConnection.error ? html`<p role="alert">${this.detailConnection.error}</p>` : nothing}
+                    ${
+                      this.#detailConnectionErrors().host || this.#detailConnectionErrors().port
+                        ? html`<p role="alert">${t("form.fix_fields")}</p>`
+                        : nothing
+                    }
+                    <wt-form-actions>
+                      <wt-button
+                        data-test="cancel-printer-connection"
+                        ?disabled=${this.detailConnection.saving}
+                        @click=${() => {
+                          if (this.#connectionIsDirty(p) && !this.discardDetailConnectionArmed) {
+                            this.discardDetailConnectionArmed = true;
+                          } else {
+                            this.detailConnection = null;
+                            this.discardDetailConnectionArmed = false;
+                            this.discardDetailConnectionNavigationArmed = false;
+                          }
+                        }}
+                        >${this.discardDetailConnectionArmed ? t("printers.discard") : t("action.cancel")}</wt-button
+                      >
+                      ${this.discardDetailConnectionArmed ? html`<span data-test="discard-printer-connection" role="status">${t("printers.discard_connection_prompt")}</span>` : nothing}
+                      <wt-button
+                        variant="primary"
+                        data-test="save-printer-connection"
+                        ?disabled=${this.detailConnection.saving || !!this.#detailConnectionErrors().host || !!this.#detailConnectionErrors().port}
+                        @click=${() => void this.#saveDetailConnection(p)}
+                        >${t("action.save")}</wt-button
+                      >
+                    </wt-form-actions>
+                  </div>`
+                : html`<wt-button
+                    data-test="edit-printer-connection"
+                    @click=${() => {
+                      this.detailConnection = {
+                        id: p.id,
+                        host: p.host ?? "",
+                        port: p.port === null ? "" : String(p.port),
+                        saving: false,
+                        error: null,
+                      };
+                      this.discardDetailConnectionArmed = false;
+                      this.discardDetailConnectionNavigationArmed = false;
+                    }}
+                    >${t("action.edit")}</wt-button
+                  >`
+              : nothing
+          }</wt-disclosure
+        >
+        <wt-disclosure
+          data-test="printer-section-calibration"
+          heading=${t("printers.calibration")}
+          summary=${`${t(p.paperWidth === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80")} · ${t(p.resolution === "180dpi" ? "printers.resolution_180" : "printers.resolution_203")}`}
+          ?open=${this.calibrationOpen}
+          @wt-toggle=${(event: CustomEvent<{ open: boolean }>) => {
+            this.calibrationOpen = event.detail.open;
+          }}
+          ><dl class="status-fields">
+            ${field(t("printers.paper_width"), t(p.paperWidth === "58mm" ? "printers.paper_width_58" : "printers.paper_width_80"))}
+            ${field(t("printers.resolution"), t(p.resolution === "180dpi" ? "printers.resolution_180" : "printers.resolution_203"))}
+            ${field(t("printers.drawer_attached"), t(p.hasCashDrawer ? "printers.yes" : "printers.no"), "printer-drawer")}
+            ${field(t("printers.profiles"), offeredOn.join(", ") || t("printers.no"), "printer-profiles")}
+          </dl>
+          <wt-button
+            data-test="calibrate-printer-details"
+            @click=${(event: Event) => {
+              this.#openPrinter(p, event);
+            }}
+            >${t("printers.calibrate")}</wt-button
+          ></wt-disclosure
+        >
       </div>
     </section>`;
   }
@@ -2472,31 +2844,15 @@ export class PrintersScreen extends LitElement {
     if (!p) return nothing;
     const errors = this.formAttempted ? this.#printerErrors(p) : {};
     const settingDots = textGrid(p.paperWidth, p.resolution).widthDots;
-    const fieldInvalid = PRINTER_FIELDS.some((key) => errors[key] !== undefined);
     const bottom = bottomMessage(
       refusal(this.errorKey),
       refusal(this.testError),
-      ...Object.entries(errors)
-        .filter(([key]) => !PRINTER_FIELDS.includes(key))
-        .map(([, message]) => message),
-      fieldInvalid ? t("form.fix_fields") : null,
+      ...Object.values(errors),
     );
-    const field = (key: "name" | "host" | "port", label: string, required = false) =>
-      html`<wt-input
-        name=${`printer-${key}`}
-        label=${label}
-        .value=${p[key]}
-        ?required=${required}
-        type=${key === "port" ? "number" : "text"}
-        data-test=${`printer-${key}-${p.id}`}
-        .invalid=${!!errors[key]}
-        .error=${errors[key] ?? ""}
-        @wt-change=${this.#editHandler(p.id, key)}
-      ></wt-input>`;
     return html`<wt-modal
       size="standard"
       data-test="edit-printer-modal"
-      heading=${this.calibrationStep ? `${t("printers.calibrate")}: ${p.name}` : t("printers.edit_printer")}
+      heading=${`${t("printers.calibrate")}: ${p.name}`}
       .open=${true}
       @wt-close=${() => {
         this.editingPrinter = null;
@@ -2508,50 +2864,14 @@ export class PrintersScreen extends LitElement {
           void this.#deactivatePrinter(p.id);
         }
       }}
-      @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep > 0 && this.calibrationStep < 3 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
+      @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep < 3 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
     >
       <div class="form-fields">
         ${this.#renderRefreshError()}
-        ${this.calibrationStep ? html`<p role="status">${t("printers.calibration_progress").replace("{step}", String(this.calibrationStep))}</p>` : nothing}
+        <p role="status">
+          ${t("printers.calibration_progress").replace("{step}", String(this.calibrationStep))}
+        </p>
         ${this.#renderCalibrationFailure()}
-        ${
-          this.calibrationStep === 0
-            ? html`
-                ${field("name", t("printers.name"), true)}
-                <p>${transportName(p.transport)}</p>
-                ${
-                  p.transport === "network_tcp"
-                    ? html`<div class="field-row">
-                        ${field("host", t("printers.host"), true)}${field("port", t("printers.port"))}
-                      </div>`
-                    : html`<div class="setting-field">
-                        <span
-                          >${t(p.transport === "cloud_poll" ? "printers.poll_id" : "printers.local_key")}</span
-                        >
-                        <span
-                          data-test=${`printer-${p.transport === "cloud_poll" ? "poll-id" : "local-key"}-${p.id}`}
-                        >
-                          ${p.transport === "cloud_poll" ? p.pollId : p.localKey}
-                        </span>
-                      </div>`
-                }
-                <wt-switch
-                  name="printer-active"
-                  label=${t("printers.active")}
-                  data-test=${`printer-active-${p.id}`}
-                  .checked=${p.active}
-                  @wt-change=${(e: CustomEvent<{ checked: boolean }>) => this.#editPrinter(p.id, { active: e.detail.checked })}
-                ></wt-switch>
-                <wt-button
-                  data-test="calibrate-printer"
-                  @click=${() => {
-                    if (this.#validatePrinter(p)) this.calibrationStep = 1;
-                  }}
-                  >${t("printers.calibrate")}</wt-button
-                >
-              `
-            : nothing
-        }
         <div
           data-test="calibration-step-1"
           class="form-fields"
@@ -2721,7 +3041,6 @@ export class PrintersScreen extends LitElement {
             ? html`<wt-button
                 variant="primary"
                 data-test="calibration-next"
-                ?disabled=${fieldInvalid}
                 @click=${() => {
                   if (this.#validatePrinter(p)) this.calibrationStep++;
                 }}
@@ -2732,7 +3051,6 @@ export class PrintersScreen extends LitElement {
                   variant="primary"
                   data-test=${`save-printer-${p.id}`}
                   ?loading=${this.submitting}
-                  ?disabled=${fieldInvalid}
                   @click=${() => void this.#savePrinter(p.id)}
                   >${t("action.save")}</wt-button
                 >

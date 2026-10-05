@@ -1806,6 +1806,12 @@ list, on Venue settings' Kitchen tab and in the product editor's Courses window,
 courses in place without a modal, saving each change as it is made; the Courses window has one Done
 button.
 
+Printer details are a navigable destination with a different edit pattern. The printer name edits
+beside the heading, network host and port edit inside Connection, and Active saves in Status. Status
+starts open; Connection and Calibration start closed, each with a summary. Calibration opens its
+wizard at paper settings. The list's Edit action navigates to the details page and opens the name
+field. A draft name or connection change asks to be discarded before leaving that page.
+
 **A screen that isn't itself a navigable destination is the whole page in a modal, not just its
 edits.** `dashboard-profile-screen` (Your profile) has no sidebar entry and is reached from the
 banner on any face — `dashboard-app.ts` treats it as a boolean (`profileOpen`), never a `screen`,
