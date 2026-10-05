@@ -19,40 +19,24 @@ export function requireDeviceName(value: unknown): string {
   return name;
 }
 
-/**
- * Refuse a reassign to a profile that names no row as `device.binding_invalid` naming the input
- * FIELD (`deviceProfileId`, the assign-device-profile route).
- *
- * Asked BEFORE the write rather than read off the refusal afterwards. The engine's foreign-key
- * refusal is the whole message `FOREIGN KEY constraint failed` — no table, no column, no
- * constraint name (`packages/db/src/constraint-target.ts` states this), and `devices` carries
- * several other foreign keys, so a refusal cannot be attributed to any one of them.
- *
- * The lookup runs on the CALLER's transaction, which is also the write's, and
- * `packages/store/src/write-queue.ts` admits one write transaction at a time — so the profile cannot
- * be deleted between the check and the statement. A second process on the same file is outside
- * that and would get the raw refusal.
- */
-export async function requireDeviceBinding(
-  tx: Transaction,
-  deviceProfileId: string,
-): Promise<void> {
-  const profile = await getDeviceProfile(tx, deviceProfileId);
-  if (profile === undefined) {
-    throw new AppError("device.binding_invalid", { field: "deviceProfileId" });
-  }
-}
-
 /** `devices_location_label_active_key`, as the table and columns a refusal on it names. */
 const DEVICE_NAME_UNIQUE: ConstraintTarget = {
   table: "devices",
   columns: ["location_id", "label"],
 };
 
-/**
- * Insert a device on the caller's transaction. A refusal on {@link DEVICE_NAME_UNIQUE} becomes
- * `device.name_taken`; any other refusal is rethrown raw.
- */
+/** A refusal on {@link DEVICE_NAME_UNIQUE} as `device.name_taken`; any other error unchanged. */
+export function mapDeviceNameTaken(error: unknown): unknown {
+  if (isUniqueViolation(error)) {
+    const target = constraintTarget(error);
+    if (target !== undefined && sameTarget(target, DEVICE_NAME_UNIQUE)) {
+      return new AppError("device.name_taken", {});
+    }
+  }
+  return error;
+}
+
+/** Insert a device on the caller's transaction, refusals mapped by {@link mapDeviceNameTaken}. */
 export async function insertDevice(
   tx: Transaction,
   row: typeof devices.$inferInsert,
@@ -60,13 +44,7 @@ export async function insertDevice(
   try {
     await tx.insert(devices).values(row);
   } catch (error) {
-    if (isUniqueViolation(error)) {
-      const target = constraintTarget(error);
-      if (target !== undefined && sameTarget(target, DEVICE_NAME_UNIQUE)) {
-        throw new AppError("device.name_taken", {});
-      }
-    }
-    throw error;
+    throw mapDeviceNameTaken(error);
   }
 }
 

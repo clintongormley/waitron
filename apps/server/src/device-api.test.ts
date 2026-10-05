@@ -1,16 +1,10 @@
-/**
- * The device join, enrolment and management surface end to end.
- *
- * `rejects a nonexistent or absent profile — device untouched` is the only case proving that a
- * device write naming a missing profile is refused as `device.binding_invalid` rather than as a 500.
- * A refusal on one of the OTHER foreign keys of `devices` is rethrown raw, and nothing here checks
- * that it cannot be mistaken for a binding fault.
- */
+/** The device join, enrolment and management surface end to end. */
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  deviceMadeHereStations,
   devices,
   deviceProfiles,
   kitchenStations,
@@ -1092,165 +1086,286 @@ describe("Device management routes (device.manage)", () => {
     });
     expect(malformed.status).toBe(404);
   });
-
-  describe("assign-device-profile (reassign only — the profile is NOT NULL since Task 7)", () => {
-    it("reassigns a device to another of this tenant's profiles", async () => {
-      const venue = await setupVenue(suite.db);
-      const app = mountApp(venue.cfg);
-      const { deviceId } = await enrolKds(app, venue, venue.defaultStationId);
-      const target = await seedProfile("kds");
-
-      const assign = await send(
-        app,
-        "POST",
-        `/management-api/devices/${deviceId}/assign-device-profile`,
-        { cookie: venue.managerCookie, body: { deviceProfileId: target } },
-      );
-      expect(assign.status).toBe(204);
-      expect((await deviceBindings(deviceId)).deviceProfileId).toBe(target);
-    });
-
-    it("moves the device onto the new profile's first usable printers", async () => {
-      const venue = await setupVenue(suite.db);
-      const app = mountApp(venue.cfg);
-      const [p1, p2, p3] = await seedNamedPrinters(venue.cfg, ["Bar", "Counter", "Portable"]);
-      const from = await seedProfile("till");
-      const to = await seedProfile("till");
-      await withTransaction(suite.db, async (tx) => {
-        await setProfilePrinterLists(tx, from, {
-          receiptPrinterIds: [p1!],
-          paymentSlipPrinterIds: [p1!],
-        });
-        await setProfilePrinterLists(tx, to, {
-          receiptPrinterIds: [p2!, p1!],
-          paymentSlipPrinterIds: [p3!, p1!],
-        });
-      });
-      const { deviceId } = await knockAndAccept(app, venue, { name: "Caja", profileId: from });
-      expect(await deviceBindings(deviceId)).toMatchObject({
-        receiptPrinterId: p1,
-        paymentSlipPrinterId: p1,
-      });
-
-      const assign = await send(
-        app,
-        "POST",
-        `/management-api/devices/${deviceId}/assign-device-profile`,
-        { cookie: venue.managerCookie, body: { deviceProfileId: to } },
-      );
-      expect(assign.status).toBe(204);
-      expect(await deviceBindings(deviceId)).toMatchObject({
-        deviceProfileId: to,
-        receiptPrinterId: p2,
-        paymentSlipPrinterId: p3,
-      });
-    });
-
-    it("keeps the device's chosen printers when it is reassigned to the profile it already has", async () => {
-      const venue = await setupVenue(suite.db);
-      const app = mountApp(venue.cfg);
-      const [p1, p2] = await seedNamedPrinters(venue.cfg, ["Bar", "Counter"]);
-      const profileId = await seedProfile("till");
-      await withTransaction(suite.db, (tx) =>
-        setProfilePrinterLists(tx, profileId, {
-          receiptPrinterIds: [p1!, p2!],
-          paymentSlipPrinterIds: [p1!, p2!],
-        }),
-      );
-      const { deviceId } = await knockAndAccept(app, venue, { name: "Caja", profileId });
-      await suite.db
-        .update(devices)
-        .set({ receiptPrinterId: p2!, paymentSlipPrinterId: null })
-        .where(eq(devices.id, deviceId));
-
-      const assign = await send(
-        app,
-        "POST",
-        `/management-api/devices/${deviceId}/assign-device-profile`,
-        { cookie: venue.managerCookie, body: { deviceProfileId: profileId } },
-      );
-      expect(assign.status).toBe(204);
-      expect(await deviceBindings(deviceId)).toMatchObject({
-        deviceProfileId: profileId,
-        receiptPrinterId: p2,
-        paymentSlipPrinterId: null,
-      });
-    });
-
-    it("rejects a nonexistent or absent profile — device untouched", async () => {
-      const venue = await setupVenue(suite.db);
-      const app = mountApp(venue.cfg);
-      const { deviceId, profileId } = await enrolKds(app, venue, venue.defaultStationId);
-
-      for (const badProfile of [randomUUID()]) {
-        const res = await send(
-          app,
-          "POST",
-          `/management-api/devices/${deviceId}/assign-device-profile`,
-          { cookie: venue.managerCookie, body: { deviceProfileId: badProfile } },
-        );
-        expect(res.status).toBe(400);
-        expect(
-          (await res.json()) as { error: { code: string; params: { field: string } } },
-        ).toMatchObject({
-          error: { code: "device.binding_invalid", params: { field: "deviceProfileId" } },
-        });
-        expect((await deviceBindings(deviceId)).deviceProfileId).toBe(profileId);
-      }
-
-      // An absent target is a request-shape 400 (the profile is required — it cannot be cleared).
-      const absent = await send(
-        app,
-        "POST",
-        `/management-api/devices/${deviceId}/assign-device-profile`,
-        { cookie: venue.managerCookie, body: {} },
-      );
-      expect(absent.status).toBe(400);
-      expect(
-        (await absent.json()) as { error: { code: string; params: { field: string } } },
-      ).toMatchObject({
-        error: { code: "management.request_invalid", params: { field: "deviceProfileId" } },
-      });
-    });
-
-    it("with an unknown or malformed device id → 404 device.not_found", async () => {
-      const venue = await setupVenue(suite.db);
-      const app = mountApp(venue.cfg);
-      const profileId = await seedProfile("kds");
-      const unknown = randomUUID();
-      const res = await send(
-        app,
-        "POST",
-        `/management-api/devices/${unknown}/assign-device-profile`,
-        { cookie: venue.managerCookie, body: { deviceProfileId: profileId } },
-      );
-      expect(res.status).toBe(404);
-
-      const malformed = await send(
-        app,
-        "POST",
-        "/management-api/devices/not-a-uuid/assign-device-profile",
-        { cookie: venue.managerCookie, body: { deviceProfileId: profileId } },
-      );
-      expect(malformed.status).toBe(404);
-    });
-  });
 });
 
-describe("PUT /management-api/devices/:id/made-here (device.manage)", () => {
-  it("sets a device's list and includes it in the management GET", async () => {
+describe("PATCH /management-api/devices/:id (device.manage)", () => {
+  type EditBody = {
+    name: string;
+    profileId: string;
+    stationId: string | null;
+    watcherId: string | null;
+    receiptPrinterId: string | null;
+    paymentSlipPrinterId: string | null;
+    madeHereStationIds: string[];
+  };
+
+  /** What the Edit dialog would send for the device as stored, so a case changes only its own field. */
+  async function storedBody(deviceId: string): Promise<EditBody> {
+    const [row] = await suite.db
+      .select({
+        name: devices.label,
+        profileId: devices.deviceProfileId,
+        stationId: devices.stationId,
+        watcherId: devices.watcherId,
+        receiptPrinterId: devices.receiptPrinterId,
+        paymentSlipPrinterId: devices.paymentSlipPrinterId,
+      })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    const madeHere = await suite.db
+      .select({ stationId: deviceMadeHereStations.stationId })
+      .from(deviceMadeHereStations)
+      .where(eq(deviceMadeHereStations.deviceId, deviceId));
+    return { ...row!, madeHereStationIds: madeHere.map((r) => r.stationId) };
+  }
+
+  async function edit(
+    app: Hono,
+    cookie: string,
+    deviceId: string,
+    changes: Partial<Record<keyof EditBody, unknown>> = {},
+  ): Promise<Response> {
+    return send(app, "PATCH", `/management-api/devices/${deviceId}`, {
+      cookie,
+      body: { ...(await storedBody(deviceId)), ...changes },
+    });
+  }
+
+  async function labelOf(deviceId: string): Promise<string> {
+    const [row] = await suite.db
+      .select({ label: devices.label })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    return row!.label;
+  }
+
+  /** A till on a profile listing receipt [Bar, Counter] and slip [Bar, Counter]. */
+  async function tillOnListedProfile(venue: Venue, app: Hono, name = "Caja") {
+    const [bar, counter] = await seedNamedPrinters(venue.cfg, ["Bar", "Counter"]);
+    const profileId = await seedProfile("till");
+    await withTransaction(suite.db, (tx) =>
+      setProfilePrinterLists(tx, profileId, {
+        receiptPrinterIds: [bar!, counter!],
+        paymentSlipPrinterIds: [bar!, counter!],
+      }),
+    );
+    const { deviceId } = await knockAndAccept(app, venue, { name, profileId });
+    return { bar: bar!, counter: counter!, profileId, deviceId };
+  }
+
+  it("renames a device", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolTill(app, venue, "Caja");
+    const res = await edit(app, venue.managerCookie, deviceId, { name: "Barra 2" });
+    expect(res.status).toBe(204);
+    expect(await labelOf(deviceId)).toBe("Barra 2");
+  });
+
+  it("renames a device whose receipt printer has since been switched off", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    expect(await deviceBindings(t.deviceId)).toMatchObject({ receiptPrinterId: t.bar });
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, t.bar));
+
+    const res = await edit(app, venue.managerCookie, t.deviceId, { name: "Barra 2" });
+    expect(res.status).toBe(204);
+    expect(await labelOf(t.deviceId)).toBe("Barra 2");
+    expect(await deviceBindings(t.deviceId)).toMatchObject({
+      receiptPrinterId: t.bar,
+      paymentSlipPrinterId: t.bar,
+    });
+  });
+
+  it("refuses a blank name on edit", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolTill(app, venue, "Caja");
+    const res = await edit(app, venue.managerCookie, deviceId, { name: "   " });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "name" } },
+    });
+    expect(await labelOf(deviceId)).toBe("Caja");
+  });
+
+  it("refuses the name of another active device as device.name_taken", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    await enrolTill(app, venue, "Barra");
+    const { deviceId } = await enrolTill(app, venue, "Caja");
+    const res = await edit(app, venue.managerCookie, deviceId, { name: "Barra" });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "device.name_taken" } });
+    expect(await labelOf(deviceId)).toBe("Caja");
+  });
+
+  it("a name differing only by surrounding spaces clashes", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    await enrolTill(app, venue, "Barra");
+    const { deviceId } = await enrolTill(app, venue, "Caja");
+    const res = await edit(app, venue.managerCookie, deviceId, { name: " Barra " });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "device.name_taken" } });
+    expect(await labelOf(deviceId)).toBe("Caja");
+  });
+
+  it("reuses a revoked device's name", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const old = await enrolTill(app, venue, "Barra");
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, old.deviceId));
+    const { deviceId } = await enrolTill(app, venue, "Caja");
+    const res = await edit(app, venue.managerCookie, deviceId, { name: "Barra" });
+    expect(res.status).toBe(204);
+    expect(await labelOf(deviceId)).toBe("Barra");
+  });
+
+  it("refuses a revoked, unknown or malformed device as device.not_found", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolTill(app, venue, "Caja");
+    const body = await storedBody(deviceId);
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+    for (const id of [deviceId, randomUUID(), "not-a-uuid"]) {
+      const res = await send(app, "PATCH", `/management-api/devices/${id}`, {
+        cookie: venue.managerCookie,
+        body: { ...body, name: "Renamed" },
+      });
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({ error: { code: "device.not_found" } });
+    }
+    expect(await labelOf(deviceId)).toBe("Caja");
+  });
+
+  it("changes the profile and moves the printers to the new profile's first in the same request", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const [p1, p2, p3] = await seedNamedPrinters(venue.cfg, ["Bar", "Counter", "Portable"]);
+    const from = await seedProfile("till");
+    const to = await seedProfile("till");
+    await withTransaction(suite.db, async (tx) => {
+      await setProfilePrinterLists(tx, from, {
+        receiptPrinterIds: [p1!],
+        paymentSlipPrinterIds: [p1!],
+      });
+      await setProfilePrinterLists(tx, to, {
+        receiptPrinterIds: [p2!, p1!],
+        paymentSlipPrinterIds: [p3!, p1!],
+      });
+    });
+    const { deviceId } = await knockAndAccept(app, venue, { name: "Caja", profileId: from });
+    expect(await deviceBindings(deviceId)).toMatchObject({
+      receiptPrinterId: p1,
+      paymentSlipPrinterId: p1,
+    });
+
+    const res = await edit(app, venue.managerCookie, deviceId, {
+      name: "Barra",
+      profileId: to,
+      receiptPrinterId: p2,
+      paymentSlipPrinterId: p3,
+    });
+    expect(res.status).toBe(204);
+    expect(await deviceBindings(deviceId)).toMatchObject({
+      deviceProfileId: to,
+      receiptPrinterId: p2,
+      paymentSlipPrinterId: p3,
+    });
+    expect(await labelOf(deviceId)).toBe("Barra");
+  });
+
+  it("keeps the printers when the profile is unchanged", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    await suite.db
+      .update(devices)
+      .set({ receiptPrinterId: t.counter, paymentSlipPrinterId: null })
+      .where(eq(devices.id, t.deviceId));
+
+    const res = await edit(app, venue.managerCookie, t.deviceId);
+    expect(res.status).toBe(204);
+    expect(await deviceBindings(t.deviceId)).toMatchObject({
+      deviceProfileId: t.profileId,
+      receiptPrinterId: t.counter,
+      paymentSlipPrinterId: null,
+    });
+  });
+
+  it("refuses a printer not on the (new) profile with device.binding_invalid and changes nothing", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const t = await tillOnListedProfile(venue, app);
+    const [elsewhere] = await seedNamedPrinters(venue.cfg, ["Terraza"]);
+    const other = await seedProfile("till");
+    await withTransaction(suite.db, (tx) =>
+      setProfilePrinterLists(tx, other, {
+        receiptPrinterIds: [elsewhere!],
+        paymentSlipPrinterIds: [elsewhere!],
+      }),
+    );
+
+    // The body keeps the old profile's receipt printer, which the new profile does not list.
+    const res = await edit(app, venue.managerCookie, t.deviceId, {
+      name: "Renamed",
+      profileId: other,
+      paymentSlipPrinterId: elsewhere,
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "device.binding_invalid", params: { field: "receiptPrinterId" } },
+    });
+    expect(await labelOf(t.deviceId)).toBe("Caja");
+    expect(await deviceBindings(t.deviceId)).toEqual({
+      deviceProfileId: t.profileId,
+      receiptPrinterId: t.bar,
+      paymentSlipPrinterId: t.bar,
+    });
+  });
+
+  it("refuses a profile that names no row as device_profile.not_found, device untouched", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId, profileId } = await enrolTill(app, venue, "Caja");
+    const res = await edit(app, venue.managerCookie, deviceId, {
+      name: "Renamed",
+      profileId: randomUUID(),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "device_profile.not_found" } });
+    expect((await deviceBindings(deviceId)).deviceProfileId).toBe(profileId);
+    expect(await labelOf(deviceId)).toBe("Caja");
+  });
+
+  it("a kitchen screen's profile without a station or watcher is device.station_required", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolKds(app, venue, venue.defaultStationId);
+    const res = await edit(app, venue.managerCookie, deviceId, {
+      name: "Renamed",
+      stationId: null,
+      watcherId: null,
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: { code: "device.station_required" } });
+    expect(await storedBody(deviceId)).toMatchObject({
+      name: "Pantalla Cocina",
+      stationId: venue.defaultStationId,
+    });
+  });
+
+  it("sets the made-here stations, and the management GET lists them", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId } = await enrolTill(app, venue);
     const bar = await withTransaction(suite.db, (tx) =>
       createStation(tx, venue.cfg, { name: "Bar" }),
     );
-    const path = `/management-api/devices/${deviceId}/made-here`;
-    const put = await send(app, "PUT", path, {
-      cookie: venue.managerCookie,
-      body: { stationIds: [bar.id] },
-    });
-    expect(put.status).toBe(204);
+    const res = await edit(app, venue.managerCookie, deviceId, { madeHereStationIds: [bar.id] });
+    expect(res.status).toBe(204);
     const get = await send(app, "GET", "/management-api/devices", { cookie: venue.managerCookie });
     expect(get.status).toBe(200);
     expect(
@@ -1260,64 +1375,68 @@ describe("PUT /management-api/devices/:id/made-here (device.manage)", () => {
     ).toEqual([bar.id]);
   });
 
-  it("refuses missing permission, malformed input, unknown device and switched-off station", async () => {
+  it("refuses a stored made-here station since switched off as station.not_found", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const { deviceId } = await enrolTill(app, venue);
-    const path = `/management-api/devices/${deviceId}/made-here`;
-    const cases: { path: string; cookie?: string; body: unknown; status: number; code: string }[] =
-      [
-        { path, body: { stationIds: [] }, status: 401, code: "management_session.required" },
-        {
-          path,
-          cookie: venue.staffCookie,
-          body: { stationIds: [] },
-          status: 403,
-          code: "authorization.not_permitted",
-        },
-        {
-          path: "/management-api/devices/bad/made-here",
-          cookie: venue.managerCookie,
-          body: { stationIds: [] },
-          status: 404,
-          code: "device.not_found",
-        },
-        {
-          path: `/management-api/devices/${randomUUID()}/made-here`,
-          cookie: venue.managerCookie,
-          body: { stationIds: [] },
-          status: 404,
-          code: "device.not_found",
-        },
-        ...[{}, { stationIds: null }, { stationIds: ["bad"] }].map((body) => ({
-          path,
-          cookie: venue.managerCookie,
-          body,
-          status: 400,
-          code: "management.request_invalid",
-        })),
-      ];
-    for (const one of cases) {
-      const res = await send(app, "PUT", one.path, { cookie: one.cookie, body: one.body });
-      expect(res.status).toBe(one.status);
-      expect(await res.json()).toMatchObject({
-        error: {
-          code: one.code,
-          ...(one.code === "management.request_invalid" ? { params: { field: "stationIds" } } : {}),
-        },
-      });
-    }
-    const off = await withTransaction(suite.db, async (tx) => {
-      const row = await createStation(tx, venue.cfg, { name: "Off" });
-      await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, row.id));
-      return row;
-    });
-    const res = await send(app, "PUT", path, {
-      cookie: venue.managerCookie,
-      body: { stationIds: [off.id] },
-    });
+    const { deviceId } = await enrolTill(app, venue, "Caja");
+    const off = await withTransaction(suite.db, (tx) =>
+      createStation(tx, venue.cfg, { name: "Off" }),
+    );
+    expect(
+      (await edit(app, venue.managerCookie, deviceId, { madeHereStationIds: [off.id] })).status,
+    ).toBe(204);
+    await suite.db
+      .update(kitchenStations)
+      .set({ active: false })
+      .where(eq(kitchenStations.id, off.id));
+
+    const res = await edit(app, venue.managerCookie, deviceId, { name: "Renamed" });
     expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({ error: { code: "station.not_found" } });
+    expect(await labelOf(deviceId)).toBe("Caja");
+  });
+
+  it("refuses a malformed body field as management.request_invalid naming it", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolTill(app, venue, "Caja");
+    const cases: [Partial<Record<keyof EditBody, unknown>>, string][] = [
+      [{ profileId: undefined }, "profileId"],
+      [{ profileId: null }, "profileId"],
+      [{ stationId: "bad" }, "stationId"],
+      [{ watcherId: "bad" }, "watcherId"],
+      [{ receiptPrinterId: undefined }, "receiptPrinterId"],
+      [{ paymentSlipPrinterId: "bad" }, "paymentSlipPrinterId"],
+      [{ madeHereStationIds: undefined }, "madeHereStationIds"],
+      [{ madeHereStationIds: null }, "madeHereStationIds"],
+      [{ madeHereStationIds: ["bad"] }, "madeHereStationIds"],
+    ];
+    for (const [changes, field] of cases) {
+      const res = await edit(app, venue.managerCookie, deviceId, { name: "Renamed", ...changes });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    expect(await labelOf(deviceId)).toBe("Caja");
+  });
+
+  it("needs device.manage — 401 unauthenticated, 403 for a staff session", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolTill(app, venue, "Caja");
+    const body = { ...(await storedBody(deviceId)), name: "Renamed" };
+    const path = `/management-api/devices/${deviceId}`;
+
+    const anonymous = await send(app, "PATCH", path, { body });
+    expect(anonymous.status).toBe(401);
+    expect(await anonymous.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+    const staff = await send(app, "PATCH", path, { cookie: venue.staffCookie, body });
+    expect(staff.status).toBe(403);
+    expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await labelOf(deviceId)).toBe("Caja");
   });
 });
 
