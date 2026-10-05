@@ -3544,7 +3544,7 @@ it("keeps a disabled printer available when adding it again fails", async () => 
 });
 
 it.each(["printer-row-p1", "job-printer-j1"])(
-  "opens printer status then its editor from %s",
+  "opens printer details then its inline name editor from %s",
   async (selector) => {
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi(),
@@ -3556,10 +3556,10 @@ it.each(["printer-row-p1", "job-printer-j1"])(
     expect(q(el, "[data-test=printer-status]")?.checkVisibility()).toBe(true);
     expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
     expect(text(el, "[data-test=printer-status]")).toContain("10.0.0.9:9100");
-    q(el, "[data-test=edit-printer-details]")!.click();
+    q(el, "[data-test=edit-printer-name]")!.click();
     await flush(el);
-    expect(q(el, "[data-test=edit-printer-modal]")?.checkVisibility()).toBe(true);
-    expect((q(el, "[data-test=printer-name-p1]") as import("@waitron/ui").WtInput)?.value).toBe(
+    expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
+    expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput)?.value).toBe(
       "Cocina",
     );
   },
