@@ -441,8 +441,13 @@ hash the cookie was verified against, or it is refused `device.unauthorized` and
 an Enable, landing while the PIN is checked therefore leaves no session open
 (`apps/server/src/join-e2e.test.ts`, "a sign-in that Disable overtook is refused, and opens no
 session" and "a sign-in that Disable and then Enable both overtook is refused, and opens no
-session"). Enabling still ends any session open on the device, a second
-line for a device turned off outside the Disable route. A
+session"). The same check hands back the device as it stands at that moment, and the sign-in
+refuses it `device.forbidden_action` (`action: "sign_in"`) if its profile is now a kitchen
+screen's (`refuseKitchenSignIn`, `apps/server/src/till-api.ts`), so a move onto a kitchen-screen
+profile while the PIN is checked opens no session (`apps/server/src/join-e2e.test.ts`, "a sign-in
+overtaken by a move onto a kitchen-screen profile is refused, and opens no session"). Enabling
+still ends any session open on the device, a second line for a device turned off outside the
+Disable route. A
 knock whose proof another knock or Pair overtook is refused `device.join_stale` with no new cookie,
 so the browser keeps the one it has. Cancel and the number check name the ask by its `createdAt` as
 well as its id, and a replacing knock always gets a later `createdAt`, so a dialog still showing the

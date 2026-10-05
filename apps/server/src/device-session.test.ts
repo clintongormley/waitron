@@ -582,6 +582,31 @@ describe("requireDeviceProof and assertDeviceStillProven (venue database)", () =
     expect(await stillProven(proof)).toBe("device.unauthorized");
   });
 
+  it("returns the device as it stands now, not as the proof read it", async () => {
+    const { cfg, deviceId, token } = await enrolDeviceFixture();
+    const proof = await proofFor({ cookie: `${DEVICE_COOKIE}=${deviceId}.${token}` });
+    expect(proof.device.formFactor).toBe("kds");
+    const tillProfileId = await seedDeviceProfile("Bar tills", "till", ["take-cash"]);
+    await suite.db
+      .update(devices)
+      .set({ deviceProfileId: tillProfileId, stationId: null, label: "Bar till" })
+      .where(eq(devices.id, deviceId));
+
+    const current = await withTransaction(suite.db, (tx) => assertDeviceStillProven(tx, proof));
+    expect(current).toEqual({
+      deviceId,
+      formFactor: "till",
+      label: "Bar till",
+      locationId: cfg.locationId,
+      stationId: null,
+      deviceProfileId: tillProfileId,
+      watcherId: null,
+      receiptPrinterId: null,
+      paymentSlipPrinterId: null,
+      capabilities: ["take-cash"],
+    });
+  });
+
   it("a dev-header proof carries no hash and is checked again for active alone", async () => {
     const { deviceBId } = await enrolDevDevices();
     const proof = await proofFor({ [DEV_DEVICE_HEADER]: deviceBId }, true);

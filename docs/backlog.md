@@ -5420,9 +5420,21 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   (`apps/server/src/join-e2e.test.ts`; with that check removed both cases fail). The refusal of a
   session on a disabled device (`device.unauthorized`) stays, and Enable still ends the device's
   sessions, as a second line for a device turned off outside the Disable route (with that call
-  removed, the join e2e case turning a device off directly fails). Open point: sign-in refuses a
-  kitchen screen by the profile it read before the PIN check, so a till moved onto a kitchen-screen
-  profile during that check could still open a session (older than W105f).
+  removed, the join e2e case turning a device off directly fails).
+  **W105i (done):** the same in-transaction check now hands back the device as it stands at that
+  moment, and the sign-in refuses it `device.forbidden_action` (`action: "sign_in"`) if its profile
+  is now a kitchen screen's, so a till moved onto a kitchen-screen profile while the PIN is checked
+  opens no session; a move onto another till profile still signs in. The refusal before the PIN
+  check stays, so a kitchen screen is turned away before any PIN work. `POST /api/session` is the
+  only route that opens a session tied to a device: `loginWithPin` (`packages/identity/src/login.ts`)
+  is otherwise called only by test code (the fixtures under `apps/server/src/testing/` and
+  `packages/identity/test/` among it) and three demo scripts under `apps/server/scripts/`, and
+  dashboard and mirror sessions name no device. Cases in `apps/server/src/join-e2e.test.ts` and
+  `apps/server/src/device-session.test.ts`; with either check removed, its case fails. Still open:
+  a shift session already open when its device is moved onto a kitchen-screen profile stays
+  open — a review signed in on a till, moved it onto a kitchen-screen profile through the management
+  route, and found one session still open; whether such a move should end the device's sessions is
+  not decided.
   **W106 (done, #1240):** `devices` gains three empty-by-default columns: the battery level,
   whether it is charging and when that was reported (core `0099`). A paired device sends both to
   `PUT /api/device/battery`, which refuses a level outside 0 to 100 and stores at most one report a

@@ -46,7 +46,7 @@ const between = vi.hoisted(() => ({
    * another ask, or with Pair, lands. */
   proofAndTransaction: async (): Promise<void> => {},
   /** After the till sign-in checks its PIN, before the transaction that opens the session: where a
-   * Disable that overtakes a sign-in lands. */
+   * Disable or a profile move that overtakes a sign-in lands. */
   pinCheckAndSignIn: async (): Promise<void> => {},
 }));
 vi.mock("./join-requests.js", async (importOriginal) => {
@@ -96,7 +96,7 @@ function mountBoth(cfg: TillConfig, pairingMode: PairingMode = createPairingMode
 
 async function send(
   app: Hono,
-  method: "GET" | "POST" | "PUT" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   opts: { body?: unknown; cookie?: string } = {},
 ): Promise<Response> {
@@ -426,7 +426,7 @@ describe("a disabled device comes back as the same device", () => {
     venue: Venue,
     holdId: string,
     joined: { joinId: string; verificationNumber: string },
-    body: { name: string; profileId: string },
+    body: { name: string; profileId: string; stationId?: string },
   ): Promise<Response> {
     const checked = await send(
       app,
@@ -588,6 +588,29 @@ describe("a disabled device comes back as the same device", () => {
 
   async function signIn(app: Hono, jar: string, personId: string): Promise<Response> {
     return send(app, "POST", "/api/session", { cookie: jar, body: { personId, pin: "4321" } });
+  }
+
+  /** Moves a device onto another profile, naming it Bar till and leaving every printer unset. */
+  async function moveOnto(
+    app: Hono,
+    venue: Venue,
+    deviceId: string,
+    profileId: string,
+    stationId: string | null,
+  ): Promise<void> {
+    const res = await send(app, "PATCH", `/management-api/devices/${deviceId}`, {
+      cookie: venue.managerCookie,
+      body: {
+        name: "Bar till",
+        profileId,
+        stationId,
+        watcherId: null,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+        madeHereStationIds: [],
+      },
+    });
+    expect(res.status).toBe(204);
   }
 
   it("knocks as itself, is listed as returning, and Pair enables the same row with its settings", async () => {
@@ -801,6 +824,88 @@ describe("a disabled device comes back as the same device", () => {
     expect(fresh.status).toBe(200);
     expect(await openSessionsOn(deviceId)).toBe(1);
     expect((await sessionRead(app, deviceCookieFrom(fresh))).status).toBe(200);
+  });
+
+  it("a sign-in overtaken by a move onto a kitchen-screen profile is refused, and opens no session", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountWithSignIn(venue);
+    const profileId = await seedProfile("till");
+    const kitchenId = await seedProfile("kds");
+    const holdId = await openWindow(app, venue);
+    const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
+    const [person] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Camarera", pinHash: hashPin("4321"), role: "staff" })
+      .returning({ id: persons.id });
+    between.pinCheckAndSignIn = async () => {
+      between.pinCheckAndSignIn = async () => {};
+      await moveOnto(app, venue, deviceId, kitchenId, venue.defaultStationId);
+    };
+
+    const late = await signIn(app, jar, person!.id);
+    expect(late.status).toBe(403);
+    expect(await errorOf(late)).toMatchObject({
+      code: "device.forbidden_action",
+      params: { action: "sign_in" },
+    });
+    expect(late.headers.get("set-cookie")).toBeNull();
+    expect(await openSessionsOn(deviceId)).toBe(0);
+  });
+
+  it("a kitchen screen's sign-in is refused before its PIN is checked", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountWithSignIn(venue);
+    const kitchenId = await seedProfile("kds");
+    const holdId = await openWindow(app, venue);
+    const joined = await knock(app, "Pass screen");
+    const accepted = await pair(app, venue, holdId, joined, {
+      name: "Pass screen",
+      profileId: kitchenId,
+      stationId: venue.defaultStationId,
+    });
+    expect(accepted.status).toBe(200);
+    const [person] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Camarera", pinHash: hashPin("4321"), role: "staff" })
+      .returning({ id: persons.id });
+    let pinChecked = false;
+    between.pinCheckAndSignIn = async () => {
+      pinChecked = true;
+    };
+
+    const refused = await signIn(app, joined.jar, person!.id);
+    expect(refused.status).toBe(403);
+    expect(await errorOf(refused)).toMatchObject({
+      code: "device.forbidden_action",
+      params: { action: "sign_in" },
+    });
+    expect(refused.headers.get("set-cookie")).toBeNull();
+    expect(pinChecked).toBe(false);
+    expect(await openSessionsOn(joined.joinId)).toBe(0);
+  });
+
+  it("a sign-in overtaken by a move onto another till profile still signs in", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountWithSignIn(venue);
+    const profileId = await seedProfile("till");
+    const otherTillId = await seedProfile("till");
+    const holdId = await openWindow(app, venue);
+    const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
+    const [person] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Camarera", pinHash: hashPin("4321"), role: "staff" })
+      .returning({ id: persons.id });
+    let moved = false;
+    between.pinCheckAndSignIn = async () => {
+      between.pinCheckAndSignIn = async () => {};
+      await moveOnto(app, venue, deviceId, otherTillId, null);
+      moved = true;
+    };
+
+    const signedIn = await signIn(app, jar, person!.id);
+    expect(moved).toBe(true);
+    expect(signedIn.status).toBe(200);
+    expect(await openSessionsOn(deviceId)).toBe(1);
   });
 
   it("a browser with no device cookie still joins as a new device", async () => {
