@@ -636,7 +636,6 @@ export const en = {
   "profile.authenticator_enabled": "An authenticator app is enabled.",
   "profile.authenticator_hint": "Use an authenticator app for an extra sign-in check.",
   "profile.setup_authenticator": "Set up authenticator",
-  "profile.authenticator_disable": "Disable",
   "profile.authenticator_scan":
     "Scan this QR code with your authenticator app, then enter its current six-digit code.",
   "profile.authenticator_secret": "Setup key",
@@ -1267,6 +1266,7 @@ export const en = {
   "person.confirm_disable": "This signs the user out and prevents further login.",
   "person.confirm_enable": "This marks the user as Pending and sends a new invitation.",
   "profile.disable_authenticator": "Disable authenticator",
+  "profile.disable_authenticator_button": "Disable",
   "profile.unlink_google": "Remove Google login",
   "person.password": "Password",
   "person.set_password": "Set password",
@@ -2798,7 +2798,6 @@ export const es: Record<StringKey, string> = {
   "profile.authenticator_enabled": "Hay una aplicación de autenticación activada.",
   "profile.authenticator_hint": "Usa una aplicación de autenticación como comprobación adicional.",
   "profile.setup_authenticator": "Configurar autenticador",
-  "profile.authenticator_disable": "Desactivar",
   "profile.authenticator_scan":
     "Escanea este código QR con tu aplicación de autenticación e introduce su código actual de seis dígitos.",
   "profile.authenticator_secret": "Clave de configuración",
@@ -3434,6 +3433,7 @@ export const es: Record<StringKey, string> = {
   "person.confirm_disable": "Esto cierra la sesión e impide volver a acceder.",
   "person.confirm_enable": "Esto marca al usuario como pendiente y envía una invitación nueva.",
   "profile.disable_authenticator": "Desactivar autenticador",
+  "profile.disable_authenticator_button": "Desactivar",
   "profile.unlink_google": "Eliminar acceso con Google",
   "person.password": "Contraseña",
   "person.set_password": "Establecer contraseña",

@@ -2357,8 +2357,9 @@ removing a product from a menu removes that offer.
 
 Something switched off but kept — a product, a variant, an options or extras list, a zone, a
 department, a station, a table, a table status, an adjustment reason, a user, a printer, a print
-agent, a device, a card reader — is switched off with **Disable**, and wherever a screen brings it
-back, that action is **Enable**. Some have no Enable on any screen yet; the backlog entry "One word
+agent, a device, a card reader — is switched off with **Disable** (options and extras lists and
+table statuses are switched back on with an **Active** switch in their form), and where a screen has
+an action that brings it back, that action is **Enable**. Some have no Enable on any screen yet; the backlog entry "One word
 for switched off, kept for the record" in `docs/backlog.md` lists them. Its status reads **Active**
 or **Disabled**; there is no "Enabled" status. **Delete** is only for something really deleted, and **Remove** for taking a row out of a list or a link off a record,
 which may delete that row (Remove from this list, Remove image, a passkey). "Restore", "Add again", "Deactivate", "Reactivate" and
@@ -2373,9 +2374,9 @@ words.
 
 Where a screen has both, the action follows what the code does: the products list's bulk action
 reads Disable while only products are selected and Delete once a category is in the selection,
-because the category itself is deleted. Products selected directly are disabled; the category's own
-products are disabled only with **Delete it too**, and with **Move it up to the parent category**
-they stay active.
+because the category itself is deleted. Products selected directly are disabled; the products
+inside the category, its subcategories included, are disabled only with **Delete it too**, and with
+**Move it up to the parent category** they stay active.
 
 ### Products: Active and Available are two different words
 

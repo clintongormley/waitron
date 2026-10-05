@@ -848,7 +848,7 @@ export class ProfileScreen extends LitElement {
                       data-test="disable-authenticator"
                       class="card-action accent-danger"
                       @click=${() => this.#edit("disable-totp")}
-                      >${t("profile.authenticator_disable")}</wt-button
+                      >${t("profile.disable_authenticator_button")}</wt-button
                     >
                   </div>`
                 : html`<wt-button

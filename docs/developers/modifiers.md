@@ -221,7 +221,7 @@ price it was sold at, a pick that pairs with nothing is new and priced from the 
 published version, and a
 child no pick keeps is removed. A line whose quantity rises, while the kitchen does not have it,
 keeps its stored price, but its dish and its picks are priced afresh as a check first, so a dish or
-an extra that is Inactive or Unavailable, or has gained an Active variant, refuses the
+an extra that is disabled or Unavailable, or has gained an Active variant, refuses the
 raise with the code a new line naming it gets (`product.variant_required` for the variant). A line
 the edit does not change is not touched.
 
@@ -351,7 +351,7 @@ Six things it is worth knowing about that payload:
   itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a
   different code, `product.variant_required`, in `priceOrderLines`
   (`apps/server/src/working-order.ts`). A pick of a variant
-  still sells, as does a product whose only variants are Inactive. The catalogue's own saves do
+  still sells, as does a product whose only variants are disabled. The catalogue's own saves do
   not build that state: an extras list save naming such a product is refused
   `extras.product_has_variants` (`extras.ts`), and a save that would give a product an extras
   list offers an Active variant — from the parent's editor or the variant's own page — is refused

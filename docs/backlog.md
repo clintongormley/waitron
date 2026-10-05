@@ -8238,8 +8238,9 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   W105a; printers were out of W110's scope). (b) A kitchen-screen watcher's **Remove** marks the
   watcher inactive and drops its printers, its screens then say it was removed, and nothing lists or
   brings it back (`removeWatcher`, `apps/server/src/watchers.ts`), so it is neither a delete nor a
-  switch-off; a kitchen course's **Remove** does the same, setting `active: false` and keeping the
-  row with no screen to bring it back (`deactivateCourse`, `apps/server/src/kitchen.ts`). Both keep
+  switch-off; a kitchen course's **Remove** is the same kind of action: it sets `active: false` and
+  keeps the row, and no screen lists it or brings it back (`deactivateCourse`; `listCourses` returns
+  active courses only, `apps/server/src/kitchen.ts`). Both keep
   "Remove" until the owner decides which they are. (c) On the products list a
   disabled product's own row offers Disable again rather than Enable (a disabled variant's row does
   offer Enable); Enable for a product is only in its editor (`apps/dashboard/src/widgets/product-list.ts`,

@@ -274,8 +274,8 @@ With only products selected, the toolbar's action reads **Disable**: it switches
 product's `active` flag), and its dialog asks "Disable N products?". Their rows and previous sales
 remain, and you can enable the products again later. Once a category is in the selection the action
 reads **Delete**, because the category itself is deleted. Products you selected directly are still
-only disabled. The category's own products are disabled only if you choose **Delete it too**; with
-**Move it up to the parent category** they stay active. Before deleting a non-empty category, choose
+only disabled. The products inside the category, its subcategories included, are disabled only if
+you choose **Delete it too**; with **Move it up to the parent category** they stay active. Before deleting a non-empty category, choose
 what happens to its contents:
 
 - **Move it up to the parent category** keeps the products active and moves the category's direct

@@ -91,8 +91,8 @@ export async function readContentTranslationCandidates(
   // `translations` arrives as the JSON TEXT the column stores: this is a raw statement, so no
   // drizzle column mapping runs over the result.
   // A variant is a `products` row with a `parent_id`, so the product branch keeps to top-level
-  // rows and the variant branch to the rest; otherwise each variant would be counted twice. An
-  // Inactive (removed) variant is on no menu offer, so a language it lacks reaches no diner and must
+  // rows and the variant branch to the rest; otherwise each variant would be counted twice. A
+  // disabled variant is on no menu offer, so a language it lacks reaches no diner and must
   // not block a change of default.
   const result = await tx.execute<ContentTranslationCandidate>(sql`
     select 'product' as kind, id, null as product_id, customer_name as translations from products

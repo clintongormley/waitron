@@ -53,7 +53,7 @@ missing, and has a note saying how many names still need translating into it. A 
 some languages but not this one is marked **Partly translated**. Something with no customer-facing
 name at all is listed under your other languages as **No customer-facing name**, because there its
 staff name is shown instead; an extras list is the exception, because its own name never reaches a
-receipt. Deleted products and switched-off lists and menus are not listed.
+receipt. Disabled products, disabled lists and switched-off menus are not listed.
 
 Removing an additional language hides its ordinary translation fields but keeps the saved text.
 Add the language again to resume using those translations. The default language's row has no
