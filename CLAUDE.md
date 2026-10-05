@@ -630,12 +630,6 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   to it; a `const` it accepts can be changed after it is declared; a function injected beside it
   through `??` runs unseen; and a path that migrates without `applyMigrations` (`runMigrations`
   called directly) is invisible to it.
-- **A column of a transferred table that holds another row's id is a foreign key or listed in its
-  table's `references`**, or a configuration import carries the exporting venue's id across
-  unchanged. Guard: `scripts/id-columns-are-references.test.ts`, weaker than its name — it knows an
-  id column only by a name ending `_id` or `_ids`, trusts each column its `NOT_REFERENCES` list
-  names, and passes a declared `_ids` list though the import replaces only a whole value. See
-  [conventions-data.md](docs/developers/conventions-data.md).
 - **A new append-only table travels in both its module's exported migration descriptor and
   `packages/migrations/migrations.manifest.json`.** Guards:
   `scripts/append-only-migration-sets.test.ts` and `packages/composition/src/composition.test.ts`.
@@ -684,6 +678,14 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   when it fires, with `no such table`. Cost: the first `requires` graph was derived from `REFERENCES`
   alone and missed two edges made by triggers ON another module's tables, caught by hand in review. See
   [conventions-data.md](docs/developers/conventions-data.md).
+- **A column of a transferred table that holds another row's id is a foreign key, a declared
+  `references` entry, a location column or left out of the export** (`locationColumns`, `omit`);
+  any other column the export carries arrives holding the exporting venue's id. Cost: W72a's
+  narrowing (#1230) left two such columns that only a throwaway probe found; undeclared, two
+  transfer cases failed. Guard: `scripts/id-columns-are-references.test.ts`, weaker than its name —
+  it knows an id column only by a name ending `_id` or `_ids`, trusts each column its
+  `NOT_REFERENCES` list names, and passes a declared `_ids` list though the import replaces only a
+  whole value. See [conventions-data.md](docs/developers/conventions-data.md).
 - **No new table enters the core migration set without a stated reason in the commit.** A domain
   table a module owns belongs to that module's own set, where its append-only classification
   travels with it.
