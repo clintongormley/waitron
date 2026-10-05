@@ -64,13 +64,13 @@ export async function assertProductNamesFree(
  * `productId` is null for a product the write creates. `product` holds the fields the write sets;
  * `variants`, when given, is the whole list the write leaves, in order, and a stored variant it
  * leaves out is made Inactive (`writeProductVariants`); absent, the stored variants stay as they
- * are. A variant's absent `active` keeps its stored state, or is Active for a new one.
+ * are.
  */
 export async function assertFamilyNamesFree(
   tx: Transaction,
   productId: string | null,
   product: { name?: string; active?: boolean },
-  variants?: readonly { id?: string; name: string; active?: boolean }[],
+  variants?: readonly { id?: string; name: string; active: boolean }[],
 ): Promise<void> {
   let stored: { name: string; active: boolean } | undefined;
   let storedVariants: { id: string; name: string; active: boolean }[] = [];
@@ -103,7 +103,7 @@ export async function assertFamilyNamesFree(
         ...(was && {
           before: { counted: stored!.active && was.active, nameBefore: was.name },
         }),
-        counted: active && (row.active ?? was?.active ?? true),
+        counted: active && row.active,
       };
     }),
   ];
