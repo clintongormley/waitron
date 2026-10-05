@@ -8541,9 +8541,13 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   longer said what they show; the rule is in `docs/developers/design-system.md`, "Switching off
   versus deleting". (a) is done by W110a (#1268): a printer's Active status reads "Activa", agreeing with
   "Deshabilitada" as lists and variants already did, and print agents read "Activo" from a key of their own
-  (`printers.agent_status_active`). (c) is done by W110c: a disabled product's own row on the
+  (`printers.agent_status_active`). (c) is done by W110c (#1271): a disabled product's own row on the
   products list offers Enable, not Disable, through the editor's own save; a bulk selection of
-  products that are all disabled already offers no Disable (no bulk Enable exists). Left open: (b) A kitchen-screen watcher's **Remove** marks the
+  products that are all disabled already offers no Disable (no bulk Enable exists). Two owner
+  questions from W110c, in its PR: whether a bulk Enable is wanted, and whether that all-disabled
+  selection's Disable should be greyed out like the toolbar's other buttons rather than hidden.
+  W110c's review read #1269 as having changed (b)'s watcher wording and added a test for (e); not
+  re-checked, so (b) and (e) below may be stale. Left open: (b) A kitchen-screen watcher's **Remove** marks the
   watcher inactive and drops its printers, its screens then say it was removed, and nothing lists or
   brings it back (`removeWatcher`, `apps/server/src/watchers.ts`), so it is neither a delete nor a
   switch-off; a kitchen course's **Remove** is the same kind of action: it sets `active: false` and
