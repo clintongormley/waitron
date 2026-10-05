@@ -1631,7 +1631,7 @@ deleted the right category; the dashboard was at fault. Fixed:
   read at Delete and the server both treat a change to it like a change to the others.
 - Under "Delete it too" the routing-rules warning says the rules name "these categories or ones
   inside them" (Spanish: "estas categorías o las que hay dentro de ellas"), since its count
-  includes rules on subcategories the dialog does not list (W74e). Under "Move it up to the parent
+  includes rules on subcategories the dialog does not list (W74e, #1224). Under "Move it up to the parent
   category" it keeps "name these categories", which is what that count is.
 
 Still open from W74:
