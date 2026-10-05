@@ -189,6 +189,9 @@ const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
   "deployment.already_stamped": 409,
   // A `provision-only` module (fiscal) is disabled in `modules.json`.
   "module.provision_only_disabled": 409,
+  // A configuration export holding a name the save refuses twice; 409 as on the management API.
+  "category.name_taken": 409,
+  "product.name_taken": 409,
 };
 
 // The tag is a log label for a non-`AppError` fault, never a wire code: the client sees

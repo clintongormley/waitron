@@ -3402,7 +3402,12 @@ A configuration import now holds a bundle to the same two rules (W72a, 2026-10-0
 two categories in one place, or two Active products or variants, sharing a name is refused whole,
 nothing written, when setup opens the export and again when it is imported
 (`validateCatalogueConfiguration`, `packages/catalogue/src/configuration-transfer.ts`, run by
-`validateConfigurationBundle`). Setup's live-source screen then names the duplicate and asks for it
+`validateConfigurationBundle`); both setup routes that reach it answer the two codes 409, as the
+management API does (`PROVISION_STATUS`, `apps/server/src/setup-api.ts`). It judges what the import
+will store: a product row with no `active` value counts as Active, the column's default, and a row
+whose product `active` is not 0 or 1, or whose category or product name is not text, is refused
+with `setup.request_invalid` naming the column. Setup's live-source screen then names the duplicate
+and asks for it
 to be renamed in the prepared restaurant and exported again, in English and Spanish. At 390 px the
 category name box cuts its refusal off against the pinned Actions column, as it already did for
 `category.invalid` (compared in `~/waitron-campaign/w72-shots/`, local screenshots); the same cause

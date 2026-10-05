@@ -1117,6 +1117,24 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect((await res.json()).error.code).toBe("module.provision_only_disabled");
   });
 
+  it.each(["category.name_taken", "product.name_taken"] as const)(
+    "maps a staged configuration's %s, thrown at import, to 409",
+    async (code) => {
+      const app = new Hono();
+      const provision = vi.fn(async () => {
+        throw new AppError(code, { field: "name", name: "Agua" });
+      });
+      const { deps } = makeDeps({ provision });
+      mountSetup(app, deps, noopLog);
+
+      const res = await postProvision(app, demoBody());
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: { code, params: { field: "name", name: "Agua" } },
+      });
+    },
+  );
+
   it("answers 503 setup.not_ready when NONE of the provision deps are wired", async () => {
     const app = new Hono();
     mountSetup(app, { environment: "preproduction" }, noopLog);
@@ -1448,6 +1466,24 @@ describe("POST /setup-api/configuration", () => {
       "a strong passphrase",
     );
   });
+
+  it.each(["category.name_taken", "product.name_taken"] as const)(
+    "answers 409 when staging refuses an export for %s",
+    async (code) => {
+      const stageConfiguration = vi.fn(async () => {
+        throw new AppError(code, { field: "name", name: "Agua" });
+      });
+      const app = new Hono();
+      mountSetup(app, { environment: "preproduction", stageConfiguration }, noopLog);
+
+      const response = await postConfiguration(app, Uint8Array.from([1, 2, 3]));
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: { code, params: { field: "name", name: "Agua" } },
+      });
+    },
+  );
 
   it("blocks provisioning while a configuration archive is being staged", async () => {
     let release!: () => void;
