@@ -5436,10 +5436,24 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   minutes old, adding "as of" and the time it was taken. A report that passes ten minutes while the
   page is open is greyed then, without the list being read again
   (`apps/dashboard/src/screens/devices-screen.ts`). No low-battery alert: that is A272, still open.
-  Left OPEN by W106, not acted on: (a) the Spanish "as of" reads "a las 2026-10-05 11:49", because
-  the time carries the date; owner wording needed (for example "del {time}"), and
-  `devices.open_until` and `printers.pairing_open_until` have the same shape. (b) the greying
-  compares the dashboard browser's clock with the server's stamp, so a browser clock far behind
+  Left OPEN by W106: (a) done by W106a (owner 2026-10-05: "relative time '5 minutes ago' with
+  hover/click to show the actual timestamp"): the greyed battery report says "updated 11 minutes
+  ago" / "actualizado hace 11 minutos", the Add a device dialog "Accepting devices: closes in 4
+  minutes" / "Se aceptan dispositivos: se cierra dentro de 4 minutos", and the Add print agent
+  dialog "Open: closes in 4 minutes" / "Abierto: se cierra dentro de 4 minutos" (a window already
+  past reads "closes now"). The words come from the new shared primitive `wt-relative-time`
+  (`packages/ui/src/components/wt-relative-time.ts`, through `apps/dashboard/src/widgets/relative-time.ts`),
+  which redraws itself when its words would change; hovering or tapping them shows the full date
+  and time ("5 de octubre de 2026 a las 11:49"), which is also their screen-reader description. The
+  exact time is in the BROWSER's time zone: the dashboard reads no venue time zone. Other dashboard
+  places still showing a bare `YYYY-MM-DD HH:MM` (`formatIsoMinute`), not changed: the Devices "Last
+  seen" column; on Printers, a print agent's join request, an agent's Last seen (its table and Edit), a
+  printer's Last print and Last seen (its status view) and Last print (the printers table), "Seen on {agent} · {time}" (`printers.seen_at`), and the print
+  queue's Created and Delivered columns; the menu status and preview's "published {time}"
+  (`apps/dashboard/src/widgets/menu-preview.ts`); and the adjustments report's time column
+  (`packages/adjustments/src/dashboard/adjustment-report-screen.ts`). Whether any of them should
+  use `wt-relative-time` is the owner's call. (b) the greying, and the relative words with it,
+  compare the dashboard browser's clock with the server's stamp, so a browser clock far behind
   shows an old report as current. (c) a report exactly 60 s after the last stored one is not stored
   (`sightingDue` is strictly more than a minute); the spec says "at least a minute". (d) the till
   starts reporting from its first draw only, so an app removed from the page and put back does not
