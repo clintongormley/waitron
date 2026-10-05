@@ -32,7 +32,7 @@ import {
   type DropGap,
 } from "./tree-drag.js";
 import { swatchPartStyles } from "./swatch-styles.js";
-import { effectiveColor } from "@waitron/catalogue/src/color-inheritance.js";
+import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
@@ -662,12 +662,9 @@ export class MenuStructureTable extends LitElement {
     } else {
       const productId = node.ref.productId;
       const product = this.#productById.get(productId);
-      color = effectiveColor(
-        product?.color ?? null,
-        product?.categoryId ?? null,
-        this.#categoryById,
-      );
-      send = () => this.#send("wt-product-color", { productId });
+      const inherited = categoryColor(product?.categoryId ?? null, this.#categoryById);
+      color = product?.color ?? inherited;
+      send = () => this.#send("wt-product-color", { productId, categoryColor: inherited });
       editable = !row.readOnly && product !== undefined;
     }
     // Checked, because the value lands in a style attribute.

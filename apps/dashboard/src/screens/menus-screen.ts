@@ -30,7 +30,6 @@ import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
 import "../widgets/section-details-form.js";
 import "../widgets/product-color-form.js";
-import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import { textField } from "../widgets/form-fields.js";
 import { fieldOf, ListWriteQueue } from "../widgets/section-writes.js";
 import type {
@@ -495,8 +494,8 @@ export class MenusScreen extends LitElement {
   @state() private creatingSection: ListTarget | null = null;
   @state() private editingSection: SectionDetails | null = null;
   @state() private deletingSection: SectionDetails | null = null;
-  /** The product whose own colour is being chosen. */
-  @state() private colouring: Product | null = null;
+  /** The product whose own colour is being chosen, and the colour its category gives it. */
+  @state() private colouring: { product: Product; categoryColor: string | null } | null = null;
   @state() private colorBusy = false;
   @state() private colorErrors: Record<string, string> = {};
   @state() private deleteSectionError = "";
@@ -611,7 +610,6 @@ export class MenusScreen extends LitElement {
   /** The tree row whose ⋮ gets focus back once its window has closed and nothing is out. */
   #focusReturn: { menuId: string; key: string } | null = null;
   #windowShut = false;
-  #categoryById: ReadonlyMap<string, CategorySummary> = new Map();
   /** What a home page tile may point at: the active products and the sections the structure
    * reaches. The server checks reach by membership alone; an inactive product is not offered. */
   #tileProducts: { id: string; name: string }[] = [];
@@ -655,8 +653,6 @@ export class MenusScreen extends LitElement {
         ...menu,
         status: this.statuses?.[menu.id] ?? (this.statusesError ? "failed" : "loading"),
       }));
-    if (changed.has("categories"))
-      this.#categoryById = new Map(this.categories.map((category) => [category.id, category]));
     if (changed.has("structure")) {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
     }
@@ -2002,10 +1998,13 @@ export class MenusScreen extends LitElement {
             this.sections.find((section) => section.id === event.detail.sectionId) ?? null;
           this.newSectionErrors = {};
         }}
-        @wt-product-color=${(event: CustomEvent<{ productId: string }>) => {
+        @wt-product-color=${(
+          event: CustomEvent<{ productId: string; categoryColor: string | null }>,
+        ) => {
           event.stopPropagation();
-          this.colouring =
-            this.products.find((product) => product.id === event.detail.productId) ?? null;
+          const { productId, categoryColor } = event.detail;
+          const product = this.products.find((each) => each.id === productId);
+          this.colouring = product === undefined ? null : { product, categoryColor };
           this.colorErrors = {};
         }}
         @wt-member-delete=${(event: CustomEvent<{ sectionId: string; path: string[] }>) => {
@@ -2266,7 +2265,7 @@ export class MenusScreen extends LitElement {
   }
 
   async #saveProductColor(color: string | null): Promise<void> {
-    const product = this.colouring;
+    const product = this.colouring?.product;
     if (!product || this.colorBusy) return;
     this.colorBusy = true;
     try {
@@ -2283,13 +2282,13 @@ export class MenusScreen extends LitElement {
   }
 
   #renderProductColor() {
-    const product = this.colouring;
+    const product = this.colouring?.product ?? null;
     return html`<dashboard-product-color-form
       .open=${product !== null}
       .busy=${this.colorBusy}
       .name=${product?.name ?? ""}
       .color=${product?.color ?? null}
-      .inherited=${product ? categoryColor(product.categoryId, this.#categoryById) : null}
+      .inherited=${this.colouring?.categoryColor ?? null}
       .errors=${this.colorErrors}
       @wt-submit=${(event: CustomEvent<{ color: string | null }>) => {
         event.stopPropagation();
