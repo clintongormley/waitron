@@ -2990,14 +2990,13 @@ when the zone cannot be read, as a last defence
 ([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), S8).
 
 **A configuration import does not check a table status's colour (A273, review of W92, 2026-10-05) —
-OPEN.** A save checks it (`STATUS_COLOR_RE`, `apps/server/src/tables.ts`), but the import copies
-`table_service_statuses` as a plain table (`packages/db/src/configuration-transfer.ts`) and core has
-no import check, so a bundle can store a colour such as `red;position:fixed`. The till puts that
-colour straight into a `style` attribute (`apps/till/src/screens/till-floor-screen.ts` and
-`till-table-order-screen.ts`). Read, not run. W92 closed the same gap for product, category and
-section colours (`validateCatalogueConfiguration`). **Wanted:** the import refuses a status colour
-the save would refuse. Status colours allow named colours such as `amber`, so a till-side guard
-cannot simply be `isHexColor`.
+DONE (`fix/import-status-colour`).** A save and an import now share one rule, `isStatusColor`
+(`packages/db/src/status-color.ts`), which still allows a short named colour such as `amber`. The
+core module's import check (`validateCoreConfiguration`, `packages/db/src/configuration-transfer.ts`)
+refuses a `table_service_statuses` row whose colour fails it with `setup.request_invalid`
+`{ field: "table_service_statuses.color" }`, before anything is written; a save's refusal is
+unchanged (`management.request_invalid`). Reproduced first: on `main` a bundle carrying
+`red;position:fixed` imported.
 
 **Remaining "?" buttons that should be hints (A237, owner 2026-10-03) — OPEN.** The rule — a short
 explanation is the field's hint, and the "?" button is only for one too long for a hint or a field
