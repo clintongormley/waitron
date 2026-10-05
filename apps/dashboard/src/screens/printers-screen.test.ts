@@ -4033,6 +4033,57 @@ it("keeps a refused network connection edit available to retry", async () => {
   await vi.waitFor(() => expect(api.updatePrinter).toHaveBeenCalledTimes(2));
 });
 
+it("keeps the next printer's connection draft when an earlier save finishes", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const second = { ...printers[0]!, id: "p2", name: "Second network printer" };
+  let finishFirst!: () => void;
+  const api = stubApi({
+    listPrinters: vi.fn().mockResolvedValue([printers[0]!, second]),
+    updatePrinter: vi.fn().mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishFirst = resolve;
+      }),
+    ),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=printer-section-connection]")!
+    .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+    .click();
+  q(el, "[data-test=edit-printer-connection]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-host"]', "10.0.0.88");
+  q(el, "[data-test=save-printer-connection]")!.click();
+  await vi.waitFor(() =>
+    expect(api.updatePrinter).toHaveBeenCalledWith("p1", { host: "10.0.0.88", port: 9100 }),
+  );
+
+  history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  expect(q(el, "[data-test=discard-printer-connection-navigation]")).not.toBeNull();
+  history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  q(el, "[data-test=printer-section-connection]")!
+    .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+    .click();
+  await flush(el);
+  q(el, "[data-test=edit-printer-connection]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-host"]', "10.0.0.99");
+  finishFirst();
+  await flush(el);
+
+  expect((q(el, '[name="printer-detail-host"]') as import("@waitron/ui").WtInput).value).toBe(
+    "10.0.0.99",
+  );
+  q(el, "[data-test=save-printer-connection]")!.click();
+  await vi.waitFor(() =>
+    expect(api.updatePrinter).toHaveBeenLastCalledWith("p2", { host: "10.0.0.99", port: 9100 }),
+  );
+});
+
 it("asks before discarding a changed network connection or leaving its printer", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {

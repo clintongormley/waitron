@@ -2113,16 +2113,20 @@ export class PrintersScreen extends LitElement {
       };
       return;
     }
-    this.detailConnection = { ...draft, saving: true, error: null };
+    const savingDraft = { ...draft, saving: true, error: null };
+    this.detailConnection = savingDraft;
     try {
       await this.api.updatePrinter(printer.id, { host, port: port ? Number(port) : null });
     } catch (error) {
-      this.detailConnection = { ...draft, saving: false, error: codeMessage(codeOf(error)) };
+      if (this.detailConnection === savingDraft)
+        this.detailConnection = { ...draft, saving: false, error: codeMessage(codeOf(error)) };
       return;
     }
-    this.detailConnection = null;
-    this.discardDetailConnectionArmed = false;
-    this.discardDetailConnectionNavigationArmed = false;
+    if (this.detailConnection === savingDraft) {
+      this.detailConnection = null;
+      this.discardDetailConnectionArmed = false;
+      this.discardDetailConnectionNavigationArmed = false;
+    }
     await this.#load();
   }
 
