@@ -96,6 +96,14 @@ export class VenueOperationsScreen extends LitElement {
         padding: 0;
         text-decoration: underline;
       }
+      wt-data-table::part(trading-name-cell) {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+      wt-data-table::part(inactive-department-label) {
+        margin-inline-start: var(--wt-space-2);
+      }
       wt-data-table::part(inherited-value) {
         color: var(--wt-color-text-muted);
       }
@@ -688,7 +696,11 @@ export class VenueOperationsScreen extends LitElement {
                 }}
               >
                 ${displayName}</button
-              >${row.department.active ? nothing : html` ${t("venue.inactive")}`}`;
+              >${
+                row.department.active
+                  ? nothing
+                  : html`<span part="inactive-department-label">${t("venue.inactive")}</span>`
+              }`;
           return html`<wt-input
               name="departmentName"
               label=${t("venue.name")}
@@ -741,7 +753,8 @@ export class VenueOperationsScreen extends LitElement {
         cell: (row) => {
           if (row.kind !== "department") return nothing;
           if (this.tradingNameEditor !== row.department.id)
-            return html`<button
+            return html`<span part="trading-name-cell"
+              ><button
                 type="button"
                 part="edit-trading-name"
                 data-test="edit-trading-name"
@@ -757,7 +770,8 @@ export class VenueOperationsScreen extends LitElement {
               <a
                 href=${`/manage/venue-settings/view/receipts?departmentId=${encodeURIComponent(row.department.id)}`}
                 >${t("venue.preview")}</a
-              >`;
+              ></span
+            >`;
           return html`<wt-input
               name="tradingName"
               label=${`${row.department.name}: ${t("venue.trading_name")}`}

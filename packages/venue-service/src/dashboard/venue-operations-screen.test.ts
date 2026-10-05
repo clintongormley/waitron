@@ -687,6 +687,21 @@ describe("venue operations screen", () => {
     const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
     const department = rows.find((row) => row.textContent?.includes("Restaurant and bar"));
     expect(department?.textContent).toContain("Inactive");
+    const name = department!.querySelector<HTMLElement>('[data-test="edit-department-name"]')!;
+    const walker = document.createTreeWalker(department!, NodeFilter.SHOW_TEXT);
+    let inactiveText: Text | null = null;
+    while (walker.nextNode()) {
+      if (walker.currentNode.textContent?.trim() === "Inactive") {
+        inactiveText = walker.currentNode as Text;
+        break;
+      }
+    }
+    expect(inactiveText).not.toBeNull();
+    const range = document.createRange();
+    range.selectNodeContents(inactiveText!);
+    expect(
+      range.getBoundingClientRect().left - name.getBoundingClientRect().right,
+    ).toBeGreaterThanOrEqual(8);
   });
 
   it("retains an inactive configured zone in the policy tree", async () => {
@@ -1749,6 +1764,21 @@ describe("venue operations screen", () => {
       'a[href="/manage/venue-settings/view/receipts?departmentId=d2"]',
     );
     expect(link?.textContent?.trim()).toBe("Preview");
+  });
+
+  it("separates the trading name edit and receipt preview links", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    const root = table(el, "policy-tree").shadowRoot!;
+    const edit = root.querySelector<HTMLElement>('[data-test="edit-trading-name"]')!;
+    const preview = root.querySelector<HTMLElement>(
+      'a[href="/manage/venue-settings/view/receipts?departmentId=d1"]',
+    )!;
+
+    expect(
+      preview.getBoundingClientRect().left - edit.getBoundingClientRect().right,
+    ).toBeGreaterThanOrEqual(8);
   });
 
   it("offers each active department’s receipt preview from the unified tree", async () => {
