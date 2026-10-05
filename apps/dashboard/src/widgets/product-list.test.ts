@@ -1740,6 +1740,7 @@ describe("the product list at phone width", () => {
     expect(line.box.width).toBeGreaterThanOrEqual(140);
     expect(line.box.top).toBeGreaterThanOrEqual(line.grip.bottom);
     expect(line.box.left).toBeLessThanOrEqual(line.grip.left + 1);
+    expect(line.box.left).toBeGreaterThanOrEqual(line.grip.left - 1);
     expectInView(line.edges);
     expect(line.box.right).toBeLessThanOrEqual(line.edges.pinned);
     expect(line.errorOverflows).toBe(false);

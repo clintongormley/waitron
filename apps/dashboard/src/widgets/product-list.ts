@@ -243,9 +243,9 @@ export class ProductList extends LitElement {
       wt-data-table::part(name-after) {
         display: contents;
       }
-      /* On a phone the name box takes a line of its own under the grip, and the cell is as wide as
-         the room #fitNames measures: the first line keeps the grip and the icon at their widths, the
-         count and asterisk wrap in what is left, and the box spans the whole cell. */
+      /* On a phone the name box takes a line of its own. The \`folder-cell\` span is held to the
+         room #fitNames measures, so the count and asterisk wrap there instead of running under the
+         pinned column. */
       wt-data-table[narrow]::part(naming) {
         display: grid;
         grid-template-columns: auto auto minmax(0, auto) 1fr;
@@ -695,7 +695,7 @@ export class ProductList extends LitElement {
       return `${Math.max(0, room)}px`;
     });
     fitted.forEach((element, index) => {
-      // The box's room is set on its cell, which a phone lays out to that width.
+      // The box's room is set on its `folder-cell` span, which a phone lays out to that width.
       const [target, property] =
         element === box ? [box.parentElement!, "--name-box-room"] : [element, "--name-room"];
       if (target.style.getPropertyValue(property) !== rooms[index])
