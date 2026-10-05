@@ -6058,20 +6058,28 @@ describe("printers-screen forms say what is wrong beside the field and in the bo
     expect(api.updatePrinter).toHaveBeenCalledTimes(2);
   });
 
-  it("starts the printer form again when it is reopened", async () => {
+  it("starts the inline printer name form again when it is reopened", async () => {
+    history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
     const { el } = await mounted();
-    await openPrinter(el, "p1");
-    typeField(el, "[data-test=printer-name-p1]", "");
-    q(el, "[data-test=save-printer-p1]")!.click();
+    q(el, "[data-test=edit-printer-name]")!.click();
     await flush(el);
-    q(el, "[data-test=cancel-edit-printer]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
-    await openPrinter(el, "p1");
-    typeField(el, "[data-test=printer-name-p1]", "");
+    typeField(el, '[name="printer-detail-name"]', " ");
     await flush(el);
-    expect(errorOf(el, "[data-test=printer-name-p1]")).toBe("");
-    expect(await bottomOf(el, printerActions)).toBe("");
-    expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(false);
+    expect(errorOf(el, '[name="printer-detail-name"]')).toBe(t("form.name_required"));
+    q(el, "[data-test=cancel-printer-name]")!.click();
+    await flush(el);
+    q(el, "[data-test=cancel-printer-name]")!.click();
+    await flush(el);
+    expect(q(el, '[name="printer-detail-name"]')).toBeNull();
+
+    q(el, "[data-test=edit-printer-name]")!.click();
+    await flush(el);
+    expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).value).toBe(
+      "Cocina",
+    );
+    expect(errorOf(el, '[name="printer-detail-name"]')).toBe("");
+    expect(q(el, "[data-test=printer-name-refusal]")).toBeNull();
+    expect(isDisabled(el, "[data-test=save-printer-name]")).toBe(false);
   });
 
   it("names a discovered printer: nothing before Add, then a focused message that each change re-checks", async () => {
