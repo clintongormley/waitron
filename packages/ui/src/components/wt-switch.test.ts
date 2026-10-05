@@ -298,13 +298,37 @@ test("a disabled switch does not flip from a click in its gap or on its thumb", 
     ["label", (box: DOMRect) => ({ x: box.left - 2, y: box.top + box.height / 2 })],
     [".thumb", (box: DOMRect) => ({ x: box.left + box.width / 2, y: box.top + box.height / 2 })],
   ] as const) {
-    // A disabled control fails the pointer's "enabled" check, so the click is forced past it.
     await userEvent.click(el, { position: inside(el, partOf(el, selector), where), force: true });
   }
   await el.updateComplete;
 
   expect(el.checked).toBe(false);
   expect(changes.count).toBe(0);
+});
+
+test("a click in a disabled switch's gap or on its thumb still reaches the page, once per click", async () => {
+  const el = (await mount('<wt-switch label="Preselected" disabled></wt-switch>')) as Switch;
+  let clicks = 0;
+  host.addEventListener("click", () => clicks++);
+
+  for (const [selector, where] of [
+    ["label", (box: DOMRect) => ({ x: box.left - 2, y: box.top + box.height / 2 })],
+    [".thumb", (box: DOMRect) => ({ x: box.left + box.width / 2, y: box.top + box.height / 2 })],
+  ] as const) {
+    await userEvent.click(el, { position: inside(el, partOf(el, selector), where), force: true });
+  }
+  await el.updateComplete;
+
+  expect(clicks).toBe(2);
+  expect(el.checked).toBe(false);
+});
+
+test("the label shows a pointer on an enabled switch and the not-allowed cursor on a disabled one", async () => {
+  const enabled = await mount('<wt-switch label="Active"></wt-switch>');
+  const disabled = await mount('<wt-switch label="Preselected" disabled></wt-switch>');
+
+  expect(getComputedStyle(partOf(enabled, "label")).cursor).toBe("pointer");
+  expect(getComputedStyle(partOf(disabled, "label")).cursor).toBe("not-allowed");
 });
 
 test("a click in one switch's gap leaves the switch beside it alone, and a click between them flips neither", async () => {

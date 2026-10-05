@@ -20,14 +20,14 @@ export class WtSwitch extends LitElement {
 
       /* The control and its label, and no more: a host stretched by its container must not
          toggle from the empty space past the label. */
-      .field {
+      .hit-area {
         display: inline-flex;
         align-items: center;
         gap: var(--wt-space-3);
         cursor: pointer;
       }
 
-      :host([disabled]) .field {
+      :host([disabled]) .hit-area {
         cursor: not-allowed;
       }
 
@@ -101,7 +101,7 @@ export class WtSwitch extends LitElement {
       }
 
       label {
-        cursor: pointer;
+        cursor: inherit;
       }
     `,
   ];
@@ -117,15 +117,16 @@ export class WtSwitch extends LitElement {
 
   private readonly inputId = uniqueId("wt-switch");
 
-  @query("input") private readonly input!: HTMLInputElement;
+  @query("input") private input!: HTMLInputElement;
 
   /** A click on the field outside the input and its label (the gap, the thumb drawn over the
    * input, the space around the label) is handed to the input, and the original click goes no
    * further, so the page sees the one click the input makes. */
   private onFieldClick(event: MouseEvent): void {
+    if (this.disabled) return;
     const target = event.composedPath()[0];
     if (target === this.input || (target instanceof Element && target.closest("label"))) return;
-    event.stopImmediatePropagation();
+    event.stopPropagation();
     this.input.click();
   }
 
@@ -136,7 +137,7 @@ export class WtSwitch extends LitElement {
 
   override render() {
     return html`
-      <span class="field" @click=${this.onFieldClick}>
+      <span class="hit-area" @click=${this.onFieldClick}>
         <span class="control">
           <input
             id=${this.inputId}
