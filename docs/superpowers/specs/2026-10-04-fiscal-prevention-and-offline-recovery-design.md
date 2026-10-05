@@ -184,6 +184,48 @@ network or devices, repeated and interrupted recovery, concurrent allocation, st
 the phone-entry path, and switching to a fresh short series without renumbering old invoices.
 Use controls that would expose allocation reuse and unintended dependence on online services.
 
+### 7.1 Protocol receipt, 2026-10-05 (W41s-1)
+
+Eight synthetic preproduction runs used `@waitron/verifactu` 0.2.1 with probe head
+`d99e1077387dfa491ef3816c875ddc822bdbf3c4` in
+[verifactu PR #132](https://github.com/waitron-io/verifactu/pull/132).
+The local probe suite passed 97/97 with `node --test scripts/live-aeat.test.mjs`.
+These observations describe the requests below. They do not settle legal remedies or
+prove every rejection behaves like the tested code 1161.
+
+| Case and source run | Observed individual outcomes |
+| --- | --- |
+| [Same batch, 3 records](https://github.com/waitron-io/verifactu/actions/runs/37283677375) | All 3 control records `Correcto`; rejected first record `Incorrecto`, code 1161, and both linked successors `Correcto`. Rejected envelope `ParcialmenteCorrecto`. |
+| [Later batch](https://github.com/waitron-io/verifactu/actions/runs/37283909983) | Valid predecessor and both later control successors `Correcto`; invalid predecessor `Incorrecto`, code 1161, then both linked successors `Correcto` in a separate submission. |
+| [1,000-record batches](https://github.com/waitron-io/verifactu/actions/runs/37283910284) | All 1,000 control records `Correcto`. Test first record `Incorrecto`, code 1161; all 999 successors `Correcto`. Each of the 2,000 submitted identities had exactly one response. Every adjacent successor projection named the preceding sent hash and invoice identity. |
+| [Cancellation comparison](https://github.com/waitron-io/verifactu/actions/runs/37286358223) | Ordinary alta and its ordinary cancellation `Correcto`; separate absent-original cancellation with `SinRegistroPrevio=S` `Correcto`. The absent identity was never submitted as an alta in this run; this is not a cancellation of the rejected predecessor from the other runs. |
+| [Changed-content duplicate](https://github.com/waitron-io/verifactu/actions/runs/37286361433) | Distinct control and original `Correcto`; same invoice identity with a changed total (1.21 to 2.42) and different sent hash `Incorrecto`, code 3000. The receipt does not contain a lookup of the stored original fingerprint. |
+| [Fresh installation](https://github.com/waitron-io/verifactu/actions/runs/37286364837) | Two first records with distinct invoice identities and installation names under software ID `WT` both `Correcto`. The first installation was created by this probe, not restored from an old backup. No old-chain continuation or fencing experiment ran. |
+| [Credit naming a rejected invoice](https://github.com/waitron-io/verifactu/actions/runs/37286368370) | Control original and credit `Correcto`; test original `Incorrecto`, code 1161; credit naming and chaining to that rejected invoice `Correcto`. This tests protocol acceptance, not the legal remedy. |
+| [Registered-name mismatch](https://github.com/waitron-io/verifactu/actions/runs/37286371546) | Correct-name control and record-level issuer name `Nombre incorrecto para prueba` both `Correcto`; the authenticated request header retained the configured name. This does not test a wrong taxpayer identity or header name. |
+
+The rejection trigger was `RechazoPrevio=S` without `Subsanacion=S`. AEAT's response says
+“no podrá incluirse el campo RechazoPrevio con valor S” under that condition (same-batch run).
+Each workflow completed successfully and its final evidence reported `incomplete=false`.
+No transport or whole-envelope failure interrupted these eight runs; record-level rejection
+is reported separately from the envelope status.
+
+[Saved evidence](2026-10-05-aeat-protocol-evidence.json) retains the logged request projections
+(invoice identities, sent hashes, previous links and distinguishing values) and parsed response
+projections, including all large-batch line outcomes. Raw SOAP request and response bytes were
+not captured by these modes. Download the source archive with
+`gh api repos/waitron-io/verifactu/actions/runs/<run-id>/logs`; the ordinary
+`gh run view 37283910284 --log` omitted the long batch-result lines when checked on 2026-10-05.
+Read the archive's `live/6_Call AEAT preproduction.txt` for the complete large-batch projections.
+
+The owner-approved temporary environment branch policy was removed after collection.
+`gh api repos/waitron-io/verifactu/environments/aeat-preproduction/deployment-branch-policies`
+returned only `main` (policy 60719401). Commit
+`1ccb5093756e5c72d76315a49fafe85cd9125363` restored the workflow's original main-only job condition.
+The library PR remains for owner review. D2 still requires the plan's owner-reviewed PR gate;
+D5's old-chain survival and adviser gates remain. Targeted lookup returning `SistemaInformatico`
+and the stored duplicate fingerprint are unverified by these probes.
+
 ## 8. Primary-source boundaries
 
 The [adviser document's provenance table](../../compliance/asesor-questions.md#sources-checked-for-the-2026-10-04-revision)

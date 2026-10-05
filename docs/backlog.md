@@ -2827,9 +2827,11 @@ a separately owned Cloud registry workstream. The owner approved the revised pla
 it replaces the 2026-10-03 task list while W41s remains the backlog item. The owner approved
 the allocation and recovery contract in §9 and granted W41s-4 a narrow H2 scope exception on
 2026-10-05. Task 2's ordered filing and duplicate-evidence changes landed as [#1213](https://github.com/clintongormley/waitron/pull/1213)
-on 2026-10-05. **Next action:** complete the live AEAT probes in W41s-1 and record their evidence;
-the dependent submission-outcomes task still needs those results. Independent queue items may
-proceed under the plan. The following paragraph records the 2026-10-03 state;
+on 2026-10-05. W41s-1 completed eight synthetic preproduction probes;
+[the dated protocol receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1)
+records each outcome and its limits. The library PR #132 remains for owner review. **Next action:**
+follow the lane queue; Task 3 and D2 enablement retain the reviewed-PR gate, and D5 still needs
+old-chain evidence and its adviser answer. Independent queue items may proceed under the plan. The following paragraph records the 2026-10-03 state;
 its old next action and allocation assumptions are superseded by this update.
 
 The owner asked (2026-10-03, on W21's review) how a chain AEAT disagrees with can happen, how to
