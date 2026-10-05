@@ -773,10 +773,9 @@ describe("the Edit dialog", () => {
     expect(api.getDeviceReader).toHaveBeenCalledExactlyOnceWith("t1");
     expect(api.listReaders).toHaveBeenCalledTimes(1);
     const reader = field(el, "edit-reader");
-    expect([reader.name, reader.label, reader.placeholder, reader.value]).toEqual([
+    expect([reader.name, reader.label, reader.value]).toEqual([
       "defaultReaderId",
       t("devices.default_reader"),
-      t("devices.default_reader_none"),
       "r2",
     ]);
     // Only active readers, by name and a friendly provider label, after a leading none option.
@@ -832,6 +831,17 @@ describe("the Edit dialog", () => {
       expect(shown(id).textContent!.trim()).toBe(t("devices.no_printer"));
       expect(shown(id).classList.contains("placeholder")).toBe(false);
     }
+  });
+
+  it("shows None as the chosen card reader of a device that has none", async () => {
+    const api = editApi({ getDeviceReader: vi.fn().mockResolvedValue({ readerId: null }) });
+    const el = await openEdit(api);
+    const shown = q(el, "[data-test=edit-reader]")!.shadowRoot!.querySelector(
+      "button.trigger .value",
+    )!;
+    expect(field(el, "edit-reader").value).toBe("");
+    expect(shown.textContent!.trim()).toBe(t("devices.default_reader_none"));
+    expect(shown.classList.contains("placeholder")).toBe(false);
   });
 
   it("changing the profile resets both printers to the new profile's first switched-on printer, or none", async () => {
@@ -2040,6 +2050,27 @@ describe("add a device", () => {
       ),
     );
     expect((q(el, "[data-test=pair-name]") as Field).error).toBe("");
+  });
+
+  it("puts a refusal naming a field Pair does not show at the bottom", async () => {
+    const api = stubApi({
+      acceptDeviceJoinRequest: vi.fn().mockRejectedValue({
+        code: "management.request_invalid",
+        params: { field: "receiptPrinterId" },
+      }),
+    });
+    const el = await openAdd(api);
+    await toSettings(el);
+    await chooseOption(q(el, "[data-test=pair-profile]")!, "dp1");
+    await el.updateComplete;
+
+    q(el, "[data-test=pair-submit]")!.click();
+
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, "[data-test=pair-actions]")).toBe(
+        codeMessage("management.request_invalid"),
+      ),
+    );
   });
 
   it("shows a refusal naming no field at the bottom of Pair", async () => {

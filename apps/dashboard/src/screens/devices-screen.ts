@@ -68,8 +68,12 @@ const FIELD_BY_PARAM: Record<string, EditField> = {
   paymentSlipPrinterId: "slip",
 };
 
-/** The field a refusal is about, when the form shows it (CLAUDE.md §3: by what the error carries). */
-function refusedField(error: unknown, binding: string, bindingShown: boolean): EditField | null {
+/** The field a refusal is about, when it is one of `shown` (CLAUDE.md §3: by what the error carries). */
+function refusedField(
+  error: unknown,
+  binding: string,
+  shown: readonly EditField[],
+): EditField | null {
   const code = codeOf(error);
   const params = (error as { params?: Record<string, unknown> } | null)?.params ?? {};
   let field: EditField | undefined;
@@ -79,8 +83,7 @@ function refusedField(error: unknown, binding: string, bindingShown: boolean): E
   else if (code === "station.not_found")
     field = binding === `station:${String(params.stationId)}` ? "binding" : undefined;
   else field = FIELD_BY_CODE[code];
-  if (field === undefined) return null;
-  return field !== "binding" || bindingShown ? field : null;
+  return field !== undefined && shown.includes(field) ? field : null;
 }
 
 /** A refusal's sentence goes under its field unless the form's own check already marks it. */
@@ -545,7 +548,11 @@ export class DevicesScreen extends LitElement {
     } catch (error) {
       if (epoch !== this.#pairEpoch) return;
       this.submitting = false;
-      const field = refusedField(error, this.chosenBinding, this.#bindingShown());
+      const field = refusedField(error, this.chosenBinding, [
+        "name",
+        "profile",
+        ...(this.#bindingShown() ? (["binding"] as const) : []),
+      ]);
       if (field === null) this.pairError = codeOf(error);
       else this.fieldRefusal = { field, code: codeOf(error) };
       return;
@@ -791,7 +798,13 @@ export class DevicesScreen extends LitElement {
     } catch (error) {
       if (epoch !== this.#editEpoch) return;
       this.editSaving = false;
-      const field = refusedField(error, form.binding, this.#editBindingShown());
+      const field = refusedField(error, form.binding, [
+        "name",
+        "profile",
+        ...(this.#editBindingShown() ? (["binding"] as const) : []),
+        "receipt",
+        "slip",
+      ]);
       if (field === null) this.editError = codeOf(error);
       else this.editRefusal = { field, code: codeOf(error) };
       return;
@@ -997,6 +1010,7 @@ export class DevicesScreen extends LitElement {
       data-test="add-device-modal"
       heading=${t("devices.add_title")}
       .open=${true}
+      .opener=${this.renderRoot.querySelector<HTMLElement>(".heading [data-test=open-add-device]")}
       .dismissible=${!this.submitting}
       @wt-close=${() => this.#endAdding()}
     >
@@ -1332,9 +1346,9 @@ export class DevicesScreen extends LitElement {
     return html`<wt-combobox
       data-test="edit-reader"
       name="defaultReaderId"
+      show-empty-option
       label=${t("devices.default_reader")}
       search="auto"
-      placeholder=${t("devices.default_reader_none")}
       searchPlaceholder=${t("categories.combobox_search")}
       noResultsLabel=${t("categories.combobox_no_results")}
       ?disabled=${this.readerState !== "ready" || this.editSaving}
