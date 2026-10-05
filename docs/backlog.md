@@ -5268,9 +5268,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   after the usual number check the step is titled "Enable <name>" and starts filled in
   (`apps/dashboard/src/screens/devices-screen.ts`). A station or watcher that is gone or switched
   off starts empty, to choose again; so does a profile missing from the dashboard's list of
-  profiles. Profiles have no switched-off state, and deleting one a disabled device holds is refused
-  `device_profile.in_use`, so today that should arise only if the dashboard could not read the
-  list; W105c may make it ordinary. If the device asks again while its Enable dialog is open, the
+  profiles, which since W105c is what a profile deleted while only disabled devices held it looks
+  like. If the device asks again while its Enable dialog is open, the
   new ask replaces the old one under the same id; the dialog closes without sending a discard,
   which the server would answer as naming an ask already gone, and says the device asked again
   with new numbers. Cancel and the number check name the ask by its
@@ -5323,16 +5322,19 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   are switched on in the screen's station list; that list re-reads when kitchen stations change, so
   one switched off while the dialog is open refuses the save — at the bottom of the dialog, with
   "That station no longer exists" — only if the save is sent before that re-read lands, or while
-  live updates are down. (8) a profile whose only device has been disabled cannot be deleted, and
-  the dashboard alone cannot free it (since W105b the device itself can come back and be enabled
-  under another profile; the delete problem is W105c's): Disable keeps the device's profile, and
-  deleting the profile is refused
-  `device_profile.in_use` (measured 2026-10-05 through the routes,
-  with a control: an unused profile deletes). Before W105 a direct call to the old reassign route
-  could move a disabled device onto another profile, because it did not check `active`; the Edit
-  route refuses a disabled device. Owner decision needed: for example, let the profile delete ignore
-  disabled devices, or clear a disabled device's profile when it is disabled (`device_profile_id` is NOT NULL,
-  so that is a schema change). (9) a device holding a printer its unchanged profile no longer lists
+  live updates are down. (8) done by W105c: deleting a profile ignores disabled devices (owner
+  decision 2026-10-05). A profile only disabled devices hold is RETIRED, not deleted, because
+  `devices.device_profile_id` is NOT NULL, and the rebuild that changing it needs fails once a row
+  in a table keying into `devices` with RESTRICT names a device (fiscal records among them;
+  CLAUDE.md §3's rebuild rule): `device_profiles.retired_at` is set, the name is free again, and its canvas and printer
+  lists are let go (`deleteDeviceProfile`, `packages/layouts/src/device-profile-store.ts`). A
+  profile an active device holds is still refused `device_profile.in_use`. A returning device whose
+  profile was retired opens Enable with Profile empty; Enable with the old profile is refused
+  `device_profile.not_found`. Left open: the Devices table shows an empty Profile for a disabled
+  device on a retired profile; a retired profile's home-layout choices stay in
+  `device_profile_home_layouts`; and the configuration transfer has no row filter, so it copies a
+  retired profile with its `retired_at` (`packages/db/src/configuration-transfer.ts`; read, not
+  tested). (9) a device holding a printer its unchanged profile no longer lists
   opens with that field empty, and Save keeps the old printer without saying so. (10) for a manager
   without `payments.manage` the card reader field is drawn greyed while it loads and then disappears,
   so the layout jumps. Review suggestions #1235 did not take, listed in its description: the edit
@@ -8140,11 +8142,10 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
 
 **Names left behind by the tenant-column removal (#378, 2026-09-16):**
 
-- **Thirteen index and key names still read `tenant`, and the columns they name are gone:**
-  `canvases_tenant_name_key`, `device_profiles_tenant_name_key`, `print_agents_tenant_node_key`,
+- **These index and key names still read `tenant`, and the columns they name are gone:**
+  `canvases_tenant_name_key`, `print_agents_tenant_node_key`,
   `purchase_invoices_tenant_received_idx`, `sales_tenant_issued_idx`,
-  `table_service_statuses_tenant_label_key`, `tills_tenant_location_name_key`,
-  `working_orders_tenant_status_idx`, `registros_tenant_node_secuencia_uq`, and four in identity:
+  `table_service_statuses_tenant_label_key`, `working_orders_tenant_status_idx`, `registros_tenant_node_secuencia_uq`, and four in identity:
   `persons_tenant_email_uq`, `persons_tenant_live_display_name_uq`,
   `persons_tenant_pending_email_uq` and `persons_tenant_google_subject_uq`. (The `tenants*`,
   `tenant_themes*`, `tenant_receipts*` and `tenant_credentials*` names are correct and stay.) This is

@@ -404,7 +404,8 @@ function withVenueReadAuth<T>(
 }
 
 /** Runs `fn` in one transaction after confirming the session holds `layout.configure` and that
- * device profile `id` exists, which the catalogue's home-layout reads and writes do not check. */
+ * device profile `id` exists and is not retired, which the catalogue's home-layout reads and writes
+ * do not check. */
 function withLayoutProfile<T>(
   deps: ManagementApiDeps,
   sessionId: string,

@@ -1,4 +1,5 @@
-import { check, unique } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   count,
   enumCheck,
@@ -24,6 +25,11 @@ export const deviceFormFactorEnum = enumType(["till", "phone-portrait", "tablet-
  *
  * `canvas_id` NULL means the form-factor default canvas.
  *
+ * `retired_at` set means RETIRED: deleted while only disabled devices held it, which the
+ * `devices.device_profile_id` key would refuse. The database does not stop an active device
+ * holding one: retiring refuses an active holder, and `getDeviceProfile`, through which device joins
+ * and edits resolve a profile, hides retired ones.
+ *
  * `capabilities` is plain JSON (a CapabilityFlag[]) with no @waitron/layouts type: that package
  * depends on @waitron/db, so importing its type here would be circular. The store validates on write.
  */
@@ -42,9 +48,12 @@ export const deviceProfiles = table(
     inactivityTimeoutSeconds: count("inactivity_timeout_seconds"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     updatedAt: tsString("updated_at").notNull().$defaultFn(nowIso),
+    retiredAt: tsString("retired_at"),
   },
   (t) => [
-    unique("device_profiles_tenant_name_key").on(t.name),
+    uniqueIndex("device_profiles_live_name_key")
+      .on(t.name)
+      .where(sql`${t.retiredAt} is null`),
     check("device_profiles_form_factor_ck", enumCheck(t.formFactor)),
   ],
 );

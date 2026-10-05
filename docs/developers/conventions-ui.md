@@ -422,7 +422,9 @@ Devices follow the same rule, though nothing discovers them. A disabled device's
 `waitron_device` cookie, and a knock whose cookie token verifies against a disabled row
 (`provenDisabledDevice`, `apps/server/src/join-requests.ts`) takes that device's id: the pending list
 marks it `returning`, with the row's name, profile and binding, and accepting it enables the same
-row. Outside dev mode it still needs an open Add a device dialog and the number check; in dev mode
+row. If that profile was retired since (deleted while only disabled devices held it), accepting with
+it is refused `device_profile.not_found` and the request stays, so Enable needs another profile.
+Outside dev mode it still needs an open Add a device dialog and the number check; in dev mode
 (`config.devMode`) the knock skips both and the device is enabled at once, under the venue's
 default till profile and the name the browser sent rather than its own (`apps/server/src/device-api.ts`).
 The knock gives the disabled

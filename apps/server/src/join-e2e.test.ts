@@ -9,9 +9,11 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   deviceMadeHereStations,
+  deviceProfilePrinters,
   deviceProfiles,
   devices,
   joinRequests,
+  printers,
   withTransaction,
 } from "@waitron/db";
 import {
@@ -27,6 +29,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mountDeviceApi } from "./device-api.js";
 import { mountJoinApi } from "./join-api.js";
+import { mountManagementApi } from "./management-api.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { createPairingMode, type PairingMode } from "./pairing-mode.js";
 import type { TillConfig } from "./till-config.js";
 import type { Logger } from "./logger.js";
@@ -479,6 +483,40 @@ describe("a disabled device comes back as the same device", () => {
     return { venue, mode, app, profileId, holdId, deviceId, jar };
   }
 
+  /** The device-profile routes, on an app of their own: they live in the management API. */
+  function mountProfiles(venue: Venue): Hono {
+    const app = new Hono();
+    mountManagementApi(
+      app,
+      {
+        db: suite.db,
+        cfg: venue.cfg,
+        secureCookies: false,
+        rpId: "localhost",
+        origin: "http://localhost",
+        credentialKeyRing: TOTP_KEY_RING,
+      },
+      noopLog,
+    );
+    return app;
+  }
+
+  async function deleteProfile(venue: Venue, profileId: string): Promise<Response> {
+    return send(mountProfiles(venue), "DELETE", `/management-api/device-profiles/${profileId}`, {
+      cookie: venue.managerCookie,
+    });
+  }
+
+  async function listedProfileIds(venue: Venue): Promise<string[]> {
+    const res = await send(mountProfiles(venue), "GET", "/management-api/device-profiles", {
+      cookie: venue.managerCookie,
+    });
+    expect(res.status).toBe(200);
+    return ((await res.json()) as { deviceProfiles: { id: string }[] }).deviceProfiles.map(
+      (profile) => profile.id,
+    );
+  }
+
   it("knocks as itself, is listed as returning, and Pair enables the same row with its settings", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountBoth(venue.cfg);
@@ -894,6 +932,110 @@ describe("a disabled device comes back as the same device", () => {
     const me = await send(app, "GET", "/api/device/me", { cookie: first.jar });
     expect(me.status).toBe(200);
     expect(await me.json()).toMatchObject({ deviceId });
+  });
+
+  it("a profile whose only device was disabled deletes, and leaves the profile list", async () => {
+    const { venue, profileId, deviceId } = await disabledTill();
+    expect(await listedProfileIds(venue)).toContain(profileId);
+
+    const removed = await deleteProfile(venue, profileId);
+    expect(removed.status).toBe(204);
+    expect(await listedProfileIds(venue)).not.toContain(profileId);
+    const got = await send(
+      mountProfiles(venue),
+      "GET",
+      `/management-api/device-profiles/${profileId}`,
+      {
+        cookie: venue.managerCookie,
+      },
+    );
+    expect(got.status).toBe(404);
+    expect((await errorOf(got)).code).toBe("device_profile.not_found");
+    expect(await deviceRow(deviceId)).toMatchObject({ active: false, deviceProfileId: profileId });
+  });
+
+  it("a profile an active device holds is still refused 409 device_profile.in_use", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountBoth(venue.cfg);
+    const profileId = await seedProfile("till");
+    const holdId = await openWindow(app, venue);
+    await addDevice(app, venue, holdId, "Bar till", profileId);
+
+    const refused = await deleteProfile(venue, profileId);
+    expect(refused.status).toBe(409);
+    expect((await errorOf(refused)).code).toBe("device_profile.in_use");
+    expect(await listedProfileIds(venue)).toContain(profileId);
+  });
+
+  it("a returning device whose profile was deleted is refused that profile, and the request survives", async () => {
+    const { venue, app, profileId, holdId, deviceId, jar } = await disabledTill();
+    expect((await deleteProfile(venue, profileId)).status).toBe(204);
+    const back = await joined(await knockWith(app, "Bar till", jar));
+    expect(back.joinId).toBe(deviceId);
+
+    const refused = await pair(app, venue, holdId, back, { name: "Bar till", profileId });
+    expect(refused.status).toBe(404);
+    expect((await errorOf(refused)).code).toBe("device_profile.not_found");
+    expect(await pendingCount()).toBe(1);
+    expect(await deviceRow(deviceId)).toMatchObject({ active: false, deviceProfileId: profileId });
+
+    const live = await seedProfile("till");
+    const retried = await send(
+      app,
+      "POST",
+      `/management-api/device-join-requests/${deviceId}/accept`,
+      { cookie: venue.managerCookie, body: { name: "Bar till", profileId: live } },
+    );
+    expect(retried.status).toBe(200);
+    expect(await deviceRow(deviceId)).toMatchObject({ active: true, deviceProfileId: live });
+  });
+
+  it("a returning device whose profile was deleted is enabled on a live profile, with that profile's first usable printers", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountBoth(venue.cfg);
+    const [oldPrinter, newPrinter] = await suite.db
+      .insert(printers)
+      .values([
+        {
+          locationId: venue.cfg.locationId,
+          name: "Old",
+          transport: "network_tcp",
+          host: "10.0.0.1",
+        },
+        {
+          locationId: venue.cfg.locationId,
+          name: "New",
+          transport: "network_tcp",
+          host: "10.0.0.2",
+        },
+      ])
+      .returning({ id: printers.id });
+    const oldProfile = await seedProfile("till");
+    const newProfile = await seedProfile("till");
+    await suite.db.insert(deviceProfilePrinters).values([
+      { deviceProfileId: oldProfile, printerId: oldPrinter!.id, role: "receipt", position: 0 },
+      { deviceProfileId: newProfile, printerId: newPrinter!.id, role: "receipt", position: 0 },
+    ]);
+    const holdId = await openWindow(app, venue);
+    const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", oldProfile);
+    expect((await deviceRow(deviceId)).receiptPrinterId).toBe(oldPrinter!.id);
+    await disable(app, venue, deviceId);
+    expect((await deleteProfile(venue, oldProfile)).status).toBe(204);
+
+    const back = await joined(await knockWith(app, "Bar till", jar));
+    const accepted = await pair(app, venue, holdId, back, {
+      name: "Bar till",
+      profileId: newProfile,
+    });
+    expect(accepted.status).toBe(200);
+    expect(await deviceRow(deviceId)).toMatchObject({
+      id: deviceId,
+      active: true,
+      deviceProfileId: newProfile,
+      receiptPrinterId: newPrinter!.id,
+      paymentSlipPrinterId: null,
+    });
+    expect(await pendingCount()).toBe(0);
   });
 
   it("enabling under a name an active device has taken since is refused, and the request survives", async () => {

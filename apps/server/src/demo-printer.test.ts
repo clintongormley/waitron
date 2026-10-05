@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   deviceProfilePrinters,
+  deviceProfiles,
   devices,
   kitchenStations,
   locations,
@@ -171,6 +172,29 @@ describe("the Demo printer", () => {
     expect(await profileLists(profileId)).toEqual({
       receiptPrinterIds: [bar, demo!.printerId],
       paymentSlipPrinterIds: [bar, demo!.printerId],
+    });
+  });
+
+  it("leaves a retired profile off, so it gains no printer list", async () => {
+    const { locationId, profileId } = await venue();
+    const { deviceId: revokedId, profileId: retiredId } = await seedDevice(suite.db, {
+      locationId,
+    });
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, revokedId));
+    await suite.db
+      .update(deviceProfiles)
+      .set({ retiredAt: new Date().toISOString() })
+      .where(eq(deviceProfiles.id, retiredId));
+
+    const demo = await configureDemoPrinter(suite.db, locationId, true);
+
+    expect(await profileLists(retiredId)).toEqual({
+      receiptPrinterIds: [],
+      paymentSlipPrinterIds: [],
+    });
+    expect(await profileLists(profileId)).toEqual({
+      receiptPrinterIds: [demo!.printerId],
+      paymentSlipPrinterIds: [demo!.printerId],
     });
   });
 

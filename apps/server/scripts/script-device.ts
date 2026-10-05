@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { deviceProfiles, devices } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 
@@ -14,7 +14,7 @@ export async function scriptSessionDevice(
   const [existing] = await tx
     .select({ id: deviceProfiles.id })
     .from(deviceProfiles)
-    .where(eq(deviceProfiles.name, label));
+    .where(and(eq(deviceProfiles.name, label), isNull(deviceProfiles.retiredAt)));
   const profileId =
     existing?.id ??
     (
