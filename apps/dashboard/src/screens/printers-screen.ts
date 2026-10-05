@@ -569,7 +569,7 @@ export class PrintersScreen extends LitElement {
 
   @state() private armedRevokeId: string | null = null;
 
-  // Separate from `armedRevokeId`, so arming one agent's re-allow does not disarm another's revoke.
+  // Separate from `armedRevokeId`, so arming one agent's Enable does not disarm another's Disable.
   @state() private armedAllowId: string | null = null;
 
   // Pairing is venue-wide; challenges stay cached because each request's numbers are fixed.
@@ -653,7 +653,7 @@ export class PrintersScreen extends LitElement {
   #renewTimer?: ReturnType<typeof setInterval>;
   #registeredDevices = new Set<string>();
   #editTrigger?: HTMLButtonElement;
-  /** A retained printer Add again switched on so its calibration can print; closing the wizard
+  /** A retained printer that Enable switched on so its calibration can print; closing the wizard
    * without saving switches it off again. */
   #readdingId?: string;
 
@@ -908,7 +908,7 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  // ── Agents: revoke ───────────────────────────────────────────────────────────────────────────────
+  // ── Agents: disable ──────────────────────────────────────────────────────────────────────────────
 
   #onRevokeAgent(id: string): void {
     if (this.armedRevokeId === id) {
@@ -923,7 +923,7 @@ export class PrintersScreen extends LitElement {
     await this.#mutate(() => this.api.revokeAgent(id));
   }
 
-  /** Two clicks, so a single accidental one cannot turn a revoked agent back on. */
+  /** Two clicks, so a single accidental one cannot turn a disabled agent back on. */
   #onAllowAgent(id: string): void {
     if (this.armedAllowId === id) {
       this.armedAllowId = null;
@@ -1609,7 +1609,7 @@ export class PrintersScreen extends LitElement {
               data-armed=${revokeArmed ? "true" : nothing}
               @click=${() => this.#onRevokeAgent(agent.id)}
             >
-              ${revokeArmed ? t("printers.delete_confirm") : t("printers.disable")}
+              ${revokeArmed ? t("printers.agent_disable_confirm") : t("printers.disable")}
             </wt-button>`
           : html`<wt-button
               data-keep-open
@@ -1617,7 +1617,7 @@ export class PrintersScreen extends LitElement {
               data-armed=${allowArmed ? "true" : nothing}
               @click=${() => this.#onAllowAgent(agent.id)}
             >
-              ${allowArmed ? t("printers.allow_confirm") : t("printers.allow")}
+              ${allowArmed ? t("printers.agent_enable_confirm") : t("printers.agent_enable")}
             </wt-button>`
       }
     </dashboard-row-actions>`;
@@ -1748,7 +1748,7 @@ export class PrintersScreen extends LitElement {
         label: t("printers.status"),
         cell: (a) =>
           html`<span data-test=${`agent-status-${a.id}`}
-            >${a.active ? t("printers.status_active") : t("printers.status_revoked")}</span
+            >${a.active ? t("printers.status_active") : t("printers.agent_status_disabled")}</span
           >`,
         filter: {
           label: t("printers.status"),
@@ -1757,7 +1757,7 @@ export class PrintersScreen extends LitElement {
           value: (a) => (a.active ? "active" : "disabled"),
           options: [
             { value: "active", label: t("printers.status_active") },
-            { value: "disabled", label: t("printers.status_revoked") },
+            { value: "disabled", label: t("printers.agent_status_disabled") },
           ],
         },
       },
@@ -2287,13 +2287,13 @@ export class PrintersScreen extends LitElement {
         <wt-disclosure
           data-test="printer-section-status"
           heading=${t("printers.status")}
-          summary=${`${t(p.active ? "printers.status_active" : "printers.status_inactive")} · ${p.pendingJobs} ${t("printers.pending_jobs")}`}
+          summary=${`${t(p.active ? "printers.status_active" : "printers.status_disabled")} · ${p.pendingJobs} ${t("printers.pending_jobs")}`}
           ?open=${this.statusOpen}
           @wt-toggle=${(event: CustomEvent<{ open: boolean }>) => {
             this.statusOpen = event.detail.open;
           }}
           ><dl class="status-fields">
-            ${field(t("printers.status"), t(p.active ? "printers.status_active" : "printers.status_inactive"))}
+            ${field(t("printers.status"), t(p.active ? "printers.status_active" : "printers.status_disabled"))}
             ${field(t("printers.pending_jobs"), p.pendingJobs)}
             ${field(t("printers.last_print"), this.#timestamp(p.lastPrintAt))}
             ${field(t("printers.last_seen_by"), p.transport === "cloud_poll" ? "—" : (seen?.agentName ?? t("printers.agent_unknown")))}
@@ -2505,7 +2505,7 @@ export class PrintersScreen extends LitElement {
         choosable: "shown",
         label: t("printers.status"),
         cell: (p) => {
-          const status = p.active ? t("printers.status_active") : t("printers.status_inactive");
+          const status = p.active ? t("printers.status_active") : t("printers.status_disabled");
           const command = this.#printerCommands.get(p.id);
           return command === undefined
             ? status
@@ -2521,7 +2521,7 @@ export class PrintersScreen extends LitElement {
           value: (p) => (p.active ? "active" : "disabled"),
           options: [
             { value: "active", label: t("printers.status_active") },
-            { value: "disabled", label: t("printers.status_inactive") },
+            { value: "disabled", label: t("printers.status_disabled") },
           ],
         },
       },
@@ -3098,7 +3098,7 @@ export class PrintersScreen extends LitElement {
           ?loading=${this.submitting}
           ?disabled=${nameError !== ""}
           @click=${() => void this.#registerDiscovered(d)}
-          >${this.#disabledPrinter(d) ? t("printers.add_again") : t("action.add")}</wt-button
+          >${this.#disabledPrinter(d) ? t("printers.enable") : t("action.add")}</wt-button
         >
       </wt-form-actions>
     </wt-modal>`;
@@ -3219,7 +3219,7 @@ export class PrintersScreen extends LitElement {
               <div>${transportName(d.transport)}</div>
               <div>${d.host ? `${d.host}:${d.port ?? 9100}` : (d.localKey ?? "—")}</div>
               ${d.agentName ? html`<div>${t("printers.discovered_seen_on").replace("{agent}", d.agentName)}</div>` : nothing}
-              ${this.#disabledPrinter(d) ? html`<div>${t("printers.add_again_hint")}</div>` : nothing}
+              ${this.#disabledPrinter(d) ? html`<div>${t("printers.enable_hint")}</div>` : nothing}
               ${lost.has(d) && !listed.has(this.#commandKeyOf(d)) ? html`<div>${t("printers.bluetooth_not_seen")}</div>` : nothing}
             </div>
           </div>`,
@@ -3244,7 +3244,7 @@ export class PrintersScreen extends LitElement {
               this.errorKey = null;
               this.namingPrinter = d;
             }}
-            >${this.#disabledPrinter(d) ? t("printers.add_again") : t("action.add")}</wt-button
+            >${this.#disabledPrinter(d) ? t("printers.enable") : t("action.add")}</wt-button
           >`;
           if (d.transport !== "bluetooth") return add;
           const key = this.#commandKeyOf(d);

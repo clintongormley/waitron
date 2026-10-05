@@ -1358,8 +1358,8 @@ describe("printers-screen", () => {
     expect(text(el, "[data-test=agent-name-a1]")).toBe("Cocina agent");
     expect(text(el, "[data-test=agent-status-a1]")).toBe(t("printers.status_active", "es-ES"));
     expect(text(el, "[data-test=agent-last-seen-a1]")).toBe("2026-08-25 14:30");
-    // A revoked, never-authenticated agent.
-    expect(text(el, "[data-test=agent-status-a2]")).toBe(t("printers.status_revoked", "es-ES"));
+    // A disabled, never-authenticated agent.
+    expect(text(el, "[data-test=agent-status-a2]")).toBe("Deshabilitado");
     expect(text(el, "[data-test=agent-last-seen-a2]")).toBe(t("printers.last_seen_never", "es-ES"));
   });
 
@@ -1780,9 +1780,9 @@ describe("printers-screen", () => {
     expect(q(el, "[data-test=copy-code]")).toBeNull();
   });
 
-  // ── Agents: revoke ───────────────────────────────────────────────────────────────────────────────
+  // ── Agents: disable ──────────────────────────────────────────────────────────────────────────────
 
-  it("does not show a revoke control for an already-revoked agent", async () => {
+  it("does not show a Disable control for an already-disabled agent", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -1791,7 +1791,68 @@ describe("printers-screen", () => {
     expect(q(el, "[data-test=revoke-agent-a2]")).toBeNull();
   });
 
-  it("revokes an agent only on the confirming second click, then reloads", async () => {
+  it("words disabling and enabling a printer and a print agent in English and Spanish", async () => {
+    const before = currentLocale();
+    try {
+      for (const w of [
+        {
+          locale: "en",
+          disable: "Disable",
+          enable: "Enable",
+          printerDisabled: "Disabled",
+          agentDisabled: "Disabled",
+          agentDisableConfirm: "Disable this print agent?",
+          agentEnableConfirm: "Enable this print agent?",
+          hint: "Disabled printer. Enabling it restores its settings, and any jobs still waiting for it can print once it is on.",
+        },
+        {
+          locale: "es-ES",
+          disable: "Deshabilitar",
+          enable: "Habilitar",
+          printerDisabled: "Deshabilitada",
+          agentDisabled: "Deshabilitado",
+          agentDisableConfirm: "¿Deshabilitar este agente de impresión?",
+          agentEnableConfirm: "¿Habilitar este agente de impresión?",
+          hint: "Impresora deshabilitada. Al habilitarla se restauran sus ajustes, y los trabajos que sigan pendientes pueden imprimirse cuando esté activa.",
+        },
+      ] as const) {
+        setLocale(w.locale);
+        const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+          api: stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered) }),
+        });
+        await flush(el);
+        await filterAgents(el, "all");
+        expect(text(el, "[data-test=agent-status-a2]")).toBe(w.agentDisabled);
+        expect(text(el, "[data-test=revoke-agent-a1]")).toBe(w.disable);
+        q(el, "[data-test=revoke-agent-a1]")!.click();
+        await el.updateComplete;
+        expect(text(el, "[data-test=revoke-agent-a1]")).toBe(w.agentDisableConfirm);
+        expect(text(el, "[data-test=allow-agent-a2]")).toBe(w.enable);
+        q(el, "[data-test=allow-agent-a2]")!.click();
+        await el.updateComplete;
+        expect(text(el, "[data-test=allow-agent-a2]")).toBe(w.agentEnableConfirm);
+
+        await selectTab(el, "printers");
+        await filterPrinters(el, "all");
+        expect(text(el, "[data-test=deactivate-printer-p1]")).toBe(w.disable);
+        const table = q(el, '[data-test="printers-table"]')!;
+        const statusOf = (id: string) =>
+          [...table.shadowRoot!.querySelectorAll(`tr[data-row-key="${id}"] td`)].map((cell) =>
+            cell.textContent?.trim(),
+          );
+        expect(statusOf("p2")).toContain(w.printerDisabled);
+
+        await openDiscovery(el);
+        expect(text(el, "[data-test=register-SN-2]")).toBe(w.enable);
+        expect(text(el, "[data-test=discovered-row-SN-2]")).toContain(w.hint);
+        cleanupWidgets();
+      }
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it("disables an agent only on the confirming second click, then reloads", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -1799,7 +1860,7 @@ describe("printers-screen", () => {
     q(el, "[data-test=revoke-agent-a1]")!.click();
     await el.updateComplete;
     expect(api.revokeAgent).not.toHaveBeenCalled();
-    expect(text(el, "[data-test=revoke-agent-a1]")).toBe(t("printers.delete_confirm", "es-ES"));
+    expect(text(el, "[data-test=revoke-agent-a1]")).toBe("¿Deshabilitar este agente de impresión?");
 
     q(el, "[data-test=revoke-agent-a1]")!.click();
     await flush(el);
@@ -1807,7 +1868,7 @@ describe("printers-screen", () => {
     expect(api.listAgents).toHaveBeenCalledTimes(2);
   });
 
-  it("shows an error and keeps the list when a revoke is rejected", async () => {
+  it("shows an error and keeps the list when an agent's disable is rejected", async () => {
     const api = stubApi({ revokeAgent: vi.fn().mockRejectedValue({ code: "agent.not_found" }) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -1821,7 +1882,7 @@ describe("printers-screen", () => {
     expect(banner).toContain(codeMessage("agent.not_found", "es-ES"));
   });
 
-  // ── Agents: provenance + allow-again ─────────────────────────────────────────────────────────────
+  // ── Agents: provenance + enable ──────────────────────────────────────────────────────────────────
 
   it("marks a self-enrolled agent (node id present) and not a manually-enrolled one", async () => {
     const api = stubApi();
@@ -1859,7 +1920,7 @@ describe("printers-screen", () => {
     expect(getComputedStyle(hostCell).fontSize).not.toBe(small);
   });
 
-  it("re-allows a revoked agent only on the confirming second click, then reloads", async () => {
+  it("enables a disabled agent only on the confirming second click, then reloads", async () => {
     const api = stubApi();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -1871,7 +1932,7 @@ describe("printers-screen", () => {
     q(el, "[data-test=allow-agent-a2]")!.click();
     await el.updateComplete;
     expect(api.allowAgent).not.toHaveBeenCalled();
-    expect(text(el, "[data-test=allow-agent-a2]")).toBe(t("printers.allow_confirm", "es-ES"));
+    expect(text(el, "[data-test=allow-agent-a2]")).toBe("¿Habilitar este agente de impresión?");
 
     q(el, "[data-test=allow-agent-a2]")!.click();
     await flush(el);
@@ -1879,7 +1940,7 @@ describe("printers-screen", () => {
     expect(api.listAgents).toHaveBeenCalledTimes(2);
   });
 
-  it("shows an error and keeps the list when a re-allow is rejected", async () => {
+  it("shows an error and keeps the list when an agent's enable is rejected", async () => {
     const api = stubApi({ allowAgent: vi.fn().mockRejectedValue({ code: "agent.not_found" }) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -2200,7 +2261,7 @@ describe("printers-screen", () => {
   });
 
   it.each([true, false])(
-    "recognizes a registered address (active=%s) and preserves Add again",
+    "recognizes a registered address (active=%s) and preserves Enable",
     async (active) => {
       const row = { ...printers[0]!, active };
       const target = {
@@ -2236,7 +2297,7 @@ describe("printers-screen", () => {
       const add = q(el, `[data-test='register-${target.host}:${target.port}']`);
       if (active) expect(add).toBeNull();
       else {
-        expect(add!.textContent).toContain(t("printers.add_again"));
+        expect(add!.textContent).toContain("Habilitar");
         await addDiscovered(el, add!);
         await flush(el);
         expect(api.updatePrinter).toHaveBeenCalledWith(row.id, { active: true });
@@ -2245,7 +2306,7 @@ describe("printers-screen", () => {
     },
   );
 
-  it("keeps Add again for a disabled registration even when the agent marks it an office printer", async () => {
+  it("keeps Enable for a disabled registration even when the agent marks it an office printer", async () => {
     const row = { ...printers[0]!, active: false };
     const target = {
       host: row.host!,
@@ -2276,7 +2337,9 @@ describe("printers-screen", () => {
     expect(q(el, `[data-test='discovered-row-${key}']`)!.getAttribute("part")).toBe(
       "discovered-details",
     );
-    expect(text(el, `[data-test='discovered-row-${key}']`)).toContain(t("printers.add_again_hint"));
+    expect(text(el, `[data-test='discovered-row-${key}']`)).toContain(
+      "Impresora deshabilitada. Al habilitarla se restauran sus ajustes, y los trabajos que sigan pendientes pueden imprimirse cuando esté activa.",
+    );
     q(el, "[data-test=probe-host]")!.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: target.host } }),
     );
@@ -2284,7 +2347,7 @@ describe("printers-screen", () => {
     await flush(el);
     expect(text(el, "[data-test=probe-status]")).toContain(t("printers.probe_found"));
     const add = q(el, `[data-test='register-${key}']`);
-    expect(add!.textContent).toContain(t("printers.add_again"));
+    expect(add!.textContent).toContain("Habilitar");
     await addDiscovered(el, add!);
     await flush(el);
     expect(api.updatePrinter).toHaveBeenCalledWith(row.id, { active: true });
@@ -3686,7 +3749,7 @@ it.each(["usb", "bluetooth", "network_tcp"] as const)(
     const key = stored.localKey ?? "10.0.0.88:9100";
     const add = q(el, `[data-test="register-${key}"]`)!;
     expect(add).not.toBeNull();
-    expect(add.textContent).toContain(t("printers.add_again"));
+    expect(add.textContent).toContain("Habilitar");
     await addDiscovered(el, add);
     await flush(el);
     expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p3", { active: true });
@@ -3861,7 +3924,7 @@ it("saves the printer's Active switch from Status and shows the saved value", as
   toggleSwitch(el, '[name="printer-detail-active"]', false);
   await vi.waitFor(() => expect(api.updatePrinter).toHaveBeenCalledWith("p1", { active: false }));
   await flush(el);
-  expect(text(el, "[data-test=printer-section-status]")).toContain(t("printers.status_inactive"));
+  expect(text(el, "[data-test=printer-section-status]")).toContain("Deshabilitada");
 });
 
 it("shows the fetched Active value when it differs from the switch just pressed", async () => {
@@ -4790,7 +4853,7 @@ it("re-adds a printer after adding and disabling it in the same screen", async (
   q(el, "[data-test=deactivate-printer-p9]")!.click();
   await flush(el);
   await openDiscovery(el);
-  expect(text(el, "[data-test=register-SN-1]")).toBe(t("printers.add_again"));
+  expect(text(el, "[data-test=register-SN-1]")).toBe("Habilitar");
   await addDiscovered(el, q(el, "[data-test=register-SN-1]")!);
   await flush(el);
   expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p9", { active: true });
@@ -5740,7 +5803,7 @@ describe("printers-screen discovery and add edges", () => {
   it("adds a disabled registration again under its existing id, sending a changed name", async () => {
     const device: DiscoveredPrinter = { ...discovered[1]! };
     const { el, api } = await mountWithDiscovered([device]);
-    expect(text(el, "[data-test=register-SN-2]")).toBe(t("printers.add_again"));
+    expect(text(el, "[data-test=register-SN-2]")).toBe("Habilitar");
     q(el, "[data-test=register-SN-2]")!.click();
     await flush(el);
     expect((q(el, "[data-test=discovered-name-SN-2]") as unknown as { value: string }).value).toBe(
@@ -7199,7 +7262,7 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
     q(el, sel("show-all-bluetooth"))!.click();
     await flush(el);
-    expect(text(el, sel(`register-${OTHER}`))).toBe(t("printers.add_again"));
+    expect(text(el, sel(`register-${OTHER}`))).toBe("Habilitar");
     await addDiscovered(el, q(el, sel(`register-${OTHER}`))!);
     await flush(el);
     expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p4", { active: true });
@@ -7260,7 +7323,7 @@ describe("printers-screen Bluetooth pairing", () => {
     }
   });
 
-  describe("Unpair stands in for Disable, and Add again switches it off again unless calibration is saved", () => {
+  describe("Unpair stands in for Disable, and Enable switches it off again unless calibration is saved", () => {
     const saved: Printer = {
       ...btPrinter("p9", ADDRESS, false),
       paperWidth: "58mm",
@@ -7285,8 +7348,8 @@ describe("printers-screen Bluetooth pairing", () => {
       expect(text(el, sel("forget-pairing-p8"))).toBe(t("printers.bluetooth_forget"));
       expect(q(el, sel("deactivate-printer-p8"))).toBeNull();
       expect(q(el, sel("forget-pairing-p5"))).toBeNull();
-      expect(text(el, sel("deactivate-printer-p5"))).toBe(t("printers.disable"));
-      expect(text(el, sel("deactivate-printer-p1"))).toBe(t("printers.disable"));
+      expect(text(el, sel("deactivate-printer-p5"))).toBe("Deshabilitar");
+      expect(text(el, sel("deactivate-printer-p1"))).toBe("Deshabilitar");
     });
 
     async function addAgain() {
@@ -7294,7 +7357,7 @@ describe("printers-screen Bluetooth pairing", () => {
         listPrinters: vi.fn().mockResolvedValue([...printers, saved]),
       });
       await openDiscovery(mounted.el);
-      expect(text(mounted.el, sel(`register-${ADDRESS}`))).toBe(t("printers.add_again"));
+      expect(text(mounted.el, sel(`register-${ADDRESS}`))).toBe("Habilitar");
       await addDiscovered(mounted.el, q(mounted.el, sel(`register-${ADDRESS}`))!);
       await vi.waitFor(() => expect(q(mounted.el, sel("calibration-step-1"))).not.toBeNull());
       await flush(mounted.el);
@@ -7825,7 +7888,7 @@ describe("printers-screen Bluetooth pairing", () => {
       });
       await flush(el);
       expect(text(el, sel(`forget-device-${ADDRESS}`))).toBe(t("printers.bluetooth_forget"));
-      expect(text(el, sel(`register-${OTHER}`))).toBe(t("printers.add_again"));
+      expect(text(el, sel(`register-${OTHER}`))).toBe("Habilitar");
       expect(q(el, sel(`forget-device-${OTHER}`))).toBeNull();
     });
 
@@ -8545,7 +8608,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await flush(el);
       expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_forgotten"));
       expect(q(el, sel("forget-pairing-p4"))).toBeNull();
-      expect(text(el, sel("deactivate-printer-p4"))).toBe(t("printers.disable"));
+      expect(text(el, sel("deactivate-printer-p4"))).toBe("Deshabilitar");
       expect(isDisabled(el, sel("deactivate-printer-p4"))).toBe(false);
       q(el, sel("deactivate-printer-p4"))!.click();
       await flush(el);

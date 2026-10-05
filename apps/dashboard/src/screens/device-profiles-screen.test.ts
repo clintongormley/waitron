@@ -1327,7 +1327,7 @@ describe("device-profiles-screen printer lists", () => {
     });
     const slip = switches(el, "payment-slip-printers");
     expect(slip.map((s) => s.dataset.printerId)).toEqual(["pr4", "pr3", "pr1", "pr2"]);
-    expect(slip[0]!.label).toBe(`Vieja (${t("printers.status_inactive")})`);
+    expect(slip[0]!.label).toBe("Vieja (Deshabilitada)");
     expect(switches(el, "receipt-printers").map((s) => s.dataset.printerId)).not.toContain("pr4");
     await save(el);
     expect(savedLists(api)).toEqual({

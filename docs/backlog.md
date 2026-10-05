@@ -3508,7 +3508,7 @@ before this change that lists a print agent carries `node_id`, so setup refuses 
 Still open, for the owner, and older than W72c: the export still carries each agent's `setup_url`
 and `setup_port`, and the Printers screen links an agent's host cell to its `setup_url`
 (`apps/dashboard/src/screens/printers-screen.ts`), so an imported agent that had reported one, which
-arrives inactive and is shown once the status filter includes revoked agents, would link to the
+arrives inactive and is shown once the status filter includes disabled agents, would link to the
 exporting machine's setup page (read, not run).
 Fixed in W72e (#1241, 2026-10-05): at 390 px the Products tree's category name box used to cut its
 duplicate-name refusal, and `category.invalid`'s, off against the pinned Actions column. The table
@@ -3948,11 +3948,11 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   printer off without unpairing it. Leaving the Printers screen mid-calibration asks the server to
   switch the printer off; if that request fails nothing reports it and the printer stays on, and
   closing the browser tab mid-wizard does not switch it off. Leaving the screen while a Save is in
-  flight and that save then fails, or in the moment between Add again switching the printer on and
+  flight and that save then fails, or in the moment between Enable switching the printer on and
   the wizard opening, also leaves it on. While it is on during calibration, jobs already queued for
   it can be handed out (since A163, jobs a succeeded Unpair ended no longer print; jobs kept in the
-  cases the next item lists, and a printer switched off with Disable, can still print after Add
-  again). Keeping the printer off until calibration is saved would need a calibration-only
+  cases the next item lists, and a printer switched off with Disable, can still print after
+  Enable). Keeping the printer off until calibration is saved would need a calibration-only
   print path for a switched-off printer, since `enqueuePrintJob` refuses one and `claimPrintJobs`
   claims only switched-on printers' jobs.
 - **An Unpair outcome that reaches the server after it dropped the command leaves the printer on**
@@ -5206,7 +5206,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   **W105 (done):** one request, `PATCH /management-api/devices/:id`, saves a device's
   name, profile, Shows, printers and made-here stations in one transaction, replacing the reassign
   and made-here routes (`apps/server/src/device-api.ts`). The Devices list is a table with an Edit
-  dialog and a two-press Remove in each active row's menu; a removed device's row does not open
+  dialog and a two-press Disable in each active row's menu; a disabled device's row does not open
   (`rowClickable`, new on `wt-data-table`). The card reader is read when the dialog opens and saved
   second, through its own route; without `payments.manage` the field is not shown.
   **W106 (done, #1240):** `devices` gains three empty-by-default columns: the battery level,
@@ -5229,23 +5229,25 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   shows an old report as current. (c) a report exactly 60 s after the last stored one is not stored
   (`sightingDue` is strictly more than a minute); the spec says "at least a minute". (d) the till
   starts reporting from its first draw only, so an app removed from the page and put back does not
-  report until it restarts. (e) test gaps: no battery case for a removed device; no failing test
+  report until it restarts. (e) test gaps: no battery case for a disabled device; no failing test
   for the `isConnected` check in the Battery column's update step; "Not reported" sorting last is
   held only by `wt-data-table`'s own tests.
   Left OPEN by W105, not acted on: (5) a kitchen screen whose station or watcher was switched off
   opens with Shows empty, so even a rename asks for a new one; whether to let it keep a switched-off
-  one is the owner's call. (6) the Status column still says "Revoked" (`devices.status_revoked`)
-  beside a menu that now says Remove. (7) a kitchen screen's Edit dialog hides Made here but still
-  sends its stored made-here stations that are switched on in the screen's station list; that list
-  re-reads when kitchen stations change, so one switched off while the dialog is open refuses the
-  save — at the bottom of the dialog, with "That station no longer exists" — only if the save is
-  sent before that re-read lands, or while live updates are down. (8) a profile whose only device
-  has been removed cannot be deleted, and nothing can free it: Remove keeps the device's profile, and
-  deleting the profile is refused `device_profile.in_use` (measured 2026-10-05 through the routes,
+  one is the owner's call. (6) done by W105a: printers and devices both say Disable/Deshabilitar,
+  status Disabled, and printers' Add again is now Enable; card readers, out of its scope, still say
+  Disable/Desactivar, Enable/Activar, Disabled/Desactivado and Add again/Volver a añadir. (7) a
+  kitchen screen's Edit dialog hides Made here but still sends its stored made-here stations that
+  are switched on in the screen's station list; that list re-reads when kitchen stations change, so
+  one switched off while the dialog is open refuses the save — at the bottom of the dialog, with
+  "That station no longer exists" — only if the save is sent before that re-read lands, or while
+  live updates are down. (8) a profile whose only device has been disabled cannot be deleted, and
+  nothing can free it: Disable keeps the device's profile, and deleting the profile is refused
+  `device_profile.in_use` (measured 2026-10-05 through the routes,
   with a control: an unused profile deletes). Before W105 a direct call to the old reassign route
-  could move a removed device onto another profile, because it did not check `active`; the Edit
-  route refuses a removed device. Owner decision needed: for example, let the profile delete ignore
-  removed devices, or clear a removed device's profile on removal (`device_profile_id` is NOT NULL,
+  could move a disabled device onto another profile, because it did not check `active`; the Edit
+  route refuses a disabled device. Owner decision needed: for example, let the profile delete ignore
+  disabled devices, or clear a disabled device's profile when it is disabled (`device_profile_id` is NOT NULL,
   so that is a schema change). (9) a device holding a printer its unchanged profile no longer lists
   opens with that field empty, and Save keeps the old printer without saying so. (10) for a manager
   without `payments.manage` the card reader field is drawn greyed while it loads and then disappears,
@@ -8101,14 +8103,21 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   `packages/venue-service/src/dashboard/strings.ts`): products, venues, extras lists and options
   lists say **Active / Inactive** (`product.inactive_badge`, `venue.inactive`, `extras.inactive`,
   `options.inactive`); printers, card readers and staff say **Disabled** with a **Disable** action
-  (`printers.status_inactive`, `printers.status_revoked`, `payments.reader_disabled`,
+  (`printers.status_disabled`, `printers.agent_status_disabled`, `payments.reader_disabled`,
   `person.mark_inactive`); and a generic `action.deactivate` ("Deactivate") exists beside
   `action.disable`. Products settle on **Active / Inactive**, kept separate from **Available** (sold
   out for now). **Next action:** pick the one pair, and the one action verb, for every screen whose
-  record is switched off rather than deleted — deciding first whether a revoked printer or a disabled
+  record is switched off rather than deleted — deciding first whether a disabled printer or a disabled
   login is really the same state as an inactive product — then change the English and Spanish
   strings together and record the rule in `docs/developers/design-system.md`. String keys are not
-  renamed on the way (only their text).
+  renamed on the way (only their text). W105a (2026-10-05) already moved printers, print agents
+  and devices to **Disable / Deshabilitar**, status **Disabled** (Deshabilitada for a printer,
+  Deshabilitado for an agent or a device), and printers and print agents to **Enable / Habilitar**
+  (devices get Enable in a later campaign item, W105b); it renamed their keys as an exception its own spec asked for,
+  because the old keys no longer said what they show; card
+  readers and staff still say Desactivar. Left open by W105a: a printer's Active status reads the
+  masculine "Activo" beside "Deshabilitada", because `printers.status_active` is shared with print
+  agents.
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile`; the Spanish
   form-factor label differs between two pickers ("TPV" vs "Caja registradora") — an owner copy call.
 - An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional

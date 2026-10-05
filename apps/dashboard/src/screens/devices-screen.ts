@@ -922,7 +922,7 @@ export class DevicesScreen extends LitElement {
         data-test=${`remove-${device.id}`}
         data-armed=${armed ? "true" : nothing}
         @click=${() => this.#onRemove(device.id)}
-        >${armed ? t("devices.remove_confirm") : t("devices.remove")}</wt-button
+        >${armed ? t("devices.disable_confirm") : t("devices.disable")}</wt-button
       >
     </dashboard-row-actions>`;
   }
@@ -970,7 +970,7 @@ export class DevicesScreen extends LitElement {
         label: t("devices.column_status"),
         cell: (d) =>
           html`<span data-test=${`device-status-${d.id}`}
-            >${d.active ? t("devices.status_active") : t("devices.status_revoked")}</span
+            >${d.active ? t("devices.status_active") : t("devices.status_disabled")}</span
           >`,
       },
       {
