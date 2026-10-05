@@ -900,6 +900,7 @@ export class DevicesScreen extends LitElement {
     const until = this.#openUntil();
     const [before, after] = t("devices.add_hint").split("{address}");
     return html`<wt-modal
+      size="standard"
       data-test="add-device-modal"
       heading=${t("devices.add_title")}
       .open=${true}
@@ -1045,6 +1046,7 @@ export class DevicesScreen extends LitElement {
     const own = this.#ownErrors();
     const blocked = own.name !== "" || own.profile !== "" || own.binding !== "";
     return html`<wt-modal
+      size="standard"
       data-test="pair-modal"
       heading=${t("devices.pair_title").replace("{name}", request.label)}
       .open=${true}

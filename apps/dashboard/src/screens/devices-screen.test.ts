@@ -1,6 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { html } from "lit";
 import { registerCatalogue, type CardProviderPanel } from "@waitron/dashboard-kit";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
@@ -956,6 +956,18 @@ describe("add a device", () => {
     await vi.waitFor(() => expect(q(el, "[data-test=pair-name]")).not.toBeNull());
     await flush(el);
   }
+
+  // At 1280px wide the standard size is not capped by the window: 42rem (672px).
+  it("sizes the Add a device and Pair dialogs to the standard width on desktop", async () => {
+    await page.viewport(1280, 900);
+    const el = await openAdd(stubApi());
+    const width = (id: string) =>
+      q(el, `[data-test=${id}]`)!.shadowRoot!.querySelector("dialog")!.getBoundingClientRect()
+        .width;
+    expect(width("add-device-modal")).toBeCloseTo(672, 0);
+    await openPair(el);
+    expect(width("pair-modal")).toBeCloseTo(672, 0);
+  });
 
   it("offers Add a device in the heading and on the empty list", async () => {
     const api = stubApi({ listDevices: vi.fn().mockResolvedValue([]) });
