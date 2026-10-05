@@ -6039,6 +6039,14 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     preview after each pause in typing. Cheaper: have `formatReceipt`
     (`apps/server/src/receipt-ticket.ts`) record the byte range each part emits, so one draw yields
     every mark. Not measured.
+  - **Left open by #1261's review, not acted on (2026-10-05):** (1) no database trigger protects
+    the logo image (the approved design adds no migration; the app-level `receipt` usage refuses a
+    library delete); (2) a configuration import does not validate the `tenant_receipts` JSON (the
+    print path reads it defensively instead); (3) the phone and email length limits (30 and 254)
+    are copied into the dashboard's Receipts screen and nothing keeps the copies in step with
+    `packages/layouts/src/validate.ts`; (4) a reviewer, reading only, believed that a
+    `tenant_receipts.receipt` value that is not valid JSON would make every sale fail when its
+    receipt is built — untested, and I believe it predates W111.
   - Not yet checked on paper: the logo, and the centred block, on the owner's box (FYI in the
     campaign's questions file). Local screenshots in `~/waitron-campaign/w111-shots/`.
 - **«QR tributario:» above the QR (C115, owner 2026-09-30) — done (2026-10-01, #999).** Both the
