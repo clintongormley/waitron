@@ -278,6 +278,16 @@ describe("venue operations screen", () => {
     expect(table(el, "zone-menus").checkVisibility()).toBe(true);
   });
 
+  it("opens an unconfigured zone's menus from the tree without a duplicate old-table action", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+    } as unknown as VenueServiceApi);
+    expect(find(el, '[data-test="zone-menus-z2"]')).toBeNull();
+    await action(el, "menus-tree-zone-z2");
+    expect(table(el, "zone-menus").checkVisibility()).toBe(true);
+    expect(find(el, '[data-test="new-assignment-z2"]')!.hasAttribute("disabled")).toBe(true);
+  });
+
   it("opens a new department from the policy tree's top action", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
@@ -1405,8 +1415,7 @@ describe("venue operations screen", () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
-    await selectTab(el, "zones");
-    await action(el, "zone-menus-z2");
+    await action(el, "menus-tree-zone-z2");
     const button = find(el, '[data-test="new-assignment-z2"]')!;
     expect(button).not.toBeNull();
     expect(button.hasAttribute("disabled")).toBe(true);
