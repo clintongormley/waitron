@@ -28,6 +28,7 @@ import "@waitron/ui/src/components/wt-notice.js";
 import "../widgets/row-actions.js";
 import "../widgets/print-job-preview.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
+import { relativeTime } from "../widgets/relative-time.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { dashboardPath, leftToBrowser } from "../navigation.js";
@@ -1633,7 +1634,7 @@ export class PrintersScreen extends LitElement {
           ? read
           : this.takenUntil;
     return html`<p class="hint" data-test="pairing-panel">${t("printers.pairing_hint")}</p>
-      ${until !== null ? html`<p data-test="pairing-until">${t("printers.pairing_open_until").replace("{time}", this.#timestamp(until))}</p>` : nothing}
+      ${until !== null ? html`<p data-test="pairing-until">${relativeTime(t("printers.pairing_closes"), until, { deadline: true })}</p>` : nothing}
       ${holdNotice(this.holdStatus, () => void this.#hold.start())}`;
   }
 

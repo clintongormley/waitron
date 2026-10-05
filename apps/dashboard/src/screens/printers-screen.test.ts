@@ -288,6 +288,15 @@ function deepQuery(root: ShadowRoot | HTMLElement, sel: string): HTMLElement | n
 const q = (el: PrintersScreen, sel: string) => deepQuery(el.shadowRoot!, sel);
 type Dropdown = HTMLElement & { value: string };
 const text = (el: PrintersScreen, sel: string) => q(el, sel)?.textContent?.trim();
+/** A sentence holding a relative time, with the time standing as `{time}`, and the moment it shows. */
+function timeSentence(sentence: Element | null): { text: string; at: string | null } {
+  const copy = sentence!.cloneNode(true) as Element;
+  copy.querySelector("wt-relative-time")?.replaceWith("{time}");
+  return {
+    text: copy.textContent!.replace(/\s+/g, " ").trim(),
+    at: sentence!.querySelector("wt-relative-time")?.getAttribute("datetime") ?? null,
+  };
+}
 async function filterPrinters(el: PrintersScreen, value: string): Promise<void> {
   const table = q(el, '[data-test="printers-table"]')!;
   const select = table.shadowRoot!.querySelector<Dropdown>('[name="status-filter"]')!;
@@ -1569,12 +1578,48 @@ describe("printers-screen", () => {
     q(el, "[data-test=open-add-agent]")!.click();
     await flush(el);
     expect(api.takePairingHold).toHaveBeenCalledOnce();
-    expect(text(el, "[data-test=pairing-until]")).toBe(
-      t("printers.pairing_open_until", "es-ES").replace("{time}", "2026-09-08 10:20"),
-    );
+    expect(timeSentence(q(el, "[data-test=pairing-until]"))).toEqual({
+      text: t("printers.pairing_closes", "es-ES"),
+      at: "2026-09-08T10:20:00.000Z",
+    });
     expect(q(el, "[data-test=pairing-open]")).toBeNull();
     expect(q(el, "[data-test=pairing-extend]")).toBeNull();
     expect(q(el, "[data-test=pairing-close]")).toBeNull();
+  });
+
+  it("says in the session's language how soon the window closes, with the exact time on hand", async () => {
+    const before = currentLocale();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.parse("2026-09-08T10:15:30.000Z"));
+    try {
+      for (const [locale, sentence, exact] of [
+        ["en-GB", "Open: closes in 4 minutes", "8 September 2026 at 10:20"],
+        ["es-ES", "Abierto: se cierra dentro de 4 minutos", "8 de septiembre de 2026 a las 10:20"],
+      ] as const) {
+        setLocale(locale);
+        const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+          api: stubApi(),
+        });
+        await flush(el);
+        q(el, "[data-test=open-add-agent]")!.click();
+        await flush(el);
+        const until = q(el, "[data-test=pairing-until]")!;
+        const time = until.querySelector("wt-relative-time")!;
+        await time.updateComplete;
+        expect(time.future).toBe(true);
+        const words = time.shadowRoot!.querySelector("time")!.textContent!.trim();
+        expect(timeSentence(until).text.replace("{time}", words)).toBe(sentence);
+        const button = time.shadowRoot!.querySelector("button")!;
+        const tip = time.shadowRoot!.getElementById(button.getAttribute("aria-describedby")!)!;
+        expect(tip.textContent!.trim()).toBe(exact);
+        button.click();
+        expect(tip.matches(":popover-open")).toBe(true);
+        cleanupWidgets();
+      }
+    } finally {
+      vi.useRealTimers();
+      setLocale(before);
+    }
   });
 
   it("shows an error banner when opening the window is rejected", async () => {
@@ -5416,9 +5461,10 @@ describe("printers-screen agent joining edges", () => {
 
     q(el, "[data-test=open-add-agent]")!.click();
     await vi.waitFor(() =>
-      expect(text(el, "[data-test=pairing-until]")).toBe(
-        t("printers.pairing_open_until").replace("{time}", "2026-09-08 10:20"),
-      ),
+      expect(timeSentence(q(el, "[data-test=pairing-until]"))).toEqual({
+        text: t("printers.pairing_closes"),
+        at: "2026-09-08T10:20:00.000Z",
+      }),
     );
     expect(q(el, "[data-test=pairing-refused]")).toBeNull();
   });
@@ -6194,9 +6240,10 @@ describe("printers-screen pairing renewal and stale scan edges", () => {
       await el.updateComplete;
       expect(api.takePairingHold).toHaveBeenCalledTimes(2);
       expect(q(el, "[data-test=hold-lapsed]")).toBeNull();
-      expect(text(el, "[data-test=pairing-until]")).toBe(
-        t("printers.pairing_open_until").replace("{time}", "2026-09-08 10:20"),
-      );
+      expect(timeSentence(q(el, "[data-test=pairing-until]"))).toEqual({
+        text: t("printers.pairing_closes"),
+        at: "2026-09-08T10:20:00.000Z",
+      });
     } finally {
       el.remove();
       vi.useRealTimers();
@@ -6268,9 +6315,10 @@ describe("printers-screen pairing renewal and stale scan edges", () => {
       expect(api.takePairingHold).toHaveBeenCalledTimes(2);
       expect(q(el, "[data-test=hold-lapsed]")).toBeNull();
       expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe("");
-      expect(text(el, "[data-test=pairing-until]")).toBe(
-        t("printers.pairing_open_until").replace("{time}", "2026-09-08 10:20"),
-      );
+      expect(timeSentence(q(el, "[data-test=pairing-until]"))).toEqual({
+        text: t("printers.pairing_closes"),
+        at: "2026-09-08T10:20:00.000Z",
+      });
     } finally {
       el.remove();
       vi.useRealTimers();
@@ -6292,9 +6340,10 @@ describe("printers-screen pairing renewal and stale scan edges", () => {
     await flush(el);
     q(el, "[data-test=open-add-agent]")!.click();
     await flush(el);
-    expect(text(el, "[data-test=pairing-until]")).toBe(
-      t("printers.pairing_open_until").replace("{time}", `2026-09-08 ${shown}`),
-    );
+    expect(timeSentence(q(el, "[data-test=pairing-until]"))).toEqual({
+      text: t("printers.pairing_closes"),
+      at: `2026-09-08T${shown}:00.000Z`,
+    });
   });
 
   it("opens the window and shows its lapse time before the first pairing read has arrived", async () => {
@@ -6305,9 +6354,10 @@ describe("printers-screen pairing renewal and stale scan edges", () => {
     q(el, "[data-test=open-add-agent]")!.click();
 
     await vi.waitFor(() =>
-      expect(text(el, "[data-test=pairing-until]")).toBe(
-        t("printers.pairing_open_until").replace("{time}", "2026-09-08 10:20"),
-      ),
+      expect(timeSentence(q(el, "[data-test=pairing-until]"))).toEqual({
+        text: t("printers.pairing_closes"),
+        at: "2026-09-08T10:20:00.000Z",
+      }),
     );
     expect(q(el, "[data-test=pairing-refused]")).toBeNull();
   });

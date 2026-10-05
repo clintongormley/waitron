@@ -22,6 +22,7 @@ import "@waitron/ui/src/components/wt-spinner.js";
 import { PairingHold, type PairingHoldStatus } from "../api/pairing-hold.js";
 import { bottomMessage, refusal } from "../i18n/form-message.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
+import { relativeTime } from "../widgets/relative-time.js";
 import "../widgets/row-actions.js";
 import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
 import {
@@ -781,7 +782,7 @@ export class DevicesScreen extends LitElement {
       }${
         stale
           ? html` <span part="battery-as-of"
-              >${t("devices.battery_as_of").replace("{time}", formatIsoMinute(at))}</span
+              >${relativeTime(t("devices.battery_updated"), at, { now: this.now })}</span
             >`
           : nothing
       }</span
@@ -1213,7 +1214,7 @@ export class DevicesScreen extends LitElement {
       <p class="hint">
         ${before}<code data-test="device-address">${this.deviceAddress}</code>${after}
       </p>
-      ${until === null ? nothing : html`<p class="hint" data-test="pairing-until">${t("devices.open_until").replace("{time}", formatIsoMinute(until))}</p>`}
+      ${until === null ? nothing : html`<p class="hint" data-test="pairing-until">${relativeTime(t("devices.window_closes"), until, { deadline: true, now: this.now })}</p>`}
       ${holdNotice(this.holdStatus, () => void this.#hold.start())}
       ${
         this.added === null

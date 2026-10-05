@@ -10,7 +10,6 @@ import {
 } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { formatIsoMinute } from "../date-utils.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type {
   DashboardApi,
@@ -275,6 +274,16 @@ function dq(root: ShadowRoot | Element, sel: string): HTMLElement | null {
   return null;
 }
 const deepText = (el: DevicesScreen, sel: string) => dq(el.shadowRoot!, sel)?.textContent?.trim();
+/** A sentence holding a relative time, with the time standing as `{time}`, and the moment it shows. */
+function timeSentence(sentence: Element | null): { text: string; at: string | null } {
+  const copy = sentence!.cloneNode(true) as Element;
+  const time = copy.querySelector("wt-relative-time");
+  time?.replaceWith("{time}");
+  return {
+    text: copy.textContent!.replace(/\s+/g, " ").trim(),
+    at: sentence!.querySelector("wt-relative-time")?.getAttribute("datetime") ?? null,
+  };
+}
 const devicesTable = (el: DevicesScreen) =>
   q(el, "[data-test=devices-table]") as HTMLElementTagNameMap["wt-data-table"];
 
@@ -551,14 +560,46 @@ describe("the device table", () => {
       const el = await mountBattery([reported("old", 82, false, 11)]);
       const shown = cell(el, "old");
       expect(shown.getAttribute("part")).toBe("battery-stale");
-      expect(shown.textContent!.replace(/\s+/g, " ").trim()).toBe(
-        `82% ${t("devices.battery_as_of", "es-ES").replace("{time}", formatIsoMinute(minutesAgo(11)))}`,
-      );
+      expect(timeSentence(shown)).toEqual({
+        text: `82% ${t("devices.battery_updated", "es-ES")}`,
+        at: minutesAgo(11),
+      });
       const probe = document.createElement("span");
       probe.style.color = "var(--wt-color-text-muted)";
       el.parentElement!.appendChild(probe);
       expect(getComputedStyle(shown).color).toBe(getComputedStyle(probe).color);
       probe.remove();
+    });
+
+    it("says how long ago a greyed report was taken in the session's language, with the exact time on hand", async () => {
+      const before = currentLocale();
+      try {
+        for (const [locale, sentence, ago, exact] of [
+          ["en-GB", "82% updated 11 minutes ago", "11 minutes ago", "5 October 2026 at 11:49"],
+          [
+            "es-ES",
+            "82% actualizado hace 11 minutos",
+            "hace 11 minutos",
+            "5 de octubre de 2026 a las 11:49",
+          ],
+        ] as const) {
+          setLocale(locale);
+          const el = await mountBattery([reported("old", 82, false, 11)]);
+          const time = cell(el, "old").querySelector("wt-relative-time")!;
+          await time.updateComplete;
+          const words = time.shadowRoot!.querySelector("time")!.textContent!.trim();
+          expect(words).toBe(ago);
+          expect(timeSentence(cell(el, "old")).text.replace("{time}", words)).toBe(sentence);
+          const button = time.shadowRoot!.querySelector("button")!;
+          const tip = time.shadowRoot!.getElementById(button.getAttribute("aria-describedby")!)!;
+          expect(tip.textContent!.trim()).toBe(exact);
+          button.click();
+          expect(tip.matches(":popover-open")).toBe(true);
+          cleanupWidgets();
+        }
+      } finally {
+        setLocale(before);
+      }
     });
 
     it("leaves a nine-minute-old report as it is", async () => {
@@ -604,9 +645,10 @@ describe("the device table", () => {
 
         const shown = cell(el, "ageing");
         expect(shown.getAttribute("part")).toBe("battery-stale");
-        expect(shown.textContent!.replace(/\s+/g, " ").trim()).toBe(
-          `82% ${t("devices.battery_as_of", "es-ES").replace("{time}", formatIsoMinute(minutesAgo(9)))}`,
-        );
+        expect(timeSentence(shown)).toEqual({
+          text: `82% ${t("devices.battery_updated", "es-ES")}`,
+          at: minutesAgo(9),
+        });
         expect(api.listDevices).toHaveBeenCalledTimes(1);
       });
 
@@ -2156,17 +2198,53 @@ describe("add a device", () => {
       liveData,
     });
     const el = await openAdd(api);
-    expect(text(el, "[data-test=pairing-until]")).toBe(
-      t("devices.open_until").replace("{time}", "2026-09-08 10:05"),
-    );
+    expect(timeSentence(q(el, "[data-test=pairing-until]"))).toEqual({
+      text: t("devices.window_closes"),
+      at: "2026-09-08T10:05:00.000Z",
+    });
 
     vi.mocked(api.pairingMode).mockResolvedValue(later);
     liveData.refresh();
     await vi.waitFor(() =>
-      expect(text(el, "[data-test=pairing-until]")).toBe(
-        t("devices.open_until").replace("{time}", "2026-09-08 10:07"),
-      ),
+      expect(timeSentence(q(el, "[data-test=pairing-until]"))).toEqual({
+        text: t("devices.window_closes"),
+        at: "2026-09-08T10:07:00.000Z",
+      }),
     );
+  });
+
+  it("says in the session's language how soon the window closes, with the exact time on hand", async () => {
+    const before = currentLocale();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.parse("2026-09-08T10:00:30.000Z"));
+    try {
+      for (const [locale, sentence, exact] of [
+        ["en-GB", "Accepting devices: closes in 4 minutes", "8 September 2026 at 10:05"],
+        [
+          "es-ES",
+          "Se aceptan dispositivos: se cierra dentro de 4 minutos",
+          "8 de septiembre de 2026 a las 10:05",
+        ],
+      ] as const) {
+        setLocale(locale);
+        const el = await openAdd(stubApi());
+        const until = q(el, "[data-test=pairing-until]")!;
+        const time = until.querySelector("wt-relative-time")!;
+        await time.updateComplete;
+        expect(time.future).toBe(true);
+        const words = time.shadowRoot!.querySelector("time")!.textContent!.trim();
+        expect(timeSentence(until).text.replace("{time}", words)).toBe(sentence);
+        const button = time.shadowRoot!.querySelector("button")!;
+        const tip = time.shadowRoot!.getElementById(button.getAttribute("aria-describedby")!)!;
+        expect(tip.textContent!.trim()).toBe(exact);
+        button.click();
+        expect(tip.matches(":popover-open")).toBe(true);
+        cleanupWidgets();
+      }
+    } finally {
+      vi.useRealTimers();
+      setLocale(before);
+    }
   });
 
   it("closing the dialog releases the hold", async () => {
