@@ -46,6 +46,10 @@
   --wt-duration-move: 150ms;
   --wt-duration-disclosure: 900ms;
 
+  /* wt-modal's sizes: compact for a confirmation or one or two short fields, standard for an
+     ordinary editor, and --wt-modal-max-width for wide content (and an unsized modal). */
+  --wt-modal-compact-width: 28rem;
+  --wt-modal-standard-width: 42rem;
   --wt-modal-max-width: 64rem;
   --wt-dialog-max-width: min(90vw, 48rem);
   /* How wide a field in a wt-modal may grow. Fields read --wt-field-max-width, which is none here and

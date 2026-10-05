@@ -1743,6 +1743,7 @@ export class DashboardApp extends LitElement {
   #renderProfileModal(): TemplateResult {
     return html`
       <wt-modal
+        size="standard"
         heading=${t("profile.title")}
         .open=${this.profileOpen}
         @wt-close=${(e: Event) => {

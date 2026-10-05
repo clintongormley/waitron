@@ -174,6 +174,7 @@ export class SectionDetailsForm extends LitElement {
     );
     const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
     return html`<wt-modal
+      size="standard"
       .open=${this.open}
       heading=${this.heading}
       @keydown=${(event: KeyboardEvent) => {

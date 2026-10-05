@@ -15,8 +15,8 @@ import type { WtDataTable } from "./wt-data-table.js";
 
 afterEach(cleanup);
 
-async function openModal(body = "Printer settings") {
-  const modal = (await mount(`<wt-modal heading="Add printer">
+async function openModal(body = "Printer settings", attributes = "") {
+  const modal = (await mount(`<wt-modal heading="Add printer" ${attributes}>
     ${body}
     <wt-form-actions slot="footer">
       <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
@@ -135,6 +135,109 @@ test.each([
   },
 );
 
+function dialogOf(modal: WtModal): HTMLDialogElement {
+  return modal.shadowRoot!.querySelector("dialog")!;
+}
+
+// At 1280px wide the side margin is --wt-space-5 (24px), so the viewport allows 1232px.
+test.each([
+  ['size="compact"', 448],
+  ['size="standard"', 672],
+  ['size="wide"', 1024],
+  ["no size", 1024],
+  ['size="huge"', 1024],
+])("is its size's width, with equal side margins, at 1280px wide (%s)", async (size, expected) => {
+  await page.viewport(1280, 900);
+  const modal = await openModal(undefined, size === "no size" ? "" : size);
+  const rect = dialogOf(modal).getBoundingClientRect();
+  expect(rect.width).toBeCloseTo(expected, 0);
+  expect(1280 - rect.right).toBeCloseTo(rect.left, 0);
+  expect(rect.top).toBeCloseTo(24, 0);
+  expect(900 - rect.bottom).toBeCloseTo(24, 0);
+});
+
+// On a phone the side margin is --wt-space-1 (4px), so every size is the viewport less 8px.
+test.each([
+  [390, 844, 382],
+  [320, 568, 312],
+])("fills a %i × %i phone less its margins at every size", async (width, height, expected) => {
+  await page.viewport(width, height);
+  try {
+    for (const size of ['size="compact"', 'size="standard"', 'size="wide"', ""]) {
+      const modal = await openModal(undefined, size);
+      const rect = dialogOf(modal).getBoundingClientRect();
+      expect(rect.width, size || "no size").toBeCloseTo(expected, 0);
+      expect(width - rect.right, size || "no size").toBeCloseTo(rect.left, 0);
+      cleanup();
+    }
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+test("reflects its size and re-sizes an open modal when the size changes", async () => {
+  await page.viewport(1280, 900);
+  const modal = await openModal();
+  const dialog = dialogOf(modal);
+  expect(modal.hasAttribute("size")).toBe(false);
+  modal.size = "compact";
+  await modal.updateComplete;
+  expect(modal.getAttribute("size")).toBe("compact");
+  expect(dialog.getBoundingClientRect().width).toBeCloseTo(448, 0);
+  modal.size = "standard";
+  await modal.updateComplete;
+  expect(modal.getAttribute("size")).toBe("standard");
+  expect(dialog.getBoundingClientRect().width).toBeCloseTo(672, 0);
+  modal.size = undefined;
+  await modal.updateComplete;
+  expect(modal.hasAttribute("size")).toBe(false);
+  expect(dialog.getBoundingClientRect().width).toBeCloseTo(1024, 0);
+});
+
+test.each([
+  ['size="compact"', 448],
+  ['size="standard"', 672],
+  ['size="wide"', 300],
+  ["", 300],
+])(
+  "lets an ancestor's --wt-modal-max-width size only an unsized or wide modal (%s)",
+  async (size, expected) => {
+    await page.viewport(1280, 900);
+    const modal = await openModal(undefined, size);
+    host.style.setProperty("--wt-modal-max-width", "300px");
+    expect(dialogOf(modal).getBoundingClientRect().width).toBeCloseTo(expected, 0);
+  },
+);
+
+test.each([
+  ["compact", "--wt-modal-compact-width"],
+  ["standard", "--wt-modal-standard-width"],
+])("resizes one %s modal through its own size token", async (size, token) => {
+  await page.viewport(1280, 900);
+  const modal = await openModal(undefined, `size="${size}"`);
+  modal.style.setProperty(token, "350px");
+  expect(dialogOf(modal).getBoundingClientRect().width).toBeCloseTo(350, 0);
+});
+
+test.each(["compact", "standard"])(
+  "keeps a wide and an unsized modal opened inside a %s modal at the wide width",
+  async (size) => {
+    await page.viewport(1280, 900);
+    const outer = await openModal(
+      `<wt-modal data-inner size="wide" heading="Choose an image">Images</wt-modal>
+      <wt-modal data-inner heading="Notice">Text</wt-modal>`,
+      `size="${size}"`,
+    );
+    for (const inner of outer.querySelectorAll<WtModal>("[data-inner]")) {
+      inner.open = true;
+      await inner.updateComplete;
+      const label = inner.getAttribute("size") ?? "no size";
+      expect(dialogOf(inner).matches(":modal"), label).toBe(true);
+      expect(dialogOf(inner).getBoundingClientRect().width, label).toBeCloseTo(1024, 0);
+    }
+  },
+);
+
 /** One of every shared form field, in the grid a form lays its fields out in. */
 const FIELDS = `<div style="display: grid">
   <wt-input label="Name"></wt-input>
@@ -158,10 +261,13 @@ async function fieldsIn(root: ParentNode): Promise<HTMLElement[]> {
 }
 
 /** A modal holding every form field, a wide block, a table and a footer row carrying a message. */
-async function openForm(): Promise<{ modal: WtModal; fields: HTMLElement[] }> {
-  const modal = await openModal(`${FIELDS}
+async function openForm(attributes = ""): Promise<{ modal: WtModal; fields: HTMLElement[] }> {
+  const modal = await openModal(
+    `${FIELDS}
     <div data-wide style="height: 1px"></div>
-    <wt-data-table aria-label="Rows"></wt-data-table>`);
+    <wt-data-table aria-label="Rows"></wt-data-table>`,
+    attributes,
+  );
   const table = modal.querySelector<WtDataTable<TableRow>>("wt-data-table")!;
   table.columns = [{ key: "name", label: "Name", cell: (row) => row.name }];
   table.rows = [{ id: "a", name: "Ada" }];
@@ -180,7 +286,7 @@ function contentWidth(modal: WtModal): number {
   return body.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
 }
 
-test("holds every form field and the form's message to the standard form width on a wide window", async () => {
+test("holds every form field and the form's message to the form width on a wide window", async () => {
   await page.viewport(1280, 900);
   const { modal, fields } = await openForm();
   const form = px("var(--wt-form-max-width)");
@@ -214,6 +320,48 @@ test("gives a field the body's whole width on a 390px-wide phone", async () => {
     }
   } finally {
     await page.viewport(1280, 900);
+  }
+});
+
+test.each([
+  ['size="compact"', "body"],
+  ['size="standard"', "form"],
+  ['size="wide"', "form"],
+  ["", "form"],
+])(
+  "bounds every field by the narrower of the form width and the body at 1280px wide (%s)",
+  async (size, bound) => {
+    await page.viewport(1280, 900);
+    const { modal, fields } = await openForm(size);
+    const form = px("var(--wt-form-max-width)");
+    const content = contentWidth(modal);
+    if (bound === "body") expect(content).toBeLessThan(form);
+    else expect(content).toBeGreaterThan(form);
+    const expected = bound === "body" ? content : form;
+    for (const field of fields) {
+      expect(field.getBoundingClientRect().width, field.localName).toBeCloseTo(expected, 0);
+    }
+    const message = modal.shadowRoot!.querySelector<HTMLElement>(".body > [data-error]")!;
+    expect(message.getBoundingClientRect().width).toBeCloseTo(expected, 0);
+  },
+);
+
+test("holds every field at the form width in a standard modal beside a classic scrollbar", async () => {
+  await page.viewport(1280, 900);
+  const modal = await openModal(FIELDS, 'size="standard"');
+  const fields = await fieldsIn(modal);
+  // This headless Chromium hides scrollbars, so the room a classic one takes from the body (a 17px
+  // allowance) is stood in as extra end padding.
+  const scrollbar = new CSSStyleSheet();
+  scrollbar.replaceSync(
+    ".body { padding-inline-end: calc(var(--wt-modal-inline-padding) + 17px); }",
+  );
+  modal.shadowRoot!.adoptedStyleSheets = [...modal.shadowRoot!.adoptedStyleSheets, scrollbar];
+  // 672px less a 1px border and 24px of padding each side, less 17px.
+  expect(contentWidth(modal)).toBeCloseTo(605, 0);
+  const form = px("var(--wt-form-max-width)");
+  for (const field of fields) {
+    expect(field.getBoundingClientRect().width, field.localName).toBeCloseTo(form, 0);
   }
 });
 

@@ -502,6 +502,7 @@ export class UnitsScreen extends LitElement {
         }}
       ></dashboard-unit-form>
       <wt-modal
+        size="wide"
         data-test="in-use-dialog"
         .open=${this.inUseUnitId !== null}
         heading=${t("units.delete_unit")}

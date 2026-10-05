@@ -1743,6 +1743,7 @@ export class MenusScreen extends LitElement {
     // scrolls to its footer row's message as it opens, before the row has taken the cleared one.
     const message = options.open ? (options.errors?.bottom ?? "") : "";
     return html`<wt-modal
+      size="compact"
       data-test=${options.test}
       .open=${options.open}
       heading=${options.heading}
@@ -2360,6 +2361,7 @@ export class MenusScreen extends LitElement {
   #renderAddProducts() {
     const target = this.addingProducts;
     return html`<wt-modal
+      size="standard"
       data-test="add-products"
       .open=${target !== null}
       heading=${t("sections.add_products_heading").replace("{name}", target?.name ?? "")}

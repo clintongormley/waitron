@@ -206,6 +206,7 @@ export class PersonEdit extends LitElement {
     );
     return html`
       <wt-modal
+        size="standard"
         heading=${person ? `${t("action.edit")} ${person.displayName}` : t("person.edit")}
         .open=${this.open}
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}

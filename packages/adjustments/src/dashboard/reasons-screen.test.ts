@@ -654,7 +654,7 @@ describe("the editor", () => {
     expect(modal(el)).toBeNull();
   });
 
-  it("holds both role fields, their labels and a role error to the standard form width on a wide window", async () => {
+  it("holds both role fields, their labels and a role error to the form width on a wide window", async () => {
     const width = window.innerWidth,
       height = window.innerHeight;
     await page.viewport(1280, 800);

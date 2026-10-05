@@ -198,24 +198,41 @@ describe("add content language dialog", () => {
     expect([...buttons].map((button) => button.textContent!.trim())).toEqual([t("action.cancel")]);
   });
 
-  it("holds the field and its error to the standard form width on a wide window", async () => {
+  it("opens in the compact modal size and fills its body with the field and its error on a wide window", async () => {
     const width = window.innerWidth,
       height = window.innerHeight;
     await page.viewport(1280, 800);
     try {
-      const { el } = await mount();
+      const { el } = await mount(vi.fn().mockRejectedValue({ code: "content.language_invalid" }));
       const probe = document.createElement("div");
       probe.style.width = "var(--wt-form-max-width)";
       el.shadowRoot!.appendChild(probe);
       const form = probe.getBoundingClientRect().width;
-      const body = el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector(".body")!;
-      expect(body.clientWidth).toBeGreaterThan(form);
-      const parts = [field(el), field(el).shadowRoot!.querySelector(".field")].filter(
-        (part) => part !== null,
+      const modal = el.shadowRoot!.querySelector("wt-modal")!;
+      // 28rem; at 1280px wide the side margins leave the window 1232px.
+      expect(modal.shadowRoot!.querySelector("dialog")!.getBoundingClientRect().width).toBeCloseTo(
+        448,
+        0,
       );
-      expect(parts).toHaveLength(2);
+      const body = modal.shadowRoot!.querySelector(".body")!;
+      const content = body.clientWidth - 2 * parseFloat(getComputedStyle(body).paddingLeft);
+      // The body, not the form width, is what bounds the field here.
+      expect(content).toBeLessThan(form);
+      await choose(el, "fr");
+      const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+      await vi.waitFor(async () =>
+        expect((await formMessageOf(actions))?.textContent).toBe(
+          codeMessage("content.language_invalid"),
+        ),
+      );
+      const parts = [
+        field(el),
+        field(el).shadowRoot!.querySelector(".field"),
+        await formMessageOf(actions),
+      ].filter((part) => part !== null);
+      expect(parts).toHaveLength(3);
       for (const part of parts) {
-        expect(part.getBoundingClientRect().width, part.localName).toBeCloseTo(form, 0);
+        expect(part.getBoundingClientRect().width, part.localName).toBeCloseTo(content, 0);
       }
     } finally {
       await page.viewport(width, height);

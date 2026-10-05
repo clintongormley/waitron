@@ -229,6 +229,7 @@ export class UnitForm extends LitElement {
     const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
     return html`
       <wt-modal
+        size="standard"
         heading=${this.value ? t("units.edit") : t("units.create")}
         .open=${this.open}
         @wt-close=${(event: Event) => this.#cancel(event)}

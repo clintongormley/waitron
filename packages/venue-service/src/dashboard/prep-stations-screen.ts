@@ -1324,6 +1324,7 @@ export class PrepStationsScreen extends LitElement {
     return html`${
       this.watcherEditor
         ? html`<wt-modal
+            size="standard"
             open
             data-test="watcher-modal"
             heading=${watcher?.name ?? t("watchers.new")}
@@ -1349,6 +1350,7 @@ export class PrepStationsScreen extends LitElement {
     ${
       this.watcherRemoval
         ? html`<wt-modal
+            size="compact"
             open
             data-test="remove-watcher-modal"
             heading=${t("watchers.remove")}
@@ -1432,6 +1434,7 @@ export class PrepStationsScreen extends LitElement {
     if (!this.editor || this.pending) return nothing;
     const editor = this.editor;
     return html`<wt-modal
+      size=${editor.kind === "claim" || editor.kind === "exception_delete" ? "compact" : "standard"}
       open
       heading=${editor.kind === "claim" ? t("prep.claim_folder") : editor.kind === "exception_delete" ? t("prep.confirm_delete_exception") : editor.kind === "exception" ? (editor.id ? t("prep.edit_exception") : t("prep.add_exception")) : editor.id ? t("prep.edit_station") : t("prep.new_station")}
       @wt-close=${() => {
@@ -1562,6 +1565,7 @@ export class PrepStationsScreen extends LitElement {
     const movedClaim =
       oldClaim && claim?.target && JSON.stringify(oldClaim.target) !== JSON.stringify(claim.target);
     return html`<wt-modal
+      size="wide"
       open
       .dismissible=${!this.busy}
       data-test="routing-preview"
@@ -1657,6 +1661,7 @@ export class PrepStationsScreen extends LitElement {
           : format("prep.close_confirm_ask", { station: station?.name ?? action.stationId, ...end })
         : "";
     return html`<wt-modal
+      size="compact"
       open
       data-test="station-action-modal"
       heading=${heading}

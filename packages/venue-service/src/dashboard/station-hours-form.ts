@@ -166,6 +166,7 @@ export class StationHoursForm extends LitElement {
     > `;
     return this.inDialog
       ? html`<wt-modal
+          size="wide"
           open
           heading=${t("venue.hours")}
           .dismissible=${!this.busy}

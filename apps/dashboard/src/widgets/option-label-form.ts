@@ -220,6 +220,7 @@ export class OptionLabelForm extends LitElement {
       ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : []),
     ].join(" ");
     return html`<wt-modal
+      size="standard"
       .open=${this.open}
       heading=${t(this.value ? "options.edit_option" : "options.add_option")}
       @keydown=${(event: KeyboardEvent) => {

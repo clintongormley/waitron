@@ -179,6 +179,7 @@ export class PersonForm extends LitElement {
     );
     return html`
       <wt-modal
+        size="standard"
         heading=${t("person.new")}
         .open=${this.open}
         @wt-close=${() => this.#reset()}

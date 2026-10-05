@@ -164,6 +164,7 @@ export class VariantForm extends LitElement {
     const invalid = Object.keys(errors).length > 0;
     const fields = this.#fields(errors);
     return html`<wt-modal
+      size="standard"
       .open=${this.open}
       heading=${this.value ? t("editor.edit_variant") : t("editor.add_variant")}
       @wt-close=${(event: Event) => this.#cancel(event)}

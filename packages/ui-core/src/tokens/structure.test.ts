@@ -46,6 +46,8 @@ test("defines the structural contract", () => {
     "--wt-opacity-hover",
     "--wt-dialog-max-width",
     "--wt-modal-max-width",
+    "--wt-modal-compact-width",
+    "--wt-modal-standard-width",
     "--wt-modal-inline-margin",
     "--wt-modal-inline-padding",
     "--wt-form-max-width",
@@ -104,7 +106,7 @@ test("dialog max width is 48rem, capped at 90% of the viewport", () => {
   expect(token(el, "--wt-dialog-max-width")).toBe("min(90vw, 48rem)");
 });
 
-test("the standard modal is 64rem wide, and a dialog keeps its own 48rem", () => {
+test("the wide modal is 64rem wide, and a dialog keeps its own 48rem", () => {
   const el = mount();
   expect(token(el, "--wt-modal-max-width")).toBe("64rem");
   el.style.setProperty("--wt-modal-max-width", "10rem");
@@ -119,7 +121,7 @@ test("a modal's form is 36rem wide, and a field outside a modal has no cap", () 
 
 test("a modal's form is narrower than the modal, and wider than a phone", () => {
   // Wider than a 390px phone, so a phone's modal gives its fields its whole width as before; narrower
-  // than the standard modal, or capping a field in one would change nothing.
+  // than the wide modal, or capping a field in one would change nothing.
   const el = mount();
   const probe = document.createElement("div");
   probe.style.position = "fixed";
@@ -130,6 +132,41 @@ test("a modal's form is narrower than the modal, and wider than a phone", () => 
   };
   expect(px("var(--wt-form-max-width)")).toBeGreaterThan(390);
   expect(px("var(--wt-form-max-width)")).toBeLessThan(px("var(--wt-modal-max-width)"));
+});
+
+/** Resolves a length to pixels inside a token root. */
+function lengthPx(el: HTMLElement, length: string): number {
+  const probe = document.createElement("div");
+  probe.style.position = "fixed";
+  probe.style.width = length;
+  el.appendChild(probe);
+  const width = probe.getBoundingClientRect().width;
+  probe.remove();
+  return width;
+}
+
+test("the modal sizes run compact, then standard, then wide", () => {
+  const el = mount();
+  const compact = lengthPx(el, "var(--wt-modal-compact-width)");
+  const standard = lengthPx(el, "var(--wt-modal-standard-width)");
+  const wide = lengthPx(el, "var(--wt-modal-max-width)");
+  expect(compact).toBe(448);
+  expect(standard).toBe(672);
+  expect(compact).toBeLessThan(standard);
+  expect(standard).toBeLessThan(wide);
+});
+
+test("a standard modal holds a form at the form width beside a classic scrollbar", () => {
+  // The dialog is border-box with a 1px border each side and --wt-space-5 of inline padding at its
+  // widest; 17px is the allowance for a classic (always-shown) scrollbar, and a long editor's body
+  // always scrolls.
+  const el = mount();
+  const content =
+    lengthPx(el, "var(--wt-modal-standard-width)") -
+    2 * 1 -
+    2 * lengthPx(el, "var(--wt-space-5)") -
+    17;
+  expect(content).toBeGreaterThanOrEqual(lengthPx(el, "var(--wt-form-max-width)"));
 });
 
 test("a name cell may grow wider than the controls that sit beside it", () => {

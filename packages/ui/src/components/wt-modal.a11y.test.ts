@@ -25,6 +25,22 @@ describe.each(["light", "dark"] as const)("wt-modal a11y (%s theme)", (theme) =>
     await expectNoA11yViolations(host);
   });
 
+  test.each(["compact", "standard"])("an open %s modal", async (size) => {
+    const modal = (await mountThemed(
+      `<wt-modal heading="Add printer" size="${size}">
+        <wt-input name="printer-name" label="Printer name"></wt-input>
+        <wt-form-actions slot="footer">
+          <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
+          <wt-button>Save</wt-button>
+        </wt-form-actions>
+      </wt-modal>`,
+      theme,
+    )) as WtModal;
+    modal.open = true;
+    await modal.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   test("with the form's message at the end of the body", async () => {
     const modal = (await mountThemed(
       `<wt-modal heading="Add passkey">

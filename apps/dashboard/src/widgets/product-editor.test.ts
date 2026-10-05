@@ -5348,3 +5348,53 @@ it("draws a variant's inherited folded values in grey italic, its own upright", 
   expect(getComputedStyle(inherited).color).toBe("rgb(7, 8, 9)");
   expect(kitchen.shadowRoot!.querySelectorAll(".summary-placeholder")).toHaveLength(1);
 });
+
+// --- Window widths (W70) ---
+
+const dialogWidth = (dialog: Element) =>
+  dialog.shadowRoot!.querySelector("dialog")!.getBoundingClientRect().width;
+
+// At 1280px wide the modal's side margin is 24px, so no size is capped by the window: standard is
+// 42rem (672px), compact 28rem (448px) and wide 64rem (1024px).
+it("opens the editor in the standard modal size on a desktop", async () => {
+  await atDesktopWidth(async () => {
+    const el = await mountPricing({ ...saved, variants: [small, large] });
+    expect(dialogWidth(el.shadowRoot!.querySelector("wt-modal")!)).toBeCloseTo(672, 0);
+  });
+});
+
+it("opens the image chooser at the wide size from inside the standard editor", async () => {
+  await atDesktopWidth(async () => {
+    const el = await mountWithPhoto();
+    photoButton(el).click();
+    await photoControl(el).updateComplete;
+    const chooser = photoControl(el).shadowRoot!.querySelector("wt-modal")!;
+    await chooser.updateComplete;
+    expect(chooser.shadowRoot!.querySelector("dialog")!.matches(":modal")).toBe(true);
+    expect(dialogWidth(chooser)).toBeCloseTo(1024, 0);
+  });
+});
+
+it("opens the unit chooser at the compact modal width on a desktop", async () => {
+  await atDesktopWidth(async () => {
+    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: product,
+      locales: ["en"],
+      units: [unit],
+      taxChoices: reduced,
+    });
+    await openUnits(el);
+    const dialog = unitChooser(el);
+    await dialog.updateComplete;
+    expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    expect(dialogWidth(dialog)).toBeCloseTo(448, 0);
+    const body = dialog.shadowRoot!.querySelector(".body")!;
+    const content =
+      body.getBoundingClientRect().width - 2 * parseFloat(getComputedStyle(body).paddingLeft);
+    expect(dialog.querySelector(".unit-chooser")!.getBoundingClientRect().width).toBeCloseTo(
+      content,
+      0,
+    );
+  });
+});

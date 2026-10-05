@@ -681,6 +681,7 @@ export class ModifiersScreen extends LitElement {
         }}
       ></dashboard-option-list-form>
       <wt-modal
+        size="standard"
         data-test="delete-dialog"
         .open=${this.deleting !== null}
         heading=${t("modifiers.delete_named").replace("{name}", this.deleting?.name ?? "")}
@@ -710,6 +711,7 @@ export class ModifiersScreen extends LitElement {
         ></wt-modal
       >
       <wt-modal
+        size="standard"
         data-test="detail-modal"
         .open=${this.viewing !== null}
         heading=${this.viewing ? this.#usedByHeading(this.viewing) : ""}

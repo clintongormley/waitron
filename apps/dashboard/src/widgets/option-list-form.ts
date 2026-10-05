@@ -659,6 +659,7 @@ export class OptionListForm extends LitElement {
     ].join(" ");
     const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
     return html`<wt-modal
+        size="standard"
         .open=${this.open}
         heading=${t(this.value ? "options.edit" : "options.create")}
         @keydown=${(event: KeyboardEvent) => {

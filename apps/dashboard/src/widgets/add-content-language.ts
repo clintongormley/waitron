@@ -79,6 +79,7 @@ export class AddContentLanguageDialog extends LitElement {
         })),
     ];
     return html`<wt-modal
+      size="compact"
       .open=${this.open}
       heading=${t("content_languages.add")}
       @wt-close=${(event: Event) => {

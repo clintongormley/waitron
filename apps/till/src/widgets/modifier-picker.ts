@@ -407,6 +407,7 @@ export class TillModifierPicker extends LitElement {
     // Add and Cancel stay on screen however many lists a dish offers.
     return html`<wt-modal
       ${trackDialog()}
+      size="standard"
       .open=${true}
       .heading=${productName(this.product)}
       @wt-close=${(event: Event) => this.#cancel(event)}

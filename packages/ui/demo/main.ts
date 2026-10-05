@@ -188,7 +188,7 @@ const panel = (theme: "light" | "dark") => `
       Esto generará un registro rectificativo.
       <wt-button slot="footer" variant="danger">Anular</wt-button>
     </wt-dialog>
-    <wt-modal heading="Add printer">
+    <wt-modal size="standard" heading="Add printer">
       <wt-input name="printer-name" label="Printer name" value="Kitchen"></wt-input>
       <p>Connect a printer to send orders to your kitchen or print receipts.</p>
       <details>
@@ -200,7 +200,7 @@ const panel = (theme: "light" | "dark") => `
         <wt-button variant="primary" class="close-modal">Save</wt-button>
       </wt-form-actions>
     </wt-modal>
-    <wt-modal class="member-modal" heading="Create team member">
+    <wt-modal size="compact" class="member-modal" heading="Create team member">
       <wt-form-error-summary heading="There is a problem with this form"></wt-form-error-summary>
       <wt-input name="member-name" label="Name" required autocomplete="name"></wt-input>
       <wt-form-actions slot="footer">

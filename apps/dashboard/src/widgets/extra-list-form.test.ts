@@ -2683,3 +2683,17 @@ it.each([
     }
   },
 );
+
+it("opens in the wide modal size on a desktop, for the items table", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 844);
+  try {
+    const { el } = await mount({ value: addons });
+    const dialog = el.shadowRoot!.querySelector("wt-modal")!.shadowRoot!.querySelector("dialog")!;
+    // 64rem; at 1280px wide the side margins leave the window 1232px.
+    expect(dialog.getBoundingClientRect().width).toBeCloseTo(1024, 0);
+  } finally {
+    await page.viewport(width, height);
+  }
+});

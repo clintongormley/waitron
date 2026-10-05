@@ -442,7 +442,7 @@ it("adds nothing when the picker closes without a choice", async () => {
   expect(box.error).toBe("");
 });
 
-it("keeps the add picker within the standard form width in a modal on a wide window", async () => {
+it("keeps the add picker within the form width in a modal on a wide window", async () => {
   const width = window.innerWidth,
     height = window.innerHeight;
   await page.viewport(1280, 800);
