@@ -1486,21 +1486,6 @@ export class PrepStationsScreen extends LitElement {
         <p data-test=${`status-${s.id}`}>${this.#stationStatus(s)}</p>
         ${this.#warnings(s.id)}
       </div>
-      ${
-        s.isDefault
-          ? nothing
-          : html`
-              <div class="actions">
-                <wt-button
-                  variant="secondary"
-                  data-test=${`${this.#times(s.id)?.status.open ? "close" : "open"}-today-${s.id}`}
-                  @click=${() => this.#openStationAction({ kind: "today", stationId: s.id, state: this.#times(s.id)?.status.open ? "closed" : "open" })}
-                  >${t(this.#times(s.id)?.status.open ? "prep.close_today" : "prep.open_today")}</wt-button
-                >
-                ${this.#times(s.id)?.today ? html`<wt-button variant="secondary" data-test=${`schedule-${s.id}`} @click=${() => this.#openStationAction({ kind: "today", stationId: s.id, state: null })}>${t("prep.back_to_schedule")}</wt-button>` : nothing}
-              </div>
-            `
-      }
       ${this.#chips(s.id)}
       <div class="actions">
         <wt-button
@@ -1516,11 +1501,6 @@ export class PrepStationsScreen extends LitElement {
           variant="secondary"
           @click=${() => this.#openStation(s)}
           >${t("prep.edit")}</wt-button
-        >${s.isDefault ? nothing : html`<wt-button data-test=${`default-${s.id}`} variant="secondary" @click=${() => void this.#act(() => this.api.setDefaultStation(s.id))}>${t("prep.make_default")}</wt-button>`}<wt-button
-          data-test=${`switch-off-${s.id}`}
-          variant="danger"
-          @click=${() => this.#openFallback(s.id, "switch_off")}
-          >${t("prep.disable")}</wt-button
         >
       </div>
     </wt-card>`;
@@ -3081,14 +3061,7 @@ export class PrepStationsScreen extends LitElement {
                                           ${this.#times(station.id)?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}
                                         </p>
                                         ${this.#warnings(station.id)}
-                                        <div class="actions">
-                                          <wt-button
-                                            data-test=${`switch-on-${station.id}`}
-                                            @click=${() => this.#openStationAction({ kind: "switch_on", stationId: station.id })}
-                                            >${t("prep.enable")}</wt-button
-                                          >
-                                        </div></wt-card
-                                      >`,
+                                      </wt-card>`,
                                   )}
                                 </section>`
                               : nothing

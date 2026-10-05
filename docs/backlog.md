@@ -6383,8 +6383,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   in the Settings cell, retaining destination confirmation, disabled choices, empty-to-null
   saves and field refusals. Disabled stations remain editable at the bottom of Settings, labelled
   Disabled; changing their fallback does not enable them. Confirming an unchanged fallback sends
-  no write, including a retained disabled destination. The remaining station-action and whole-record
-  edit controls still need to leave Routing before its card replacement is complete.
+  no write, including a retained disabled destination. Routing no longer repeats Today, Make default,
+  Disable or Enable actions; they use the Stations table, with the same confirmation and refusal
+  paths. The whole-record edit control and repeated station status still need to leave Routing
+  before its card replacement is complete.
   Venue settings › Kitchen now reads and
   replaces the venue-wide late flags. Its required whole-minute fields validate every invalid
   value and their order, naming a station when the server refuses the effective result. A refusal

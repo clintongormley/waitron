@@ -628,3 +628,23 @@ The old standalone editor skipped an unchanged fallback write. Settings now keep
 including an already stored disabled destination: it still confirms the destination, then closes
 without resubmitting the mapping. A new browser check first observed the unwanted request and
 then passed; changed destinations continue through the existing write/refusal cases.
+
+
+## 2026-10-05 implementation checkpoint: Routing station-action handover
+
+Routing no longer repeats Today, Make default, Disable or Enable controls. Their existing
+request, confirmation, retained-fallback, refusal, retry and pending-write checks use Stations.
+Six new browser cases first failed because each duplicate was present in Routing; the focused
+handover selection then passed 14 cases. The shared Today cell offers Back to the schedule for
+an existing day override, so the old explicit-open case now starts from a scheduled closure;
+it still asserts the exact `setStationToday("upstairs", "open")` write, and the separate clear
+case retains the exact null write. The server write implementation is unchanged in this increment.
+
+The legacy browser API fixture now supplies empty health rows for the stations its most recent
+load returned, without issuing an extra load. The timing-accessibility fixture supplies the
+same complete row shape for its own station list. Previously both returned no health rows and
+tested actions on Routing cards; the first moved selection exposed that fixture omission.
+
+Task 4 remains partial: whole-record editing and duplicate station status still need handover.
+Task 8 whole-branch checks, initial rebase and any migration regeneration, Claude run-it review,
+normal push hook, current-head CI and authorised landing remain. No readiness claim is made.

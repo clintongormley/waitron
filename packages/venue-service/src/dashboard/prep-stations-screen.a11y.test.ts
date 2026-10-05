@@ -262,7 +262,17 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
       updateWatcher: vi.fn().mockRejectedValue({ code: "watcher.name_taken" }),
       readStationHealth: vi.fn().mockResolvedValue({
         capturedAt: "2026-10-05T12:00:00Z",
-        stations: [],
+        stations: stations.map((station) => ({
+          id: station.id,
+          name: station.name,
+          hasScreen: false,
+          waiting: 0,
+          preparing: null,
+          ready: null,
+          late: { warm: 0, overdue: 0, forgotten: 0 },
+          oldestMinutes: null,
+          items: [],
+        })),
         outputsDown: { printersDown: [], screensDark: [] },
       }),
       load: vi.fn().mockResolvedValue({
@@ -357,10 +367,15 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
       : state === "close-confirmation" || state === "refused-close"
         ? "close-today"
         : state === "switch-off" || state === "refused-switch-off"
-          ? "switch-off"
+          ? "disable"
           : null;
     if (action) {
-      el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${action}-bar"]`)!.click();
+      const selector = `[data-test="${action}-bar"]`;
+      const summary = el
+        .shadowRoot!.querySelector("prep-station-health-table")!
+        .shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
+      (el.shadowRoot!.querySelector<HTMLElement>(selector) ??
+        summary.querySelector<HTMLElement>(selector))!.click();
       await el.updateComplete;
       if (state === "invalid-hours" || state === "refused-hours") {
         const form = el.shadowRoot!.querySelector("station-hours-form")!;

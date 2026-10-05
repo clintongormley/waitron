@@ -77,12 +77,26 @@ const view: PrepStationsView = {
   watchers: [],
 };
 function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
+  const load = overrides.load ?? vi.fn().mockResolvedValue(view);
   return {
-    load: vi.fn().mockResolvedValue(view),
-    readStationHealth: vi.fn().mockResolvedValue({
-      capturedAt: "2026-10-05T12:00:00Z",
-      stations: [],
-      outputsDown: { printersDown: [], screensDark: [] },
+    load,
+    readStationHealth: vi.fn(async () => {
+      const loaded: PrepStationsView = (await vi.mocked(load).mock.results.at(-1)?.value) ?? view;
+      return {
+        capturedAt: "2026-10-05T12:00:00Z",
+        stations: loaded.stations.map((station) => ({
+          id: station.id,
+          name: station.name,
+          hasScreen: false,
+          waiting: 0,
+          preparing: null,
+          ready: null,
+          late: { warm: 0, overdue: 0, forgotten: 0 },
+          oldestMinutes: null,
+          items: [],
+        })),
+        outputsDown: { printersDown: [], screensDark: [] },
+      };
     }),
     setClaim: vi.fn(),
     createException: vi.fn(),
@@ -299,6 +313,7 @@ const q = (el: PrepStationsScreen, s: string) =>
   el
     .shadowRoot!.querySelector('[data-test="watchers-table"]')
     ?.shadowRoot?.querySelector<HTMLElement>(s) ??
+  healthSummary(el)?.querySelector<HTMLElement>(s) ??
   null;
 
 it.each([
@@ -333,6 +348,31 @@ it.each(["[name^=fallback-]", "[data-test^=change-fallback-]"])(
     expect(routing.querySelector(selector)).toBeNull();
   },
 );
+
+it.each([
+  ["close-today-upstairs", "in_hours"],
+  ["open-today-upstairs", "out_of_hours"],
+  ["schedule-upstairs", "closed_by_hand"],
+  ["default-upstairs", "in_hours"],
+  ["switch-off-upstairs", "in_hours"],
+  ["switch-on-retired", "in_hours"],
+] as const)("keeps station action %s in Stations rather than Routing", async (action, why) => {
+  const next = withUpstairs(why === "in_hours" ? { open: true, why } : { open: false, why }, {
+    today: why === "closed_by_hand" ? "closed" : null,
+  });
+  next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
+  next.routing.stations.push({ id: "retired", name: "Retired", active: false });
+  const el = await mount(api({ load: vi.fn().mockResolvedValue(next) }));
+  const routing = el.shadowRoot!.querySelector('[slot="routing"]')!;
+  expect(routing.querySelector('[data-test="claim-upstairs"]')).not.toBeNull();
+  expect(routing.querySelector('[data-test="test-product"]')).not.toBeNull();
+  expect(routing.querySelector(`[data-test="${action}"]`)).toBeNull();
+  const moved = action
+    .replace("default-", "make-default-")
+    .replace("switch-off-", "disable-")
+    .replace("switch-on-", "enable-");
+  expect(healthSummary(el)!.querySelector(`[data-test="${moved}"]`)).not.toBeNull();
+});
 
 function settingsQ(el: PrepStationsScreen, selector: string) {
   return el
@@ -1145,7 +1185,7 @@ it("assigns an unassigned folder and removes a claim", async () => {
 it("moves station actions into this screen and rejects unordered thresholds beside overdue", async () => {
   const a = api();
   const el = await mount(a);
-  q(el, '[data-test="default-bar"]')?.click();
+  q(el, '[data-test="make-default-bar"]')?.click();
   q(el, '[data-test="edit-bar"]')!.click();
   await settle(el);
   q(el, '[data-test="overdue"]')!.dispatchEvent(
@@ -1155,7 +1195,7 @@ it("moves station actions into this screen and rejects unordered thresholds besi
   await settle(el);
   expect(q(el, '[data-field-error="overdueAfterMinutes"]')).not.toBeNull();
   expect(a.updateStation).not.toHaveBeenCalled();
-  q(el, '[data-test="switch-off-bar"]')!.click();
+  q(el, '[data-test="disable-bar"]')!.click();
   await settle(el);
   q(el, '[data-test="confirm-station-action"]')!.click();
   await settle(el);
@@ -1263,7 +1303,7 @@ it("makes a nondefault station the default", async () => {
   };
   const a = api({ load: vi.fn().mockResolvedValue(changed) });
   const el = await mount(a);
-  q(el, '[data-test="default-terrace"]')!.click();
+  q(el, '[data-test="make-default-terrace"]')!.click();
   await settle(el);
   expect(a.setDefaultStation).toHaveBeenCalledWith("terrace");
 });
@@ -1331,7 +1371,7 @@ it("does not create an unnamed station", async () => {
 it("reports rejected station actions without exposing a code", async () => {
   const a = api({ deactivateStation: vi.fn().mockRejectedValue({ code: "station.not_found" }) });
   const el = await mount(a);
-  q(el, '[data-test="switch-off-bar"]')!.click();
+  q(el, '[data-test="disable-bar"]')!.click();
   await settle(el);
   q(el, '[data-test="confirm-station-action"]')!.click();
   await settle(el);
@@ -2129,7 +2169,7 @@ it("keeps a failed save's message through a later failed refresh and the recover
   await vi.waitFor(() =>
     expect(q(el, '[role="alert"]')?.textContent).toContain("could not be loaded"),
   );
-  q(el, '[data-test="default-terrace"]')!.click();
+  q(el, '[data-test="make-default-terrace"]')!.click();
   await vi.waitFor(() =>
     expect(q(el, '[role="alert"]')?.textContent).toContain("could not be saved"),
   );
@@ -2219,7 +2259,7 @@ it("retains a disabled fallback in its editor but clears it for Disable", async 
   expect(combo.value).toBe("old");
   settingsQ(el, '[data-test="cancel-settings-cell"]')!.click();
   await settle(el);
-  q(el, '[data-test="switch-off-upstairs"]')!.click();
+  q(el, '[data-test="disable-upstairs"]')!.click();
   await settle(el);
   expect((q(el, '[data-test="station-fallback"]') as typeof combo).value).toBe("");
   q(el, '[data-test="confirm-station-action"]')!.click();
@@ -2259,7 +2299,12 @@ it.each(["open", null] as const)("saves the by-hand action %s", async (state) =>
   const a = api({
     load: vi
       .fn()
-      .mockResolvedValue(withUpstairs({ open: false, why: "closed_by_hand" }, { today: "closed" })),
+      .mockResolvedValue(
+        withUpstairs(
+          { open: false, why: state ? "out_of_hours" : "closed_by_hand" },
+          { today: state ? null : "closed" },
+        ),
+      ),
     setStationToday: vi.fn(),
   });
   const el = await mount(a);
@@ -2406,7 +2451,7 @@ it("keeps the new fallback after a failed disable and reports the failure in the
     }),
   });
   const el = await mount(a);
-  q(el, '[data-test="switch-off-upstairs"]')!.click();
+  q(el, '[data-test="disable-upstairs"]')!.click();
   await settle(el);
   q(el, '[data-test="station-fallback"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "bar" } }),
@@ -2485,7 +2530,7 @@ it("enables a disabled station and keeps its dark-screen warning in that card", 
   );
   expect(q(el, '[data-test="inactive-upstairs"]')!.textContent).toContain("has ever checked in");
   expect(q(el, '[data-test="station-bar"]')!.textContent).not.toContain("has ever checked in");
-  q(el, '[data-test="switch-on-upstairs"]')!.click();
+  q(el, '[data-test="enable-upstairs"]')!.click();
   await settle(el);
   q(el, '[data-test="confirm-station-action"]')!.click();
   await settle(el);
@@ -2629,7 +2674,7 @@ it("refreshes the saved fallback when the following disable fails", async () => 
     deactivateStation: vi.fn().mockRejectedValue(new Error("offline")),
   });
   const el = await mount(a);
-  q(el, '[data-test="switch-off-upstairs"]')!.click();
+  q(el, '[data-test="disable-upstairs"]')!.click();
   await settle(el);
   q(el, '[data-test="station-fallback"]')!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "bar" } }),
@@ -3208,8 +3253,8 @@ it.each([
       }),
     );
     expect(q(el, '[data-test="claim-bar"]')!.textContent!.trim()).toBe(claim);
-    expect(q(el, '[data-test="switch-off-bar"]')!.textContent!.trim()).toBe(disable);
-    expect(q(el, '[data-test="switch-on-upstairs"]')!.textContent!.trim()).toBe(enable);
+    expect(q(el, '[data-test="disable-bar"]')!.textContent!.trim()).toBe(disable);
+    expect(q(el, '[data-test="enable-upstairs"]')!.textContent!.trim()).toBe(enable);
     expect(q(el, '[data-test="remove-watcher-pass"]')!.textContent!.trim()).toBe(disable);
     q(el, '[data-test="claim-bar"]')!.click();
     await settle(el);
@@ -3767,7 +3812,11 @@ it.each([
       await page.viewport(width, 900);
       setLocale(locale);
       history.replaceState(null, "", "/manage/prep-stations");
-      const { el } = await mountToday(withUpstairs({ open: true, why: "in_hours" }), {}, theme);
+      const next = withUpstairs({ open: true, why: "in_hours" });
+      next.stations.push({ ...upstairs, id: "retired", name: "Retired", active: false });
+      next.routing.stations.push({ id: "retired", name: "Retired", active: false });
+      const { el } = await mountToday(next, {}, theme);
+      expect(window.innerWidth).toBe(width);
       const host = el.parentElement!;
       host.style.background = "var(--wt-color-bg)";
       document.body.style.background = getComputedStyle(host).backgroundColor;
@@ -3778,6 +3827,7 @@ it.each([
       await page.elementLocator(menu.shadowRoot!.querySelector("button")!).click();
       await settle(el);
       await expectNoA11yViolations(host);
+      await page.screenshot({ path: `look/station-actions-${locale}-${theme}-${width}-menu.png` });
       const rename = menu.querySelector<HTMLElement>('[data-test="rename-upstairs"]')!;
       await page.elementLocator(rename).click();
       await settle(el);
@@ -3786,6 +3836,24 @@ it.each([
         q(el, '[data-test="station-rename"]')!.getBoundingClientRect().right,
       ).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
+      await page.screenshot({
+        path: `look/station-actions-${locale}-${theme}-${width}-rename.png`,
+      });
+      q(el, '[data-test="station-rename"]')!
+        .querySelector<HTMLElement>('wt-button[slot="cancel"]')!
+        .click();
+      await settle(el);
+      const disabledMenu = healthSummary(el)!.querySelector(
+        'wt-row-actions[data-test="station-menu-retired"]',
+      )!;
+      await page.elementLocator(disabledMenu.shadowRoot!.querySelector("button")!).click();
+      await settle(el);
+      expect(disabledMenu.querySelector('[data-test="enable-retired"]')).not.toBeNull();
+      expect(disabledMenu.querySelector('[data-test="disable-retired"]')).toBeNull();
+      await expectNoA11yViolations(host);
+      await page.screenshot({
+        path: `look/station-actions-${locale}-${theme}-${width}-disabled-menu.png`,
+      });
     } finally {
       document.body.style.background = previous.body;
       document.documentElement.style.background = previous.canvas;
