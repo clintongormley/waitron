@@ -3491,7 +3491,7 @@ before this change that lists a print agent carries `node_id`, so setup refuses 
 Still open, for the owner, and older than W72c: the export still carries each agent's `setup_url`
 and `setup_port`, and the Printers screen links an agent's host cell to its `setup_url`
 (`apps/dashboard/src/screens/printers-screen.ts`), so an imported agent that had reported one, which
-arrives inactive and is shown once the status filter includes revoked agents, would link to the
+arrives inactive and is shown once the status filter includes disabled agents, would link to the
 exporting machine's setup page (read, not run).
 Fixed in W72e (#1241, 2026-10-05): at 390 px the Products tree's category name box used to cut its
 duplicate-name refusal, and `category.invalid`'s, off against the pinned Actions column. The table
@@ -5211,7 +5211,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   shows an old report as current. (c) a report exactly 60 s after the last stored one is not stored
   (`sightingDue` is strictly more than a minute); the spec says "at least a minute". (d) the till
   starts reporting from its first draw only, so an app removed from the page and put back does not
-  report until it restarts. (e) test gaps: no battery case for a removed device; no failing test
+  report until it restarts. (e) test gaps: no battery case for a disabled device; no failing test
   for the `isConnected` check in the Battery column's update step; "Not reported" sorting last is
   held only by `wt-data-table`'s own tests.
   Left OPEN by W105, not acted on: (5) a kitchen screen whose station or watcher was switched off
@@ -5223,13 +5223,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   are switched on in the screen's station list; that list re-reads when kitchen stations change, so
   one switched off while the dialog is open refuses the save — at the bottom of the dialog, with
   "That station no longer exists" — only if the save is sent before that re-read lands, or while
-  live updates are down. (8) a profile whose only device has been removed cannot be deleted, and
+  live updates are down. (8) a profile whose only device has been disabled cannot be deleted, and
   nothing can free it: Disable keeps the device's profile, and deleting the profile is refused
   `device_profile.in_use` (measured 2026-10-05 through the routes,
   with a control: an unused profile deletes). Before W105 a direct call to the old reassign route
-  could move a removed device onto another profile, because it did not check `active`; the Edit
-  route refuses a removed device. Owner decision needed: for example, let the profile delete ignore
-  removed devices, or clear a removed device's profile on removal (`device_profile_id` is NOT NULL,
+  could move a disabled device onto another profile, because it did not check `active`; the Edit
+  route refuses a disabled device. Owner decision needed: for example, let the profile delete ignore
+  disabled devices, or clear a disabled device's profile when it is disabled (`device_profile_id` is NOT NULL,
   so that is a schema change). (9) a device holding a printer its unchanged profile no longer lists
   opens with that field empty, and Save keeps the old printer without saying so. (10) for a manager
   without `payments.manage` the card reader field is drawn greyed while it loads and then disappears,
@@ -8083,7 +8083,9 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   strings together and record the rule in `docs/developers/design-system.md`. String keys are not
   renamed on the way (only their text). W105a (2026-10-05) already moved printers, print agents
   and devices to **Disable / Deshabilitar**, status **Disabled** (Deshabilitada for a printer,
-  Deshabilitado for an agent or a device) and **Enable / Habilitar**, renaming their keys; card
+  Deshabilitado for an agent or a device), and printers and print agents to **Enable / Habilitar**
+  (devices get Enable in W105b); it renamed their keys as an exception its own spec asked for,
+  because the old keys no longer said what they show; card
   readers and staff still say Desactivar. Left open by W105a: a printer's Active status reads the
   masculine "Activo" beside "Deshabilitada", because `printers.status_active` is shared with print
   agents.

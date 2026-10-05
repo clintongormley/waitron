@@ -653,7 +653,7 @@ export class PrintersScreen extends LitElement {
   #renewTimer?: ReturnType<typeof setInterval>;
   #registeredDevices = new Set<string>();
   #editTrigger?: HTMLButtonElement;
-  /** A retained printer Enable switched on so its calibration can print; closing the wizard
+  /** A retained printer that Enable switched on so its calibration can print; closing the wizard
    * without saving switches it off again. */
   #readdingId?: string;
 
@@ -908,7 +908,7 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  // ── Agents: revoke ───────────────────────────────────────────────────────────────────────────────
+  // ── Agents: disable ──────────────────────────────────────────────────────────────────────────────
 
   #onRevokeAgent(id: string): void {
     if (this.armedRevokeId === id) {
@@ -923,7 +923,7 @@ export class PrintersScreen extends LitElement {
     await this.#mutate(() => this.api.revokeAgent(id));
   }
 
-  /** Two clicks, so a single accidental one cannot turn a revoked agent back on. */
+  /** Two clicks, so a single accidental one cannot turn a disabled agent back on. */
   #onAllowAgent(id: string): void {
     if (this.armedAllowId === id) {
       this.armedAllowId = null;

@@ -1780,7 +1780,7 @@ describe("printers-screen", () => {
     expect(q(el, "[data-test=copy-code]")).toBeNull();
   });
 
-  // ── Agents: revoke ───────────────────────────────────────────────────────────────────────────────
+  // ── Agents: disable ──────────────────────────────────────────────────────────────────────────────
 
   it("does not show a Disable control for an already-disabled agent", async () => {
     const api = stubApi();
@@ -1940,7 +1940,7 @@ describe("printers-screen", () => {
     expect(api.listAgents).toHaveBeenCalledTimes(2);
   });
 
-  it("shows an error and keeps the list when a re-allow is rejected", async () => {
+  it("shows an error and keeps the list when an agent's enable is rejected", async () => {
     const api = stubApi({ allowAgent: vi.fn().mockRejectedValue({ code: "agent.not_found" }) });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);

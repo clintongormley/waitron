@@ -95,7 +95,7 @@ needs CLAUDE.md §3's classification line and nothing else.
 | 16 | Workforce — registro de jornada, scheduling, roster, requests | dashboard | ⬜ | |
 | 17 | Bookings — reservations day-list | dashboard | ⬜ | |
 | 18 | Diagnostics & logs viewer | dashboard | ⬜ | |
-| 19 | Device management — enrol / revoke | dashboard | ⬜ | |
+| 19 | Device management — enrol / disable | dashboard | ⬜ | |
 | 20 | Locations / venue config — invoice locales, printing, cash-drawer policy | dashboard | ⬜ | |
 
 ## Corrections log
