@@ -5,3 +5,4 @@ export * from "./migrations.js";
 export * from "./module.js";
 export { validateMediaConfiguration } from "./configuration-transfer.js";
 export { MEDIA_FILENAME } from "./routes.js";
+export * from "./logo.js";
