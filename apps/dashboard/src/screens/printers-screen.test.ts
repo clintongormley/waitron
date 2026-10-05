@@ -1388,13 +1388,13 @@ describe("printers-screen", () => {
       transportName("network_tcp", "es-ES"),
     );
     expect(text(el, "[data-test=printer-connection-p1]")).toBe("Cualquier agente del local");
-    q(el, "[data-test=back-to-printers]")!.click();
+    q(el, "[data-test=all-printers-link]")!.click();
     await flush(el);
     q(el, "[data-test=printer-row-p2]")!.click();
     await flush(el);
     expect(text(el, "[data-test=printer-transport-p2]")).toBe(transportName("cloud_poll", "es-ES"));
     expect(text(el, "[data-test=printer-connection-p2]")).toBe("Directa (sin agente)");
-    q(el, "[data-test=back-to-printers]")!.click();
+    q(el, "[data-test=all-printers-link]")!.click();
     await flush(el);
     q(el, "[data-test=printer-row-p3]")!.click();
     await flush(el);
@@ -3524,6 +3524,22 @@ it.each(["printer-row-p1", "job-printer-j1"])(
   },
 );
 
+it("links the printer breadcrumb back to the selected list", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1?keep=yes");
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  const link = q(el, "[data-test=all-printers-link]") as HTMLAnchorElement | null;
+  expect(link?.textContent?.trim()).toBe(t("printers.filter_all"));
+  expect(link?.getAttribute("href")).toBe("/manage/printers/view/printers?keep=yes");
+  expect(text(el, "[data-test=printer-breadcrumb]")).toContain("Cocina");
+  link!.click();
+  await flush(el);
+  expect(location.pathname).toBe("/manage/printers/view/printers");
+  expect(q(el, "[data-test=printers-table]")!.checkVisibility()).toBe(true);
+});
+
 it("shows the saved drawer independently of the profiles offering it, and the delivering agent without discovery", async () => {
   const api = stubApi({
     listPrinters: vi.fn().mockResolvedValue([
@@ -3589,7 +3605,7 @@ it("reopens printer status from its URL and reflects a saved drawer choice", asy
   await flush(el);
   expect(q(el, "[data-test=edit-printer-modal]")).toBeNull();
   expect(text(el, "[data-test=printer-drawer]")).toBe(t("printers.yes"));
-  q(el, "[data-test=back-to-printers]")!.click();
+  q(el, "[data-test=all-printers-link]")!.click();
   await flush(el);
   expect(location.pathname).toBe("/manage/printers/view/printers");
   expect(location.search).toBe("?keep=yes");
@@ -3635,7 +3651,7 @@ it("explains an unknown printer URL and lets you return to the list", async () =
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api: stubApi() });
   await flush(el);
   expect(text(el, '[role="status"]')).toContain(codeMessage("printer.not_found"));
-  q(el, "[data-test=back-to-printers]")!.click();
+  q(el, "[data-test=all-printers-link]")!.click();
   await flush(el);
   expect(q(el, "[data-test=printer-row-p1]")).not.toBeNull();
 });

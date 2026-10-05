@@ -2021,14 +2021,29 @@ export class PrintersScreen extends LitElement {
 
   #renderPrinterStatus(): TemplateResult {
     const p = this.printers.find(({ id }) => id === this.selectedPrinterId);
-    const back = html`<wt-button
-      data-test="back-to-printers"
-      @click=${() => {
-        this.selectedPrinterId = null;
-        this.#url.write({ printer: null });
-      }}
-      >${t("action.back")}</wt-button
-    >`;
+    const listUrl = new URL(location.href);
+    listUrl.pathname = listUrl.pathname.replace(/\/printer\/[^/]+$/, "");
+    const back = html`<nav aria-label=${t("printers.filter_all")} data-test="printer-breadcrumb">
+      <a
+        data-test="all-printers-link"
+        href=${`${listUrl.pathname}${listUrl.search}`}
+        @click=${(event: MouseEvent) => {
+          if (
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey
+          )
+            return;
+          event.preventDefault();
+          this.selectedPrinterId = null;
+          this.#url.write({ printer: null });
+        }}
+        >${t("printers.filter_all")}</a
+      >
+      ${p ? html`<span aria-hidden="true"> › </span><span>${p.name}</span>` : nothing}
+    </nav>`;
     if (!p)
       return html`${back}
         <p role="status">
