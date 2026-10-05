@@ -1187,8 +1187,11 @@ changes clear that registry immediately; a completed logout after shell teardown
 without throwing. Product Add/Edit and its nested Variant form now use that registry on the
 branch: Cancel/Escape retain edited values until Discard, reverts close directly, and child saves
 leave the Product unsaved. The Catalogue screen commits the submitted Product before refreshing;
-a rejected write retains its draft. Other audited modal owners and page/navigation protection
-remain to be wired. Keep automatic saves on their existing paths.
+a rejected write retains its draft. Unit Add/Edit, Related Unit creation and explicit Product
+colour overrides also use the shared warning. Units commit before refresh; creating a Related
+Unit commits only the child, leaving the Product draft unsaved. Category colour selection stays
+on its immediate-save path. Other audited modal owners and page/navigation protection remain
+to be wired. Keep automatic saves on their existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**

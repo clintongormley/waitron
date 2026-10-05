@@ -52,7 +52,7 @@ export class ProductChildCreate implements ReactiveController {
     await this.host.updateComplete;
     if (generation === this.#generation && this.kind === null) this.effects.focus(kind);
   }
-  async submit(write: () => Promise<{ id: string }>): Promise<void> {
+  async submit(write: () => Promise<{ id: string }>, committed?: () => void): Promise<void> {
     if (this.busy || this.kind === null) return;
     const generation = this.#generation;
     const kind = this.kind;
@@ -71,6 +71,7 @@ export class ProductChildCreate implements ReactiveController {
       return;
     }
     if (generation !== this.#generation) return;
+    committed?.();
     this.kind = null;
     this.busy = false;
     this.host.requestUpdate();

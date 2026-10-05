@@ -1489,7 +1489,7 @@ Keep the original editor mounted until the coordinator approves leaving, so Keep
 and preserves the draft. Read-only and automatically saved forms need no draft scope.
 
 W69 is being rolled out in stages. These shared APIs are available on its implementation branch;
-the application renderers, Product editor and nested Variant form are wired. The remaining
+the application renderers, Product/Variant, Unit and explicit Product colour forms are wired. The remaining
 form owners stay tracked in the W69 backlog entry. Page navigation is a separate part of that
 rollout. The coordinator's dirty-only unload registration
 requests the browser's own warning; the [design](../superpowers/specs/2026-10-05-unsaved-changes-warning-design.md)

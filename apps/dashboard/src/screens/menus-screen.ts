@@ -662,6 +662,7 @@ export class MenusScreen extends LitElement {
   /** The coloured product as last read, so the colour dialog still names it after the product has
    * left the library, until the dialog closes. */
   #colouredSeen: Product | null = null;
+  #colorGeneration = 0;
   /** The tree row whose ⋮ gets focus back once its window has closed and nothing is out. */
   #focusReturn: { menuId: string; key: string } | null = null;
   #windowShut = false;
@@ -2147,6 +2148,7 @@ export class MenusScreen extends LitElement {
         }}
         @wt-product-color=${(event: CustomEvent<{ productId: string }>) => {
           event.stopPropagation();
+          this.#colorGeneration++;
           this.colouring = event.detail.productId;
           this.colorErrors = {};
         }}
@@ -2485,11 +2487,15 @@ export class MenusScreen extends LitElement {
     const product = this.#colouredProduct();
     if (!product) return;
     const menuId = this.menuId;
+    const generation = this.#colorGeneration;
     this.colorBusy = true;
     try {
       await this.api.setProductColor(product.id, color);
+      if (generation !== this.#colorGeneration) return;
+      this.shadowRoot!.querySelector("dashboard-product-color-form")!.closeSaved(color);
       this.colouring = null;
     } catch (error) {
+      if (generation !== this.#colorGeneration) return;
       if (menuId !== this.menuId) {
         this.memberError = t("menus.change_not_saved")
           .replace("{name}", product.name)
@@ -2518,6 +2524,7 @@ export class MenusScreen extends LitElement {
       .open=${product !== null}
       .busy=${this.colorBusy}
       .name=${product?.name ?? ""}
+      .productId=${product?.id ?? ""}
       .color=${product?.color ?? null}
       .categoryColor=${inherited}
       .errors=${this.colorErrors}

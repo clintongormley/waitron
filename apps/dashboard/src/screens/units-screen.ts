@@ -208,6 +208,7 @@ export class UnitsScreen extends LitElement {
       this.units = this.editing
         ? this.units.map((unit) => (unit.id === canonical.id ? canonical : unit))
         : [...this.units, canonical];
+      this.shadowRoot!.querySelector("dashboard-unit-form")!.closeSaved(event.detail.value);
       this.#closeEditor();
       try {
         this.units = await this.api.background.listUnits();

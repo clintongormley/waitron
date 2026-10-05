@@ -127,3 +127,37 @@ it("closes the child before refresh completes and ignores a late load error afte
   expect(fx.loadError).not.toHaveBeenCalled();
   expect(fx.controller.kind).toBe("courses");
 });
+
+it("commits a saved child before attachment and refresh, but never commits a replaced child's late write", async () => {
+  const fx = await fixture();
+  fx.controller.open("unit");
+  let committed = false;
+  fx.accept.mockImplementationOnce(() => {
+    expect(committed).toBe(true);
+  });
+  fx.refresh.mockImplementationOnce(async () => {
+    expect(committed).toBe(true);
+  });
+  await fx.controller.submit(
+    async () => ({ id: "saved-unit" }),
+    () => {
+      committed = true;
+    },
+  );
+  expect(committed).toBe(true);
+  const late = deferred<{ id: string }>();
+  fx.controller.open("unit");
+  committed = false;
+  const saving = fx.controller.submit(
+    () => late.promise,
+    () => {
+      committed = true;
+    },
+  );
+  fx.controller.reset();
+  fx.controller.open("unit");
+  late.resolve({ id: "old-unit" });
+  await saving;
+  expect(committed).toBe(false);
+  expect(fx.controller.kind).toBe("unit");
+});

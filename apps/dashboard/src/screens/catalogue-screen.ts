@@ -645,17 +645,21 @@ export class CatalogueScreen extends LitElement {
   }
 
   /** Every submission is a new refusal, even one the API answers with an identical error object. */
-  #submitChild(write: () => Promise<{ id: string }>): Promise<void> {
+  #submitChild(write: () => Promise<{ id: string }>, committed?: () => void): Promise<void> {
     this.#childRefusals = null;
-    return this.#child.submit(write);
+    return this.#child.submit(write, committed);
   }
 
   #submitUnit(event: CustomEvent<{ value: UnitInput }>): void {
     event.stopPropagation();
-    void this.#submitChild(async () => {
-      const value = await this.api.createUnit(event.detail.value);
-      return { id: value.id, name: value.name };
-    });
+    const form = this.shadowRoot!.querySelector("dashboard-unit-form")!;
+    void this.#submitChild(
+      async () => {
+        const value = await this.api.createUnit(event.detail.value);
+        return { id: value.id, name: value.name };
+      },
+      () => form.closeSaved(event.detail.value),
+    );
   }
 
   #submitExtraList(event: CustomEvent<{ value: ExtraListInput }>): void {
@@ -898,6 +902,7 @@ export class CatalogueScreen extends LitElement {
       </wt-modal>
       <dashboard-unit-form
         .open=${this.#child.kind === "unit"}
+        .draftParent=${this.#editor() ?? undefined}
         .busy=${this.#child.busy}
         .locales=${locales}
         .fieldErrors=${refusals.unit}

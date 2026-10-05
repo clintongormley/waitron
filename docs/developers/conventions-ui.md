@@ -667,8 +667,9 @@ they never rewrite the record. Regression: `packages/shared/src/content-language
 ## Unsaved changes: shared close interception, owner-provided draft comparisons
 
 W69's shared dialog API, confirmation and application renderers are implemented on its feature
-branch. The Product editor and nested Variant form use the shared registry; other modal/page
-owners remain in progress. The [backlog](../backlog.md) records that boundary. Use `beforeClose`
+branch. Product/Variant, Unit Add/Edit, Related Unit and explicit Product colour forms use the
+shared registry; other modal/page owners remain in progress. The [backlog](../backlog.md)
+records that boundary. Use `beforeClose`
 with a scoped ui-core coordinator request and `requestClose(reason)`
 for voluntary dismissal. Commit the exact submitted snapshot after a successful write, before
 refreshing. Use `closeAfter("saved" | "security")` for success or forced teardown; forced exits
@@ -688,3 +689,12 @@ tearing down the session's forms; an asynchronous logout may call it after disco
 A renderer answer is tied to the question it rendered, so a removed renderer cannot answer a
 later question. Behavioral cases: `packages/ui/src/leave-controller.test.ts`, and the application
 renderer/security cases in each shell's suite.
+
+The Unit form compares its trimmed translated request body, preserving translations it does not
+show and invalid precision input. A Related Unit registers under its Product, and its successful
+write commits the child before the Product accepts the new unit id. The Units screen commits
+before its lookup refresh. Product colour compares its explicit override, including null for
+inheritance; an answer for an earlier opening cannot commit a replacement Product. Behavioral
+cases: `catalogue-forms.unsaved.test.ts`, `unit-owners.unsaved.test.ts` and
+`menu-colour.unsaved.test.ts` under `apps/dashboard/src/`. Category colour selection submits
+immediately and remains exempt.
