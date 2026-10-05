@@ -247,7 +247,7 @@ test.each([
     "label",
     (box: DOMRect) => ({ x: box.left + 4, y: box.top + box.height / 2 }),
   ],
-  ["the field above the label", "label", (box: DOMRect) => ({ x: box.left + 4, y: box.top - 2 })],
+  ["the space above the label", "label", (box: DOMRect) => ({ x: box.left + 4, y: box.top - 2 })],
 ])("a real click on %s flips the switch exactly once", async (_name, selector, where) => {
   const el = (await mount('<wt-switch label="Preselected"></wt-switch>')) as Switch;
   const changes = countChanges(el);
@@ -275,7 +275,7 @@ test("a real click on the thumb of a switch with a hidden label flips it exactly
   expect(changes.count).toBe(1);
 });
 
-test("a click in the gap reaches the page as one click, not two", async () => {
+test("a click in the gap reaches a bubbling listener above the switch as one click, not two", async () => {
   const el = (await mount('<wt-switch label="Preselected"></wt-switch>')) as Switch;
   let clicks = 0;
   host.addEventListener("click", () => clicks++);
@@ -311,11 +311,14 @@ test("a click in a disabled switch's gap or on its thumb still reaches the page,
   let clicks = 0;
   host.addEventListener("click", () => clicks++);
 
-  for (const [selector, where] of [
-    ["label", (box: DOMRect) => ({ x: box.left - 2, y: box.top + box.height / 2 })],
-    [".thumb", (box: DOMRect) => ({ x: box.left + box.width / 2, y: box.top + box.height / 2 })],
-  ] as const) {
+  for (const [i, [selector, where]] of (
+    [
+      ["label", (box: DOMRect) => ({ x: box.left - 2, y: box.top + box.height / 2 })],
+      [".thumb", (box: DOMRect) => ({ x: box.left + box.width / 2, y: box.top + box.height / 2 })],
+    ] as const
+  ).entries()) {
     await userEvent.click(el, { position: inside(el, partOf(el, selector), where), force: true });
+    expect(clicks).toBe(i + 1);
   }
   await el.updateComplete;
 

@@ -121,7 +121,7 @@ export class WtSwitch extends LitElement {
 
   /** The original click is stopped once handed to the input, so a listener above the switch in
    * the bubbling phase sees one click. A disabled switch is left alone. */
-  private onFieldClick(event: MouseEvent): void {
+  private onHitAreaClick(event: MouseEvent): void {
     if (this.disabled) return;
     const target = event.composedPath()[0];
     if (target === this.input || (target instanceof Element && target.closest("label"))) return;
@@ -136,7 +136,7 @@ export class WtSwitch extends LitElement {
 
   override render() {
     return html`
-      <span class="hit-area" @click=${this.onFieldClick}>
+      <span class="hit-area" @click=${this.onHitAreaClick}>
         <span class="control">
           <input
             id=${this.inputId}

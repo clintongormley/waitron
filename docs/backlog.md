@@ -1243,13 +1243,15 @@ owner, on the Extras editor: _"make the toggle field work when you click anywher
 one side or the other"_. In the shared `packages/ui/src/components/wt-switch.ts` a click on the round
 knob, in the gap between the switch and its label, or just above the label did nothing before:
 the knob is drawn over the hidden checkbox, and the gap belonged to no part. The switch and its label
-now sit in one inner field that hands such a click to the checkbox, so it flips once, sends one
+now sit in one inner area that hands such a click to the checkbox, so it flips once, sends one
 `wt-change`, and a listener above the switch in the bubbling phase sees one click. A switch stretched
 wider than its label by its container (the Extras editor's Active is 576 px wide at desktop, its
-label ends about 100 px in) does not flip from the empty space past the label. Space, the focus ring,
-the accessible name and a disabled switch are unchanged. Tests: real Chromium clicks in `packages/ui/src/components/wt-switch.test.ts`; the
-Extras editor's Active and Preselected were clicked the same way at 1280 and 390 px wide in both
-themes by a probe that was not kept.
+label ends about 100 px in) does not flip from the empty space past the label. Space, the focus ring
+and the accessible name are unchanged. A disabled switch still does not flip, and a click on it
+still reaches the page; it now shows the not-allowed cursor over its knob, gap and label, where its
+label showed a pointer before. Tests: real Chromium clicks in
+`packages/ui/src/components/wt-switch.test.ts`; the Extras editor's Active and Preselected were
+clicked the same way at 1280 and 390 px wide in both themes by a probe that was not kept.
 
 **The Extras editor shows Portion beside Price, and a fixed 1 for a product sold by the unit
 (W75, owner 2026-10-04) — DONE (#1194).** In `apps/dashboard/src/widgets/extra-list-form.ts` Portion is a
