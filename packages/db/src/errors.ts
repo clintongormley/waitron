@@ -44,6 +44,9 @@ declare module "@waitron/shared" {
      * redone.
      */
     "series.code_collision": { code: string };
+    /** A configuration import's core row holds a value a save would refuse; `field` is
+     * `<table>.<column>`. Declared with identical params in `apps/server/src/errors.ts`. */
+    "setup.request_invalid": { field: string };
     /**
      * A database already belongs to a different environment. Never overwritten: the rows written
      * under the first stamp cannot be moved to the second — an invoice series that filed to
