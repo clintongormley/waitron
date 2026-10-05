@@ -150,6 +150,9 @@ export async function enqueueSaleReceipt(
   const context = sale?.workingOrderId
     ? await VENUE_SERVICE.findOrderContext(tx, cfg, sale.workingOrderId)
     : null;
+  if (context?.serviceMode === "prepay") {
+    await enqueueCollectionTicket(tx, cfg, context.zoneId, ticket.orderNumber);
+  }
   const mode = context
     ? (await VENUE_SERVICE.resolveSalePolicy(tx, cfg, context.zoneId)).receiptPrintMode
     : "auto";

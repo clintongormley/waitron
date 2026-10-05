@@ -462,6 +462,51 @@ it("prints one non-fiscal numbered collection ticket when a pay-on-collection or
   expect((await printJobsFor(cfg)).filter((job) => job.printerId === printerId)).toHaveLength(1);
 });
 
+it("prints a separate numbered collection ticket when a prepaid order is paid", async () => {
+  const { cfg, each, zoneId } = await setupVenue("prepay");
+  const printerId = await makePrinter(cfg);
+  await configureReceipt(cfg, { printerId });
+  await suite.db.execute(sql`
+    update department_sale_policies
+    set paid_when = 'prepay', collection_number = 'numbered'
+    where department_id = (select department_id from zone_service_policies where zone_id = ${zoneId})
+  `);
+  const id = randomUUID();
+  const { orderNumber } = await parkOrder({ db: suite.db }, cfg, {
+    id,
+    zoneId,
+    lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+  });
+
+  await recordTillSale(
+    deps(),
+    cfg,
+    { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
+    OPERATOR,
+  );
+
+  const jobs = (await printJobsFor(cfg)).filter((job) => job.printerId === printerId);
+  const papers = jobs.map((job) => decodeTicket(new Uint8Array(job.payload))).filter(Boolean);
+  expect(papers).toHaveLength(2);
+  const collection = papers.find((paper) => !paper.includes("TOTAL"))!;
+  expect(collection).toContain(String(orderNumber));
+  expect(collection).not.toContain("FACTURA");
+  expect(collection).not.toContain("TOTAL");
+  expect(await registroCount(cfg)).toBe(1);
+  await recordTillSale(
+    deps(),
+    cfg,
+    { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
+    OPERATOR,
+  );
+  expect(
+    (await printJobsFor(cfg))
+      .filter((job) => job.printerId === printerId)
+      .map((job) => decodeTicket(new Uint8Array(job.payload)))
+      .filter(Boolean),
+  ).toHaveLength(2);
+});
+
 describe("receipt grouping after table changes", () => {
   it.each(["prepay", "ticket_then_pay", "invoice_first"] as const)(
     "%s freezes the table label at issuance across renaming, collection and table turnover",
