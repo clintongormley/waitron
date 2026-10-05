@@ -1229,13 +1229,16 @@ describe("the Agents tab at phone width", () => {
 });
 
 describe("printers-screen", () => {
-  it("updates a printer and its recent jobs after a data event while preserving an editing draft", async () => {
+  it("updates a printer and its recent jobs after a data event while preserving an inline name draft", async () => {
     const liveData = new LiveData();
     const api = Object.assign(stubApi(), { liveData });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
-    await openPrinter(el);
-    typeField(el, "[data-test=printer-name-p1]", "Unsaved name");
+    q(el, "[data-test=printer-row-p1]")!.click();
+    await flush(el);
+    q(el, "[data-test=edit-printer-name]")!.click();
+    await flush(el);
+    typeField(el, '[name="printer-detail-name"]', "Unsaved name");
     vi.mocked(api.listPrinters).mockResolvedValue(
       printers.map((printer) =>
         printer.id === "p1"
@@ -1254,12 +1257,14 @@ describe("printers-screen", () => {
     const status = q(el, "[data-test=printer-section-status]")!;
     expect(status.textContent).toContain("7");
     expect(status.textContent).toContain("2026");
-    expect((q(el, "[data-test=printer-name-p1]") as import("@waitron/ui").WtInput).value).toBe(
+    expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).value).toBe(
       "Unsaved name",
     );
     expect(api.listRecentJobs).toHaveBeenCalledTimes(2);
     expect(api.listPrinterProfiles).toHaveBeenCalledTimes(1);
-    q(el, "[data-test=cancel-edit-printer]")!.click();
+    q(el, "[data-test=cancel-printer-name]")!.click();
+    await flush(el);
+    q(el, "[data-test=cancel-printer-name]")!.click();
     await flush(el);
     q(el, "[data-test=all-printers-link]")!.click();
     await flush(el);
@@ -3717,6 +3722,44 @@ it("edits a printer name on its details page without opening the calibration wiz
   expect(q(el, '[name="printer-detail-name"]')).toBeNull();
 });
 
+it("saves an inline printer name when Enter is pressed in its field", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const api = stubApi();
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=edit-printer-name]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-name"]', "Kitchen receipt");
+  const input = q(el, '[name="printer-detail-name"]')!.shadowRoot!.querySelector("input")!;
+  input.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+  );
+  await vi.waitFor(() =>
+    expect(api.updatePrinter).toHaveBeenCalledWith("p1", { name: "Kitchen receipt" }),
+  );
+});
+
+it("saves an inline network address when Enter is pressed in its field", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  const api = stubApi();
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=printer-section-connection]")!
+    .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+    .click();
+  await flush(el);
+  q(el, "[data-test=edit-printer-connection]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-host"]', "10.0.0.20");
+  const input = q(el, '[name="printer-detail-host"]')!.shadowRoot!.querySelector("input")!;
+  input.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+  );
+  await vi.waitFor(() =>
+    expect(api.updatePrinter).toHaveBeenCalledWith("p1", { host: "10.0.0.20", port: 9100 }),
+  );
+});
+
 it("focuses the printer name when Edit opens its inline field", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
@@ -4104,15 +4147,15 @@ it("reopens printer status from its URL and reflects a saved drawer choice", asy
   expect(q(el, "[data-test=printer-status]")).toBeNull();
 });
 
-it("keeps printer status live without replacing an open editing draft", async () => {
+it("keeps printer status live without replacing an inline name draft", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   const liveData = new LiveData();
   const api = Object.assign(stubApi(), { liveData });
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
-  q(el, "[data-test=edit-printer-details]")!.click();
+  q(el, "[data-test=edit-printer-name]")!.click();
   await flush(el);
-  typeField(el, "[data-test=printer-name-p1]", "Unsaved name");
+  typeField(el, '[name="printer-detail-name"]', "Unsaved name");
   vi.mocked(api.listPrinters).mockResolvedValue([
     {
       ...printers[0]!,
@@ -4126,7 +4169,7 @@ it("keeps printer status live without replacing an open editing draft", async ()
   await flush(el);
   expect(text(el, "[data-test=printer-status]")).toContain("Cocina agent");
   expect(text(el, "[data-test=printer-status]")).toContain("2026-09-26 16:00");
-  expect((q(el, "[data-test=printer-name-p1]") as import("@waitron/ui").WtInput).value).toBe(
+  expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).value).toBe(
     "Unsaved name",
   );
 });

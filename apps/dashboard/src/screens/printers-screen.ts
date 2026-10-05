@@ -2253,6 +2253,11 @@ export class PrintersScreen extends LitElement {
                   name="printer-detail-name"
                   label=${t("printers.name")}
                   required
+                  @keydown=${(event: KeyboardEvent) =>
+                    submitOnEnter(
+                      event,
+                      this.renderRoot.querySelector("[data-test=save-printer-name]"),
+                    )}
                   .value=${this.detailName.value}
                   .invalid=${this.detailName.error === t("form.name_required")}
                   .error=${this.detailName.error === t("form.name_required") ? this.detailName.error : ""}
@@ -2378,7 +2383,14 @@ export class PrintersScreen extends LitElement {
           ${
             p.transport === "network_tcp"
               ? this.detailConnection?.id === p.id
-                ? html`<div class="form-fields">
+                ? html`<div
+                    class="form-fields"
+                    @keydown=${(event: KeyboardEvent) =>
+                      submitOnEnter(
+                        event,
+                        this.renderRoot.querySelector("[data-test=save-printer-connection]"),
+                      )}
+                  >
                     <wt-input
                       name="printer-detail-host"
                       label=${t("printers.host")}
