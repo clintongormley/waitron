@@ -3761,6 +3761,45 @@ it("shows a refused inline name save below the form and leaves Save available", 
   await vi.waitFor(() => expect(api.updatePrinter).toHaveBeenCalledTimes(2));
 });
 
+it("keeps the next printer's name draft when an earlier save finishes", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  let finishSave!: () => void;
+  const api = stubApi({
+    updatePrinter: vi.fn().mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishSave = resolve;
+      }),
+    ),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=edit-printer-name]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-name"]', "Kitchen receipt");
+  q(el, "[data-test=save-printer-name]")!.click();
+  await vi.waitFor(() =>
+    expect(api.updatePrinter).toHaveBeenCalledWith("p1", { name: "Kitchen receipt" }),
+  );
+
+  history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  expect(text(el, "[data-test=printer-breadcrumb]")).toContain("Cocina");
+  history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  expect(text(el, "[data-test=printer-breadcrumb]")).toContain("Nube");
+  q(el, "[data-test=edit-printer-name]")!.click();
+  await flush(el);
+  typeField(el, '[name="printer-detail-name"]', "Cloud copy");
+
+  finishSave();
+  await flush(el);
+  expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).value).toBe(
+    "Cloud copy",
+  );
+});
+
 it("asks before discarding an edited printer name", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {

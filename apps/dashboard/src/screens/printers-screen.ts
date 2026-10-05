@@ -2147,15 +2147,19 @@ export class PrintersScreen extends LitElement {
       this.detailName = { ...draft, error: t("form.name_required") };
       return;
     }
-    this.detailName = { ...draft, saving: true, error: null };
+    const savingDraft = { ...draft, saving: true, error: null };
+    this.detailName = savingDraft;
     try {
       await this.api.updatePrinter(printer.id, { name });
     } catch (error) {
-      this.detailName = { ...draft, saving: false, error: codeMessage(codeOf(error)) };
+      if (this.detailName === savingDraft)
+        this.detailName = { ...draft, saving: false, error: codeMessage(codeOf(error)) };
       return;
     }
-    this.detailName = null;
-    this.discardDetailNameArmed = false;
+    if (this.detailName === savingDraft) {
+      this.detailName = null;
+      this.discardDetailNameArmed = false;
+    }
     await this.#load();
   }
 
