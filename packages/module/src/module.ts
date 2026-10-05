@@ -573,6 +573,9 @@ export interface ConfigurationTransferTable {
   readonly before?: readonly string[];
   readonly omit?: readonly string[];
   readonly locationColumns?: readonly string[];
+  /** Columns holding another row's id that the schema declares no foreign key for; an import
+   * rewrites the id, the foreign-key columns and these to the new ids, and no other column. */
+  readonly references?: readonly string[];
   readonly reconnect?: boolean;
 }
 

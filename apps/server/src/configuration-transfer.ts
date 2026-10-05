@@ -389,6 +389,8 @@ export async function importConfigurationTables(
   // Which columns hold bytes, so the bundle's `\x<hex>` strings go back in as BYTES: a string bound
   // to a BLOB column is stored as text.
   const blobColumns = new Map<string, Set<string>>();
+  // A name or other text may equal a bundle id, so only these columns are rewritten to new ids.
+  const idColumns = new Map<string, Set<string>>();
   for (const [declaration] of checked) {
     // The table-valued `pragma_table_info(?)` binds its argument, unlike the `pragma table_info`
     // statement. An unknown table yields no rows, which the empty check below refuses.
@@ -407,6 +409,13 @@ export async function importConfigurationTables(
           .filter((row) => row.column_type.toUpperCase().includes("BLOB"))
           .map((row) => row.column_name),
       ),
+    );
+    const keys = await tx.execute<{ from: string }>(sql`
+      select "from" from pragma_foreign_key_list(${declaration.name})
+    `);
+    idColumns.set(
+      declaration.name,
+      new Set(["id", ...keys.rows.map((row) => row.from), ...(declaration.references ?? [])]),
     );
   }
   for (const [declaration, rows] of checked) {
@@ -461,8 +470,10 @@ export async function importConfigurationTables(
       if (typeof source.person_id === "string" && sourceOperatorIds.has(source.person_id)) continue;
       const row: Record<string, unknown> = { ...source };
       const blobs = blobColumns.get(declaration.name)!;
+      const ids = idColumns.get(declaration.name)!;
       for (const [field, value] of Object.entries(row)) {
-        if (typeof value === "string" && idMap.has(value)) row[field] = idMap.get(value)!;
+        if (ids.has(field) && typeof value === "string" && idMap.has(value))
+          row[field] = idMap.get(value)!;
         else if (blobs.has(field)) row[field] = decodeBytes(value);
       }
       for (const column of declaration.locationColumns ?? []) {

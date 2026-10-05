@@ -4,6 +4,7 @@ import {
   deleteSection,
   listHomeLayouts,
   createCatalogue,
+  createCategory,
   createHomeLayout,
   deviceHomeLayouts,
   setDeviceHomeLayout,
@@ -22,6 +23,7 @@ import {
   readMenuStructure,
   readSection,
   sections,
+  setProductVariants,
   updateOptionList,
   writeProductModifiers,
 } from "@waitron/catalogue";
@@ -1383,8 +1385,7 @@ it("gives each imported product the folded key of its own name, whatever the bun
     db: suite.db,
     modules: ALL_MODULES,
   });
-  // A staff name spelled as its catalogue's id in capitals folds to that id, which the import
-  // rewrites wherever a value equals an exported row's id.
+  // A staff name spelled as its catalogue's id in capitals folds to that id.
   const idShaped = await withTransaction(suite.db, async (tx) => {
     const menu = await createCatalogue(tx, { name: "Keys" });
     const fields = { catalogueId: menu.id, categoryId: null, pricingUnit: "each" as const };
@@ -1462,4 +1463,101 @@ it("gives each imported product the folded key of its own name, whatever the bun
     code: "setup.request_invalid",
     params: { field: "products.name_key" },
   });
+});
+
+it("keeps a name that equals another row's id, while the ids that point at rows are rewritten", async () => {
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const sourceIds = await withTransaction(suite.db, async (tx) => {
+    const menu = await createCatalogue(tx, { name: "Ids" });
+    const category = await createCategory(tx, { name: menu.id });
+    const product = await createProduct(tx, {
+      catalogueId: menu.id,
+      categoryId: category.id,
+      name: category.id,
+      pricingUnit: "each",
+      unitPrice: "2.00",
+      vatClass: "general",
+    });
+    await setProductVariants(
+      tx,
+      product.id,
+      [
+        {
+          name: product.id,
+          customerName: { es: "Grande" },
+          kitchenName: null,
+          image: null,
+          unitPrice: "2.50",
+          available: true,
+          active: true,
+        },
+      ],
+      "es",
+    );
+    return { menu: menu.id, category: category.id, product: product.id };
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-05T12:00:00Z"),
+    versions,
+  );
+  const bundleIds = new Set(
+    Object.values(transferred.tables).flatMap((rows) =>
+      rows.flatMap((row) => (typeof row.id === "string" ? [row.id] : [])),
+    ),
+  );
+  for (const id of Object.values(sourceIds)) expect(bundleIds.has(id)).toBe(true);
+
+  await applyVenue(planVenue(venue("B86420975"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+
+  const [menu] = await targetSuite.db
+    .select({ id: catalogues.id })
+    .from(catalogues)
+    .where(eq(catalogues.name, "Ids"));
+  const [category] = await targetSuite.db
+    .select({ id: categories.id })
+    .from(categories)
+    .where(eq(categories.name, sourceIds.menu));
+  const [product] = await targetSuite.db
+    .select({ id: products.id, catalogueId: products.catalogueId, categoryId: products.categoryId })
+    .from(products)
+    .where(eq(products.name, sourceIds.category));
+  const [variant] = await targetSuite.db
+    .select({ parentId: products.parentId })
+    .from(products)
+    .where(eq(products.name, sourceIds.product));
+  expect(menu).toBeDefined();
+  expect(category).toBeDefined();
+  expect(product).toEqual({
+    id: expect.any(String),
+    catalogueId: menu!.id,
+    categoryId: category!.id,
+  });
+  expect(variant).toEqual({ parentId: product!.id });
+  for (const id of [menu!.id, category!.id, product!.id]) expect(bundleIds.has(id)).toBe(false);
+
+  const policies = await targetSuite.db.execute<{
+    zone_id: string;
+    default_menu_id: string | null;
+  }>(sql`select zone_id, default_menu_id from zone_service_policies`);
+  expect(policies.rows.length).toBeGreaterThan(0);
+  const targetMenus = new Set(
+    (await targetSuite.db.select({ id: catalogues.id }).from(catalogues)).map((row) => row.id),
+  );
+  for (const policy of policies.rows) {
+    expect(bundleIds.has(policy.zone_id)).toBe(false);
+    expect(bundleIds.has(policy.default_menu_id!)).toBe(false);
+    expect(targetMenus.has(policy.default_menu_id!)).toBe(true);
+  }
 });
