@@ -403,7 +403,6 @@ export const en = {
   "printing_rules.setting_unknown": "Current setting is unavailable. Choose an option to save it.",
   "printers.add_agent": "Add a print agent",
   "printers.edit_agent": "Edit print agent",
-  "printers.edit_printer": "Edit printer",
   "printers.agent_host": "Host",
   "printers.status": "Status",
   "printers.last_seen": "Last seen",
@@ -943,7 +942,7 @@ export const en = {
   "printers.list_title": "Printers",
   "printers.no_printers": "No printers yet.",
   "printers.name": "Name",
-  "printers.discard_name": "Discard changes",
+  "printers.discard": "Discard changes",
   "printers.discard_name_prompt": "Press Discard changes again to lose the edited name.",
   "printers.discard_connection_prompt":
     "Press Discard changes again to lose the edited connection.",
@@ -958,7 +957,6 @@ export const en = {
     "A printer that prints a watcher's copies prints no station tickets.",
   "printers.watcher_conflict":
     "This printer prints station tickets. Turn its stations off first, or it would print some dishes twice.",
-  "printers.active": "Active",
   "printers.paper_width": "Paper width",
   "printers.paper_width_58": "58 mm",
   "printers.paper_width_80": "80 mm",
@@ -2554,7 +2552,6 @@ export const es: Record<StringKey, string> = {
     "El ajuste actual no está disponible. Elige una opción para guardarla.",
   "printers.add_agent": "Añadir un agente de impresión",
   "printers.edit_agent": "Editar agente de impresión",
-  "printers.edit_printer": "Editar impresora",
   "printers.agent_host": "Equipo",
   "printers.status": "Estado",
   "printers.last_seen": "Último contacto",
@@ -3098,7 +3095,7 @@ export const es: Record<StringKey, string> = {
   "printers.list_title": "Impresoras",
   "printers.no_printers": "Todavía no hay impresoras.",
   "printers.name": "Nombre",
-  "printers.discard_name": "Descartar cambios",
+  "printers.discard": "Descartar cambios",
   "printers.discard_name_prompt": "Pulsa Descartar cambios otra vez para perder el nombre editado.",
   "printers.discard_connection_prompt":
     "Pulsa Descartar cambios otra vez para perder la conexión editada.",
@@ -3113,7 +3110,6 @@ export const es: Record<StringKey, string> = {
     "Una impresora que imprime las copias de un punto de seguimiento no imprime comandas de estación.",
   "printers.watcher_conflict":
     "Esta impresora imprime comandas de estación. Desactiva primero sus estaciones, o imprimiría algunos platos dos veces.",
-  "printers.active": "Activo",
   "printers.paper_width": "Ancho del papel",
   "printers.paper_width_58": "58 mm",
   "printers.paper_width_80": "80 mm",

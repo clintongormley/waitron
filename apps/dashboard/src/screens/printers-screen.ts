@@ -2,6 +2,7 @@ import { LitElement, type PropertyValues, type TemplateResult, css, html, nothin
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { ifDefined } from "lit/directives/if-defined.js";
+import { live } from "lit/directives/live.js";
 import {
   focusFirstInvalid,
   submitOnEnter,
@@ -455,6 +456,7 @@ export class PrintersScreen extends LitElement {
   readonly #url = new UrlStateController(
     this,
     (event?: Event) => {
+      if (this.#url.read("dashboard") !== "printers") return;
       if (event && this.selectedPrinterId) {
         const printer = this.printers.find(({ id }) => id === this.selectedPrinterId);
         if (
@@ -470,14 +472,13 @@ export class PrintersScreen extends LitElement {
           printer &&
           this.detailName?.id === printer.id &&
           this.detailName.value !== printer.name &&
-          !this.discardDetailNameArmed
+          !this.discardDetailNameNavigationArmed
         ) {
-          this.discardDetailNameArmed = true;
+          this.discardDetailNameNavigationArmed = true;
           this.#url.write({ dashboard: "printers", view: this.view, printer: printer.id });
           return;
         }
       }
-      if (this.#url.read("dashboard") !== "printers") return;
       const printerId = this.#url.read("printer");
       if (printerId !== this.selectedPrinterId) {
         const editing = this.editingPrinter;
@@ -531,6 +532,7 @@ export class PrintersScreen extends LitElement {
     error: string | null;
   } | null = null;
   @state() private discardDetailNameArmed = false;
+  @state() private discardDetailNameNavigationArmed = false;
   @state() private detailConnection: {
     id: string;
     host: string;
@@ -2049,6 +2051,7 @@ export class PrintersScreen extends LitElement {
     this.discardDetailConnectionArmed = false;
     this.discardDetailConnectionNavigationArmed = false;
     this.discardDetailNameArmed = false;
+    this.discardDetailNameNavigationArmed = false;
   }
 
   #connectionIsDirty(printer: Printer): boolean {
@@ -2178,9 +2181,9 @@ export class PrintersScreen extends LitElement {
               this.detailName &&
               this.detailName.id === p.id &&
               this.detailName.value !== p.name &&
-              !this.discardDetailNameArmed
+              !this.discardDetailNameNavigationArmed
             ) {
-              this.discardDetailNameArmed = true;
+              this.discardDetailNameNavigationArmed = true;
               return;
             }
             this.selectedPrinterId = null;
@@ -2216,6 +2219,7 @@ export class PrintersScreen extends LitElement {
                   name="printer-detail-name"
                   label=${t("printers.name")}
                   required
+                  ?disabled=${this.detailName.saving}
                   @keydown=${(event: KeyboardEvent) =>
                     submitOnEnter(
                       event,
@@ -2233,6 +2237,7 @@ export class PrintersScreen extends LitElement {
                         error: event.detail.value.trim() ? null : t("form.name_required"),
                       };
                     this.discardDetailNameArmed = false;
+                    this.discardDetailNameNavigationArmed = false;
                   }}
                 ></wt-input>
                 ${
@@ -2260,9 +2265,9 @@ export class PrintersScreen extends LitElement {
                         this.discardDetailNameArmed = false;
                       }
                     }}
-                    >${this.discardDetailNameArmed ? t("printers.discard_name") : t("action.cancel")}</wt-button
+                    >${this.discardDetailNameArmed ? t("printers.discard") : t("action.cancel")}</wt-button
                   >
-                  ${this.discardDetailNameArmed ? html`<span data-test="discard-printer-name" role="status">${t("printers.discard_name_prompt")}</span>` : nothing}
+                  ${this.discardDetailNameArmed || this.discardDetailNameNavigationArmed ? html`<span data-test="discard-printer-name" role="status">${t("printers.discard_name_prompt")}</span>` : nothing}
                   <wt-button
                     variant="primary"
                     data-test="save-printer-name"
@@ -2307,7 +2312,7 @@ export class PrintersScreen extends LitElement {
           <wt-switch
             name="printer-detail-active"
             label=${t("printers.status_active")}
-            .checked=${p.active}
+            .checked=${live(p.active)}
             ?disabled=${this.detailActiveSavingIds.has(p.id)}
             @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
               event.stopPropagation();
@@ -2351,6 +2356,7 @@ export class PrintersScreen extends LitElement {
                     <wt-input
                       name="printer-detail-host"
                       label=${t("printers.host")}
+                      ?disabled=${this.detailConnection.saving}
                       .value=${this.detailConnection.host}
                       .invalid=${!!this.#detailConnectionErrors().host}
                       .error=${this.#detailConnectionErrors().host}
@@ -2370,6 +2376,7 @@ export class PrintersScreen extends LitElement {
                       name="printer-detail-port"
                       label=${t("printers.port")}
                       type="number"
+                      ?disabled=${this.detailConnection.saving}
                       .value=${this.detailConnection.port}
                       .invalid=${!!this.#detailConnectionErrors().port}
                       .error=${this.#detailConnectionErrors().port}
@@ -2403,7 +2410,7 @@ export class PrintersScreen extends LitElement {
                             this.discardDetailConnectionNavigationArmed = false;
                           }
                         }}
-                        >${this.discardDetailConnectionArmed ? t("printers.discard_name") : t("action.cancel")}</wt-button
+                        >${this.discardDetailConnectionArmed ? t("printers.discard") : t("action.cancel")}</wt-button
                       >
                       ${this.discardDetailConnectionArmed ? html`<span data-test="discard-printer-connection" role="status">${t("printers.discard_connection_prompt")}</span>` : nothing}
                       <wt-button
