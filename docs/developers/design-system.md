@@ -192,7 +192,10 @@ category swatches in the Products tree, the product and section swatches in a me
 and the till's product and section tiles (`apps/till/src/widgets/menu-browser.ts`). A painted till
 tile takes black or white for its labels and its icon, whichever `readableTextColor`
 (`packages/ui/src/category-color.ts`) picks for that colour, because the label still carries the
-meaning and the colour is never the only signal. `wt-lozenge` takes a colour the same way, filling
+meaning and the colour is never the only signal. A sold-out till tile, painted or not, is grey
+(`--wt-color-border`) with `--wt-color-text` labels in place of `wt-button`'s disabled fade, and a
+painted one keeps its colour only as a stripe on its start edge
+([products.md](products.md), _Colour_). `wt-lozenge` takes a colour the same way, filling
 its background and computing black or white text, though no screen passes it one. This is a
 different idiom from the one the floor plan and service statuses
 already use for a data colour — a neutral chip with the colour shown only as a border and a dot —
