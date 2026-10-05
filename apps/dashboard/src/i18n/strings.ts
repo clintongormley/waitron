@@ -118,7 +118,7 @@ export const en = {
     "{count} kitchen routing rules name these categories or ones inside them and will be removed.",
   "folders.routes_warning_subtree_one":
     "1 kitchen routing rule names these categories or ones inside them and will be removed.",
-  "folders.no_routing_rule": "No kitchen routing rule covers this category",
+  "folders.no_active_station": "No active station assigned",
   "folders.made_at_own": "set on this category",
   "folders.made_at_inherited": "from {name}",
   "folders.made_at_default": "default station",
@@ -2263,7 +2263,7 @@ export const es: Record<StringKey, string> = {
     "{count} reglas de envío a cocina nombran estas categorías o las que hay dentro de ellas y se eliminarán.",
   "folders.routes_warning_subtree_one":
     "1 regla de envío a cocina nombra estas categorías o las que hay dentro de ellas y se eliminará.",
-  "folders.no_routing_rule": "Ninguna regla de envío a cocina cubre esta categoría",
+  "folders.no_active_station": "Ninguna estación activa asignada",
   "folders.made_at_own": "asignada a esta categoría",
   "folders.made_at_inherited": "heredada de {name}",
   "folders.made_at_default": "estación predeterminada",
