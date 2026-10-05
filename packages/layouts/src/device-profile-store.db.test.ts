@@ -1,6 +1,7 @@
 import {
   CORE_MIGRATIONS,
   captureError,
+  deviceProfilePrinters,
   devices,
   locations,
   printers,
@@ -12,10 +13,10 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import type { PersonRoleValue } from "@waitron/identity";
 import { AppError, isAppError } from "@waitron/shared";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { DEFAULT_CANVASES } from "./default-canvases.js";
-import { createCanvas } from "./canvas-store.js";
+import { createCanvas, deleteCanvas } from "./canvas-store.js";
 import {
   createDeviceProfile,
   deleteDeviceProfile,
@@ -78,17 +79,22 @@ async function seedCanvas(session: string, name: string): Promise<string> {
 }
 
 /** Through drizzle, for the `$defaultFn` reason `seedSession` states. */
-async function seedBoundDevice(profileId: string): Promise<void> {
+async function seedBoundDevice(profileId: string, active = true): Promise<string> {
   const [location] = await suite.db
     .insert(locations)
     .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
     .returning({ id: locations.id });
-  await suite.db.insert(devices).values({
-    locationId: location!.id,
-    label: "Bound device",
-    tokenHash: "scrypt$00$00",
-    deviceProfileId: profileId,
-  });
+  const [device] = await suite.db
+    .insert(devices)
+    .values({
+      locationId: location!.id,
+      label: "Bound device",
+      tokenHash: "scrypt$00$00",
+      deviceProfileId: profileId,
+      active,
+    })
+    .returning({ id: devices.id });
+  return device!.id;
 }
 
 describe("device-profile store against a real migrated database", () => {
@@ -335,7 +341,180 @@ describe("device-profile store against a real migrated database", () => {
     expect(typeof error).not.toBe("string"); // it threw an AppError, not a raw driver refusal
     expect((error as AppError).code).toBe("device_profile.in_use");
     expect((error as AppError).params).toEqual({}); // the fact of the reference is the whole message
-    expect(await rowCount()).toBe(1); // the profile survived the refused delete (RESTRICT)
+    expect(await rowCount()).toBe(1); // the profile survived the refused delete
+  });
+
+  it("translates a refusal by a key the device check does not read to device_profile.in_use", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    const created = await inTx((tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        name: "Held elsewhere",
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+      }),
+    );
+    // A table this test creates itself, standing for another module's key into device_profiles.
+    await suite.db.execute(
+      sql`create table device_profiles_test_holder (
+            profile_id text not null references device_profiles(id) on delete restrict)`,
+    );
+    try {
+      await suite.db.execute(
+        sql`insert into device_profiles_test_holder (profile_id) values (${created.id})`,
+      );
+      const code = await codeOf(() =>
+        inTx((tx) => deleteDeviceProfile(tx, { managementSessionId: session, id: created.id })),
+      );
+      expect(code).toBe("device_profile.in_use");
+      expect(await rowCount()).toBe(1);
+    } finally {
+      await suite.db.execute(sql`drop table device_profiles_test_holder`);
+    }
+  });
+
+  it("retires a profile whose only device is disabled: hidden from every read, the device untouched", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    const created = await inTx((tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        name: "Only disabled",
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+      }),
+    );
+    const deviceId = await seedBoundDevice(created.id, false);
+    await inTx((tx) => deleteDeviceProfile(tx, { managementSessionId: session, id: created.id }));
+    expect(await inTx((tx) => listDeviceProfiles(tx))).toEqual([]);
+    expect(await inTx((tx) => getDeviceProfile(tx, created.id))).toBeUndefined();
+    expect(await inTx((tx) => getDeviceProfileWithPrinters(tx, created.id))).toBeUndefined();
+    const held = await suite.db
+      .select({ active: devices.active, deviceProfileId: devices.deviceProfileId })
+      .from(devices)
+      .where(eq(devices.id, deviceId));
+    expect(held).toEqual([{ active: false, deviceProfileId: created.id }]);
+  });
+
+  it("frees a retired profile's name for a new profile", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    const base = {
+      managementSessionId: session,
+      name: "Reused name",
+      formFactor: "till" as const,
+      canvasId: null,
+      capabilities: [],
+    };
+    const retired = await inTx((tx) => createDeviceProfile(tx, base));
+    await seedBoundDevice(retired.id, false);
+    await inTx((tx) => deleteDeviceProfile(tx, { managementSessionId: session, id: retired.id }));
+    const replacement = await inTx((tx) => createDeviceProfile(tx, base));
+    expect(replacement.id).not.toBe(retired.id);
+    expect((await inTx((tx) => listDeviceProfiles(tx))).map((p) => p.id)).toEqual([replacement.id]);
+  });
+
+  it("refuses device_profile.in_use for a profile an active device holds, and keeps it listed", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    const created = await inTx((tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        name: "Active holder",
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+      }),
+    );
+    await seedBoundDevice(created.id);
+    const code = await codeOf(() =>
+      inTx((tx) => deleteDeviceProfile(tx, { managementSessionId: session, id: created.id })),
+    );
+    expect(code).toBe("device_profile.in_use");
+    expect((await inTx((tx) => listDeviceProfiles(tx))).map((p) => p.id)).toEqual([created.id]);
+  });
+
+  it("refuses device_profile.in_use for a profile an active AND a disabled device hold, and keeps it listed", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    const created = await inTx((tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        name: "Mixed holders",
+        formFactor: "till",
+        canvasId: null,
+        capabilities: [],
+      }),
+    );
+    await seedBoundDevice(created.id, false);
+    await seedBoundDevice(created.id);
+    const code = await codeOf(() =>
+      inTx((tx) => deleteDeviceProfile(tx, { managementSessionId: session, id: created.id })),
+    );
+    expect(code).toBe("device_profile.in_use");
+    expect((await inTx((tx) => listDeviceProfiles(tx))).map((p) => p.id)).toEqual([created.id]);
+    expect(await inTx((tx) => getDeviceProfile(tx, created.id))).toBeDefined();
+  });
+
+  it("answers device_profile.not_found to a delete or an update of a retired profile", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    const base = {
+      managementSessionId: session,
+      name: "Gone",
+      formFactor: "till" as const,
+      canvasId: null,
+      capabilities: [],
+    };
+    const created = await inTx((tx) => createDeviceProfile(tx, base));
+    await seedBoundDevice(created.id, false);
+    await inTx((tx) => deleteDeviceProfile(tx, { managementSessionId: session, id: created.id }));
+    expect(
+      await codeOf(() =>
+        inTx((tx) => deleteDeviceProfile(tx, { managementSessionId: session, id: created.id })),
+      ),
+    ).toBe("device_profile.not_found");
+    expect(
+      await codeOf(() =>
+        inTx((tx) => updateDeviceProfile(tx, { ...base, id: created.id, name: "Revived" })),
+      ),
+    ).toBe("device_profile.not_found");
+    expect(await inTx((tx) => listDeviceProfiles(tx))).toEqual([]);
+  });
+
+  it("frees a retired profile's canvas and printer lists", async () => {
+    await seedTenant(suite.db);
+    const session = await seedSession("manager");
+    const canvasId = await seedCanvas(session, "Held canvas");
+    const [location] = await suite.db
+      .insert(locations)
+      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
+      .returning({ id: locations.id });
+    const [printer] = await suite.db
+      .insert(printers)
+      .values({ locationId: location!.id, name: "Bar", transport: "network_tcp", host: "10.0.0.1" })
+      .returning({ id: printers.id });
+    const created = await inTx((tx) =>
+      createDeviceProfile(tx, {
+        managementSessionId: session,
+        name: "Canvas and printers",
+        formFactor: "till",
+        canvasId,
+        capabilities: [],
+        printerLists: { receiptPrinterIds: [printer!.id], paymentSlipPrinterIds: [printer!.id] },
+      }),
+    );
+    await seedBoundDevice(created.id, false);
+    await inTx((tx) => deleteDeviceProfile(tx, { managementSessionId: session, id: created.id }));
+    const listed = await suite.db
+      .select({ printerId: deviceProfilePrinters.printerId })
+      .from(deviceProfilePrinters)
+      .where(eq(deviceProfilePrinters.deviceProfileId, created.id));
+    expect(listed).toEqual([]);
+    await inTx((tx) => deleteCanvas(tx, { managementSessionId: session, id: canvasId }));
   });
 
   it("translates a form-factor change on a profile an active device uses to device_profile.in_use", async () => {

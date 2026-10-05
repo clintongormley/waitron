@@ -5,6 +5,7 @@ import {
   constraintTarget,
   deviceProfilePrinters,
   deviceProfiles,
+  devices,
   isRefusal,
   isUniqueViolation,
   nowIso,
@@ -15,7 +16,7 @@ import {
 import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import type { CapabilityFlag, FormFactor } from "./canvas.js";
 import { validateCapabilities, validateInactivityTimeout } from "./device-profile.js";
 import {
@@ -78,6 +79,8 @@ function toRow(row: StoredProfile, lists: ProfilePrinterLists): DeviceProfileRow
   };
 }
 
+const live = isNull(deviceProfiles.deletedAt);
+
 const PROFILE_NAME: ConstraintTarget = { table: "device_profiles", columns: ["name"] };
 
 /**
@@ -121,6 +124,7 @@ export async function listDeviceProfiles(tx: Transaction): Promise<DeviceProfile
   const rows = await tx
     .select(PROFILE_COLUMNS)
     .from(deviceProfiles)
+    .where(live)
     .orderBy(asc(deviceProfiles.name));
   const listed = await tx
     .select({
@@ -152,7 +156,7 @@ export async function getDeviceProfile(
   const [row] = await tx
     .select(PROFILE_COLUMNS)
     .from(deviceProfiles)
-    .where(eq(deviceProfiles.id, id));
+    .where(and(eq(deviceProfiles.id, id), live));
   return row === undefined ? undefined : toSettings(row);
 }
 
@@ -243,7 +247,7 @@ export async function updateDeviceProfile(
         inactivityTimeoutSeconds,
         updatedAt: nowIso(),
       })
-      .where(eq(deviceProfiles.id, input.id))
+      .where(and(eq(deviceProfiles.id, input.id), live))
       .returning(PROFILE_COLUMNS);
     updated = rows;
   } catch (error) {
@@ -258,6 +262,11 @@ export async function updateDeviceProfile(
   return toRow(updated[0]!, await readProfilePrinterLists(tx, input.id));
 }
 
+/**
+ * Refused `device_profile.in_use` while an active device holds the profile. One that only disabled
+ * devices hold is retired rather than deleted, because their `device_profile_id` keys refuse the
+ * delete.
+ */
 export async function deleteDeviceProfile(
   tx: Transaction,
   input: { managementSessionId: string; id: string },
@@ -266,16 +275,34 @@ export async function deleteDeviceProfile(
     managementSessionId: input.managementSessionId,
     permission: "layout.configure",
   });
-  let deleted: { id: string }[];
+  const [profile] = await tx
+    .select({ id: deviceProfiles.id })
+    .from(deviceProfiles)
+    .where(and(eq(deviceProfiles.id, input.id), live));
+  if (profile === undefined) {
+    throw new AppError("device_profile.not_found", {});
+  }
+  const holders = await tx
+    .select({ active: devices.active })
+    .from(devices)
+    .where(eq(devices.deviceProfileId, input.id));
+  if (holders.some((device) => device.active)) {
+    throw new AppError("device_profile.in_use", {});
+  }
+  if (holders.length > 0) {
+    const now = nowIso();
+    await tx
+      .update(deviceProfiles)
+      .set({ deletedAt: now, updatedAt: now, canvasId: null })
+      .where(eq(deviceProfiles.id, input.id));
+    await tx
+      .delete(deviceProfilePrinters)
+      .where(eq(deviceProfilePrinters.deviceProfileId, input.id));
+    return;
+  }
   try {
-    deleted = await tx
-      .delete(deviceProfiles)
-      .where(eq(deviceProfiles.id, input.id))
-      .returning({ id: deviceProfiles.id });
+    await tx.delete(deviceProfiles).where(eq(deviceProfiles.id, input.id));
   } catch (error) {
     translateWriteError(error);
-  }
-  if (deleted.length === 0) {
-    throw new AppError("device_profile.not_found", {});
   }
 }
