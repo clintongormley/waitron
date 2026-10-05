@@ -3545,11 +3545,19 @@ by the owner the same day as two items:
   selection turned on. Not covered: while a category is being renamed, its count and
   asterisk follow the name box and are not capped _(2026-10-05: since W72g only at desktop width;
   at phone width they sit on the line above the box and wrap in what the grip and folder icon leave
-  of the room before the pinned column)_. Open point for the owner: at 390 px in the demo
-  venue a name gets about 46 px, so most words break part-way ("Croqu" / "etas"); giving names
-  more room at phone width (for example narrower leading slots) is asked in the campaign's
-  questions file. Wrapping was chosen over an ellipsis because a phone cannot show a cut name's
-  full text.
+  of the room before the pinned column)_. Wrapping was chosen over an ellipsis because a phone
+  cannot show a cut name's full text. The open point (a name got about 46 px at 390 px, so most
+  words broke part-way) was answered "maybe (b) and (c)" by the owner and **done in W85e**
+  (2026-10-06): at phone width (the table's `narrow`) a product row draws no photo, and every tree's
+  arrow slot is one cell padding (12 px) narrower, a toggle button keeping its 44 px tap target by
+  reaching back over its cell's start padding. Measured in the demo venue at 390 px: a product's
+  name room went from 55 to 123 px (English) and 46 to 114 px (Spanish), a category's up 12 px;
+  laptop width unchanged. Categories keep their folder icon, so at phone width a product's name
+  starts one folder slot before a sibling category's. The grip and the 8 px indent step were
+  left as they were: the grip is a tap target, and a narrower step barely tells levels apart.
+  Found while checking, not changed: at 390 px a menu's Structure tree still runs a long name
+  ("Sharing plates", "Menu: Casa Delgado") under its pinned Actions column, as the Products tree
+  did before W85b — it has no room-fitting of its own; it gains the same 12 px.
 - Fixed in W85c (#1245, 2026-10-05): in the product editor's variant table the Unit button sat 4 px
   (`--wt-space-1`) after the word Price, which read as no gap. The two now have a `--wt-space-2`
   (8 px) gap between them (`.price-heading`, `apps/dashboard/src/widgets/variant-table.ts`),

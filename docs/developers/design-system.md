@@ -734,7 +734,12 @@ the branch's own collapsed state. With `searchOpensPath`, as the Products tree s
 while a search is typed, even one that matches itself, and what passes the filters under a match
 stays reachable, closed as the person left it. With filters alone, only a row kept solely to hold a
 match's place is held open. A tree whose box is 440px wide or less indents each level
-`--wt-space-2` instead of `--wt-space-4`, and no deeper than four levels. A CSS condition cannot
+`--wt-space-2` instead of `--wt-space-4`, and no deeper than four levels, and its arrow slot is
+one cell padding (`--wt-space-3`) narrower than `--wt-tap-min`. A branch's toggle button stays
+`--wt-tap-min` wide by reaching back over its cell's start padding, so it takes no more of the row
+than the other slots and its tap target stays whole and inside its own cell. The table publishes
+the arrow slot's width as `--tree-arrow-width`, which a screen reads to line up its Name heading
+or its own slots (W85e, owner 2026-10-05). A CSS condition cannot
 read a token, so the table watches a tree's box in code and, a frame after each change to the box's
 width, sets a `narrow` attribute on itself if the box is that narrow and removes it if not; a flat
 table is not watched and carries no `narrow`. A screen may style its cells on
@@ -898,10 +903,12 @@ On the All products row, each category row, a category being added and each prod
 Products tree draws three tap-target slots before the name: the table's arrow (or its blank space),
 a drag grip (blank on All products and on a category being added), and a folder icon centred in its
 slot — on a product row, the product's photo, or its empty placeholder frame when it has none — then
-`--wt-space-3` and the name. So on those rows names step in by the table's indent per level whether
+`--wt-space-3` and the name. At phone width (while the table carries `narrow`) a product row draws
+no photo or placeholder, so its name starts right after its grip, one folder slot before a category's
+at its level; categories keep the folder icon (W85e, owner 2026-10-05). So on those rows names step in by the table's indent per level whether
 the row is a category or a product, and the Name heading sits over the All products name. A
 variant's row draws no grip and no photo slot; its name is indented to start under its product's
-name. Each name, with what follows it on its row (a category's count, the asterisk that marks a
+name, at phone width too. Each name, with what follows it on its row (a category's count, the asterisk that marks a
 category with no active station and the swatch of its colour; a product's variant count), takes
 only the room between its own start and the row's pinned Actions cell, measured as if the table
 were unscrolled, and wraps inside it, a single long word included; a name that fits stays on one
