@@ -3365,10 +3365,10 @@ component — Select is a native `<button>` because `wt-button` does not pass `a
 (3) the 768px side-panel threshold is tied by hand to token sizes (768 − 7×44 − 12 = 448, just
 above the table's 440px narrow-tree width); (4) the catalogue browser's phone layout switches on
 the window's width (`@media (max-width: 30rem)`), where the menus and modifiers screens use
-`@container (max-width: 30rem)` _(2026-10-05: fixed in W85d, below — it now switches on
+`@container (max-width: 30rem)` _(2026-10-05: fixed in W85d, #1249, below — it now switches on
 the list's own width, at 40rem)_.
 
-**Products at phone width: the toolbar takes two lines, not three — DONE (W85d, owner
+**Products at phone width: the toolbar takes two lines, not three — DONE (W85d, #1249, owner
 2026-10-05).** The owner saw three toolbar lines on Products: Filters and Select, then the search,
 then Expand all and Customise. The catalogue browser moved its search under the buttons only in a
 window up to 30rem (480px) wide, so a narrow list in a wider window — the sidebar showing, for
