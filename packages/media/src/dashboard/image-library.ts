@@ -99,6 +99,9 @@ export class ImageLibrary extends LitElement {
         border-radius: var(--wt-radius-md);
         padding: var(--wt-space-3);
       }
+      .actions {
+        justify-content: space-between;
+      }
       .actions .use {
         flex-basis: 100%;
       }
@@ -575,17 +578,17 @@ export class ImageLibrary extends LitElement {
             <div class="actions">
               ${this.picker ? html`<wt-button class="use" data-test=${`select-${image.id}`} aria-label=${`${t("image.select")}: ${name}`} @click=${() => this.dispatchEvent(new CustomEvent("select-image", { detail: image, bubbles: true, composed: true }))}>${t("image.select")}</wt-button>` : nothing}
               <wt-button
-                data-test=${`edit-${image.id}`}
-                variant="secondary"
-                aria-label=${`${t("action.edit")}: ${name}`}
-                @click=${() => this.#edit(image)}
-                >${t("action.edit")}</wt-button
-              ><wt-button
                 data-test=${`delete-${image.id}`}
                 variant="secondary"
                 aria-label=${`${t("image.delete")}: ${name}`}
                 @click=${() => void this.#inspectDeletion(image)}
                 >${t("image.delete")}</wt-button
+              ><wt-button
+                data-test=${`edit-${image.id}`}
+                variant="secondary"
+                aria-label=${`${t("action.edit")}: ${name}`}
+                @click=${() => this.#edit(image)}
+                >${t("action.edit")}</wt-button
               >
             </div>
           </article>`;

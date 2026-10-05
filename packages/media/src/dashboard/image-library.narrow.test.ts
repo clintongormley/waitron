@@ -164,6 +164,39 @@ for (const locale of ["en-GB", "es-ES"] as const) {
   }
 }
 
+for (const locale of ["en-GB", "es-ES"] as const) {
+  for (const picker of [false, true]) {
+    for (const theme of ["light", "dark"] as const) {
+      it(`puts Delete at the start of each card's action row and Edit at its end, with a gap between them, from 300 to 1240px (${locale}, ${picker ? "picker" : "library"}, ${theme})`, async () => {
+        setLocale(locale);
+        await page.viewport(1280, 800);
+        const library = await mountLibrary(picker, theme);
+        const gap = token(library, "--wt-space-4");
+        for (let width = 300; width <= 1240; width += 20) {
+          host.style.width = `${width}px`;
+          await frame();
+          for (const article of library.shadowRoot!.querySelectorAll("article")) {
+            const id = article.getAttribute("data-image")!;
+            const row = measured(article.querySelector(".actions")!);
+            const edit = measured(article.querySelector(`[data-test=edit-${id}]`)!);
+            const remove = measured(article.querySelector(`[data-test=delete-${id}]`)!);
+            expect(remove.top, `${width}px: Delete and Edit on one line`).toBe(edit.top);
+            expect(
+              Math.abs(remove.left - row.left),
+              `${width}px: Delete not at the start`,
+            ).toBeLessThan(1);
+            expect(
+              Math.abs(row.right - edit.right),
+              `${width}px: Edit not at the end`,
+            ).toBeLessThan(1);
+            expect(edit.left - remove.right, `${width}px: gap`).toBeGreaterThanOrEqual(gap);
+          }
+        }
+      });
+    }
+  }
+}
+
 for (const theme of ["light", "dark"] as const) {
   it(`gives the search box the free width of the filter row beside the dropdowns on a wide screen (${theme})`, async () => {
     await page.viewport(1280, 800);
