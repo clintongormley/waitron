@@ -4110,6 +4110,7 @@ it("finishes a save quietly when the person has gone to another menu, reading no
   );
   expect(q(el, '[data-test="member-error"]')).toBeNull();
   expect(prices(el).rows).toEqual([]);
+  expect(prices(el).outcome).toBeNull();
 });
 
 it("stops following a menu's prices once another menu is opened, so its changes never show under the new one", async () => {
@@ -4194,6 +4195,7 @@ it("reads no prices when a save finishes after the person has left the Prices ta
   await vi.waitFor(() => expect(prices(el).saving.size).toBe(0));
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(client.getMenuPrices.mock.calls.length).toBe(reads);
+  expect(prices(el).outcome).toBeNull();
 });
 
 it("saves an edit left by choosing another tab", async () => {
@@ -4337,6 +4339,132 @@ it("keeps the sent price in the field, marked saving, until the re-read after it
   await vi.waitFor(() => expect(prices(el).saving.size).toBe(0));
   await prices(el).updateComplete;
   expect(prices(el).rows.find((row) => row.menuItemId === "mi-burger")!.override).toBe("11.00");
+  expect(priceField(el, "mi-burger").value).toBe("11.00");
+});
+
+function priceUndo(el: MenusScreen): HTMLElement | null {
+  return prices(el).shadowRoot!.querySelector<HTMLElement>('[data-test="price-undo"]');
+}
+
+const burgerSave = {
+  key: "mi-burger",
+  menuItemId: "mi-burger",
+  variantId: null,
+  name: "Burger",
+  price: "11.00",
+  previous: null,
+};
+
+/** Ways of leaving Lunch's Price overrides tab. */
+const AWAY_FROM_PRICES = [
+  {
+    away: "another menu",
+    leave: async () => {
+      history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/prices");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    },
+  },
+  { away: "the Structure tab", leave: (el: MenusScreen) => chooseTab(el, "structure") },
+];
+
+it("says a save was saved once the prices are read again, and Undo writes the previous price back, offering no second Undo", async () => {
+  const client = api();
+  const el = await mountPrices(client);
+  const reread = deferred<MenuPriceRow[]>();
+  client.getMenuPrices.mockImplementationOnce(() => reread.promise);
+  await commitPrice(el, "mi-burger", "11.00");
+  await vi.waitFor(() => expect(client.getMenuPrices).toHaveBeenLastCalledWith("menu-lunch"));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(prices(el).outcome).toBeNull();
+  reread.resolve(
+    lunchPrices().map((row) =>
+      row.menuItemId === "mi-burger" ? { ...row, override: "11.00" } : row,
+    ),
+  );
+  await vi.waitFor(() => expect(prices(el).outcome).toEqual({ kind: "saved", save: burgerSave }));
+  await prices(el).updateComplete;
+  priceUndo(el)!.click();
+  await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledTimes(2));
+  expect(client.updateMenuItem.mock.calls[1]).toEqual([
+    "menu-lunch",
+    "mi-burger",
+    { grossPrice: null },
+  ]);
+  await vi.waitFor(() =>
+    expect(prices(el).outcome).toEqual({
+      kind: "saved",
+      save: { ...burgerSave, price: null, previous: "11.00", undo: true },
+    }),
+  );
+  await prices(el).updateComplete;
+  expect(priceUndo(el)).toBeNull();
+});
+
+it.each(AWAY_FROM_PRICES)(
+  "clears what the status line said about a saved price once $away is opened",
+  async ({ leave }) => {
+    const el = await mountPrices();
+    await commitPrice(el, "mi-burger", "11.00");
+    await vi.waitFor(() => expect(prices(el).outcome).toMatchObject({ kind: "saved" }));
+    await leave(el);
+    await vi.waitFor(() => expect(prices(el).outcome).toBeNull());
+  },
+);
+
+it.each(AWAY_FROM_PRICES)(
+  "says nothing was saved when $away is opened while the prices are read again after a save",
+  async ({ leave }) => {
+    const client = api();
+    const el = await mountPrices(client);
+    const reread = deferred<MenuPriceRow[]>();
+    client.getMenuPrices.mockImplementation(() => reread.promise);
+    await commitPrice(el, "mi-burger", "11.00");
+    await vi.waitFor(() => expect(client.getMenuPrices).toHaveBeenLastCalledWith("menu-lunch"));
+    await leave(el);
+    await vi.waitFor(() => expect(prices(el).saving.size).toBe(0));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(prices(el).outcome).toBeNull();
+  },
+);
+
+it("says only the last save made, and its Undo writes back the price the save before it sent", async () => {
+  const first = deferred<void>();
+  const second = deferred<void>();
+  let written: string | null = null;
+  const holds = [first, second];
+  const client = api({
+    updateMenuItem: vi.fn(async (_menu: string, _item: string, body: { grossPrice: string }) => {
+      await holds.shift()?.promise;
+      written = body.grossPrice;
+    }),
+    getMenuPrices: vi.fn(async (id: string) =>
+      id === "menu-lunch"
+        ? lunchPrices().map((row) =>
+            row.menuItemId === "mi-burger" ? { ...row, override: written } : row,
+          )
+        : [],
+    ),
+  });
+  const el = await mountPrices(client);
+  await commitPrice(el, "mi-burger", "11.00");
+  await commitPrice(el, "mi-burger", "11.50");
+  first.resolve();
+  await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledTimes(2));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(prices(el).outcome).toBeNull();
+  second.resolve();
+  await vi.waitFor(() =>
+    expect(prices(el).outcome).toEqual({
+      kind: "saved",
+      save: { ...burgerSave, price: "11.50", previous: "11.00" },
+    }),
+  );
+  await prices(el).updateComplete;
+  priceUndo(el)!.click();
+  await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledTimes(3));
+  expect(client.updateMenuItem.mock.calls[2]![2]).toEqual({ grossPrice: "11.00" });
+  await vi.waitFor(() => expect(prices(el).saving.size).toBe(0));
+  await prices(el).updateComplete;
   expect(priceField(el, "mi-burger").value).toBe("11.00");
 });
 

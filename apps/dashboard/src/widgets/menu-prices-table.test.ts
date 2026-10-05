@@ -1141,11 +1141,152 @@ it("says a refusal in the status line, and moves no focus for one that names no 
     expect(text(line)).toBe(
       "Your change to Burger was not saved. The server could not be reached.",
     );
+    expect(el.shadowRoot!.querySelector('[data-test="price-undo"]')).toBeNull();
     expect(override(el, "mi-burger").error).toBe("");
     expect(other.matches(":focus-within")).toBe(true);
   } finally {
     setLocale("es-ES");
   }
+});
+
+const burgerSaved: PriceSave = {
+  key: "mi-burger",
+  menuItemId: "mi-burger",
+  variantId: null,
+  name: "Burger",
+  price: "11.00",
+  previous: null,
+};
+
+function undoButton(el: MenuPricesTable): HTMLElement | null {
+  return el.shadowRoot!.querySelector<HTMLElement>('[data-test="price-undo"]');
+}
+
+// Spanish writes a no-break space (U+00A0) before the sign; `text` folds it to a space.
+it.each([
+  {
+    locale: "en-GB",
+    saved: "Saved Burger's price override: €11.00.",
+    cleared: "Burger now uses the inherited price.",
+    undo: "Undo",
+  },
+  {
+    locale: "es-ES",
+    saved: "Guardado el precio propio de Burger: 11,00 €.",
+    cleared: "Burger usa ahora el precio heredado.",
+    undo: "Deshacer",
+  },
+])(
+  "says in $locale what a successful save did, with an Undo beside the status line and outside it",
+  async (want) => {
+    setLocale(want.locale);
+    try {
+      const el = await mount();
+      el.outcome = { kind: "saved", save: burgerSaved };
+      await el.updateComplete;
+      const line = el.shadowRoot!.querySelector('[data-test="price-outcome"]')!;
+      expect(line.getAttribute("role")).toBe("status");
+      expect(text(line)).toBe(want.saved);
+      const undo = undoButton(el)!;
+      expect(text(undo)).toBe(want.undo);
+      expect(line.contains(undo)).toBe(false);
+      expect(undo.parentElement).toBe(line.parentElement);
+      el.outcome = { kind: "saved", save: { ...burgerSaved, price: null, previous: "11.00" } };
+      await el.updateComplete;
+      expect(text(line)).toBe(want.cleared);
+      expect(undoButton(el)).not.toBeNull();
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+it("sends Undo as the save with its price and previous swapped, its click stopped at the widget", async () => {
+  const el = await mount({ rows: [{ ...burger, override: "11.00" }, lemonade, lager] });
+  const heard = priceSaves(el);
+  const clicks: Event[] = [];
+  el.parentElement!.addEventListener("click", (event) => clicks.push(event));
+  el.outcome = { kind: "saved", save: burgerSaved };
+  await el.updateComplete;
+  undoButton(el)!.click();
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(heard).toHaveBeenCalledExactlyOnceWith({
+    ...burgerSaved,
+    price: null,
+    previous: "11.00",
+    undo: true,
+  });
+  expect(clicks).toEqual([]);
+  // The field shows what the Undo sends while it is out, not the price it replaces.
+  expect(override(el, "mi-burger").value).toBe("");
+});
+
+it("draws no Undo for the saved outcome of an Undo", async () => {
+  setLocale("en-GB");
+  try {
+    const el = await mount();
+    el.outcome = { kind: "saved", save: { ...burgerSaved, undo: true } };
+    await el.updateComplete;
+    expect(text(el.shadowRoot!.querySelector('[data-test="price-outcome"]'))).toBe(
+      "Saved Burger's price override: €11.00.",
+    );
+    expect(undoButton(el)).toBeNull();
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
+it("carries as a save's previous price the one sent before it while that save is still out", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-burger", "11.00");
+  await press(el, "mi-burger", "Enter");
+  el.saving = new Set(["mi-burger"]);
+  await el.updateComplete;
+  await typeIn(el, "mi-burger", "11.50");
+  await press(el, "mi-burger", "Enter");
+  expect(heard.mock.calls.map(([save]) => [save.price, save.previous])).toEqual([
+    ["11.00", null],
+    ["11.50", "11.00"],
+  ]);
+});
+
+it("leaves a field the status line says was saved to the prices read after it", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-burger", "11.00");
+  await press(el, "mi-burger", "Enter");
+  el.saving = new Set(["mi-burger"]);
+  await el.updateComplete;
+  el.saving = new Set();
+  el.outcome = { kind: "saved", save: heard.mock.calls[0]![0] };
+  el.rows = [{ ...burger, override: "10.00" }, lemonade, lager];
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(override(el, "mi-burger").value).toBe("10.00");
+});
+
+it("puts a refused price back to the stored one once the status line says another save was saved", async () => {
+  const el = await mount();
+  const heard = priceSaves(el);
+  await typeIn(el, "mi-burger", "11.00");
+  await press(el, "mi-burger", "Enter");
+  const save = heard.mock.calls[0]![0];
+  el.saving = new Set(["mi-burger"]);
+  await el.updateComplete;
+  el.saving = new Set();
+  el.outcome = { kind: "refused", save, reason: "The server could not be reached." };
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(override(el, "mi-burger").value).toBe("11.00");
+  el.outcome = {
+    kind: "saved",
+    save: { ...burgerSaved, key: "mi-lager", menuItemId: "mi-lager", name: "Lager" },
+  };
+  await el.updateComplete;
+  await table(el).updateComplete;
+  expect(override(el, "mi-burger").value).toBe("");
 });
 
 it("keeps an empty status line after the table, held in view at the bottom while the rows scroll", async () => {

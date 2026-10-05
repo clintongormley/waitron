@@ -35,7 +35,8 @@ import { currentLocale, t } from "../i18n/t.js";
 import { byLabel, categoryAncestors, categoryPath } from "./category-form.js";
 import { priceSearchText, priceText } from "./form-fields.js";
 
-/** One field's value to write. `previous` is the stored value it replaces, for Undo. */
+/** One field's value to write. `previous` is the value it replaces in the order writes are made,
+ * which Undo writes back. */
 export interface PriceSave {
   key: string;
   menuItemId: string;
@@ -48,7 +49,8 @@ export interface PriceSave {
 }
 
 /** What the status line says. */
-export type PriceOutcome = { kind: "refused"; save: PriceSave; reason: string };
+export type PriceOutcome =
+  { kind: "saved"; save: PriceSave } | { kind: "refused"; save: PriceSave; reason: string };
 
 const blankToNull = (text: string): string | null => (text.trim() === "" ? null : text.trim());
 
@@ -160,6 +162,10 @@ export class MenuPricesTable extends LitElement {
       .outcome {
         position: sticky;
         bottom: 0;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
         padding-block: var(--wt-space-2);
         background: var(--wt-color-bg);
       }
@@ -559,6 +565,8 @@ export class MenuPricesTable extends LitElement {
 
   #send(line: Line, text: string): void {
     const key = keyOf(line);
+    const sent = this.saving.has(key) ? this.#sent.get(key) : undefined;
+    const previous = sent === undefined ? this.#stored(line) : blankToNull(sent);
     this.#sent.set(key, text);
     this.#emit("wt-price-save", {
       key,
@@ -566,7 +574,23 @@ export class MenuPricesTable extends LitElement {
       variantId: line.variant?.variantId ?? null,
       name: this.#lineName(line),
       price: blankToNull(text),
-      previous: this.#stored(line),
+      previous,
+    } satisfies PriceSave);
+  }
+
+  /** Writes back the price the saved one replaced, shown in its field while it is out. */
+  #undo(save: PriceSave): void {
+    const text = save.previous ?? "";
+    this.drafts = new Map(this.drafts).set(save.key, text);
+    this.hiddenRefusals = new Set([...this.hiddenRefusals, save.key]);
+    this.#checking.delete(save.key);
+    this.#mark(save.key, false);
+    this.#sent.set(save.key, text);
+    this.#emit("wt-price-save", {
+      ...save,
+      price: save.previous,
+      previous: save.price,
+      undo: true,
     } satisfies PriceSave);
   }
 
@@ -832,14 +856,35 @@ export class MenuPricesTable extends LitElement {
       ></wt-data-table>
       <div class="outcome">
         <p role="status" data-test="price-outcome">${this.#outcomeText()}</p>
+        ${this.#undoButton()}
       </div>`;
   }
 
   #outcomeText(): string {
-    if (this.outcome === null) return "";
-    return t("menus.change_not_saved")
-      .replace("{name}", this.outcome.save.name)
-      .replace("{reason}", this.outcome.reason);
+    const outcome = this.outcome;
+    if (outcome === null) return "";
+    const { name, price } = outcome.save;
+    if (outcome.kind === "refused")
+      return t("menus.change_not_saved")
+        .replace("{name}", name)
+        .replace("{reason}", outcome.reason);
+    return price === null
+      ? t("menu_prices.cleared").replace("{name}", name)
+      : t("menu_prices.saved").replace("{name}", name).replace("{price}", priceText(price));
+  }
+
+  #undoButton() {
+    const outcome = this.outcome;
+    if (outcome?.kind !== "saved" || outcome.save.undo) return nothing;
+    return html`<wt-button
+      variant="secondary"
+      data-test="price-undo"
+      @click=${(event: Event) => {
+        event.stopPropagation();
+        this.#undo(outcome.save);
+      }}
+      >${t("menu_prices.undo")}</wt-button
+    >`;
   }
 }
 

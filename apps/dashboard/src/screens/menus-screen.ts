@@ -618,6 +618,7 @@ export class MenusScreen extends LitElement {
   #tileSections: { id: string; internalName: string }[] = [];
   readonly #writes = new ListWriteQueue();
   readonly #priceWrites = new ListWriteQueue();
+  #priceSavesMade = 0;
   /** Per row key, the price saves queued or out. */
   readonly #pendingPrices = new Map<string, number>();
   /** Per list, the current batch of moves: those made since the list last had none unanswered,
@@ -1531,10 +1532,13 @@ export class MenusScreen extends LitElement {
 
   /** One field per request, in the order made; each field stays editable meanwhile. A refusal is
    * said in the tab's status line, and under the field when it names the price; once the menu,
-   * the tab or the row has gone, it is named beside the list instead. */
+   * the tab or the row has gone, it is named beside the list instead. A success is said only for
+   * the last save made, so its Undo never reaches past a later write, and not over a failed
+   * re-read, which the list reports as a load failure. */
   #savePrice(save: PriceSave): void {
     const menuId = this.menuId;
     if (menuId === null) return;
+    const made = ++this.#priceSavesMade;
     this.priceRefusals = without(this.priceRefusals, [save.key]);
     this.priceOutcome = null;
     this.#countPending(save.key, 1);
@@ -1561,7 +1565,11 @@ export class MenusScreen extends LitElement {
         this.#countPending(save.key, -1);
         return;
       }
-      if (this.menuId === menuId && this.view === "prices") await this.#watchPrices(menuId);
+      if (this.menuId === menuId && this.view === "prices") {
+        await this.#watchPrices(menuId);
+        const shown = this.menuId === menuId && this.view === "prices" && !this.pricesError;
+        if (shown && made === this.#priceSavesMade) this.priceOutcome = { kind: "saved", save };
+      }
       this.#countPending(save.key, -1);
     });
   }

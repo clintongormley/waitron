@@ -147,6 +147,25 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
+  it("accessible saved outcome with its Undo", async () => {
+    const { el, host } = await mount(theme, {
+      outcome: {
+        kind: "saved",
+        save: {
+          key: "mi-burger",
+          menuItemId: "mi-burger",
+          variantId: null,
+          name: "Burger",
+          price: "11.00",
+          previous: null,
+        },
+      },
+    });
+    expect(el.shadowRoot!.querySelector('[data-test="price-outcome"]')!.textContent).not.toBe("");
+    expect(el.shadowRoot!.querySelector('[data-test="price-undo"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("accessible field refusing a malformed price", async () => {
     const { el, host } = await mount(theme, {});
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
