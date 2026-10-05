@@ -605,18 +605,6 @@ export class ProductList extends LitElement {
     box.shadowRoot!.querySelector("input")!.select();
   }
 
-  /** Puts the cursor back in the name box, its text as it was, once its colour chooser closes. */
-  async returnToNameBox(): Promise<void> {
-    const box = this.#table()?.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-      'wt-input[name="category-name"]',
-    );
-    if (!box) return;
-    await box.updateComplete;
-    // Not the host's own focus(): it delegates focus, and does nothing while the square inside it
-    // holds the cursor.
-    box.shadowRoot!.querySelector("input")!.focus();
-  }
-
   /** `show()` moves no focus, so the person's place on the page is kept. */
   async #openRootMenu(): Promise<void> {
     const table = this.#table();

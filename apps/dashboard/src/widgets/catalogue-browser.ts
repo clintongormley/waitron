@@ -593,7 +593,7 @@ export class CatalogueBrowser extends LitElement {
     if (!target) return;
     if (target.kind === "box") {
       this.nameColor = color;
-      void this.#closeBoxColor();
+      this.colorTarget = null;
       return;
     }
     if (this.colorBusy) return;
@@ -607,15 +607,6 @@ export class CatalogueBrowser extends LitElement {
     } finally {
       this.colorBusy = false;
     }
-  }
-  /** The modal hands focus back to the square that opened it; the box wants it in its input. */
-  async #closeBoxColor(): Promise<void> {
-    this.colorTarget = null;
-    await this.updateComplete;
-    const form = this.shadowRoot!.querySelector("dashboard-category-color-form")!;
-    await form.updateComplete;
-    await form.shadowRoot!.querySelector("wt-modal")!.updateComplete;
-    await this.shadowRoot!.querySelector("dashboard-product-list")!.returnToNameBox();
   }
   #colorHeading(): string {
     const target = this.colorTarget;
@@ -788,8 +779,7 @@ export class CatalogueBrowser extends LitElement {
         }}
         @wt-cancel=${(event: Event) => {
           event.stopPropagation();
-          if (this.colorTarget?.kind === "box") void this.#closeBoxColor();
-          else this.colorTarget = null;
+          this.colorTarget = null;
         }}
       ></dashboard-category-color-form
       >${this.dropError ? html`<p class="error" role="alert">${this.dropError}</p>` : nothing}`;

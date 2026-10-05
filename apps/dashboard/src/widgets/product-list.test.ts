@@ -2823,13 +2823,12 @@ describe("the product list as a tree", () => {
     const square = box.querySelector<HTMLElement>('[data-test="name-box-color"]')!;
     el.addEventListener("name-color", () => (el.choosingColor = true));
     await userEvent.click(square);
-    // The colour chooser takes the cursor while it is open, and hands it back to the square.
+    // The colour chooser takes the cursor while it is open, and hands it back to the input.
     outside.focus();
-    square.focus();
     expect(sent).toEqual([["name-color", {}]]);
     expect(root.querySelector('wt-input[name="category-name"]')).toBe(box);
     el.choosingColor = false;
-    await el.returnToNameBox();
+    box.shadowRoot!.querySelector("input")!.focus();
     expect(focusedName(el)).toBe("category-name");
     expect(box.value).toBe("Juice");
     await userEvent.keyboard("{Enter}");
@@ -2909,7 +2908,7 @@ describe("the product list as a tree", () => {
     ]);
   });
 
-  it("leaves the name box, and saves it, once focus has come back from its colour square", async () => {
+  it("leaves the name box, and saves it, once focus has come back from its colour chooser", async () => {
     const outside = document.createElement("button");
     document.body.append(outside);
     onTestFinished(() => outside.remove());
@@ -2926,7 +2925,10 @@ describe("the product list as a tree", () => {
     outside.focus();
     expect(sent).toEqual([["name-color", {}]]);
     el.choosingColor = false;
-    await el.returnToNameBox();
+    root
+      .querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="category-name"]')!
+      .shadowRoot!.querySelector("input")!
+      .focus();
     outside.focus();
     expect(sent).toEqual([
       ["name-color", {}],
