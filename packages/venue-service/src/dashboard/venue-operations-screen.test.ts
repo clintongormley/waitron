@@ -303,6 +303,24 @@ describe("venue operations screen", () => {
     expect(modal(el)?.getAttribute("heading")).toBe("Add department");
   });
 
+  it("edits a department's retained service style from its policy-tree row", async () => {
+    const updateDepartment = vi.fn().mockResolvedValue(undefined);
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      updateDepartment,
+    } as unknown as VenueServiceApi);
+    await action(el, "edit-tree-department-d1");
+    expect(modal(el)?.getAttribute("heading")).toBe("Edit department");
+    expect(field(el, "department-mode").value).toBe("table_tab");
+    field(el, "department-mode").value = "prepay";
+    await action(el, "save-editor");
+    expect(updateDepartment).toHaveBeenCalledWith("d1", {
+      name: "Restaurant and bar",
+      tradingName: "Casa Delgado",
+      defaultServiceMode: "prepay",
+    });
+  });
+
   it("offers one Add department action above the policy tree", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),

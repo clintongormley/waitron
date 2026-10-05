@@ -1077,6 +1077,11 @@ export class VenueOperationsScreen extends LitElement {
           row.kind === "department"
             ? this.#actions(row.department.name, [
                 {
+                  key: `edit-tree-department-${row.department.id}`,
+                  label: t("venue.edit"),
+                  run: () => this.#open({ kind: "department", row: row.department }),
+                },
+                {
                   key: `rename-tree-department-${row.department.id}`,
                   label: t("venue.rename"),
                   run: () => {
