@@ -89,8 +89,8 @@ type DueRow = RegistroRow & { intentos: number };
  * Is there anything to send, read before the drain opens its own transaction? Lone stale claims
  * count, so `drainDue` can recover them even with no pending row.
  *
- * - `proximo_intento_en <= now` is INCLUSIVE, the same comparison `countDue` and `claimBatch`
- *   make, so this gate never opens on a row neither of them would claim.
+ * - `proximo_intento_en <= now` is INCLUSIVE. A due successor can still wait for an earlier
+ *   record's retry or in-flight answer.
  * - `enviado_en < now - RECUPERACION_ENVIANDO_MS` is STRICT, the same cutoff `recoverStaleClaims`
  *   computes, so a row this reports stale is a row that pass will recover.
  *
@@ -205,8 +205,13 @@ async function drainDue(
       if (claimed.sendable.length > 0 || claimed.rawCount === 0) break;
     }
     const batch = claimed.sendable;
-    // Only when the claim found nothing at all: the work `countDue` saw is gone by claim time.
-    if (batch.length === 0) break;
+    // No row could be claimed: due work may be waiting for an earlier record's retry.
+    if (batch.length === 0) {
+      const next = await withTransaction(db, (tx) => nextClaimOpportunity(tx, now));
+      bumpNextDue(result, next);
+      if (result.batchesSent === 0) return;
+      break;
+    }
 
     const cabecera = cabeceraFor(batch[0]!);
     const registros: EnvioRegistro[] = batch.map(toEnvioRegistro);
@@ -251,13 +256,29 @@ async function readFlujo(
     : { proximoEnvioEn: null, tiempoEsperaSeg: 0 };
 }
 
-/** How many rows are due right now — the same predicate `claimBatch` runs. */
+/** How many rows are due now, including successors held behind an earlier retry. */
 async function countDue(tx: Transaction, now: Date): Promise<number> {
   const rows = await tx.execute<{ count: number }>(sql`
     select count(*) as count from envios
     where estado = 'pendiente' and proximo_intento_en <= ${now.toISOString()}
   `);
   return rows.rows[0]!.count;
+}
+
+async function nextClaimOpportunity(tx: Transaction, now: Date): Promise<Date | null> {
+  const rows = await tx.execute<{ next_retry: string | null; oldest_claim: string | null }>(sql`
+    select
+      min(case when estado = 'pendiente' and proximo_intento_en > ${now.toISOString()}
+        then proximo_intento_en end) as next_retry,
+      min(case when estado = 'enviando' then enviado_en end) as oldest_claim
+    from envios
+  `);
+  const row = rows.rows[0];
+  const candidates = [
+    row?.next_retry ? new Date(row.next_retry).getTime() : null,
+    row?.oldest_claim ? new Date(row.oldest_claim).getTime() + RECUPERACION_ENVIANDO_MS + 1 : null,
+  ].filter((value): value is number => value !== null);
+  return candidates.length > 0 ? new Date(Math.min(...candidates)) : null;
 }
 
 /** Upserts the one flow-control row: when the next envío may go, and the `t` that produced that
@@ -366,6 +387,13 @@ async function claimBatch(
     join registros_facturacion r on r.id = e.registro_id
     where e.estado = 'pendiente' and e.proximo_intento_en <= ${now.toISOString()}
       ${alreadyBlocked === null ? sql`` : sql`and r.sif_id not in ${alreadyBlocked}`}
+      and not exists (
+        select 1 from envios earlier
+        join registros_facturacion prior on prior.id = earlier.registro_id
+        where prior.sif_id = r.sif_id and prior.secuencia < r.secuencia
+          and (earlier.estado = 'enviando'
+            or (earlier.estado = 'pendiente' and earlier.proximo_intento_en > ${now.toISOString()}))
+      )
     order by r.sif_id, r.secuencia
     limit ${maxPorEnvio}`)
   ).rows;
