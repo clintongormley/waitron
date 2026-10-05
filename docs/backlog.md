@@ -3424,7 +3424,7 @@ columns a module lists as `references` for a reference the schema gives no forei
 (`option_lists.default_label_id`, `device_profile_home_layouts.layout_id`). Those two were the only
 such columns a probe found, run over every import in the transfer tests and an import of the demo
 seed; a reference column added later that is no foreign key, `references`, `locationColumns` or
-`omit` entry keeps the old id. Since W72d (2026-10-05) a guard fails on one: `scripts/id-columns-are-references.test.ts`
+`omit` entry keeps the old id. Since W72d (#1238, 2026-10-05) a guard fails on one: `scripts/id-columns-are-references.test.ts`
 migrates a real database and refuses any column of a transferred table whose name ends `_id` or
 `_ids` that is not the row's `id`, a foreign key, a `references` entry, a location column or left out
 of the export. It found one such column, `printers.poll_id`, which is free text the operator types
