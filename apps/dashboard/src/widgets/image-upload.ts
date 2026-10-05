@@ -90,6 +90,8 @@ export class ImageUpload extends LitElement {
   ];
   @property({ attribute: false }) api!: ImageUploader;
   @property() image: string | null = null;
+  /** The heading above the full control; "Image" when empty. */
+  @property() label = "";
   /** The photo a blank `image` falls back to — a variant's parent's — is not stored. */
   @property() inheritedImage: string | null = null;
   /** Marks the control's button invalid, so `focusFirstInvalid` lands on it. */
@@ -150,7 +152,7 @@ export class ImageUpload extends LitElement {
   }
 
   #renderFull() {
-    return html`<p>${t("image.label")}</p>
+    return html`<p>${this.label || t("image.label")}</p>
       <div class="actions">
         <wt-button
           data-test="choose-image"

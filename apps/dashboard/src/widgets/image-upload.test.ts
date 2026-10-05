@@ -33,6 +33,14 @@ describe("image-upload", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=preview]")!.alt).toBe("Pan");
   });
+  it("heads the control with its own label when given one, and with Image otherwise", async () => {
+    setLocale("en-GB");
+    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", { api: stubApi() });
+    expect(el.shadowRoot!.querySelector("p")!.textContent).toBe(t("image.label"));
+    el.label = "Logo";
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("p")!.textContent).toBe("Logo");
+  });
   it("opens the shared library and emits the stored reference on selection", async () => {
     const api = stubApi();
     const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", { api });

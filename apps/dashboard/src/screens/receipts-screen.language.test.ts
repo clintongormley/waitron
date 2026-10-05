@@ -48,7 +48,14 @@ function drawn(
       truncated: false,
       unsupported: false,
     },
-    marks: { headerSubtitle: null, footerMessage: null },
+    marks: {
+      headerSubtitle: null,
+      footerMessage: null,
+      phone: null,
+      email: null,
+      address: null,
+      logo: null,
+    },
     paperWidth: "80mm",
     paperWidths: ["80mm"],
   };
@@ -60,7 +67,7 @@ function stubApi(
   overrides: Record<string, unknown> = {},
 ): DashboardApi {
   return {
-    getReceipt: vi.fn().mockResolvedValue({ receipt: {} }),
+    getReceipt: vi.fn().mockResolvedValue({ receipt: {}, venueAddress: [] }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
     getLocationSettings: vi
       .fn()

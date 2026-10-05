@@ -9,11 +9,14 @@ import "@waitron/ui/src/components/wt-textarea.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
+import "@waitron/ui/src/components/wt-switch.js";
+import "../widgets/image-upload.js";
 import type {
   DashboardApi,
   PrintPaperWidth,
   ReceiptConfig,
   ReceiptLanguage,
+  ReceiptMarkName,
   ReceiptPreview,
 } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -26,8 +29,47 @@ import { receiptLanguageName, receiptLanguageWarning } from "../widgets/receipt-
 /** How long typing must pause before the preview is redrawn with the latest text. */
 export const RECEIPT_PREVIEW_QUIET_MS = 300;
 
-type TrimField = "headerSubtitle" | "footerMessage";
-const TRIM_FIELDS: readonly TrimField[] = ["headerSubtitle", "footerMessage"];
+type TextField = "headerSubtitle" | "footerMessage" | "phone" | "email";
+const TEXT_FIELDS: readonly TextField[] = ["headerSubtitle", "footerMessage", "phone", "email"];
+type TrimField = TextField | "printAddress" | "logo";
+const TRIM_FIELDS: readonly TrimField[] = [...TEXT_FIELDS, "printAddress", "logo"];
+const MARK_NAMES: readonly ReceiptMarkName[] = [
+  "logo",
+  "headerSubtitle",
+  "address",
+  "phone",
+  "email",
+  "footerMessage",
+];
+
+type Trim = Record<TextField, string> & { printAddress: boolean; logo: string | null };
+
+/** The field a `receipt.invalid` names, if it is one this page shows. */
+function refusedField(error: unknown): TrimField | undefined {
+  if (codeOf(error) !== "receipt.invalid") return undefined;
+  const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
+  return TRIM_FIELDS.find((each) => each === field);
+}
+
+/** The sentence under the field a refused save names. */
+function refusalSentence(error: unknown): string {
+  const params = (error as { params?: { reason?: unknown; maxLength?: unknown } } | null)?.params;
+  if (typeof params?.maxLength === "number") {
+    return t("receipts.trim_too_long").replace("{max}", String(params.maxLength));
+  }
+  switch (params?.reason) {
+    case "invalid_phone":
+      return t("receipts.invalid_phone");
+    case "invalid_email":
+      return t("receipts.invalid_email");
+    case "invalid_logo":
+      return t("receipts.invalid_logo");
+    case "image_not_found":
+      return t("receipts.logo_not_found");
+    default:
+      return codeMessage(codeOf(error));
+  }
+}
 
 /**
  * The venue-wide receipt trim and this location's receipt language and invoice operation
@@ -87,6 +129,14 @@ export class ReceiptsScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
         color: var(--wt-color-text-muted);
       }
+      .error {
+        margin: var(--wt-space-1) 0 0;
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-danger);
+      }
+      .address .reason {
+        margin-top: var(--wt-space-2);
+      }
       .warning {
         max-width: 60ch;
         margin: var(--wt-space-2) 0 0;
@@ -140,7 +190,7 @@ export class ReceiptsScreen extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
 
-  readonly #draft = new DraftRows<{ id: string; headerSubtitle: string; footerMessage: string }>();
+  readonly #draft = new DraftRows<Trim & { id: string }>();
   readonly #receiptQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -174,6 +224,12 @@ export class ReceiptsScreen extends LitElement {
 
   @state() private headerSubtitle = "";
   @state() private footerMessage = "";
+  @state() private phone = "";
+  @state() private email = "";
+  @state() private printAddress = true;
+  @state() private logo: string | null = null;
+  /** This location's address as a receipt prints it, shown under the switch. */
+  @state() private venueAddress: string[] = [];
   @state() private receiptLoaded = false;
   @state() private receiptLoadError: string | null = null;
   /** The receipt trim's refusal that names no field shown, until the next Save. */
@@ -212,7 +268,7 @@ export class ReceiptsScreen extends LitElement {
   @state() private previewDepartmentId: string | null = null;
   #departmentsLoaded = false;
   @state() private previewFailed = false;
-  @state() private focusedTrim: TrimField | null = null;
+  @state() private focusedTrim: ReceiptMarkName | null = null;
   /** The paper width the person chose, kept for every later preview; never saved. */
   @state() private chosenWidth: PrintPaperWidth | null = null;
   #previewTimer: ReturnType<typeof setTimeout> | undefined;
@@ -336,33 +392,37 @@ export class ReceiptsScreen extends LitElement {
 
   async #loadReceipt(): Promise<void> {
     try {
-      await this.#receiptQueries.watch("getReceipt", [], ({ receipt }) => {
+      await this.#receiptQueries.watch("getReceipt", [], ({ receipt, venueAddress }) => {
         const [merged] = this.#draft.merge(
-          [
-            {
-              id: "receipt",
-              headerSubtitle: this.headerSubtitle,
-              footerMessage: this.footerMessage,
-            },
-          ],
+          [{ id: "receipt", ...this.#shown() }],
           [
             {
               id: "receipt",
               headerSubtitle: receipt.headerSubtitle ?? "",
               footerMessage: receipt.footerMessage ?? "",
+              phone: receipt.phone ?? "",
+              email: receipt.email ?? "",
+              printAddress: receipt.printAddress !== false,
+              logo: receipt.logo ?? null,
             },
           ],
         );
-        const changed =
-          merged!.headerSubtitle !== this.headerSubtitle ||
-          merged!.footerMessage !== this.footerMessage;
-        this.headerSubtitle = merged!.headerSubtitle;
-        this.footerMessage = merged!.footerMessage;
+        const shown = this.#shown();
+        const changed = TRIM_FIELDS.some((field) => merged![field] !== shown[field]);
+        const moved = venueAddress.join("\n") !== this.venueAddress.join("\n");
+        for (const field of TEXT_FIELDS) this[field] = merged![field];
+        this.printAddress = merged!.printAddress;
+        this.logo = merged!.logo;
+        this.venueAddress = venueAddress;
         this.receiptLoadError = null;
         if (!this.receiptLoaded) {
           this.receiptLoaded = true;
           this.#previewActive = true;
           void this.#sendPreview();
+        } else if (moved) {
+          // The address is not in what a preview asks for, so the same request must be sent again.
+          this.#previewRequested = null;
+          this.#schedulePreview();
         } else if (changed) this.#schedulePreview();
       });
     } catch (error) {
@@ -396,13 +456,26 @@ export class ReceiptsScreen extends LitElement {
     }
   }
 
-  /** What a save sends: each text trimmed, a blank one left out. */
+  #shown(): Trim {
+    return {
+      headerSubtitle: this.headerSubtitle,
+      footerMessage: this.footerMessage,
+      phone: this.phone,
+      email: this.email,
+      printAddress: this.printAddress,
+      logo: this.logo,
+    };
+  }
+
+  /** What a save sends: each text trimmed, a blank one left out, and the switch only when off. */
   #trim(): ReceiptConfig {
     const config: ReceiptConfig = {};
-    const header = this.headerSubtitle.trim();
-    const footer = this.footerMessage.trim();
-    if (header !== "") config.headerSubtitle = header;
-    if (footer !== "") config.footerMessage = footer;
+    for (const field of TEXT_FIELDS) {
+      const value = this[field].trim();
+      if (value !== "") config[field] = value;
+    }
+    if (!this.printAddress) config.printAddress = false;
+    if (this.logo !== null) config.logo = this.logo;
     return config;
   }
 
@@ -430,19 +503,29 @@ export class ReceiptsScreen extends LitElement {
     if (requested === this.#previewRequested) return;
     this.#previewRequested = requested;
     this.#previewInFlight = true;
-    try {
-      this.preview = await (this.previewDepartmentId !== null
-        ? client.previewReceipt(
-            config,
-            width ?? undefined,
-            language ?? undefined,
-            this.previewDepartmentId,
-          )
+    const departmentId = this.previewDepartmentId;
+    const draw = (drawn: ReceiptConfig) =>
+      departmentId !== null
+        ? client.previewReceipt(drawn, width ?? undefined, language ?? undefined, departmentId)
         : language !== null
-          ? client.previewReceipt(config, width ?? undefined, language)
+          ? client.previewReceipt(drawn, width ?? undefined, language)
           : width === null
-            ? client.previewReceipt(config)
-            : client.previewReceipt(config, width));
+            ? client.previewReceipt(drawn)
+            : client.previewReceipt(drawn, width);
+    let drawn = config;
+    try {
+      for (;;) {
+        try {
+          this.preview = await draw(drawn);
+          break;
+        } catch (error) {
+          // A phone or email the server would refuse is drawn without, as no receipt prints it.
+          const field = refusedField(error);
+          if ((field !== "phone" && field !== "email") || drawn[field] === undefined) throw error;
+          drawn = { ...drawn };
+          delete drawn[field];
+        }
+      }
       this.previewFailed = false;
     } catch {
       this.previewFailed = true;
@@ -456,14 +539,30 @@ export class ReceiptsScreen extends LitElement {
     }
   }
 
-  #changeTrim(field: TrimField, value: string): void {
+  #changeTrim(field: TextField, value: string): void {
     this[field] = value;
+    this.#changed(field);
+    this.#schedulePreview();
+  }
+
+  #changeAddress(checked: boolean): void {
+    this.printAddress = checked;
+    this.#changed("printAddress");
+    void this.#sendPreview();
+  }
+
+  #changeLogo(image: string | null): void {
+    this.logo = image;
+    this.#changed("logo");
+    void this.#sendPreview();
+  }
+
+  #changed(field: TrimField): void {
     const refusals = { ...this.trimRefusals };
     delete refusals[field];
     this.trimRefusals = refusals;
     this.saved = false;
     this.#previewActive = true;
-    this.#schedulePreview();
   }
 
   #chooseWidth(width: PrintPaperWidth): void {
@@ -542,17 +641,10 @@ export class ReceiptsScreen extends LitElement {
   }
 
   #receiptRefused(error: unknown): void {
-    const params = (error as { params?: { field?: unknown; maxLength?: unknown } } | null)?.params;
-    const field = TRIM_FIELDS.find((each) => each === params?.field);
-    if (codeOf(error) === "receipt.invalid" && field !== undefined) {
-      this.trimRefusals = {
-        ...this.trimRefusals,
-        [field]:
-          typeof params?.maxLength === "number"
-            ? t("receipts.trim_too_long").replace("{max}", String(params.maxLength))
-            : codeMessage("receipt.invalid"),
-      };
-    } else this.errorKey = codeOf(error);
+    // A logo the save could not draw is refused with media's own code.
+    const field = codeOf(error) === "image.invalid_file" ? ("logo" as const) : refusedField(error);
+    if (field === undefined) this.errorKey = codeOf(error);
+    else this.trimRefusals = { ...this.trimRefusals, [field]: refusalSentence(error) };
   }
 
   #locationRefused(error: unknown): void {
@@ -611,7 +703,7 @@ export class ReceiptsScreen extends LitElement {
     submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"));
   }
 
-  #focusTrim(field: TrimField): void {
+  #focusTrim(field: ReceiptMarkName): void {
     this.focusedTrim = field;
   }
 
@@ -637,6 +729,74 @@ export class ReceiptsScreen extends LitElement {
       @focusin=${() => this.#focusTrim("footerMessage")}
       @focusout=${() => this.#blurTrim()}
     ></wt-textarea>`;
+  }
+
+  #renderLogo(): TemplateResult {
+    const error = this.trimRefusals.logo;
+    return html`<dashboard-image-upload
+        .api=${this.api}
+        label=${t("receipts.logo")}
+        .image=${this.logo}
+        .invalid=${error !== undefined}
+        @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
+          event.stopPropagation();
+          this.#changeLogo(event.detail.image);
+        }}
+        @image-picker-state=${(event: Event) => event.stopPropagation()}
+        @focusin=${() => this.#focusTrim("logo")}
+        @focusout=${() => this.#blurTrim()}
+      ></dashboard-image-upload>
+      ${error === undefined ? nothing : html`<p class="error" data-test="logo-error">${error}</p>`}`;
+  }
+
+  #renderAddress(): TemplateResult {
+    const error = this.trimRefusals.printAddress;
+    return html`<div class="address">
+      <wt-switch
+        name="printAddress"
+        label=${t("receipts.print_address")}
+        .checked=${this.printAddress}
+        ?disabled=${this.saving}
+        @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
+          event.stopPropagation();
+          this.#changeAddress(event.detail.checked);
+        }}
+        @focusin=${() => this.#focusTrim("address")}
+        @focusout=${() => this.#blurTrim()}
+      ></wt-switch>
+      ${
+        this.venueAddress.length > 0
+          ? html`<p class="reason" data-test="venue-address">
+              ${this.venueAddress.map((line, index) => html`${index > 0 ? html`<br />` : nothing}${line}`)}
+            </p>`
+          : html`<p class="reason" data-test="no-address">${t("receipts.no_address")}</p>`
+      }
+      ${
+        error === undefined
+          ? nothing
+          : html`<p class="error" data-test="print-address-error">${error}</p>`
+      }
+    </div>`;
+  }
+
+  #renderContact(field: "phone" | "email", type: "tel" | "email"): TemplateResult {
+    return html`<wt-input
+      name=${field}
+      type=${type}
+      autocomplete="off"
+      label=${t(`receipts.${field}`)}
+      hint=${t(`receipts.${field}_hint`)}
+      .value=${this[field]}
+      error=${this.trimRefusals[field] ?? ""}
+      ?disabled=${this.saving}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        this.#changeTrim(field, event.detail.value);
+      }}
+      @focusin=${() => this.#focusTrim(field)}
+      @focusout=${() => this.#blurTrim()}
+      @keydown=${(event: KeyboardEvent) => this.#enter(event)}
+    ></wt-input>`;
   }
 
   #renderWarning(language: string): TemplateResult | typeof nothing {
@@ -707,8 +867,7 @@ export class ReceiptsScreen extends LitElement {
     const marked =
       descriptionError !== "" ||
       this.languageRefusal !== "" ||
-      this.trimRefusals.headerSubtitle !== undefined ||
-      this.trimRefusals.footerMessage !== undefined;
+      Object.keys(this.trimRefusals).length > 0;
     const bottom = [
       this.languageError ?? "",
       this.errorKey === null
@@ -722,6 +881,7 @@ export class ReceiptsScreen extends LitElement {
     return html`<div class="form">
       <section class="settings" aria-labelledby="venue-wide-heading">
         <h2 id="venue-wide-heading">${t("receipts.venue_wide")}</h2>
+        ${this.#renderLogo()}
         <wt-input
           name="headerSubtitle"
           data-test="header-subtitle"
@@ -743,7 +903,8 @@ export class ReceiptsScreen extends LitElement {
           ${t("receipts.trading_name_location")}
           <a href="/manage/venue-operations">${t("receipts.departments_zones")}</a>.
         </p>
-        ${this.#renderFooter()}
+        ${this.#renderAddress()} ${this.#renderContact("phone", "tel")}
+        ${this.#renderContact("email", "email")} ${this.#renderFooter()}
       </section>
       <section class="settings" aria-labelledby="location-heading">
         <h2 id="location-heading" data-test="location-name">${this.name}</h2>
@@ -806,7 +967,7 @@ export class ReceiptsScreen extends LitElement {
   #renderPreview(): TemplateResult {
     const preview = this.preview;
     const marks: PaperMark[] = [];
-    for (const name of TRIM_FIELDS) {
+    for (const name of MARK_NAMES) {
       const range = preview?.marks[name];
       if (range) marks.push({ name, range, active: this.focusedTrim === name });
     }

@@ -33,6 +33,10 @@ function fakePreview(config: ReceiptConfig): ReceiptPreview {
     marks: {
       headerSubtitle: header === null ? null : { start: header, end: header + 1 },
       footerMessage: footer === null ? null : { start: footer, end: footer + 1 },
+      phone: null,
+      email: null,
+      address: null,
+      logo: null,
     },
     paperWidth: "80mm",
     paperWidths: ["80mm"],
@@ -41,7 +45,7 @@ function fakePreview(config: ReceiptConfig): ReceiptPreview {
 
 function stubApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): DashboardApi {
   return {
-    getReceipt: vi.fn().mockResolvedValue({ receipt: {} }),
+    getReceipt: vi.fn().mockResolvedValue({ receipt: {}, venueAddress: [] }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
     getLocationSettings: vi
       .fn()
@@ -303,7 +307,7 @@ describe("the Receipts page's live preview", () => {
     url.searchParams.set("departmentId", "bar");
     history.replaceState(null, "", url);
     try {
-      const receipt = heldRead<{ receipt: ReceiptConfig }>();
+      const receipt = heldRead<{ receipt: ReceiptConfig; venueAddress: string[] }>();
       const api = stubApi({
         getReceipt: vi.fn(receipt.read),
         getVenueDepartments: vi.fn().mockResolvedValue([
@@ -314,7 +318,7 @@ describe("the Receipts page's live preview", () => {
       const { el } = await mountWidget<ReceiptsScreen>("dashboard-receipts-screen", { api });
       await flush(el);
       expect(api.previewReceipt).not.toHaveBeenCalled();
-      receipt.release({ receipt: { headerSubtitle: "Saved header" } });
+      receipt.release({ receipt: { headerSubtitle: "Saved header" }, venueAddress: [] });
       await vi.waitFor(() => expect(api.previewReceipt).toHaveBeenCalledTimes(1));
       expect(vi.mocked(api.previewReceipt).mock.calls[0]).toEqual([
         { headerSubtitle: "Saved header" },
@@ -331,6 +335,7 @@ describe("the Receipts page's live preview", () => {
     const api = stubApi({
       getReceipt: vi.fn().mockResolvedValue({
         receipt: { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias" },
+        venueAddress: [],
       }),
     });
     const { el } = await mount(api);
@@ -399,6 +404,7 @@ describe("the Receipts page's live preview", () => {
     const api = stubApi({
       getReceipt: vi.fn().mockResolvedValue({
         receipt: { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias" },
+        venueAddress: [],
       }),
     });
     const { el } = await mount(api);
@@ -612,6 +618,7 @@ describe("the Receipts page's one Save", () => {
     const { el } = await mount(api);
     vi.mocked(api.getReceipt).mockResolvedValue({
       receipt: { headerSubtitle: "Desde otro sitio" },
+      venueAddress: [],
     });
     liveData.invalidate([{ type: "tenant_receipts" }]);
     await vi.waitFor(() => expect(paperLines(el)).toContain("Desde otro sitio"));
@@ -671,12 +678,14 @@ describe("the Receipts page's one Save", () => {
     const liveData = new LiveData();
     const api = Object.assign(
       stubApi({
-        getReceipt: vi.fn().mockResolvedValue({ receipt: { headerSubtitle: "Before" } }),
+        getReceipt: vi
+          .fn()
+          .mockResolvedValue({ receipt: { headerSubtitle: "Before" }, venueAddress: [] }),
       }),
       { liveData },
     );
     const { el } = await mount(api);
-    const held = heldRead<{ receipt: ReceiptConfig }>();
+    const held = heldRead<{ receipt: ReceiptConfig; venueAddress: string[] }>();
     vi.mocked(api.getReceipt).mockImplementation(held.read);
     liveData.invalidate([{ type: "tenant_receipts" }]);
     await vi.waitFor(() => expect(api.getReceipt).toHaveBeenCalledTimes(2));
@@ -684,7 +693,7 @@ describe("the Receipts page's one Save", () => {
     q(el, "[data-test=save]")!.click();
     await flush(el);
     expect(q(el, "[role=status]")).not.toBeNull();
-    held.release({ receipt: { headerSubtitle: "Before" } });
+    held.release({ receipt: { headerSubtitle: "Before" }, venueAddress: [] });
     await flush(el);
     expect(q<WtInput>(el, "wt-input[name=headerSubtitle]")!.value).toBe("Saved new");
     edit(el, "operationDescription", "Solo la descripción");
@@ -701,9 +710,12 @@ describe("the Receipts page's refreshes from elsewhere", () => {
   async function mountLive(receipt: ReceiptConfig = {}) {
     const { LiveData } = await import("@waitron/dashboard-kit");
     const liveData = new LiveData();
-    const api = Object.assign(stubApi({ getReceipt: vi.fn().mockResolvedValue({ receipt }) }), {
-      liveData,
-    });
+    const api = Object.assign(
+      stubApi({ getReceipt: vi.fn().mockResolvedValue({ receipt, venueAddress: [] }) }),
+      {
+        liveData,
+      },
+    );
     const { el } = await mount(api);
     return { el, api, liveData };
   }
@@ -712,7 +724,10 @@ describe("the Receipts page's refreshes from elsewhere", () => {
     const { el, api, liveData } = await mountLive();
     edit(el, "headerSubtitle", "Mío");
     await vi.waitFor(() => expect(previewCalls(api)).toHaveLength(2));
-    vi.mocked(api.getReceipt).mockResolvedValue({ receipt: { headerSubtitle: "Suyo" } });
+    vi.mocked(api.getReceipt).mockResolvedValue({
+      receipt: { headerSubtitle: "Suyo" },
+      venueAddress: [],
+    });
     vi.mocked(api.getLocationSettings).mockResolvedValue({
       name: "Calle Mayor",
       operationDescription: "Otra descripción",
@@ -730,7 +745,10 @@ describe("the Receipts page's refreshes from elsewhere", () => {
   it("sends no preview when a refresh changes the shown text only in what a save would trim off", async () => {
     const { el, api, liveData } = await mountLive({ headerSubtitle: "Hola" });
     expect(previewCalls(api)).toEqual([{ headerSubtitle: "Hola" }]);
-    vi.mocked(api.getReceipt).mockResolvedValue({ receipt: { headerSubtitle: "Hola " } });
+    vi.mocked(api.getReceipt).mockResolvedValue({
+      receipt: { headerSubtitle: "Hola " },
+      venueAddress: [],
+    });
     liveData.invalidate([{ type: "tenant_receipts" }]);
     await vi.waitFor(() =>
       expect(q<WtInput>(el, "wt-input[name=headerSubtitle]")!.value).toBe("Hola "),
@@ -769,7 +787,7 @@ describe("the Receipts page's refreshes from elsewhere", () => {
       const api = Object.assign(stubApi(), { liveData, background });
       const { el } = await mount(api);
       const savedElsewhere = (receipt: ReceiptConfig) => {
-        vi.mocked(background.getReceipt).mockResolvedValue({ receipt });
+        vi.mocked(background.getReceipt).mockResolvedValue({ receipt, venueAddress: [] });
         liveData.invalidate([{ type: "tenant_receipts" }]);
       };
       return { el, api, background, savedElsewhere };
@@ -856,7 +874,7 @@ describe("the Receipts page's paper width", () => {
     const api = Object.assign(stubApi({ previewReceipt: drawer() }), { liveData, background });
     const { el } = await mount(api);
     const savedElsewhere = (receipt: ReceiptConfig) => {
-      vi.mocked(background.getReceipt).mockResolvedValue({ receipt });
+      vi.mocked(background.getReceipt).mockResolvedValue({ receipt, venueAddress: [] });
       liveData.invalidate([{ type: "tenant_receipts" }]);
     };
     return { el, api, background, savedElsewhere };

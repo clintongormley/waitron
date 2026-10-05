@@ -21,6 +21,10 @@ function preview(config: ReceiptConfig): ReceiptPreview {
     marks: {
       headerSubtitle: config.headerSubtitle ? { start: 1, end: 2 } : null,
       footerMessage: null,
+      phone: null,
+      email: null,
+      address: null,
+      logo: null,
     },
     paperWidth: "80mm",
     paperWidths: ["80mm"],
@@ -29,7 +33,7 @@ function preview(config: ReceiptConfig): ReceiptPreview {
 
 function stubApi(overrides: Partial<DashboardApi> = {}, receipt: ReceiptConfig = {}): DashboardApi {
   return {
-    getReceipt: vi.fn().mockResolvedValue({ receipt: { ...receipt } }),
+    getReceipt: vi.fn().mockResolvedValue({ receipt: { ...receipt }, venueAddress: [] }),
     putReceipt: vi.fn().mockResolvedValue(undefined),
     getLocationSettings: vi
       .fn()
@@ -126,6 +130,57 @@ describe.each(["light", "dark"] as const)("receipts-screen a11y (%s theme)", (th
     expect(
       el.shadowRoot!.querySelector("[data-mark=headerSubtitle]")!.hasAttribute("data-active"),
     ).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
+  const LOGO = `${"c".repeat(64)}.png`;
+  const topBlock = { phone: "+34 912 345 678", email: "hola@deli.es", logo: LOGO };
+
+  it.each([
+    ["on, with the address it prints", { ...topBlock }, ["Calle Mayor 1", "28013 Madrid"]],
+    ["off", { ...topBlock, printAddress: false }, ["Calle Mayor 1", "28013 Madrid"]],
+    ["on, with no address saved", { ...topBlock }, []],
+  ])(
+    "renders accessibly with a logo, a phone, an email and the address switch %s",
+    async (_, receipt, venueAddress) => {
+      const api = stubApi({
+        getReceipt: vi.fn().mockResolvedValue({ receipt, venueAddress }),
+      });
+      const { el, host } = await mountWidget<ReceiptsScreen>(
+        "dashboard-receipts-screen",
+        { api },
+        theme,
+      );
+      await flush(el);
+      const shown = el.shadowRoot!.querySelector(
+        venueAddress.length > 0 ? "[data-test=venue-address]" : "[data-test=no-address]",
+      );
+      expect(shown).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("dashboard-image-upload")!.image).toBe(LOGO);
+      await expectNoA11yViolations(host);
+    },
+  );
+
+  it.each([
+    [{ reason: "invalid_phone", field: "phone" }, "wt-input[name=phone]"],
+    [{ reason: "invalid_email", field: "email" }, "wt-input[name=email]"],
+    [{ reason: "image_not_found", field: "logo" }, "[data-test=logo-error]"],
+    [{ reason: "not_boolean", field: "printAddress" }, "[data-test=print-address-error]"],
+  ])("renders accessibly with the save's refusal %j shown under its field", async (params, at) => {
+    const api = stubApi({
+      getReceipt: vi.fn().mockResolvedValue({ receipt: topBlock, venueAddress: ["Calle Mayor 1"] }),
+      putReceipt: vi.fn().mockRejectedValue({ code: "receipt.invalid", params }),
+    });
+    const { el, host } = await mountWidget<ReceiptsScreen>(
+      "dashboard-receipts-screen",
+      { api },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await flush(el);
+    const marked = el.shadowRoot!.querySelector<HTMLElement & { error?: string }>(at)!;
+    expect(marked.error ?? marked.textContent!.trim()).not.toBe("");
     await expectNoA11yViolations(host);
   });
 
