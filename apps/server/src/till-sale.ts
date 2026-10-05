@@ -1492,7 +1492,7 @@ export async function fireDishesAtPayment(
 ): Promise<DishesNotSent | null> {
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, workingOrderId);
   if ((serviceContext?.serviceMode ?? cfg.orderFlow) !== "prepay") {
-    if (!paysAfterSending(serviceContext?.serviceMode, cfg)) return null;
+    if (!paysAfterSending(serviceContext?.serviceMode)) return null;
     const party =
       partyId !== undefined
         ? partyId

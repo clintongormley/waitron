@@ -5771,12 +5771,12 @@ async function sentUnpaidCounterOrder(
 ): Promise<boolean> {
   if (order.status !== "placed" || order.partyId !== null) return false;
   const context = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
-  return paysAfterSending(context?.serviceMode, cfg);
+  return paysAfterSending(context?.serviceMode);
 }
 
-/** An order with no frozen mode takes the venue's order flow. */
-export function paysAfterSending(mode: string | undefined, cfg: TillConfig): boolean {
-  return PAY_AFTER_SENDING.has(mode ?? cfg.orderFlow);
+/** An order without a recorded zone mode uses the unscoped prepay default. */
+export function paysAfterSending(mode: string | undefined): boolean {
+  return PAY_AFTER_SENDING.has(mode ?? "prepay");
 }
 
 /** A counter order the counter is still waiting on: sent and not paid, or paid and not handed over. */
@@ -5858,7 +5858,7 @@ export async function listCounterWaiting(
       const eligible =
         Boolean(row.fired) &&
         row.collectedAt === null &&
-        (!placed || paysAfterSending(modes.get(row.id), cfg));
+        (!placed || paysAfterSending(modes.get(row.id)));
       waiting.push({
         id: row.id,
         orderNumber: row.orderNumber,

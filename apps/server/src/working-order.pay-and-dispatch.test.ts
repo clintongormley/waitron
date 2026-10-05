@@ -57,6 +57,7 @@ import {
   listStationQueue,
   markCollected,
   parkOrder,
+  paysAfterSending,
   placeOrder,
   recallLines,
   sendLines,
@@ -77,6 +78,13 @@ import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
+
+describe("counter handover timing", () => {
+  it("uses prepay when an order has no frozen service mode", () => {
+    expect(paysAfterSending(undefined)).toBe(false);
+    expect(paysAfterSending("ticket_then_pay")).toBe(true);
+  });
+});
 
 // The working-order verbs driven on a venue provisioned through `applyVenue`, with a real
 // `VerifactuBackend` on the settle path, so a case here can follow an order through

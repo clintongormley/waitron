@@ -1325,7 +1325,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
               (mode === "prepay" ||
                 (order?.partyId !== null && order?.partyId !== undefined
                   ? false
-                  : paysAfterSending(mode, cfg)))
+                  : paysAfterSending(mode)))
             : body.step === "place"
               ? unsentCount > 0
               : body.lines.length > 0;
@@ -2435,7 +2435,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           unsent.length > 0 &&
           (body.toZoneId === undefined
             ? (context?.serviceMode ?? cfg.orderFlow) === "prepay" ||
-              (order.partyId === null && paysAfterSending(context?.serviceMode, cfg))
+              (order.partyId === null && paysAfterSending(context?.serviceMode))
             : await moveWouldSend(tx, cfg, id, body.toZoneId));
         const chosen =
           unsent.length === 0
