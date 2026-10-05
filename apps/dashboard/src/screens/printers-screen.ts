@@ -527,7 +527,7 @@ export class PrintersScreen extends LitElement {
   @state() private discoveredNames: Record<string, string> = {};
   @state() private calibrationStep = 0;
   @state() private statusOpen = true;
-  @state() private detailActiveSaving = false;
+  @state() private detailActiveSavingIds = new Set<string>();
   @state() private detailActiveError: string | null = null;
   @state() private detailName: {
     id: string;
@@ -2160,14 +2160,14 @@ export class PrintersScreen extends LitElement {
   }
 
   async #setDetailActive(printer: Printer, active: boolean): Promise<void> {
-    if (this.detailActiveSaving || active === printer.active) return;
-    this.detailActiveSaving = true;
+    if (this.detailActiveSavingIds.has(printer.id) || active === printer.active) return;
+    this.detailActiveSavingIds = new Set([...this.detailActiveSavingIds, printer.id]);
     this.detailActiveError = null;
     try {
       await this.api.updatePrinter(printer.id, { active });
     } catch (error) {
-      this.detailActiveError = codeOf(error);
       if (this.selectedPrinterId === printer.id) {
+        this.detailActiveError = codeOf(error);
         const toggle = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-switch"]>(
           '[name="printer-detail-active"]',
         );
@@ -2175,7 +2175,9 @@ export class PrintersScreen extends LitElement {
       }
       return;
     } finally {
-      this.detailActiveSaving = false;
+      this.detailActiveSavingIds = new Set(
+        [...this.detailActiveSavingIds].filter((id) => id !== printer.id),
+      );
     }
     await this.#load();
   }
@@ -2340,7 +2342,7 @@ export class PrintersScreen extends LitElement {
             name="printer-detail-active"
             label=${t("printers.status_active")}
             .checked=${p.active}
-            ?disabled=${this.detailActiveSaving}
+            ?disabled=${this.detailActiveSavingIds.has(p.id)}
             @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
               event.stopPropagation();
               void this.#setDetailActive(p, event.detail.checked);

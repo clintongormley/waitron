@@ -3667,6 +3667,32 @@ it("keeps the Active switch retryable and explains a refused save in Status", as
   await vi.waitFor(() => expect(api.updatePrinter).toHaveBeenCalledTimes(2));
 });
 
+it("keeps a late Active refusal off the next printer's details", async () => {
+  history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
+  let refuse!: (reason: unknown) => void;
+  const api = stubApi({
+    updatePrinter: vi.fn().mockReturnValueOnce(
+      new Promise<void>((_resolve, reject) => {
+        refuse = reject;
+      }),
+    ),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+
+  toggleSwitch(el, '[name="printer-detail-active"]', false);
+  await vi.waitFor(() => expect(api.updatePrinter).toHaveBeenCalledWith("p1", { active: false }));
+  history.pushState(null, "", "/manage/printers/view/printers/printer/p2");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await flush(el);
+  expect(text(el, "[data-test=printer-breadcrumb]")).toContain("Nube");
+  expect(q(el, '[name="printer-detail-active"]')!.hasAttribute("disabled")).toBe(false);
+
+  refuse({ code: "connection.failed" });
+  await flush(el);
+  expect(q(el, "[data-test=printer-detail-active-error]")).toBeNull();
+});
+
 it("edits a printer name on its details page without opening the calibration wizard", async () => {
   history.replaceState(null, "", "/manage/printers/view/printers/printer/p1");
   let stored = { ...printers[0]! };
