@@ -20,7 +20,8 @@ it its own ancestor is refused with `category.parent_cycle`. A category's name m
 ignoring case and surrounding spaces, from every other category with the same parent; a save that
 breaks this is refused with `category.name_taken`. A category moving into a parent, including the
 children a delete moves up, is checked against the categories already there, and two categories
-that share a name are refused when they move in together. A product's category is
+that share a name are refused when they move in together. Categories that already share a name
+are not refused when a save leaves them as they are. A product's category is
 `products.category_id`. When this is null, the product is Uncategorised, which is not a category
 row you can rename or delete.
 

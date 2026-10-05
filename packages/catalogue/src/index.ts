@@ -2,8 +2,9 @@ export * from "./pricing.js";
 export * from "./vat-rates.js";
 export * from "./product-ordering.js";
 export * from "./units.js";
-// Listed rather than `export *`: `createProductSkippingNameCheck` and
-// `updateProductSkippingNameCheck` skip the unique-name rule and stay inside the package.
+// Listed rather than `export *`: `createProductSkippingNameCheck`,
+// `updateProductSkippingNameCheck` and `writeProductVariantsSkippingNameCheck` skip the
+// unique-name rule and are kept out of the package entry point.
 export {
   addCatalogueToLocation,
   addProductToMenu,
