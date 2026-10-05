@@ -566,6 +566,57 @@ describe("the device table", () => {
       expect(shown.textContent!.trim()).toBe("82%");
     });
 
+    it("leaves a report exactly ten minutes old as it is", async () => {
+      const el = await mountBattery([reported("edge", 82, false, 10)]);
+      const shown = cell(el, "edge");
+      expect(shown.getAttribute("part")).toBeNull();
+      expect(shown.textContent!.trim()).toBe("82%");
+    });
+
+    describe("as time passes, with the list unchanged", () => {
+      afterEach(() => vi.useRealTimers());
+
+      async function mountWithClock(rows: DeviceRow[], clock: { at: Date }) {
+        // Only the timers: the table's animation frames keep running.
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        const api = stubApi({ listDevices: vi.fn().mockResolvedValue(rows) });
+        const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
+          api,
+          now: () => clock.at,
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        await el.updateComplete;
+        await devicesTable(el).updateComplete;
+        return { el, api };
+      }
+
+      it("greys a report once it passes ten minutes, without reading the list again", async () => {
+        const clock = { at: NOW };
+        const { el, api } = await mountWithClock([reported("ageing", 82, false, 9)], clock);
+        expect(cell(el, "ageing").getAttribute("part")).toBeNull();
+
+        clock.at = new Date(NOW.getTime() + 61_000);
+        await vi.advanceTimersByTimeAsync(61_000);
+        await el.updateComplete;
+        await devicesTable(el).updateComplete;
+
+        const shown = cell(el, "ageing");
+        expect(shown.getAttribute("part")).toBe("battery-stale");
+        expect(shown.textContent!.replace(/\s+/g, " ").trim()).toBe(
+          `82% ${t("devices.battery_as_of", "es-ES").replace("{time}", formatIsoMinute(minutesAgo(9)))}`,
+        );
+        expect(api.listDevices).toHaveBeenCalledTimes(1);
+      });
+
+      it("leaves no timer behind once the screen is gone", async () => {
+        const clock = { at: NOW };
+        const { el } = await mountWithClock([reported("ageing", 82, false, 9)], clock);
+        expect(vi.getTimerCount()).toBeGreaterThan(0);
+        el.remove();
+        expect(vi.getTimerCount()).toBe(0);
+      });
+    });
+
     it("is a column a person may hide, sorted by the level", async () => {
       const row = reported("s", 82, false, 1);
       const el = await mountBattery([row]);

@@ -5145,7 +5145,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   the browser has `navigator.getBattery` (`apps/till/src/api/battery-report.ts`). The Devices table's
   Battery column, between Shows and Status, shows "82%" with a lightning mark while charging, "Not
   reported" for a device that never sent one, and greys a report more than ten minutes old, adding
-  "as of" and the time it was taken (`apps/dashboard/src/screens/devices-screen.ts`). No low-battery
+  "as of" and the time it was taken. A report that passes ten minutes while the page is open is
+  greyed then, without the list being read again (`apps/dashboard/src/screens/devices-screen.ts`). No low-battery
   alert: that is A272, still open.
   Left OPEN by W105, not acted on: (5) a kitchen screen whose station or watcher was switched off
   opens with Shows empty, so even a rename asks for a new one; whether to let it keep a switched-off
