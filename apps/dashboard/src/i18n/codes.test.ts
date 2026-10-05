@@ -416,3 +416,17 @@ it("says a printer a device cannot use may have been disabled, in the Printers s
     "Este perfil no puede usar esa impresora, o la impresora se ha deshabilitado. Elige otra",
   );
 });
+
+it("says disabled, never deactivated, for a record that is switched off and kept", () => {
+  expect(codeMessage("person.self_deactivation", "es")).toBe(
+    "No puedes deshabilitar tu propia cuenta. Pídeselo a otro administrador.",
+  );
+  expect(codeMessage("person.suspended", "es")).toBe(
+    "Esta cuenta está deshabilitada. Avisa a un responsable",
+  );
+  expect(codeMessage("status.inactive", "en")).toBe("That status is disabled");
+  expect(codeMessage("status.inactive", "es")).toBe("Ese estado está deshabilitado");
+  expect(codeMessage("payment.provider_in_use", "es")).toBe(
+    "Deshabilita los lectores de tarjetas de este proveedor antes de desconectarlo",
+  );
+});

@@ -59,7 +59,7 @@ made visible, or a field added on a line that already has one passes. See design
 The product editor binds a refused save to an editor field. `product.invalid` carries the `field` it
 is about, but `content.translation_required` — the refusal the editor's own translated inputs
 produce — carries only the missing `language`, and one product save can have several translated
-values checked (the product's customer name and one per variant saved Active; an Inactive variant is
+values checked (the product's customer name and one per variant saved Active; a disabled variant is
 never checked, `writeProductVariants` in `packages/catalogue/src/variants.ts`), so the language alone
 does not say which. What the save path can carry is pinned where it is thrown, in
 `packages/catalogue/src/product-editor.test.ts` ("names the missing language, and nothing else" and
@@ -69,7 +69,7 @@ Nutrition section.
 
 `productEditorTranslationField` (`apps/dashboard/src/widgets/product-editor.ts`) resolves the
 language onto a value by reading the body that was submitted: every checked translated value missing
-that language, which skips a variant submitted Inactive, is a fault the save has to clear, so it
+that language, which skips a variant submitted disabled, is a fault the save has to clear, so it
 points at the first one and the next save reports whatever is still missing. Focus goes to the input
 for the language the SERVER named rather than the first on screen, because that is the only input
 whose emptiness refused the save; a variant has no input in the product form, so its problem goes to
@@ -414,7 +414,7 @@ screens do with events such as `fire-course` and `mark-collected`.
 ## A retained hardware registration must remain re-addable after deactivation
 
 Discovery matches disabled records as well as active ones; the dashboard offers disabled matches
-(printers as Enable, card readers as Add again) and reactivates their existing id, preserving
+(printers and card readers as Enable) and reactivates their existing id, preserving
 history and routing. Only active matches
 disappear from the add list. Cost: deleting a USB printer left it in the registered table and hid it
 from discovery, blocking re-add. The table now defaults to Active with Disabled/All filters. Built in

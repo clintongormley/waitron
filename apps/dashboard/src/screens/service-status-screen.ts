@@ -190,7 +190,7 @@ export class ServiceStatusScreen extends LitElement {
             <strong>${s.label}</strong>
             <span>${t("status.color")}: ${s.color}</span>
             <span>${t("status.display_order")}: ${s.displayOrder}</span>
-            <span>${s.active ? t("status.active") : t("status.inactive")}</span>
+            <span>${s.active ? t("status.active") : t("status.disabled")}</span>
           </div>
         </wt-card>
       </li>`;
@@ -253,7 +253,7 @@ export class ServiceStatusScreen extends LitElement {
             data-test="deactivate-${s.id}"
             ?disabled=${!s.active}
             @click=${() => void this.#deactivate(s.id)}
-            >${t("action.deactivate")}</wt-button
+            >${t("action.disable")}</wt-button
           >
         </div>
       </wt-card>

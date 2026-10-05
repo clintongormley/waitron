@@ -103,10 +103,10 @@ it("explains station move refusals in English and Spanish", () => {
     "Este plato se prepara aquí en la caja, así que no se puede pasar a una estación",
   );
   expect(codeMessage("route.station_inactive", "en")).toBe(
-    "That station has been switched off. Choose another",
+    "That station has been disabled. Choose another",
   );
   expect(codeMessage("route.station_inactive", "es")).toBe(
-    "Esa estación se ha desactivado. Elige otra",
+    "Esa estación se ha deshabilitado. Elige otra",
   );
   expect(codeMessage("station.not_found", "en")).toBe(
     "That station no longer exists. Choose another",

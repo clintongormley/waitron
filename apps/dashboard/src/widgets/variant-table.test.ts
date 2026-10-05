@@ -391,24 +391,66 @@ it("shows a variant with no price of its own as the base price it sells at", asy
   expect(cells(el, 2)).toEqual([euros("9,00"), euros("12,00"), euros("20,00")]);
 });
 
-it("hides Inactive variants until the host asks for them, in their place in the list", async () => {
+it.each([
+  {
+    locale: "en-GB",
+    disable: "Disable",
+    enable: "Enable",
+    remove: "Remove",
+    badge: "Disabled",
+    none: "Every variant is disabled.",
+  },
+  {
+    locale: "es-ES",
+    disable: "Deshabilitar",
+    enable: "Habilitar",
+    remove: "Eliminar",
+    badge: "Deshabilitada",
+    none: "Todas las variantes están deshabilitadas.",
+  },
+])(
+  "in $locale, disables and enables a saved variant, and removes one never saved",
+  async ({ locale, disable, enable, remove, badge, none }) => {
+    setLocale(locale);
+    try {
+      const el = await mountTable({ variants: withRemoved() });
+      await showInactive(el);
+      const label = (test: string) =>
+        el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${test}"]`)!.textContent!.trim();
+      expect([label("remove-0"), label("restore-1"), label("remove-2")]).toEqual([
+        disable,
+        enable,
+        remove,
+      ]);
+      expect(label("inactive-1")).toBe(badge);
+      el.variants = el.variants.map((variant) => ({ ...variant, id: variant.name, active: false }));
+      el.showInactive = false;
+      await el.updateComplete;
+      expect(label("no-variants")).toBe(none);
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+it("hides disabled variants until the host asks for them, in their place in the list", async () => {
   const el = await mountTable({ variants: withRemoved() });
   expect(cells(el, 1)).toEqual(["Media", "Doble"]);
   const names = () => cells(el, 1).map((text) => text.replace(/\s+/g, " "));
   await showInactive(el);
-  expect(names()).toEqual(["Media", `Entera ${t("product.inactive_badge")}`, "Doble"]);
+  expect(names()).toEqual(["Media", `Entera ${t("product.variant_disabled_badge")}`, "Doble"]);
   await showInactive(el, false);
   expect(names()).toEqual(["Media", "Doble"]);
 });
 
-it("says so when every variant is Inactive and hidden", async () => {
+it("says so when every variant is disabled and hidden", async () => {
   const el = await mountTable();
   expect(el.shadowRoot!.querySelector('[data-test="no-variants"]')).toBeNull();
   el.variants = el.variants.map((variant) => ({ ...variant, id: variant.name, active: false }));
   await el.updateComplete;
   expect(rows(el)).toHaveLength(0);
   expect(el.shadowRoot!.querySelector('[data-test="no-variants"]')!.textContent!.trim()).toBe(
-    t("editor.variants_all_inactive"),
+    t("editor.variants_all_disabled"),
   );
   await showInactive(el);
   expect(rows(el)).toHaveLength(3);

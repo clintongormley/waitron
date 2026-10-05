@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, DashboardTable, FloorZone } from "../api/client.js";
 import { FloorScreen } from "./floor-screen.js";
@@ -226,7 +226,21 @@ describe("floor-screen", () => {
     expect(api.createTable).not.toHaveBeenCalled();
   });
 
-  it("deactivates a table row", async () => {
+  it.each([
+    ["es-ES", "Deshabilitar"],
+    ["en-GB", "Disable"],
+  ])("in %s, labels a table's switch-off Disable", async (locale, label) => {
+    setLocale(locale);
+    try {
+      const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api: stubApi() });
+      await flush(el);
+      expect(q(el, "[data-test=table-deactivate-t1]")!.textContent!.trim()).toBe(label);
+    } finally {
+      setLocale("es-ES");
+    }
+  });
+
+  it("disables a table row", async () => {
     const api = stubApi();
     const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
     await flush(el);
@@ -301,7 +315,7 @@ describe("floor-screen", () => {
     expect(banner).toContain(codeMessage("table.label_taken", "es-ES"));
   });
 
-  it("surfaces a rejected table deactivate as a localised role=alert", async () => {
+  it("surfaces a rejected table disable as a localised role=alert", async () => {
     const api = stubApi({
       deactivateTable: vi.fn().mockRejectedValue({ code: "table.not_found" }),
     });

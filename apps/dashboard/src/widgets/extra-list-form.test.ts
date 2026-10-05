@@ -359,7 +359,7 @@ it("refuses a pick bound that is not a whole number within the allowed limit", a
   );
 });
 
-it("refuses an active list with no products, and saves the same list once it is inactive", async () => {
+it("refuses an active list with no products, and saves the same list once it is disabled", async () => {
   const { el, host } = await mount();
   const submitted = record(host);
 
@@ -368,6 +368,8 @@ it("refuses an active list with no products, and saves the same list once it is 
 
   expect(submitted).toEqual([]);
   expect(text(el, "items-error")).toContain(t("extras.items_required"));
+  // es-ES is the suite's language.
+  expect(text(el, "items-error")).toContain("Añade un producto, o deshabilita esta lista.");
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 

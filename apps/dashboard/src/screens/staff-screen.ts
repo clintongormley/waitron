@@ -434,9 +434,9 @@ export class StaffScreen extends LitElement {
                     : this.rowAction.action === "reset-pin"
                       ? "person.confirm_reset_pin"
                       : this.rowAction.action === "disable"
-                        ? "person.confirm_mark_inactive"
+                        ? "person.confirm_disable"
                         : this.rowAction.action === "reactivate"
-                          ? "person.confirm_reactivate"
+                          ? "person.confirm_enable"
                           : "person.resend_invitation",
                 )}
               </p>`

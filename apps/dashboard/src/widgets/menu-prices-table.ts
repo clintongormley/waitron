@@ -34,6 +34,7 @@ import type {
   Product,
 } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
+import { productStatusName } from "../i18n/domain.js";
 import { leftToBrowser } from "../navigation.js";
 import { byLabel, categoryAncestors, categoryPath } from "./category-form.js";
 import { priceSearchText, priceText } from "./form-fields.js";
@@ -547,7 +548,7 @@ export class MenuPricesTable extends LitElement {
   #status(line: Line) {
     const active = this.#active(line);
     const id = line.variant?.variantId ?? line.item.productId;
-    const word = t(active ? "product.active_badge" : "product.inactive_badge");
+    const word = productStatusName(active, line.variant !== null);
     const viaParent = line.variant !== null && line.variant.active && !line.item.active;
     return html`<a
         part="status-link"
@@ -558,7 +559,7 @@ export class MenuPricesTable extends LitElement {
         >${word}</a
       >${
         viaParent
-          ? html` <span part="muted status-note">${t("menu_prices.status_parent_inactive")}</span>`
+          ? html` <span part="muted status-note">${t("menu_prices.status_parent_disabled")}</span>`
           : nothing
       }`;
   }
@@ -875,8 +876,7 @@ export class MenuPricesTable extends LitElement {
         label: t("product.status"),
         choosable: "shown",
         sortValue: (line) => (this.#active(line) ? 0 : 1),
-        searchValue: (line) =>
-          t(this.#active(line) ? "product.active_badge" : "product.inactive_badge"),
+        searchValue: (line) => productStatusName(this.#active(line), line.variant !== null),
         cell: (line) => this.#status(line),
       },
       {

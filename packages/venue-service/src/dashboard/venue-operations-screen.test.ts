@@ -625,7 +625,8 @@ describe("venue operations screen", () => {
     expect(rows).toHaveLength(4);
     expect(tree.querySelector('th[data-actions][data-pinned="end"]')).not.toBeNull();
     expect(rows[0].querySelector("wt-row-actions")!.textContent).toContain("Opening hours");
-    expect(rows[1].querySelector("wt-row-actions")!.textContent).toContain("Remove");
+    expect(rows[1].querySelector("wt-row-actions")!.textContent).toContain("Disable");
+    expect(rows[1].querySelector("wt-row-actions")!.textContent).not.toContain("Remove");
     expect(rows[3].textContent).toContain("Deli counter");
     expect(rows[3].querySelector("wt-row-actions")!.textContent).toContain("Edit");
     const rename = rows[1].querySelector<HTMLElement>('[data-test="rename-tree-zone-z1"]')!;
@@ -702,7 +703,7 @@ describe("venue operations screen", () => {
     expect(zone?.textContent).not.toContain("Not configured");
   });
 
-  it("retains an inactive department in the policy tree", async () => {
+  it("retains a disabled department in the policy tree", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({
         ...model,
@@ -711,12 +712,12 @@ describe("venue operations screen", () => {
     } as unknown as VenueServiceApi);
     const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
     const department = rows.find((row) => row.textContent?.includes("Restaurant and bar"));
-    expect(department?.textContent).toContain("Inactive");
+    expect(department?.textContent).toContain("Disabled");
     const name = department!.querySelector<HTMLElement>('[data-test="edit-department-name"]')!;
     const walker = document.createTreeWalker(department!, NodeFilter.SHOW_TEXT);
     let inactiveText: Text | null = null;
     while (walker.nextNode()) {
-      if (walker.currentNode.textContent?.trim() === "Inactive") {
+      if (walker.currentNode.textContent?.trim() === "Disabled") {
         inactiveText = walker.currentNode as Text;
         break;
       }
@@ -729,7 +730,7 @@ describe("venue operations screen", () => {
     ).toBeGreaterThanOrEqual(8);
   });
 
-  it("retains an inactive configured zone in the policy tree", async () => {
+  it("retains a disabled configured zone in the policy tree", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({
         ...model,
@@ -738,7 +739,36 @@ describe("venue operations screen", () => {
     } as unknown as VenueServiceApi);
     const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
     const zone = rows.find((row) => row.textContent?.includes("Dining room"));
-    expect(zone?.textContent).toContain("Inactive");
+    expect(zone?.textContent).toContain("Disabled");
+    expect(zone?.textContent).not.toContain("Inactive");
+  });
+
+  it("in Spanish, says Deshabilitar and words a disabled zone and department by their gender", async () => {
+    setLocale("es");
+    const el = await mount({
+      load: vi.fn().mockResolvedValue({
+        ...model,
+        departments: [{ ...model.departments[0], active: false }, model.departments[1]],
+        floorZones: [{ ...model.floorZones[0]!, active: false }, model.floorZones[1]!],
+      }),
+      departmentRemovalImpact: vi.fn().mockResolvedValue({
+        zones: [{ id: "z1", name: "Dining room", activeTableCount: 0 }],
+      }),
+    } as unknown as VenueServiceApi);
+    const rows = [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')];
+    const department = rows.find((row) => row.textContent?.includes("Restaurant and bar"))!;
+    const zone = rows.find((row) => row.textContent?.includes("Dining room"))!;
+    expect(department.querySelector("[part~=inactive-department-label]")!.textContent!.trim()).toBe(
+      "Deshabilitado",
+    );
+    expect(zone.textContent).toContain("Deshabilitada");
+    expect(zone.querySelector('[data-test="remove-tree-zone-z1"]')!.textContent!.trim()).toBe(
+      "Deshabilitar",
+    );
+    await action(el, "remove-tree-zone-z1");
+    expect(modal(el)?.getAttribute("heading")).toBe("¿Deshabilitar Dining room?");
+    await selectTab(el, "departments");
+    expect(column(el, "departments", 3)).toEqual(["Deshabilitado", "Activo"]);
   });
 
   it("names a sole active department and offers no move to an inactive one", async () => {
@@ -757,7 +787,7 @@ describe("venue operations screen", () => {
     expect(active!.querySelector('[data-test="move-tree-zone-z1"]')).toBeNull();
   });
 
-  it("confirms removal of a zone from its policy-tree row", async () => {
+  it("confirms disabling a zone from its policy-tree row", async () => {
     const deactivateZone = vi.fn().mockResolvedValue(undefined);
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
@@ -772,14 +802,16 @@ describe("venue operations screen", () => {
       .closest("wt-row-actions")!
       .shadowRoot!.querySelector<HTMLButtonElement>("button")!
       .click();
+    expect(remove.textContent!.trim()).toBe("Disable");
     remove.click();
     await settle(el);
+    expect(modal(el)?.getAttribute("heading")).toBe("Disable Dining room?");
     expect(deactivateZone).not.toHaveBeenCalled();
     await action(el, "save-editor");
     expect(deactivateZone).toHaveBeenCalledWith("z1");
   });
 
-  it("shows active tables before removing an unconfigured zone", async () => {
+  it("shows active tables before disabling an unconfigured zone", async () => {
     const deactivateZone = vi.fn().mockResolvedValue(undefined);
     const zoneRemovalImpact = vi.fn().mockResolvedValue({
       zones: [{ id: "z2", name: "Deli counter", activeTableCount: 2 }],
@@ -798,7 +830,7 @@ describe("venue operations screen", () => {
     expect(deactivateZone).toHaveBeenCalledWith("z2");
   });
 
-  it("keeps zone removal available after a rejected request", async () => {
+  it("keeps disabling a zone available after a rejected request", async () => {
     const deactivateZone = vi.fn().mockRejectedValue({ code: "zone.not_found" });
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
@@ -821,7 +853,7 @@ describe("venue operations screen", () => {
     expect(await bottom(el)).toBe("The change could not be saved.");
   });
 
-  it("names the zone and its active tables before removal", async () => {
+  it("names the zone and its active tables before disabling it", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
       departmentRemovalImpact: vi.fn().mockResolvedValue({
@@ -1948,7 +1980,7 @@ describe("venue operations screen", () => {
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
     expect(el.shadowRoot!.querySelector('[data-test="readiness-issue-0"]')!.textContent).toContain(
-      "No default prep station is switched on.",
+      "No default prep station is active.",
     );
     await selectTab(el, "departments");
     expect(tableText(el, "departments")).toContain("Restaurant and bar");
@@ -2004,7 +2036,7 @@ describe("venue operations screen", () => {
     ).toHaveLength(0);
   });
 
-  it("deactivates a department that has no active zones", async () => {
+  it("disables a department that has no active zones", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),
       departmentRemovalImpact: vi.fn().mockResolvedValue({ zones: [] }),
@@ -2012,7 +2044,11 @@ describe("venue operations screen", () => {
     } as unknown as VenueServiceApi;
     const el = await mount(api);
     await selectTab(el, "departments");
+    expect(find(el, '[data-test="deactivate-department-d2"]')!.textContent!.trim()).toBe(
+      "Disable department",
+    );
     await action(el, "deactivate-department-d2");
+    expect(modal(el)?.getAttribute("heading")).toMatch(/^Disable .+\?$/);
     expect(api.deactivateDepartment).not.toHaveBeenCalled();
     await action(el, "save-editor");
     expect(api.deactivateDepartment).toHaveBeenCalledWith("d2");
@@ -2113,7 +2149,7 @@ describe("venue operations screen", () => {
       load: vi.fn().mockResolvedValue(variedModel),
     } as unknown as VenueServiceApi);
     const text = el.shadowRoot!.querySelector('[data-test="readiness"]')!.textContent!;
-    expect(text).toContain("No default prep station is switched on.");
+    expect(text).toContain("No default prep station is active.");
     expect(text).toContain("Create an active department");
     expect(text).toContain("Dining room needs an active department");
     expect(text).toContain("Deli counter needs a default menu");
@@ -2352,9 +2388,12 @@ it("names the zones and active tables before removing a department", async () =>
 });
 
 it.each([
-  [{ code: "zone.table_in_use", params: { tableName: "Window 4" } }, "Window 4"],
-  [{ code: "department.last_active" }, "last active department"],
-])("keeps the removal modal open with a named refusal", async (refusal, expected) => {
+  [
+    { code: "zone.table_in_use", params: { tableName: "Window 4" } },
+    "Table Window 4 has an open tab. Close it before disabling this department.",
+  ],
+  [{ code: "department.last_active" }, "You cannot disable the last active department."],
+])("keeps the disable modal open with a named refusal", async (refusal, expected) => {
   const api = {
     load: vi.fn().mockResolvedValue(model),
     departmentRemovalImpact: vi.fn().mockResolvedValue({ zones: [] }),
@@ -2440,7 +2479,7 @@ describe("the venue lists", () => {
     expect(column(el, "tills", 0)).toEqual(["Apple till", "Zebra till"]);
   });
 
-  it("marks inactive departments, and names a zone's non-default menus", async () => {
+  it("marks disabled departments, and names a zone's non-default menus", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue({
         ...model,
@@ -2453,7 +2492,7 @@ describe("the venue lists", () => {
       }),
     } as unknown as VenueServiceApi);
     await selectTab(el, "departments");
-    expect(column(el, "departments", 3)).toEqual(["Active", "Inactive"]);
+    expect(column(el, "departments", 3)).toEqual(["Active", "Disabled"]);
     await selectTab(el, "zones");
     await action(el, "menus-tree-zone-z1");
     expect(column(el, "zone-menus", 1)).toEqual(["Yes", "No"]);

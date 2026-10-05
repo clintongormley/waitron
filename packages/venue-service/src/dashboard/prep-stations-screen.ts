@@ -399,9 +399,9 @@ export class PrepStationsScreen extends LitElement {
       if (rejectedField === "condition") this.exceptionFieldError = t("prep.exception_condition");
       else if (codeOf(e) === "route.station_inactive" && field) {
         this.claimField = field;
-        this.claimError = t("prep.station_inactive");
+        this.claimError = t("prep.station_disabled");
       } else if (codeOf(e) === "route.station_inactive")
-        this.#showError(t("prep.station_inactive"));
+        this.#showError(t("prep.station_disabled"));
       else this.#showError(t("prep.save_error"));
       this.#restoreOrder();
     } finally {
@@ -427,9 +427,9 @@ export class PrepStationsScreen extends LitElement {
       if (rejectedField === "condition") this.exceptionFieldError = t("prep.exception_condition");
       else if (codeOf(e) === "route.station_inactive" && pending.field) {
         this.claimField = pending.field;
-        this.claimError = t("prep.station_inactive");
+        this.claimError = t("prep.station_disabled");
       } else if (codeOf(e) === "route.station_inactive") {
-        this.#showError(t("prep.station_inactive"));
+        this.#showError(t("prep.station_disabled"));
       } else this.#showError(t("prep.save_error"));
       this.pending = undefined;
       this.#restoreOrder();
@@ -603,11 +603,14 @@ export class PrepStationsScreen extends LitElement {
     const exception = this.view?.routing.exceptions.find((row) => row.id === decision.exceptionId);
     return t("prep.test_exception").replace("{rule}", this.#exceptionText(exception));
   }
-  #testFallback(step: RouteExplanation["fallbacks"][number], index: number): string {
-    const explanation = this.explanation!;
-    const reason = format(`prep.test_${step.why}`, {
+  #fallbackReason(step: RouteExplanation["fallbacks"][number]): string {
+    return format(step.why === "switched_off" ? "prep.test_disabled" : `prep.test_${step.why}`, {
       station: this.#testStationName(step.stationId),
     });
+  }
+  #testFallback(step: RouteExplanation["fallbacks"][number], index: number): string {
+    const explanation = this.explanation!;
+    const reason = this.#fallbackReason(step);
     const next = explanation.fallbacks[index + 1]?.stationId;
     if (next === undefined && explanation.noReplacement)
       return format("prep.test_no_replacement", { reason });
@@ -651,9 +654,7 @@ export class PrepStationsScreen extends LitElement {
     const fallbacks = extra.fallbacks
       .map((step, index) =>
         format("prep.test_fallback_step", {
-          reason: format(`prep.test_${step.why}`, {
-            station: this.#testStationName(step.stationId),
-          }),
+          reason: this.#fallbackReason(step),
           destination: this.#testStationName(
             extra.fallbacks[index + 1]?.stationId ?? outcome.stationId,
           ),
@@ -871,7 +872,7 @@ export class PrepStationsScreen extends LitElement {
         ? [
             {
               value: selected,
-              label: `${this.#stationName(selected)} (${t("prep.inactive_station_label")})`,
+              label: `${this.#stationName(selected)} (${t("prep.disabled_station_label")})`,
             },
           ]
         : [];
@@ -919,7 +920,7 @@ export class PrepStationsScreen extends LitElement {
                       <td>
                         ${this.#exceptionText(e)}
                         <div class="warnings">
-                          ${e.neverMatches ? html`<span class="chip">${t("prep.never_used")}</span>` : nothing}${e.stationOff ? html`<span class="chip">${t("prep.exception_station_off")}</span>` : nothing}
+                          ${e.neverMatches ? html`<span class="chip">${t("prep.never_used")}</span>` : nothing}${e.stationOff ? html`<span class="chip">${t("prep.exception_station_disabled")}</span>` : nothing}
                         </div>
                       </td>
                       <td>
@@ -1010,7 +1011,7 @@ export class PrepStationsScreen extends LitElement {
         .filter((row) => row.id !== id && (row.active || row.id === stored))
         .map((row) => ({
           value: row.id,
-          label: row.active ? row.name : `${row.name} ${t("prep.switched_off_option")}`,
+          label: row.active ? row.name : `${row.name} ${t("prep.disabled_option")}`,
         })),
     ];
   }
@@ -1086,7 +1087,7 @@ export class PrepStationsScreen extends LitElement {
         if (Number.isInteger(index)) this.hoursServerErrors = { [index]: t("venue.time_distinct") };
       } else if (code === "station.fallback_loop" || code === "route.station_inactive")
         this.stationFieldError = t(
-          code === "station.fallback_loop" ? "prep.fallback_loop" : "prep.station_inactive",
+          code === "station.fallback_loop" ? "prep.fallback_loop" : "prep.station_disabled",
         );
       else
         this.stationActionError =
@@ -1205,7 +1206,7 @@ export class PrepStationsScreen extends LitElement {
           data-test=${`switch-off-${s.id}`}
           variant="danger"
           @click=${() => this.#openFallback(s.id, "switch_off")}
-          >${t("prep.switch_off")}</wt-button
+          >${t("prep.disable")}</wt-button
         >
       </div>
       ${this.stationSwitchError[s.id] && !this.stationSwitchError[s.id]!.field ? html`<p class="error" role="alert">${this.stationSwitchError[s.id]!.message}</p>` : nothing}</wt-card
@@ -1640,11 +1641,11 @@ export class PrepStationsScreen extends LitElement {
     const isFallback = action.kind === "fallback" || action.kind === "switch_off";
     const heading =
       action.kind === "switch_off"
-        ? t("prep.switch_off")
+        ? t("prep.disable")
         : action.kind === "fallback"
           ? t("prep.when_closed")
           : action.kind === "switch_on"
-            ? t("prep.switch_on")
+            ? t("prep.enable")
             : action.kind === "today" && action.state === "closed"
               ? t("prep.close_today")
               : action.kind === "today" && action.state === "open"
@@ -1672,7 +1673,7 @@ export class PrepStationsScreen extends LitElement {
       ${
         isFallback
           ? html`
-              ${action.kind === "switch_off" ? html`<p>${format("prep.switch_off_confirm", { station: station?.name ?? action.stationId })}</p>` : nothing}
+              ${action.kind === "switch_off" ? html`<p>${format("prep.disable_confirm", { station: station?.name ?? action.stationId })}</p>` : nothing}
               ${
                 station?.isDefault
                   ? nothing
@@ -1757,7 +1758,7 @@ export class PrepStationsScreen extends LitElement {
               ${
                 inactive.length
                   ? html`<section>
-                      <h2>${t("prep.switched_off")}</h2>
+                      <h2>${t("prep.disabled")}</h2>
                       ${inactive.map(
                         (station) =>
                           html`<wt-card data-test=${`inactive-${station.id}`}
@@ -1766,7 +1767,7 @@ export class PrepStationsScreen extends LitElement {
                               ${this.#times(station.id)?.closedSendsTo ? format("prep.off_goes_to", { station: this.#stationName(this.#times(station.id)!.closedSendsTo!) }) : t("prep.off_asks")}
                             </p>
                             <p>
-                              ${this.#times(station.id)?.closedSendsTo ? t("prep.switched_off_hint") : t("prep.switched_off_no_replacement")}
+                              ${this.#times(station.id)?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}
                             </p>
                             ${this.#warnings(station.id)}
                             <div class="actions">
@@ -1778,7 +1779,7 @@ export class PrepStationsScreen extends LitElement {
                               ><wt-button
                                 data-test=${`switch-on-${station.id}`}
                                 @click=${() => this.#openStationAction({ kind: "switch_on", stationId: station.id })}
-                                >${t("prep.switch_on")}</wt-button
+                                >${t("prep.enable")}</wt-button
                               >
                             </div></wt-card
                           >`,
@@ -1786,7 +1787,7 @@ export class PrepStationsScreen extends LitElement {
                     </section>`
                   : nothing
               }
-              ${off.length ? html`<p>${t("prep.switched_off")}: ${off.map((c) => html`${this.#path(c.categoryId)} — ${this.#targetName(c.target)}. ${this.#times(c.target.kind === "station" ? c.target.stationId : "")?.closedSendsTo ? t("prep.switched_off_hint") : t("prep.switched_off_no_replacement")}`)}</p>` : nothing}`
+              ${off.length ? html`<p>${t("prep.disabled")}: ${off.map((c) => html`${this.#path(c.categoryId)} — ${this.#targetName(c.target)}. ${this.#times(c.target.kind === "station" ? c.target.stationId : "")?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}`)}</p>` : nothing}`
           : nothing
       }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}`;
   }

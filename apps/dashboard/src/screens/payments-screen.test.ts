@@ -498,14 +498,14 @@ async function openRename(el: PaymentsScreen) {
 }
 
 describe("reader discovery and status", () => {
-  it("offers editable names, Add again and already added rows", async () => {
+  it("offers editable names, Enable and already added rows", async () => {
     const { el, api } = await mount(
       stubApi({ availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS) }),
     );
     await openAdd(el);
     expect(api.availableReaders).toHaveBeenCalledWith("acme");
     expect(q(el, "[data-test=reader-discovery]")!.textContent).toContain("123");
-    expect(q(el, "[data-test=adopt-v-2]")!.textContent).toContain("Add again");
+    expect(q(el, "[data-test=adopt-v-2]")!.textContent!.trim()).toBe("Enable");
     expect(q(el, "[data-test=adopt-v-3]")).toBeNull();
     expect(q(el, "[data-test=reader-discovery]")!.textContent).toContain("Already added");
     const input = q(el, "[data-test=name-v-1]")!;
@@ -690,6 +690,37 @@ describe("reader discovery and status", () => {
     q(el, "[data-test=refresh-readers]")!.click();
     await flush(el);
     expect(api.readerStatus).toHaveBeenCalledExactlyOnceWith("r-1");
+  });
+
+  it("words a reader's Disable, Enable and Disabled status in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mount(
+      stubApi({
+        listReaders: vi
+          .fn()
+          .mockResolvedValue([...READERS, { ...READERS[0], id: "disabled", active: false }]),
+        availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS),
+      }),
+    );
+    expect(qCell(el, "[data-test=disable-r-1]")!.textContent!.trim()).toBe("Deshabilitar");
+    const filter = q(el, "wt-combobox[name=reader-status-filter]") as HTMLElement & {
+      options: { value: string; label: string }[];
+    };
+    expect(filter.options.map((option) => option.label)).toEqual([
+      "Activos",
+      "Deshabilitados",
+      "Todos los lectores",
+    ]);
+    await chooseOption(filter, "disabled");
+    await flush(el);
+    expect(qCell(el, "[data-test=enable-disabled]")!.textContent!.trim()).toBe("Habilitar");
+    expect(qCell(el, "[data-test=reader-status-disabled]")!.textContent!.trim()).toBe(
+      "Deshabilitado",
+    );
+    await openAdd(el);
+    expect(q(el, "[data-test=adopt-v-2]")!.textContent!.trim()).toBe("Habilitar");
+    expect(q(el, "[data-test=reader-discovery]")!.textContent).toContain("Deshabilitado");
+    expect(q(el, "[data-test=reader-discovery]")!.textContent).not.toContain("Volver a añadir");
   });
 
   it("filters readers by status from a labelled dropdown showing Active first", async () => {
@@ -1111,12 +1142,12 @@ describe("payments-screen remaining edges", () => {
     );
   });
 
-  it("adds a disabled reader again under its existing provider reference", async () => {
+  it("enables a disabled reader again under its existing provider reference", async () => {
     const { el, api } = await mount(
       stubApi({ availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS) }),
     );
     await openAdd(el);
-    expect(q(el, "[data-test=adopt-v-2]")!.textContent!.trim()).toBe("Add again");
+    expect(q(el, "[data-test=adopt-v-2]")!.textContent!.trim()).toBe("Enable");
 
     q(el, "[data-test=adopt-v-2]")!.click();
 

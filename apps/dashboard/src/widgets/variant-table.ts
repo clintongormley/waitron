@@ -218,7 +218,7 @@ export class VariantTable extends LitElement {
    * confirms it. */
   @state() private rows: VariantRow[] = [];
   #nextKey = 0;
-  /** The row whose Remove or Restore was just chosen. The host hands that variant back as a new
+  /** The row whose Disable, Remove or Enable was just chosen. The host hands that variant back as a new
    * object, which re-keys the row and destroys the control holding focus, so focus is put back once
    * the new variants arrive. */
   #refocus: number | null = null;
@@ -381,7 +381,7 @@ export class VariantTable extends LitElement {
           variant.active
             ? nothing
             : html`<span class="muted" data-test=${`inactive-${index}`}
-                >${t("product.inactive_badge")}</span
+                >${t("product.variant_disabled_badge")}</span
               >`
         }
         ${
@@ -422,8 +422,14 @@ export class VariantTable extends LitElement {
               : this.#action("open", index, t("editor.open_variant"), "secondary", this.openBlocked)
           }${this.#action("edit", index, t("action.edit"), "secondary")}${
             variant.active
-              ? this.#action("remove", index, t("action.remove"), "danger")
-              : this.#action("restore", index, t("product.restore"), "secondary")
+              ? this.#action(
+                  "remove",
+                  index,
+                  // A variant never saved has no row to keep, so it is really removed.
+                  t(variant.id === undefined ? "action.remove" : "product.disable"),
+                  "danger",
+                )
+              : this.#action("restore", index, t("product.enable"), "secondary")
           }</wt-row-actions
         >
       </td>
@@ -481,7 +487,7 @@ export class VariantTable extends LitElement {
       ${
         visible.length
           ? nothing
-          : html`<p class="notice" data-test="no-variants">${t("editor.variants_all_inactive")}</p>`
+          : html`<p class="notice" data-test="no-variants">${t("editor.variants_all_disabled")}</p>`
       }
       ${
         this.openBlocked && visible.some(({ row }) => row.variant.id !== undefined)

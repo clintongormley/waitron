@@ -259,10 +259,10 @@ at all, marked **No customer-facing name**, because there the staff name is show
 absent extras list name is never listed: it reaches no receipt). Under the default language an
 absent name is not listed, because the staff name stands as that language's text. Each row shows the
 staff name — a unit, which has none, shows its name in the default language, or any text it has —
-and links to the screen that edits it. That list leaves out a deleted product, a removed variant
-and every variant of a deleted product, a switched-off options or extras list and its options, and
+and links to the screen that edits it. That list leaves out a disabled product, a disabled variant
+and every variant of a disabled product, a disabled options or extras list and its options, and
 what a switched-off menu owns; the default-change check above still counts all of them except a
-removed variant, which it skips too. Image names (the media module's contribution) are checked on
+disabled variant, which it skips too. Image names (the media module's contribution) are checked on
 a change of default but are not in the list.
 
 ## Variants
@@ -333,16 +333,16 @@ one as a member with `menu_section.membership_invalid`). A menu stores something
 for a variant only to override its price there: a `menu_item_variant_overrides` row, keyed by the
 parent's menu row and the variant, holds that menu's price, and saving the price blank deletes the
 row. Saving one size's price on a menu writes that size's row alone, whether the size is Active or
-Inactive (`setMenuVariantPrice`, `packages/catalogue/src/variants.ts`), while `setMenuVariants`
+Disabled (`setMenuVariantPrice`, `packages/catalogue/src/variants.ts`), while `setMenuVariants`
 replaces the row of every Active size at once. The table's
 `menu_item_variant_overrides_overrides_ck` refuses a row with no price.
 
 ### Active and Available
 
 A variant has the same two states as a product (_One save, one transaction_ below).
-Removing a variant makes it Inactive and keeps its row; a saved variant left out of a product save
-is made Inactive too (`setProductVariants`). A variant Inactive when its menu was published is on
-none of that menu's offers, and one made Inactive since is served marked unavailable
+Disabling a saved variant keeps its row (an unsaved one's Remove just drops it); a saved variant
+left out of a product save is disabled too (`setProductVariants`). A variant disabled when its menu
+was published is on none of that menu's offers, and one disabled since is served marked unavailable
 (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`).
 
 A product is on an active menu when that menu's working structure places it — in the menu's own
@@ -355,14 +355,14 @@ product; one that comes through an included menu goes when that menu's structure
 the menu is no longer included.
 
 A menu's Price overrides tab lists every product an active menu's working structure reaches,
-Inactive ones and their sizes too, with a Status column; a size reads Inactive when it or its
-product is. The tab reads `menuPrices`; a menu's offers, and the published document built from
+disabled ones and their sizes too, with a Status column reading Active or Disabled; a size reads
+Disabled when it or its product is disabled. The tab reads `menuPrices`; a menu's offers, and the published document built from
 them (`packages/catalogue/src/menu-document.ts`), still come from `listMenuOffers`, which leaves
-Inactive items out (both in `packages/catalogue/src/operations.ts`).
+disabled items out (both in `packages/catalogue/src/operations.ts`).
 
 The offers a till sells from are each menu's published version, which leaves out a product that was
-Inactive when it was published (`listMenuOffers`, `packages/catalogue/src/operations.ts`). A product
-that is Unavailable, or has become Inactive since, is served in its place marked unavailable
+disabled when it was published (`listMenuOffers`, `packages/catalogue/src/operations.ts`). A product
+that is Unavailable, or has become disabled since, is served in its place marked unavailable
 (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`). A change to a menu's structure
 reaches the tills only when the menu is published again. Whether each product and variant is
 Active and Available, including products picked as extras, is read from the current rows
@@ -415,16 +415,16 @@ extras pick of it. Every sale line names a zone's menu offer, and `selectMenuVar
 cannot name a variant, so `priceOrderLines` (`apps/server/src/working-order.ts`) refuses a pick of
 such a product; a pick of a variant itself sells. That refusal comes from one read for the whole
 basket's picks (`parentsWithActiveVariants`, `packages/catalogue/src/variants.ts`). A product whose
-variants are all Inactive sells as itself.
+variants are all disabled sells as itself.
 
 On the server, an edit of a held order keeps each stored line it names, at its stored price —
 including one whose product, or one of whose extras, has since gained an Active variant — and
 prices only what the edit adds (menus plan D10; `updateHeldOrder`,
 `apps/server/src/working-order.ts`). Lowering or keeping such a line's quantity is allowed; raising
-it is refused `product.variant_required`, as a raise of a line whose product has become Inactive or
+it is refused `product.variant_required`, as a raise of a line whose product has become disabled or
 Unavailable is refused. Paying a held order bills its stored lines at their stored prices and
 VAT classes, at each class's rate on the day of issue, as _What a sold line freezes_ says; a line not yet sent, dish
-or extra, whose product is now Inactive or Unavailable is refused `product.unavailable`, while a
+or extra, whose product is now disabled or Unavailable is refused `product.unavailable`, while a
 sent one is billed whatever its product's availability (`priceStoredOrderForIssuance`, same file;
 a card payment already captured is filed as it stands). On the till, retrieving the order keeps
 such an extra in the basket, marked "Not offered now" and counted in the total, as it keeps a
@@ -461,16 +461,17 @@ The editor allows any number of variants, one included (`apps/dashboard/src/widg
   the base price as its hint, in its window and in its table row, and the Pricing section is a fold
   whose closed line names the base price and the VAT (`pricingSummary`). The fold opens on a VAT,
   unit or price error (`SECTION_FIELDS`) and starts open on a product never saved. The table, Add
-  variant and the inactive link are a separate Variants section under it, always open.
-- Each row's menu offers **Open**, **Edit** and **Remove** (or **Restore**). **Open** goes to the
+  variant and the "Show N disabled" link are a separate Variants section under it, always open.
+- Each row's menu offers **Open**, **Edit** and **Disable** (or **Enable**; **Remove** for a variant
+  never saved). **Open** goes to the
   variant's own page and is shown only for a saved variant; it is disabled, with a line saying to
   save first, while the product form has unsaved changes, because opening the page replaces the form.
 - A click on a variant's row, or Enter on it, opens its edit window, as the menu's **Edit** does. The
   drag handle, the Available switch and the row menu keep their own clicks.
-- **Remove** marks a saved variant Inactive in the draft, and **Restore** marks it Active again; one
-  that was never saved is simply dropped from the draft. The table hides Inactive
-  rows until the editor's "Show N inactive" link, beside Add variant and drawn only while some
-  variant is Inactive, shows them; the link then reads "Hide inactive". The table shows them itself,
+- **Disable** marks a saved variant disabled (`active` false) in the draft, and **Enable** marks it
+  Active again; **Remove** drops one that was never saved from the draft. The table hides disabled
+  rows until the editor's "Show N disabled" link, beside Add variant and drawn only while some
+  variant is disabled, shows them; the link then reads "Hide disabled". The table shows them itself,
   and tells the editor with `wt-show-inactive`, when a reported problem or a newly added unsaved
   variant would otherwise be hidden (`dashboard-variant-table`,
   `apps/dashboard/src/widgets/variant-table.ts`).
@@ -525,8 +526,8 @@ opening the section is what shows every value. Top to bottom: the category path,
 photo beside it as a small button that opens the image library (absent when the editor is given no
 `api`), Available, Standalone ordering (absent on a variant's page), ▸ Kitchen, ▸ Descriptors,
 ▸ Nutritional info, Pricing (a ▸ fold once some variant is Active), Variants, Modifiers, then Cancel
-and Save. An Inactive product's editor also shows a line saying so, under the category path, and
-offers Restore beside Save. Opened on a variant, the same form is the variant's own
+and Save. A disabled product's editor also shows a line saying so, under the category path, and
+offers Enable beside Save. Opened on a variant, the same form is the variant's own
 page: it has no Standalone ordering, Modifiers or Variants section, and each field the variant may
 leave blank to take the parent's value shows that value as its hint; the course, description,
 allergens and dietary preferences also show it in italic on their folded section's closed line.
@@ -568,19 +569,19 @@ dietary declarations, the two required state flags `active` and `available` (bel
 `ordering` (a body carrying the retired `soldAlone` is refused), and `variants`
 — each variant carrying `name`, `customerName`, `kitchenName`, `image`, `unitPrice`, `available` and
 a required `active`, plus `id` when it already exists. Each variant's `active` is written as sent,
-and a saved variant left out of the body is made Inactive (`writeProductVariants`,
+and a saved variant left out of the body is disabled (`writeProductVariants`,
 `packages/catalogue/src/variants.ts`). A customer-facing name whose every entry is blank parses to
 `null`, so "I typed spaces" and "I left it empty" store identically.
 
-A product has two states. **Active / Inactive** is whether it exists for the venue:
-Delete sends `active: false`, Restore sends `active: true`, and Delete removes no row.
+A product has two states. **Active / Disabled** is whether it exists for the venue:
+Disable sends `active: false`, Enable sends `active: true`, and Disable removes no row.
 **Available / Unavailable** is "sold out for now": the editor's Available switch sends `available`,
 and it hides nothing in the dashboard. The till sells a product, or offers it as an extra, only when
 it is both (`applyLiveFields` in `packages/catalogue/src/menu-document.ts` marks it on each
 served offer and extras item, and `priceOrderLines` in `apps/server/src/working-order.ts` refuses
 what it marks) —
 except that an edit of a held order may keep a line at or below its quantity although its dish or
-an extra has since become Inactive or Unavailable (a raise is checked in `updateHeldOrder`, and a
+an extra has since become disabled or Unavailable (a raise is checked in `updateHeldOrder`, and a
 change to the note, options or extras of a line the kitchen already has is refused
 `product.unavailable` too, because the changed line is sent to the kitchen again — `applyLineEdits`),
 and paying bills such a line only once it has been sent; unsent, it is refused `product.unavailable`

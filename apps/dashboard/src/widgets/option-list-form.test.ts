@@ -1561,6 +1561,7 @@ it("re-checks every change after a failed submission, and Save works again once 
   const { el } = await mount();
   await click(el, "save");
   expect(text(el, "labels-error")).toBe(t("options.labels_required"));
+  expect(text(el, "labels-error")).toBe("Add or enable an option, or disable this list.");
 
   await type(el, "name", "Cooked");
   expect(field(el, "name").error).toBe("");

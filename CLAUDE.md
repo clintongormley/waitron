@@ -376,7 +376,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A retained hardware registration must remain re-addable after deactivation.** Discovery matches
   disabled printers and card readers too, and a disabled device that asks to join with its old
   cookie while Add a device is open comes back as itself; each reactivates the existing id
-  (printers and devices offer Enable, card readers Add again).
+  (printers, devices and card readers offer Enable).
 - **A narrower roll in a wider receipt printer needs an explicit print area before native centring.**
   Cost: a shifted, clipped 58mm receipt; whether the printer's own width setting also contributed
   is unverified, and a corrected reprint is owed. Guard: `apps/server/src/receipt-ticket.test.ts`; see

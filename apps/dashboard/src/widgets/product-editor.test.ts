@@ -2686,7 +2686,41 @@ it("creates a new product Active", async () => {
   expect(submit.mock.calls[0]![0].detail.value.active).toBe(true);
 });
 
-it("offers an Inactive product's Restore, which saves it Active and keeps its availability", async () => {
+it.each([
+  {
+    locale: "en-GB",
+    notice: "This product is disabled, so the till does not sell it. Enable it to sell it again.",
+    enable: "Enable",
+  },
+  {
+    locale: "es-ES",
+    notice:
+      "Este producto está deshabilitado, así que la caja no lo vende. Habilítalo para volver a venderlo.",
+    enable: "Habilitar",
+  },
+])(
+  "words a disabled product's notice and its Enable in $locale",
+  async ({ locale, notice, enable }) => {
+    setLocale(locale as "en-GB" | "es-ES");
+    try {
+      const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+        open: true,
+        value: { ...product, id: "p1", active: false },
+        locales: ["en"],
+        units: [unit],
+        taxChoices: reduced,
+      });
+      expect(el.shadowRoot!.querySelector("[data-test=inactive-notice]")!.textContent!.trim()).toBe(
+        notice,
+      );
+      expect(el.shadowRoot!.querySelector("[data-test=restore]")!.textContent!.trim()).toBe(enable);
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+it("offers a disabled product's Enable, which saves it Active and keeps its availability", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, id: "p1", active: false, available: false },
@@ -2697,10 +2731,10 @@ it("offers an Inactive product's Restore, which saves it Active and keeps its av
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   expect(el.shadowRoot!.querySelector("[data-test=inactive-notice]")!.textContent!.trim()).toBe(
-    t("product.inactive_notice"),
+    t("product.disabled_notice"),
   );
   const restore = el.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!;
-  expect(restore.textContent!.trim()).toBe(t("product.restore"));
+  expect(restore.textContent!.trim()).toBe(t("product.enable"));
   restore.click();
   expect(submit).toHaveBeenCalledOnce();
   const sent = submit.mock.calls[0]![0].detail.value;
@@ -2710,7 +2744,7 @@ it("offers an Inactive product's Restore, which saves it Active and keeps its av
   });
 });
 
-it("saves an Inactive product's other edits without restoring it", async () => {
+it("saves a disabled product's other edits without enabling it", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     value: { ...product, id: "p1", active: false },
@@ -4733,29 +4767,29 @@ it("makes the Variants section the Add variant button alone while there are no v
   expect(showInactiveLink(el)).toBeNull();
 });
 
-it("offers Show inactive beside Add variant only while some variant is Inactive, counting them", async () => {
+it("offers Show disabled beside Add variant only while some variant is disabled, counting them", async () => {
   const el = await mountPricing({ ...saved, variants: [small, large] });
   expect(showInactiveLink(el)).toBeNull();
   await tableEvent(el, "wt-remove", { index: 0 });
-  expect(showInactiveLink(el)!.textContent!.trim()).toBe(t("editor.show_inactive_one"));
+  expect(showInactiveLink(el)!.textContent!.trim()).toBe(t("editor.show_disabled_one"));
   const row = showInactiveLink(el)!.parentElement!;
   expect(row.querySelector("[data-test=add-variant]")).not.toBeNull();
   await tableEvent(el, "wt-remove", { index: 1 });
   expect(showInactiveLink(el)!.textContent!.trim()).toBe(
-    t("editor.show_inactive").replace("{count}", "2"),
+    t("editor.show_disabled").replace("{count}", "2"),
   );
   expect(variantTable(el)!.showInactive).toBe(false);
 });
 
 it.each([
-  { locale: "en-GB", one: "Show 1 inactive", two: "Show 2 inactive", hide: "Hide inactive" },
+  { locale: "en-GB", one: "Show 1 disabled", two: "Show 2 disabled", hide: "Hide disabled" },
   {
     locale: "es-ES",
-    one: "Mostrar 1 inactiva",
-    two: "Mostrar 2 inactivas",
-    hide: "Ocultar inactivas",
+    one: "Mostrar 1 deshabilitada",
+    two: "Mostrar 2 deshabilitadas",
+    hide: "Ocultar deshabilitadas",
   },
-])("words the inactive link in $locale", async ({ locale, one, two, hide }) => {
+])("words the disabled link in $locale", async ({ locale, one, two, hide }) => {
   setLocale(locale as "en-GB" | "es-ES");
   try {
     const el = await mountPricing({ ...saved, variants: [small, { ...large, active: false }] });
@@ -4779,7 +4813,7 @@ it("shows and hides the Inactive variants from the link, and starts hidden on ev
   showInactiveLink(el)!.click();
   await el.updateComplete;
   expect(table.showInactive).toBe(true);
-  expect(showInactiveLink(el)!.textContent!.trim()).toBe(t("editor.hide_inactive"));
+  expect(showInactiveLink(el)!.textContent!.trim()).toBe(t("editor.hide_disabled"));
   showInactiveLink(el)!.click();
   await el.updateComplete;
   expect(table.showInactive).toBe(false);
@@ -4790,13 +4824,13 @@ it("shows and hides the Inactive variants from the link, and starts hidden on ev
   expect(variantTable(el)!.showInactive).toBe(false);
 });
 
-it("says Hide inactive when the table shows the Inactive rows itself", async () => {
+it("says Hide disabled when the table shows the disabled rows itself", async () => {
   const el = await mountPricing({ ...saved, variants: [small, { ...large, active: false }] });
   el.fieldErrors = { "variant-1-name": "Refused" };
   await el.updateComplete;
   await variantTable(el)!.updateComplete;
   await el.updateComplete;
-  expect(showInactiveLink(el)!.textContent!.trim()).toBe(t("editor.hide_inactive"));
+  expect(showInactiveLink(el)!.textContent!.trim()).toBe(t("editor.hide_disabled"));
 });
 
 it("puts focus on Show inactive when Remove hides the last row on screen", async () => {

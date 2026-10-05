@@ -475,8 +475,8 @@ describe("catalogue-screen", () => {
     expect(editor(el).locales).toEqual(["es", "en"]);
   });
 
-  // Delete makes the product Inactive and leaves its availability as it was.
-  it("confirms Delete and makes the product Inactive without deleting its history", async () => {
+  // Disable switches the product off and leaves its availability as it was.
+  it("confirms Disable and switches the product off without deleting its history", async () => {
     const api = stubApi();
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
@@ -493,7 +493,42 @@ describe("catalogue-screen", () => {
     });
   });
 
-  it("keeps the Delete confirmation open and reports a refused deactivation inside it", async () => {
+  it.each([
+    [
+      "en-GB",
+      "Disable Croquetas",
+      "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept.",
+      "Disable",
+    ],
+    [
+      "es",
+      "Deshabilitar Croquetas",
+      "Esto deshabilita el producto: la caja deja de venderlo y sale de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarlo, y sus ventas anteriores se conservan.",
+      "Deshabilitar",
+    ],
+  ])(
+    "in %s, asks to Disable a product, never to Delete it",
+    async (locale, heading, body, action) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const api = stubApi();
+        const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+        await flush(el);
+        emit(list(el), "delete-product", { productId: "p1" });
+        await el.updateComplete;
+        const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
+        expect(dialog.getAttribute("heading")).toBe(heading);
+        expect(dialog.querySelector("p")!.textContent!.trim()).toBe(body);
+        const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
+        expect(confirm.textContent!.trim()).toBe(action);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
+  it("keeps the Disable confirmation open and reports a refused save inside it", async () => {
     const api = stubApi({
       updateProductEditor: vi.fn().mockRejectedValue({ code: "server.internal" }),
     });
@@ -2337,9 +2372,9 @@ describe("catalogue-screen", () => {
       expect(location.pathname).toBe("/manage/catalogue/product/v1");
     });
 
-    // Removing a variant makes it Inactive, through its own page's write, and leaves its availability
+    // Disabling a variant switches it off through its own page's write, and leaves its availability
     // and every other stored value as they were.
-    it("confirms a variant's Remove and makes the variant Inactive through its own write", async () => {
+    it("confirms a variant's Disable and switches the variant off through its own write", async () => {
       history.replaceState(null, "", "/manage/catalogue");
       const api = variantApi();
       // Sold out as well, so a write that resets availability while removing is caught.
@@ -2351,12 +2386,34 @@ describe("catalogue-screen", () => {
       emit(list(el), "delete-product", { productId: "v1" });
       await el.updateComplete;
       const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
-      expect(dialog.getAttribute("heading")).toBe(
-        t("product.remove_variant_named").replace("{name}", "Media ración"),
-      );
-      expect(dialog.textContent).toContain(t("product.remove_variant_warning"));
+      const before = currentLocale();
+      setLocale("en-GB");
+      el.requestUpdate();
+      await el.updateComplete;
+      try {
+        expect(dialog.getAttribute("heading")).toBe("Disable Media ración");
+        expect(dialog.textContent).toContain(
+          "This disables the variant: the till stops offering it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept.",
+        );
+        expect(
+          el
+            .shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!
+            .textContent!.trim(),
+        ).toBe("Disable");
+        setLocale("es");
+        el.requestUpdate();
+        await el.updateComplete;
+        expect(dialog.getAttribute("heading")).toBe("Deshabilitar Media ración");
+        expect(dialog.textContent).toContain(
+          "Esto deshabilita la variante: la caja deja de ofrecerla y sale de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarla, y sus ventas anteriores se conservan.",
+        );
+      } finally {
+        setLocale(before);
+        el.requestUpdate();
+        await el.updateComplete;
+      }
       const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
-      expect(confirm.textContent!.trim()).toBe(t("action.remove"));
+      expect(confirm.textContent!.trim()).toBe(t("product.disable"));
       confirm.click();
       await flush(el);
       expect(api.getProductEditor).toHaveBeenCalledWith("v1");

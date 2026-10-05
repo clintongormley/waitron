@@ -348,7 +348,7 @@ export class FloorScreen extends LitElement {
             size="sm"
             data-test="table-deactivate-${tbl.id}"
             @click=${() => void this.#deactivateTable(tbl.id)}
-            >${t("action.deactivate")}</wt-button
+            >${t("action.disable")}</wt-button
           >
         </div>
       </wt-card>

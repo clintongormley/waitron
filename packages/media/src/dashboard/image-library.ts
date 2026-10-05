@@ -309,7 +309,7 @@ export class ImageLibrary extends LitElement {
         : use.kind === "menu_version"
           ? `${use.menuName} (${t("image.published_menu")})`
           : use.name;
-    const inactive = "active" in use && !use.active ? ` (${t("image.inactive")})` : "";
+    const inactive = "active" in use && !use.active ? ` (${t("image.disabled_product")})` : "";
     return html`<a href=${usageHref(use)}>${name}${inactive}</a>`;
   }
 

@@ -674,7 +674,7 @@ export class AdjustmentReasonsScreen extends LitElement {
       )}
       ${
         reason.active
-          ? item(`deactivate-${reason.id}`, t("adjustments.deactivate"), (opener) =>
+          ? item(`deactivate-${reason.id}`, t("adjustments.disable"), (opener) =>
               this.#open({ kind: "deactivate", reason }, opener),
             )
           : nothing
@@ -711,14 +711,14 @@ export class AdjustmentReasonsScreen extends LitElement {
         key: "status",
         label: t("adjustments.column.status"),
         choosable: "shown",
-        cell: (reason) => t(reason.active ? "adjustments.active" : "adjustments.inactive"),
+        cell: (reason) => t(reason.active ? "adjustments.active" : "adjustments.disabled"),
         filter: {
           label: t("adjustments.column.status"),
           allLabel: t("adjustments.filter_all"),
           value: (reason) => (reason.active ? "active" : "inactive"),
           options: [
             { value: "active", label: t("adjustments.active") },
-            { value: "inactive", label: t("adjustments.inactive") },
+            { value: "inactive", label: t("adjustments.disabled") },
           ],
           initial: "active",
         },
@@ -869,7 +869,7 @@ export class AdjustmentReasonsScreen extends LitElement {
     const reason = editor.kind === "reason" ? editor.reason : undefined;
     const deactivating = editor.kind === "deactivate";
     const heading = deactivating
-      ? t("adjustments.deactivate_heading")
+      ? t("adjustments.disable_heading")
       : t(reason ? "adjustments.edit_heading" : "adjustments.new");
     const checked = this.attempted ? this.#check() : {};
     const errors = { ...this.refusedFields, ...checked };
@@ -894,7 +894,7 @@ export class AdjustmentReasonsScreen extends LitElement {
         <div class="form">
           ${
             deactivating
-              ? html`<p>${tf("adjustments.deactivate_explained", { name: editor.reason.name })}</p>`
+              ? html`<p>${tf("adjustments.disable_explained", { name: editor.reason.name })}</p>`
               : this.#reasonForm(errors)
           }
         </div>
@@ -913,7 +913,7 @@ export class AdjustmentReasonsScreen extends LitElement {
                   data-test="confirm-deactivate"
                   ?disabled=${this.busy}
                   @click=${() => this.#deactivate(editor.reason)}
-                  >${t("adjustments.deactivate")}</wt-button
+                  >${t("adjustments.disable")}</wt-button
                 >`
               : html`<wt-button
                   variant="primary"

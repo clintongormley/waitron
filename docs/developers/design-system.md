@@ -2350,22 +2350,46 @@ also passes `align="end"`, since a modal has no margin beside the table.
 Open create and edit forms in `wt-modal`, with `wt-form-actions` in its footer. Keep validation
 messages inside the modal, retain entered values after a failed save, and refresh the table after
 success. Use the existing Forms contract for required markers, field errors and keyboard submission.
-Only offer operations your domain supports: department removal deactivates the department; removing
-a product from a menu removes that offer.
+Only offer operations your domain supports: Disable on a department switches it off and keeps it;
+removing a product from a menu removes that offer.
+
+### Switching off versus deleting
+
+Something switched off but kept — a product, a variant, an options or extras list, a zone, a
+department, a station, a table, a table status, an adjustment reason, a user, a printer, a print
+agent, a device, a card reader — is switched off with **Disable** (options and extras lists and
+table statuses are switched back on with an **Active** switch in their form), and where a screen has
+an action that brings it back, that action is **Enable**. Some have no Enable on any screen yet; the backlog entry "One word
+for switched off, kept for the record" in `docs/backlog.md` lists them. Its status reads **Active**
+or **Disabled**; there is no "Enabled" status. **Delete** is only for something really deleted, and **Remove** for taking a row out of a list or a link off a record,
+which may delete that row (Remove from this list, Remove image, a passkey). "Restore", "Add again", "Deactivate", "Reactivate" and
+"Inactive" are not used for a record that is kept.
+
+In Spanish the action is **Deshabilitar** and **Habilitar**, and the status **Activo** or
+**Deshabilitado** agrees with the noun the screen uses: Deshabilitado for a producto, departamento,
+estado, motivo, usuario, lector, agente or dispositivo; Deshabilitada for a variante, lista, zona,
+estación, mesa or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
+"Inactivo" are not used for a record that is kept. A setting turned off (backups, a toggle) is not a record and keeps its own
+words.
+
+Where a screen has both, the action follows what the code does: the products list's bulk action
+reads Disable while only products are selected and Delete once a category is in the selection,
+because the category itself is deleted. Products selected directly are disabled; the products
+inside the category, its subcategories included, are disabled only with **Delete it too**, and with
+**Move it up to the parent category** they stay active.
 
 ### Products: Active and Available are two different words
 
-On the products screens, **Active / Inactive** says whether a product exists for the
-venue, and **Available / Unavailable** says whether it is sold out for now. Delete makes a product
-Inactive, and Restore makes it Active again; never label either of them "unavailable". The products
-list's Status filter starts on Active, so an Inactive product is hidden until the filter is changed,
-while an Unavailable one stays listed with an "Unavailable" badge beside its Active badge. A
-variant's Remove makes it Inactive and its Restore makes it Active, on the products list and in the
-product editor's variants section; an Inactive variant is hidden behind the list's same Status
-filter, and in the editor until the "Show N inactive" link beside Add variant shows it. A menu's
-Price overrides tab shows Active or Inactive in its Status column, as a link to the product's page,
-and never shows Available. Other
-screens' words for "switched off, kept for the record" are still being settled in `docs/backlog.md`.
+On the products screens, **Active / Disabled** says whether a product exists for the
+venue, and **Available / Unavailable** says whether it is sold out for now. Disable switches a
+product off, and Enable makes it Active again; never label either of them "unavailable". The
+products list's Status filter starts on Active, so a disabled product is hidden until the filter is
+changed, while an Unavailable one stays listed with an "Unavailable" badge beside its Active badge.
+A variant's Disable and Enable work the same way, on the products list and in the product editor's
+variants section; a disabled variant is hidden behind the list's same Status filter, and in the
+editor until the "Show N disabled" link beside Add variant shows it. A menu's Price overrides tab
+shows Active or Disabled in its Status column, as a link to the product's page, and never shows
+Available.
 
 ### Navigation and language controls
 

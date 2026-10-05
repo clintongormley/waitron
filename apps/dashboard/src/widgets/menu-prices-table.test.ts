@@ -2429,21 +2429,48 @@ it("shows each row's own Active state as a link to its product page, a size by i
       "/manage/catalogue/product/p-burger",
     ]);
     expect(link("mi-burger").getAttribute("aria-label")).toBe("Active: open Burger's product page");
-    expect(text(link("mi-lemonade"))).toBe("Inactive");
-    // An Active size of an Inactive product is Inactive, and says why.
-    expect(text(link("mi-lemonade:v-small"))).toBe("Inactive");
+    expect(text(link("mi-lemonade"))).toBe("Disabled");
+    // An Active size of a disabled product is Disabled, and says why.
+    expect(text(link("mi-lemonade:v-small"))).toBe("Disabled");
     expect(link("mi-lemonade:v-small").getAttribute("href")).toBe(
       "/manage/catalogue/product/v-small",
     );
     expect(visibleText(cell(el, "status", "mi-lemonade:v-small"))).toBe(
-      "Inactive its product is inactive",
+      "Disabled its product is disabled",
     );
   } finally {
     setLocale("es-ES");
   }
 });
 
-it("reads an Inactive size as Inactive under an Active product, and keeps it out of the product's range", async () => {
+it("in Spanish, words a product's status by the product and a size's by the variant", async () => {
+  setLocale("es-ES");
+  const el = await mount({
+    rows: [burger, { ...lemonade, active: false }],
+  });
+  toggleOf(el, "mi-lemonade")!.click();
+  await table(el).updateComplete;
+  const link = (key: string) =>
+    cell(el, "status", key).querySelector<HTMLAnchorElement>("a[part~=status-link]")!;
+  expect(text(link("mi-burger"))).toBe("Activo");
+  expect(text(link("mi-lemonade"))).toBe("Deshabilitado");
+  expect(visibleText(cell(el, "status", "mi-lemonade:v-small"))).toBe(
+    "Deshabilitada su producto está deshabilitado",
+  );
+  try {
+    // An Active size of an Active product.
+    const own = await mount({ rows: [lemonade] });
+    toggleOf(own, "mi-lemonade")!.click();
+    await table(own).updateComplete;
+    expect(
+      text(cell(own, "status", "mi-lemonade:v-small").querySelector("a[part~=status-link]")),
+    ).toBe("Activa");
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
+it("reads a disabled size as Disabled under an Active product, and keeps it out of the product's range", async () => {
   const el = await mount({
     rows: [
       {
@@ -2455,7 +2482,7 @@ it("reads an Inactive size as Inactive under an Active product, and keeps it out
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
   expect(text(cell(el, "status", "mi-lemonade:v-large").querySelector("a"))).toBe(
-    t("product.inactive_badge"),
+    t("product.variant_disabled_badge"),
   );
   expect(override(el, "mi-lemonade").placeholder).toBe("3.00");
 });

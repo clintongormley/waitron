@@ -87,9 +87,9 @@ or the VAT needs fixing, and on a product that has never been saved.
 
 Drag a row by the handle at its start to reorder it, or focus the handle and use the up and down
 arrow keys. Each row's **Available** switch marks the variant sold out or back on sale. The row menu
-offers **Open**, **Edit** and **Remove**. **Edit**, or a click on the variant's row, reopens the
-small window. Changes you make in the table, including the Available switch, are saved when you save
-the product.
+offers **Open**, **Edit** and **Disable** (**Remove** for a variant not yet saved, **Enable** for a
+disabled one). **Edit**, or a click on the variant's row, reopens the small window. Changes you make
+in the table, including the Available switch, are saved when you save the product.
 
 **Open** takes you to the variant's own page, where it can have its own VAT, allergens and the
 other product details. Its main category and its unit are always its product's: the page shows the
@@ -107,14 +107,14 @@ or Variants section, because a variant always uses its product's extras and opti
 **Open** appears once the variant has been saved, and it waits while the product has unsaved
 changes, because leaving the product would lose them: save the product first.
 
-**Remove** makes a saved variant Inactive once you save the product: the till stops offering it, and
-its past sales are kept. A variant you added and have not saved yet is simply dropped. The table
-shows only Active variants at first. While some variant is Inactive, a link beside **Add variant**
-says how many, such as **Show 1 inactive**: choose it to see them in the table, and choose **Hide
-inactive** to hide them again. Choose **Restore** from an Inactive row's menu to make it Active
-again.
+**Disable** makes a saved variant disabled once you save the product: the till stops offering it,
+and its past sales are kept. **Remove**, on a variant you added and have not saved yet, simply drops
+it. The table shows only Active variants at first. While some variant is disabled, a link beside
+**Add variant** says how many, such as **Show 1 disabled**: choose it to see them in the table, and
+choose **Hide disabled** to hide them again. Choose **Enable** from a disabled row's menu to make it
+Active again.
 
-You cannot add or restore an Active variant on a product that an extras list offers, because a
+You cannot add or enable an Active variant on a product that an extras list offers, because a
 product with Active variants cannot be an extra. The save is refused, and the dashboard names the
 extras lists to take the product off first.
 
@@ -126,7 +126,7 @@ in the editor to change it.
 Each variant's row shows its own name, the price it sells at, its status and its
 row menu. If a variant's VAT differs
 from its product's, the list notes it under the variant's price. A variant's row menu offers
-**Remove** or **Restore** there too, and an Inactive variant is listed once you change the
+**Disable** or **Enable** there too, and a disabled variant is listed once you change the
 **Status** filter from **Active**.
 
 A variant follows its product onto every menu the product is on, including a variant you add later.

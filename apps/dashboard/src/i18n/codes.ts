@@ -258,11 +258,11 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "person.self_deactivation": {
     en: "You cannot disable your own account. Ask another administrator.",
-    es: "No puedes desactivar tu propia cuenta. Pídeselo a otro administrador.",
+    es: "No puedes deshabilitar tu propia cuenta. Pídeselo a otro administrador.",
   },
   "person.suspended": {
     en: "This account is disabled — ask a manager",
-    es: "Esta cuenta está desactivada. Avisa a un responsable",
+    es: "Esta cuenta está deshabilitada. Avisa a un responsable",
   },
   "person.not_found": {
     en: "That person could not be found",
@@ -431,8 +431,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ese estado ya no existe",
   },
   "status.inactive": {
-    en: "That status is deactivated",
-    es: "Ese estado está desactivado",
+    en: "That status is disabled",
+    es: "Ese estado está deshabilitado",
   },
   "zone.name_taken": {
     en: "A zone with that name already exists",
@@ -777,7 +777,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "payment.provider_in_use": {
     en: "Disable this provider's card readers before disconnecting it",
-    es: "Desactiva los lectores de tarjetas de este proveedor antes de desconectarlo",
+    es: "Deshabilita los lectores de tarjetas de este proveedor antes de desconectarlo",
   },
   "payment.provider_credential_rejected": {
     en: "The payment provider rejected those details — check them and try again",

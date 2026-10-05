@@ -866,8 +866,9 @@ export class ProductEditor extends LitElement {
     this.variantOpen = true;
   }
 
-  /** After a Remove: a table left with no row on screen cannot keep the focus itself, so it goes to
-   * what follows it — Show inactive while hidden variants remain, Add variant when none do. */
+  /** After a Disable or Remove: a table left with no row on screen cannot keep the focus itself, so
+   * it goes to what follows it — Show disabled while hidden variants remain, Add variant when none
+   * do. */
   private async focusAfterRemove(): Promise<void> {
     const { variants } = this.draft;
     if (variants.length && (this.showInactive || variants.some((variant) => variant.active)))
@@ -1488,8 +1489,8 @@ export class ProductEditor extends LitElement {
                 @wt-remove=${(event: CustomEvent<{ index: number }>) => {
                   event.stopPropagation();
                   const { index } = event.detail;
-                  // Removing makes a saved variant Inactive; one never saved has no row to make
-                  // Inactive, so it simply leaves the draft.
+                  // Disable switches a saved variant off; one never saved has no row to keep, so
+                  // Remove simply drops it from the draft.
                   if (this.draft.variants[index]?.id === undefined)
                     this.change(
                       "variants",
@@ -1528,10 +1529,10 @@ export class ProductEditor extends LitElement {
                 }}
                 >${
                   this.showInactive
-                    ? t("editor.hide_inactive")
+                    ? t("editor.hide_disabled")
                     : inactive === 1
-                      ? t("editor.show_inactive_one")
-                      : t("editor.show_inactive").replace("{count}", String(inactive))
+                      ? t("editor.show_disabled_one")
+                      : t("editor.show_disabled").replace("{count}", String(inactive))
                 }</wt-button
               >`
             : nothing
@@ -1735,7 +1736,7 @@ export class ProductEditor extends LitElement {
             this.draft.active
               ? nothing
               : html`<p class="notice" data-test="inactive-notice">
-                  ${t("product.inactive_notice")}
+                  ${t("product.disabled_notice")}
                 </p>`
           }
           ${keyed(this.generation, this.renderName(fields))}
@@ -1772,7 +1773,7 @@ export class ProductEditor extends LitElement {
                   .loading=${this.busy}
                   ?disabled=${this.suspended || invalid}
                   @click=${(event: Event) => this.save(event, true)}
-                  >${t("product.restore")}</wt-button
+                  >${t("product.enable")}</wt-button
                 >`
           }
           <wt-button

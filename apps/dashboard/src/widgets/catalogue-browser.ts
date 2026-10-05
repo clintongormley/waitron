@@ -434,7 +434,7 @@ export class CatalogueBrowser extends LitElement {
         ? "folders.move_heading"
         : selection.categoryIds.length
           ? "folders.delete_heading"
-          : "folders.delete_products_heading",
+          : "folders.disable_products_heading",
       count,
     );
     return html`<wt-modal
@@ -470,7 +470,7 @@ export class CatalogueBrowser extends LitElement {
                 }}
               ></wt-combobox>`
             : html`
-                ${selection.productIds.length ? html`<p>${selection.productIds.length === 1 ? t("product.delete_warning") : t("folders.delete_products_body")}</p>` : nothing}
+                ${selection.productIds.length ? html`<p>${selection.productIds.length === 1 ? t("product.disable_warning") : t("folders.disable_products_body")}</p>` : nothing}
                 ${
                   selection.categoryIds.length
                     ? html`<p>${t("folders.deleting")}</p>
@@ -526,12 +526,20 @@ export class CatalogueBrowser extends LitElement {
           .loading=${this.operationBusy}
           .disabled=${this.operationBusy || this.summaryLoading || this.summaryFailed || (this.operation === "move" && !this.destination)}
           @click=${() => void this.#confirm(this.operation, true)}
-          >${t(this.operation === "delete" ? "action.delete" : "folders.move")}</wt-button
+          >${this.operation === "delete" ? this.#deleteLabel(selection) : t("folders.move")}</wt-button
         >
       </wt-form-actions>
     </wt-modal>`;
   }
 
+  /** Products alone are only switched off; a category in the selection is really deleted. */
+  #deleteLabel(selection: CatalogueSelection): string {
+    return t(
+      selection.productIds.length && !selection.categoryIds.length
+        ? "product.disable"
+        : "action.delete",
+    );
+  }
   #unroutedFolderIds(): string[] {
     return [...this.#folderMadeAt].filter(([, made]) => !isRouted(made)).map(([id]) => id);
   }
@@ -672,7 +680,7 @@ export class CatalogueBrowser extends LitElement {
                           variant="danger"
                           .disabled=${!this.selected.length || this.summaryLoading || this.operationBusy}
                           @click=${() => void this.#openDelete()}
-                          >${t("action.delete")}</wt-button
+                          >${this.#deleteLabel(this.#selection(this.selected))}</wt-button
                         >
                         <wt-button
                           data-test="cancel-selection"

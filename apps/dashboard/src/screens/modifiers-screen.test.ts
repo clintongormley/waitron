@@ -573,9 +573,9 @@ describe("in English", () => {
   beforeEach(() => setLocale("en"));
   afterEach(() => setLocale("es-ES"));
 
-  it("shows each list's status as Active or Inactive, and filters by the same two words", async () => {
-    expect([t("extras.active"), t("extras.inactive")]).toEqual(["Active", "Inactive"]);
-    expect([t("options.active"), t("options.inactive")]).toEqual(["Active", "Inactive"]);
+  it("shows each list's status as Active or Disabled, and filters by the same two words", async () => {
+    expect([t("extras.active"), t("extras.disabled")]).toEqual(["Active", "Disabled"]);
+    expect([t("options.active"), t("options.disabled")]).toEqual(["Active", "Disabled"]);
     const el = await mount(
       api({
         listExtraLists: vi
@@ -594,14 +594,15 @@ describe("in English", () => {
       expect(status.filter).toMatchObject({
         options: [
           { value: "active", label: t(`${kind}.active`) },
-          { value: "inactive", label: t(`${kind}.inactive`) },
+          { value: "inactive", label: t(`${kind}.disabled`) },
         ],
       });
     }
     const extras = table(el, "extra-lists");
     await vi.waitFor(() => expect(extras.shadowRoot.textContent).toContain("Sauces"));
     const rows = [...extras.shadowRoot.querySelectorAll("tbody tr")].map((row) => row.textContent!);
-    expect(rows.find((row) => row.includes("Sauces"))).toContain("Inactive");
+    expect(rows.find((row) => row.includes("Sauces"))).toContain("Disabled");
+    expect(rows.find((row) => row.includes("Sauces"))).not.toContain("Inactive");
     expect(rows.find((row) => row.includes("Breads"))).toContain("Active");
     expect(extras.shadowRoot.textContent).not.toContain("In use");
   });
@@ -771,7 +772,8 @@ describe("in English", () => {
 });
 
 it("counts in Spanish, with the singular forms", async () => {
-  expect([t("extras.active"), t("extras.inactive")]).toEqual(["Activa", "Inactiva"]);
+  expect([t("extras.active"), t("extras.disabled")]).toEqual(["Activa", "Deshabilitada"]);
+  expect([t("options.active"), t("options.disabled")]).toEqual(["Activa", "Deshabilitada"]);
   const el = await mount(
     api({
       listExtraLists: vi
@@ -1674,7 +1676,7 @@ it("finds a list by its name and by the status it shows", async () => {
   expect(byName).toContain("Sauces");
   expect(byName).not.toContain("Breads");
 
-  const byStatus = await search(extras, t("extras.inactive"));
+  const byStatus = await search(extras, "Deshabilitada");
   expect(byStatus).toContain("Sauces");
   expect(byStatus).not.toContain("Breads");
 });

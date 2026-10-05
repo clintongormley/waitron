@@ -1966,21 +1966,59 @@ it("deleting an empty category from its menu acts on that category alone, and le
   expect(menus().filter(isOpen)).toEqual([]);
   expect(menu.isConnected).toBe(false);
 });
-it.each([1, 2])("confirms %i product deletion with inactive and sales wording", async (number) => {
+it.each([1, 2])(
+  "confirms disabling %i products with disabled and sales wording",
+  async (number) => {
+    const el = await mountBrowser();
+    await toggleCategory(el, "d");
+    await selectKeys(el, number === 1 ? ["bread"] : ["bread", "cola"]);
+    expect(el.shadowRoot!.querySelector('[data-test="delete"]')!.textContent!.trim()).toBe(
+      "Disable",
+    );
+    await press(el, "delete");
+    expect(dialog(el)!.heading).toBe(number === 1 ? "Disable 1 product?" : "Disable 2 products?");
+    expect(el.shadowRoot!.textContent).toContain("past sales");
+    expect(el.shadowRoot!.textContent).toContain(
+      number === 1
+        ? "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept."
+        : "This disables the products: the till stops selling them and they leave this list until you choose to show disabled products. You can enable them again, and their past sales are kept.",
+    );
+    expect(el.shadowRoot!.textContent).not.toContain("inactive");
+    expect(el.shadowRoot!.querySelector('[data-test="confirm"]')!.textContent!.trim()).toBe(
+      "Disable",
+    );
+    await press(el, "confirm");
+    await vi.waitFor(() =>
+      expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+        { productIds: number === 1 ? ["bread"] : ["bread", "cola"], categoryIds: [] },
+        "move_up",
+        [],
+      ),
+    );
+  },
+);
+it("says Disable for products alone in Spanish, and Delete once a category is selected", async () => {
+  setLocale("es");
   const el = await mountBrowser();
   await toggleCategory(el, "d");
-  await selectKeys(el, number === 1 ? ["bread"] : ["bread", "cola"]);
+  await selectKeys(el, ["bread", "cola"]);
+  expect(el.shadowRoot!.querySelector('[data-test="delete"]')!.textContent!.trim()).toBe(
+    "Deshabilitar",
+  );
   await press(el, "delete");
-  expect(dialog(el)!.heading).toBe(number === 1 ? "Delete 1 product?" : "Delete 2 products?");
-  expect(el.shadowRoot!.textContent).toContain("past sales");
-  expect(el.shadowRoot!.textContent).toContain("inactive");
-  await press(el, "confirm");
-  await vi.waitFor(() =>
-    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
-      { productIds: number === 1 ? ["bread"] : ["bread", "cola"], categoryIds: [] },
-      "move_up",
-      [],
-    ),
+  expect(dialog(el)!.heading).toBe("¿Deshabilitar 2 productos?");
+  expect(el.shadowRoot!.textContent).toContain(
+    "Esto deshabilita los productos: la caja deja de venderlos y salen de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarlos, y sus ventas anteriores se conservan.",
+  );
+  expect(el.shadowRoot!.querySelector('[data-test="confirm"]')!.textContent!.trim()).toBe(
+    "Deshabilitar",
+  );
+  cleanupWidgets();
+  const mixed = await mountBrowser();
+  await toggleCategory(mixed, "d");
+  await selectKeys(mixed, ["bread", "folder:d"]);
+  expect(mixed.shadowRoot!.querySelector('[data-test="delete"]')!.textContent!.trim()).toBe(
+    "Eliminar",
   );
 });
 it.each(["move", "delete"])(
@@ -2482,7 +2520,7 @@ it("clears the selection when a filter is chosen in the panel beside the rows", 
     const filter = panel.querySelector<HTMLElement>('wt-combobox[data-filter="active"]')!;
     await userEvent.click(filter.shadowRoot!.querySelector<HTMLElement>(".trigger")!);
     const option = [...filter.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')].find(
-      (row) => row.textContent!.trim() === en["product.inactive_badge"],
+      (row) => row.textContent!.trim() === en["product.disabled_badge"],
     )!;
     await userEvent.click(option);
     await el.updateComplete;

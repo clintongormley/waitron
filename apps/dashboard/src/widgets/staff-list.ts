@@ -92,8 +92,8 @@ export class StaffList extends LitElement {
             ${this.#action(person, "reset-pin", t("person.reset_pin"))}
             ${
               person.status === "suspended"
-                ? this.#action(person, "reactivate", t("person.reactivate_and_invite"))
-                : this.#action(person, "disable", t("person.mark_inactive"))
+                ? this.#action(person, "reactivate", t("person.enable_and_invite"))
+                : this.#action(person, "disable", t("person.disable"))
             }
             ${person.status === "pending" ? this.#action(person, "resend-invitation", t("person.resend_invitation")) : nothing}
           </wt-row-actions>

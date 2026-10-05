@@ -60,6 +60,29 @@ describe("staff-list", () => {
     expect(events[0]!.detail).toEqual({ personId: "p1", action: "reset-pin" });
   });
 
+  it.each([
+    ["en-GB", "Disable", "Enable and send invitation", "Disabled"],
+    ["es-ES", "Deshabilitar", "Habilitar y enviar invitación", "Deshabilitado"],
+  ])(
+    "in %s, offers Disable on a current user and Enable on a disabled one",
+    async (locale, disable, enable, status) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
+        const table = el.shadowRoot!.querySelector("wt-data-table")!;
+        await table.updateComplete;
+        const label = (test: string) =>
+          table.shadowRoot!.querySelector<HTMLElement>(`[data-test=${test}]`)!.textContent!.trim();
+        expect(label("disable-p1")).toBe(disable);
+        expect(label("reactivate-p2")).toBe(enable);
+        expect(table.shadowRoot!.querySelectorAll("tbody tr")[1]!.textContent).toContain(status);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
   it("renders one row per person with role and status", async () => {
     const { el } = await mountWidget<StaffList>("dashboard-staff-list", { people });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;

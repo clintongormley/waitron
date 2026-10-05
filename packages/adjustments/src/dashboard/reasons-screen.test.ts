@@ -307,7 +307,7 @@ describe("the reasons list", () => {
     expect(rowText(el, "e")).toContain("No limit");
   });
 
-  it("shows the inactive reasons when the status filter asks for them, without reorder buttons", async () => {
+  it("shows the disabled reasons when the status filter asks for them, without reorder buttons", async () => {
     const el = await mount(fakeApi());
     const filter = table(el).shadowRoot!.querySelector<HTMLElement & { value: string }>(
       'wt-combobox[data-filter="status"]',
@@ -316,7 +316,8 @@ describe("the reasons list", () => {
     await chooseOption(filter, "inactive");
     await settle(el);
     expect(rowKeys(el)).toEqual(["o"]);
-    expect(rowText(el, "o")).toContain("Inactive");
+    expect(rowText(el, "o")).toContain("Disabled");
+    expect(rowText(el, "o")).not.toContain("Inactive");
     expect(find(el, '[data-test="move-up-o"]')).toBeNull();
     expect(find(el, '[data-test="deactivate-o"]')).toBeNull();
     expect(find(el, '[data-test="edit-o"]')).not.toBeNull();
@@ -1217,9 +1218,42 @@ describe("the editor's messages", () => {
   });
 });
 
-describe("deactivating", () => {
+describe("disabling", () => {
   const menuFocused = (el: AdjustmentReasonsScreen) =>
     table(el).shadowRoot!.activeElement?.getAttribute("label");
+
+  it.each([
+    {
+      locale: "en",
+      action: "Disable",
+      heading: "Disable reason",
+      body: "Staff will no longer be offered Complaint. It stays in the list as disabled.",
+      filter: ["All reasons", "Active", "Disabled"],
+    },
+    {
+      locale: "es",
+      action: "Deshabilitar",
+      heading: "Deshabilitar motivo",
+      body: "El personal dejará de ver Complaint. Seguirá en la lista como deshabilitado.",
+      filter: ["Todos los motivos", "Activo", "Deshabilitado"],
+    },
+  ])(
+    "in $locale, offers Disable and confirms it",
+    async ({ locale, action, heading, body, filter }) => {
+      setLocale(locale);
+      const el = await mount(fakeApi());
+      expect(find(el, '[data-test="deactivate-c"]')!.textContent!.trim()).toBe(action);
+      const status = table(el).shadowRoot!.querySelector<
+        HTMLElement & { options: { label: string }[] }
+      >('wt-combobox[data-filter="status"]')!;
+      expect(status.options.map((option) => option.label)).toEqual(filter);
+      await press(el, "deactivate-c");
+      const modal = find(el, "wt-modal")!;
+      expect(modal.getAttribute("heading")).toBe(heading);
+      expect(modal.textContent).toContain(body);
+      expect(find(el, '[data-test="confirm-deactivate"]')!.textContent!.trim()).toBe(action);
+    },
+  );
 
   it("moves focus to the menu of the row that takes the deactivated one's place", async () => {
     const api = fakeApi({
@@ -1263,13 +1297,13 @@ describe("deactivating", () => {
     expect(el.shadowRoot!.activeElement).toBe(add);
   });
 
-  it("says what deactivating does before it acts, then deactivates and reloads", async () => {
+  it("says what disabling does before it acts, then disables and reloads", async () => {
     const api = fakeApi();
     const el = await mount(api);
     await press(el, "deactivate-c");
     expect(api.deactivateReason).not.toHaveBeenCalled();
     expect(modal(el)!.textContent).toContain(
-      "Staff will no longer be offered Complaint. It stays in the list as inactive.",
+      "Staff will no longer be offered Complaint. It stays in the list as disabled.",
     );
     await press(el, "confirm-deactivate");
     expect(api.deactivateReason).toHaveBeenCalledWith("c");

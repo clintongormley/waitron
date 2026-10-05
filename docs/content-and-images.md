@@ -53,7 +53,7 @@ missing, and has a note saying how many names still need translating into it. A 
 some languages but not this one is marked **Partly translated**. Something with no customer-facing
 name at all is listed under your other languages as **No customer-facing name**, because there its
 staff name is shown instead; an extras list is the exception, because its own name never reaches a
-receipt. Deleted products and switched-off lists and menus are not listed.
+receipt. Disabled products, disabled lists and switched-off menus are not listed.
 
 Removing an additional language hides its ordinary translation fields but keeps the saved text.
 Add the language again to resume using those translations. The default language's row has no
@@ -124,7 +124,7 @@ stays in the library for your other products.
 
 To remove the photograph itself, choose **Delete** in the library and confirm. If any product,
 product variant or section still uses it, deletion is blocked. You see links to those products,
-including inactive products, and to those sections, a section shown by its internal name. Remove
+including disabled products, and to those sections, a section shown by its internal name. Remove
 the photograph from each of them before trying deletion again. A section's link opens its menu's
 **Structure** tab, in **Products and menus**, **Menus**, where **Remove image** in the section's
 editor clears it when you save the section. A menu's own photograph is removed the same way

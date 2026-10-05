@@ -9,7 +9,12 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t, currentLocale } from "../i18n/t.js";
-import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
+import {
+  allergenState,
+  allergenStateName,
+  productStatusName,
+  vatClassName,
+} from "../i18n/domain.js";
 import { categoryPath, categoryWithDescendants } from "./category-form.js";
 import { priceSearchText } from "./form-fields.js";
 import {
@@ -1006,7 +1011,7 @@ export class ProductList extends LitElement {
               part="badge"
               data-test="active-badge"
               data-active=${active ? "true" : "false"}
-              >${active ? t("product.active_badge") : t("product.inactive_badge")}</span
+              >${productStatusName(active, variant !== null)}</span
             >
             ${(variant ?? product).available ? nothing : this.#unavailableBadge()}`;
         },
@@ -1017,7 +1022,7 @@ export class ProductList extends LitElement {
           value: (row) => (rowActive(row) ? "active" : "inactive"),
           options: [
             { value: "active", label: t("product.active_badge") },
-            { value: "inactive", label: t("product.inactive_badge") },
+            { value: "inactive", label: t("product.disabled_badge") },
           ],
           initial: "active",
         },
@@ -1045,11 +1050,11 @@ export class ProductList extends LitElement {
           const { id, name } = variant ?? product;
           const restore = variant !== null && !variant.active;
           const removal = restore
-            ? { event: "restore-product" as const, test: "restore", label: t("product.restore") }
+            ? { event: "restore-product" as const, test: "restore", label: t("product.enable") }
             : {
                 event: "delete-product" as const,
                 test: "delete",
-                label: variant ? t("action.remove") : t("action.delete"),
+                label: t("product.disable"),
               };
           return html`<wt-row-actions
             align="end"
