@@ -1331,7 +1331,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const mode =
           context?.serviceMode ??
           (zoneId === undefined
-            ? cfg.orderFlow
+            ? "prepay"
             : (await VENUE_SERVICE.resolveZoneContext(tx, cfg, zoneId)).serviceMode);
         const unsentCount =
           order === undefined ? body.lines.length : (await unsentDishLines(tx, order.id)).length;
