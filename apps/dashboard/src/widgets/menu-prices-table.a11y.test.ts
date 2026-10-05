@@ -68,6 +68,18 @@ const rows: MenuPriceRow[] = [
   },
 ];
 
+const clash = {
+  state: "clash",
+  candidates: [
+    { place: { kind: "own_sections" }, value: "12.00", source: { kind: "product" } },
+    {
+      place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
+      value: "14.00",
+      source: { kind: "menu", menuId: "drinks", menuName: "Drinks", from: { kind: "own" } },
+    },
+  ],
+} as unknown as MenuPriceRow["combined"]["price"];
+
 async function mount(theme: "light" | "dark", props: Partial<MenuPricesTable>) {
   return mountWidget<MenuPricesTable>(
     "dashboard-menu-prices-table",
@@ -87,21 +99,29 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("accessible table with a product's variants open and the combined price shown", async () => {
-    const { el, host } = await mount(theme, {});
+  it("accessible table with a product's sizes open, an Inactive row and a clash", async () => {
+    const { el, host } = await mount(theme, {
+      rows: [
+        { ...rows[0]!, combined: { ...rows[0]!.combined, price: clash } },
+        { ...rows[1]!, active: false },
+      ],
+    });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = table.shadowRoot!;
     root
       .querySelector<HTMLButtonElement>('tr[data-row-key="mi-lemonade"] button.tree-toggle')!
       .click();
-    root.querySelector<HTMLInputElement>('input[data-column="price-on-menu"]')!.click();
     await table.updateComplete;
-    expect(root.querySelector('tr[data-row-key="mi-lemonade:v-large"]')).not.toBeNull();
-    // A struck price, a muted one with its hidden words, and a muted "no own price", all drawn.
-    expect(root.querySelector("s")).not.toBeNull();
-    expect(root.querySelector('[part~="visually-hidden"]')).not.toBeNull();
+    const keys = ["mi-burger", "mi-lemonade", "mi-lemonade:v-small", "mi-lemonade:v-large"];
+    for (const key of keys) {
+      const tr = root.querySelector(`tr[data-row-key="${key}"]`)!;
+      expect(tr.querySelector("a[part~=status-link]"), key).not.toBeNull();
+      expect(tr.querySelector('wt-price-input[name="price-override"]'), key).not.toBeNull();
+    }
+    expect(root.querySelector('tr[data-row-key="mi-burger"] [part~="clash"]')).not.toBeNull();
+    // An Active size of an Inactive product says why it reads Inactive, muted.
     expect(
-      root.querySelector('tr[data-row-key="mi-lemonade:v-small"] [part~="muted"]'),
+      root.querySelector('tr[data-row-key="mi-lemonade:v-small"] [part~="status-note"]'),
     ).not.toBeNull();
     await expectNoA11yViolations(host);
   });
@@ -135,19 +155,6 @@ describe.each(["light", "dark"] as const)("price source and clash states (%s)", 
     async (locale) => {
       setLocale(locale);
       const product = rows[0]!;
-      const source = {
-        kind: "menu",
-        menuId: "drinks",
-        menuName: "Drinks",
-        from: { kind: "own" },
-      } as const;
-      const clash = {
-        state: "clash",
-        candidates: [
-          { place: { kind: "own_sections" }, value: "12.00", source: { kind: "product" } },
-          { place: { kind: "menu", menuId: "drinks", menuName: "Drinks" }, value: "14.00", source },
-        ],
-      } as unknown as MenuPriceRow["combined"]["price"];
       const { el, host } = await mount(theme, {
         rows: [{ ...product, combined: { ...product.combined, price: clash } }],
       });

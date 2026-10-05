@@ -3829,10 +3829,18 @@ async function reprice(el: MenusScreen, price = "11.00"): Promise<void> {
   await el.updateComplete;
 }
 
-it("keeps the Prices tab in the address, and switching tabs keeps the chosen menu", async () => {
+it("keeps the Price overrides tab in the address, and switching tabs keeps the chosen menu", async () => {
   const client = api();
   const el = await mountLunch(client);
   expect(client.getMenuPrices).not.toHaveBeenCalled();
+  const tab = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.shadowRoot!.querySelector(
+    '[role="tab"][data-key="prices"]',
+  );
+  expect(text(tab)).toBe(t("menus.tab_prices"));
+  expect([t("menus.tab_prices", "en"), t("menus.tab_prices", "es-ES")]).toEqual([
+    "Price overrides",
+    "Precios propios",
+  ]);
   await chooseTab(el, "prices");
   expect(location.pathname).toBe(PRICES_PATH);
   await vi.waitFor(() => expect(prices(el)?.rows.length).toBe(3));

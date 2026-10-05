@@ -1951,7 +1951,7 @@ existing check.
 | 4 | `…:1275` | the glass's 6.00 and the carafe's charged 15.00 from the server | the glass's placeholder `6.00`, the carafe's value `15.00` | R1 |
 | 4 | `…:1297` | Before and Effective ranges | placeholders: wine's range when its own is cleared is Task 5's; here juice `3.50 – 5.00`, tea `2.40`, burger `12.00`, wine's value `13.00` | R2 |
 | 4 | `…:1313` | effective `5.0` | juice placeholder `5.0` (one amount, not a range) | R2 |
-| 4 | `…:1339` | sort by product-price low end: tea, juice, wine, burger | sort by `override`: tea (2.40), juice (3.50), burger (12.00), wine (13.00); descending reversed | R1 |
+| 4 | `…:1339` | sort by product-price low end: tea, juice, wine, burger | sort by `override` with cider added (4.00 – 4.50, whose high end is below juice's 5.00, so a sort by the high end fails): tea (2.40), juice (3.50), cider (4.00), burger (12.00), wine (13.00); descending reversed | R1 (cider added by the Task 4 implementer: without it the five rows sort the same by either end) |
 | 4 | `…:1350` | sort sizes by `effective-price` | sort by `override`; same orders | R1 |
 | 4 | `…:1376` | Menu price column: `13.00`, "Variant overrides" ×2, "None" | override cells' text: `""`, note, note, `""` | R1 |
 | 4 | `…:1386`, `:1397` | `menu-price` filter and "None" cells | `override` filter; unmarked rows are those with no value and no note: cider, burger | R1 |
@@ -1966,7 +1966,9 @@ existing check.
 | 4 | `…:2036` (both locales) | the Menu price cell's value and its tooltip; the aggregate cell "Variant overrides" | the field's value `4.00`; the tooltip lists each size as the aggregate did; a no-override lemonade shows the note with the same tooltip | R1 |
 | 4 | `…:2126` | chooser contains `from`, not `active` | contains `status`, not `active` | R1 |
 | 4 | `…:2157` | effective range `2.50 – 3.75` counts every size | lemonade's hint names `€3.00 – €3.75`: the Large's override counts | R2 |
-| 4 | `…menu-prices-table.a11y.test.ts:88` | sizes open and the combined column shown | sizes open, an Inactive row and a clash drawn; axe | R1, R3 |
+| 4 | `…menu-prices-table.a11y.test.ts:88` | sizes open and the combined column shown | sizes open, an Inactive row and a clash drawn; axe. Rows: burger Active with a product clash, lemonade Inactive (the brief's `[{ ...rows[0], active: false }, rows[1]]` draws no clash and no status note, which needs an Active size under an Inactive product) | R1, R3 |
+| 4 | `packages/ui-core/src/tokens/structure.test.ts:22` | the structural contract's names | also `--wt-price-range-field-width` | Added check |
+| 4 | `…menu-prices-table.test.ts` (new, beside `:1791`) | — | resolving an Active size's clash sends the Active sizes and the resolved one, never an Inactive sibling (`setMenuVariants` refuses one it is sent, `variants.ts:389`–`390`) | Added check (Task 1 put Inactive sizes into `row.variants` without filtering `#resolve`, D18) |
 | 4 | `apps/dashboard/src/screens/menus-screen.test.ts:3829` | path and tab key | also the tab's label, "Price overrides" / "Precios propios" | Added check |
 | 5 | `…menu-prices-table.test.ts:280` (both locales) | the window's fields carry the locale; the hint names the product price | each row's field carries the locale; lemonade's hint names its range | R1 |
 | 5 | `…:549` | pressing the name asks for the window | **DELETE** — no window; "draws a product's name as plain text, with no window behind it" | R1 |
