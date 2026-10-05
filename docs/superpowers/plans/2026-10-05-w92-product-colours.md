@@ -780,6 +780,110 @@ under "Changed test checks".
 
 ---
 
+### Task 10: The owner's design — inline name, a colour square, a small swatch modal (rework of Task 5)
+
+(Added 2026-10-05 ~18:30. The owner answered at ~14:20, after Task 5 had built the Edit dialog:
+"couldn't we keep it as inline edit with the name plus a colour square next to the name, and
+clicking the color square opens a small modal with swatches to choose from?" — questions.md,
+"2026-10-05 ~14:20 — OWNER ANSWER". This task supersedes Task 5's Edit dialog. Review focus 1
+and 2 still hold.)
+
+**What the person sees.**
+- A category's name is edited INLINE again, for Add and for Rename, exactly as on `main`
+  (`git show origin/main:apps/dashboard/src/widgets/product-list.ts`): the row menu says Rename
+  (`folders.rename`), the box opens in place, Enter or leaving the box saves, Esc or a blank name
+  cancels.
+- A colour square sits AFTER the name (ruling 2026-10-05, W84 alignment): on each category's row
+  (the Task 5 swatch button, kept), and inside the open add box and rename box, beside the input.
+- Clicking any square opens a SMALL modal, `wt-modal size="compact"`, headed with the category's
+  name (for a new category: "New category's colour" | "Color de la categoría nueva"), holding the
+  shared `colorField` (palette swatches, "No colour", Custom — the owner asked for swatches; the
+  shared chooser also has No colour and Custom, which the product editor already shows, so it is
+  used whole and the STATE says so). CHOOSING sets the colour: a palette swatch or No colour applies
+  at once and closes the modal; Custom applies on the colour input's `change`. A Cancel button and
+  Esc close it with nothing changed. No Save button.
+- From a ROW's square: choosing sends `api.updateCategory(id, { color })` — the colour alone, never
+  `name` or `parentId` (a move or rename made meanwhile is kept). While it is saving the modal is
+  inert and Esc does nothing; on success it closes and the row shows the colour; on refusal it stays
+  open with the refusal under the chooser (`categoryRefusalErrors`, the colour key Task 5 added) and
+  `form.fix_fields` at the end of the body, as `product-color-form.ts` does.
+- From the BOX's square: choosing sends NO request. It sets the box's colour, which its square then
+  shows; the modal closes and focus returns to the name input with the typed text intact. Enter
+  then sends `createCategory({ name, parentId, color })` for a new category, and
+  `updateCategory(id, { name, color })` for a rename — the `color` key ONLY when one was chosen in
+  this box and it differs from the category's current colour, so a plain create or rename sends
+  exactly what it sends on `main` and its `main` checks pass unedited. Esc or blank still cancel
+  and discard the chosen colour.
+- TRAP: on `main` the box saves on `focusout` (`product-list.ts`, `#nameBox`). Moving focus to the
+  box's own square, or into the modal, must NOT save or cancel the box. Pin it: type a name, click
+  the square, choose a swatch — no `createCategory` call until Enter, and the box still holds the
+  typed name.
+
+**Files.**
+- Delete `apps/dashboard/src/widgets/category-details-form.ts`, `category-details-form.test.ts`,
+  `category-details-form.a11y.test.ts`, and the strings only they read (grep each key first).
+- Create `apps/dashboard/src/widgets/category-color-form.ts` (`dashboard-category-color-form`):
+  properties `open`, `busy`, `heading: string`, `color: string | null`, `errors`; events
+  `wt-choose` `{ color: string | null }` and `wt-cancel` (`bubbles`, `composed`, each stopping the
+  triggering event). Model it on `product-color-form.ts`, minus Save and the scope line. With
+  `category-color-form.test.ts` and `category-color-form.a11y.test.ts` (axe, light and dark, the
+  open modal and the modal with a refusal).
+- `product-list.ts`: restore `main`'s `CategoryNameDraft` (`create` | `rename`), `#renaming`, the
+  rename branch of `willUpdate` and `#focusNameBox`, `name-after` and its narrow-screen CSS, the
+  folder cell's rename branch, `rowActivation`'s rename check, and the menu's Rename sending
+  `rename-folder`. Keep the row swatch (shown only when the row is not being renamed); it sends
+  `folder-color` `{ folderId }`. The box gains a square button (`data-test="name-box-color"`,
+  `aria-label` "Choose the colour" | "Elegir el color") showing a new property `nameColor: string |
+  null`; it sends `name-color` `{}`. W72e's `#fitNameBox`/`#scheduleFit` and W72g's own-line layout
+  must still hold with the square in the box.
+- `catalogue-browser.ts`: drop `editingCategory`/`category-details-form`; state `colorTarget:
+  { kind: "row"; category: CategorySummary } | { kind: "box" } | null`, `nameColor: string | null`
+  (reset to the renamed category's colour, or null, whenever `nameDraft` changes), the modal's
+  `busy`/`errors`; `#saveName` restores `main`'s create AND rename branches and adds `color` as
+  above; listen for `rename-folder` again, plus `folder-color` and `name-color`.
+- `apps/dashboard/src/i18n/strings.ts`: English and Spanish for every new string; restore
+  `folders.rename` if Task 5 deleted it.
+
+**Tests (test-first; watch each fail).**
+- Every check Task 5 or the W72g rebase rewrote from the rename box to the Edit dialog (the R3 rows
+  and the three "rebase" rows of Changed test checks) goes back to its `main` text, unedited. Take
+  the text from `git show origin/main:<file>`. Where a `main` check needs the colour square to be
+  present (none should), say so in the table.
+- Keep W92's additions that still describe the product (the row swatch draws the colour, outlined
+  when none, its click does not toggle the row — Review focus 2), changing only the event name.
+- New: the row square → modal → choosing a swatch sends `updateCategory(id, { color })` alone and
+  the row shows it; No colour sends `{ color: null }`; a refusal stays in the modal under the
+  chooser; Esc and Cancel send nothing. A category moved while its modal is open keeps the move
+  (Review focus 1, rewritten: the colour request carries no `parentId`). The box square → modal →
+  swatch → Enter sends `createCategory` with `color`; for a rename, `updateCategory(id, { name,
+  color })`; the focusout trap above; Esc after choosing discards it. Both languages for each new
+  string. W72e's phone-width `describe` and W72g's own-line cases pass with the square in the box:
+  run `-t "phone width"` and read the `Tests` count, nothing skipped.
+- a11y: `catalogue-browser.a11y.test.ts` and `product-list.a11y.test.ts` — the tree with row
+  squares, and an open add box with its square, light and dark.
+- Run: `pnpm --filter @waitron/dashboard exec vitest run src/widgets/category-color-form.test.ts
+  src/widgets/category-color-form.a11y.test.ts src/widgets/product-list.test.ts
+  src/widgets/product-list.a11y.test.ts src/widgets/catalogue-browser.test.ts
+  src/widgets/catalogue-browser.a11y.test.ts src/widgets/category-form.test.ts
+  src/widgets/color-field.test.ts src/screens/catalogue-screen.test.ts`; typecheck and lint
+  `@waitron/dashboard`; `pnpm format:check`; `pnpm exec vitest run
+  scripts/native-form-fields.test.ts scripts/style-token-names.test.ts`.
+
+**Docs (same task).** `docs/developers/products.md`, `docs/developers/product-categories.md`,
+`docs/developers/design-system.md`, the spec's Decision 8 (a dated note: the owner chose inline
+naming with a colour square, 2026-10-05 ~14:20), the W92 backlog entry, and every other line on the
+branch that says a category has an Edit dialog (`git grep -n "Edit dialog\|edit-folder\|category-details"`).
+Then update the Changed test checks table: the R3 and rebase rows whose checks are back to `main`'s
+text are removed from the table (a check that is no longer changed is not listed), and a row is
+added for anything Task 10 changes that `main` has.
+
+**Look.** In Chromium at 1280 and 390 px, light and dark, English and Spanish: a category row with
+and without a colour, the open add box and rename box with their squares, the open modal, a
+refused colour.
+
+**Commit** (signed, plain English): "Products: a category is named inline again, with a colour
+square that opens a small swatch chooser".
+
 ## Changed test checks
 
 Line numbers at c2b886e99 (after W72e, #1241; only `product-list.test.ts` moved since 520f9cd20): the `it(` or `it.each(` line, then the assertions. **Reasons:** **R1** design
