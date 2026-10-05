@@ -1039,6 +1039,10 @@ unnamed legacy input, an unnamed combobox and every `wt-switch` use a module-lev
   `<input>` *additionally* sets `aria-label` directly from the `label` property, so the accessible
   name doesn't depend on how a given screen reader resolves a `for`/`id` pair against a
   non-default role.
+  A click on the knob (drawn over the input), the gap beside the label, or the space above and
+  below the label is handed to the input, so the switch flips once, sends one `wt-change`, and a
+  listener above the switch in the bubbling phase sees one click. A click in the empty space a
+  container stretches the host into past the label does not flip it (W76).
 - `wt-combobox`: the visible `<label>`'s `for` points at the inner `.trigger` button's `id`, which
   is the `name` when one is set and a generated `wt-combobox-trigger-N` otherwise. The trigger also
   carries `aria-labelledby` pointing at that same `<label>`, so the accessible name does not depend

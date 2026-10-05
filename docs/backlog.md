@@ -1238,6 +1238,21 @@ pending update has run, the Modifiers control, an attached row's button, and foc
 field during the wait — each failed with its part of the fix removed. The course box is still
 focused once with no wait, because the editor never draws it disabled.
 
+**A click on a switch's knob, track, gap or label flips it once (W76, owner 2026-10-04) — DONE.** The
+owner, on the Extras editor: _"make the toggle field work when you click anywhere on it, not just on
+one side or the other"_. In the shared `packages/ui/src/components/wt-switch.ts` a click on the round
+knob, in the gap between the switch and its label, or just above the label did nothing before:
+the knob is drawn over the hidden checkbox, and the gap belonged to no part. The switch and its label
+now sit in one inner area that hands such a click to the checkbox, so it flips once, sends one
+`wt-change`, and a listener above the switch in the bubbling phase sees one click. A switch stretched
+wider than its label by its container (the Extras editor's Active is 576 px wide at desktop, its
+label ends about 100 px in) does not flip from the empty space past the label. Space, the focus ring
+and the accessible name are unchanged. A disabled switch still does not flip, and a click on it
+still reaches the page; it now shows the not-allowed cursor over its knob, gap and label, where its
+label showed a pointer before. Tests: real Chromium clicks in
+`packages/ui/src/components/wt-switch.test.ts`; the Extras editor's Active and Preselected were
+clicked the same way at 1280 and 390 px wide in both themes by a probe that was not kept.
+
 **The Extras editor shows Portion beside Price, and a fixed 1 for a product sold by the unit
 (W75, owner 2026-10-04) — DONE (#1194).** In `apps/dashboard/src/widgets/extra-list-form.ts` Portion is a
 column of its own between Preselected and Price, there even when every item is sold by the unit,
@@ -2140,7 +2155,8 @@ lies over its name, price and badges, named "Edit: <variant>" and disabled while
 or another of the editor's windows is open. The drag handle, the Available switch and the row menu
 are lifted above it and keep their own clicks. Left open from its review: a click exactly on the
 Available switch's round knob does not flip it — the run-it reviewer reported the same on `main`
-before the branch, so it is in the shared `wt-switch`, not the row; not measured further.
+before the branch, so it is in the shared `wt-switch`, not the row; DONE by W76 (the knob now flips
+the switch; tested on the switch itself, not in this table).
 
 **The price's unit button says "Each" or "per kg", never "per Each" (A216) — DONE (#1057).** The owner:
 _"I don't like "per Each", it should either be "Each" or "per Unit""_. **Decided (owner,
@@ -4161,7 +4177,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       `wt-switch` that is on does not turn it off (clicking the label or its left edge, or Space,
       does), seen on the Device profiles screen, on the existing "Integrated card payment" switch
       too — the same knob already left open under A215 (clicking a variant's row); `packages/ui`
-      is untouched by C130.
+      is untouched by C130. The knob is DONE by W76.
     - **Done (C133, #1045) — the till's tabs fit one screen, with or without a notice above them.**
       The page gives the till the screen less its padding (`apps/till/index.html`), and the error
       banner and the other notices above the tabs take their height from the tab shell, so the

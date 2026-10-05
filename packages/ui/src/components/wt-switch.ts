@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, query } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
@@ -13,10 +13,22 @@ export class WtSwitch extends LitElement {
       :host {
         display: inline-flex;
         align-items: center;
-        gap: var(--wt-space-3);
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
         max-width: var(--wt-field-max-width);
+      }
+
+      /* The control and its label, and no more: a host stretched by its container must not
+         toggle from the empty space past the label. */
+      .hit-area {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-3);
+        cursor: pointer;
+      }
+
+      :host([disabled]) .hit-area {
+        cursor: not-allowed;
       }
 
       .control {
@@ -33,8 +45,8 @@ export class WtSwitch extends LitElement {
         content: "\\200b" / "";
       }
 
-      /* The native input covers the control so it stays the hit target and keeps keyboard and
-         assistive-technology behaviour. It fills .control exactly (inset: 0) rather than
+      /* The native input covers the control and keeps keyboard and assistive-technology
+         behaviour. It fills .control exactly (inset: 0) rather than
          carrying its own min-height/min-width — the minimum tap target comes from .control
          (and :host) above, so the input can never stretch past its container and steal clicks
          from whatever is stacked next to or below the switch. */
@@ -89,7 +101,7 @@ export class WtSwitch extends LitElement {
       }
 
       label {
-        cursor: pointer;
+        cursor: inherit;
       }
     `,
   ];
@@ -105,6 +117,18 @@ export class WtSwitch extends LitElement {
 
   private readonly inputId = uniqueId("wt-switch");
 
+  @query("input") private input!: HTMLInputElement;
+
+  /** The original click is stopped once handed to the input, so a listener above the switch in
+   * the bubbling phase sees one click. A disabled switch is left alone. */
+  private onHitAreaClick(event: MouseEvent): void {
+    if (this.disabled) return;
+    const target = event.composedPath()[0];
+    if (target === this.input || (target instanceof Element && target.closest("label"))) return;
+    event.stopPropagation();
+    this.input.click();
+  }
+
   private onChange(event: Event): void {
     this.checked = (event.target as HTMLInputElement).checked;
     dispatchWtChange(this, event, { checked: this.checked });
@@ -112,21 +136,23 @@ export class WtSwitch extends LitElement {
 
   override render() {
     return html`
-      <span class="control">
-        <input
-          id=${this.inputId}
-          name=${this.name || nothing}
-          type="checkbox"
-          role="switch"
-          .checked=${this.checked}
-          ?disabled=${this.disabled}
-          aria-label=${this.accessibleName || this.label || nothing}
-          @change=${this.onChange}
-        />
-        <span class="track"></span>
-        <span class="thumb"></span>
+      <span class="hit-area" @click=${this.onHitAreaClick}>
+        <span class="control">
+          <input
+            id=${this.inputId}
+            name=${this.name || nothing}
+            type="checkbox"
+            role="switch"
+            .checked=${this.checked}
+            ?disabled=${this.disabled}
+            aria-label=${this.accessibleName || this.label || nothing}
+            @change=${this.onChange}
+          />
+          <span class="track"></span>
+          <span class="thumb"></span>
+        </span>
+        ${this.label && !this.hideLabel ? html`<label part="label" for=${this.inputId}>${this.label}</label>` : nothing}
       </span>
-      ${this.label && !this.hideLabel ? html`<label part="label" for=${this.inputId}>${this.label}</label>` : nothing}
     `;
   }
 }
