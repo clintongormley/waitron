@@ -43,7 +43,8 @@ describe("the relative phrase", () => {
     ["a minute ago", MINUTE, "1 minute ago", "hace 1 minuto"],
     ["five minutes and a half ago", 5 * MINUTE + 30 * SECOND, "5 minutes ago", "hace 5 minutos"],
     ["a millisecond short of an hour ago", HOUR - 1, "59 minutes ago", "hace 59 minutos"],
-    ["an hour ago", HOUR, "1 hour ago", "hace 1 hora"],
+    // The step onto exactly an hour is in the clock test below, which reads "1 hour ago".
+    ["two hours ago", 2 * HOUR, "2 hours ago", "hace 2 horas"],
     ["a millisecond short of a day ago", DAY - 1, "23 hours ago", "hace 23 horas"],
     ["a day ago", DAY, "1 day ago", "hace 1 día"],
     ["three days ago", 3 * DAY + 5 * HOUR, "3 days ago", "hace 3 días"],
