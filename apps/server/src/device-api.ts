@@ -440,6 +440,19 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       }>(c);
       await gated(sessionId, async (tx) => {
         if (!isUuid(id)) throw new AppError("device.not_found", { deviceId: id });
+        const [device] = await tx
+          .select({
+            active: devices.active,
+            locationId: devices.locationId,
+            deviceProfileId: devices.deviceProfileId,
+            receiptPrinterId: devices.receiptPrinterId,
+            paymentSlipPrinterId: devices.paymentSlipPrinterId,
+          })
+          .from(devices)
+          .where(ownDeviceById(id));
+        if (device === undefined || !device.active) {
+          throw new AppError("device.not_found", { deviceId: id });
+        }
         const label = requireDeviceName(body.name);
         const profileId = requireBodyUuid(body.profileId, "profileId");
         const stationId =
@@ -453,20 +466,6 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         const madeHere = body.madeHereStationIds;
         if (!Array.isArray(madeHere) || !madeHere.every(isUuid)) {
           throw new AppError("management.request_invalid", { field: "madeHereStationIds" });
-        }
-
-        const [device] = await tx
-          .select({
-            active: devices.active,
-            locationId: devices.locationId,
-            deviceProfileId: devices.deviceProfileId,
-            receiptPrinterId: devices.receiptPrinterId,
-            paymentSlipPrinterId: devices.paymentSlipPrinterId,
-          })
-          .from(devices)
-          .where(ownDeviceById(id));
-        if (device === undefined || !device.active) {
-          throw new AppError("device.not_found", { deviceId: id });
         }
         const binding = await resolveDeviceBinding(tx, deps.cfg, {
           profileId,

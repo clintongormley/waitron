@@ -1240,6 +1240,32 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     expect(await labelOf(deviceId)).toBe("Caja");
   });
 
+  it("refuses an unknown device as device.not_found before reading the body", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const res = await send(app, "PATCH", `/management-api/devices/${randomUUID()}`, {
+      cookie: venue.managerCookie,
+      body: {},
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "device.not_found" } });
+  });
+
+  it("refuses a revoked device as device.not_found even with a blank name", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId } = await enrolTill(app, venue, "Caja");
+    const body = await storedBody(deviceId);
+    await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+    const res = await send(app, "PATCH", `/management-api/devices/${deviceId}`, {
+      cookie: venue.managerCookie,
+      body: { ...body, name: "   " },
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: { code: "device.not_found" } });
+    expect(await labelOf(deviceId)).toBe("Caja");
+  });
+
   it("changes the profile and moves the printers to the new profile's first in the same request", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
@@ -1437,6 +1463,15 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     expect(staff.status).toBe(403);
     expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
     expect(await labelOf(deviceId)).toBe("Caja");
+
+    const malformed = await send(app, "PATCH", "/management-api/devices/not-a-uuid", {
+      cookie: venue.staffCookie,
+      body: {},
+    });
+    expect(malformed.status).toBe(403);
+    expect(await malformed.json()).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
   });
 });
 
@@ -1788,6 +1823,21 @@ describe("deleted routes are gone (404)", () => {
     const res = await send(app, "PATCH", `/management-api/devices/${deviceId}/hardware`, {
       cookie: venue.managerCookie,
       body: { receiptPrinterId: null },
+    });
+    expect(res.status).toBe(404);
+  });
+
+  // Each body is one the removed route accepted for this device, so a live route would answer 204.
+  it.each([
+    ["POST", "assign-device-profile"],
+    ["PUT", "made-here"],
+  ] as const)("%s /management-api/devices/:id/%s no longer exists", async (method, tail) => {
+    const venue = await setupVenue(suite.db);
+    const app = mountApp(venue.cfg);
+    const { deviceId, profileId } = await enrolTill(app, venue, `Caja ${tail}`);
+    const res = await send(app, method, `/management-api/devices/${deviceId}/${tail}`, {
+      cookie: venue.managerCookie,
+      body: tail === "made-here" ? { stationIds: [] } : { deviceProfileId: profileId },
     });
     expect(res.status).toBe(404);
   });
