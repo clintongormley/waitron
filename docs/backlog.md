@@ -3423,7 +3423,7 @@ columns a module lists as `references` for a reference the schema gives no forei
 such columns a probe found, run over every import in the transfer tests and an import of the demo
 seed; a reference column added later with neither a foreign key nor a `references` entry keeps the
 old id, and nothing checks for one.
-Since W72b (2026-10-05) both setup routes answer an export that cannot be opened as the restore
+Since W72b (#1236, 2026-10-05) both setup routes answer an export that cannot be opened as the restore
 routes answer a copy that cannot be opened: `backup.artifact_invalid`, `backup.archive_invalid` and
 `recovery.passphrase_invalid` get 422, where since `fabdb224d1` (2026-09-10) they fell to the
 boundary's default 400. `image.invalid_metadata` and `content.language_invalid` are now listed at
