@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
@@ -56,10 +56,15 @@ export class WtSlider extends LitElement {
   @property({ type: Number }) value = 0;
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property() error = "";
-  /** The number under a drag that has not been released, which `value` does not hold yet. */
+  /** The number under the latest drag, until a release or a new `value` replaces it. A drag that
+   * ends where it began sends no `change`, so a release alone cannot be relied on to clear it. */
   @state() private shown: number | null = null;
 
   readonly #id = uniqueId("wt-slider");
+
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("value")) this.shown = null;
+  }
 
   #onInput(event: Event): void {
     event.stopPropagation();
@@ -68,7 +73,6 @@ export class WtSlider extends LitElement {
 
   #onChange(event: Event): void {
     const value = Number((event.target as HTMLInputElement).value);
-    this.shown = null;
     this.value = value;
     dispatchWtChange(this, event, { value });
   }

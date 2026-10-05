@@ -119,6 +119,22 @@ test("after a release the shown number follows the value property again", async 
   expect(input.value).toBe("3");
 });
 
+test("a drag that ends without a change still lets a new value redraw the number", async () => {
+  const el = await mountSlider();
+  const input = inputOf(el);
+  // Chromium sends no `change` when a drag ends where it began, so only `input` arrives.
+  for (const step of ["8", "6"]) {
+    input.value = step;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  }
+  await el.updateComplete;
+
+  el.value = 3;
+  await el.updateComplete;
+  expect(input.value).toBe("3");
+  expect(shownOf(el)).toBe("3");
+});
+
 test("a keyboard step moves the value by one step and sends exactly one wt-change", async () => {
   const el = await mountSlider();
   const heard = hostHears(el);
