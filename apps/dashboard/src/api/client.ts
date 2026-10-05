@@ -318,7 +318,8 @@ export interface FolderSummary {
    * included. */
   products: number;
   activeProducts: number;
-  /** Routing rules naming the category or any category below it. */
+  /** Routing rules naming the category or any category below it: what deleting its contents too
+   * removes. */
   routes: number;
   /** Routing rules naming the category itself: what moving its contents up removes. */
   ownRoutes: number;

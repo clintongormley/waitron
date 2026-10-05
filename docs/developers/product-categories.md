@@ -255,8 +255,8 @@ restore the products later. Before deleting a non-empty category, choose what ha
 
 - **Move it up to the parent category** keeps the products active and moves the category's direct
   products and subcategories to its parent. For a top-level category they move to **All products**.
-  Only the routing rules naming a selected category itself are removed; its subcategories keep
-  theirs, and the summary counts only those.
+  Only the routing rules naming a selected category itself are removed; its subcategories that are
+  not selected keep theirs. The dialog's routing-rule warning counts only the removed ones.
 - **Delete it too** removes the subtree and makes its products Inactive. The summary shows the
   numbers of subcategories, active products and routing rules removed (category claims and
   exceptions, in the whole subtree). A product that is already Inactive is not counted. Every product in the subtree,
@@ -275,8 +275,8 @@ message. If an empty category, which is deleted without confirmation, has gained
 active products or routing rules by then, the dialog opens with its new counts. A refused action
 keeps its dialog open with a message at the bottom.
 Deleting a category removes its station claim and every exception naming it, because both tables
-have a cascading foreign key to `categories`. The summary counts the rules the chosen option
-removes; it does not list products whose station would change. **Move to…** also has no routing preview. Check
+have a cascading foreign key to `categories`. The dialog's routing-rule warning counts the rules the
+chosen option removes; it does not list products whose station would change. **Move to…** also has no routing preview. Check
 Prep Stations' tester after changing the category tree. A variant is routed by its product's
 category, and a variant still storing a deleted category has it cleared.
 
@@ -323,7 +323,11 @@ is `category.parent_cycle` (409). A category name that would match a sibling's i
 `shown` counts differ from the server's own for any selected category is `category.contents_changed`
 (409, `{ categoryId }`, the first such category), and deletes nothing. Malformed arrays or
 repeated IDs are `management.request_invalid` (400), and a malformed UUID is `shared.invalid_id`
-(400); a missing or malformed `shown` is `management.request_invalid` with `field: "shown"`. Category-summary counts cover each complete subtree; the browser counts selected roots when ancestors and descendants are selected together.
+(400); a missing or malformed `shown` is `management.request_invalid` with `field: "shown"`.
+Category-summary counts cover each complete subtree, except `ownRoutes`, which counts only the
+routing rules naming the category itself. The browser counts the outermost selected categories when
+ancestors and descendants are selected together, except that under **Move it up to the parent
+category** its routing-rule warning sums `ownRoutes` over every selected category.
 
 The former per-category delete, dependants and product-membership routes are retired. Use the
 category selection operations above. The product editor still saves `primaryCategoryId`, which

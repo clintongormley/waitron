@@ -1599,10 +1599,10 @@ deleted the right category; the dashboard was at fault. Fixed:
   two on its subcategory, the summary reported 3 and moving the contents up removed 1, the
   subcategory keeping both of its own. Each category's summary now also reports `ownRoutes`, the
   rules naming the category itself (`summariseFolders`, `packages/catalogue/src/catalogue-items.ts`).
-  Under "Move contents up" the dialog warns of the selected categories' own rules, summed over every
-  selected one; under "Delete it too", of every rule in the deleted subtrees, as before. The delete
-  sends `ownRoutes` with the other counts it showed, and the dashboard's second read at Delete and
-  the server both treat a change to it like a change to the others.
+  Under "Move it up to the parent category" the dialog warns of the selected categories' own rules,
+  summed over every selected one; under "Delete it too", of every rule in the deleted subtrees, as
+  before. The delete sends `ownRoutes` with the other counts it showed, and the dashboard's second
+  read at Delete and the server both treat a change to it like a change to the others.
 
 Still open from W74:
 - **An empty category's no-dialog delete does not see an inactive product added meanwhile**
