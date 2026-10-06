@@ -4487,6 +4487,12 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       which differ only for a country shipping an allowance of 0 (none does); and `renameSpecialDate`
       checks the name before the date's id, so a blank name for another venue's date answers
       `hours.invalid` rather than not found.
+    - **Address changes during a local-holiday or area save (#1305's open points).** An address
+      change that lands after Save is pressed but before the page has read the new address is not
+      caught: the route takes no expected address, and an area save already on its way has the same
+      gap. The address-change warning names only the new city, though a province change also
+      triggers it. The owner decided on 2026-10-06 not to queue these, or the clear-area control
+      above.
     [Step 4 Routing grid plan](superpowers/plans/2026-10-05-routing-grid.md) was approved on
     2026-10-05; the grid and row-first cell storage are not implemented. Its Prep stations dependency
     is landed; follow the lane queue for the build. Approved decisions cover the No category group,
