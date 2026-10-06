@@ -309,6 +309,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.in_use": 409,
   "device_profile.invalid": 400,
   "device_profile.access_invalid": 400,
+  "device_profile.admission_invalid": 400,
   "device_profile.station_in_use": 409,
   "device_profile.watcher_in_use": 409,
   "printer.not_found": 404,
@@ -535,7 +536,6 @@ function parseProfileSettings(body: ProfileBody) {
   };
 }
 
-/** The fields a device profile's POST and PUT read. */
 type ProfileBody = {
   name?: unknown;
   formFactor?: unknown;
@@ -562,21 +562,20 @@ type ProfileScope = {
 
 const NO_SCOPE: ProfileScope = { departmentId: null, allowedZoneIds: null, startingZoneId: null };
 
-/**
- * The department, zones and starting zone travel together: `undefined` when the body names none of
- * them, otherwise each one it omits or sends as null is null (`allowedZoneIds` null is every zone).
- */
-function parseProfileScope(body: ProfileBody): ProfileScope | undefined {
+/** The scope fields the body names; each one it omits is left out, and null is kept as null. */
+function parseProfileScope(body: ProfileBody): Partial<ProfileScope> {
+  const scope: Partial<ProfileScope> = {};
   const { departmentId, allowedZoneIds, startingZoneId } = body;
-  if (departmentId === undefined && allowedZoneIds === undefined && startingZoneId === undefined)
-    return undefined;
-  return {
-    departmentId: departmentId == null ? null : requireBodyUuid(departmentId, "departmentId"),
-    allowedZoneIds:
-      allowedZoneIds == null ? null : parseIdLists(body, ["allowedZoneIds"]).allowedZoneIds!,
-    startingZoneId:
-      startingZoneId == null ? null : requireBodyUuid(startingZoneId, "startingZoneId"),
-  };
+  if (departmentId !== undefined)
+    scope.departmentId =
+      departmentId === null ? null : requireBodyUuid(departmentId, "departmentId");
+  if (allowedZoneIds !== undefined)
+    scope.allowedZoneIds =
+      allowedZoneIds === null ? null : parseIdLists(body, ["allowedZoneIds"]).allowedZoneIds!;
+  if (startingZoneId !== undefined)
+    scope.startingZoneId =
+      startingZoneId === null ? null : requireBodyUuid(startingZoneId, "startingZoneId");
+  return scope;
 }
 
 /** Shape only, each part only when present; `setProfileAdmission` refuses an empty role set. */
@@ -609,25 +608,28 @@ function parseProfileAdmission(body: ProfileBody): Partial<ProfileAdmission> {
 }
 
 /**
- * A kitchen display keeps no scope, so one a body omits is cleared. Any other profile keeps the
- * department it has stored when the body names no scope, and is refused without one.
+ * Each scope field the body omits keeps its stored value, as the other optional fields of a PUT
+ * do; a new profile has none stored, so an omitted `allowedZoneIds` is every zone. A kitchen
+ * display keeps no scope, so it starts from none rather than from what was stored. A profile that
+ * is not one is refused without a department.
  */
 async function saveProfileScope(
   tx: Transaction,
   deps: ManagementApiDeps,
   profile: { id: string; formFactor: FormFactor },
-  scope: ProfileScope | undefined,
+  scope: Partial<ProfileScope>,
 ): Promise<void> {
-  if (scope === undefined && !isSharedDisplay(profile.formFactor)) {
+  let base = NO_SCOPE;
+  if (!isSharedDisplay(profile.formFactor)) {
     const [stored] = await VENUE_SERVICE.readProfileServiceScopes(tx, [profile.id]);
-    if (stored!.departmentId !== null) return;
+    base = stored!;
+    if (Object.keys(scope).length === 0 && base.departmentId !== null) return;
   }
-  await VENUE_SERVICE.setProfileServiceScope(
-    tx,
-    requireVenueCfg(deps),
-    profile.id,
-    scope ?? NO_SCOPE,
-  );
+  await VENUE_SERVICE.setProfileServiceScope(tx, requireVenueCfg(deps), profile.id, {
+    departmentId: scope.departmentId === undefined ? base.departmentId : scope.departmentId,
+    allowedZoneIds: scope.allowedZoneIds === undefined ? base.allowedZoneIds : scope.allowedZoneIds,
+    startingZoneId: scope.startingZoneId === undefined ? base.startingZoneId : scope.startingZoneId,
+  });
 }
 
 /** Each profile row with where it serves and who may sign in on it, as last saved. */
@@ -1497,7 +1499,7 @@ export function mountManagementApi(
 
   // Full replacement: an omitted `canvasId` or `inactivityTimeoutSeconds` stores null. These stay as
   // they were when omitted: the starting screen, a printer, station or watcher list, the role set,
-  // the person exceptions, and the department with its zones and starting zone.
+  // the person exceptions, and each of the department, the zones and the starting zone.
   app.put("/management-api/device-profiles/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

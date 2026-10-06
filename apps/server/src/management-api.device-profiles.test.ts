@@ -1419,6 +1419,35 @@ describe("Management API — who and where a device profile serves (W97)", () =>
     }
   });
 
+  it("keeps each scope field a PUT omits, and widens to every zone only on an explicit null", async () => {
+    const name = uniqueName("Terrace only");
+    const created = await send(
+      "POST",
+      handheld(name, {
+        departmentId: ordering.departmentId,
+        allowedZoneIds: [place.terrace],
+        startingZoneId: place.terrace,
+      }),
+    );
+    const id = (created.body as Detail).id;
+    const narrowed = {
+      departmentId: ordering.departmentId,
+      allowedZoneIds: [place.terrace],
+      startingZoneId: place.terrace,
+    };
+    for (const partial of [
+      { departmentId: ordering.departmentId, startingZoneId: place.terrace },
+      { startingZoneId: place.terrace },
+      { departmentId: ordering.departmentId },
+    ]) {
+      const res = await send("PUT", handheld(name, partial), id);
+      expect({ partial, status: res.status }).toEqual({ partial, status: 200 });
+      expect(await read(id)).toMatchObject(narrowed);
+    }
+    await send("PUT", handheld(name, { allowedZoneIds: null }), id);
+    expect(await read(id)).toMatchObject({ ...narrowed, allowedZoneIds: null });
+  });
+
   it("keeps a starting screen a PUT omits, and clears it on an explicit null", async () => {
     const name = uniqueName("Start screen");
     const created = await send(
