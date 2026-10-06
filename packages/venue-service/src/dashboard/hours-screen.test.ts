@@ -769,7 +769,12 @@ describe("Hours: the standard week", () => {
     expect(saveButton(el).disabled).toBe(false);
   });
 
-  it("gives a reopened editor its own save: an earlier save that settles late changes nothing in it", async () => {
+  const cancelButton = (el: HoursScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      '[data-test="cancel-editor"]',
+    )!;
+
+  it("holds the editor open while a save is pending, and says a late failure in it", async () => {
     const { api, state } = server();
     const el = await mount(api);
     const late = deferred();
@@ -777,29 +782,32 @@ describe("Hours: the standard week", () => {
     await click(el, cellButton(el, restaurant, 2));
     await click(el, saveButton(el));
     expect(saveButton(el).disabled).toBe(true);
-    await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
-    await click(el, cellButton(el, restaurant, 2));
-    expect(saveButton(el).disabled).toBe(false);
-    late.resolve({ reject: { code: "server.internal" } });
+    expect(cancelButton(el).disabled).toBe(true);
+    await click(el, cancelButton(el));
+    await userEvent.keyboard("{Escape}");
     await settle(el);
     expect(modal(el)).not.toBeNull();
-    expect(await bottomMessage(el)).toBe("");
+    late.resolve({ reject: { code: "connection.failed" } });
+    await settle(el);
+    expect(modal(el)).not.toBeNull();
+    expect(await bottomMessage(el)).toBe("The change could not be saved.");
     expect(saveButton(el).disabled).toBe(false);
+    expect(cancelButton(el).disabled).toBe(false);
   });
 
-  it("keeps a reopened editor open when an earlier save succeeds late", async () => {
+  it("closes the editor and reads once when a save that Cancel could not stop succeeds", async () => {
     const { api, state, calls } = server();
     const el = await mount(api);
     const late = deferred();
     state.writes.push(late.promise);
     await click(el, cellButton(el, restaurant, 2));
     await click(el, saveButton(el));
-    await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
-    await click(el, cellButton(el, bar, 2));
+    await click(el, cancelButton(el));
+    expect(modal(el)).not.toBeNull();
     const reads = calls("GET").length;
     late.resolve(undefined);
     await settle(el);
-    expect(modal(el)!.getAttribute("heading")).toBe("Bar: Tuesday");
+    expect(modal(el)).toBeNull();
     expect(calls("GET").length).toBe(reads + 1);
   });
 

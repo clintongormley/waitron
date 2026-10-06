@@ -246,7 +246,7 @@ export class HoursScreen extends LitElement {
   readonly #from = addDays(browserToday(), -1);
   readonly #to = addDays(this.#from, HOURS_RANGE_MAX_DAYS - 1);
   #detach?: () => void;
-  /** Each editor opened or closed is a new generation; a save answers only its own. */
+  /** Each editor opened or closed is a new generation, drawn as a modal of its own. */
   #generation = 0;
   #returnTo?: () => HTMLElement | null | undefined;
   /** The cells the last date save sent, to name the subject a `cells.N` refusal is about. */
@@ -549,19 +549,17 @@ export class HoursScreen extends LitElement {
     }
   }
 
+  /** The editor cannot be closed or replaced while `busy`, so the answer always belongs to it. */
   async #write(editor: Editor): Promise<void> {
-    const generation = this.#generation;
     this.busy = true;
     try {
       await this.#send(editor);
     } catch (error) {
-      if (generation === this.#generation) {
-        this.busy = false;
-        this.#refuse(editor, error);
-      }
+      this.busy = false;
+      this.#refuse(editor, error);
       return;
     }
-    if (generation === this.#generation) this.#close();
+    this.#close();
     await this.#reload();
   }
 
@@ -972,6 +970,7 @@ export class HoursScreen extends LitElement {
             : "standard"
         }
         heading=${content.heading}
+        .dismissible=${!this.busy}
         @wt-close=${() => this.#close()}
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'))}
@@ -988,10 +987,13 @@ export class HoursScreen extends LitElement {
             slot="cancel"
             variant="secondary"
             data-test="cancel-editor"
-            @click=${() =>
-              editor.kind === "configure" && editor.confirming
-                ? (this.editor = { ...editor, confirming: false })
-                : this.#close()}
+            ?disabled=${this.busy}
+            @click=${() => {
+              if (this.busy) return;
+              if (editor.kind === "configure" && editor.confirming)
+                this.editor = { ...editor, confirming: false };
+              else this.#close();
+            }}
             >${content.cancel ?? t("hours.cancel")}</wt-button
           >
           <wt-button
