@@ -1,3 +1,5 @@
+import type { CountryHolidayCalendar } from "./holidays.js";
+
 export type ValidationFailureReason = "empty" | "format" | "checksum" | "unsupported";
 
 export type ValidationResult<Kind extends string> =
@@ -107,6 +109,7 @@ export interface CountryPack {
   readonly taxIdentifier?: ValueValidator<string>;
   readonly postalCode?: ValueValidator<"postal-code">;
   readonly telephone?: ValueValidator<string>;
+  readonly holidayCalendar?: CountryHolidayCalendar;
 }
 
 export interface AddressSuggestion {

@@ -758,6 +758,9 @@ importers:
         specifier: workspace:*
         version: link:../country
     devDependencies:
+      '@types/node':
+        specifier: ^26.0.0
+        version: 26.6.2
       '@vitest/coverage-v8':
         specifier: ^4.1.11
         version: 4.1.11(@vitest/browser@4.1.11)(vitest@4.1.11)

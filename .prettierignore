@@ -29,3 +29,8 @@ packages/reporting/reference/
 # The Iosevka font's licence, committed verbatim from the font's repository at its release tag
 # (deploy/third-party/iosevka/README.md). Same rule: a licence text is never reformatted.
 deploy/third-party/iosevka/LICENSE.md
+
+# BOE and INE pages, committed byte for byte: the holiday data's tests hash them against the
+# SHA-256 the shipped data names (packages/country-es/src/data/sources/README.md).
+packages/country-es/src/data/sources/*.htm
+packages/country-es/src/data/sources/*.xml
