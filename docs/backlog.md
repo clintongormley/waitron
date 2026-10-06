@@ -1185,11 +1185,13 @@ in place until navigation is approved. Receipt/login page draft registration, ch
 owners, till shell integration, other page/setup owners and activated native reload
 remain open. Setup Back now requests the current child scope before leaving; the administrator
 step protects each of its six submitted fields. Next transfers their exact values into the
-wizard draft without asking and cancels any unanswered Back question. Setup's root draft,
-mode changes and the remaining setup forms still need protection. The setup administrator
-checkpoint passed 387 focused browser cases and the unedited 20 fiscal cases; six independent
-deletion controls failed their intended cases beside a passing same-step control. See the dated
-setup entry in the W69 audit for receipts and limits.
+wizard draft without asking and cancels any unanswered Back question. The root now keeps unload
+protection after Next and through configuration preview/review; Back retains accepted values.
+Only successful provisioning commits the captured root body; newer input and refused writes
+stay dirty. Provision/import replies from an earlier connection cannot change the reconnected
+wizard. Destructive mode/start-over interception and the remaining setup forms still need work.
+See the dated setup entries in the W69 audit for commands and limits; activated native reload
+has not been verified.
 Dashboard voluntary logout and a language change also request the shared warning before their
 API calls. Language changes exclude the retained profile editor and its descendants; picking
 the current language saves its preference without restoring unrelated drafts. Forced expiry

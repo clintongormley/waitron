@@ -1,5 +1,52 @@
 # W69 editable-form inventory
 
+## 2026-10-06 setup root draft checkpoint
+
+The root captures a detached baseline before its first accepted child patch or configuration
+import. Child Next leaves the root dirty; Back retains accepted root values without another
+question. Comparison reads the existing `assembleBody` representation and preserves invoice
+language order. Successful provisioning commits its captured body before showing Done;
+pending/refused provisioning and newer accepted patches remain protected. Disconnect releases
+the scope; reconnect registers retained values against the original baseline. Departed patches
+and provision/import replies from an earlier connection cannot change the reconnected wizard.
+
+The command below passed 440 cases.
+
+```sh
+pnpm --filter @waitron/setup exec vitest run \
+  src/setup-app.test.ts src/setup-app.unsaved-changes.test.ts \
+  src/screens/admin-screen.test.ts src/screens/admin-screen.a11y.test.ts \
+  src/screens/mode-screen.test.ts src/screens/live-source-screen.test.ts \
+  src/screens/configuration-preview-screen.test.ts
+```
+
+The initial root run observed eight expected assertion failures. Import and
+provision-refusal reconnect checks observed two more; the later import-reconnect pair observed
+two failures before its generation checks. Setup typechecking, scoped lint, source formatting
+and diff checks are recorded with the checkpoint. The unedited fiscal write-path and
+inmutabilidad suites passed 20 cases.
+
+Eight independent installed-candidate guard deletions each failed the intended assertion while
+the unchanged clean/reverted administrator control passed. The first import-notification deletion
+survived: the fixture imported from Administrator, whose scope disposal refreshed the root's
+unload listener. The corrected test imports from the actual live-source screen and fails with
+that notification removed. Restored candidates passed 28 cases before the import-generation
+addition and 30 afterwards; both source/test files were byte-compared before each owned clone
+was removed. No existing assertion changed.
+
+Eight real-shell EN/ES/light/dark/390/1280 flows passed 24 axe scans; all 24 captures were inspected
+in four contact sheets. They exercise Keep, accepted Next and Back to the retained administrator.
+Initial API reads are stubbed and administrator values seeded; live onboarding, the deployment's
+dark outer canvas and an activated native browser reload remain unverified. These tests check
+`beforeunload` cancellation, not a native dialog. Temporary visual sources and captures are
+archived outside product source. Local receipts: Lane E `receipts/w69-setup-root-20261006`.
+
+This checkpoint does not intercept destructive mode/start-over changes or register the other
+setup children. Those, the final advancing-owner classification, till/child page routes,
+remaining page owners and activated native reload keep Tasks 1/4/5/6 incomplete. No partial PR
+or whole-branch readiness is claimed.
+
+
 ## 2026-10-06 advancing Hours owner audit
 
 Hours #1298 is included in the candidate after the rebase onto `ac861b774d9d368d8435b0b06f1467ef89f9386e`.

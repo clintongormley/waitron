@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { leaveCoordinatorFor } from "@waitron/ui";
 import { SetupApp, type DeepPartial, type Screen } from "./setup-app.js";
-import type { ProvisionBody, SetupApi } from "./api/client.js";
+import type { ConfigurationPreview, ProvisionBody, SetupApi } from "./api/client.js";
 import type { SetupAdminScreen } from "./screens/admin-screen.js";
 import type { WtInput } from "@waitron/ui/src/components/wt-input.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
@@ -277,4 +277,312 @@ describe("setup administrator unsaved changes", () => {
     expect(field(admin, "password").value).toBe("retained edit");
     expect(unload()).toBe(false);
   });
+});
+
+function patchRoot(el: SetupApp, patch: DeepPartial<ProvisionBody>) {
+  el.shadowRoot!.querySelector("main")!.dispatchEvent(
+    new CustomEvent("setup-patch", { detail: { patch }, bubbles: true, composed: true }),
+  );
+}
+function submitRoot(el: SetupApp) {
+  el.shadowRoot!.querySelector("main")!.dispatchEvent(
+    new CustomEvent("provision-requested", { bubbles: true, composed: true }),
+  );
+}
+async function nextEditedAdmin() {
+  const mounted = await mount();
+  await edit(mounted.admin, "email", "submitted@example.com");
+  mounted.admin.shadowRoot!.querySelector<HTMLElement>("[data-test=next]")!.click();
+  await expect.poll(() => (mounted.el as unknown as State).screen).toBe("venue");
+  return mounted;
+}
+
+describe("setup root draft unsaved changes", () => {
+  it("Next transfers protection to the root, and Back retains the accepted administrator", async () => {
+    const { el } = await nextEditedAdmin();
+    expect(unload()).toBe(true);
+    goto(el, "admin");
+    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+    expect(warning(el).open).toBe(false);
+    const admin = el.shadowRoot!.querySelector<SetupAdminScreen>("setup-admin-screen")!;
+    await admin.updateComplete;
+    expect(field(admin, "email").value).toBe("submitted@example.com");
+    expect(unload()).toBe(true);
+  });
+
+  it("unchanged patches and value reverts release root unload protection", async () => {
+    const { el } = await mount();
+    patchRoot(el, { venue: { admin: { email: initialAdmin.email } } });
+    expect(unload()).toBe(false);
+    patchRoot(el, { venue: { admin: { email: "changed@example.com" } } });
+    expect(unload()).toBe(true);
+    patchRoot(el, { venue: { admin: { email: initialAdmin.email } } });
+    expect(unload()).toBe(false);
+  });
+
+  it("unchanged nested values stay clean but invoice language order remains significant", async () => {
+    const { el } = await mount();
+    patchRoot(el, { venue: { location: { invoiceLocales: ["es-ES", "en-GB"] } } });
+    expect(unload()).toBe(true);
+    await el.updateComplete;
+    submitRoot(el);
+    await expect.poll(() => (el as unknown as State).screen).toBe("done");
+    expect(unload()).toBe(false);
+    patchRoot(el, {
+      venue: { admin: { pin: "1234", password: "initial password", email: initialAdmin.email } },
+    });
+    expect(unload()).toBe(false);
+    patchRoot(el, { venue: { location: { invoiceLocales: ["en-GB", "es-ES"] } } });
+    expect(unload()).toBe(true);
+    patchRoot(el, { venue: { location: { invoiceLocales: ["es-ES", "en-GB"] } } });
+    expect(unload()).toBe(false);
+  });
+
+  it("pending provisioning keeps protection and success commits the exact submitted body", async () => {
+    const { el, api } = await nextEditedAdmin();
+    let accept!: () => void;
+    vi.mocked(api.provision).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          accept = () => resolve({ provisioned: true, restarting: true });
+        }),
+    );
+    submitRoot(el);
+    await expect.poll(() => (el as unknown as State).screen).toBe("provisioning");
+    expect(warning(el).open).toBe(false);
+    expect(unload()).toBe(true);
+    expect(api.provision).toHaveBeenCalledExactlyOnceWith({
+      mode: "prepare",
+      venue: { admin: { ...initialAdmin, email: "submitted@example.com" } },
+    });
+    accept();
+    await expect.poll(() => (el as unknown as State).screen).toBe("done");
+    expect(unload()).toBe(false);
+  });
+
+  it("a provisioning refusal preserves the accepted draft and its unload protection", async () => {
+    const { el, api } = await nextEditedAdmin();
+    vi.mocked(api.provision).mockRejectedValue({ code: "setup.not_ready" });
+    submitRoot(el);
+    await expect
+      .poll(
+        () =>
+          (
+            el.shadowRoot!.querySelector("setup-provisioning-screen") as
+              (HTMLElement & { canRetry?: boolean }) | null
+          )?.canRetry,
+      )
+      .toBe(true);
+    expect(api.provision).toHaveBeenCalledOnce();
+    await el.updateComplete;
+    expect((el as unknown as State).draft.venue!.admin!.email).toBe("submitted@example.com");
+    expect(unload()).toBe(true);
+  });
+
+  it("successful provisioning commits the captured request, keeping any newer patch dirty", async () => {
+    const { el, api } = await nextEditedAdmin();
+    let accept!: () => void;
+    vi.mocked(api.provision).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          accept = () => resolve({ provisioned: true, restarting: true });
+        }),
+    );
+    submitRoot(el);
+    patchRoot(el, { venue: { admin: { email: "newer@example.com" } } });
+    accept();
+    await expect.poll(() => (el as unknown as State).screen).toBe("done");
+    expect(unload()).toBe(true);
+    expect((el as unknown as State).draft.venue!.admin!.email).toBe("newer@example.com");
+    patchRoot(el, { venue: { admin: { email: "submitted@example.com" } } });
+    expect(unload()).toBe(false);
+  });
+
+  it("disconnect releases root protection, and reconnect retains its original baseline", async () => {
+    const { el, host } = await nextEditedAdmin();
+    expect(unload()).toBe(true);
+    el.remove();
+    expect(unload()).toBe(false);
+    host.appendChild(el);
+    await el.updateComplete;
+    expect(unload()).toBe(true);
+    patchRoot(el, { venue: { admin: { email: initialAdmin.email } } });
+    expect(unload()).toBe(false);
+  });
+
+  it("a departed patch cannot alter the root, and a departed success cannot commit its baseline", async () => {
+    const { el, host, api } = await nextEditedAdmin();
+    let accept!: () => void;
+    vi.mocked(api.provision).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          accept = () => resolve({ provisioned: true, restarting: true });
+        }),
+    );
+    submitRoot(el);
+    el.remove();
+    patchRoot(el, { venue: { admin: { email: "departed@example.com" } } });
+    expect((el as unknown as State).draft.venue!.admin!.email).toBe("submitted@example.com");
+    accept();
+    await Promise.resolve();
+    host.appendChild(el);
+    await el.updateComplete;
+    expect((el as unknown as State).screen).toBe("provisioning");
+    expect(unload()).toBe(true);
+  });
+});
+
+const importedConfiguration: ConfigurationPreview = {
+  venue: {
+    country: "ES",
+    taxId: "B12345678",
+    legalName: "Prepared SL",
+    taxpayerDomicile: null,
+    seriesCode: "F",
+    fullSeriesCode: "C",
+    rectificativeSeriesCode: "R",
+    location: {
+      id: "source-location",
+      name: "Prepared",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Restaurant",
+      fiscalTerritory: "ES-common",
+      addressLine1: "Calle 1",
+      addressLine2: null,
+      postalCode: "28001",
+      city: "Madrid",
+      province: "Madrid",
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00",
+    },
+  },
+  counts: { products: 4 },
+  reconnect: ["printers"],
+};
+function importConfiguration(el: SetupApp, api: SetupApi) {
+  const stage = vi.fn().mockResolvedValue(importedConfiguration);
+  api.stageConfiguration = stage;
+  const artifact = new File(["encrypted"], "prepared.waitron-config");
+  el.shadowRoot!.querySelector("main")!.dispatchEvent(
+    new CustomEvent("configuration-requested", {
+      detail: { request: { artifact, passphrase: "import proof" } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  return { stage, artifact };
+}
+
+describe("setup root lifecycle and import", () => {
+  it("an accepted configuration preview stays dirty until provisioning succeeds", async () => {
+    const { el, api } = await mount();
+    goto(el, "live-source");
+    await expect.poll(() => (el as unknown as State).screen).toBe("live-source");
+    const { stage, artifact } = importConfiguration(el, api);
+    await expect.poll(() => (el as unknown as State).screen).toBe("configuration-preview");
+    expect(stage).toHaveBeenCalledExactlyOnceWith(artifact, "import proof");
+    expect(unload()).toBe(true);
+    expect((el as unknown as State).draft).toEqual({
+      mode: "prepare",
+      configurationImport: true,
+      venue: {
+        ...importedConfiguration.venue,
+        admin: initialAdmin,
+        location: {
+          name: "Prepared",
+          invoiceLocales: ["es-ES"],
+          operationDescription: "Restaurant",
+          fiscalTerritory: "ES-common",
+          addressLine1: "Calle 1",
+          addressLine2: null,
+          postalCode: "28001",
+          city: "Madrid",
+          province: "Madrid",
+          timeZone: "Europe/Madrid",
+          dayCutover: "06:00",
+        },
+      },
+    });
+    goto(el, "review");
+    await expect.poll(() => (el as unknown as State).screen).toBe("review");
+    expect(warning(el).open).toBe(false);
+    expect(unload()).toBe(true);
+    submitRoot(el);
+    await expect.poll(() => (el as unknown as State).screen).toBe("done");
+    expect(unload()).toBe(false);
+  });
+
+  it.each(["success", "refusal"])(
+    "a %s from an earlier connection cannot update the reconnected wizard",
+    async (outcome) => {
+      const { el, host, api } = await nextEditedAdmin();
+      let finish!: () => void;
+      vi.mocked(api.provision).mockImplementation(
+        () =>
+          new Promise((resolve, reject) => {
+            finish =
+              outcome === "success"
+                ? () => resolve({ provisioned: true, restarting: true })
+                : () => reject({ code: "setup.request_invalid", params: { field: "legalName" } });
+          }),
+      );
+      submitRoot(el);
+      el.remove();
+      host.appendChild(el);
+      await el.updateComplete;
+      finish();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+      expect((el as unknown as State).screen).toBe("provisioning");
+      expect(unload()).toBe(true);
+      expect((el as unknown as State).draft.venue!.admin!.email).toBe("submitted@example.com");
+    },
+  );
+});
+
+describe("setup root import connection generation", () => {
+  it.each(["success", "refusal"])(
+    "ignores an import %s received after reconnecting",
+    async (outcome) => {
+      const { el, host, api } = await mount();
+      goto(el, "live-source");
+      await expect.poll(() => (el as unknown as State).screen).toBe("live-source");
+      let finish!: () => void;
+      api.stageConfiguration = vi.fn().mockImplementation(
+        () =>
+          new Promise((resolve, reject) => {
+            finish =
+              outcome === "success"
+                ? () => resolve(importedConfiguration)
+                : () => reject({ code: "setup.request_invalid" });
+          }),
+      );
+      const source = el.shadowRoot!.querySelector("main")!;
+      source.dispatchEvent(
+        new CustomEvent("configuration-requested", {
+          detail: {
+            request: {
+              artifact: new File(["encrypted"], "old.waitron-config"),
+              passphrase: "old proof",
+            },
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      el.remove();
+      host.appendChild(el);
+      goto(el, "mode");
+      await expect.poll(() => (el as unknown as State).screen).toBe("mode");
+      finish();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+      expect((el as unknown as State).screen).toBe("mode");
+      expect((el as unknown as State).draft).toEqual({
+        mode: "prepare",
+        venue: { admin: initialAdmin },
+      });
+      expect(unload()).toBe(false);
+    },
+  );
 });

@@ -1,4 +1,4 @@
-import { LeaveController } from "@waitron/ui";
+import { LeaveController, type DraftScope } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
@@ -98,6 +98,27 @@ function deepMerge(base: unknown, patch: unknown): unknown {
     out[key] = deepMerge(out[key], value);
   }
   return out;
+}
+
+function sameDraftValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((value, index) => sameDraftValue(value, b[index]))
+    );
+  }
+  if (!isPlainObject(a) || !isPlainObject(b)) return false;
+  const keys = (value: Record<string, unknown>) =>
+    Object.keys(value).filter((key) => value[key] !== undefined);
+  const aKeys = keys(a);
+  const bKeys = keys(b);
+  return (
+    aKeys.length === bKeys.length &&
+    aKeys.every((key) => Object.hasOwn(b, key) && sameDraftValue(a[key], b[key]))
+  );
 }
 
 /**
@@ -428,6 +449,7 @@ export class SetupApp extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     if (!this.#localeChosen) setLocale(matchBrowserLocale(this.browserLanguages));
+    if (this.#rootBaseline) this.#registerRoot();
   }
 
   #onLocaleSelected(event: CustomEvent<{ code: string }>): void {
@@ -460,6 +482,32 @@ export class SetupApp extends LitElement {
       },
     },
   };
+
+  #rootBaseline?: DeepPartial<ProvisionBody>;
+  #rootScope?: DraftScope<DeepPartial<ProvisionBody>>;
+  #rootGeneration = 0;
+
+  override disconnectedCallback(): void {
+    ++this.#rootGeneration;
+    this.#rootScope?.dispose();
+    this.#rootScope = undefined;
+    super.disconnectedCallback();
+  }
+
+  #registerRoot(): void {
+    if (this.#rootScope || !this.isConnected) return;
+    this.#rootBaseline ??= structuredClone(this.draft);
+    this.#rootScope = this.leave.coordinator.register({
+      id: this,
+      current: () => this.draft,
+      snapshot: (draft) => structuredClone(draft),
+      equal: (a, b) => sameDraftValue(assembleBody(a), assembleBody(b)),
+      restore: (draft) => {
+        this.draft = draft;
+      },
+    });
+    this.#rootScope.commit(this.#rootBaseline);
+  }
 
   @state() private reviewError?: Message;
 
@@ -592,6 +640,8 @@ export class SetupApp extends LitElement {
 
   #onPatch(event: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>): void {
     event.stopPropagation();
+    if (!this.isConnected) return;
+    this.#registerRoot();
     const mode = event.detail.patch.mode;
     if (
       mode !== undefined &&
@@ -612,6 +662,7 @@ export class SetupApp extends LitElement {
       this.fiscalTestStatus = undefined;
     }
     this.draft = deepMerge(this.draft, event.detail.patch) as DeepPartial<ProvisionBody>;
+    this.#rootScope?.changed();
   }
 
   #pendingGoto?: { owner: HTMLElement; finished: Promise<unknown> };
@@ -699,15 +750,20 @@ export class SetupApp extends LitElement {
     this.venueError = undefined;
     this.venueInvalidField = undefined;
     this.#clearProvisionOutcome();
+    this.#registerRoot();
+    const submitted = structuredClone(this.draft);
+    const generation = this.#rootGeneration;
     this.screen = "provisioning";
     try {
       await (this.#localeChosen
-        ? this.api.provision(assembleBody(this.draft), currentLocale())
-        : this.api.provision(assembleBody(this.draft)));
-      if (!this.isConnected) return;
+        ? this.api.provision(assembleBody(submitted), currentLocale())
+        : this.api.provision(assembleBody(submitted)));
+      if (!this.isConnected || generation !== this.#rootGeneration) return;
+      this.#rootBaseline = submitted;
+      this.#rootScope?.commit(submitted);
       this.screen = "done";
     } catch (error) {
-      if (!this.isConnected) return;
+      if (!this.isConnected || generation !== this.#rootGeneration) return;
       this.#mapProvisionError(error as ApiError);
     }
   }
@@ -994,13 +1050,16 @@ export class SetupApp extends LitElement {
     event: CustomEvent<{ request: ConfigurationRequestDetail }>,
   ): Promise<void> {
     event.stopPropagation();
+    if (!this.isConnected) return;
+    this.#registerRoot();
+    const generation = this.#rootGeneration;
     this.configurationError = undefined;
     try {
       const preview = await this.api.stageConfiguration(
         event.detail.request.artifact,
         event.detail.request.passphrase,
       );
-      if (!this.isConnected) return;
+      if (!this.isConnected || generation !== this.#rootGeneration) return;
       const location = Object.fromEntries(
         Object.entries(preview.venue.location).filter(([key]) => key !== "id"),
       ) as ProvisionBody["venue"]["location"];
@@ -1008,10 +1067,11 @@ export class SetupApp extends LitElement {
         configurationImport: true,
         venue: { ...preview.venue, location },
       }) as DeepPartial<ProvisionBody>;
+      this.#rootScope?.changed();
       this.configurationPreview = preview;
       this.screen = "configuration-preview";
     } catch (error) {
-      if (!this.isConnected) return;
+      if (!this.isConnected || generation !== this.#rootGeneration) return;
       this.configurationError = describeConfigurationRefusal(error);
       this.screen = "live-source";
     }
