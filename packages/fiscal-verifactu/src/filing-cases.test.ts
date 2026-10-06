@@ -270,6 +270,57 @@ describe("recordCaseEvent", () => {
     expect(appErrorCode(error)).toBe("filing_case.action_mismatch");
   });
 
+  it("refuses a note that names a corrective record: filing_case.remedy_invalid", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    const [original, remedy] = seeded.registroIds as [string, string];
+    const opened = await inTx((tx) =>
+      openFilingCase(tx, {
+        registroId: original,
+        cause: "fiscal.registro_rechazado",
+        evidence: EVIDENCE,
+        now: OPENED_AT,
+      }),
+    );
+
+    const error = await captureError(() =>
+      inTx((tx) =>
+        recordCaseEvent(tx, {
+          caseId: opened.id,
+          actionKey: "note-1",
+          kind: "note",
+          personId: PERSON,
+          action: "Called the asesor",
+          remedyRegistroId: remedy,
+          now: LATER,
+        }),
+      ),
+    );
+
+    expect(appErrorCode(error)).toBe("filing_case.remedy_invalid");
+    expect(await rowCount("filing_case_events")).toBe(0);
+  });
+
+  it("refuses a resolution naming the case's own record as its remedy: filing_case.remedy_invalid", async () => {
+    const { registroId, opened } = await openCaseOnFirstRecord();
+
+    const error = await captureError(() =>
+      inTx((tx) =>
+        recordCaseEvent(tx, {
+          caseId: opened.id,
+          actionKey: "resolve-1",
+          kind: "resolved",
+          personId: PERSON,
+          action: "Filed a corrective record",
+          remedyRegistroId: registroId,
+          now: LATER,
+        }),
+      ),
+    );
+
+    expect(appErrorCode(error)).toBe("filing_case.remedy_invalid");
+    expect(await rowCount("filing_case_events")).toBe(0);
+  });
+
   it("refuses an event for a case that does not exist: filing_case.not_found", async () => {
     const error = await captureError(() =>
       inTx((tx) =>

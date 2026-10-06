@@ -228,6 +228,12 @@ declare module "@waitron/shared" {
     "filing_case.already_resolved": { caseId: string };
 
     /**
+     * `recordCaseEvent`: a note named a corrective record, or a resolution named the case's own
+     * record as its corrective one.
+     */
+    "filing_case.remedy_invalid": { caseId: string; remedyRegistroId: string };
+
+    /**
      * An ongoing-alert code from ./submission-alerts.ts, never thrown: `count` records are still
      * waiting to reach AEAT and `hours` is the oldest one's age.
      */

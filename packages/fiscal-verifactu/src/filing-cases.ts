@@ -54,7 +54,8 @@ export async function openFilingCase(
 /**
  * Records what a person did about a case. `actionKey` is the caller's idempotency key: a retry with
  * the same content returns the event already stored, and the same key with other content is
- * refused. A case takes one resolution; notes may follow it.
+ * refused. A case takes one resolution; notes may follow it. Only a resolution names a corrective
+ * record, and never the case's own record.
  */
 export async function recordCaseEvent(
   tx: Transaction,
@@ -70,10 +71,16 @@ export async function recordCaseEvent(
 ): Promise<FilingCaseEvent> {
   const remedyRegistroId = input.remedyRegistroId ?? null;
   const [found] = await tx
-    .select({ id: filingCases.id })
+    .select({ registroId: filingCases.registroId })
     .from(filingCases)
     .where(eq(filingCases.id, input.caseId));
   if (found === undefined) throw new AppError("filing_case.not_found", { caseId: input.caseId });
+  if (
+    remedyRegistroId !== null &&
+    (input.kind === "note" || remedyRegistroId === found.registroId)
+  ) {
+    throw new AppError("filing_case.remedy_invalid", { caseId: input.caseId, remedyRegistroId });
+  }
 
   const [stored] = await tx
     .select()
@@ -131,8 +138,14 @@ export async function listFilingCases(tx: Transaction): Promise<FilingCaseReport
     .select()
     .from(filingCaseEvents)
     .orderBy(filingCaseEvents.recordedAt, sql`rowid`);
+  const byCase = new Map<string, FilingCaseEvent[]>();
+  for (const event of events) {
+    const own = byCase.get(event.caseId);
+    if (own === undefined) byCase.set(event.caseId, [event]);
+    else own.push(event);
+  }
   return cases.map(({ filingCase, estado }) => {
-    const own = events.filter((event) => event.caseId === filingCase.id);
+    const own = byCase.get(filingCase.id) ?? [];
     return {
       ...filingCase,
       estado,
