@@ -279,6 +279,26 @@ describe("Local holidays: what the section shows", () => {
     );
   });
 
+  it.each(["London", null])(
+    "tells a venue in a country with no local holidays and no provinces (city %s) that they are unavailable, not to fix its address",
+    async (city) => {
+      const { api } = server(
+        localModel({
+          venue: { country: "GB", provinceCode: null, city },
+          localEntryLimit: 0,
+          areaOptions: [],
+          areaRequired: false,
+          geographies: [],
+          entries: [],
+        }),
+      );
+      const el = await mount(api);
+      expect(text(part(el, "local-address"))).toBe(
+        "Local holidays cannot be entered for a venue in this country.",
+      );
+    },
+  );
+
   it("says local entry is unavailable in a country without it, even with no city", async () => {
     const { api } = server(
       localModel({

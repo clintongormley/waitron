@@ -964,6 +964,27 @@ describe("Hours calendar: public holidays", () => {
     ]);
   });
 
+  it("says local holidays are unavailable, not that the address needs fixing, in a country with no holidays", async () => {
+    const { api } = server({
+      edit: (model) => {
+        model.holidayCoverage = [
+          {
+            ...coverage(2026, "unsupported_country", "address_unresolved"),
+            country: "GB",
+            provinceCode: null,
+            regionCode: null,
+          },
+        ];
+      },
+    });
+    const el = await mount(api);
+    await open(el, "2026-10-15");
+    expect([...panel(el).querySelectorAll('[data-test="coverage"] li')].map(text)).toEqual([
+      "2026: official holidays are not available for this country.",
+      "2026: local holidays cannot be entered for a venue in this country.",
+    ]);
+  });
+
   it("treats a year with no coverage as unknown, never as complete", async () => {
     const { api } = server();
     const el = await mount(api);

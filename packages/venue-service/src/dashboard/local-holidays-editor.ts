@@ -452,9 +452,9 @@ export class LocalHolidaysEditor extends LitElement {
 
   #addressText(model: LocalHolidayModel): string {
     const { city, provinceCode } = model.venue;
+    if (model.localEntryLimit === 0) return t("holidays.unsupported");
     if (provinceCode === null)
       return t(city === null ? "holidays.needs_address" : "holidays.needs_province");
-    if (model.localEntryLimit === 0) return t("holidays.unsupported");
     if (city === null)
       return t(model.areaOptions.length > 0 ? "holidays.needs_city_area" : "holidays.needs_city");
     return format(model.localEntryLimit === 1 ? "holidays.address_one" : "holidays.address", {

@@ -661,7 +661,14 @@ export class HoursCalendar extends LitElement {
           coverage === undefined
             ? nothing
             : html`<li>
-                ${format(`hours.calendar.local.${coverage.local}` as Key, { year: String(year) })}
+                ${format(
+                  `hours.calendar.local.${
+                    coverage.nationalRegional === "unsupported_country"
+                      ? "unsupported_country"
+                      : coverage.local
+                  }` as Key,
+                  { year: String(year) },
+                )}
               </li>`
         }
       </ul>`;
