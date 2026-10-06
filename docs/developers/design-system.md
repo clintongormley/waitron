@@ -206,6 +206,22 @@ and a dark colour in the dark theme, which is accepted because the tile's name a
 the meaning. Reach for the filled-background idiom only for a
 colour that is itself the data, never as a shortcut around a `--wt-color-*` token.
 
+**A menu's Device Home Page, on the till and in the dashboard's preview.** Both draw it from one
+set of rules (`packages/catalogue/src/device-home.ts`): the till in its menu browser
+(`apps/till/src/widgets/menu-browser.ts`) and the dashboard in a menu's Home page tab
+(`apps/dashboard/src/widgets/device-home-preview.ts`). Under search come two blocks, the shortcuts
+and the menu's own structure, in the order the menu sets for that kind of device. The first block
+has no visible heading, only an accessible name. Between the two sits a divider: the second
+block's name ("Full menu" or "Shortcuts") in `--wt-font-size-sm` and `--wt-color-text-muted`,
+between two 1px `--wt-color-border` lines, as that block's heading. A block with nothing to show is
+not drawn, and then there is no divider. Every grid has up to the menu's column count of tracks,
+fewer where a tile would be narrower than twice `--wt-tap-min` plus `--wt-space-4`
+(`HOME_GRID_COLUMNS`), so a narrow screen shows fewer columns in the same reading order. In Colours
+mode a tile is painted as above. In Thumbnails mode a tile with an image shows it above its name,
+4:3 with `--wt-radius-sm` corners, and is not painted; a tile with no image is painted as in
+Colours mode, or neutral. A section tile always keeps its "Section" word under its name, so a
+section and a product differ without colour; its image, when shown, takes the folder icon's place.
+
 ### Structure
 
 `--wt-space-1` … `--wt-space-6` (4–32px), `--wt-radius-sm|md|lg`, `--wt-font-family`,
@@ -307,12 +323,12 @@ A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
 beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print width ruler"
 button beside the ruler's answer, and the member list editor's `.add` row does, for its Add button
-(`apps/dashboard/src/widgets/member-list-editor.ts`; the only screen drawing it is a menu's Home
-page tab, on a page through `home-layout-editor.ts`, where nothing changes). Guards: the form-width
+(`apps/dashboard/src/widgets/member-list-editor.ts`; no screen draws it since W93, so only its own
+tests reach it). Guards: the form-width
 cases in `packages/ui/src/components/wt-modal.test.ts` (`wt-input`, `wt-textarea`, `wt-combobox`,
 `wt-price-input`, `wt-number-stepper` and `wt-switch`, and the message at 1280px; each field and the
 message bounded by the narrower of the form width and the body in every modal size at 1280px; wide
-content and the footer row at full width; each field at the body's width at 390px; each field at its container's width outside a modal); the calibration case in
+content and the footer row at full width; each field at the body's width at 390px; each field at its container's width outside a modal); `wt-slider`'s own case "the field max-width token bounds the slider's width" (`packages/ui/src/components/wt-slider.test.ts`); the calibration case in
 `apps/dashboard/src/screens/printers-screen.test.ts`; and one 1280px case each in
 `apps/dashboard/src/widgets/member-list-editor.test.ts` (the editor placed in a `wt-modal`),
 `packages/adjustments/src/dashboard/reasons-screen.test.ts` and
@@ -753,8 +769,14 @@ A tree also answers `isExpanded(key)`, opens or closes a branch with `setExpande
 `revealRow(key)` opens every closed branch above a row and scrolls the row into view.
 
 **A menu's Structure tab is the second tree** (`dashboard-menu-structure-table`,
-`apps/dashboard/src/widgets/menu-structure-table.ts`; W88, owner 2026-10-04). Its first row,
-"Menu: <name>", has no grip, only the grip's blank space, and cannot be closed, and its ⋮ holds the adds: New section here,
+`apps/dashboard/src/widgets/menu-structure-table.ts`; W88, owner 2026-10-04). Its first row is
+the menu's Device Home Page (W93): no grip, only the grip's blank space, closed at first, with "No
+shortcuts yet." under its name while it has none. Its ⋮ holds Add a product shortcut and Add a
+section shortcut; each opens a window whose one dropdown offers what the menu reaches and is not
+already a shortcut, and choosing adds it at once. Its children are the shortcuts in order, each with
+a grip, no folder or photo, and a ⋮ holding Remove shortcut; one whose target the menu no longer
+reaches reads "Missing: <name>", its kind "No longer available". The menu's own row,
+"Menu: <name>", comes next. It has no grip, only the grip's blank space, and cannot be closed, and its ⋮ holds the adds: New section here,
 Include a menu and Add products. Under it the menu's members follow in menu order, with no sort.
 A row's key is the member ids from the top level down to it, so a section shown in two places is
 two rows. The ⋮ of a section the menu owns holds the same three adds, then Edit and Delete; an add
@@ -763,8 +785,8 @@ name is drawn bold and underlined with `aria-current="true"`. A product's ⋮ ho
 <list>", naming the list that holds it. An included menu's row reads "Menu: <name>" with
 "Read-only here" under it, and its ⋮ holds a link to that menu's own Structure tab and "Remove from
 this menu". The rows inside an included menu open and close for browsing but have no grip, no ⋮ and
-a muted name; each keeps an unseen grip-sized space. Only an owned row has a grip. Every row draws
-the Products tree's three slots before its name (below): the table's arrow, the grip or its space,
+a muted name; each keeps an unseen grip-sized space. Only an owned row has a grip. Every row but a
+shortcut's draws the Products tree's three slots before its name (below): the table's arrow, the grip or its space,
 and a folder or the product's photo, so names at one level start at one x and the Name heading sits
 over the menu's name. At phone width the Products tree drops the photo; the Structure tree does not. ArrowUp and ArrowDown on a grip move the member one place within its own list and announce
 it; a pointer drag starts from the grip only, and offers only places among the member's siblings,

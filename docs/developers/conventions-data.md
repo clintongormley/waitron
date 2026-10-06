@@ -933,7 +933,7 @@ table lists in `omit`. Any other column the export carries that holds a row's id
 the EXPORTING venue's id. Before W72a (#1230) the import replaced any text equal to a bundle id in every
 column, so a product named like an id arrived renamed; the narrowing is what makes this rule
 necessary. A reference the schema cannot give a foreign key goes in `references`, as
-`option_lists.default_label_id` and `device_profile_home_layouts.layout_id` do.
+`option_lists.default_label_id` does.
 
 Guard: `scripts/id-columns-are-references.test.ts`, which migrates a real database and reads every
 transferred table's columns and keys. Weaker than its name: it knows an id column only by a name

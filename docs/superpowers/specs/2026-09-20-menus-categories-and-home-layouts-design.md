@@ -30,6 +30,10 @@ and 8 as #722, with the follow-ups #680 (the Prices tab's variants and columns),
 home page, landed as #729. What the
 closing sweep found missing against §2 and §9, and the choices it leaves for the owner, are open
 entries in [the backlog](../../backlog.md), beside the plan's Track A entry.
+**2026-10-05:** home layouts (§5, the §6 view table's Home page row, §7 example 9 and §9's
+removed-layout decision) are superseded by W93 ([its design](2026-10-05-w93-device-home-page-design.md)):
+one Device Home Page per menu, edited in the Structure tree; no named layouts and no per-profile
+choice; each device's form factor picks the Handheld or Till display.
 
 **Related decisions, 2026-09-20:** the [service workflow spec](2026-09-20-service-ordering-and-billing-design.md)
 adds a public/staff-only/not sold separately setting for standalone ordering. Menu membership
@@ -210,6 +214,10 @@ not permission to reprice it silently.
 
 ## 5. Home layouts help staff order quickly
 
+_Superseded 2026-10-05 by W93 ([its design](2026-10-05-w93-device-home-page-design.md)): one
+Device Home Page per menu, edited in the Structure tree; no named layouts and no per-profile choice;
+each device's form factor picks the Handheld or Till display._
+
 The handheld and till menu home page presents search first, an ordered shortcut grid next, and
 the full menu structure below it. Search covers the whole published menu, regardless of the
 category being viewed, and returns each product once. The ordering interaction, published price
@@ -221,6 +229,10 @@ You choose and order the contents manually. Automatic popularity-based rearrange
 this design so buttons remain in predictable positions during service.
 
 ### A home layout is a menu-owned category
+
+_Superseded 2026-10-05 by W93 ([its design](2026-10-05-w93-device-home-page-design.md)): one
+Device Home Page per menu, edited in the Structure tree; no named layouts and no per-profile choice;
+each device's form factor picks the Handheld or Till display._
 
 Use the category membership model and editing interaction for the home grid. Its category belongs
 to one menu and is hidden from the shared category library and ordinary menu structure. “Hidden”
@@ -252,7 +264,7 @@ The menu editor has four views:
 | --- | --- |
 | Structure | Add products and categories, edit categories in place, duplicate them, and reorder members. |
 | Prices | Review each distinct product and set or clear its menu price override. |
-| Home page | Manage the default and alternative layouts, arrange tiles, and preview device sizes. |
+| Home page | Manage the default and alternative layouts, arrange tiles, and preview device sizes. *(Superseded 2026-10-05 by W93: the shortcuts are edited in the Structure tree, and this tab sets the Handheld and Till displays over a preview.)* |
 | Preview | Review the proposed menu and its differences from the published version, then publish. |
 
 The standalone Categories screen remains the reusable library: organise groups, find usages,
@@ -287,7 +299,9 @@ These are required future checks, not tests run as part of writing this specific
    leaves the previous complete version live.
 8. *(2026-09-25: groups are dropped, §10.1; read "a reporting-category or label edit".)* Group-only edits do not flag a content change. Relevant nested content and home-layout edits do.
    Availability changes take effect without altering the published snapshot.
-9. A default home layout works at handheld and till widths in the same item order. A device can use
+9. *(Superseded 2026-10-05 by W93, [its design](2026-10-05-w93-device-home-page-design.md): one
+   Device Home Page per menu and no alternatives; each device's form factor picks the Handheld or
+   Till display.)* A default home layout works at handheld and till widths in the same item order. A device can use
    an alternative for the same menu without changing prices, search or the full menu underneath.
 10. The rendered editor and service views work in both themes and at handheld and till sizes.
     Keyboard reordering and non-colour distinctions between product and category tiles are exercised.
@@ -348,6 +362,9 @@ again later starts from the product's own values, as if it had never been on tha
 tap a home tile whose product or category is no longer in the version the device should be showing,
 the device says the item was not found and reloads the home screen. How the editor and preview
 treat a shortcut whose target has left the working menu is not decided here and stays with the plan.
+
+_Superseded 2026-10-05 by W93 ([its design](2026-10-05-w93-device-home-page-design.md)): there are
+no named layouts to delete and no per-profile choice, so this decision no longer applies._
 
 **A device whose home layout is deleted falls back to the menu's default layout, with a warning
 first.** The device shows a warning notification, then switches to that menu's default layout.

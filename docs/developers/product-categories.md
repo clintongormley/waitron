@@ -89,9 +89,9 @@ permission as the category routes below. A section answer is
 | Route | Body and success |
 | --- | --- |
 | `POST /management-api/sections/:id/sections` | `{ internalName, names?, image?, color?, position? }` creates a section in this list and gives it the same owner; 201, `{ id }` |
-| `GET /management-api/sections/:id` | 200, the section, root or layout |
+| `GET /management-api/sections/:id` | 200, the section, a menu root or a menu's Device Home Page section |
 | `PATCH /management-api/sections/:id` | Supplied presentation fields from create; 200, the saved section |
-| `DELETE /management-api/sections/:id` | 204; deletes the section and its owned descendants, and preserves home tiles pointing at them as missing slots |
+| `DELETE /management-api/sections/:id` | 204; deletes the section and its owned descendants, and preserves Device Home Page shortcuts pointing at them as missing slots |
 | `GET /management-api/sections/:id/members` | 200, the members in order |
 | `POST /management-api/sections/:id/members` | `{ ref, position? }`; 201, the new member |
 | `POST /management-api/sections/:id/members/products` | `{ productIds }`; 200, `{ added }`; skips products already held |
@@ -101,14 +101,16 @@ permission as the category routes below. A section answer is
 
 The collection routes, usages routes and section duplication route have been removed. Create
 nested sections with `/:id/sections`; add products or include a menu root with the member routes.
-The generic readers give a partial view of Home: they omit missing members, and the structure
-graph's `children` gives no Home members. Read Home through the layout routes below.
+The generic readers give a partial view of a Device Home Page: they omit missing members, and the
+structure graph's `children` gives none of its members. Read it through the Device Home Page routes
+below.
 
 Malformed ids answer `shared.invalid_id` (400); a malformed body answers
 `management.request_invalid` (400), naming its field. `menu_section.not_found` (404) names an
 unknown section (`sectionId`) or a member not held by that list (`sectionId`, `memberId`).
 `menu_section.wrong_role` (409, `sectionId`, `role`) refuses presentation edits or deletes of roots
-and layouts, structure writes into a layout, and a member ref to anything other than a menu root.
+and Device Home Page sections, structure writes into a Device Home Page section, and a member ref to
+anything other than a menu root.
 It also refuses removing or replacing a member that references an owned section, naming that
 section's id and `role: "section"`. Delete the section through `DELETE /management-api/sections/:id`, using the
 owned section's id.
@@ -173,8 +175,12 @@ live version. `clashes` counts unresolved settings. `GET /management-api/catalog
 all menus' statuses keyed by menu id. `GET /management-api/catalogues/:id/preview` gives
 `{ hash, changes, warnings, status, clashes, document }`. `clashes` lists the products, sizes and
 fields that need a decision. `document` is the proposed published document, with the combined
-structure and Home layouts; missing targets occupy `{ kind: "empty" }` slots. Each warning is
-`{ kind: "shortcut_missing", layoutName, name }`.
+structure and the Device Home Page as `home` (below); a shortcut whose target the document does not
+hold keeps its place as a `{ kind: "empty" }` slot. Each such shortcut gives a warning
+`{ kind: "shortcut_missing", name }`. Among the `changes`, a `home_shortcuts_changed` change says
+the shortcuts differ from the live version's, and a `home_display_changed` change, naming its
+`device`, that one device's display does. With no live version, the shortcuts count as changed when
+there are any, and a display when it differs from the default.
 
 `POST /management-api/catalogues/:id/publish`, with `{ expectedHash }`, gives
 `{ versionId, number }` (200). It first refuses unresolved settings with
@@ -184,81 +190,83 @@ without writing another. Missing or non-string `expectedHash` answers `managemen
 (400). A malformed menu id answers `shared.invalid_id` (400), an unknown menu
 `catalogue.not_found` (404).
 
-Tills sell from live versions of active menus. Availability, course and reporting category are
+Tills sell from live versions of active menus. A live version in an earlier document format is not
+sold from (`readLiveDocuments`, `packages/catalogue/src/menu-publication.ts`), so a menu last
+published before the Device Home Page (format 2) reaches no till until it is published again. Its
+status still reads `changed`, and its preview compares the working menu with no live version, as a
+first publish does. Availability, course and reporting category are
 applied from current rows when serving that version; its VAT class is frozen, and it holds no VAT
 rate (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`). Menu extras use product-level list attachments and settings, including their active filters;
 there are no per-menu extras publications or overrides.
 
-### Home layout routes
+### Device Home Page routes
 
-A menu owns its Home layouts and never inherits another menu's layouts. Its default layout is
-created as Home. A tile is a shortcut and adds no product, price or placement to the menu. The
-layout writer checks that the working structure reaches its target, including targets in included
-menus. Use the tile routes to write Home: generic section writes refuse it with
-`menu_section.wrong_role` (409).
+A menu has one Device Home Page: the shortcuts a handheld or a till shows under its search, beside
+the menu's own structure, and how each of the two kinds of device lays them out. A menu never
+inherits another menu's. A shortcut points at a product or a section and adds no product, price or
+placement to the menu. The shortcut writer checks that the menu's working structure reaches the
+target, including targets in included menus. Use the shortcut routes to write it: the generic
+section writes refuse its section with `menu_section.wrong_role` (409).
 
-A layout is `{ id, name, isDefault, tiles }`. A tile is
-`{ memberId, position, ref, name, reachable, missingName }`. Its `ref` names a product, a section,
-or a deleted target as `{ kind: "missing", name }`. `reachable` checks working membership;
+`GET /management-api/catalogues/:id/home` gives `{ homeSectionId, shortcuts, handheld, till }`. A
+shortcut is `{ memberId, position, ref, name, reachable, missingName }`. Its `ref` names a product, a
+section, or a deleted target as `{ kind: "missing", name }`. `reachable` checks working membership;
 `missingName` is null for a reachable target and otherwise records its name or section path.
-Publishing retains an empty slot for a target excluded from the document, so later tiles keep their
-positions. The editor lets you remove or replace a missing tile; replacing keeps its member id and
-position.
+Publishing keeps an empty slot for a target the document leaves out, so later shortcuts keep their
+positions.
+
+`handheld` and `till` are the two displays, each `{ columns, tiles, order }`. `columns` is a whole
+number from 2 to 6 for a handheld and from 6 to 10 for a till. `tiles` is `colours` or `thumbnails`,
+and `order` is `home_first` (the shortcuts, then the menu) or `menu_first`. A new menu starts with
+3 columns on a handheld and 6 on a till, both `colours` and `home_first` (`HOME_DISPLAY_DEFAULTS`,
+`packages/catalogue/src/device-home.ts`).
 
 | Route | Body and success | Refusals |
 | --- | --- | --- |
-| `GET /management-api/catalogues/:id/home-layouts` | 200, layouts, default first then by name | `catalogue.not_found` |
-| `POST /management-api/catalogues/:id/home-layouts` | `{ name }`; 201, `{ id }` | `catalogue.not_found`, `menu_section.invalid` |
-| `PUT /management-api/catalogues/:id/default-home-layout` | `{ layoutId }`; 204 | `catalogue.not_found`, `menu.layout_not_found` |
-| `POST /management-api/home-layouts/:layoutId/duplicate` | `{ name }`; 201, `{ id }`, with the same tiles in order, including missing slots | `menu.layout_not_found`, `menu_section.invalid` |
-| `PATCH /management-api/home-layouts/:layoutId` | `{ name }`; 204 | `menu.layout_not_found`, `menu_section.invalid` |
-| `DELETE /management-api/home-layouts/:layoutId` | 204, deleting its tiles too | `menu.layout_not_found`, `menu.default_layout_required` |
-| `POST /management-api/home-layouts/:layoutId/tiles` | `{ ref, position? }`; 201, `{ id, position, ref }` | `menu.layout_not_found`, `menu_section.not_found`, `menu_section.wrong_role`, `menu_section.membership_invalid`, `menu_section.member_duplicate`, `menu_section.invalid`, `menu.shortcut_unreachable` |
-| `POST /management-api/home-layouts/:layoutId/tiles/:memberId/replace` | `{ ref }`; 200, the member, keeping its id and position | `menu.layout_not_found`, `menu_section.not_found`, `menu_section.wrong_role`, `menu_section.membership_invalid`, `menu_section.member_duplicate`, `menu.shortcut_unreachable` |
-| `DELETE /management-api/home-layouts/:layoutId/tiles/:memberId` | 204 | `menu.layout_not_found`, `menu_section.not_found` |
-| `PUT /management-api/home-layouts/:layoutId/tiles/:memberId/position` | `{ to }`; 200, tiles in their new order, including missing slots | `menu.layout_not_found`, `menu_section.not_found`, `menu_section.invalid` |
+| `GET /management-api/catalogues/:id/home` | 200, the Device Home Page, shortcuts in order, missing ones included | `catalogue.not_found` |
+| `PATCH /management-api/catalogues/:id/home-display` | `{ device, columns?, tiles?, order? }`, `device` being `handheld` or `till`; 204, changing only the fields given | `catalogue.not_found`, `management.request_invalid`, `menu.home_display_invalid` |
+| `POST /management-api/catalogues/:id/home/shortcuts` | `{ ref, position? }`; 201, `{ id, position, ref }` | `catalogue.not_found`, `menu_section.not_found`, `menu_section.wrong_role`, `menu_section.membership_invalid`, `menu_section.member_duplicate`, `menu_section.invalid`, `menu.shortcut_unreachable` |
+| `POST /management-api/catalogues/:id/home/shortcuts/:memberId/replace` | `{ ref }`; 200, the member, keeping its id and position | `catalogue.not_found`, `menu_section.not_found`, `menu_section.wrong_role`, `menu_section.membership_invalid`, `menu_section.member_duplicate`, `menu.shortcut_unreachable` |
+| `DELETE /management-api/catalogues/:id/home/shortcuts/:memberId` | 204 | `catalogue.not_found`, `menu_section.not_found` |
+| `PUT /management-api/catalogues/:id/home/shortcuts/:memberId/position` | `{ to }`; 200, the shortcuts as members `{ id, position, ref }` in their new order, missing slots included | `catalogue.not_found`, `menu_section.not_found`, `menu_section.invalid` |
 
 Malformed ids answer `shared.invalid_id` (400) and malformed bodies `management.request_invalid`
-(400). `menu.layout_not_found` (404, `layoutId`, and `menuId` when checking ownership) refuses an
-absent layout or one belonging to another menu. `menu.default_layout_required` (409, `layoutId`)
-refuses deletion of the default. `menu.shortcut_unreachable` (409, `layoutId`, `ref`) refuses a
-target outside the working structure, including the menu's own root. Disabled products are
-structurally accepted, but publish as empty tiles. `menu_section.wrong_role` (409, `sectionId`,
-`role`) refuses a layout as a target. `menu_section.not_found` names a missing section or member; a
-product target must be a stored top-level product or it answers `menu_section.membership_invalid`
-(400). A repeated target answers `menu_section.member_duplicate` (409), and invalid names and
-positions answer `menu_section.invalid` (400, `field`).
+(400); on the display route that includes a `device` other than `handheld` or `till`
+(`field: "device"`). An unknown menu answers `catalogue.not_found` (404).
+`menu.home_display_invalid` (400, `device`, `field`) refuses a value that device cannot take,
+`field` being `columns`, `tiles` or `order`; with more than one wrong it names the first in that
+order. `menu.shortcut_unreachable` (409, `ref`) refuses a target outside the working structure,
+including the menu's own root. Disabled products are structurally accepted, but publish as empty
+slots. `menu_section.wrong_role` (409, `sectionId`, `role`) refuses a Device Home Page section,
+this menu's or another's, as a target. `menu_section.not_found` names a missing section, or a
+member the menu's Device Home Page does not hold; a product target must be a stored top-level
+product or it answers `menu_section.membership_invalid` (400). A repeated target answers
+`menu_section.member_duplicate` (409), and a negative or fractional position answers
+`menu_section.invalid` (400, `field`). The dashboard adds, removes and moves shortcuts from the
+menu's Structure tab and edits the displays on its Home page tab; it does not call the replace
+route.
 
-A device profile chooses one layout per menu; with no choice it shows the menu's default. The two
-routes are in `apps/server/src/management-api.ts`, behind the `layout.configure` permission like
-the other device-profile routes, and the choices are stored in `device_profile_home_layouts`.
+No device profile chooses anything here. A device uses `handheld` when its profile's form factor is
+a phone or a tablet (`kindOfFormFactor`, `apps/till/src/layout.ts`) and `till` otherwise.
 
-| Route | Body → success | Refusals |
-| --- | --- | --- |
-| `GET /management-api/device-profiles/:id/home-layouts` | → 200, an array with every menu by name, each `{ menuId, menuName, layouts, selectedLayoutId, selectedRemoved }`, where `layouts` is `{ id, name, isDefault }[]` with the default first | `device_profile.not_found` |
-| `PUT /management-api/device-profiles/:id/home-layouts/:menuId` | `{ layoutId }`, a layout id or null for the default → 204 | `device_profile.not_found`, `catalogue.not_found`, `menu.layout_not_found`, `management.request_invalid` |
+**Storage.** The shortcuts are the members of the `home_layout` section that
+`menu_details.default_home_layout_id` names (the column keeps its old name; the TypeScript property
+is `homeSectionId`). The displays are six columns on `menu_details`: `handheld_columns`,
+`handheld_tiles`, `handheld_order`, `till_columns`, `till_tiles` and `till_order`, each required and
+with a default. None has a CHECK, because adding one makes drizzle rebuild the table, so the
+database stores any value: `homeDisplayProblem` (`packages/catalogue/src/device-home.ts`) is the
+whole of the range check. A save runs it, and so does a configuration import, which refuses a bad
+value with `setup.request_invalid` (`field` such as `menu_details.till_columns`).
 
-`selectedLayoutId` is null when the profile uses the default. Deleting a layout leaves a profile's
-choice of it in place, and `selectedRemoved` is then true, so the screen can show the choice as
-removed and offer to reset it (the plan's decision D14). `menu.layout_not_found` (404) here is a
-layout of another menu or an id that is no home layout; `layoutId` must be present, and anything
-but a well-formed id or null is `management.request_invalid` (400). A malformed profile id answers
-`device_profile.not_found` and a malformed menu id `catalogue.not_found`, both 404. Deleting a
-device profile no device holds deletes its choices; a profile retired because only disabled devices
-hold it keeps them. A venue's configuration export carries a live profile's choices, remapped on
-import to the new menu and layout ids, and leaves a retired profile's choices behind.
-
-A till reads the structure and the layouts from each menu's live version, not from the working
-state: both offers routes give each menu its `structure`, `homeLayouts` and `defaultHomeLayoutId`,
-and they and `GET /api/menu-state` give each menu the signed-in session's device's `homeLayoutId` and a `layoutFallback`
-(`resolveDeviceHomeLayouts`, `packages/catalogue/src/home-layouts.ts`). The profile's choice counts
-while the live version holds that layout, so a layout deleted or renamed since the last publish
-keeps showing, under its published name, until the menu is published again. Otherwise the till gets
-the live default, with `layoutFallback` `layout_unpublished` when the menu still has the chosen
-layout but has not published it, and `layout_removed` when it no longer has it; a device whose
-profile has no choice for that menu gets the default and `null`. The till warns about `layout_removed` once for each removed layout of a menu while its page
-stays loaded (a removal it cannot name, only if nothing has been said about that menu yet), and
-switches silently otherwise (`apps/till/src/till-app.ts`).
+**What a till is served.** A till reads the Device Home Page from each menu's live version, not
+from the working state. Both offers routes (`GET /api/default-service-zone/offers` and
+`GET /api/service-zones/:zoneId/offers`) give each menu its `structure` and its `home`, the live
+document's `{ shortcuts, handheld, till }`, where a shortcut is `{ kind: "product", productId }`,
+`{ kind: "section", sectionId }` or `{ kind: "empty" }`. `GET /api/menu-state` gives each menu
+`{ menuId, versionId }` beside `unavailable`. The served `home` is the live document's, the same
+whichever device asks; the till picks the display its form factor names. A shortcut or display changed since the last publish
+reaches no device until the menu is published again (the case "a draft shortcut or display change
+reaches no device until the menu is published" in `apps/server/src/till-api.sell-published.test.ts`).
 
 ## Moving and deleting
 

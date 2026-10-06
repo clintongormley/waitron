@@ -315,6 +315,8 @@ On the till (`apps/till/src/widgets/menu-browser.ts`), a product tile and a sect
 colour fill with it, and their labels, and a section tile's folder icon, switch to black or white,
 whichever reads better on that colour (`readableTextColor`, `packages/ui/src/category-color.ts`). A
 tile with no colour, or with a value that is not a lowercase `#rrggbb` colour, keeps the plain look.
+That is the menu's Colours display; in its Thumbnails display a tile with an image shows the image
+and is not filled (_On the till_, below).
 The dashboard does the same with such a value: the swatches in the Products
 tree and a menu's Structure tree draw it as no colour, and the colour chooser's "Use category
 colour" choice says the category has none (`apps/dashboard/src/widgets/color-field.ts`).
@@ -450,7 +452,7 @@ Active and Available, including products picked as extras, is read from the curr
 
 Each product placed in a menu's published structure gets a button in the till's menu browser
 (`apps/till/src/widgets/menu-browser.ts`): where the structure places it, in the search results,
-and wherever the device's home layout places it. The exception is a product whose
+and wherever the menu's Device Home Page places it. The exception is a product whose
 standalone ordering the menu published as Not sold separately (`LiveOffer.ordering`): it has no
 button anywhere, and a section left with nothing else goes too (`indexMenu`), though a dish's
 extras list still offers it. Staff only gets a button like Public, because there is no guest
@@ -467,6 +469,20 @@ menu-state poll greys and restores it without reloading the offers (`apps/till/s
 variant never has a button: it is listed only nested under its parent's offer
 (`LiveOffer.variants`). The till reads its offers from the zone
 (`GET /api/default-service-zone/offers`, `GET /api/service-zones/:zoneId/offers`).
+
+Under search, the till shows the menu's Device Home Page shortcuts and the menu's own structure as
+two blocks, in the order the menu's display for that kind of device sets: a handheld (a phone or a
+tablet) uses the menu's Handheld display and every other device its Till display. "Device Home Page
+first" puts the shortcuts first and "Menu first" the structure; neither reorders anything inside a
+block. A divider naming the second block sits between them, and a block with nothing to show is
+left out with no divider. The display's column count is the most a grid shows: a grid shows fewer
+where a tile would be narrower than its minimum, so a phone held upright shows two or three. A
+canvas card that sets its own column count keeps it. In Colours mode a tile fills with its
+colour (_Colour_, above); in Thumbnails mode it shows the product's or section's image instead, and
+a tile with no image falls back to its colour, else the plain tile. A shortcut whose target the
+till does not show keeps its place as an empty slot, so the shortcuts after it do not move. The
+display and the shortcuts come from the menu's published version, so a change reaches the till
+only when the menu is published.
 
 Tapping a parent sold in whole units, and not tied to a scale, opens the picker at once
 (`pickProduct`, `apps/till/src/widgets/product-pick.ts`). A parent sold by weight or in fractions, or
