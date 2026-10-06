@@ -730,7 +730,8 @@ component rules harden around the dashboard alone.
   the first in Safari or Playwright's WebKit, and the second by hand in Chromium.
 
 **Image library: Delete left, Edit right, and a preview showing where an image is used — DONE (W78, #1215;
-the portrait-photo bands W78a, #1280); left open by #1215's review:** a test title in
+the portrait-photo bands W78a, #1280; on a phone a narrow photo centred and at most 40% of the
+window high, A293, #1313); left open by #1215's review:** a test title in
 `apps/till/src/screens/till-allergen-screen.test.ts` says its dialog closes on "escape/backdrop",
 but the shared dialog does not close on a click outside it — the title, not the behaviour, looks
 wrong (unchecked beyond the reviewer's reading).
