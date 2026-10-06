@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   LIGHT_A_PACKAGES,
   LIGHT_B_PACKAGES,
@@ -647,17 +647,30 @@ done
 exit "$(cat "$STUB_DIR/status.$n" 2>/dev/null || echo 0)"
 `;
 
+// A stand-in for `sleep`, first on PATH: it records each argument in sleeps and returns at once.
+const SLEEP_STUB = `#!/usr/bin/env bash
+echo "$1" >> "$STUB_DIR/sleeps"
+`;
+const STUBS = { gh: GH_STUB, sleep: SLEEP_STUB };
+
 describe("the `ci` aggregate's jobs API cross-check", () => {
   let stubDir;
-  beforeEach(() => {
+  beforeAll(() => {
     stubDir = mkdtempSync(join(tmpdir(), "ci-jobs-api-"));
-    writeFileSync(join(stubDir, "gh"), GH_STUB);
-    chmodSync(join(stubDir, "gh"), 0o755);
+    for (const [name, body] of Object.entries(STUBS)) {
+      writeFileSync(join(stubDir, name), body);
+      chmodSync(join(stubDir, name), 0o755);
+    }
   });
-  afterEach(() => {
-    rmSync(stubDir, { recursive: true, force: true });
+  afterAll(() => {
+    if (stubDir !== undefined) rmSync(stubDir, { recursive: true, force: true });
   });
 
+  // The page shape (`total_count`, `jobs`) and the job names (`test-heavy (1)`, `image / smoke`) are
+  // as read with `gh api --paginate "repos/clintongormley/waitron/actions/runs/37435589194/attempts/1/jobs?per_page=100"`;
+  // the never-acquired entry's shape (`cancelled`, `runner_id` 0) is run 37368759185 attempt 1's
+  // `test-dashboard`. A stub whose shape is wrong makes the cases that serve pages pass against
+  // a script that fails in CI.
   const apiJob = (name, conclusion, status = "completed") => ({
     name,
     status,
@@ -669,9 +682,12 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
   const needsFor = (...ids) =>
     Object.fromEntries(ids.map((id) => [id, { result: "success", outputs: {} }]));
 
-  /** Call n of the stub answers `answers[n-1]`: a string to print, or `{ out, status }`. */
-  function runCrossCheck(needs, answers) {
-    for (const name of readdirSync(stubDir)) if (name !== "gh") rmSync(join(stubDir, name));
+  /**
+   * Call n of the stub answers `answers[n-1]`: a string to print, or `{ out, status }`. Runs with
+   * three tries and no delay unless `defaults` is set.
+   */
+  function runCrossCheck(needs, answers, { defaults = false } = {}) {
+    for (const name of readdirSync(stubDir)) if (!(name in STUBS)) rmSync(join(stubDir, name));
     answers.forEach((answer, at) => {
       const { out, status } = typeof answer === "string" ? { out: answer, status: 0 } : answer;
       if (out !== undefined) writeFileSync(join(stubDir, `out.${at + 1}`), out);
@@ -684,10 +700,9 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
       REPO: "o/r",
       RUN_ID: "123",
       RUN_ATTEMPT: "2",
-      JOBS_API_TRIES: "3",
-      JOBS_API_DELAY: "0",
       VERDICT_SCRIPT: ciJobsApiStep().script,
     };
+    if (!defaults) Object.assign(env, { JOBS_API_TRIES: "3", JOBS_API_DELAY: "0" });
     if (needs !== undefined) env.NEEDS = typeof needs === "string" ? needs : JSON.stringify(needs);
     const result = spawnSync("bash", ["-c", 'bash -e -c "$VERDICT_SCRIPT" 2>&1'], {
       encoding: "utf8",
@@ -702,18 +717,22 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
     const calls = existsSync(join(stubDir, "count"))
       ? Number(readFileSync(join(stubDir, "count"), "utf8"))
       : 0;
-    return { status: result.status, output: `${result.stdout}${result.stderr}`, calls };
+    const sleeps = existsSync(join(stubDir, "sleeps"))
+      ? readFileSync(join(stubDir, "sleeps"), "utf8").split("\n").filter(Boolean)
+      : [];
+    return { status: result.status, output: `${result.stdout}${result.stderr}`, calls, sleeps };
   }
   const argsOfCall = (n) =>
     readFileSync(join(stubDir, `args.${n}`), "utf8")
       .split("\n")
       .filter(Boolean);
 
-  it("is wired to always run, read this run's jobs with a token allowed to, and keep its default tries", () => {
+  it("is wired to always run, read this run's jobs with a token allowed to, carry a five-minute step limit, and keep its default tries", () => {
     const { keys, step } = ciJobsApiStep();
     expect(keys).toContain("        if: always()");
+    expect(keys).toContain("        timeout-minutes: 5");
     for (const line of [
-      "          GH_TOKEN: ${{ github.token }}",
+      "          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}",
       "          REPO: ${{ github.repository }}",
       "          RUN_ID: ${{ github.run_id }}",
       "          RUN_ATTEMPT: ${{ github.run_attempt }}",
@@ -733,6 +752,25 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
       granted.push(line.trim());
     }
     expect(granted).toEqual(["actions: read"]);
+  });
+
+  it("tries six times, ten seconds apart, when nothing overrides its defaults", () => {
+    const { status, output, calls, sleeps } = runCrossCheck(
+      needsFor("lint"),
+      Array.from({ length: 6 }, () => ({ status: 1 })),
+      { defaults: true },
+    );
+    expect(status).not.toBe(0);
+    expect(calls, output).toBe(6);
+    expect(sleeps).toEqual(["10", "10", "10", "10", "10"]);
+    expect(output).toContain("the jobs API call failed");
+  });
+
+  it("matches only needed jobs that set no display `name:`, which the jobs API would report instead of the id", () => {
+    const needs = needsOf(job("ci").body);
+    expect(needs.length).toBeGreaterThan(0);
+    const named = needs.filter((id) => job(id).body.some((line) => /^ {4}name:/.test(line)));
+    expect(named).toEqual([]);
   });
 
   it("reads this run attempt's jobs, every page of them", () => {

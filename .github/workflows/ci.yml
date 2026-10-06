@@ -1617,8 +1617,8 @@ jobs:
   # same deadlock the five-required-ids arrangement had, and `always()` is what stops the fix for it
   # reintroducing it one layer up.
   #
-  # Because the job therefore always runs, its own `if` cannot be what decides pass or fail. The
-  # step below decides.
+  # Because the job therefore always runs, its own `if` cannot be what decides pass or fail. The two
+  # steps below decide, and either one failing fails the job.
   ci:
     if: always()
     needs:
@@ -1647,7 +1647,8 @@ jobs:
       - test-light-b
       - mutation-shared
     runs-on: ubuntu-latest
-    # The jobs API read by the second step needs `actions: read`; it is granted to this job alone.
+    # Naming a permission drops the workflow's defaults. This job checks nothing out, so it holds
+    # `actions: read` alone: the permission GitHub lists for the jobs API the second step reads.
     permissions:
       actions: read
     steps:
@@ -1673,20 +1674,22 @@ jobs:
                | if length > 0 then error("not succeeded or skipped: \(join(", "))") else empty end)
           '
 
-      # A needed job's API entries are named by its id: `lint`, a matrix's `test-heavy (1)`, a
-      # reusable workflow's `image / smoke` (or `image` when skipped). A failed conclusion fails at
-      # once; anything not yet settled (the call failing, fewer jobs read than the API counts, a
-      # needed job absent or still running) is retried a bounded number of times, then fails.
+      # While no needed job sets a `name:`, its API entries are named by its id: `lint`, a matrix's
+      # `test-heavy (1)`, a reusable workflow's `image / smoke` (or `image` when skipped). A completed
+      # conclusion other than `success` or `skipped` fails at once; anything not yet settled (the
+      # call failing, a number of jobs read that differs from the API's `total_count`, a needed job
+      # absent or still running) is retried a bounded number of times, then fails.
       - name: Fail unless GitHub's jobs API reports every needed job succeeded or skipped
         if: always()
+        timeout-minutes: 5
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           NEEDS: ${{ toJSON(needs) }}
         run: |
-          set -o pipefail
+          set -euo pipefail
           tries="${JOBS_API_TRIES:-6}"
           delay="${JOBS_API_DELAY:-10}"
 
