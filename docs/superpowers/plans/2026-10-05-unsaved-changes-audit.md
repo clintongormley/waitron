@@ -2374,3 +2374,32 @@ all its refusal-clearing assertions remain. Record that in the eventual PR's Cha
 Tasks 2/3 stay complete; Tasks 1/4/5/6 remain partial. Archive/bucket/Cloud restore, remaining
 page/till routes, final modal-owner classification and activated native reload remain open.
 W69 is not ready for finish-branch or landing at this checkpoint.
+
+## 2026-10-06: Archive restore child checkpoint
+
+On the W69 branch, archive restore registers the selected File by identity, exact recovery key
+and environment against the initial empty/default values. Back and Cloud recovery navigation ask
+before leaving authored inputs; Keep and native warning Escape retain the values and focus.
+Discard resets the child including its native file input, retaining the wizard root. Reverted
+values leave directly; safety acknowledgements alone remain exempt. Restore submits its existing
+arguments directly. Refusals retain protected values; success removes the child scope. Disconnect
+releases the scope, and reconnect retains the original baseline. The new late-reply cases cover
+a departed form, an older shell connection and an older archive attempt beside a newer pending one.
+
+`pnpm --filter @waitron/setup exec vitest run src/setup-app-restore.unsaved-changes.test.ts`
+initially reported 11 failures and two passes. Four added departed/reconnected reply cases failed
+before their guards. The final eight-file setup family reported 522 passes; the restored final
+archive pair reported 50 passes in a separately installed candidate. Nine independent guard
+deletions or replacements failed their intended assertions, each beside a passing clean-Back
+control. The unedited fiscal write-path and immutability pair reported 20 passes. Setup typecheck,
+scoped lint, source formatting and diff checks passed. Local commands/output: Lane E
+`receipts/w69-setup-archive-20261006/`.
+
+Eight native real-shell EN/ES, light/dark, 390/1280 flows ran sixteen axe scans and produced sixteen
+captures inspected in four contact sheets. API reads and restore replies were synthetic; actual
+archive restore/restart, hovered colours and activated native reload remain unverified. The
+existing archive refusal-departure test now asserts the warning and answers Discard before
+returning; every original refusal-clearing assertion remains. Include it in the eventual PR's
+Changed test checks. Bucket/Cloud restore, remaining page/till routes, final advancing-owner
+classification and activated native reload remain open. Tasks 2/3 stay complete and Tasks 1/4/5/6
+partial. W69 is not ready for finish-branch or landing.

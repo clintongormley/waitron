@@ -1216,8 +1216,13 @@ replacement requests and edits invalidate old Back answers; reconnect keeps the 
 Reset now protects its person ID and exact password before Back, retains failed credentials,
 and restores only that child on Discard. Its outcome removes the credential form and its unload
 scope. A late Reset reply cannot change a replacement form or reconnected draft; the same
-retained form releases its busy state when that request settles. Archive, bucket and Cloud
-restore setup forms still need work.
+retained form releases its busy state when that request settles. Archive restore now protects
+its selected File, exact recovery key and environment through Back and Cloud recovery navigation.
+Keep and warning Escape retain the native controls; Discard restores only that child. Safety
+acknowledgements remain exempt. Refused archive requests stay protected against the initial empty
+form; accepted submission still proceeds directly. Late replies cannot replace a departed form,
+reconnected wizard or newer archive attempt in the new browser cases. Bucket and Cloud restore
+setup forms still need work.
 See the dated setup entries in the W69 audit for commands and limits; activated native reload
 has not been verified.
 Dashboard voluntary logout and a language change also request the shared warning before their

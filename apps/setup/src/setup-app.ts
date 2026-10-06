@@ -531,6 +531,7 @@ export class SetupApp extends LitElement {
   @state() private restoreLiveUnknown = false;
   /** Handed back to the archive screen with a refusal, so the owner's entries are kept. */
   @state() private restoreRequest?: RestoreRequestDetail;
+  #archiveRestoreAttempt = 0;
   @state() private bucketRestoreError?: Message;
   @state() private bucketInvalidField?: BucketField;
   @state() private bucketLiveSince?: string;
@@ -935,6 +936,13 @@ export class SetupApp extends LitElement {
 
   async #onRestoreRequested(event: CustomEvent<{ request: RestoreRequestDetail }>): Promise<void> {
     event.stopPropagation();
+    const attempt = ++this.#archiveRestoreAttempt;
+    const generation = this.#rootGeneration;
+    const current = () =>
+      this.isConnected &&
+      generation === this.#rootGeneration &&
+      attempt === this.#archiveRestoreAttempt &&
+      this.screen === "provisioning";
     this.restoreError = undefined;
     this.restoreInvalidField = undefined;
     this.#clearProvisionOutcome();
@@ -952,11 +960,11 @@ export class SetupApp extends LitElement {
         request.environment,
         request.oldBoxGone,
       );
-      if (!this.isConnected) return;
+      if (!current()) return;
       this.restoreRequest = undefined;
       this.screen = "done";
     } catch (error) {
-      if (!this.isConnected) return;
+      if (!current()) return;
       const { code, params } = (error ?? {}) as {
         code?: unknown;
         params?: { lastChangeAt?: unknown };
