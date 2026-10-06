@@ -484,6 +484,78 @@ describe("ci.yml's job graph", () => {
   });
 });
 
+/**
+ * The `ci` job's one step: its own keys (indent 8) and its `run: |` script, dedented. Weaker than
+ * GitHub: the `env:` value is read as text, so what `${{ toJSON(needs) }}` evaluates to is GitHub's.
+ */
+function ciVerdictStep() {
+  const body = job("ci").body;
+  const stepsAt = body.findIndex((line) => /^ {4}steps:\s*$/.test(line));
+  if (stepsAt === -1) throw new Error("the `ci` job has no `steps:`");
+  const steps = body.slice(stepsAt + 1).filter((line) => /^ {6}- /.test(line));
+  if (steps.length !== 1) throw new Error(`the \`ci\` job has ${steps.length} steps, not one`);
+
+  const step = body.slice(body.indexOf(steps[0]));
+  const keys = step.filter((line, at) => at === 0 || /^ {8}\S/.test(line));
+  const runAt = step.findIndex((line) => /^ {8}run: \|\s*$/.test(line));
+  if (runAt === -1) throw new Error("the `ci` job's step has no `run: |` block");
+  const script = [];
+  for (const line of step.slice(runAt + 1)) {
+    if (line.trim() !== "" && !line.startsWith(" ".repeat(10))) break;
+    script.push(line.slice(10));
+  }
+  return { keys, step, script: script.join("\n") };
+}
+
+/** Runs the step's script as GitHub's default Linux shell does (`bash -e`), with `NEEDS` set. */
+function runVerdict(needs) {
+  const env = { PATH: process.env.PATH };
+  if (needs !== undefined) env.NEEDS = typeof needs === "string" ? needs : JSON.stringify(needs);
+  const result = spawnSync("bash", ["-e", "-c", ciVerdictStep().script], {
+    encoding: "utf8",
+    env,
+    timeout: 10_000,
+  });
+  return { status: result.status, output: `${result.stdout}${result.stderr}` };
+}
+
+describe("the `ci` aggregate's verdict", () => {
+  const results = (...values) =>
+    Object.fromEntries(values.map((result, at) => [`job-${at}`, { result, outputs: {} }]));
+
+  it("always runs, reading every needed job's result from the environment", () => {
+    const { keys, step } = ciVerdictStep();
+    expect(keys.filter((line) => /^ {8}if:/.test(line))).toEqual([]);
+    expect(step).toContain("          NEEDS: ${{ toJSON(needs) }}");
+  });
+
+  it("passes when every needed job succeeded or was skipped", () => {
+    expect(runVerdict(results("success", "success")).status).toBe(0);
+    expect(runVerdict(results("success", "skipped", "skipped")).status).toBe(0);
+  });
+
+  it("fails, naming the job, when one failed or was cancelled", () => {
+    for (const bad of ["failure", "cancelled"]) {
+      const { status, output } = runVerdict(results("success", bad, "skipped"));
+      expect(status, bad).not.toBe(0);
+      expect(output, bad).toContain(`job-1: ${bad}`);
+    }
+  });
+
+  it("fails on a result nobody anticipated, or none at all", () => {
+    for (const odd of ["neutral", "", null, "Success"]) {
+      expect(runVerdict(results("success", odd)).status, String(odd)).not.toBe(0);
+    }
+    expect(runVerdict({ a: { result: "success" }, b: { outputs: {} } }).status).not.toBe(0);
+  });
+
+  it("fails when it was handed no results to read", () => {
+    for (const needs of [undefined, "", "{}", "not json", "[]"]) {
+      expect(runVerdict(needs).status, String(needs)).not.toBe(0);
+    }
+  });
+});
+
 describe("the test shards", () => {
   it("runs both UI packages sequentially and verifies the tarball", () => {
     const body = job("test-ui").body.join("\n");

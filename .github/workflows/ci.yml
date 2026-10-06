@@ -1648,29 +1648,27 @@ jobs:
       - mutation-shared
     runs-on: ubuntu-latest
     steps:
-      # `skipped` must PASS: scoping works by skipping, and a skipped job means "this change could
-      # not affect that check", not "that check did not run". `cancelled` must FAIL: ci.yml sets
-      # cancel-in-progress on pull requests, and a superseded run reporting green would let a stale
-      # result satisfy branch protection. Getting that pair backwards turns this job into a rubber stamp.
+      # An ALLOWLIST: `success` and `skipped` pass, and every other result fails, including one
+      # nobody anticipated. `skipped` must pass because scoping works by skipping: a skipped job
+      # means "this change could not affect that check", not "that check did not run". The step has
+      # no `if:`, so it always runs and prints what each needed job reported.
       #
-      # These expressions only evaluate on GitHub, so there is no local way to check them. Both
-      # directions were therefore run against the real workflow, on PR #25:
-      #
-      #   run 30642999746 — typecheck FAILED, the other four succeeded, and `ci` FAILED.
-      #   run 30643556188 — mutation-shared SKIPPED, everything else succeeded, and `ci` PASSED.
-      #
-      # `cancelled` is the untested half of the pair: it is the second `contains(...)` in the same
-      # `if` below and has never been observed firing, because provoking it means racing a
-      # superseding push to a PULL REQUEST's branch — a push is no longer superseded at all (the
-      # concurrency block at the top of this file).
-      - name: Fail if any needed job did not succeed
-        if: >-
-          contains(needs.*.result, 'failure') ||
-          contains(needs.*.result, 'cancelled')
+      # A list of bad values is not enough: a job GitHub cancelled because no runner picked it up
+      # has passed `contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')`.
+      # If GitHub reports such a job as `skipped`, this allowlist passes it too. GitHub alone
+      # evaluates `toJSON(needs)`; scripts/ci-workflow.test.mjs runs the script on sample results.
+      - name: Fail unless every needed job succeeded or was skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
         run: |
-          echo "A required job did not succeed:"
-          echo '${{ toJSON(needs) }}'
-          exit 1
+          jq -nr '
+            $ENV.NEEDS | fromjson
+            | if type != "object" or length == 0 then error("no needed job results to read") else . end
+            | to_entries
+            | (.[] | "\(.key): \(.value.result)"),
+              (map(select(.value.result != "success" and .value.result != "skipped") | .key)
+               | if length > 0 then error("not succeeded or skipped: \(join(", "))") else empty end)
+          '
 
   # Publishes the image to GHCR — a POST-GATE LEAF, downstream of the WHOLE suite rather than of the
   # image smoke alone. `needs: [changes, ci]` waits on the `ci` aggregate, so a push to `main` (or a
