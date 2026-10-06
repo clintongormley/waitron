@@ -410,3 +410,20 @@ The new sibling `*-connect-form.unsaved.test.ts` suites exercise these boundarie
 owner's scope request. They do not establish interception of the Payments page's actual navigation
 or browser reload. Those adapters remain Tasks 5–6. SumUp/Stripe reader forms and other modal owners
 remain pending. Existing provider connect and pairing assertions are unchanged.
+
+## 2026-10-06 Stripe reader checkpoint
+
+Stripe reader registration now compares exact name/reference input and asks through the shared
+registry on Cancel/native Escape. Keep retains the visible fields; Discard closes without an add.
+Clean/reverted values and a submitted registration waiting for its answer close directly. A refused
+registration retains its draft. Acceptance commits before the host notification and keeps newer
+input dirty, while still reporting the reader that was added. A departed successful registration
+still notifies its captured host callback, as the existing detached/pending-close tests require,
+without closing or marking a reconnected form. Departed input/submit/Cancel controls and native close
+reports cannot change that new opening. A host notification that reconnects the form also leaves
+the replacement open. Disconnect unregisters the scope and clears its local fields.
+
+The unchanged Stripe reader suite and `stripe-add-reader.unsaved.test.ts` ran in Chromium, together
+with its connection and panel suites. The visual/accessibility matrix exercised native Escape in
+English/Spanish, light/dark and phone/desktop. SumUp reader pairing and the remaining modal owners
+remain pending. Page/history/native-reload integration remains Tasks 5–6.

@@ -1307,8 +1307,13 @@ and successful connection commits before the host callback. Newer input stays vi
 departed controls and replies cannot change a reconnected opening. Disconnect clears typed keys.
 Submitted connect requests remain exempt while waiting, and a refusal restores draft protection.
 SumUp's merchant picker also restores its visible choice on Discard. Focused provider suites retain
-the existing reader pairing and cleanup assertions. Provider reader forms and the remaining modal
-owners are still pending; actual provider/page navigation and native reload remain Tasks 5–6.
+the existing reader pairing and cleanup assertions. Stripe reader registration now protects exact
+name/reference inputs through Cancel and native Escape, with clean/reverted and submitted-request
+exemptions. Accepted registration commits before notification and retains newer input; departed
+replies, controls, native close reports and a reconnecting callback leave a replacement opening
+alone. Its unchanged reader suite and new `stripe-add-reader.unsaved.test.ts` exercise these paths.
+SumUp reader pairing and the remaining modal owners are still pending; actual provider/page
+navigation and native reload remain Tasks 5–6.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**

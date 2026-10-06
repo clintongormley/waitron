@@ -1,6 +1,8 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
+import { keyed } from "lit/directives/keyed.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -45,16 +47,76 @@ export class StripeAddReader extends LitElement {
   @state() private refusal = "";
   @state() private busy = false;
   #closed = false;
+  #opening = {};
+  #scope?: DraftScope<{ name: string; reference: string }>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> => {
+    if (this.busy || !this.#scope) return true;
+    const opening = this.#opening;
+    const outcome = await this.#leave!.request({ scopes: [this], reason, proceed() {} });
+    return opening === this.#opening && outcome === "proceeded";
+  };
+
+  #value() {
+    return { name: this.name, reference: this.reference };
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#opening = {};
+    this.#closed = false;
+    this.#leave = leaveCoordinatorFor(this);
+    this.#scope = this.#leave?.register({
+      id: this,
+      parent: (this.getRootNode() as ShadowRoot).host,
+      current: () => this.#value(),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) => this.busy || (a.name === b.name && a.reference === b.reference),
+      restore: (value) => {
+        this.name = value.name;
+        this.reference = value.reference;
+      },
+    });
+    this.requestUpdate();
+  }
+
+  override disconnectedCallback(): void {
+    this.#opening = {};
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    this.name = "";
+    this.reference = "";
+    this.attempted = false;
+    this.refusal = "";
+    this.busy = false;
+    super.disconnectedCallback();
+  }
+
+  #cancel(opening: object): void {
+    if (opening !== this.#opening || !this.isConnected || this.#closed) return;
+    if (this.busy || !this.#scope) this.#close();
+    else void this.shadowRoot!.querySelector("wt-dialog")!.requestClose("cancel");
+  }
 
   #close(): void {
     if (this.#closed) return;
     this.#closed = true;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.requestUpdate();
     this.onClose();
   }
 
-  #onField(event: CustomEvent<{ value: string }>, field: "name" | "reference"): void {
+  #onField(
+    event: CustomEvent<{ value: string }>,
+    field: "name" | "reference",
+    opening: object,
+  ): void {
     event.stopPropagation();
+    if (opening !== this.#opening || !this.isConnected || this.#closed) return;
     this[field] = event.detail.value;
+    this.#scope?.changed();
   }
 
   #fieldErrors(): { name: string; reference: string } {
@@ -65,9 +127,12 @@ export class StripeAddReader extends LitElement {
     };
   }
 
-  async #add(event: Event): Promise<void> {
+  async #add(event: Event, opening: object): Promise<void> {
     event.stopPropagation();
-    if (this.busy) return; // single-flight
+    if (this.busy || opening !== this.#opening || !this.isConnected || this.#closed) return;
+    const scope = this.#scope;
+    const submitted = this.#value();
+    const added = this.onAdded;
     this.attempted = true;
     this.refusal = "";
     const errors = this.#fieldErrors();
@@ -77,33 +142,54 @@ export class StripeAddReader extends LitElement {
       return;
     }
     this.busy = true;
+    scope?.changed();
     try {
       await new StripePaymentsClient(this.request).addReader({
-        name: this.name,
-        reference: this.reference,
+        name: submitted.name,
+        reference: submitted.reference,
       });
-      // The reader exists whether or not the dialog is still open, so the host refreshes its list;
-      // a cancelled or removed dialog does not close again.
-      this.onAdded();
-      if (this.isConnected) this.#close();
+      if (opening !== this.#opening || !this.isConnected || this.#closed) {
+        added();
+        return;
+      }
+      this.busy = false;
+      scope?.commit(submitted);
+      added();
+      if (opening === this.#opening && this.isConnected && !this.#closed && !scope?.isDirty()) {
+        this.shadowRoot!.querySelector("wt-dialog")!.closeAfter("saved");
+        this.#close();
+      }
     } catch (error) {
+      if (opening !== this.#opening || !this.isConnected || this.#closed) return;
       this.refusal =
         codeOf(error) === "reader.not_found" || codeOf(error) === "server.internal"
           ? t("payments.stripe.add_failed")
           : codeMessage(codeOf(error));
     } finally {
-      this.busy = false;
+      if (opening === this.#opening) {
+        this.busy = false;
+        scope?.changed();
+      }
     }
   }
 
   override render(): TemplateResult {
+    return html`${keyed(this.#opening, this.#renderForm())}`;
+  }
+
+  #renderForm(): TemplateResult {
+    const opening = this.#opening;
     const errors = this.#fieldErrors();
     const blocked = errors.name !== "" || errors.reference !== "";
     return html`
       <wt-dialog
         heading=${t("payments.stripe.add_reader_heading")}
-        .open=${true}
-        @wt-close=${() => this.#close()}
+        .open=${!this.#closed}
+        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          if (opening === this.#opening) this.#close();
+        }}
       >
         <wt-input
           class="field"
@@ -113,7 +199,7 @@ export class StripeAddReader extends LitElement {
           required
           error=${errors.name}
           .value=${this.name}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "name")}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "name", opening)}
         ></wt-input>
         <div class="id-label">
           <span>${t("payments.stripe.reader_id")}</span>
@@ -129,7 +215,7 @@ export class StripeAddReader extends LitElement {
           required
           error=${errors.reference}
           .value=${this.reference}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "reference")}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "reference", opening)}
         ></wt-input>
         <wt-form-actions
           slot="footer"
@@ -137,7 +223,7 @@ export class StripeAddReader extends LitElement {
             .filter(Boolean)
             .join(" ")}
         >
-          <wt-button slot="cancel" data-test="cancel" @click=${() => this.#close()}
+          <wt-button slot="cancel" data-test="cancel" @click=${() => this.#cancel(opening)}
             >${t("payments.stripe.cancel")}</wt-button
           >
           <wt-button
@@ -145,7 +231,7 @@ export class StripeAddReader extends LitElement {
             data-test="add"
             ?loading=${this.busy}
             ?disabled=${blocked}
-            @click=${(e: Event) => void this.#add(e)}
+            @click=${(e: Event) => void this.#add(e, opening)}
             >${t("payments.stripe.add")}</wt-button
           >
         </wt-form-actions>
