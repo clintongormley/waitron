@@ -894,7 +894,7 @@ Still open from W74:
 refusal re-reads; a selection with no disabled products keeps the old sentence.
 
 **A category holding only routing rules gets the Delete confirmation (A279, owner 2026-10-06) —
-DONE.** It reverses the 2026-10-01 decision; a category with nothing at all is still deleted at once.
+DONE (#1297).** It reverses the 2026-10-01 decision; a category with nothing at all is still deleted at once.
 
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE (#1066).**
 
