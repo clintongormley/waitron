@@ -97,7 +97,7 @@ type Editor =
       /** Cells of subjects the editor does not show, sent back as they were. */
       hidden: DateHoursCell[];
       /**
-       * A new date's name taken from `date`'s holidays, followed while the name is left as it is.
+       * A new date's name taken from `date`'s holidays, followed until the name is edited at all.
        */
       suggested?: { date: LocalDate; name: string };
     }
@@ -466,13 +466,13 @@ export class HoursScreen extends LitElement {
     );
   }
 
-  /** A new read of `days`: a new date's untouched suggested name follows its holidays. */
+  /** A new read of `days`: a new date's suggested name follows its holidays. */
   #followHolidays(days: readonly CalendarDay[]): void {
     const editor = this.editor;
     if (editor?.kind !== "date" || editor.suggested === undefined) return;
     const { date, name } = editor.suggested;
     const day = days.find((entry) => entry.date === date);
-    if (day === undefined || editor.draft.name !== name) return;
+    if (day === undefined) return;
     const next = holidayDateName(day.holidays, date, date);
     if (next === name) return;
     this.editor = {
@@ -756,7 +756,8 @@ export class HoursScreen extends LitElement {
     const editor = this.editor as Extract<Editor, { kind: "date" }>;
     const draft = { ...editor.draft, ...patch };
     // The suggestion names the date it was taken from; on any other date it would rename wrongly.
-    const suggested = draft.date === editor.suggested?.date ? editor.suggested : undefined;
+    const suggested =
+      "name" in patch || draft.date !== editor.suggested?.date ? undefined : editor.suggested;
     this.#changed(name, { ...editor, draft, suggested });
   }
 

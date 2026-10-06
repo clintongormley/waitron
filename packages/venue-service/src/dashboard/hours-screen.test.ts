@@ -2333,6 +2333,48 @@ describe("Hours: public holidays", () => {
     expect(modal(el)).not.toBeNull();
   });
 
+  it("follows the holidays through a colour change, and stops once the name is edited, even back to the suggested text", async () => {
+    const liveData = new LiveData();
+    const { api, state } = server(liveData);
+    state.model = withHolidays(["Feria"]);
+    const el = await mount(api);
+    await selectTab(el, "calendar");
+    await makeSpecial(el, "2026-10-15");
+    expect(field(el, "name")!.value).toBe("Feria");
+    await choose(el, "colour", "amber");
+    state.model = withHolidays(["Feria de otoño"]);
+    liveData.invalidate([{ type: "local_holidays" }]);
+    await vi.waitFor(() =>
+      expect(text(day(el, "2026-10-15"))).toBe("15 Feria de otoño · standard hours"),
+    );
+    await settle(el);
+    expect(field(el, "name")!.value).toBe("Feria de otoño");
+
+    await setField(el, "name", "My choice");
+    await setField(el, "name", "Feria de otoño");
+    state.model = withHolidays(["Feria de invierno"]);
+    liveData.invalidate([{ type: "local_holidays" }]);
+    await vi.waitFor(() =>
+      expect(text(day(el, "2026-10-15"))).toBe("15 Feria de invierno · standard hours"),
+    );
+    await settle(el);
+    expect(field(el, "name")!.value).toBe("Feria de otoño");
+  });
+
+  it("keeps a suggested name when a read no longer lists its date's holidays", async () => {
+    const liveData = new LiveData();
+    const { api, state } = server(liveData);
+    state.model = withHolidays(["Feria"]);
+    const el = await mount(api);
+    await selectTab(el, "calendar");
+    await makeSpecial(el, "2026-10-15");
+    state.model = model();
+    liveData.invalidate([{ type: "local_holidays" }]);
+    await vi.waitFor(() => expect(text(day(el, "2026-10-15"))).not.toContain("Feria"));
+    await settle(el);
+    expect(field(el, "name")!.value).toBe("Feria");
+  });
+
   it("drops the holiday name's link to its date once the draft's date changes, so a later read cannot rename it", async () => {
     const liveData = new LiveData();
     const { api, state } = server(liveData);
