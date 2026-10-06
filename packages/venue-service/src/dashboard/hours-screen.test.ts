@@ -2361,7 +2361,7 @@ describe("Hours: public holidays", () => {
     expect(field(el, "name")!.value).toBe("Feria de otoño");
   });
 
-  it("keeps a suggested name when a read no longer lists its date's holidays", async () => {
+  it("keeps a suggested name when a read covers a range without its date", async () => {
     const liveData = new LiveData();
     const { api, state } = server(liveData);
     state.model = withHolidays(["Feria"]);
@@ -2373,6 +2373,20 @@ describe("Hours: public holidays", () => {
     await vi.waitFor(() => expect(text(day(el, "2026-10-15"))).not.toContain("Feria"));
     await settle(el);
     expect(field(el, "name")!.value).toBe("Feria");
+  });
+
+  it("turns an untouched suggested name into the date when a read lists the date with no holidays", async () => {
+    const liveData = new LiveData();
+    const { api, state } = server(liveData);
+    state.model = withHolidays(["Feria"]);
+    const el = await mount(api);
+    await selectTab(el, "calendar");
+    await makeSpecial(el, "2026-10-15");
+    state.model = withHolidays([]);
+    liveData.invalidate([{ type: "local_holidays" }]);
+    await vi.waitFor(() => expect(text(day(el, "2026-10-15"))).not.toContain("Feria"));
+    await settle(el);
+    expect(field(el, "name")!.value).toBe("2026-10-15");
   });
 
   it("drops the holiday name's link to its date once the draft's date changes, so a later read cannot rename it", async () => {

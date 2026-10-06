@@ -2489,11 +2489,12 @@ its own `h2`. A line names the venue's city and yearly allowance, or says why no
 yet. Where the province's official list needs an area, a dropdown chooses it (a viewer reads the
 choice as text). Then come the year's count against the allowance, Add a local holiday, and a
 `wt-data-table` of the current address's entries whose row menu holds Edit and Remove. Last, each
-earlier address still stored gets a line naming its city, with a Remove button. In the Calendar,
+earlier address still stored gets a line naming its city, with a Remove button. A viewer gets
+none of these actions: no Add a local holiday, no row menu and no Remove. In the Calendar,
 the date panel lists each holiday on the chosen date under its heading, with its kind (national,
 regional or local) and its source: the official source, linked where it has an address, or
-"Entered by you for" the city. Two lines follow, on how complete that year's official holidays are
-and on its local holidays. Above the month grid, a line names each year shown whose official
+"Entered by you for" the city. A line follows on how complete that year's official holidays are,
+and a second on its local holidays when the venue has a coverage record for that year. Above the month grid, a line names each year shown whose official
 holidays are not known to be complete.
 
 In the week grid and the date panel a period stays on one line, so hours wrap only between

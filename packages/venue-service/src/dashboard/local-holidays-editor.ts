@@ -30,8 +30,8 @@ type Editor =
       date: string;
       name: string;
       /**
-       * A new entry's address as the manager last saw it, by `holidayAddressKey`: the server files
-       * it under the address current when it arrives.
+       * A new entry's address when the dialog opened, or the last one the dialog warned about, by
+       * `holidayAddressKey`: the server files it under the address current when it arrives.
        */
       address?: string | null;
     }
