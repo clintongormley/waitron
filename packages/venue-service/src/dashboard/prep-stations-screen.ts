@@ -412,9 +412,61 @@ export class PrepStationsScreen extends LitElement {
   #stationActionScope?: DraftScope<string>;
   #stationActionIdentity?: object;
   #stationActionBeforeClose?: (reason: LeaveReason) => Promise<boolean>;
+  #printerScope?: DraftScope<string[]>;
+  #printerIdentity?: object;
   #settingsScope?: DraftScope<string>;
   #settingsIdentity?: object;
   #leave?: LeaveCoordinator;
+
+  #printerCurrent(identity: object | undefined): boolean {
+    return this.isConnected && identity === this.#printerIdentity;
+  }
+  #syncPrinterDraft(): void {
+    if (!this.printerEditor) {
+      this.#printerScope?.dispose();
+      this.#printerScope = undefined;
+      this.#printerIdentity = undefined;
+    } else if (!this.#printerIdentity) {
+      const id = (this.#printerIdentity = {});
+      this.#leave ??= leaveCoordinatorFor(this);
+      this.#printerScope = this.#leave?.register({
+        id,
+        current: () => this.printerEditor!.ids,
+        snapshot: (ids) => [...ids],
+        equal: (a, b) => a.length === b.length && a.every((value) => b.includes(value)),
+        restore: (ids) => {
+          if (this.printerEditor)
+            this.printerEditor = { ...this.printerEditor, ids: [...ids], error: "" };
+        },
+      });
+    }
+  }
+  #leavePrinters(reason: LeaveReason, identity: object | undefined, proceed: () => void): void {
+    if (!this.#printerCurrent(identity) || this.printerBusy) return;
+    if (!this.#printerScope) proceed();
+    else
+      void this.#leave!.request({
+        scopes: [this.#printerScope.id],
+        reason,
+        proceed: () => {
+          if (this.#printerCurrent(identity) && !this.printerBusy) proceed();
+        },
+      });
+  }
+  #openPrinters(stationId: string, ids: string[]): void {
+    this.#leavePrinters("navigation", this.#printerIdentity, () => {
+      this.printerEditor = undefined;
+      this.#syncPrinterDraft();
+      this.printerEditor = { stationId, ids: [...ids], error: "" };
+      this.#syncPrinterDraft();
+    });
+  }
+  #cancelPrinters(reason: LeaveReason, identity: object | undefined): void {
+    this.#leavePrinters(reason, identity, () => {
+      this.printerEditor = undefined;
+      this.#syncPrinterDraft();
+    });
+  }
 
   #settingsCurrent(identity: object | undefined): boolean {
     return this.isConnected && identity === this.#settingsIdentity;
@@ -736,6 +788,7 @@ export class PrepStationsScreen extends LitElement {
     this.#syncStationDrafts();
     this.#syncWatcherInlineDrafts();
     this.#syncSettingsDraft();
+    this.#syncPrinterDraft();
     if (changed.has("readOnly") && this.readOnly) {
       this.tab = "stations";
       this.testProduct = "";
@@ -773,6 +826,9 @@ export class PrepStationsScreen extends LitElement {
     this.watcherPrinterEditor = undefined;
     this.watcherCellBusy = false;
     this.watcherPrinterBusy = false;
+    this.printerEditor = undefined;
+    this.printerBusy = false;
+    this.#syncPrinterDraft();
     this.settingsEditor = undefined;
     this.settingsBusy = false;
     this.#settingsScope?.dispose();
@@ -1976,22 +2032,25 @@ export class PrepStationsScreen extends LitElement {
       </div>
     </wt-card>`;
   }
-  async #saveStationPrinters() {
+  async #saveStationPrinters(identity: object | undefined) {
     const editor = this.printerEditor;
-    if (!editor || this.printerBusy) return;
+    if (!editor || !this.#printerCurrent(identity) || this.printerBusy) return;
+    const scope = this.#printerScope;
+    const submitted = [...editor.ids];
     this.printerBusy = true;
     this.printerEditor = { ...editor, error: "" };
     this.#showError("");
     try {
-      await this.api.setStationPrinters(editor.stationId, editor.ids);
+      await this.api.setStationPrinters(editor.stationId, submitted);
     } catch (error) {
+      if (!this.#printerCurrent(identity)) return;
       const code = codeOf(error);
       if (
         code === "printer.not_found" ||
         code === "printer.makes_and_watches" ||
         code === "management.request_invalid"
       ) {
-        this.printerEditor = { ...editor, error: t("prep.tickets.printer_refused") };
+        this.printerEditor = { ...this.printerEditor!, error: t("prep.tickets.printer_refused") };
       } else {
         this.#showError(
           code === "station.not_found" ? t("prep.station_disabled") : t("prep.save_error"),
@@ -2000,7 +2059,12 @@ export class PrepStationsScreen extends LitElement {
       this.printerBusy = false;
       return;
     }
-    this.printerEditor = undefined;
+    if (!this.#printerCurrent(identity)) return;
+    scope?.commit(submitted);
+    if (!scope?.isDirty()) {
+      this.printerEditor = undefined;
+      this.#syncPrinterDraft();
+    }
     this.printerBusy = false;
     await this.#load();
   }
@@ -2014,6 +2078,7 @@ export class PrepStationsScreen extends LitElement {
       t("prep.none");
     if (!station.active) return html`<span part="disabled-station">${names}</span>`;
     const editor = this.printerEditor?.stationId === station.id ? this.printerEditor : undefined;
+    const identity = this.#printerIdentity;
     if (!editor)
       return html`<button
         type="button"
@@ -2022,7 +2087,7 @@ export class PrepStationsScreen extends LitElement {
         aria-label=${`${station.name}: ${t("prep.tickets.printed_on")}`}
         ?disabled=${this.printerBusy}
         @click=${() => {
-          this.printerEditor = { stationId: station.id, ids: selected, error: "" };
+          this.#openPrinters(station.id, selected);
         }}
       >
         ${names}
@@ -2065,12 +2130,15 @@ export class PrepStationsScreen extends LitElement {
         .countLabel=${(count: number) => format("prep.tickets.printer_count", { count: String(count) })}
         @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
           event.stopPropagation();
-          this.printerEditor = { ...editor, ids: event.detail.values, error: "" };
+          if (!this.#printerCurrent(identity)) return;
+          this.printerEditor = { ...editor, ids: [...event.detail.values], error: "" };
+          this.#printerScope?.changed();
         }}
         @keydown=${(event: KeyboardEvent) => {
           if (event.key === "Escape" && !this.printerBusy) {
+            event.preventDefault();
             event.stopPropagation();
-            this.printerEditor = undefined;
+            this.#cancelPrinters("escape", identity);
           }
         }}
       ></wt-combobox>
@@ -2080,14 +2148,14 @@ export class PrepStationsScreen extends LitElement {
           data-test=${`cancel-printers-${station.id}`}
           ?disabled=${this.printerBusy}
           @click=${() => {
-            this.printerEditor = undefined;
+            this.#cancelPrinters("cancel", identity);
           }}
           >${t("venue.cancel")}</wt-button
         >
         <wt-button
           data-test=${`save-printers-${station.id}`}
           ?disabled=${this.printerBusy}
-          @click=${() => void this.#saveStationPrinters()}
+          @click=${() => void this.#saveStationPrinters(identity)}
           >${t("venue.save")}</wt-button
         >
       </div>
@@ -2650,6 +2718,7 @@ export class PrepStationsScreen extends LitElement {
       part="watcher-cell"
       @keydown=${(event: KeyboardEvent) => {
         if (event.key === "Escape" && !this.settingsBusy) {
+          event.preventDefault();
           event.stopPropagation();
           this.#cancelSettings("escape", identity);
         }
@@ -2755,6 +2824,7 @@ export class PrepStationsScreen extends LitElement {
       part="watcher-cell"
       @keydown=${(event: KeyboardEvent) => {
         if (event.key === "Escape" && !this.settingsBusy) {
+          event.preventDefault();
           event.stopPropagation();
           this.#cancelSettings("escape", identity);
         } else
@@ -3650,13 +3720,20 @@ export class PrepStationsScreen extends LitElement {
               @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
                 if (event.target !== event.currentTarget) return;
                 const tab = PREP_TABS.find((tab) => tab === event.detail.value);
-                if (!tab || (this.readOnly && tab !== "stations")) return;
+                if (!tab || tab === this.tab || (this.readOnly && tab !== "stations")) return;
+                (event.currentTarget as HTMLElementTagNameMap["wt-tabs"]).value = this.tab;
                 const proceed = () => {
                   this.tab = tab;
                   this.#url.write({ dashboard: "prep-stations", view: tab });
                 };
-                if (this.settingsEditor)
+                if (this.tab === "settings" && this.settingsEditor)
                   this.#leaveSettings("navigation", this.#settingsIdentity, proceed);
+                else if (this.printerEditor)
+                  this.#leavePrinters("navigation", this.#printerIdentity, () => {
+                    this.printerEditor = undefined;
+                    this.#syncPrinterDraft();
+                    proceed();
+                  });
                 else proceed();
               }}
             >

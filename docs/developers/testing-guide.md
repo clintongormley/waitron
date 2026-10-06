@@ -980,6 +980,20 @@ input-type guard without reaching the branch it claims to check. Exercise the ev
 input and prove the target guard by deletion. Receipt: `packages/ui-core/src/submit-on-enter.test.ts`
 (UI keyboard review, 2026-09-06).
 
+## Test an inline Escape warning with the native keypress.
+
+An inline editor that opens a confirmation from `keydown` must cancel Escape's default action as
+well as its propagation. On 2026-10-06, W69's printer and Settings choice tests could open the
+warning and then observe it closed after the same native Escape. Dispatched events had not exposed
+that browser action. The handlers now call `preventDefault`; the printer regression observes that
+the actual keydown was cancelled and the warning stays open until a subsequent answer.
+
+Run `pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations-screen.printers-unsaved.test.ts src/dashboard/prep-stations-screen.settings-unsaved.test.ts`.
+The pair passed 37 cases. In an independently installed candidate, removing the printer cancellation
+failed its native case while a pristine form still closed directly. A preceding deletion survived
+when the test asserted only the visible warning, so timing alone does not guard the cancellation.
+These cases cover the named editors; they do not audit every inline Escape handler.
+
 ## Position a native popover before its first paint.
 
 In Chromium, positioning from the asynchronous `toggle` event left the row menu at `(0, 0)` for its

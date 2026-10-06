@@ -2926,3 +2926,44 @@ The collection-number, paid and receipt-mode controls already submit their chang
 `wt-change`; they remain exempt from staged-draft protection. Their existing behavior tests ran
 unchanged. Station-printer owners, remaining configuration owners, advancing-lane reconciliation
 and the complete shell/navigation/native-reload audit remain pending. W69 is still incomplete.
+
+## 2026-10-06: prep-station printer cells and native inline Escape
+
+On the W69 branch, the Tickets printer cell captures detached printer membership. Changing and
+reverting choices, including a reordered membership, clears its warning. Cancel, native Escape,
+replacement with another station and the actual Tickets tab controls use the shared coordinator.
+Keep retains the original cell and selection; Discard closes or continues without writing. Selecting
+the current tab does not leave. The tab control is reset to the current tab before a decision,
+so Keep leaves its next native click usable. A retained clean Settings cell cannot bypass the
+visible Tickets draft; its newly added case failed before the active-tab check was added.
+
+An accepted write commits the captured submitted membership before refreshing. A later selection
+remains dirty against that snapshot. Refusals retain the choices for retry. Disconnect clears the
+editor, busy state and scope; stale write replies and retained controls cannot alter a replacement.
+The API still submits the original membership through `PrepStationsApi.setStationPrinters`; its
+server consumer, `replaceStationPrinters` in `apps/server/src/station-printers.ts:64`, attaches and
+detaches by membership rather than assigning list positions (source inspection, not runtime
+verification).
+
+The first new browser run failed nine cases before implementation. Native Escape then exposed a
+second edge: a warning could open and immediately close from that keypress's default action. The
+printer handler now prevents that action. The same Settings choice path failed its native case;
+both Settings field handlers now prevent the default. The final native printer check also asserts
+that the actual keydown was cancelled: an initial deletion of `preventDefault` survived the
+visible-warning assertion, so that assertion alone is not a dependable guard of the cancellation.
+
+Commands and full outputs live in Lane E's local `receipts/w69-station-printers-20261006/`.
+The focused printer/Settings pair passed 37 tests; the final five-file browser family passed 490.
+Six independent installed-candidate deletions
+failed the selected behavioral case while the pristine-form control passed. The strengthened
+native-default deletion also failed with that control passing. The corrected temporary visual
+matrix passed eight native EN/ES, light/dark, 390/1280 flows with sixteen axe scans and sixteen
+captures; four contact sheets were inspected. Early temporary fixtures incorrectly set HTMLElement's
+native `lang` in its constructor, used a blocked background heading for pointer parking, and left
+the Spanish Discard label in English. Those fixtures were corrected without changing production
+wording. Their failed outputs are retained. Existing behavioral assertions were unchanged.
+
+API reads/writes use controlled fakes in the browser harness. Actual dashboard sidebar/history,
+server writes, activated native reload and hover accessibility are not established by this check.
+Remaining configuration owners, device-profile reconciliation and the complete shell/navigation
+inventory keep W69 incomplete. Tasks 2/3 remain complete and Tasks 1/4/5/6 partial.

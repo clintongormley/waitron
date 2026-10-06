@@ -1173,6 +1173,16 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Prep-station printer cells now use the shared warning on the branch. Cancel, native Escape,
+replacing the station and leaving Tickets ask before discarding your selection. Keep retains it;
+Discard leaves without writing. Reordered memberships and reverted choices are clean. Accepted
+writes commit before refresh, and later edits stay dirty against the submitted selection.
+Disconnected editors release their scope; older writes cannot replace a new editor. Native Escape
+also cancels its browser default action in printer and Settings cells, so opening the warning does
+not hand that same keypress to its dialog. The dated audit records focused tests, deletion controls
+and inspected EN/ES, light/dark, phone/desktop captures. Remaining configuration owners,
+device-profile reconciliation and the full shell/history/native-reload audit keep W69 incomplete.
+
 Prep-station Settings cells now use the shared warning on the branch: Cancel, Escape, replacement
 by another cell and the screen's tab change ask before discarding an edited choice or timing value.
 Keep retains the editor; Discard leaves without writing. Accepted writes commit before refresh,

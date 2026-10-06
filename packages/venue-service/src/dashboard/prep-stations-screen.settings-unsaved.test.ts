@@ -1,4 +1,5 @@
 import { afterEach, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import type { VenueServiceApi } from "./client.js";
 import "./service-settings-panel.js";
@@ -536,3 +537,41 @@ it("immediately saved service controls remain exempt while saving and after a re
   expect(left).toBe(true);
   expect((await question()).open).toBe(false);
 });
+
+it.each(["rest", "warmAfterMinutes"])(
+  "native Escape keeps the Settings %s warning open until the next answer",
+  async (field) => {
+    const { screen, writes } = await mount();
+    await open(screen, field);
+    await change(
+      screen,
+      field === "rest" ? "yes" : "8",
+      field === "rest" ? "settings-choice" : "settings-minutes",
+    );
+    const control = cell(
+      screen,
+      field === "rest" ? "[data-test=settings-choice]" : "[data-test=settings-minutes]",
+    ) as WtCombobox | WtInput;
+    await control.updateComplete;
+    const native = control.shadowRoot!.querySelector<HTMLElement>(
+      field === "rest" ? ".trigger" : "input",
+    )!;
+    await userEvent.click(native);
+    if (field === "rest") {
+      await userEvent.keyboard("{Escape}");
+      await expect
+        .poll(() => control.shadowRoot!.querySelector("[popover]")!.matches(":popover-open"))
+        .toBe(false);
+    }
+    native.focus();
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(async () => (await question()).open).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(async () => (await question()).open).toBe(false);
+    expect(shown(screen, field === "rest" ? "settings-choice" : "settings-minutes")).toBe(
+      field === "rest" ? "yes" : "8",
+    );
+    expect(unload()).toBe(true);
+    expect(writes).toEqual([]);
+  },
+);
