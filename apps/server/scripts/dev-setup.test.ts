@@ -318,10 +318,23 @@ describe("devSetup against a real venue directory", () => {
           "show-expo",
           "show-schedule",
           "take-cash",
+          "take-orders",
+          "hand-keyed-card-payment",
+          "prepare-orders",
+          "hand-over-orders",
         ],
       },
-      { name: "Handheld", canvasId: null, capabilities: [] },
-      { name: "Kitchen", canvasId: null, capabilities: ["act-as-kds"] },
+      {
+        name: "Handheld",
+        canvasId: null,
+        capabilities: [
+          "take-orders",
+          "hand-keyed-card-payment",
+          "prepare-orders",
+          "hand-over-orders",
+        ],
+      },
+      { name: "Kitchen", canvasId: null, capabilities: ["act-as-kds", "prepare-orders"] },
     ]);
   });
 

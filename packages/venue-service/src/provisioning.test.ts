@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, catalogues, locations } from "@waitron/db";
+import { CORE_MIGRATIONS, catalogues, deviceProfiles, locations } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -10,6 +10,8 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { readHolidays, readLocalHolidayModel, saveLocalHoliday } from "./holidays.js";
 import { readSpecialDate, readWeekHours, replaceWeekHours, saveSpecialDate } from "./hours.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
+import { createServiceZone } from "./operations.js";
+import { readProfileServiceAccess, setProfileServiceAccess } from "./profile-access.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
 
 const suite = useVenueDb({
@@ -301,5 +303,81 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     expect(await db.transaction((tx) => readLocalHolidayModel(tx, cfg))).toEqual(before);
     expect(before.entries).toEqual([entry]);
     expect(await stored()).toEqual({ geographies: 1, entries: 1 });
+  });
+
+  describe("the venue's ordering profiles", () => {
+    async function venue() {
+      await seedTenant(db);
+      const [location] = await db
+        .insert(locations)
+        .values({ name: "Bar Sol", invoiceLocales: ["es-ES"], operationDescription: "Bar" })
+        .returning({ id: locations.id });
+      const locationId = brandLocationId(location!.id);
+      const node = { locationId, nodeId: await seedNode(db, locationId) };
+      const profile = async (formFactor: "till" | "phone-portrait" | "kds") =>
+        (
+          await db
+            .insert(deviceProfiles)
+            .values({ name: `${formFactor} ${randomUUID()}`, formFactor, capabilities: [] })
+            .returning({ id: deviceProfiles.id })
+        )[0]!.id;
+      const profiles = {
+        till: await profile("till"),
+        phone: await profile("phone-portrait"),
+        kitchen: await profile("kds"),
+      };
+      const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
+      const access = (id: string) =>
+        db.transaction((tx) => readProfileServiceAccess(tx, { locationId }, id));
+      const defaults = async () => {
+        const rows = await db.execute<{ department_id: string; zone_id: string }>(sql`
+          select department_id, zone_id from zone_service_policies
+          where location_id = ${locationId} and is_counter_default = 1`);
+        return rows.rows[0]!;
+      };
+      return { locationId, profiles, runSeed, access, defaults };
+    }
+
+    it("puts each ordering profile in the default department, every zone, starting at the counter, and leaves the kitchen display without one", async () => {
+      const { profiles, runSeed, access, defaults } = await venue();
+
+      await runSeed();
+
+      const { department_id, zone_id } = await defaults();
+      for (const id of [profiles.till, profiles.phone]) {
+        expect(await access(id)).toEqual({
+          departmentId: department_id,
+          allowedZoneIds: [zone_id],
+          startingZoneId: zone_id,
+          stationIds: [],
+          watcherIds: [],
+        });
+      }
+      expect((await access(profiles.kitchen)).departmentId).toBeNull();
+    });
+
+    it("leaves a profile's scope alone on a re-run", async () => {
+      const { locationId, profiles, runSeed, access, defaults } = await venue();
+      await runSeed();
+      const { department_id } = await defaults();
+      const terrace = await db.transaction((tx) =>
+        createServiceZone(tx, { locationId }, { name: "Terrace", departmentId: department_id }),
+      );
+      await db.transaction((tx) =>
+        setProfileServiceAccess(tx, { locationId }, profiles.till, {
+          departmentId: department_id,
+          allowedZoneIds: [terrace.id],
+          startingZoneId: terrace.id,
+          stationIds: [],
+          watcherIds: [],
+        }),
+      );
+      const before = await access(profiles.till);
+
+      await runSeed();
+
+      expect(await access(profiles.till)).toEqual(before);
+      expect(before.allowedZoneIds).toEqual([terrace.id]);
+    });
   });
 });

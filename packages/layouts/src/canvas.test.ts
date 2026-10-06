@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceKind, FormFactor } from "./canvas.js";
-import { CARD_TYPES, CAPABILITY_FLAGS, FORM_FACTORS, kindOfFormFactor } from "./canvas.js";
+import {
+  CARD_TYPES,
+  CAPABILITY_FLAGS,
+  FORM_FACTORS,
+  NAVIGATION_SCREENS,
+  PROFILE_ACTIONS,
+  PROFILE_SCREENS,
+  kindOfFormFactor,
+} from "./canvas.js";
 
 const noDupes = (t: readonly string[]) => new Set(t).size === t.length;
 
@@ -26,6 +34,48 @@ describe("catalogue tuples", () => {
       "show-schedule",
     ])
       expect(CAPABILITY_FLAGS).toContain(c);
+  });
+});
+
+describe("profile actions and screens", () => {
+  it("split the capability flags into two subsets that together are the whole list", () => {
+    expect(noDupes([...PROFILE_ACTIONS, ...PROFILE_SCREENS])).toBe(true);
+    expect([...PROFILE_ACTIONS, ...PROFILE_SCREENS].sort()).toEqual([...CAPABILITY_FLAGS].sort());
+  });
+
+  it("names an action for taking orders, cash, both card payments, preparing, handing over, printing and the drawer", () => {
+    expect([...PROFILE_ACTIONS].sort()).toEqual(
+      [
+        "take-orders",
+        "take-cash",
+        "integrated-card-payment",
+        "hand-keyed-card-payment",
+        "prepare-orders",
+        "hand-over-orders",
+        "print-receipt",
+        "open-cash-drawer",
+      ].sort(),
+    );
+  });
+
+  it("keeps the show-* switches and the kitchen board as screens, and only the show-* ones are navigation screens", () => {
+    expect([...PROFILE_SCREENS].sort()).toEqual(
+      ["act-as-kds", "show-station", "show-expo", "show-schedule"].sort(),
+    );
+    expect([...NAVIGATION_SCREENS]).toEqual(["show-station", "show-expo", "show-schedule"]);
+  });
+
+  it("keeps every existing flag at its position, adding the new ones after them", () => {
+    expect(CAPABILITY_FLAGS.slice(0, 8)).toEqual([
+      "integrated-card-payment",
+      "open-cash-drawer",
+      "act-as-kds",
+      "print-receipt",
+      "show-station",
+      "show-expo",
+      "show-schedule",
+      "take-cash",
+    ]);
   });
 });
 

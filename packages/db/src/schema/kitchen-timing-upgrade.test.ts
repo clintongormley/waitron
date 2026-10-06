@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -75,7 +76,13 @@ it("adds timing storage without rewriting populated stations, mappings, keys or 
   await db.insert(stationPrinters).values({ stationId, printerId: printer!.id });
   const [watcher] = await db.insert(watchers).values({ locationId, name: "Pass" }).returning();
   await db.insert(watcherStations).values({ watcherId: watcher!.id, stationId });
-  const { deviceId } = await seedDevice(db, { locationId });
+  // By hand: the table definition names `device_profiles` columns later migrations add, which this
+  // schema does not have yet.
+  const profileId = randomUUID();
+  const now = new Date().toISOString();
+  await db.run(sql`insert into device_profiles (id, name, form_factor, capabilities, created_at, updated_at)
+    values (${profileId}, 'Till', 'till', '[]', ${now}, ${now})`);
+  const { deviceId } = await seedDevice(db, { locationId, profileId });
   await db.insert(deviceMadeHereStations).values({ deviceId, stationId });
 
   const tables = db

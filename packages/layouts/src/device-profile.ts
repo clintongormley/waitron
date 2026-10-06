@@ -1,9 +1,41 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
-import { CAPABILITY_FLAGS, type CapabilityFlag, type FormFactor } from "./canvas.js";
+import {
+  CAPABILITY_FLAGS,
+  NAVIGATION_SCREENS,
+  PROFILE_ACTIONS,
+  type CapabilityFlag,
+  type FormFactor,
+  type NavigationScreen,
+  type ProfileAction,
+} from "./canvas.js";
 
-/** Refuses an unknown flag rather than dropping it: some capabilities gate server routes. */
-export function validateCapabilities(input: unknown): CapabilityFlag[] {
+/** A `kds` profile is a shared display: nobody signs in on it. */
+export function isSharedDisplay(formFactor: FormFactor): boolean {
+  return formFactor === "kds";
+}
+
+/** The only action a shared display can be given: every other one needs a named person signed in. */
+const SHARED_DISPLAY_ACTIONS: readonly ProfileAction[] = ["prepare-orders"];
+
+function sharedDisplayMay(flag: CapabilityFlag): boolean {
+  const action = (PROFILE_ACTIONS as readonly CapabilityFlag[]).includes(flag);
+  return !action || SHARED_DISPLAY_ACTIONS.includes(flag as ProfileAction);
+}
+
+/** Whether the profile permits `action`. A shared display is refused every action but its own, even
+ * one its stored list names, because that list is not validated when a row is written directly. */
+export function profileAllows(
+  profile: { formFactor: FormFactor; capabilities: readonly string[] },
+  action: ProfileAction,
+): boolean {
+  if (isSharedDisplay(profile.formFactor) && !SHARED_DISPLAY_ACTIONS.includes(action)) return false;
+  return profile.capabilities.includes(action);
+}
+
+/** Refuses an unknown flag rather than dropping it: some capabilities gate server routes. With a
+ * form factor, a shared display is also refused the actions only a named person may take. */
+export function validateCapabilities(input: unknown, formFactor?: FormFactor): CapabilityFlag[] {
   if (!Array.isArray(input)) {
     throw new AppError("device_profile.invalid", { reason: "bad_capabilities" });
   }
@@ -13,9 +45,29 @@ export function validateCapabilities(input: unknown): CapabilityFlag[] {
       throw new AppError("device_profile.invalid", { reason: "bad_capabilities" });
     }
     const flag = raw as CapabilityFlag;
+    if (formFactor !== undefined && isSharedDisplay(formFactor) && !sharedDisplayMay(flag)) {
+      throw new AppError("device_profile.invalid", { reason: "shared_display_action" });
+    }
     if (!out.includes(flag)) out.push(flag);
   }
   return out;
+}
+
+/** `null` leaves the till on its canvas's first view; otherwise one of the navigation screens the
+ * profile's `capabilities` show. */
+export function validateStartingScreen(
+  value: unknown,
+  capabilities: readonly string[],
+): NavigationScreen | null {
+  if (value === null) return null;
+  if (
+    typeof value !== "string" ||
+    !(NAVIGATION_SCREENS as readonly string[]).includes(value) ||
+    !capabilities.includes(value)
+  ) {
+    throw new AppError("device_profile.invalid", { reason: "bad_starting_screen" });
+  }
+  return value as NavigationScreen;
 }
 
 /**
@@ -44,10 +96,19 @@ export const DEFAULT_PROFILE_CAPABILITIES: Record<FormFactor, CapabilityFlag[]> 
     "show-expo",
     "show-schedule",
     "take-cash",
+    "take-orders",
+    "hand-keyed-card-payment",
+    "prepare-orders",
+    "hand-over-orders",
   ],
-  "phone-portrait": [],
+  "phone-portrait": [
+    "take-orders",
+    "hand-keyed-card-payment",
+    "prepare-orders",
+    "hand-over-orders",
+  ],
   "tablet-landscape": [],
-  kds: ["act-as-kds"],
+  kds: ["act-as-kds", "prepare-orders"],
 };
 
 /** No `canvasId`: a seeded profile binds no canvas, so its canvas is resolved by form factor

@@ -311,6 +311,31 @@ describe("applyVenue", () => {
     ]);
   });
 
+  it("puts the seeded counter and handheld profiles in the venue's department, starting at its counter zone, and the kitchen in none", async () => {
+    await applyVenue(planVenue(request("B10101010"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+
+    const scopes = await suite.db.execute<{
+      name: string;
+      department: string | null;
+      starting_zone: string | null;
+      every_zone: number | null;
+    }>(sql`
+      select p.name, d.name as department, z.name as starting_zone, a.every_zone
+      from device_profiles p
+      left join device_profile_service_access a on a.device_profile_id = p.id
+      left join departments d on d.id = a.department_id
+      left join floor_zones z on z.id = a.starting_zone_id
+      order by p.name`);
+    expect(scopes.rows).toEqual([
+      { name: "Cocina", department: null, starting_zone: null, every_zone: null },
+      { name: "Mostrador", department: "Mostrador", starting_zone: "Counter", every_zone: 1 },
+      { name: "Móvil", department: "Mostrador", starting_zone: "Counter", every_zone: 1 },
+    ]);
+  });
+
   it("seeds exactly the three starter device profiles (names per the venue locale, no canvas, form-factor caps)", async () => {
     await applyVenue(planVenue(request("B10101010"), ALL_MODULES), {
       db: suite.db,
@@ -332,7 +357,7 @@ describe("applyVenue", () => {
       {
         name: "Cocina",
         canvas_id: null,
-        capabilities: ["act-as-kds"],
+        capabilities: ["act-as-kds", "prepare-orders"],
         inactivity_timeout_seconds: null,
       },
       {
@@ -346,10 +371,24 @@ describe("applyVenue", () => {
           "show-expo",
           "show-schedule",
           "take-cash",
+          "take-orders",
+          "hand-keyed-card-payment",
+          "prepare-orders",
+          "hand-over-orders",
         ],
         inactivity_timeout_seconds: 300,
       },
-      { name: "Móvil", canvas_id: null, capabilities: [], inactivity_timeout_seconds: 300 },
+      {
+        name: "Móvil",
+        canvas_id: null,
+        capabilities: [
+          "take-orders",
+          "hand-keyed-card-payment",
+          "prepare-orders",
+          "hand-over-orders",
+        ],
+        inactivity_timeout_seconds: 300,
+      },
     ]);
   });
 

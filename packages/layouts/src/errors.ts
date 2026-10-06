@@ -44,7 +44,12 @@ declare module "@waitron/shared" {
     "canvas.name_taken": Record<string, never>;
     "canvas.in_use": Record<string, never>;
     "device_profile.invalid": {
-      reason: "bad_capabilities" | "bad_canvas_ref" | "bad_inactivity_timeout";
+      reason:
+        | "bad_capabilities"
+        | "bad_canvas_ref"
+        | "bad_inactivity_timeout"
+        | "shared_display_action"
+        | "bad_starting_screen";
     };
     "device_profile.not_found": Record<string, never>;
     "device_profile.name_taken": Record<string, never>;

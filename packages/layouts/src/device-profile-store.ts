@@ -17,8 +17,12 @@ import type { ConstraintTarget, Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq, isNull } from "drizzle-orm";
-import type { CapabilityFlag, FormFactor } from "./canvas.js";
-import { validateCapabilities, validateInactivityTimeout } from "./device-profile.js";
+import type { CapabilityFlag, FormFactor, NavigationScreen } from "./canvas.js";
+import {
+  validateCapabilities,
+  validateInactivityTimeout,
+  validateStartingScreen,
+} from "./device-profile.js";
 import {
   readProfilePrinterLists,
   setProfilePrinterLists,
@@ -171,6 +175,19 @@ export async function getDeviceProfileWithPrinters(
   return { ...settings, ...(await readProfilePrinterLists(tx, id)) };
 }
 
+/** `null` when the profile has none, or is retired or absent. Kept off {@link DeviceProfileSettings}
+ * so the profile rows the routes answer keep their shape. */
+export async function readProfileStartingScreen(
+  tx: Transaction,
+  id: string,
+): Promise<NavigationScreen | null> {
+  const [row] = await tx
+    .select({ startingScreen: deviceProfiles.startingScreen })
+    .from(deviceProfiles)
+    .where(and(eq(deviceProfiles.id, id), live));
+  return (row?.startingScreen ?? null) as NavigationScreen | null;
+}
+
 export async function createDeviceProfile(
   tx: Transaction,
   input: {
@@ -180,6 +197,8 @@ export async function createDeviceProfile(
     canvasId: string | null | undefined;
     capabilities: unknown;
     inactivityTimeoutSeconds?: number | null;
+    /** Absent means none. */
+    startingScreen?: unknown;
     /** Absent means both lists empty. */
     printerLists?: ProfilePrinterLists;
   },
@@ -188,7 +207,8 @@ export async function createDeviceProfile(
     managementSessionId: input.managementSessionId,
     permission: "layout.configure",
   });
-  const capabilities = validateCapabilities(input.capabilities);
+  const capabilities = validateCapabilities(input.capabilities, input.formFactor);
+  const startingScreen = validateStartingScreen(input.startingScreen ?? null, capabilities);
   const inactivityTimeoutSeconds = validateInactivityTimeout(
     input.inactivityTimeoutSeconds ?? null,
     input.formFactor,
@@ -203,6 +223,7 @@ export async function createDeviceProfile(
         canvasId: input.canvasId ?? null,
         capabilities,
         inactivityTimeoutSeconds,
+        startingScreen,
       })
       .returning(PROFILE_COLUMNS);
     created = row!;
@@ -224,6 +245,8 @@ export async function updateDeviceProfile(
     canvasId: string | null | undefined;
     capabilities: unknown;
     inactivityTimeoutSeconds?: number | null;
+    /** Absent keeps the stored one, which must still be a screen the new capabilities show. */
+    startingScreen?: unknown;
     /** Absent leaves both lists as they are. */
     printerLists?: ProfilePrinterLists;
   },
@@ -232,7 +255,13 @@ export async function updateDeviceProfile(
     managementSessionId: input.managementSessionId,
     permission: "layout.configure",
   });
-  const capabilities = validateCapabilities(input.capabilities);
+  const capabilities = validateCapabilities(input.capabilities, input.formFactor);
+  const startingScreen = validateStartingScreen(
+    input.startingScreen === undefined
+      ? await readProfileStartingScreen(tx, input.id)
+      : input.startingScreen,
+    capabilities,
+  );
   const inactivityTimeoutSeconds = validateInactivityTimeout(
     input.inactivityTimeoutSeconds ?? null,
     input.formFactor,
@@ -247,6 +276,7 @@ export async function updateDeviceProfile(
         canvasId: input.canvasId ?? null,
         capabilities,
         inactivityTimeoutSeconds,
+        startingScreen,
         updatedAt: nowIso(),
       })
       .where(and(eq(deviceProfiles.id, input.id), live))

@@ -9,12 +9,23 @@ export {
 } from "./validate.js";
 export { MAX_TAB_TITLE_LENGTH, validateCanvas } from "./validate-canvas.js";
 
-export { FORM_FACTORS, CARD_TYPES, CAPABILITY_FLAGS, kindOfFormFactor } from "./canvas.js";
+export {
+  FORM_FACTORS,
+  CARD_TYPES,
+  CAPABILITY_FLAGS,
+  NAVIGATION_SCREENS,
+  PROFILE_ACTIONS,
+  PROFILE_SCREENS,
+  kindOfFormFactor,
+} from "./canvas.js";
 export type {
   FormFactor,
   DeviceKind,
   CardType,
   CapabilityFlag,
+  NavigationScreen,
+  ProfileAction,
+  ProfileScreen,
   CardInstance,
   TabDef,
   ThemeOverride,
@@ -25,8 +36,11 @@ export type { CardContract } from "./card-contract.js";
 export { validateThemeOverride, THEMEABLE_TOKENS, MAX_THEME_VALUE_LENGTH } from "./theme.js";
 export { DEFAULT_CANVASES } from "./default-canvases.js";
 export {
+  isSharedDisplay,
+  profileAllows,
   validateCapabilities,
   validateInactivityTimeout,
+  validateStartingScreen,
   DEFAULT_PROFILE_CAPABILITIES,
   DEFAULT_DEVICE_PROFILES,
   defaultProfileName,
@@ -44,6 +58,7 @@ export {
   listDeviceProfiles,
   getDeviceProfile,
   getDeviceProfileWithPrinters,
+  readProfileStartingScreen,
   createDeviceProfile,
   updateDeviceProfile,
   deleteDeviceProfile,

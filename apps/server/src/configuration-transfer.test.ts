@@ -2443,6 +2443,21 @@ it("transfers a profile's department, zones and station list, leaving a retired 
         watcherIds: [],
       });
     }
+    // Provisioning gave the seeded ordering profiles a scope; clear it so the rows that travel are
+    // this test's own.
+    const seeded = await tx
+      .select({ id: deviceProfiles.id })
+      .from(deviceProfiles)
+      .where(sql`${deviceProfiles.id} not in (${live!.id}, ${retired!.id})`);
+    for (const { id } of seeded) {
+      await setProfileServiceAccess(tx, cfg, id, {
+        departmentId: null,
+        allowedZoneIds: null,
+        startingZoneId: null,
+        stationIds: [],
+        watcherIds: [],
+      });
+    }
     return { live: live!.id, retired: retired!.id };
   });
   await retireProfile(source.locationId, original.retired);

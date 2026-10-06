@@ -1,9 +1,11 @@
-import { and, eq, sql } from "drizzle-orm";
-import { floorZones, locations } from "@waitron/db";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { deviceProfiles, floorZones, locations } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
+import { readProfileServiceAccess, setProfileServiceAccess } from "./profile-access.js";
 import {
   departmentSalePolicies,
   departments,
+  deviceProfileServiceAccess,
   zoneMenus,
   zoneSalePolicies,
   zoneServicePolicies,
@@ -12,7 +14,8 @@ import { serviceSettings } from "./schema/settings.js";
 
 export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
   seed: {
-    summary: "Create the default department, counter zone and service settings",
+    summary:
+      "Create the default department, counter zone and service settings, and give each ordering profile that department",
     async run(tx, node) {
       const location = await tx
         .select({ name: locations.name, catalogueId: locations.catalogueId })
@@ -81,7 +84,10 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           });
       }
       const policy = await tx
-        .select({ zoneId: zoneServicePolicies.zoneId })
+        .select({
+          zoneId: zoneServicePolicies.zoneId,
+          departmentId: zoneServicePolicies.departmentId,
+        })
         .from(zoneServicePolicies)
         .where(
           and(
@@ -110,6 +116,32 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
               sql`${zoneServicePolicies.defaultMenuId} is null`,
             ),
           );
+      }
+      // An ordering profile with no scope yet orders in the counter's department, starting there. A
+      // kitchen display takes no orders, so it gets none. A scope already saved is left alone.
+      const unscoped = await tx
+        .select({ id: deviceProfiles.id })
+        .from(deviceProfiles)
+        .leftJoin(
+          deviceProfileServiceAccess,
+          eq(deviceProfileServiceAccess.deviceProfileId, deviceProfiles.id),
+        )
+        .where(
+          and(
+            isNull(deviceProfiles.retiredAt),
+            ne(deviceProfiles.formFactor, "kds"),
+            isNull(deviceProfileServiceAccess.deviceProfileId),
+          ),
+        );
+      for (const { id } of unscoped) {
+        const kept = await readProfileServiceAccess(tx, node, id);
+        await setProfileServiceAccess(tx, node, id, {
+          departmentId: policy[0]!.departmentId,
+          allowedZoneIds: null,
+          startingZoneId: zoneId,
+          stationIds: kept.stationIds,
+          watcherIds: kept.watcherIds,
+        });
       }
       await tx
         .insert(serviceSettings)
