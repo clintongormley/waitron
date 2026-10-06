@@ -6169,7 +6169,7 @@ test("revealRow straight after a sticky table's headings grow lands the row belo
   await revealFromEnd(el, scroll);
 });
 
-test("revealRow keeps a row of a fractional height wholly below the headings, never a part of a pixel under them", async () => {
+test("revealRow, scrolling up from the end, puts each row of a fractional height wholly below the headings", async () => {
   // Each row is 0.3 px off a whole pixel more than the one above, so the rows' tops cover every
   // fraction, and a scroll position the browser rounds to a whole pixel can land a row under them.
   const { el, scroll } = await stickyTable({

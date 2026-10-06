@@ -48,8 +48,9 @@ category's full path on the first line under the window's title, such as
 **Drinks › Alcoholic drinks › Cocktails**, or **Uncategorised** when the product is in none. Choose
 **Change** after the path to pick another: the list starts with **Uncategorised** and then shows
 every category as an indented tree, each subcategory under its parent. You can also move the product
-to another category on the Products screen, by dragging it or with **Move to…**. The main category
-also plays a part in choosing the kitchen station a dish goes to, as described below.
+to another category on the Products screen, by turning on **Select and move** and dragging it, or
+with **Move to…**. The main category also plays a part in choosing the kitchen station a dish goes
+to, as described below.
 
 Use the **Default course** field under **Kitchen** to decide when the product fires. It saves with
 the product. Prep stations choose where the dish is made: an ordered exception applies first, then
@@ -119,8 +120,8 @@ product with Active variants cannot be an extra. The save is refused, and the da
 extras lists to take the product off first.
 
 The products list keeps each product's variants folded away under it. A product with Active
-variants says how many under its name, such as **2 variants**, and the small arrow just before
-its drag handle opens them. The list shows a product's variants in the product's own order, the
+variants says how many under its name, such as **2 variants**, and the small arrow at the start
+of its row opens them. The list shows a product's variants in the product's own order, the
 order of the variant list in the product editor, whichever column the list is sorted by; drag them
 in the editor to change it.
 Each variant's row shows its own name, the price it sells at, its status and its

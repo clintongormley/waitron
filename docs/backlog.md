@@ -917,6 +917,12 @@ unused `units` property is gone (it closes W75's leftover).
   files rows into a category rather than reordering them.
 - In the Structure tree a product's colour square stays after its name, because its photo holds the
   leading slot.
+- Price overrides and departments-and-zones (`apps/dashboard/src/widgets/menu-prices-table.ts`,
+  `packages/venue-service/src/dashboard/venue-operations-screen.ts`) draw no grips, folder icons or
+  product counts, so nothing changed there.
+- The Structure tree's section rows were deliberately not top-aligned: section names do not wrap
+  there, and `apps/dashboard/src/widgets/menu-structure-table.test.ts` deliberately centres the
+  included-menu name and note.
 
 **The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE (#1066).**
 
@@ -1922,8 +1928,9 @@ Left open:
 - At 390 px the Structure tree clips a long name under the pinned Actions column, so a long name's
   swatch needs a sideways scroll to reach. The names clip with the swatches removed too (measured
   on the W92 branch, not on `main`) _(2026-10-06: W85e gives it 12 px more; it still clips)_
-  _(2026-10-06: since A294 a section's swatch comes before its name, and outside Reorder mode a row
-  draws no grip slot; whether a long name still clips at 390 px was not measured)_.
+  _(2026-10-06, A294: a section's square now sits before its name, so this no longer applies to
+  sections — A294's look pass saw a long-named section's square at 390 px; a product's square still
+  trails its name, so it stays open for products)_.
 - A case in `apps/dashboard/src/screens/catalogue-screen.test.ts` (near line 2135, added by #1087
   before W92) prints "[Unhandled rejection] Error: marker" in passing runs; the noise should go.
 - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
@@ -2057,7 +2064,7 @@ test, with a stub catalogue of 40 uncategorised products, no category open and n
 list, finds only the rows scrolling at 390×844 and 375×667, with about 27px to spare at 375×667
 before W83 (a temporary test, not kept, measured 83px after it on 2026-10-04;
 `docs/developers/design-system.md`, `stickyHeader`), so longer toolbar labels, a wrapped banner or a
-message can still make the content column scroll. Not covered: in Select mode the toolbar wraps
+message can still make the content column scroll. Not covered: in Select and move mode the toolbar wraps
 taller and the content column overflows at 375×667 (figures below).
 Other long tables (Orders, Staff, Payments and
 the rest) keep scrolling with the content column until someone decides they should opt in too; each
@@ -2068,8 +2075,8 @@ shortened the toolbar. Measured on 2026-10-04 with a temporary test in the shell
 setup (not kept), reading the rows' box below its headings: before W83, 117.5px of row area, which
 held the All products row and no whole product row (rows are 69px); after it, 173.5px, which holds
 the All products row and one whole product row. At 390×844 the whole rows, the All products row included, went from four to five.
-In Select mode at 375×667 the content column overflows: by 129px before W83 and 25px after, in the
-same temporary test; no kept test covers Select mode there. Whether
+In Select and move mode at 375×667 the content column overflows: by 129px before W83 and 25px after, in the
+same temporary test; no kept test covers Select and move mode there. Whether
 that is enough rows is the owner's call.
 
 **Products: Filters and Select at the start of the table's toolbar — DONE (W83, #1193, owner
@@ -2087,12 +2094,14 @@ the layout existed only at phone width, #1193)_; and a desktop window narrow eno
 not measured. Also left open by W83's review, none started: (1) the table's Customise columns
 button is icon-only beside these two but has neither their look nor a tooltip; (2) the icon button
 and its tooltip are a stylesheet and a handler each caller wires by hand, not a `wt-icon-button`
-component — Select is a native `<button>` because `wt-button` does not pass `aria-pressed` through;
+component — Select and move is a native `<button>` because `wt-button` does not pass `aria-pressed`
+through, and the Structure tab's Reorder toggle is a second hand-built icon button for the same
+reason (a review probe confirmed `wt-button` drops `aria-pressed` on 2026-10-06);
 (3) the 768px side-panel threshold is tied by hand to token sizes (768 − 7×44 − 12 = 448, just
 above the table's 440px narrow-tree width).
 
 **Products at phone width: the toolbar takes two lines, not three — DONE (W85d, #1249, owner
-2026-10-05).** Not covered: Select mode's extra controls at the middle widths.
+2026-10-05).** Not covered: Select and move mode's extra controls at the middle widths.
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
 2026-10-04).** Seven existing test assertions that pinned the column changed, for the owner to

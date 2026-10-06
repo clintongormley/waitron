@@ -175,7 +175,6 @@ export class ProductList extends LitElement {
         user-select: none;
         cursor: var(--reorder-drag-cursor, grab);
       }
-      /* All products and a category being added cannot be dragged, but keep the grip's space. */
       wt-data-table::part(grip-space) {
         display: inline-block;
         flex: none;
@@ -238,14 +237,12 @@ export class ProductList extends LitElement {
         display: inline-flex;
         flex-direction: column;
       }
-      /* Drawn at the end of its tap target, against the grip. */
       wt-data-table::part(tree-toggle) {
         padding-inline-end: var(--wt-space-1);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         text-align: end;
       }
-      /* The table draws a variant at its product's indent; this is the product's grip and photo. */
       wt-data-table::part(variant-name) {
         padding-inline-start: calc(var(--wt-tap-min) + var(--wt-space-3));
       }
@@ -284,7 +281,7 @@ export class ProductList extends LitElement {
         display: contents;
       }
       /* On a phone the name box takes a line of its own. The \`folder-cell\` span is held to the
-         room #fitNames measures, so the count and asterisk wrap there instead of running under the
+         room #fitNames measures, so the asterisk wraps there instead of running under the
          pinned column. */
       wt-data-table[narrow]::part(naming) {
         display: grid;

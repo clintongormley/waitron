@@ -798,7 +798,7 @@ it("a drop on the category the dragged row is already in moves nothing and is ne
   expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
 });
 
-it("in Select mode, dragging a selected row moves every selected row, from two categories, in one drop", async () => {
+it("in Select and move mode, dragging a selected row moves every selected row, from two categories, in one drop", async () => {
   const el = await mountBrowser();
   await toggleCategory(el, "d");
   await toggleCategory(el, "f");
@@ -826,7 +826,7 @@ it("in Select mode, dragging a selected row moves every selected row, from two c
   await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
 });
 
-it("in Select mode, a drop where the drag started moves nothing, even with rows selected from two categories", async () => {
+it("in Select and move mode, a drop where the drag started moves nothing, even with rows selected from two categories", async () => {
   const el = await mountBrowser();
   await toggleCategory(el, "d");
   await toggleCategory(el, "f");
@@ -1542,7 +1542,7 @@ it("selects folders and products but never variants", async () => {
   ).toBeNull();
   expect(count(el)).toBe("2 selected");
 });
-it("leaves selection mode on Cancel and restores the ordinary toolbar with no selected keys", async () => {
+it("leaves selection mode on Done and restores the ordinary toolbar with no selected keys", async () => {
   const el = await mountBrowser();
   await selectKeys(el, ["bread"]);
   await press(el, "cancel-selection");
@@ -2608,7 +2608,7 @@ it("says Disable for products alone in Spanish, and Delete once a category is se
     "Eliminar",
   );
 });
-it("offers no Disable for a selection of products that are all disabled already, keeping Move and Cancel", async () => {
+it("offers no Disable for a selection of products that are all disabled already, keeping Move and Done", async () => {
   const withDisabled = [
     product("bread", "Bread", null),
     product("old", "Old", null, false),
@@ -2743,7 +2743,7 @@ it("shows a spinner and blocks confirmation while summaries are pending", async 
   expect(el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled")).toBeNull();
 });
 
-it("keeps the captured Delete request when Cancel exits selection during the summary read", async () => {
+it("keeps the captured Delete request when Done exits selection during the summary read", async () => {
   const el = await mountBrowser();
   let resolve!: (
     value: {
@@ -3108,7 +3108,7 @@ it("names Select in Spanish", async () => {
   expect(select.querySelector(".icon-tooltip")!.textContent!.trim()).toBe(es["folders.select"]);
 });
 
-it("pressing Select again leaves Select mode and clears the selection, as Cancel does", async () => {
+it("pressing Select again leaves Select and move mode and clears the selection, as Done does", async () => {
   const el = await mountBrowser();
   await selectKeys(el, ["bread"]);
   expect(count(el)).toBe("1 selected");
@@ -3296,7 +3296,7 @@ it("keeps Filters, Select, search, Expand all and Customise on one line in a Spa
   }
 });
 
-it("at phone width fits Select mode's controls and the table's own on two toolbar lines", async () => {
+it("at phone width fits Select and move mode's controls and the table's own on two toolbar lines", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -3352,7 +3352,7 @@ it("draws the Select tooltip over the sticky headings", async () => {
   }
 });
 
-it("a click on the Select tooltip, where it lies over the sticky headings, leaves Select mode off; a click on its icon turns it on", async () => {
+it("a click on the Select tooltip, where it lies over the sticky headings, leaves Select and move mode off; a click on its icon turns it on", async () => {
   const { page } = await import("vitest/browser");
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -3440,7 +3440,7 @@ it("Expand all leaves a product's variants closed, and still reads Collapse all"
   expect(button().textContent!.trim()).toBe("Collapse all");
 });
 
-it("puts Select mode's count, Move to…, Delete and Cancel at the toolbar's end", async () => {
+it("puts Select and move mode's count, Move to…, Delete and Done at the toolbar's end", async () => {
   const el = await mountBrowser();
   await press(el, "select");
   const end = (await tableOf(el)).shadowRoot!.querySelector(".table-end")!;

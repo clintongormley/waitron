@@ -1810,7 +1810,7 @@ describe("the product list at phone width", () => {
       }),
   );
 
-  /** The open name box against its row's grip (or grip space) and folder icon. */
+  /** The open name box against its row's grip (or grip space) and leading slot. */
   async function nameBoxLine(root: ShadowRoot) {
     const edges = await nameBoxEdges(root);
     const box = root.querySelector<HTMLElementTagNameMap["wt-input"]>(
@@ -3550,7 +3550,7 @@ describe("the Products tree's Name column", () => {
         const expected = all[0]!.name.left + (row.level - 1) * step;
         expect(row.name.left, row.key).toBeCloseTo(expected, 0);
       }
-      // The grip and the folder icon or photo sit in the same slots on every row of one level.
+      // The grip and the colour square or photo sit in the same slots on every row of one level.
       for (const row of all) {
         const twin = all.find((other) => other.level === row.level && other.key !== row.key);
         if (!twin) continue;
@@ -3727,7 +3727,7 @@ describe("the Products tree's Name column", () => {
       }),
     );
 
-    it("lifts nothing for a mouse press-and-move on a product or a category, or a touch press", async () => {
+    it("lifts nothing for a mouse press-and-move on a product or a category", async () => {
       const { el, root } = await mountDeep({ reordering: false });
       const offered: string[][] = [];
       el.addEventListener("drag-items", (event) =>

@@ -577,7 +577,7 @@ async function mountDeep(props: Partial<MenuStructureTable> = {}) {
   return el;
 }
 
-/** Where a row's name text, grip slot and folder or photo slot start, and where their middles are. */
+/** Where a row's name text, grip slot and leading slot start, and where their middles are. */
 function pieces(el: MenuStructureTable, key: string) {
   const tr = row(el, key)!;
   const box = (rect: DOMRect | undefined) =>
@@ -635,13 +635,13 @@ it("keeps a blank grip slot on the menu's row, so its name starts where the Prod
   const gap = parseFloat(tokens.getPropertyValue("--wt-space-3"));
   expect(tap).toBeGreaterThan(0);
   const start = tr.querySelector(".tree-cell")!.getBoundingClientRect().left;
-  // The table's arrow, the grip, the folder, then the gap before the name.
+  // The table's arrow, the grip, the leading slot, then the gap before the name.
   expect(pieces(el, "root").name.left - start).toBeCloseTo(3 * tap + gap, 0);
 });
 
 // The name and any note under it (an included menu's "read only here") are centred as one.
 it.each([true, false])(
-  "lines each row's grip, folder or photo and name up on one middle (reordering: %s)",
+  "lines each row's grip, leading slot and name up on one middle (reordering: %s)",
   async (reordering) => {
     const el = await mountDeep({ reordering });
     for (const key of DEEP_ROWS) {
@@ -679,7 +679,7 @@ it.each([1280, 390].flatMap((width) => [true, false].map((reordering) => ({ widt
           ["name", name],
         ] as const) {
           // The table lines its larger arrow glyph up by baseline, which put the arrow's middle
-          // 2.5 px above the Type text's in every row measured, before this case's fix and after.
+          // 2.5 px above the Type text's in every row measured.
           expect(Math.abs(at - arrow), `${key} ${what} to arrow`).toBeLessThanOrEqual(3);
           expect(Math.abs(at - kind), `${key} ${what} to Type`).toBeLessThanOrEqual(2);
         }
