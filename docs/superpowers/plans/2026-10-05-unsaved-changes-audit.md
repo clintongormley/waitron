@@ -1055,3 +1055,31 @@ product source. Receipts are in the lane's `w69-supervisor-20261006` directory.
 This is a Task 4 family checkpoint. Tender, bill, adjustment, refund, collection and other audited
 modal owners and inline/page/history/native-reload work remain pending. Neither proposed W69 PR
 is ready for finishing.
+
+
+## Unpaid-departure reason checkpoint — 2026-10-06
+
+The branch protects the trimmed reason comparison through Cancel and native Escape while
+retaining the raw input for Keep. Reverting to whitespace is clean. Invalid input and a refused
+request remain protected; bill-summary rerenders do not reset the draft. Busy requests retain
+nondismissible behavior. Continue emits the existing trimmed reason without a discard question;
+a successful departure removes its owner before the table's following refresh.
+
+The real till cases in `apps/till/src/till-app-parties.test.ts` retain the table and complete bill
+list after local Discard, send no departure request from either leave route, and keep the reason
+when a nested PIN approval is discarded. Recording after that dismissal sends the existing
+reason/revision and closes without a warning or drawer request. Existing assertions were retained.
+New approval dismissal explicitly waits for the native dialog's delayed close report.
+
+The widget cases in `apps/till/src/widgets/unpaid-departure-dialog.unsaved.test.ts` cover raw
+value/focus preservation, normalized revert, validation, refusal, busy dismissal, disconnect,
+reconnection, retained departed controls and duplicate native reports. In a frozen-installed
+throwaway checkout, independently deleting the native close binding, dirty notification, local
+restore, disconnect disposal or departed-input guard failed its intended behavioral assertion;
+restoring the source passed all eight widget cases. Deleting the native close binding also failed
+the real till Escape assertion; restoring it passed the four selected till leave cases. The
+temporary visual probe exercised EN/ES,
+light/dark and 390/1280 widths with axe and captured the editor and warning at each combination.
+The campaign's `receipts/w69-departure-20261006` holds logs, probe and inspected images.
+
+This advances Task 4 only. Other modal owners and the page/history/navigation rollout remain open.

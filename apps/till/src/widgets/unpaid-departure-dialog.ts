@@ -1,7 +1,9 @@
 import { LitElement, css, html, type PropertyValues } from "lit";
+import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { formatMoney } from "@waitron/shared";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { trackDialog } from "./track-dialog.js";
@@ -17,12 +19,6 @@ export interface DepartingBill {
   outstanding: string;
 }
 
-/**
- * Records that a party left without paying (spec §8): it shows the bills it leaves unpaid and what
- * happens to them and the table, and asks why. It holds no request of its own:
- * `unpaid-departure-continue` carries the reason, which the app sends in the operator's name, or
- * with a supervisor's or manager's PIN when they may not record one.
- */
 @customElement("till-unpaid-departure-dialog")
 export class TillUnpaidDepartureDialog extends LitElement {
   static override styles = [
@@ -79,12 +75,38 @@ export class TillUnpaidDepartureDialog extends LitElement {
 
   @state() private reason = "";
   @state() private attempted = false;
-  /** The refusal still shown: it goes when the reason changes, if it named the reason, or at the
-   * next request. */
   @state() private shownRefusal: DialogRefusal | null = null;
+
+  @state() private active = true;
+  #scope?: DraftScope<string>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("refusal")) this.shownRefusal = this.refusal;
+    if (!this.active || this.#scope) return;
+    this.#leave = leaveCoordinatorFor(this);
+    this.#scope = this.#leave?.register<string>({
+      id: this,
+      current: () => this.reason,
+      snapshot: (value) => value,
+      equal: (a, b) => a.trim() === b.trim(),
+      restore: (value) => (this.reason = value),
+    });
+    this.#scope?.commit("");
   }
 
   #money(amount: string): string {
@@ -131,7 +153,7 @@ export class TillUnpaidDepartureDialog extends LitElement {
   }
 
   async #continue(): Promise<void> {
-    if (this.busy) return;
+    if (!this.isConnected || !this.active || this.busy) return;
     this.attempted = true;
     this.shownRefusal = null;
     if (this.#ownError() !== null) {
@@ -142,15 +164,42 @@ export class TillUnpaidDepartureDialog extends LitElement {
     this.#emit("unpaid-departure-continue", { reason: this.reason.trim() });
   }
 
+  #onInput(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    if (!this.isConnected || !this.active || this.busy) return;
+    this.reason = event.detail.value;
+    this.#scope?.changed();
+    if (this.#refusalOnReason()) this.shownRefusal = null;
+  }
+
+  #cancel(): void {
+    if (!this.isConnected || !this.active || this.busy) return;
+    if (this.#scope) {
+      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+      return;
+    }
+    this.#emit("unpaid-departure-close");
+  }
+
+  #closed(event: Event): void {
+    event.stopPropagation();
+    if (event.target !== event.currentTarget || !this.isConnected || !this.active) return;
+    this.active = false;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#emit("unpaid-departure-close");
+  }
+
   override render() {
     const own = this.attempted ? this.#ownError() : null;
     const fieldError = this.#reasonError(own);
     return html`<wt-dialog
       ${trackDialog()}
-      .open=${true}
+      .open=${this.active}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       .heading=${t("departure.title")}
       .dismissible=${!this.busy}
-      @wt-close=${() => this.#emit("unpaid-departure-close")}
+      @wt-close=${(event: Event) => this.#closed(event)}
     >
       <div class="body">
         <dl class="summary">
@@ -172,14 +221,10 @@ export class TillUnpaidDepartureDialog extends LitElement {
           autocomplete="off"
           .disabled=${this.busy}
           .label=${t("departure.reason")}
-          .value=${this.reason}
+          .value=${live(this.reason)}
           .required=${true}
           .error=${fieldError ?? ""}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.reason = event.detail.value;
-            if (this.#refusalOnReason()) this.shownRefusal = null;
-          }}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onInput(event)}
           @keydown=${(event: KeyboardEvent) =>
             submitOnEnter(
               event,
@@ -193,7 +238,7 @@ export class TillUnpaidDepartureDialog extends LitElement {
             variant="secondary"
             data-departure-close
             .disabled=${this.busy}
-            @click=${() => this.#emit("unpaid-departure-close")}
+            @click=${() => this.#cancel()}
           >
             ${t("action.cancel")}
           </wt-button>

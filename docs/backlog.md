@@ -1443,8 +1443,13 @@ request. Selection alone is exempt, as is a PIN whose digits have all been remov
 still emits the exact selected person and PIN and consumes the proof immediately; a refused attempt may
 start a new protected entry. Disconnect clears the PIN. Focused cases are in
 `supervisor-override-dialog.unsaved.test.ts`, with a real drawer-approval leave case in
-`apps/till/src/till-app.test.ts`. Tender, bill, adjustment, refund, collection and other modal
-owners, plus page/navigation work, remain open.
+`apps/till/src/till-app.test.ts`. Unpaid-departure reasons now use the shared warning through Cancel
+and native Escape. Discard closes the local editor while retaining the table and its bills;
+submission retains the trimmed reason and existing request path. A refusal keeps the reason
+protected, and dismissing the nested approval leaves that parent reason intact. Focused cases
+are in `unpaid-departure-dialog.unsaved.test.ts` and `apps/till/src/till-app-parties.test.ts`.
+Tender, bill, adjustment, refund, cancellation, collection and other modal owners, plus
+page/navigation work, remain open.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
