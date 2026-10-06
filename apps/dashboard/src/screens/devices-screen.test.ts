@@ -1165,8 +1165,8 @@ describe("the Edit dialog", () => {
       watcherId: null,
       receiptPrinterId: null,
       paymentSlipPrinterId: null,
-      madeHereStationIds: ["s2"],
     });
+    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("madeHereStationIds");
 
     // Another screen cannot newly choose it.
     dq(el.shadowRoot!, "[data-test=edit-device-k2]")!.click();
@@ -1196,6 +1196,7 @@ describe("the Edit dialog", () => {
       "k1",
       expect.objectContaining({ stationId: null, watcherId: "w-off" }),
     );
+    expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty("madeHereStationIds");
 
     dq(el.shadowRoot!, "[data-test=edit-device-k2]")!.click();
     await vi.waitFor(() => expect(q(el, "[data-test=edit-binding]")).not.toBeNull());

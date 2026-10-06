@@ -1483,14 +1483,28 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
       createStation(tx, venue.cfg, { name: "Off" }),
     );
     const { deviceId } = await enrolKds(app, venue, off.id);
+    expect(
+      (
+        await edit(app, venue.managerCookie, deviceId, {
+          madeHereStationIds: [venue.defaultStationId],
+        })
+      ).status,
+    ).toBe(204);
     await switchStationOff(off.id);
 
-    const res = await edit(app, venue.managerCookie, deviceId, { name: "Renamed" });
+    // As the dashboard sends a kitchen screen's save: without the made-here stations.
+    const { madeHereStationIds: before, ...rest } = await storedBody(deviceId);
+    expect(before).toEqual([venue.defaultStationId]);
+    const res = await send(app, "PATCH", `/management-api/devices/${deviceId}`, {
+      cookie: venue.managerCookie,
+      body: { ...rest, name: "Renamed" },
+    });
     expect(res.status).toBe(204);
     expect(await storedBody(deviceId)).toMatchObject({
       name: "Renamed",
       stationId: off.id,
       watcherId: null,
+      madeHereStationIds: [venue.defaultStationId],
     });
   });
 
@@ -1498,14 +1512,28 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const { deviceId, watcherId } = await enrolWatching(venue);
+    expect(
+      (
+        await edit(app, venue.managerCookie, deviceId, {
+          madeHereStationIds: [venue.defaultStationId],
+        })
+      ).status,
+    ).toBe(204);
     await withTransaction(suite.db, (tx) => removeWatcher(tx, venue.cfg, watcherId));
 
-    const res = await edit(app, venue.managerCookie, deviceId, { name: "Renamed" });
+    // As the dashboard sends a kitchen screen's save: without the made-here stations.
+    const { madeHereStationIds: before, ...rest } = await storedBody(deviceId);
+    expect(before).toEqual([venue.defaultStationId]);
+    const res = await send(app, "PATCH", `/management-api/devices/${deviceId}`, {
+      cookie: venue.managerCookie,
+      body: { ...rest, name: "Renamed" },
+    });
     expect(res.status).toBe(204);
     expect(await storedBody(deviceId)).toMatchObject({
       name: "Renamed",
       stationId: null,
       watcherId,
+      madeHereStationIds: [venue.defaultStationId],
     });
   });
 
