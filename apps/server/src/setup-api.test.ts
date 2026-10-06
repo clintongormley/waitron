@@ -856,37 +856,62 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     });
   });
 
-  it("refuses Prepare without a taxpayer domicile before provisioning", async () => {
-    const app = new Hono();
-    const { deps, provision } = makeDeps();
-    mountSetup(app, deps, noopLog);
-    const body = demoBody();
-    body.mode = "prepare";
-    delete asRec(body.venue).taxpayerDomicile;
+  const setDomicile = (body: Record<string, unknown>, value: string | null | undefined): void => {
+    const venue = asRec(body.venue);
+    if (value === undefined) delete venue.taxpayerDomicile;
+    else venue.taxpayerDomicile = value;
+  };
 
-    const response = await postProvision(app, body);
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: { code: "setup.request_invalid", params: { field: "taxpayerDomicile" } },
-    });
-    expect(provision).not.toHaveBeenCalled();
-  });
+  it.each([
+    ["absent", undefined],
+    ["null", null],
+  ] as const)(
+    "provisions a demo whose taxpayer domicile is %s, as no address",
+    async (_label, value) => {
+      const app = new Hono();
+      const { deps, provisionRequests } = makeDeps();
+      mountSetup(app, deps, noopLog);
+      const body = demoBody();
+      setDomicile(body, value);
 
-  it("refuses a blank taxpayer domicile before provisioning", async () => {
-    const app = new Hono();
-    const { deps, provision } = makeDeps();
-    mountSetup(app, deps, noopLog);
-    const body = demoBody();
-    body.mode = "prepare";
-    asRec(body.venue).taxpayerDomicile = "   ";
+      expect((await postProvision(app, body)).status).toBe(200);
+      expect(provisionRequests[0].venue.taxpayerDomicile).toBeNull();
+    },
+  );
 
-    const response = await postProvision(app, body);
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: { code: "setup.request_invalid", params: { field: "taxpayerDomicile" } },
-    });
-    expect(provision).not.toHaveBeenCalled();
-  });
+  it.each(
+    (
+      [
+        ["Prepare", prepareBody],
+        ["Live", () => ({ ...liveBody(), aeatCert: CERT })],
+      ] as const
+    ).flatMap(([mode, makeBody]) =>
+      (
+        [
+          ["absent", undefined],
+          ["null", null],
+          ["empty", ""],
+          ["blank", "   "],
+        ] as const
+      ).map(([label, value]) => [mode, label, makeBody, value] as const),
+    ),
+  )(
+    "refuses %s with a taxpayer domicile that is %s before provisioning",
+    async (_mode, _label, makeBody, value) => {
+      const app = new Hono();
+      const { deps, provision } = makeDeps();
+      mountSetup(app, deps, noopLog);
+      const body = makeBody();
+      setDomicile(body, value);
+
+      const response = await postProvision(app, body);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "setup.request_invalid", params: { field: "taxpayerDomicile" } },
+      });
+      expect(provision).not.toHaveBeenCalled();
+    },
+  );
 
   it("provisions a live venue with a cert: stamps production and seals the cert in order", async () => {
     const app = new Hono();
