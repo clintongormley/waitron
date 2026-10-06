@@ -1355,6 +1355,14 @@ clean/reverted rows close directly. Accepted writes commit before refresh, newer
 stays dirty, refusals retain the draft and pending writes block dismissal. Departed controls/replies
 leave a replacement editor alone, including its busy state. Focused cases are in
 `packages/venue-service/src/dashboard/station-hours-form.unsaved.test.ts`.
+Disable station now protects a changed replacement-station selection through Cancel, native Escape
+and another station-action opening. Keep retains the selection; Discard closes without a station
+command. A successful fallback write commits before the separate disable command and refresh,
+so a later disable refusal leaves that accepted selection clean. Pending writes retain their
+nondismissible phase and disabled selector. Disconnect aborts the question, and departed controls
+or replies leave another opening alone. Default-station and Today safety confirmations keep their
+direct cancellation. Focused cases are in
+`packages/venue-service/src/dashboard/station-action.unsaved.test.ts`.
 Exception Add/Edit now protects subject, zone and destination through Cancel/native Escape. The
 scope survives routing preview, whose Cancel returns to the retained draft without another question.
 Confirmed writes commit their captured body before refresh; refusals keep the draft. Clean/reverted

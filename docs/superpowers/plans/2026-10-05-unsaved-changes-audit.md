@@ -761,3 +761,68 @@ controls were added. No existing expected value was changed.
 Station-action drafts and the remaining dashboard/till modal owners still need Task 4 work.
 Venue inline settings and shell/page/history routes remain Tasks 5–6; this checkpoint completes
 only the venue modal family, not either proposed W69 PR.
+
+
+## 2026-10-06 station-action fallback checkpoint
+
+The Disable station dialog now asks before Cancel, native Escape or another station action drops
+your edited replacement-station selection. Keep preserves that selection. Discard restores its
+accepted baseline and then closes, without a fallback or disable command. Reviewing an unchanged
+selection does not make it dirty. Default-station and Today confirmations retain direct Cancel.
+The existing disabled input and nondismissible pending-command phase remain in place.
+
+The fallback write and disable command have separate outcomes: a successful fallback write commits
+its submitted selection immediately, even when the later disable is refused. Replacement and
+disconnect invalidate old controls and pending replies. A disconnected fallback reply does not
+start the subsequent disable command. The question's callback remains stable across rerenders,
+including the Discard restoration itself.
+
+The corrected initial browser fixture produced six failing behavioral cases and two passing
+controls. The initial implementation passed six cases; two Discard cases exposed callback replacement
+on rerender. Keeping the callback per opening passed those cases. A further replacement-opening
+case failed before its gate was added. The focused final station-action suite in an independently
+installed disposable checkout passed 15 cases. Four deletion controls each failed one intended
+assertion: edited Cancel without its leave gate, partial-save cleanliness without the submitted
+commit, a departed write without its identity check, and replacement values without the old-control
+check. Restoring the candidate passed all 15 cases. The measuring checkout and its parent were
+removed after those runs.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/station-action.unsaved.test.ts
+```
+
+The first five-suite consumer run passed 383 cases and failed the existing immediate Cancel
+assertion in the refused Today confirmation. The implementation was narrowed to retain that
+confirmation's direct Cancel; no existing assertion or fixture changed. The subsequent focused
+consumer selection passed 16 cases, with 327 outside the selection skipped. Temporary visual
+cases passed eight EN/ES, light/dark, 390/1280 flows, with 16 axe scans and 16 inspected editor
+and warning captures. That probe supplied the shell's localized warning copy. Its source and
+captures are kept in Lane E's local `receipts/w69-station-actions-20261006` directory.
+
+Remaining modal owners, including the full-invoice recipient dialog added by A231, still need
+Task 4 work. Venue inline settings and page/history/navigation remain Tasks 5–6. This checkpoint
+covers station-action fallback selection; neither proposed W69 PR is complete.
+
+A later live-update case failed when a background update made the edited station default:
+the choice control disappeared and its scope was disposed. Retaining an already registered scope
+across that metadata change passed the case and the 16-case station-action suite. The opening's
+comparison baseline is retained even when the refreshed metadata changes which controls appear.
+The temporary visual probe initially remained in the package during typechecking and imported
+app icons outside that package's `rootDir`; that check failed. The probe was archived and removed,
+and the package typecheck then passed. These temporary artifacts are not part of the change.
+
+A second background-update case failed when another write had already persisted the selected
+fallback. The dialog's Confirm skipped the redundant fallback request, completed Disable, but
+left the local selection dirty and the editor open. Commit the selection once the fallback is
+known to be accepted, whether this confirmation writes it or the refreshed snapshot already
+holds it. The case keeps its literal single Disable request and clean-close assertions. Its
+initial focused run failed the modal-removal assertion; the same case also failed in the ongoing
+consumer run, which otherwise passed 387 cases. No existing assertion changed.
+
+The final five-suite station/hour consumer run passed 388 tests on the completed candidate.
+The final independently installed deletion controls each failed one selected assertion for all
+five protections, including retaining the opening baseline through a background default change.
+Restoring that checkout passed all 17 station-action cases. Its checkout and parent were removed.
+Package types, changed-file lint, formatting and `git diff --check` passed. Documentation paths
+are Prettier-ignored and were read directly. Generated visual and failure captures were archived
+outside the product source; no existing test assertion or fixture was edited.

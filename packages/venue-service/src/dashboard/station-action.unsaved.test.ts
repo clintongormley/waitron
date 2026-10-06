@@ -1,0 +1,436 @@
+import { afterEach, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
+import { LitElement, html } from "lit";
+import { LeaveController, applyTokens } from "@waitron/ui";
+import { LiveData, setLocale } from "@waitron/dashboard-kit";
+import type { PrepStationsApi, PrepStationsView } from "./routing-client.js";
+import { PrepStationsScreen } from "./prep-stations-screen.js";
+const view: PrepStationsView = {
+  routing: {
+    claims: [
+      { categoryId: "cocktails", target: { kind: "station", stationId: "bar" }, stationOff: false },
+    ],
+    exceptions: [],
+    unassigned: {
+      folders: [{ id: "food", name: "Food" }],
+      products: [{ id: "bread", name: "Bread" }],
+    },
+    defaultStationId: "bar",
+    stations: [{ id: "bar", name: "Bar", active: true }],
+    stationTimes: [
+      {
+        stationId: "bar",
+        nextTransition: null,
+        status: { open: true, why: "default" },
+        hours: [],
+        fallbackStationId: null,
+        today: null,
+        closedSendsTo: "bar",
+      },
+    ],
+    todayEnds: { timeOfDay: "06:00", tomorrow: true },
+    clockReadable: true,
+  },
+  stations: [
+    {
+      id: "bar",
+      name: "Bar",
+      active: true,
+      isDefault: true,
+      displayOrder: 1,
+      warmAfterMinutes: 5,
+      overdueAfterMinutes: 10,
+      forgottenAfterMinutes: 15,
+      timingDefaults: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
+      timingOverrides: {
+        warmAfterMinutes: null,
+        overdueAfterMinutes: null,
+        forgottenAfterMinutes: null,
+      },
+      showsRestOfOrder: false,
+    },
+  ],
+  categories: [
+    { id: "drinks", name: "Drinks", parentId: null },
+    { id: "cocktails", name: "Cocktails", parentId: "drinks" },
+    { id: "food", name: "Food", parentId: null },
+  ],
+  zones: [],
+  products: [{ id: "bread", name: "Bread" }],
+  testProducts: [{ id: "bread", name: "Bread" }],
+  printers: [],
+  stationPrinters: [],
+  devices: [],
+  watchers: [],
+  disabledWatchers: [],
+};
+
+class StationActionLeaveApp extends LitElement {
+  readonly leave = new LeaveController(this);
+  api!: PrepStationsApi;
+  override render() {
+    return html`<dashboard-prep-stations-screen .api=${this.api}></dashboard-prep-stations-screen>
+      ${this.leave.render({ heading: "Unsaved changes", message: "Discard unsaved changes?", keepLabel: "Keep editing", discardLabel: "Discard changes" })}`;
+  }
+}
+customElements.define("station-action-leave-test-app", StationActionLeaveApp);
+let app: StationActionLeaveApp;
+afterEach(() => app?.remove());
+function deferred() {
+  let resolve!: () => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<void>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+async function mount(write?: Promise<void>, refreshFails = false, deactivate?: Promise<void>) {
+  const writes: unknown[] = [];
+  let reads = 0;
+  const model = structuredClone(view);
+  for (const [id, name] of [
+    ["kitchen", "Kitchen"],
+    ["grill", "Grill"],
+  ]) {
+    model.stations.push({ ...model.stations[0]!, id: id!, name: name!, isDefault: false });
+    model.routing.stations.push({ id: id!, name: name!, active: true });
+    model.routing.stationTimes.push({
+      ...model.routing.stationTimes[0]!,
+      stationId: id!,
+      status: { open: true, why: "in_hours" },
+      closedSendsTo: null,
+    });
+  }
+  history.replaceState(null, "", "/manage/prep-stations/view/stations");
+  app = document.createElement("station-action-leave-test-app") as StationActionLeaveApp;
+  const liveData = new LiveData();
+  app.api = {
+    liveData,
+    load: async () => {
+      if (++reads > 1 && refreshFails) throw { code: "connection.failed" };
+      return structuredClone(model);
+    },
+    readStationHealth: async () => ({
+      capturedAt: "2026-10-06T08:00:00Z",
+      stations: model.stations.map(({ id, name }) => ({
+        id,
+        name,
+        hasScreen: false,
+        waiting: 0,
+        preparing: null,
+        ready: null,
+        late: { warm: 0, overdue: 0, forgotten: 0 },
+        oldestMinutes: null,
+        items: [],
+      })),
+      outputsDown: { printersDown: [], screensDark: [] },
+    }),
+    setStationFallback: async (id: string, choice: string | null) => {
+      writes.push({ fallback: id, choice });
+      await write;
+      model.routing.stationTimes.find((row) => row.stationId === id)!.fallbackStationId = choice;
+    },
+    deactivateStation: async (id: string) => {
+      writes.push({ deactivate: id });
+      await deactivate;
+    },
+    createStation: async (body: unknown) => {
+      writes.push(body);
+      await write;
+    },
+    updateStation: async (id: string, body: unknown) => {
+      writes.push({ id, body });
+      await write;
+    },
+  } as unknown as PrepStationsApi;
+  setLocale("en");
+  applyTokens(app);
+  document.body.append(app);
+  await app.updateComplete;
+  const screen = app.shadowRoot!.querySelector<PrepStationsScreen>(
+    "dashboard-prep-stations-screen",
+  )!;
+  await expect
+    .poll(() => screen.shadowRoot?.querySelector("[data-test=new-station]"))
+    .not.toBeNull();
+  return { screen, writes, model, liveData, readCount: () => reads };
+}
+function unload() {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+async function question() {
+  await app.updateComplete;
+  const q = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await q.updateComplete;
+  return q;
+}
+async function choose(decision: "keep" | "discard") {
+  const q = await question();
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
+  await expect.poll(() => q.open).toBe(false);
+}
+
+async function open(screen: PrepStationsScreen, id = "kitchen") {
+  const table = screen
+    .shadowRoot!.querySelector("prep-station-health-table")!
+    .shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  table.shadowRoot!.querySelector<HTMLElement>(`[data-test=disable-${id}]`)!.click();
+  await screen.updateComplete;
+  const modal = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    "[data-test=station-action-modal]",
+  )!;
+  await modal.updateComplete;
+  return modal;
+}
+async function change(
+  screen: PrepStationsScreen,
+  modal: HTMLElementTagNameMap["wt-modal"],
+  value: string,
+) {
+  modal
+    .querySelector("wt-combobox")!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+  await screen.updateComplete;
+}
+function cancel(modal: HTMLElementTagNameMap["wt-modal"]) {
+  modal.querySelector<HTMLElement>("[slot=cancel]")!.click();
+}
+async function save(screen: PrepStationsScreen, modal: HTMLElementTagNameMap["wt-modal"]) {
+  const button = modal.querySelector<HTMLElement>("[data-test=confirm-station-action]")!;
+  button.click();
+  await screen.updateComplete;
+  button.click();
+  await screen.updateComplete;
+}
+for (const route of ["cancel", "escape"] as const) {
+  it(`Disable station ${route} protects its selected fallback without issuing a command`, async () => {
+    const { screen, writes } = await mount();
+    const modal = await open(screen);
+    await change(screen, modal, "bar");
+    if (route === "cancel") cancel(modal);
+    else await userEvent.keyboard("{Escape}");
+    expect((await question()).open).toBe(true);
+    expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    await choose("keep");
+    expect(modal.querySelector("wt-combobox")!.value).toBe("bar");
+    cancel(modal);
+    await choose("discard");
+    await expect.poll(() => modal.isConnected).toBe(false);
+    expect(writes).toEqual([]);
+    expect(unload()).toBe(false);
+  });
+}
+it("Disable station clean and reverted fallback closes without another safety confirmation", async () => {
+  const { screen, writes } = await mount();
+  let modal = await open(screen);
+  cancel(modal);
+  await expect.poll(() => modal.isConnected).toBe(false);
+  modal = await open(screen);
+  await change(screen, modal, "bar");
+  expect(unload()).toBe(true);
+  await change(screen, modal, "");
+  expect(unload()).toBe(false);
+  cancel(modal);
+  await expect.poll(() => modal.isConnected).toBe(false);
+  expect((await question()).open).toBe(false);
+  expect(writes).toEqual([]);
+});
+it("Disable station commits the accepted fallback before a failed refresh", async () => {
+  const { screen, writes } = await mount(undefined, true);
+  const modal = await open(screen);
+  await change(screen, modal, "bar");
+  await save(screen, modal);
+  await expect.poll(() => modal.isConnected).toBe(false);
+  expect(writes).toEqual([{ fallback: "kitchen", choice: "bar" }, { deactivate: "kitchen" }]);
+  expect(unload()).toBe(false);
+  expect((await question()).open).toBe(false);
+});
+it("Disable station refused fallback retains selection and asks before Cancel", async () => {
+  const write = deferred();
+  const { screen, writes } = await mount(write.promise);
+  const modal = await open(screen);
+  await change(screen, modal, "bar");
+  await save(screen, modal);
+  write.reject({ code: "station.fallback_loop" });
+  await expect.poll(() => modal.querySelector("[data-field-error=fallback]")).not.toBeNull();
+  expect(unload()).toBe(true);
+  cancel(modal);
+  await choose("keep");
+  expect(modal.querySelector("wt-combobox")!.value).toBe("bar");
+  expect(writes).toEqual([{ fallback: "kitchen", choice: "bar" }]);
+});
+it("Disable station commits only fallback when the later disable is refused", async () => {
+  const deactivation = deferred();
+  const { screen, writes } = await mount(undefined, false, deactivation.promise);
+  const modal = await open(screen);
+  await change(screen, modal, "bar");
+  await save(screen, modal);
+  await expect.poll(() => writes.length).toBe(2);
+  deactivation.reject({ code: "station.default_cannot_disable" });
+  await expect.poll(() => modal.querySelector("[role=alert]")).not.toBeNull();
+  expect(modal.querySelector("wt-combobox")!.value).toBe("bar");
+  expect(unload()).toBe(false);
+  cancel(modal);
+  await expect.poll(() => modal.isConnected).toBe(false);
+  expect((await question()).open).toBe(false);
+});
+it("Disable station pending write refuses dismissal and ignores changes to its disabled selector", async () => {
+  const write = deferred();
+  const { screen, writes } = await mount(write.promise);
+  const modal = await open(screen);
+  await change(screen, modal, "bar");
+  await save(screen, modal);
+  expect(await modal.requestClose("cancel")).toBe(false);
+  await change(screen, modal, "grill");
+  write.resolve();
+  await expect.poll(() => modal.isConnected).toBe(false);
+  expect(writes).toEqual([{ fallback: "kitchen", choice: "bar" }, { deactivate: "kitchen" }]);
+  expect(unload()).toBe(false);
+});
+it("Disable station disconnect aborts the question and removes unload protection", async () => {
+  const { screen } = await mount();
+  const modal = await open(screen);
+  await change(screen, modal, "bar");
+  cancel(modal);
+  expect((await question()).open).toBe(true);
+  screen.remove();
+  await expect.poll(async () => (await question()).open).toBe(false);
+  expect(unload()).toBe(false);
+});
+
+it("Disable station rerenders while asking without replacing the pending close callback", async () => {
+  const { screen } = await mount();
+  const modal = await open(screen);
+  await change(screen, modal, "bar");
+  cancel(modal);
+  expect((await question()).open).toBe(true);
+  screen.requestUpdate();
+  await screen.updateComplete;
+  await choose("discard");
+  await expect.poll(() => modal.isConnected).toBe(false);
+});
+for (const refused of [false, true]) {
+  it(`Disable station departed ${refused ? "refused" : "accepted"} fallback cannot disable a replacement opening`, async () => {
+    const write = deferred();
+    const { screen, writes } = await mount(write.promise);
+    const old = await open(screen);
+    await change(screen, old, "bar");
+    await save(screen, old);
+    screen.remove();
+    app.shadowRoot!.append(screen);
+    await screen.updateComplete;
+    const next = await open(screen, "grill");
+    await change(screen, next, "kitchen");
+    old
+      .querySelector("wt-combobox")!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bar" } }));
+    old.querySelector<HTMLElement>("[data-test=confirm-station-action]")!.click();
+    if (refused) write.reject({ code: "station.fallback_loop" });
+    else write.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await screen.updateComplete;
+    expect(next.isConnected).toBe(true);
+    expect(next.querySelector("wt-combobox")!.value).toBe("kitchen");
+    expect(next.querySelector("[slot=cancel]")!.hasAttribute("disabled")).toBe(false);
+    expect(next.querySelector("[role=alert]")).toBeNull();
+    expect(writes).toEqual([{ fallback: "kitchen", choice: "bar" }]);
+    expect(unload()).toBe(true);
+  });
+}
+it("Disable station departed controls cannot reopen a cancelled form", async () => {
+  const { screen, writes } = await mount();
+  const old = await open(screen);
+  cancel(old);
+  await expect.poll(() => old.isConnected).toBe(false);
+  old
+    .querySelector("wt-combobox")!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bar" } }));
+  old.querySelector<HTMLElement>("[data-test=confirm-station-action]")!.click();
+  await screen.updateComplete;
+  expect(screen.shadowRoot!.querySelector("[data-test=station-action-modal]")).toBeNull();
+  expect(writes).toEqual([]);
+  expect(unload()).toBe(false);
+});
+
+it("Disable station replacement waits for Discard and old controls cannot change the new opening", async () => {
+  const { screen, writes } = await mount();
+  const old = await open(screen);
+  await change(screen, old, "bar");
+  await open(screen, "grill");
+  expect((await question()).open).toBe(true);
+  expect(old.isConnected).toBe(true);
+  await choose("keep");
+  expect(old.querySelector("wt-combobox")!.value).toBe("bar");
+  await open(screen, "grill");
+  await choose("discard");
+  await expect.poll(() => old.isConnected).toBe(false);
+  const next = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    "[data-test=station-action-modal]",
+  )!;
+  await change(screen, next, "kitchen");
+  old
+    .querySelector("wt-combobox")!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bar" } }));
+  old.querySelector<HTMLElement>("[data-test=confirm-station-action]")!.click();
+  await screen.updateComplete;
+  expect(next.querySelector("wt-combobox")!.value).toBe("kitchen");
+  expect(writes).toEqual([]);
+  expect(unload()).toBe(true);
+});
+
+it("Disable default station is an unchanged safety confirmation without a draft warning", async () => {
+  const { screen, writes } = await mount();
+  const modal = await open(screen, "bar");
+  expect(modal.querySelector("wt-combobox")).toBeNull();
+  expect(unload()).toBe(false);
+  cancel(modal);
+  await expect.poll(() => modal.isConnected).toBe(false);
+  expect((await question()).open).toBe(false);
+  expect(writes).toEqual([]);
+});
+it("Disable station reviewing an unchanged fallback does not create unsaved changes", async () => {
+  const { screen, writes } = await mount();
+  const modal = await open(screen);
+  modal.querySelector<HTMLElement>("[data-test=confirm-station-action]")!.click();
+  await screen.updateComplete;
+  expect(modal.querySelector("[data-test=fallback-confirmation]")).not.toBeNull();
+  expect(unload()).toBe(false);
+  cancel(modal);
+  await expect.poll(() => modal.isConnected).toBe(false);
+  expect((await question()).open).toBe(false);
+  expect(writes).toEqual([]);
+});
+
+it("Disable station a background default change cannot retire the opening's unsaved selection", async () => {
+  const { screen, model, liveData } = await mount();
+  const modal = await open(screen);
+  await change(screen, modal, "bar");
+  model.stations.find((row) => row.id === "kitchen")!.isDefault = true;
+  liveData.invalidate([{ type: "kitchen_stations" }]);
+  await expect.poll(() => modal.querySelector("wt-combobox")).toBeNull();
+  expect(unload()).toBe(true);
+  cancel(modal);
+  await choose("keep");
+  expect(modal.isConnected).toBe(true);
+  expect(unload()).toBe(true);
+});
+
+it("Disable station completes when a background write already saved its selected fallback", async () => {
+  const { screen, model, liveData, writes, readCount } = await mount();
+  const modal = await open(screen);
+  await change(screen, modal, "bar");
+  const reads = readCount();
+  model.routing.stationTimes.find((row) => row.stationId === "kitchen")!.fallbackStationId = "bar";
+  liveData.invalidate([{ type: "station_fallbacks" }]);
+  await expect.poll(readCount).toBeGreaterThan(reads);
+  await screen.updateComplete;
+  await save(screen, modal);
+  await expect.poll(() => modal.isConnected).toBe(false);
+  expect(writes).toEqual([{ deactivate: "kitchen" }]);
+  expect(unload()).toBe(false);
+});

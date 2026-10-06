@@ -407,9 +407,41 @@ export class PrepStationsScreen extends LitElement {
   #watcherCellIdentity?: object;
   #watcherPrinterScope?: DraftScope<string[]>;
   #watcherPrinterIdentity?: object;
+  #stationActionScope?: DraftScope<string>;
+  #stationActionIdentity?: object;
+  #stationActionBeforeClose?: (reason: LeaveReason) => Promise<boolean>;
   #leave?: LeaveCoordinator;
 
   #syncStationDrafts(): void {
+    const action = this.stationAction;
+    if (
+      !action ||
+      (action.kind !== "fallback" && action.kind !== "switch_off") ||
+      (!this.#stationActionScope &&
+        this.view?.stations.find((station) => station.id === action.stationId)?.isDefault)
+    ) {
+      this.#stationActionScope?.dispose();
+      this.#stationActionScope = undefined;
+    } else if (!this.#stationActionScope) {
+      this.#stationActionIdentity ??= {};
+      this.#leave ??= leaveCoordinatorFor(this);
+      this.#stationActionScope = this.#leave?.register({
+        id: this.#stationActionIdentity,
+        current: () => {
+          const current = this.stationAction;
+          return current?.kind === "fallback" || current?.kind === "switch_off"
+            ? current.choice
+            : "";
+        },
+        snapshot: (value) => value,
+        equal: (a, b) => a === b,
+        restore: (choice) => {
+          const current = this.stationAction;
+          if (current?.kind === "fallback" || current?.kind === "switch_off")
+            this.stationAction = { ...current, choice, confirming: false };
+        },
+      });
+    }
     if (this.editor?.kind !== "exception") {
       this.#exceptionScope?.dispose();
       this.#exceptionScope = undefined;
@@ -666,10 +698,15 @@ export class PrepStationsScreen extends LitElement {
       this.#stationIdentity ||
       this.#renameIdentity ||
       this.#exceptionIdentity ||
+      this.stationAction !== undefined ||
       this.watcherEditor ||
       this.#watcherRenameIdentity
     )
       this.busy = false;
+    this.stationAction = undefined;
+    this.#stationActionScope?.dispose();
+    this.#stationActionScope = undefined;
+    this.#stationActionIdentity = undefined;
     this.watcherEditor = undefined;
     this.watcherCellEditor = undefined;
     this.watcherPrinterEditor = undefined;
@@ -1751,12 +1788,34 @@ export class PrepStationsScreen extends LitElement {
   }
   #openStationAction(action: StationAction) {
     if (this.busy) return;
-    this.stationAction = action;
-    this.stationActionError = "";
-    this.stationFieldError = "";
+    const previous = this.#stationActionIdentity;
+    const proceed = () => {
+      if (!this.isConnected || previous !== this.#stationActionIdentity) return;
+      this.#stationActionScope?.dispose();
+      this.#stationActionScope = undefined;
+      const identity = (this.#stationActionIdentity = {});
+      this.#stationActionBeforeClose = (reason) => this.#beforeStationActionClose(reason, identity);
+      this.stationAction = action;
+      this.stationActionError = "";
+      this.stationFieldError = "";
+    };
+    if (!this.#stationActionScope) proceed();
+    else
+      void this.#leave!.request({
+        scopes: [this.#stationActionScope.id],
+        reason: "navigation",
+        proceed,
+      });
   }
   #cancelStationAction() {
     if (!this.busy) this.stationAction = undefined;
+  }
+  async #beforeStationActionClose(reason: LeaveReason, identity: object | undefined) {
+    if (this.busy || identity !== this.#stationActionIdentity) return false;
+    const scope = this.#stationActionScope;
+    if (!scope) return true;
+    const outcome = await this.#leave!.request({ scopes: [scope.id], reason, proceed() {} });
+    return identity === this.#stationActionIdentity && outcome === "proceeded";
   }
   #openFallback(id: string, kind: "fallback" | "switch_off") {
     const fallback = this.#times(id)?.fallbackStationId;
@@ -1791,6 +1850,9 @@ export class PrepStationsScreen extends LitElement {
   async #saveStationAction() {
     const action = this.stationAction;
     if (!action || this.busy) return;
+    const identity = this.#stationActionIdentity;
+    const scope = this.#stationActionScope;
+    const current = () => this.isConnected && identity === this.#stationActionIdentity;
     this.busy = true;
     this.stationActionError = "";
     this.stationFieldError = "";
@@ -1803,13 +1865,18 @@ export class PrepStationsScreen extends LitElement {
           await this.api.setStationFallback(action.stationId, choice);
           fallbackSaved = true;
         }
+        if (!current()) return;
+        scope?.commit(action.choice);
         if (action.kind === "switch_off") await this.api.deactivateStation(action.stationId);
       }
       if (action.kind === "switch_on") await this.api.activateStation(action.stationId);
-      this.stationAction = undefined;
+      if (!current()) return;
+      if (!scope?.isDirty()) this.stationAction = undefined;
       await this.#load();
     } catch (e) {
+      if (!current()) return;
       if (fallbackSaved) await this.#load();
+      if (!current()) return;
       const code = codeOf(e);
       if (code === "station.fallback_loop" || code === "route.station_inactive")
         this.stationFieldError = t(
@@ -1821,7 +1888,7 @@ export class PrepStationsScreen extends LitElement {
             ? `${t("prep.save_error")} ${t("prep.station_not_found")}`
             : t(code === "time_zone.unreadable" ? "prep.time_zone_unreadable" : "prep.save_error");
     } finally {
-      this.busy = false;
+      if (current()) this.busy = false;
     }
   }
   #stationCard(s: PrepStation) {
@@ -3381,6 +3448,11 @@ export class PrepStationsScreen extends LitElement {
     if (!action) return nothing;
     const station = this.view?.stations.find((row) => row.id === action.stationId);
     const times = this.#times(action.stationId);
+    const identity = this.#stationActionIdentity;
+    const current = () =>
+      this.isConnected &&
+      this.stationAction !== undefined &&
+      identity === this.#stationActionIdentity;
     const end = this.#todayEnd();
     const isFallback = action.kind === "fallback" || action.kind === "switch_off";
     const heading =
@@ -3405,68 +3477,83 @@ export class PrepStationsScreen extends LitElement {
             })
           : format("prep.close_confirm_ask", { station: station?.name ?? action.stationId, ...end })
         : "";
-    return html`<wt-modal
-      size="compact"
-      open
-      data-test="station-action-modal"
-      heading=${heading}
-      .dismissible=${!this.busy}
-      @wt-close=${() => this.#cancelStationAction()}
-    >
-      ${todaySentence ? html`<p>${todaySentence}</p>` : nothing}
-      ${
-        isFallback
-          ? html`
-              ${action.kind === "switch_off" ? html`<p>${format("prep.disable_confirm", { station: station?.name ?? action.stationId })}</p>` : nothing}
-              ${
-                station?.isDefault
-                  ? nothing
-                  : html`<wt-combobox
-                        data-test="station-fallback"
-                        name="station-fallback"
-                        label=${t("prep.when_closed")}
-                        placeholder=${t("prep.no_replacement_choice")}
-                        .searchPlaceholder=${t("prep.search_stations")}
-                        .options=${this.#fallbackOptions(action.stationId)}
-                        .value=${action.choice}
-                        ?disabled=${this.busy}
-                        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                          if (this.busy) return;
-                          this.stationAction = {
-                            ...action,
-                            choice: event.detail.value,
-                            confirming: false,
-                          };
-                          this.stationFieldError = "";
-                        }}
-                      ></wt-combobox>
-                      ${this.stationFieldError ? html`<p class="error" role="alert" data-field-error="fallback">${this.stationFieldError}</p>` : nothing}`
-              }
-              ${action.confirming ? html`<p data-test="fallback-confirmation">${this.#fallbackConfirmation(action)}</p>` : nothing}
-            `
-          : nothing
-      }
-      ${this.stationActionError ? html`<p class="error" role="alert">${this.stationActionError}</p>` : nothing}
-      ${html`<wt-form-actions slot="footer"
-        ><wt-button
-          slot="cancel"
-          variant="secondary"
-          ?disabled=${this.busy}
-          @click=${() => this.#cancelStationAction()}
-          >${t("prep.cancel")}</wt-button
-        ><wt-button
-          data-test="confirm-station-action"
-          ?disabled=${this.busy}
-          @click=${() => {
-            if (this.busy) return;
-            if (isFallback && !action.confirming && !station?.isDefault)
-              this.stationAction = { ...action, confirming: true };
-            else void this.#saveStationAction();
-          }}
-          >${t("prep.confirm")}</wt-button
-        ></wt-form-actions
-      >`}
-    </wt-modal>`;
+    return keyed(
+      identity,
+      html`<wt-modal
+        size="compact"
+        open
+        data-test="station-action-modal"
+        heading=${heading}
+        .dismissible=${!this.busy}
+        .beforeClose=${this.#stationActionScope ? this.#stationActionBeforeClose : undefined}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          if (current() && event.target === event.currentTarget) this.#cancelStationAction();
+        }}
+      >
+        ${todaySentence ? html`<p>${todaySentence}</p>` : nothing}
+        ${
+          isFallback
+            ? html`
+                ${action.kind === "switch_off" ? html`<p>${format("prep.disable_confirm", { station: station?.name ?? action.stationId })}</p>` : nothing}
+                ${
+                  station?.isDefault
+                    ? nothing
+                    : html`<wt-combobox
+                          data-test="station-fallback"
+                          name="station-fallback"
+                          label=${t("prep.when_closed")}
+                          placeholder=${t("prep.no_replacement_choice")}
+                          .searchPlaceholder=${t("prep.search_stations")}
+                          .options=${this.#fallbackOptions(action.stationId)}
+                          .value=${action.choice}
+                          ?disabled=${this.busy}
+                          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                            if (this.busy || !current()) return;
+                            this.stationAction = {
+                              ...action,
+                              choice: event.detail.value,
+                              confirming: false,
+                            };
+                            this.stationFieldError = "";
+                            this.#stationActionScope?.changed();
+                          }}
+                        ></wt-combobox>
+                        ${this.stationFieldError ? html`<p class="error" role="alert" data-field-error="fallback">${this.stationFieldError}</p>` : nothing}`
+                }
+                ${action.confirming ? html`<p data-test="fallback-confirmation">${this.#fallbackConfirmation(action)}</p>` : nothing}
+              `
+            : nothing
+        }
+        ${this.stationActionError ? html`<p class="error" role="alert">${this.stationActionError}</p>` : nothing}
+        ${html`<wt-form-actions slot="footer"
+          ><wt-button
+            slot="cancel"
+            variant="secondary"
+            ?disabled=${this.busy}
+            @click=${(event: Event) => {
+              if (!current()) return;
+              if (this.#stationActionScope)
+                void (event.currentTarget as HTMLElement)
+                  .closest("wt-modal")!
+                  .requestClose("cancel");
+              else this.#cancelStationAction();
+            }}
+            >${t("prep.cancel")}</wt-button
+          ><wt-button
+            data-test="confirm-station-action"
+            ?disabled=${this.busy}
+            @click=${() => {
+              if (this.busy || !current()) return;
+              if (isFallback && !action.confirming && !station?.isDefault)
+                this.stationAction = { ...action, confirming: true };
+              else void this.#saveStationAction();
+            }}
+            >${t("prep.confirm")}</wt-button
+          ></wt-form-actions
+        >`}
+      </wt-modal>`,
+    );
   }
   override render() {
     const view = this.view;
