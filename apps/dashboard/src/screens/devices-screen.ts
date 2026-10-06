@@ -6,11 +6,15 @@ import { customElement, property, state } from "lit/decorators.js";
 import { toDataURL } from "qrcode";
 import {
   baseStyles,
+  leaveCoordinatorFor,
   focusFirstInvalid,
   submitOnEnter,
   visuallyHiddenStyles,
   type DataTableColumn,
   type WtModal,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -390,6 +394,61 @@ export class DevicesScreen extends LitElement {
   @state() private chosenReaderId = "";
   #storedReaderId: string | null = null;
   #editEpoch = 0;
+  #editLeave?: LeaveCoordinator;
+  #editScope?: DraftScope<Parameters<DashboardApi["updateDevice"]>[1]>;
+  #readerScope?: DraftScope<string>;
+  readonly #beforeEditClose = async (reason: LeaveReason): Promise<boolean> => {
+    const scopes = [this.#editScope, this.#readerScope].flatMap((scope) =>
+      scope ? [scope.id] : [],
+    );
+    return (
+      !this.#editLeave ||
+      (await this.#editLeave.request({ scopes, reason, proceed() {} })) === "proceeded"
+    );
+  };
+
+  #editPayload() {
+    const form = this.editForm;
+    return {
+      name: form.name.trim(),
+      profileId: form.profileId,
+      ...bindingIds(this.#editBindingShown() ? form.binding : ""),
+      receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
+      paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
+      ...(this.#editBindingShown() ? {} : { madeHereStationIds: this.#madeHereToSend() }),
+      ...this.#approvalsToSend(this.editing!),
+    };
+  }
+
+  #registerEditDraft(): void {
+    this.#editLeave = leaveCoordinatorFor(this);
+    this.#editScope = this.#editLeave?.register({
+      id: {},
+      current: () => this.#editPayload(),
+      snapshot: (value) => ({
+        ...value,
+        ...(value.madeHereStationIds ? { madeHereStationIds: [...value.madeHereStationIds] } : {}),
+      }),
+      equal: (a, b) =>
+        a.name === b.name &&
+        a.profileId === b.profileId &&
+        a.stationId === b.stationId &&
+        a.watcherId === b.watcherId &&
+        a.receiptPrinterId === b.receiptPrinterId &&
+        a.paymentSlipPrinterId === b.paymentSlipPrinterId &&
+        (a.madeHereStationIds === undefined
+          ? b.madeHereStationIds === undefined
+          : b.madeHereStationIds !== undefined &&
+            a.madeHereStationIds.length === b.madeHereStationIds.length &&
+            a.madeHereStationIds.every((id) => b.madeHereStationIds!.includes(id))),
+      restore: () => {},
+    });
+  }
+
+  #disposeReaderDraft(): void {
+    this.#readerScope?.dispose();
+    this.#readerScope = undefined;
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -446,6 +505,7 @@ export class DevicesScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("canManageReaders") && !this.canManageReaders) {
+      this.#disposeReaderDraft();
       this.readerState = "hidden";
       this.readerReadError = null;
       this.editRefusal = clearedRefusal(this.editRefusal, "reader");
@@ -850,6 +910,7 @@ export class DevicesScreen extends LitElement {
   }
 
   #openEdit(device: DeviceRow): void {
+    this.#endEdit();
     const epoch = ++this.#editEpoch;
     this.editing = device;
     this.editHeld = heldBinding(device);
@@ -871,6 +932,7 @@ export class DevicesScreen extends LitElement {
     this.readerReadError = null;
     this.chosenReaderId = "";
     this.#storedReaderId = null;
+    this.#registerEditDraft();
     if (this.canManageReaders) void this.#loadReader(device.id, epoch);
   }
 
@@ -886,6 +948,13 @@ export class DevicesScreen extends LitElement {
       this.#storedReaderId = readerId;
       this.chosenReaderId = readerId ?? "";
       this.readerState = "ready";
+      this.#readerScope = this.#editLeave?.register({
+        id: {},
+        current: () => this.chosenReaderId,
+        snapshot: (value) => value,
+        equal: (a, b) => a === b,
+        restore: () => {},
+      });
     } catch (error) {
       if (epoch !== this.#editEpoch || this.readerState !== "loading") return;
       const code = codeOf(error);
@@ -900,6 +969,10 @@ export class DevicesScreen extends LitElement {
   #endEdit(): void {
     if (this.editing === null) return;
     this.#editEpoch++;
+    this.#editScope?.dispose();
+    this.#editScope = undefined;
+    this.#disposeReaderDraft();
+    this.#editLeave = undefined;
     this.editing = null;
     this.editSaving = false;
   }
@@ -922,6 +995,7 @@ export class DevicesScreen extends LitElement {
   #setEdit(patch: Partial<EditForm>, ...fields: EditField[]): void {
     this.editForm = { ...this.editForm, ...patch };
     this.editRefusal = clearedRefusal(this.editRefusal, ...fields);
+    this.#editScope?.changed();
   }
 
   #onEditProfile(profileId: string): void {
@@ -1036,15 +1110,10 @@ export class DevicesScreen extends LitElement {
     const picked = this.#bindingOptions(form.profileId, this.editHeld).find(
       (option) => option.value === savedBinding,
     );
-    const sent = {
-      name: form.name.trim(),
-      profileId: form.profileId,
-      ...bindingIds(savedBinding),
-      receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
-      paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
-      ...(this.#editBindingShown() ? {} : { madeHereStationIds: this.#madeHereToSend() }),
-      ...this.#approvalsToSend(device),
-    };
+    const sent = this.#editPayload();
+    const editScope = this.#editScope;
+    const readerScope = this.#readerScope;
+    const submittedReader = this.chosenReaderId;
     try {
       await this.api.updateDevice(device.id, sent);
     } catch (error) {
@@ -1062,6 +1131,7 @@ export class DevicesScreen extends LitElement {
       else this.editRefusal = { field, code: codeOf(error) };
       return;
     }
+    if (epoch === this.#editEpoch) editScope?.commit(sent);
     this.#reloadDevices().catch((error: unknown) => this.#showReadError(error));
     if (epoch !== this.#editEpoch) return;
     if (savedBinding !== this.editHeld?.value)
@@ -1078,13 +1148,14 @@ export class DevicesScreen extends LitElement {
           ? device.approvedProfileIds
           : [deviceProfileId, ...approvedProfileIds],
     };
-    const readerId = this.chosenReaderId === "" ? null : this.chosenReaderId;
+    const readerId = submittedReader === "" ? null : submittedReader;
     if (this.readerState === "ready" && readerId !== this.#storedReaderId) {
       // Saved separately: the reader belongs to the payments module and its own permission (spec §5).
       try {
         await this.api.setDeviceReader(device.id, readerId);
         if (epoch !== this.#editEpoch) return;
         this.#storedReaderId = readerId;
+        readerScope?.commit(submittedReader);
       } catch (error) {
         if (epoch !== this.#editEpoch) return;
         // Hidden since Save was pressed: the reader is no longer this session's to set, so the saved
@@ -1097,7 +1168,9 @@ export class DevicesScreen extends LitElement {
       }
     }
     this.editSaving = false;
-    await this.#closeModal("edit-device-modal");
+    if (editScope?.isDirty() || this.#readerScope?.isDirty()) return;
+    const modal = this.renderRoot.querySelector<WtModal>("[data-test=edit-device-modal]");
+    modal?.closeAfter("saved");
     this.#endEdit();
   }
 
@@ -1561,6 +1634,7 @@ export class DevicesScreen extends LitElement {
     const device = this.editing;
     if (device === null) return nothing;
     const form = this.editForm;
+    const epoch = this.#editEpoch;
     const errors = this.#editErrors();
     const own = this.#editOwnErrors();
     const blocked = own.name !== "" || own.profile !== "" || own.binding !== "";
@@ -1573,7 +1647,11 @@ export class DevicesScreen extends LitElement {
       heading=${t("devices.edit_title").replace("{name}", device.label)}
       .open=${true}
       .dismissible=${!this.editSaving}
-      @wt-close=${() => this.#endEdit()}
+      .beforeClose=${this.#editScope || this.#readerScope ? this.#beforeEditClose : undefined}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (epoch === this.#editEpoch) this.#endEdit();
+      }}
     >
       <div class="edit-fields">
         ${this.#renderIdentityFields(
@@ -1581,9 +1659,17 @@ export class DevicesScreen extends LitElement {
           form,
           errors,
           {
-            name: (value) => this.#setEdit({ name: value }, "name"),
-            profile: (value) => this.#onEditProfile(value),
-            binding: (value) => this.#setEdit({ binding: value }, "binding"),
+            name: (value) => {
+              if (this.isConnected && epoch === this.#editEpoch)
+                this.#setEdit({ name: value }, "name");
+            },
+            profile: (value) => {
+              if (this.isConnected && epoch === this.#editEpoch) this.#onEditProfile(value);
+            },
+            binding: (value) => {
+              if (this.isConnected && epoch === this.#editEpoch)
+                this.#setEdit({ binding: value }, "binding");
+            },
           },
           this.editSaving,
           this.editHeld,
@@ -1602,6 +1688,8 @@ export class DevicesScreen extends LitElement {
           .error=${errors.receipt}
           .invalid=${errors.receipt !== ""}
           @wt-change=${(e: CustomEvent<{ value: string }>) =>
+            this.isConnected &&
+            epoch === this.#editEpoch &&
             this.#setEdit({ receiptPrinterId: e.detail.value }, "receipt")}
         ></wt-combobox>
         <wt-combobox
@@ -1621,6 +1709,8 @@ export class DevicesScreen extends LitElement {
           .error=${errors.slip}
           .invalid=${errors.slip !== ""}
           @wt-change=${(e: CustomEvent<{ value: string }>) =>
+            this.isConnected &&
+            epoch === this.#editEpoch &&
             this.#setEdit({ paymentSlipPrinterId: e.detail.value }, "slip")}
         ></wt-combobox>
         ${this.#renderApproved(errors.approved)} ${kitchen ? nothing : this.#renderMadeHere()}
@@ -1639,7 +1729,7 @@ export class DevicesScreen extends LitElement {
           slot="cancel"
           data-test="edit-cancel"
           ?disabled=${this.editSaving}
-          @click=${() => void this.#closeModal("edit-device-modal")}
+          @click=${() => void this.renderRoot.querySelector<WtModal>("[data-test=edit-device-modal]")?.requestClose("cancel")}
           >${t("action.cancel")}</wt-button
         >
         <wt-button
@@ -1655,6 +1745,7 @@ export class DevicesScreen extends LitElement {
   }
 
   #renderMadeHere(): TemplateResult {
+    const epoch = this.#editEpoch;
     return html`<fieldset class="made-here" data-test="edit-made-here">
       <legend>${t("devices.made_here")}</legend>
       <p class="hint">${t("devices.made_here_hint")}</p>
@@ -1670,6 +1761,8 @@ export class DevicesScreen extends LitElement {
                 .checked=${live(this.editForm.madeHere.includes(station.id))}
                 ?disabled=${this.editSaving}
                 @change=${(e: Event) =>
+                  this.isConnected &&
+                  epoch === this.#editEpoch &&
                   this.#onMadeHereChange(station.id, (e.target as HTMLInputElement).checked)}
               />
               ${station.name}</label
@@ -1708,6 +1801,7 @@ export class DevicesScreen extends LitElement {
   }
 
   #renderReader(error: string): TemplateResult {
+    const epoch = this.#editEpoch;
     return html`<wt-combobox
       data-test="edit-reader"
       name="defaultReaderId"
@@ -1725,7 +1819,9 @@ export class DevicesScreen extends LitElement {
       .error=${error}
       .invalid=${error !== ""}
       @wt-change=${(e: CustomEvent<{ value: string }>) => {
+        if (!this.isConnected || epoch !== this.#editEpoch) return;
         this.chosenReaderId = e.detail.value;
+        this.#readerScope?.changed();
         this.editRefusal = clearedRefusal(this.editRefusal, "reader");
       }}
     ></wt-combobox>`;

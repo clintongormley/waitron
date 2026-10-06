@@ -1271,6 +1271,15 @@ A successful save commits the submitted settings before refresh; newer delivered
 and a second save sends only the remaining changes. Submitted saves and hardware commands retain
 their existing immediate dismissal. Replacement, disconnect and delayed native close cases are in
 `apps/dashboard/src/screens/printer-calibration.unsaved.test.ts` alongside the unchanged printer suites.
+Device Edit now protects the normalized name, profile, Shows selection, printer choices,
+made-here station membership and independently loaded reader selection through Cancel and native
+Escape. Successful device and reader writes commit separately; a reader refusal retains that
+reader draft, and a failed list refresh does not turn an accepted write into unsaved work.
+Newer delivered input remains dirty against the submitted snapshot. Replacing or disconnecting
+an editor cancels its question; detached controls and late replies leave the current editor alone.
+Focused cases are in `apps/dashboard/src/screens/device-edit.unsaved.test.ts`, alongside the
+unchanged device behavior and accessibility suites. Pairing settings and Payments reader dialogs
+remain pending with the other modal owners.
 Printer detail name/connection are page owners for the remaining page/navigation work. Other audited
 modal owners also remain to be wired. Keep automatic saves on their existing paths.
 

@@ -339,3 +339,22 @@ cannot discard a reopened editor.
 the unchanged printer behavior/accessibility suites. Its synthetic unload checks establish listener
 cancellation, not the browser's native reload prompt. Printer detail name and connection editors
 are page forms and remain with Tasks 5/6; the other modal and page owners remain pending.
+
+### Device Edit checkpoint (2026-10-06)
+
+Device Edit compares its existing device patch independently of the default card reader's write.
+The device baseline is captured after opening defaults; the reader baseline is captured after its
+own read. Cancel and native Escape ask for changed name, profile, Shows, receipt/slip printer,
+made-here station membership or reader. Keep retains the draft and focus; Discard closes once.
+Normalized reverts close directly. Saving commits each captured write separately before refresh;
+a failed reader write leaves that reader dirty, and newer delivered values remain open and dirty.
+
+Replacement and disconnect dispose the scopes and invalidate a pending answer. Generation checks
+ignore detached control events. Late write replies and delayed native close reports cannot mark
+or close a replacement editor. Existing in-flight nondismissible Escape and disabled Cancel remain.
+Losing reader permission removes its reader scope without clearing a changed device name.
+`apps/dashboard/src/screens/device-edit.unsaved.test.ts` checks these paths and actual sent patches;
+the existing device behavior/accessibility suites remain unchanged. Eight EN/ES, light/dark,
+phone/desktop confirmation renderings also ran with axe. Synthetic unload checks cover listener
+cancellation; the browser reload prompt is still Task 5. Device pairing settings and Payments
+reader dialogs remain pending; the Device/Reader inventory row is not complete.
