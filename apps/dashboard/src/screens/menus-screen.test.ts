@@ -21,6 +21,7 @@ import type {
   CatalogueSummary,
   CategorySummary,
   MenuHome,
+  MenuReadPart,
   SectionDetails,
   MemberRef,
   MenuPreview,
@@ -540,6 +541,27 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
     setProductColor: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
+  Object.assign(client, {
+    getMenuRead: vi.fn(async (id: string, parts: readonly MenuReadPart[]) => {
+      const readClient = client as unknown as DashboardApi;
+      const reads = {
+        structure: () => readClient.getMenuStructure(id),
+        home: () => readClient.getMenuHome(id),
+        status: () => readClient.getMenuStatus(id),
+        preview: () => readClient.getMenuPreview(id),
+      };
+      const entries = await Promise.all(
+        parts.map(async (part) => {
+          try {
+            return [part, { status: 200, body: await reads[part]() }];
+          } catch (error) {
+            return [part, { status: 409, body: { error } }];
+          }
+        }),
+      );
+      return Object.fromEntries(entries);
+    }),
+  });
   return client as unknown as DashboardApi & {
     [K in keyof DashboardApi]: ReturnType<typeof vi.fn>;
   };
@@ -8266,6 +8288,17 @@ describe("one menu read after an edit", () => {
           "/management-api/catalogues/menu-lunch/status": () => statuses()["menu-lunch"],
           "/management-api/catalogues/menu-lunch/preview": () => lunchPreview(),
         };
+        const url = new URL(path, "http://localhost");
+        if (url.pathname === "/management-api/catalogues/menu-lunch/read") {
+          const entries = await Promise.all(
+            url.searchParams.getAll("part").map(async (part) => {
+              const read = bodies[`/management-api/catalogues/menu-lunch/${part}`];
+              if (!read) throw new Error(`Unexpected menu part: ${part}`);
+              return [part, { status: 200, body: await read() }];
+            }),
+          );
+          return Response.json(Object.fromEntries(entries));
+        }
         const body = bodies[path];
         if (!body) throw new Error(`Unexpected GET: ${path}`);
         return Response.json(await body());
@@ -8325,4 +8358,24 @@ describe("one menu read after an edit", () => {
       expect(menuReads, JSON.stringify(menuReads)).toHaveLength(1);
     },
   );
+});
+
+it("keeps a reconnected menu's snapshot when the departed initial read answers late", async () => {
+  const client = api();
+  const oldStructure = await client.getMenuStructure("menu-lunch");
+  const old = deferred<MenuStructure>();
+  client.getMenuStructure.mockReset();
+  client.getMenuStructure
+    .mockReturnValueOnce(old.promise)
+    .mockResolvedValue({ ...oldStructure, nodes: [] });
+  const el = await mount(client, LUNCH_PATH);
+  const parent = el.parentElement!;
+  el.remove();
+  parent.append(el);
+  await vi.waitFor(() => expect(structure(el)).not.toBeNull());
+  expect(structure(el).nodes).toEqual([]);
+  old.resolve(oldStructure);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  await el.updateComplete;
+  expect(structure(el).nodes).toEqual([]);
 });

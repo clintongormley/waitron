@@ -149,6 +149,20 @@ export type {
 
 /** One member of a menu's structure (`readMenuStructure`, packages/catalogue/src/menu-structure.ts);
  * `children` is present exactly when the member is a section. */
+export interface MenuReadModels {
+  structure: MenuStructure;
+  home: MenuHome;
+  status: MenuStatus;
+  preview: MenuPreview;
+}
+export type MenuReadPart = keyof MenuReadModels;
+export type MenuReadResult = Partial<{
+  [P in MenuReadPart]: {
+    status: number;
+    body: MenuReadModels[P] | { error: { code: string; params?: Record<string, unknown> } };
+  };
+}>;
+
 export interface MenuStructureNode {
   memberId: string;
   ref: MemberRef;
@@ -1872,6 +1886,14 @@ export class DashboardApi {
 
   renameCatalogue(id: string, name: string): Promise<void> {
     return this.#request<void>(`/management-api/catalogues/${id}`, "PATCH", { name });
+  }
+
+  getMenuRead(id: string, parts: readonly MenuReadPart[]): Promise<MenuReadResult> {
+    const query = parts.map((part) => `part=${encodeURIComponent(part)}`).join("&");
+    return this.#request<MenuReadResult>(
+      `/management-api/catalogues/${encodeURIComponent(id)}/read?${query}`,
+      "GET",
+    );
   }
 
   getMenuStructure(id: string): Promise<MenuStructure> {

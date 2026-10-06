@@ -43,6 +43,9 @@ import type {
   HomeDevice,
   HomeDisplay,
   MenuHome,
+  MenuReadModels,
+  MenuReadPart,
+  MenuReadResult,
   SectionDetails,
   SectionInput,
   MemberRef,
@@ -54,6 +57,7 @@ import type {
   Product,
   SectionMember,
 } from "../api/client.js";
+import { MenuReadController } from "../api/menu-read-controller.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { categoryColor } from "@waitron/catalogue/src/color-inheritance.js";
 import {
@@ -599,16 +603,16 @@ export class MenusScreen extends LitElement {
       this.loadError = false;
     },
   );
-  readonly #structureQueries = new DashboardQueries(
+  readonly #menuReads = new MenuReadController(
     this,
     () => this.api,
-    () => {
-      this.structureError = true;
-    },
-    () => {
-      this.structureError = false;
+    (error) => {
+      this.#menuReadFailed(error);
     },
   );
+  #includedStatusesFor: string | null = null;
+  #menuReadKey = "";
+  #menuReadGeneration = 0;
   readonly #priceQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -634,26 +638,6 @@ export class MenusScreen extends LitElement {
   );
   /** The menu whose state is followed, null for every menu's, undefined before the first. */
   #statusFor: string | null | undefined = undefined;
-  /** Whether the open menu's state is followed through its own query rather than the preview. */
-  #statusOwnQuery = false;
-  readonly #previewQueries = new DashboardQueries(
-    this,
-    () => this.api,
-    (error) => {
-      this.previewResetRequired = codeOf(error) === "menu.reset_required";
-      this.previewError = true;
-      if (this.status === null) this.statusError = true;
-    },
-  );
-  #previewFor: string | null = null;
-  readonly #homeQueries = new DashboardQueries(
-    this,
-    () => this.api,
-    () => {
-      this.homeLoadError = true;
-    },
-  );
-  #homeFor: string | null = null;
   /** An unknown menu or tab is replaced rather than pushed, so Back still leaves the screen. */
   readonly #url = new UrlStateController(this, () => this.#restore(), dashboardPath);
 
@@ -905,25 +889,120 @@ export class MenusScreen extends LitElement {
     });
   }
 
-  async #watchStructure(): Promise<void> {
+  #menuReadParts(): MenuReadPart[] {
+    return [
+      "structure",
+      ...(this.view === "structure" || this.view === "home" ? ["home" as const] : []),
+      this.view === "home" || this.view === "preview" ? "preview" : "status",
+    ];
+  }
+
+  #menuReadFailed(error: unknown, parts = this.#menuReadParts()): void {
+    for (const part of parts) {
+      if (part === "structure") this.structureError = true;
+      if (part === "home") this.homeLoadError = true;
+      if (part === "preview") {
+        this.previewError = true;
+        this.previewResetRequired = codeOf(error) === "menu.reset_required";
+      }
+      if (part === "status" || (part === "preview" && this.status === null)) {
+        this.statusError = true;
+        this.statusResetRequired = codeOf(error) === "menu.reset_required";
+      }
+    }
+  }
+
+  #applyMenuRead(menuId: string, result: MenuReadResult): void {
+    for (const part of this.#menuReadParts()) {
+      const response = result[part];
+      if (response === undefined) continue;
+      if (response.status !== 200) {
+        this.#menuReadFailed((response.body as { error: unknown }).error, [part]);
+        continue;
+      }
+      if (part === "structure") {
+        this.structure = response.body as MenuReadModels["structure"];
+        this.structureError = false;
+        if (this.structure.includedBy.length && this.#includedStatusesFor !== menuId) {
+          this.#includedStatusesFor = menuId;
+          void this.#statusQueries
+            .watch("getMenuStatuses", [], (value) => {
+              this.statuses = value;
+            })
+            .catch(() => undefined);
+        }
+      }
+      if (part === "home") {
+        this.menuHome = response.body as MenuReadModels["home"];
+        this.homeLoadError = false;
+      }
+      if (part === "preview") {
+        this.preview = response.body as MenuReadModels["preview"];
+        this.previewError = false;
+        this.previewResetRequired = false;
+        this.status = this.preview.status;
+      }
+      if (part === "status") this.status = response.body as MenuReadModels["status"];
+      if (part === "status" || part === "preview") {
+        this.statusError = false;
+        this.statusResetRequired = false;
+      }
+    }
+  }
+
+  async #watchMenu(again = false): Promise<void> {
     const menuId = this.menuId;
     if (menuId === null) return;
-    this.structureError = false;
-    try {
-      await this.#structureQueries.watch("getMenuStructure", [menuId], (value) => {
-        if (this.menuId === menuId) {
-          this.structure = value;
-          if (value.includedBy.length)
-            void this.#statusQueries
-              .watch("getMenuStatuses", [], (statuses) => {
-                this.statuses = statuses;
-              })
-              .catch(() => undefined);
-        }
-      });
-    } catch {
-      if (this.menuId === menuId) this.structureError = true;
+    const parts = this.#menuReadParts();
+    const key = JSON.stringify([menuId, parts]);
+    if (key !== this.#menuReadKey) {
+      this.#menuReadKey = key;
+      this.#menuReadGeneration++;
     }
+    const generation = this.#menuReadGeneration;
+    const initialRead = async (): Promise<MenuReadResult> => {
+      const cached = {
+        structure: this.structureError ? null : this.structure,
+        home: this.homeLoadError ? null : this.menuHome,
+        status: null,
+        preview: this.previewError ? null : this.preview,
+      };
+      const reads = {
+        structure: () => this.api.getMenuStructure(menuId),
+        home: () => this.api.getMenuHome(menuId),
+        status: () => this.api.getMenuStatus(menuId),
+        preview: () => this.api.getMenuPreview(menuId),
+      };
+      const entries = await Promise.all(
+        parts.map(async (part) => {
+          let response;
+          try {
+            response = { status: 200, body: cached[part] ?? (await reads[part]()) };
+          } catch (error) {
+            response = { status: 409, body: { error } };
+          }
+          if (this.#menuReadGeneration === generation && this.menuId === menuId)
+            this.#applyMenuRead(menuId, { [part]: response } as MenuReadResult);
+          return [part, response];
+        }),
+      );
+      return Object.fromEntries(entries) as MenuReadResult;
+    };
+    try {
+      await this.#menuReads.watch(
+        menuId,
+        parts,
+        (value) => this.#applyMenuRead(menuId, value),
+        initialRead,
+      );
+    } catch {
+      // The controller reports read failures independently of write refusals.
+    }
+    if (again) await this.#menuReads.refresh();
+  }
+
+  #watchStructure(): Promise<void> {
+    return this.#watchMenu(true);
   }
 
   /** The query slot holds one watch: watching another menu, or `#releasePrices`, stops the earlier
@@ -941,93 +1020,52 @@ export class MenusScreen extends LitElement {
     }
   }
 
-  /** Follows every menu's state while the list is shown, and the open menu's alone while its
-   * editor is — except on the Preview and Home page tabs, where the preview's own answer carries it
-   * and a second query would only repeat the read. `again` reads it afresh even when it is already
-   * followed, keeping the open menu's state on screen until that read replaces it. */
   #followStatus(again = false): void {
     const menuId = this.menuId;
-    const ownQuery = menuId !== null && this.view !== "preview" && this.view !== "home";
-    if (!again && this.#statusFor === menuId && this.#statusOwnQuery === ownQuery) return;
-    const sameMenu = this.#statusFor === menuId;
-    this.#statusFor = menuId;
-    this.#statusOwnQuery = ownQuery;
-    if (menuId === null) {
-      this.#statusQueries.release("getMenuStatus");
-      this.statuses = null;
-      this.statusesError = false;
-      this.statusesResetRequired = false;
-      void this.#statusQueries
-        .watch("getMenuStatuses", [], (value) => {
-          this.statuses = value;
-          this.statusesError = false;
-          this.statusesResetRequired = false;
-        })
-        .catch(() => undefined);
+    if (menuId !== null) {
+      this.#statusFor = menuId;
+      if (!this.structure?.includedBy.length) {
+        this.#statusQueries.release("getMenuStatuses");
+        this.#includedStatusesFor = null;
+      }
+      if (again && (this.view === "preview" || this.view === "home"))
+        void this.#watchPreview(menuId);
+      else void this.#watchMenu(again);
       return;
     }
-    if (!this.structure?.includedBy.length) this.#statusQueries.release("getMenuStatuses");
-    if (!sameMenu) this.status = null;
-    if (again || !sameMenu) this.statusError = false;
-    if (!ownQuery) {
-      this.#statusQueries.release("getMenuStatus");
-      if (again) void this.#watchPreview(menuId);
-      return;
-    }
+    if (!again && this.#statusFor === null) return;
+    this.#statusFor = null;
+    this.statuses = null;
+    this.statusesError = false;
+    this.statusesResetRequired = false;
     void this.#statusQueries
-      .watch("getMenuStatus", [menuId], (value) => {
-        this.status = value;
-        this.statusError = false;
-        this.statusResetRequired = false;
+      .watch("getMenuStatuses", [], (value) => {
+        this.statuses = value;
+        this.statusesError = false;
+        this.statusesResetRequired = false;
       })
       .catch(() => undefined);
   }
 
-  /** Re-reads from scratch, as after a refused publish, so the preview is never an old one. */
-  async #watchPreview(menuId: string): Promise<void> {
-    this.#previewFor = menuId;
+  #watchPreview(menuId: string): Promise<void> {
+    if (this.menuId !== menuId) return Promise.resolve();
     this.preview = null;
     this.previewError = false;
     this.previewResetRequired = false;
-    try {
-      await this.#previewQueries.watch("getMenuPreview", [menuId], (value) => {
-        this.preview = value;
-        this.previewError = false;
-        this.previewResetRequired = false;
-        this.status = value.status;
-        this.statusError = false;
-        this.statusResetRequired = false;
-      });
-    } catch {
-      this.previewError = true;
-    }
+    return this.#watchMenu(true);
   }
 
   #releasePreview(): void {
-    this.#previewFor = null;
-    this.#previewQueries.release("getMenuPreview");
     this.preview = null;
     this.previewError = false;
     this.previewResetRequired = false;
   }
 
-  /** The query slot holds one watch, so watching another menu's home stops the earlier one. */
-  async #watchHome(menuId: string): Promise<void> {
-    this.#homeFor = menuId;
-    this.homeLoadError = false;
-    try {
-      await this.#homeQueries.watch("getMenuHome", [menuId], (value) => {
-        this.menuHome = value;
-        this.homeLoadError = false;
-      });
-    } catch {
-      if (this.#homeFor === menuId) this.homeLoadError = true;
-    }
+  #watchHome(menuId: string): Promise<void> {
+    return this.menuId === menuId ? this.#watchMenu(true) : Promise.resolve();
   }
 
   #releaseHome(): void {
-    this.#homeFor = null;
-    this.#homeQueries.release("getMenuHome");
     this.menuHome = null;
     this.homeLoadError = false;
     this.homeError = null;
@@ -1049,11 +1087,7 @@ export class MenusScreen extends LitElement {
     this.view = view;
     this.#followStatus();
     if (view !== "preview" && view !== "home") this.#releasePreview();
-    else if (this.menuId !== null && this.#previewFor !== this.menuId)
-      void this.#watchPreview(this.menuId);
     if (view !== "home" && view !== "structure") this.#releaseHome();
-    else if (this.menuId !== null && this.#homeFor !== this.menuId)
-      void this.#watchHome(this.menuId);
     if (view !== "prices") {
       this.priceRefusals = {};
       this.priceOutcome = null;
@@ -1064,7 +1098,7 @@ export class MenusScreen extends LitElement {
 
   /** A write that succeeded is never reported as a failed one: a failure here is a load failure. */
   async #refresh(): Promise<void> {
-    await this.#watchStructure();
+    await this.#menuReads.refresh();
   }
 
   #restore(): void {
@@ -1083,7 +1117,14 @@ export class MenusScreen extends LitElement {
     if (menuId === this.menuId) return;
     this.#menuFormGeneration++;
     this.menuForm = null;
+    this.#menuReads.release();
+    this.#menuReadGeneration++;
+    this.#menuReadKey = "";
+    this.#includedStatusesFor = null;
     this.menuId = menuId;
+    this.status = null;
+    this.statusError = false;
+    this.statusResetRequired = false;
     this.path = [];
     this.structureReordering = false;
     this.structure = null;
@@ -1105,8 +1146,7 @@ export class MenusScreen extends LitElement {
     // which knows whether the preview carries it, so no query starts only to be released.
     if (menuId === null) {
       this.#followStatus();
-      this.#structureQueries.release("getMenuStructure");
-    } else void this.#watchStructure();
+    }
   }
 
   /** Replaces an address naming a menu that does not exist, or a tab the editor does not have. */
@@ -1148,6 +1188,9 @@ export class MenusScreen extends LitElement {
 
   override disconnectedCallback(): void {
     this.#menuFormGeneration++;
+    this.#menuReadGeneration++;
+    this.#menuReadKey = "";
+    this.#includedStatusesFor = null;
     super.disconnectedCallback();
   }
 
@@ -1461,7 +1504,7 @@ export class MenusScreen extends LitElement {
   /** Reads the home again after a write, when a tab drawing it still shows the same menu. */
   async #rereadHome(menuId: string): Promise<void> {
     if (this.menuId === menuId && (this.view === "home" || this.view === "structure"))
-      await this.#watchHome(menuId);
+      await this.#menuReads.refresh();
   }
 
   /** Adds and removes hold `busy` until the home is read again. Their scope is the menu's home, as

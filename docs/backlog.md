@@ -2033,10 +2033,16 @@ Left open:
   The last GET finished about 34 ms / 32 ms after the respective input event in that single run;
   these are baseline observations, not a comparison or a latency bound. The branch now has a
   tested shared GET endpoint (`/management-api/catalogues/:id/read?part=…`) for Structure, Home,
-  status and Preview, with each part's result or refusal returned separately. The client is not
-  connected to it yet: the two one-GET tests remain red. Transport batching prototypes did not
-  satisfy both cases and were removed; they are not the proposed implementation. The shared
-  screen subscription, refresh/feed coordination and after measurement remain open. Consolidation
+  status and Preview, with each part's result or refusal returned separately. The screen now uses
+  one shared subscription after its independently displayed initial reads. Its two one-GET
+  Chromium cases pass without changing their count or saved-value assertions. A save refresh
+  waits up to 100 ms for a feed-triggered read to start, then requests a read if the stream is
+  silent; coordinator cases also cover later changes and changes during a read. Existing
+  screen checks caught stale-preview, status and loading regressions, which were corrected without
+  changing those assertions. A new reconnect case caught a departed initial read replacing the
+  reopened screen's snapshot. Final validation, the after measurement and branch finishing remain
+  open; this item is not marked done. Discarded transport batching prototypes are not the
+  implementation. Consolidation
   must retain shortcut-name refreshes from `products`
   (the dependency is pinned in `apps/dashboard/src/api/live-queries.test.ts`) and the existing
   old-response, error and publish-hash checks.

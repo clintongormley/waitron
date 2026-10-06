@@ -325,3 +325,73 @@ it.each(["locations", "tenants", "sales", "working_orders", "daily_closes"])(
     }
   },
 );
+
+it("reads a shared menu snapshot through one encoded GET, preserving independent refusals", async () => {
+  const paths: string[] = [];
+  const headers: Headers[] = [];
+  const response = {
+    structure: { status: 200, body: { rootSectionId: "root" } },
+    home: { status: 200, body: { handheld: { columns: 5 } } },
+    status: {
+      status: 409,
+      body: { error: { code: "menu.reset_required", params: { menuId: "menu&one" } } },
+    },
+  };
+  const api = new DashboardApi("", async (path, init) => {
+    paths.push(path);
+    headers.push(new Headers(init.headers));
+    return Response.json(response);
+  });
+  const query = dashboardQuery(api, "getMenuRead", ["menu&one", ["structure", "home", "status"]]);
+  expect(await query.read()).toEqual(response);
+  expect(paths).toEqual([
+    "/management-api/catalogues/menu%26one/read?part=structure&part=home&part=status",
+  ]);
+  expect(headers[0]!.has("x-waitron-live")).toBe(false);
+  expect(await query.read()).toEqual(response);
+  expect(headers[1]!.get("x-waitron-live")).toBe("1");
+});
+
+it("refreshes the shared menu snapshot for product and publication changes", async () => {
+  let columns = 3;
+  const reads: string[] = [];
+  const api = new DashboardApi("", async (path) => {
+    reads.push(path);
+    return Response.json({ home: { status: 200, body: { handheld: { columns } } } });
+  });
+  const observed = api.liveData.observe(
+    dashboardQuery(api, "getMenuRead", ["menu-1", ["home", "preview"]]),
+    () => {},
+  );
+  try {
+    await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
+    columns = 5;
+    api.liveData.invalidate([{ type: "products", id: "changed-product" }]);
+    await vi.waitFor(() =>
+      expect(observed.snapshot.value).toEqual({
+        home: { status: 200, body: { handheld: { columns: 5 } } },
+      }),
+    );
+    columns = 6;
+    api.liveData.invalidate([{ type: "menu_publications" }]);
+    await vi.waitFor(() =>
+      expect(observed.snapshot.value).toEqual({
+        home: { status: 200, body: { handheld: { columns: 6 } } },
+      }),
+    );
+    expect(reads).toHaveLength(3);
+  } finally {
+    observed.unsubscribe();
+  }
+});
+
+it("does not subscribe a Structure-only shared read to unrelated publication tables", () => {
+  const api = new DashboardApi("", async () => Response.json({}));
+  const query = dashboardQuery(api, "getMenuRead", ["menu-1", ["structure"]]);
+  expect(query.dependencies).toEqual([
+    { type: "menu_details" },
+    { type: "sections" },
+    { type: "section_members" },
+    { type: "catalogues" },
+  ]);
+});
