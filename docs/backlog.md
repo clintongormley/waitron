@@ -4626,7 +4626,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       written: with a delayed order-update body, a zone moved to Deli still answered 200. **Owner
       decision (2026-10-06 ~23:50): accepted, not to be fixed** — a write already reaching the
       server when the switch or move commits is treated as having arrived first, so the checks stay
-      outside the write transaction. A307 checked what a zone move or profile switch decides from
+      outside the write transaction. A307 (#1319) checked what a zone move or profile switch decides from
       the state present when it commits. A zone move (`configureZone`,
       `packages/venue-service/src/operations.ts`) decides nothing from it. Ending the sessions a new
       profile does not admit, every one on a kitchen screen (A298), holds: the PIN sign-in re-checks
@@ -4640,7 +4640,10 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       (`takeReaderBillPayment`, `apps/server/src/bill-payments.ts`), so its amount is not held, and
       the till's next confirm sends a new request id, which the server checks under the device's
       new profile. Still open: the practice-mode simulator writes no `attempting` row, so a switch
-      during a practice card payment is never refused (read, not run).
+      during a practice card payment is never refused (read, not run). And if the till never
+      receives a bill reader payment's `device.profile_changed` answer, its automatic resend under
+      the same id gets the failed payment back and tells staff the card was declined: no card was
+      charged, but the reason shown is wrong; the next tap starts a fresh payment (read, not run).
 - **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
   states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a
   booking, Needs clearing, Bill requested and the kitchen signals), which a venue can switch off,
