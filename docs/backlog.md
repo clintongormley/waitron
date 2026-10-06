@@ -2302,14 +2302,9 @@ chose to leave it as it is rather than shorten deep paths on paper (2026-10-05).
 
 **Products: a category's Made at shows where its dishes are made — DONE (W86, #1203; its asterisk
 W86a, #1223, W86b, #1231, W86c, #1234); left open:**
-(1) a PRODUCT row reads "Nowhere" whenever the
-made-at read holds no entry for it (`apps/dashboard/src/widgets/product-list.ts`, the `made-at`
-cell, where `maker === undefined` falls to `product.nowhere`) — the same blank-read-as-no-route
-problem this item fixed for categories, not fixed here. Judged from the code, not run: the first
-load waits for `listMadeAt` before it lists products, and a failed first read fails the whole
-load, so the gap is a product listed after the last good made-at read — a refresh still on its way
-or one that failed, which keeps the old answer — and every inactive product, which the made-at read
-never lists, so its row always reads Nowhere when the Status filter shows it; (2) a category's link is the same
+(1) DONE (A277): a product row with no entry in the made-at read (an inactive one, for example)
+now shows an empty cell instead of "Nowhere", as category rows do; a product the read routes to no
+station still reads "Nowhere"; (2) a category's link is the same
 `maker-link` as a product's, so the contrast concern and the missing `activatesRow: false` recorded
 under W87 apply to category rows too (there a click beside the link opens or closes the category;
 judged from the code, not run); (3) a person who may not read routing sees "Kitchen routing
