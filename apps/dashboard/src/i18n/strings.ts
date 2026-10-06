@@ -2095,6 +2095,11 @@ export const en = {
   "home.tiles_help":
     "Add products and sections from this menu or its included menus. Changes are saved straight away; publish the menu to make them live.",
   "home.missing": "Missing: {name}",
+  "home.row": "Device Home Page",
+  "home.add_product": "Add a product shortcut",
+  "home.add_section": "Add a section shortcut",
+  "home.remove": "Remove shortcut",
+  "home.empty": "No shortcuts yet.",
   "home.preview_heading": "Preview",
   "home.preview_handheld": "Handheld, 3 columns",
   "home.preview_till": "Till, 6 columns",
@@ -4355,6 +4360,11 @@ export const es: Record<StringKey, string> = {
   "home.tiles_help":
     "Puedes añadir productos y secciones de esta carta o de las cartas incluidas. Los cambios se guardan al momento; publica la carta para que entren en vigor.",
   "home.missing": "Falta: {name}",
+  "home.row": "Página de inicio del dispositivo",
+  "home.add_product": "Añadir un acceso directo a un producto",
+  "home.add_section": "Añadir un acceso directo a una sección",
+  "home.remove": "Quitar el acceso directo",
+  "home.empty": "Aún no hay accesos directos.",
   "home.preview_heading": "Vista previa",
   "home.preview_handheld": "Terminal de mano, 3 columnas",
   "home.preview_till": "Caja registradora, 6 columnas",

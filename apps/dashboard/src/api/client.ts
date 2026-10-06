@@ -104,12 +104,22 @@ import type {
 import type {
   HomeLayout,
   HomeTile,
+  MenuHome,
   SectionDetails,
   MemberRef,
   SectionInput,
   SectionMember,
+  TileRef,
 } from "@waitron/catalogue/src/section-types.js";
-export type { HomeLayout, HomeTile, SectionDetails, MemberRef, SectionInput, SectionMember };
+export type {
+  HomeLayout,
+  HomeTile,
+  MenuHome,
+  SectionDetails,
+  MemberRef,
+  SectionInput,
+  SectionMember,
+};
 import type {
   LanguageTranslationGaps,
   TranslationGap,
@@ -122,6 +132,8 @@ export type { MenuPriceRow, MenuPriceVariant };
 import type {
   DocumentMember,
   FrozenOffer,
+  HomeDevice,
+  HomeDisplay,
   MenuChange,
   MenuDocument,
   MenuPreview,
@@ -133,6 +145,8 @@ import type {
 export type {
   DocumentMember,
   FrozenOffer,
+  HomeDevice,
+  HomeDisplay,
   MenuChange,
   MenuDocument,
   MenuPreview,
@@ -1951,6 +1965,45 @@ export class DashboardApi {
       "PUT",
       { to },
     );
+  }
+
+  /** The menu's working Device Home Page: every shortcut in order, the ones its structure no longer
+   * reaches marked, and both devices' display settings. */
+  getMenuHome(menuId: string): Promise<MenuHome> {
+    return this.#request<MenuHome>(`/management-api/catalogues/${menuId}/home`, "GET");
+  }
+
+  /** A target the menu's structure does not reach is refused `menu.shortcut_unreachable`. */
+  addHomeShortcut(menuId: string, ref: MemberRef): Promise<SectionMember> {
+    return this.#request(`/management-api/catalogues/${menuId}/home/shortcuts`, "POST", { ref });
+  }
+
+  removeHomeShortcut(menuId: string, memberId: string): Promise<void> {
+    return this.#request<void>(
+      `/management-api/catalogues/${menuId}/home/shortcuts/${memberId}`,
+      "DELETE",
+    );
+  }
+
+  /** Answers every shortcut in its new order. */
+  moveHomeShortcut(
+    menuId: string,
+    memberId: string,
+    to: number,
+  ): Promise<SectionMember<TileRef>[]> {
+    return this.#request(
+      `/management-api/catalogues/${menuId}/home/shortcuts/${memberId}/position`,
+      "PUT",
+      { to },
+    );
+  }
+
+  /** A value outside the device's range is refused `menu.home_display_invalid`. */
+  setHomeDisplay(menuId: string, device: HomeDevice, patch: Partial<HomeDisplay>): Promise<void> {
+    return this.#request<void>(`/management-api/catalogues/${menuId}/home-display`, "PATCH", {
+      device,
+      ...patch,
+    });
   }
 
   /** `expectedHash` is the preview's; a menu edited since is refused `menu.changed_since_preview`. */

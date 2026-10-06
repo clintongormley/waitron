@@ -1777,6 +1777,16 @@ unchanged. Fixture-only edits in Task 5: `menu-browser.test.ts` (`section()` tak
 `image`, default null), `menu-browser.a11y.test.ts` (`mount()` takes the browser's properties,
 defaulting to the `columns: 3` it always passed).
 
+### Task 6
+
+No assertion changed or deleted, and no existing fixture grew: every check in
+`menu-structure-table.test.ts`, `menu-structure-table.a11y.test.ts`, `client-routes.test.ts` and
+`live-queries.test.ts` is new (a `describe` block, an a11y case, one route case, and one row added to
+the `it.each` table of dependencies). The structure table's `home` property defaults to null, so the
+existing cases, which pass none, draw no Device Home Page row and read as before. A missing
+shortcut's kind reads `members.missing` ("No longer available" | "Ya no está disponible"), the label
+`memberKindLabel` gives a `missing` reference, not a separate "Missing" word.
+
 ### Task 8
 
 | file:line | Before | After | Why |

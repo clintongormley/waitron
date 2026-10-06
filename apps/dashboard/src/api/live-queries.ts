@@ -190,6 +190,9 @@ export const QUERY_DEPENDENCIES = {
   // `listHomeLayouts` (packages/catalogue/src/home-layouts.ts): the menu's root and default, the
   // section graph, and each tile's name.
   listHomeLayouts: ["menu_details", "sections", "section_members", "products", "catalogues"],
+  // `readMenuHome` (packages/catalogue/src/menu-home.ts): the details row, the section graph with
+  // its menus, and each shortcut's name.
+  getMenuHome: ["menu_details", "sections", "section_members", "products", "catalogues"],
   listCategories: ["categories", "category_details"],
   getCategory: ["categories", "category_details"],
   listLibraryProducts: ["products"],

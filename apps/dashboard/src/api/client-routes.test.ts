@@ -894,6 +894,54 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("reads a menu's Device Home Page and writes its shortcuts and display settings", async () => {
+    const home = {
+      homeSectionId: "s-home",
+      shortcuts: [
+        {
+          memberId: "t1",
+          position: 0,
+          ref: { kind: "product" as const, productId: "p1" },
+          missingName: null,
+          name: "Burger",
+          reachable: true,
+        },
+      ],
+      handheld: { columns: 3, tiles: "colours" as const, order: "home_first" as const },
+      till: { columns: 6, tiles: "colours" as const, order: "home_first" as const },
+    };
+    const ref = { kind: "section" as const, sectionId: "s1" };
+    const shortcut = { id: "t2", position: 1, ref };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(home))
+      .mockResolvedValueOnce(jsonResponse(shortcut, true, 201))
+      .mockResolvedValueOnce(emptyResponse())
+      .mockResolvedValueOnce(jsonResponse([shortcut]))
+      .mockResolvedValueOnce(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getMenuHome("c1")).resolves.toEqual(home);
+    await expect(api.addHomeShortcut("c1", ref)).resolves.toEqual(shortcut);
+    await expect(api.removeHomeShortcut("c1", "t1")).resolves.toBeUndefined();
+    await expect(api.moveHomeShortcut("c1", "t2", 0)).resolves.toEqual([shortcut]);
+    await expect(
+      api.setHomeDisplay("c1", "till", { columns: 8, order: "menu_first" }),
+    ).resolves.toBeUndefined();
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/catalogues/c1/home", "GET", undefined],
+      ["/management-api/catalogues/c1/home/shortcuts", "POST", { ref }],
+      ["/management-api/catalogues/c1/home/shortcuts/t1", "DELETE", undefined],
+      ["/management-api/catalogues/c1/home/shortcuts/t2/position", "PUT", { to: 0 }],
+      [
+        "/management-api/catalogues/c1/home-display",
+        "PATCH",
+        { device: "till", columns: 8, order: "menu_first" },
+      ],
+    ]);
+  });
+
   it("reads menus' publication status and preview, and publishes the previewed hash", async () => {
     const current = {
       state: "current" as const,
