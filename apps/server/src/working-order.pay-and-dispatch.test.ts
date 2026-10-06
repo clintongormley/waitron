@@ -1530,7 +1530,7 @@ describe("placeOrder / cancelPlacedOrder (placing + amendment log)", () => {
 // The idempotency proofs below run as two transactions on one handle; the file header states what
 // that shows and what it does not. No primitive is reimplemented here: the dispatch ORCHESTRATES `recordSale`
 // (immediate + deferred), `settleSale` and `listOutstandingSales`.
-describe("prepare & collect — three-mode dispatch (order_flow)", () => {
+describe("prepare & collect — zone payment timing", () => {
   it("uses each zone's pay timing through payment, placement and collection in one department", async () => {
     const { cfg, cafe, zoneId: prepayZoneId } = await setupVenue();
     const collectZone = await withTransaction(suite.db, (tx) =>

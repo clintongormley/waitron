@@ -32,7 +32,7 @@ import "./errors.js";
 
 // Collecting a presented bill follows its issuance history, not its zone's service mode (spec §9).
 let venue: BillVenue;
-let invoiceFirstZone: string;
+let ticketThenPayZone: string;
 let issueAtPaymentZone: string;
 
 useVenueDb({
@@ -41,7 +41,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     venue = await provisionBillVenue(db);
-    invoiceFirstZone = (
+    ticketThenPayZone = (
       await inTx(venue, (tx) =>
         offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
       )
@@ -95,7 +95,7 @@ function collectCash(billId: string) {
 
 describe("collecting a presented bill follows its invoice, not its zone (spec §9)", () => {
   it("settles an already-issued invoice, even once the bill's zone says to issue at payment", async () => {
-    const id = await placedTarta(invoiceFirstZone, true);
+    const id = await placedTarta(ticketThenPayZone, true);
     const issued = await salesOf(id);
     expect(issued).toEqual([{ id: expect.any(String), total: 1800, settledAt: null }]);
     await retarget(id, issueAtPaymentZone);
@@ -113,7 +113,7 @@ describe("collecting a presented bill follows its invoice, not its zone (spec §
   it("issues the invoice at payment for a bill placed without one, even once its zone says invoice first", async () => {
     const id = await placedTarta(issueAtPaymentZone);
     expect(await salesOf(id)).toEqual([]);
-    await retarget(id, invoiceFirstZone);
+    await retarget(id, ticketThenPayZone);
 
     await collectCash(id);
 
@@ -132,7 +132,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
   async function correctedTarta(
     credit: { base: string; total: string } = { base: "2.00", total: "-2.42" },
   ): Promise<{ billId: string; saleId: string }> {
-    const billId = await placedTarta(invoiceFirstZone, true);
+    const billId = await placedTarta(ticketThenPayZone, true);
     return { billId, saleId: await correctBill(billId, credit) };
   }
 
@@ -311,7 +311,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
   });
 
   it("refuses a correction that would take the bill below zero, and the bill still collects in full", async () => {
-    const billId = await placedTarta(invoiceFirstZone, true);
+    const billId = await placedTarta(ticketThenPayZone, true);
     const [issued] = await salesOf(billId);
 
     // A 16.53 base at 21% is 20.00, more than Tarta's 18.00 invoice.
@@ -328,7 +328,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
   });
 
   it("refuses to close a bill already corrected below zero, with the domain code, and leaves it open", async () => {
-    const billId = await placedTarta(invoiceFirstZone, true);
+    const billId = await placedTarta(ticketThenPayZone, true);
     const [issued] = await salesOf(billId);
     // Written straight to `sales`: `recordCorrection` refuses a correction this large, but a
     // bill below zero must still be refused at collection.

@@ -61,7 +61,7 @@ import "./errors.js";
 // §9, §15). `resetPerTest: false`: the venue is provisioned once, and each case seats its own tables.
 let v: PartyVenue;
 /** A counter zone whose orders are invoiced when placed. */
-let invoiceFirstZone: string;
+let ticketThenPayZone: string;
 /** A second zone of dining tables. */
 let terrazaZone: string;
 /** Caña at 3.50, offered in the counter zone only; everywhere else it sells at 3.00. */
@@ -85,7 +85,7 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     v = await setupPartyVenue(db);
-    invoiceFirstZone = await inTx(v, (tx) => zoneNamed(tx, "Barra factura", "ticket_then_pay"));
+    ticketThenPayZone = await inTx(v, (tx) => zoneNamed(tx, "Barra factura", "ticket_then_pay"));
     terrazaZone = await inTx(v, (tx) => zoneNamed(tx, "Terraza", "table_tab"));
     counterCaña = await pricedInZone(v, v.counter.zoneId, "Caña", "3.50");
     // Agua is handed over at the bar, so it is never sent to the kitchen.
@@ -219,7 +219,7 @@ async function placedCounterOrder(...names: string[]): Promise<string> {
   const deps = { db: v.db, backend: v.backend, clock: v.clock };
   await parkOrder(deps, v.cfg, {
     id,
-    zoneId: invoiceFirstZone,
+    zoneId: ticketThenPayZone,
     lines: names.map((name) => ({ menuItemId: v.item(name), quantity: "1" })),
     operatorId: OPERATOR,
   });
@@ -946,7 +946,7 @@ describe("the service area of a moved bill", () => {
       partyId: ana.partyId,
       status: "placed",
     });
-    expect(await zoneOf(v, placed)).toBe(invoiceFirstZone);
+    expect(await zoneOf(v, placed)).toBe(ticketThenPayZone);
     expect(await lineRows(placed)).toEqual(
       linesBefore.map((line) => ({ ...line, groupId: lastGroupOf(ana.partyId) })),
     );
@@ -1014,7 +1014,7 @@ describe("the dishes of an open bill moved between service modes", () => {
     const orderId = randomUUID();
     await parkOrder({ db: v.db }, v.cfg, {
       id: orderId,
-      zoneId: invoiceFirstZone,
+      zoneId: ticketThenPayZone,
       lines: [{ menuItemId: v.item("Tarta"), quantity: "1" }],
       operatorId: OPERATOR,
     });

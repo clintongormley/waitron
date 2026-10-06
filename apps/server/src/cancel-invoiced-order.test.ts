@@ -59,7 +59,7 @@ vi.mock("node:crypto", async (importOriginal) =>
 // invoice) and settles the original owing nothing, in the cancel's one transaction (owner decision
 // 2026-10-02). Driven over HTTP against a venue that files real Veri*Factu records.
 let venue: BillVenue;
-let invoiceFirstZone: string;
+let ticketThenPayZone: string;
 /** Menu-item id of each product by its staff name, offered in the invoice-first counter zone. */
 let offerOf: (name: string) => string;
 let productIdOf: (name: string) => string;
@@ -176,7 +176,7 @@ useVenueDb({
     const offers = await inTx(venue, (tx) =>
       offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "ticket_then_pay" }),
     );
-    invoiceFirstZone = offers.zoneId;
+    ticketThenPayZone = offers.zoneId;
     productIdOf = (name) => productIds.get(name)!;
     offerOf = (name) => offers.offerFor(productIdOf(name));
     const session = await inTx(venue, async (tx) => {
@@ -200,7 +200,7 @@ useVenueDb({
 /** Park and place through the routes, optionally seeding an issued invoice between them. */
 async function placed(
   lines: { name: string; quantity: string; extras?: unknown[] }[],
-  zoneId = invoiceFirstZone,
+  zoneId = ticketThenPayZone,
   issued = true,
 ): Promise<string> {
   const id = randomUUID();

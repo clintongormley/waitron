@@ -22,7 +22,7 @@ import "./errors.js";
 let venue: BillVenue;
 let limited: Hono;
 let counter: ZoneOffers;
-let invoiceFirst: ZoneOffers;
+let ticketThenPay: ZoneOffers;
 let tables: ZoneOffers;
 const product = new Map<string, string>();
 
@@ -60,9 +60,9 @@ useVenueDb({
       tables = await offerProducts(tx, venue.cfg, { zone: "tables", productIds });
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: venue.cfg.locationId, name: "Barra factura primero" })
+        .values({ locationId: venue.cfg.locationId, name: "Barra pago posterior" })
         .returning({ id: floorZones.id });
-      invoiceFirst = await offerProducts(tx, venue.cfg, {
+      ticketThenPay = await offerProducts(tx, venue.cfg, {
         zone: { zoneId: zone!.id },
         serviceMode: "ticket_then_pay",
         productIds,
@@ -535,7 +535,7 @@ describe("a bill payment", () => {
   });
 });
 
-describe("placing a counter order that is invoiced when placed", () => {
+describe("placing a counter order under the simplified-invoice limit", () => {
 it("does not file a saved F1 choice while original delivery is unavailable", async () => {
     const id = await parked(venue.app, invoiceFirst, { Mitad: 1 });
     venue.db.run(sql`update working_orders set invoice_type = 'F1',
@@ -553,7 +553,7 @@ it("does not file a saved F1 choice while original delivery is unavailable", asy
   });
 
   it("allows an order at the limit to be placed without filing or taking money", async () => {
-    const id = await parked(venue.app, invoiceFirst, { Lote: 1 });
+    const id = await parked(venue.app, ticketThenPay, { Lote: 1 });
     const before = written();
     const answer = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/place`, {});
     expect(answer.status).toBe(200);
@@ -563,7 +563,7 @@ it("does not file a saved F1 choice while original delivery is unavailable", asy
   });
 
   it("is refused over the limit, filing no invoice and leaving the order open", async () => {
-    const id = await parked(venue.app, invoiceFirst, { Lote: 1, Céntimo: 1 });
+    const id = await parked(venue.app, ticketThenPay, { Lote: 1, Céntimo: 1 });
     const before = written();
     const answer = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/place`, {});
     expect(answer.status).toBe(409);
