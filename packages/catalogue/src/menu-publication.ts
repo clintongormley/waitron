@@ -66,7 +66,12 @@ async function liveVersions(
     if (mode === "document") requireCurrentFormat(menuId, document!.format);
     else if (mode === "format") requireCurrentFormat(menuId, format);
   }
-  return new Map(rows.map(({ menuId, format: _format, ...version }) => [menuId, version]));
+  return new Map(
+    rows.map(({ menuId, versionId, number, publishedAt, contentHash, document }) => [
+      menuId,
+      { versionId, number, publishedAt, contentHash, document },
+    ]),
+  );
 }
 
 function requireCurrentFormat(menuId: string, format: unknown): void {
