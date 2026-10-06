@@ -153,8 +153,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
 6. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
    [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
-   drawer pulse, the feed-before-cut. #689 printed calibration samples and a sample receipt on the
-   owner's NT-806 and fired its drawer from the calibration test. Since C107 (#974) every printout
+   drawer pulse, the feed-before-cut. Since C107 (#974) every printout
    is drawn as pictures, and none of them (the ruler page, the sample receipt, a receipt, a kitchen
    ticket) has been photographed or recorded as printed; the owner's box will not start on this version
    until its venue is reset, read from the code and not run on a box (A3, "Upgrading a
@@ -216,31 +215,16 @@ Track C.
 **Product folders, menus that include menus, and prep station routing: partly built
 (design approved 2026-09-30).** The
 [design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) is built in slices. Slices
-1, 2, 3a, 3b, 3c-1, 3c-2 and 3c-3 have landed (above). Slice 3c-2 makes extras at their own station and
-names the dish and extra on each other's tickets (PF6,
-[plan](superpowers/plans/2026-10-01-split-off-extras-slice-3c2.md), [#1046](https://github.com/clintongormley/waitron/pull/1046)). Slice 3b
-([#1024](https://github.com/clintongormley/waitron/pull/1024)) adds station opening hours, by-hand
-open and close, fallbacks, the till's dead-end question before sending or payment, and down-printer
-and dark-screen alerts; a station with no replacement asks the waiter where to make its dishes or
-to remove them. It follows the
-[approved plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md) and needs no venue
-reset. **Owner decision (2026-10-01):** deleting only empty folders
+1, 2, 3a, 3b ([#1024](https://github.com/clintongormley/waitron/pull/1024)), 3c-1, 3c-2 (PF6,
+[#1046](https://github.com/clintongormley/waitron/pull/1046)) and 3c-3 (PF7,
+[#1068](https://github.com/clintongormley/waitron/pull/1068)) have landed. **Owner decision
+(2026-10-01):** deleting only empty folders
 stays immediate, including any routing rules attached to them; a confirmation is shown when the
 selected folders contain products or subfolders. Each dev venue needs `wa-wt reset demo
 <worktree-name>` after slices 1 and 2, and after slice 2 the owner's box needs a reset too: library
 sections and their placements disappear and per-menu extras are retired. Reload tills running the
-older build before using the new published document. **Slice 3c-3 landed as [#1068](https://github.com/clintongormley/waitron/pull/1068) (PF7)**: "Make at" on
-any dish before sending, moving a dish the kitchen has not started (with a slip at the old station
-when its ticket printed there), and checking a held dish whose station closed or switched off before
-release against the current rules. A station chosen by hand stays while switched on, even if closed,
-without an alert. Otherwise, with no replacement, the dish stays at its old station and raises an
-alert. A dish made at the till is never moved or re-routed
-([plan](superpowers/plans/2026-10-01-moving-dishes-slice-3c3.md)). Status and remaining work:
-- **3d watchers — LANDED (#1088, 2026-10-03)** ([plan](superpowers/plans/2026-10-01-watchers-slice-3d.md)): the pass and runners
-  follow stations and service zones on screen and paper. Each watcher has its own Done, while Away
-  stays shared. Watcher printers replace whole-order printing; an existing printer set to
-  "one ticket per order" keeps printing its attached stations' tickets until you attach it to a
-  watcher (owner, 2026-10-01).
+older build before using the new published document. Status and remaining work:
+- **3d watchers — LANDED (#1088).**
 - **Show how many dishes are being made on the table plan — OPEN (3d, W16).** The plan has no such
   count; adding one needs another value from `listTablesWithState`.
 - **Refresh the floor without a staff action — OPEN (3d, W16).** `till-floor-screen.ts` reads on
@@ -266,7 +250,7 @@ alert. A dish made at the till is never moved or re-routed
   Prep Stations' `watchersSeeing` each have a hand-copied test table. Neither test detects a change
   to the other rule.
 - After approval the owner ruled that a dish made at the till is never held and the till lists
-  what to make ("Make now"); 3c-2, 3c-3 and 3d were amended to match.
+  what to make ("Make now").
 - **Three follow-ups 3c-1 left:** the kitchen screen's column view has no per-order card, so it
   does not show the rest of the order (a station that needs that context uses the card view);
   units added to a discounted pay-first dish held in a group get a held kitchen record of their own
@@ -296,8 +280,7 @@ alert. A dish made at the till is never moved or re-routed
   `apps/server/src/working-order.ts`). A split-off extra's cross-reference reads kitchen names on
   both surfaces. Decide which name the following extra should show, then make the surfaces agree.
 - **Done (lane C's W27, #1140) — the till navigation fits a 390 px screen** (PF6 Task 9's wide
-  screenshot). The header bar wraps onto more rows at phone width; the entry under C130's review
-  below has the measurements.
+  screenshot).
 - **The dark-screen alert can be wrong** (S2b, owner, 2026-10-01). A kitchen working from paper
   may never mark dishes ready on its screen. With that screen switched off, each send can raise
   the dark-screen alert for up to an hour while those dishes remain waiting. A kitchen screen
@@ -474,19 +457,9 @@ with no notice. **Next action:** the owner confirms this meets §9, or asks for 
 shortcut disappears.
 
 **Secret checks and the write lock: the PIN, manager-login and profile checks moved — DONE (W1, #1117);
-two blocking derivations and one stale-answer window remain OPEN.** Every check against a stored
-hash from `packages/identity/src/secret-hash.ts` derives the key with `verifySecretAsync` on Node's
-thread pool. The print agent's token and the two join-status readers derive it with no transaction
-open (A125, #912), and so does the device token (`tryReadDevice`, `apps/server/src/device-session.ts`).
-W1 moved the rest: PIN sign-in, the drawer override, the cancel of an invoiced order, the unpaid
-departure, the adjustment approver, the two payment attestations, the bill refund's override and
-confirmer, the four manager password sign-ins (email, membership, promote, mirror bundle) and the ten
-own-password profile and credential changes now derive the key before the transaction opens, and the
-check inside it reuses that result only while the person, the secret and the stored hash it was
-derived against are the same (`docs/developers/conventions-data.md`). Attempts sent at once through
-`withPinCheckAhead` or `ownPasswordChanges` take turns per throttle key. Nothing makes a NEW route
-do the same. **Still open:**
-`hashSecret` derives with `scryptSync` (`secret-hash.ts`), so minting a token or setting a PIN or
+two blocking derivations and one stale-answer window remain OPEN.** Nothing makes a NEW route
+derive its key before the transaction opens or take turns (`docs/developers/conventions-data.md`).
+**Still open:** `hashSecret` derives with `scryptSync` (`packages/identity/src/secret-hash.ts`), so minting a token or setting a PIN or
 password stops the event loop; and `deriveKey` (`apps/server/src/scrypt-kdf.ts`) runs `scryptSync`
 too, reached when the server encrypts or decrypts a configuration bundle, decrypts a restore archive
 or a sealed node state, or encrypts a recovery bundle. Left by #912's review: the two join-status
@@ -631,9 +604,7 @@ component rules harden around the dashboard alone.
   translations of a name" is untested. **Next action:** fill the list when next touching that
   file; the other two need a decision whether they are worth a change at all.
 
-**Photos are shrunk on upload — LANDED #543.** Every upload is resized to at most 1600 pixels on
-its longer side, turned upright, stripped of its metadata and stored as WebP at quality 80
-(`prepareImage`, `packages/media/src/prepare.ts`). What it leaves open:
+**Photos are shrunk on upload — LANDED #543.** What it leaves open:
 
 - **The upload limit is 20 MB (owner decision 2026-09-23).** It bounds how large an upload the
   server will buffer; the decode is bounded by `MAX_INPUT_PIXELS` (100 million). What current
@@ -765,247 +736,41 @@ its longer side, turned upright, stripped of its metadata and stored as WebP at 
   "fills the Custom square right up to its border while a palette colour is chosen"). **Next action:** try
   the first in Safari or Playwright's WebKit, and the second by hand in Chromium.
 
-**Image library: Delete left, Edit right, and a preview showing where an image is used — DONE (W78, #1215,
-owner 2026-10-04).** On each card (`packages/media/src/dashboard/image-library.ts`) Delete now sits at
-the left of the action row and Edit at the right, with "Use image" still on its own line above them
-in the picker. The photo is a button marked "Preview" that opens a larger copy beside a list of every
-product, variant, menu section and published menu using it, each a link there; on a phone the photo
-sits above the list. The preview closes with Close, Escape or a click outside it, and focus goes back
-to the thumbnail. `wt-dialog` has no option to close on a backdrop click (it sets `closedby` only to
-`closerequest` or `none`) and was left unchanged, so
-the library closes the preview itself when a click reaches the dialog element at a point outside the
-dialog's box.
-Left OPEN by #1215's review: (1) a portrait photo on a laptop-width screen reached the preview's
-height limit and was drawn centred with plain bands either side — fixed (W78a, #1280): the
-photo's column is now never wider than the photo drawn at that height, and the list of uses takes
-the rest of the row. The landscape checks at 1280px and 390px and the 390px portrait check pass
-unchanged; where the photo sits above the list on a screen wider than the photo, it now sits at the
-start of the row rather than filling it. The dialog width at which the photo and the list move
-from side by side to one above the other is unchanged: checked for a landscape, a portrait and a
-very tall photo at window heights of 800px and 500px, and a very tall photo still sits above the
-list on a 390px phone; (2) a test title in
-`apps/till/src/screens/till-allergen-screen.test.ts` says its
-dialog closes on "escape/backdrop", but the shared dialog does not close on a click outside it — the
-title, not the behaviour, looks wrong (unchecked beyond the reviewer's reading); (3)
-`docs/developers/design-system.md` said a dialog returns focus to its trigger on close — settled
-for that line: W71g (#1208) replaced it with the dialog's own rule; the preview keeps its own
-hand-back.
+**Image library: Delete left, Edit right, and a preview showing where an image is used — DONE (W78, #1215;
+the portrait-photo bands W78a, #1280); left open by #1215's review:** a test title in
+`apps/till/src/screens/till-allergen-screen.test.ts` says its dialog closes on "escape/backdrop",
+but the shared dialog does not close on a click outside it — the title, not the behaviour, looks
+wrong (unchecked beyond the reviewer's reading).
 
-**The folding section jumps about when it opens (A169, owner 2026-10-01) — DONE (#1026).** `wt-disclosure`
-(`packages/ui/src/components/wt-disclosure.ts`) now draws no border in either state, keeps its
-heading and chevron in place when it opens (chevron at the row's end), and shows its summary under
-the heading only while closed. The Options and Extras editors' "Customer and kitchen
-names" line lists the names themselves (`ES … · EN … · Kitchen …`) instead of a count. The rule in
-`docs/developers/design-system.md` is rewritten to match. (A171 later took the kitchen name out of
-that section and its line.)
+**The folding section jumps about when it opens (A169) — DONE (#1026).**
 
-**The option window inside an Options list: two owner fixes (A170, owner 2026-10-01) — DONE (#1040).**
-In the editor for one options list (`apps/dashboard/src/widgets/option-list-form.ts`), an option's
-name in its row is now a button, drawn as the name's text, that opens its "Edit option" window; the
-Default radio button and the row menu keep their own clicks, and closing a window the name opened
-puts focus back on the name. The window (`apps/dashboard/src/widgets/option-label-form.ts`) has no folding section:
-Name, then Kitchen name (A171's decision for this window), then the customer-facing names under a
-"Customer-facing names" heading drawn as a small bold capitals group label, then Available, the
-same on Add and Edit (owner, 2026-10-01, mockup D2 of
-[the mockups](https://claude.ai/artifact/8apJ5oRb77Q5KmEfvUZHeZ)). The menu section form
-(`apps/dashboard/src/widgets/section-details-form.ts`) now heads its names the same way and with
-the same words (owner, 2026-10-02): "Customer-facing names" / "Nombres para el cliente", no
-"(optional)", and each field labelled "Customer-facing name (en)" and so on.
+**The option window inside an Options list: two owner fixes (A170) — DONE (#1040).**
 
-**The kitchen name gets its own place, apart from the customer-facing names, everywhere (A171,
-owner 2026-10-01: "i think we should separate kitchen name from customer facing names
-(everywhere)") — DONE (#1044).** In the options list and extras list editors
-(`apps/dashboard/src/widgets/option-list-form.ts`, `extra-list-form.ts`) the Kitchen name is a
-plain field, always shown, directly under Name (owner, 2026-10-01, mockup B). Only the
-customer-facing names fold, in a section headed "Customer-facing names" ("Nombres para el
-cliente"). Its closed line (`namesLine`, `apps/dashboard/src/widgets/form-fields.ts`; _2026-10-04:
-now `effectiveNamesLine`, W77_) lists those names alone, and a refusal naming the kitchen name
-shows under the kitchen field without opening the section. The option window
-(`option-label-form.ts`, A170), the product editor (`product-editor.ts`) and the variant form
-(`variant-form.ts`) already kept the two apart and are unchanged.
+**The kitchen name gets its own place, apart from the customer-facing names, everywhere (A171) —
+DONE (#1044).**
 
-**A name field's hint shows what a blank field will actually use (A172, owner 2026-10-01) — DONE (#1053).**
-Built in all five editors as the three bullets below ask, each hint following the field it copies
-as it is typed (`optionalTextFields`, `apps/dashboard/src/widgets/form-fields.ts`). Products and
-variants already fell back requested language → default language → Name (`resolveContentText`,
-`packages/shared/src/content-languages.ts`, through `toInvoiceLineDescriptions`), so the text frozen
-for their receipt and the translation gap report are unchanged; one variant reader,
-`joinCustomerPresentationText` (`packages/catalogue/src/product-presentation.ts`), does not follow
-that order (whether any surface shows the difference is not known; the OPEN entry
-"`joinCustomerPresentationText` passes the requested language where the default belongs", under
-A9). An options list's and an option's names did not (an extras list's own name reaches no
-receipt): with default Spanish and an option named
-`{ es: "Grande", ca: "Gran" }`, a direct call to `customerOptionSnapshotLabels` for English returned
-"Gran", because it skipped the default and took the first stored language alphabetically. It now
-tries the default language, read from the frozen staff name's key, before any other (cases in
-`packages/catalogue/src/option-snapshot-labels.test.ts`); the receipt and the till's settled ticket
-both read through it.
-On the owner's answer on #1053 (2026-10-02: _"I don't think we want 'same as', we just want to show
-the value. The same everywhere."_), a variant's values taken from its parent drop "Same as" too:
-the product editor's category, VAT, unit and course dropdowns and the allergen and dietary lines
-show the parent's value itself, and the variant table shows the product's price, all in grey
-italic; where the parent names nothing they show what will be used ("Uncategorised", the course's
-"— none —", "Each" for the unit, "None", or "Not yet reviewed" for allergens the parent has not had reviewed). The
-photo now shows without a "Same as" caption too (A172b — DONE, owner 2026-10-02); its alt text still
-names the main product's photo. (Since A200, 2026-10-03, the product editor draws that photo with
-empty alt text and its photo button carries those words as a description that is not shown; a
-variant's small window still uses them as the photo's alt text.)
-The owner: _"the kitchen name hint should be the name field, unless it has its own value. The main
-language name hint should be the name field, and the secondary languages should be the main
-language name"_. A field's hint is its placeholder (CLAUDE.md §3, Forms), so it shows only while
-the field is blank. Wanted, in every editor holding these names — products, variants, options
-lists, options and extras lists:
+**A name field's hint shows what a blank field will actually use (A172, A172b) — DONE (#1053, #1061);
+left open:** the translation gap report (`listContentTranslationGaps`,
+`packages/catalogue/src/content-languages.ts`) counts "Spanish filled, English blank" as a gap;
+whether it is still a gap once English falls back to the Spanish name is a decision to make with
+the owner before building (A172 left the report unchanged).
 
-- **Kitchen name:** the hint is the current Name. This matches what is used today: a blank kitchen
-  name falls back to Name (`docs/developers/products.md`, "Each name falls back on its own").
-- **Customer-facing name, main language:** the hint is the current Name. Also matches today's
-  fallback.
+**An empty table shows a proper empty box, with the screen's Add button (A176) — DONE (#1033); left
+open:** the Payments screen's readers table gets no button, because "Add reader" sits beside each
+connected provider (none, one or several), so there is no single Add to put there, and the list is
+pre-filtered by status; and the menu prices table on a menu's Price overrides tab gets none either,
+because its rows come from "Add products" on the Structure tab.
 
-- **Customer-facing name, every other language:** the hint is the main language's customer-facing
-  name (and Name, if that is blank too). **This does NOT match what happens today**, where a
-  blank name in any language falls back straight to Name, never to the main language's name
-  (`customerPresentationText`, `packages/catalogue/src/product-presentation.ts`; for options,
-  `customerOptionSnapshotLabels`, `packages/catalogue/src/option-snapshot-labels.ts`).
-  _(Wrong when written: see the C122 correction below; A172 has since changed the options
-  reader.)_ A hint must not show text the customer will never see, so this part needs the fallback
-  itself to change to blank → main language's customer-facing name → Name, for every surface that
-  reads these names (receipt, till, menus), plus `docs/developers/products.md`. The translation
-  gap report (`listContentTranslationGaps`, `packages/catalogue/src/content-languages.ts`) counts
-  "Spanish filled, English blank" as a gap today because English would show the staff name;
-  whether it is still a gap once English falls back to the Spanish name is a decision to make
-  with the owner before building (A172 left the report unchanged; see above). "Main language"
-  here means the venue's default content language.
-  _(Correction 2026-10-01, C122: measured, the receipt already falls back to the main language's
-  customer-facing name, so "a blank name in any language falls back straight to Name" and "English
-  would show the staff name" above are wrong for it. Default
-  Spanish, a product whose customer-facing name is `{es}` only: a Catalan and an English receipt
-  both printed its Spanish name, and an option's receipt text did the same (a direct call to
-  `customerOptionSnapshotLabels`); only a thing with no customer-facing name at all printed Name.
-  So this hint already matches the receipt while the main language's customer-facing name has
-  text. When it has none but another language does, the hint would show Name and the receipt prints a
-  blank goods line (the OPEN entry "A customer-facing name with no text in the default language
-  prints a blank goods line", under A9). The till's buttons and basket show Name in every case.
-  Receipts: the C122 entry under A9.)_
+**One fixed "nothing matches" sentence; a specific "nothing yet" sentence per screen (A177) — DONE
+(#1037).** Kept as they were, because they answer a question rather than say nothing was made: the
+Alerts screen's two, the adjustment report's, a printer scan's, the Servers screen's and a list's
+"No products use this list.". Not covered: empty sentences outside a `wt-data-table` (floor,
+kitchen, devices and others) still use "Aún no hay" and other shapes.
 
-Before A172, the options list, option and extras list editors (`option-list-form.ts`,
-`option-label-form.ts`, `extra-list-form.ts`) already hint Name in the kitchen name AND in every
-language's customer-facing name; the product editor (`product-editor.ts`) and the variant form
-(`variant-form.ts`) hint neither. So the first two bullets are new work only in those two, and the
-third changes all five.
+**The language chooser moves to the top bar, in every app (A187) — DONE (#1062).**
 
-Each hint follows the field it copies as the owner types: change Name and the blank fields' hints
-change with it.
-
-**An empty table shows a proper empty box, with the screen's Add button (A176, owner 2026-10-01)
-— DONE (#1033).** `wt-data-table` draws a table with no rows as a padded box with the
-table's own border, corners and background, the sentence centred and, under it, whatever the
-screen puts in the new `empty-action` slot; the "nothing matches" case keeps the toolbar and gets
-the same box without the slot. Every dashboard table whose screen has an Add action for its own
-rows renders that Add button into the slot while its list is empty (Units, the Extras and Options
-lists, Menus, Printers and print agents, Staff, Products, adjustment reasons in Venue settings,
-and the departments, hours and zone menus in Departments and zones), except the two left open
-below; a table with no Add action
-keeps just the sentence. The till and setup draw no `wt-data-table`, so
-nothing changed there. The empty case still shows the toolbar when the table has one, as before.
-Left open: the Payments screen's readers table gets no button, because "Add reader" sits beside
-each connected provider (none, one or several), so there is no single Add to put there, and the
-list is pre-filtered by status; and the menu prices table on a menu's Price overrides tab gets none either,
-because its rows come from "Add products" on the Structure tab, shown for whichever menu or
-section is open (since W88, 2026-10-05, Add products is in the ⋮ of the menu's own row and of each
-section it owns). Found while building it, and fixed in the same change: on the
-Departments and zones screen, adding a department, hours or a zone's menu from the top Add button left
-keyboard focus on the page, because the screen tried to focus the button while it was still
-greyed out (saving); it now waits until the list has reloaded.
-
-**One fixed "nothing matches" sentence; a specific "nothing yet" sentence per screen (A177, owner
-2026-10-01) — DONE (#1037).** Every `wt-data-table` on the dashboard and in the modules' screens now
-passes `tableNoMatches()` from `@waitron/dashboard-kit` as its no-matches sentence ("Nothing
-matches your search or filters." / "Nada coincide con tu búsqueda ni con tus filtros."), which is
-also the table's own English default; the tables' per-screen `*.no_matches` strings and
-`orders.empty` are gone. A filter alone, with nothing searched, does show that sentence (a test pins it). The empty
-sentences now read "No <things> yet." in both languages, and the Departments and zones screen's five
-tables each name their own thing instead of sharing "No entries yet.", except its Tills table,
-which leaves out revoked devices and kitchen screens and so says "No active tills." / "No hay cajas
-activas." (owner's choice on #1037). Kept as they were, because
-they answer a question rather than say nothing was made: the Alerts screen's two, the adjustment
-report's, a printer scan's, the Servers screen's and a list's "No products use this list.".
-Screens that filter before the table (Orders, the catalogue browser while searching, Users and
-Payments while their filters hide what exists, and the Units delete dialog's products) show the
-no-matches sentence themselves. Not covered: empty sentences outside a `wt-data-table` (floor,
-kitchen, devices and others) still use "Aún no hay" and other shapes. (2026-10-02: since A208 the Products tree searches inside the table, so the catalogue browser no longer chooses its own empty sentence.)
-
-**An empty field's label is the same size as a typed value (A184, owner 2026-10-02) — DONE (#1035).** The
-owner, on a screenshot of a form with Password and PIN empty: _"the fieldname inside the field is
-font size 16px when a filled value is 14px"_. The `--wt-field-label-rest-size` token (16px) is gone:
-a resting label now inherits the field box's font size, which is what the value inherits too
-(`packages/ui-core/src/field-styles.ts`), and `wt-number-stepper`'s hidden copy of the label, which
-widens its box, does the same. A test in each field primitive (`wt-input` as text and password,
-`wt-textarea`, `wt-combobox`, `wt-price-input`, `wt-number-stepper`) compares the resting label's
-size with the value's, then changes `--wt-font-size-md` and checks both follow. The phone-zoom
-question below is about a field's TEXT, not its label, so this does not touch it. (Since A263,
-2026-10-03, below, `wt-number-stepper`'s label no longer rests: it always floats on the top line,
-and its test checks that the label and its hidden copy follow `--wt-font-size-sm` instead.)
-
-**The setup wizard's review page is grouped, explained and readable (A185, owner 2026-10-02) —
-DONE.** The owner, on a screenshot of "Review and provision": _"This layout looks really messy"_.
-The former `apps/setup/src/screens/review-screen.ts` was one flat list of sixteen label/value rows,
-showed the receipt language as a code (`ca-ES`), said demo twice (a Mode row and a paragraph), and
-kept the old `.actions` button row, so Provision sat beside Back rather than at the trailing edge
-as Next does on the earlier steps (`wt-form-actions`). **Decided (owner, 2026-10-02, choosing layout A
-of three mockups):**
-
-- the rows sit in boxed groups named as the steps that collect them — Business (legal name, tax
-  ID, country), Location (name, address, receipt language, when the day ends), Invoicing (till,
-  series, corrections series, invoice description, and the AEAT certificate outside demo), Your
-  account (name, email; the display name only when it differs from the name) — each box with an
-  Edit link back to the step that collects it;
-- the mode is a badge at the top (Demo, Prepare or Live) with demo's one-line explanation beside
-  it, replacing the Mode row and the demo paragraph (2026-10-03, A244: the badge is now the mode
-  pill the provisioning and done screens share, and reads Preparation);
-- a language shows by its name ("Català"), never its code; "Rectificative series" reads
-  "Corrections series" (Spanish wording to match);
-- help (replaced 2026-10-03 by A243: the review screen has no "?" buttons, and each box's
-  explanation is a muted line under its heading): each box has a `wt-help-tooltip` saying in general
-  what the group is, and each row that needs explaining has its own saying what that value does
-  (e.g. the series: "Every invoice number starts with this: FS-000001, FS-000002…"). The owner: the
-  tooltips float over the text and close when focus moves, and use the existing primitive, not a
-  dark box. `wt-help-tooltip` is a popover, so it floats and closes on an outside click or Escape;
-  the primitive now also closes it when focus moves away;
-- Back and Provision move into `wt-form-actions`.
-
-**The setup wizard's provisioning page is a page of its own with a spinner (A186, owner
-2026-10-02) — DONE.** While the request is pending, the page centres a spinner beneath "Setting up
-<legal name>" and a Demo, Preparation or Live badge, with "Keep this page open" and no button. The
-failed state keeps its retry, reset and reload actions. `provision` in
-`apps/setup/src/api/client.ts` reports no intermediate steps.
-
-**The language chooser moves to the top bar, in every app (A187, owner 2026-10-02) — DONE (#1062).**
-`wt-language-chooser` sits at the trailing end of each app's top bar: the setup wizard's card
-header beside the logo, the dashboard's banner before the alerts bell and account menu (signed out
-too), and the till's bar before the operator's name. The till's sign-in and join screens and the
-kitchen display, which have no bar, hold it at the top right on their own. At 40rem wide or less it
-shows the short code ("EN") and keeps the full name for screen readers; its menu opens downwards
-and names every language in full. `wt-language-footer` is gone.
-
-**In a demo, the dashboard's top bar links to the email inbox (A188, owner 2026-10-02) — DONE (#1067).**
-In a demo, the dashboard's banner shows an "Email inbox" link ("Bandeja de correo" in Spanish) just
-before the language chooser, to `/manage/email`, the address the setup wizard's done page uses:
-signed out always, and signed in only to a session that may open the Test inbox screen (a manager
-or an admin). Outside a demo there is no link. At 48rem wide or less it moves to the banner's second
-row, after the mode pill, because on the first row it squeezed the Waitron lockup to nothing at
-360px wide.
-(2026-10-03: A227, below, shows the link in a venue preparing to go live too, and removes the
-sidebar's Test inbox entry.)
-
-**The sidebar no longer lists the email inbox; the top-bar link is the way in (A227, owner
-2026-10-03) — DONE (#1094).** The sidebar's "Test inbox" entry is gone, and with it the `nav.email`
-string. The top bar's "Email inbox" link now shows in a demo AND in a venue preparing to go live:
-the server's practice mode covers both (`apps/server/src/boot.ts`), and in practice mode with no
-SMTP set up, account email is captured on the box (`apps/server/src/email-delivery.ts`). The
-screen keeps its rule — a manager or an admin — in the dashboard's list of screens with no sidebar
-entry, so its address still opens for them and no one else. A live venue shows no link, and there
-the screen only says how email is sent; a development server (`WAITRON_ENV=dev`) captures email in
-every mode, so in a live dev venue the address is the only way in.
+**The sidebar no longer lists the email inbox; the top-bar link is the way in (A227) — DONE
+(#1094).**
 
 **A venue preparing to go live sends real email through SMTP (owner 2026-10-03) — OPEN.** "Later
 prepare should use a real SMTP server": a prepare venue would send invitations and password resets
@@ -1014,584 +779,97 @@ demo-only again. Not built.
 (2026-10-03: the owner keeps this item open. A231d's design, below, sends a prepare venue's invoice
 email through its mail server when one is set, and adds no way to set one there.)
 
-**The sign-in screen's chosen email is drawn as a read-only field (A189, owner 2026-10-02) — DONE
-(#1048).** On every sign-in step after the email, on the passkey offer after sign-in, and on the
-reset and account-setup page, the chosen email is a read-only `wt-input` labelled "Email" with the
-address as its value: the same filled box as the other fields, so its text lines up with the
-password field's and the new password's. "Use another account" sits in its `end` slot at the box's trailing end, except on
-the passkey offer and the reset and account-setup page, which have no such button. `wt-input`
-gained `readonly`, which keeps the editable field's look (design-system.md → Forms → "The field
-box"). Where a step keeps the hidden username input for password managers, it is still the only
-field named `email`; the read-only field is `chosen-email`.
+**A field the browser fills in keeps the field's own look (A190) — DONE (#1047); left open:** an
+isolated Chromium profile accepted a saved test password through `navigator.credentials.store`, but
+did not autofill it after a reload or restart under automation; that saved-password visual check
+remains unverified.
 
-**A field the browser fills in keeps the field's own look (A190, owner 2026-10-02) — DONE.** On the
-sign-in screen and the setup wizard, a field the browser autofilled is drawn pale blue with no
-bottom line, unlike every other field. **Decided (owner, 2026-10-02):** an autofilled field looks
-like a typed one — the field fill and the bottom line — in every field primitive and both themes.
-The label already floats for an autofilled field (`:has(:autofill)` in
-`packages/ui-core/src/field-styles.ts` and `wt-price-input`); the colour and line were not looked
-into. A Chromium browser test forces the autofill pseudo-class, checks the visible fill, bottom line
-and value colour in both themes, and reproduces the browser's light-theme pale blue and dark-theme
-translucent slate fill before the CSS fix. An isolated Chromium
-profile accepted a saved test password through `navigator.credentials.store`, but did not autofill
-it after a reload or restart under automation; that saved-password visual check remains unverified.
+**The dashboard's sign-in pages: a card, one blue button, every other way in under "or" (A191) —
+DONE (#1074); left open by #1074 (owner to decide):** the new key and passkey icons draw lines at
+width 2 while the change-account icon beside them uses 1; the card copies the setup wizard's card
+styles rather than sharing `wt-card`, and nothing keeps the two in step.
 
-**The dashboard's sign-in pages: a card, one blue button, every other way in under "or" (A191,
-owner 2026-10-02) — DONE (#1074).** (Google page and its "G" changed by A228, 2026-10-03, below;
-the card's logo removed by W103, 2026-10-04, below.) The owner, on the passkey page: _"this page also looks a bit messy"_;
-layout A of three mockups was approved ("i love it"), replacing C96's single bulleted list. Every
-step of `apps/dashboard/src/screens/login-screen.ts` now sits in a card drawn like the setup
-wizard's, with the Waitron logo first (decorative there: the banner above already names Waitron, so
-the page shows the logo twice). On the email, password, passkey and Google pages the page's own way
-in is one full-width blue button, with the form's message on its own line directly above it; every
-other way in follows under an "or" line as a full-width outlined button with an icon — a key for
-"Use your password", a person with a key for "Log in with passkey", and Google's four-colour "G" (replaced by A228) for
-"Continue with Google". "I've forgotten my password" is a small link at the right under the password
-field, on the password page only. On the code step the code switch is the same kind of link under
-its field, the heading comes before the email, and Back and Log in are the ordinary action row. The
-chosen email is still A189's read-only field. No page has more than two other ways in, so the
-"row of logo-only buttons" fallback was not needed. **"Continue with Google" is also on the first
-page**, when the venue has Google set up: that holds because starting a Google sign-in takes no
-email (`POST /management-api/google/login` reads no body, `apps/server/src/management-api.ts:525`),
-and whether it shows depends only on the venue's settings, so the first page still shows everyone
-the same choices. The Google "G" (`apps/dashboard/src/assets/google-g.svg`) is the commonly
-reproduced four-colour mark; neither the drawing nor Google's branding terms were checked against
-Google's own sources (2026-10-03: checked and replaced by A228, below). Sign in with Apple does not exist; the mockup only showed where it would go. **Left open by #1074 (owner to decide):** the new key and passkey icons draw lines at width 2 while the change-account icon beside them uses 1; the card copies the setup wizard's card styles rather than sharing `wt-card`, and nothing keeps the two in step; the Google "G" is not listed in `deploy/third-party/README.md` (done by A228, below). Two races it reasoned about but did not reproduce were reproduced and fixed by A229 (below).
+**The "Continue with Google" button follows Google's branding rules (A228) — DONE (#1078).** Kept
+from the house rather than Google's drawing: the 44px tap height (Google's drawing is 40px; its
+text allows scaling), the full card width and `wt-button`'s corner radius. Checked in Chromium only
+(the vitest browser suites and screenshots); Firefox and Safari not looked at.
 
-**Pressing Google stops a passkey autofill that is still starting, and an autofill failure before a
-passkey is picked keeps Google's message (A229, owner 2026-10-03) — DONE (#1080).** The two sign-in
-timing cases A191 left unreproduced were both real, and both are fixed in
-`apps/dashboard/src/screens/login-screen.ts`. What was run, in
-`apps/dashboard/src/screens/login-screen.test.ts` (describe "Google on the first page"), with the
-browser's `PublicKeyCredential.isConditionalMediationAvailable` and `navigator.credentials.get`
-stubbed and the WebAuthn library kept real:
-
-1. The browser's "can autofill offer passkeys?" answer is held back, Continue with Google is
-   pressed and its start is held back too, then the answer is released. Before the fix the email
-   page's autofill went on to ask the server for passkey options and armed the browser's autofill
-   prompt (`navigator.credentials.get` called once, with `mediation: "conditional"`) while Google
-   was still starting; with the stubbed browser handing back a passkey at once, the screen
-   announced a passkey sign-in before Google's start had answered. Google's cancel only stopped a
-   ceremony that had already begun. Now an autofill still starting when the ceremony is cancelled
-   does not start. If Google then fails, the autofill is offered again: a further case holds back
-   the browser's answer, presses Google and has it refused, then releases the answer, and the
-   autofill asks the server for passkey options once and arms the browser's autofill prompt once
-   (`mediation: "conditional"`), from the restart (the held-back original stops at the new check).
-2. Google's start is refused (`google.invalid`) and the autofill it restarts is then refused too
-   (`connection.failed`). Before the fix the page showed the autofill's message in place of
-   Google's. Now a failure of the autofill before the person picks a passkey (its passkey-options
-   request failing) leaves a message already shown in place, and shows its own when none is
-   shown. Once the person picks a passkey from the autofill list, that is their own action: the
-   old message is cleared and the result of their choice shows, so a refused picked passkey shows
-   its refusal (`passkey.verification_failed`, or `passkey.not_registered`) in place of Google's
-   message, the same as every other sign-in action.
-
-What deleting each fix did: deleting the check of whether anything cancelled the autofill meanwhile
-failed case 1, and failed the held-back-then-refused case, where the held-back original autofill
-also sent its own options request, so options were asked for twice (it never reached the browser's
-prompt); turning the keep-the-message rule back into a plain assignment failed case 2, which showed
-the connection message instead of Google's; and deleting the line that clears the old message when
-a passkey is picked failed the picked-passkey refusal case, which showed Google's message instead
-of the passkey refusal.
-
-**The "Continue with Google" button follows Google's branding rules (A228, 2026-10-03) — DONE
-(#1078).** Google's sign-in branding guidelines
-(<https://developers.google.com/identity/branding-guidelines>) require a custom Google button to
-carry the standard gradient "G" (the download bundle's), and give its light and dark fill, line and
-text colours and its font, Google Sans Medium. The flat four-colour "G" was the kind the guidelines call
-outdated, and the Google page's own button was blue with no "G". Now the button, on every page it
-appears, carries the bundle's gradient "G" at 20px, reads `--wt-color-google-button-fill`, `-line`
-and `-text` and `--wt-font-family-google`, and the dashboard bundles Google Sans Medium (latin,
-weight 500), registered on `document.fonts`. The Google page's own button is that same button, so
-that page has no blue button. `deploy/third-party/README.md` carries the font's SIL Open Font
-License notice (`google-sans/OFL.txt`) and Google's trademark line for the "G". It changed two
-existing assertions in `apps/dashboard/src/screens/login-screen.test.ts`, both approved by the owner on 2026-10-03: the
-Google page now has 0 primary buttons, not 1, and the Google icon among the other ways in is
-`--wt-google-mark-size` wide, not `--wt-font-size-lg`. Kept from the house rather than Google's
-drawing: the 44px tap height (Google's drawing is 40px; its text allows scaling), the full card
-width and `wt-button`'s corner radius. Checked in Chromium only (the vitest browser suites and
-screenshots); Firefox and Safari not looked at.
-
-**The login card drops its logo, and a session-expired notice is drawn as an error (W103, owner
-2026-10-04) — DONE (#1190).** The owner, on a login screenshot: _"Remove the waitron logo from the login
-box, and make the 'your session has expired' more prominent eg in red."_ No step of
-`apps/dashboard/src/screens/login-screen.ts`, nor the account set-up and password-reset page, draws
-the Waitron logo any more; the banner above the card still shows it beside the business name. The
-"session expired" and "account suspended" notices are now bold `--wt-color-danger` text in a box
-with a 1px `--wt-color-danger` border, `--wt-radius-md` corners and `--wt-space-2`/`--wt-space-3`
-padding, first in the card above the heading. They are named in an explicit list, so another notice
-stays plain unless it is added: the notice after a completed password reset ("Your password has
-been changed…") keeps the text colour and no border.
-With the owner's approval it removed the logo assertions of the card test and the logo colour test
-in `apps/dashboard/src/screens/login-screen.test.ts`. Checked in Chromium only. Left open for
-the owner: the error-styled notice keeps `role="status"` (read out politely, as the item asked),
-where the dashboard's other error text uses `role="alert"` (read out at once); switching it is a
-one-line change if wanted.
-
-**A focused table search box turns its own border blue, with no second ring (A192, owner
-2026-10-02) — DONE (A192).** The owner, on two screenshots of the Modifiers screen's "Search extras
-lists": _"Focusing on the search box adds a second thicker blue border. instead it should turn the
-existing border blue."_ The box is `wt-data-table`'s `.table-search`
-(`packages/ui/src/components/wt-data-table.ts`). At rest it has a grey 1px border. On focus the existing
-border turns the primary blue and nothing is drawn outside it, as `wt-combobox`'s search box already
-does (its `.search:focus-visible` rule: "Its own primary border is the focus marking"). Every table
-with a search box gets it, since they all share this one. The border and outline are checked in
-Chromium; its visible focus state was inspected in light and dark at phone width. The axe check runs
-in both themes but does not assess the focus indicator's visibility.
+**The login card drops its logo, and a session-expired notice is drawn as an error (W103) — DONE
+(#1190); left open for the owner:** the error-styled notice keeps `role="status"` (read out
+politely, as the item asked), where the dashboard's other error text uses `role="alert"` (read out
+at once); switching it is a one-line change if wanted.
 
 **A table filter's "Any …" choice is drawn as a chosen value, not a hint (A193, owner
-2026-10-02) — DONE.** The owner, on a screenshot of the Modifiers screen's status filter: _"The Any
-Status shouldn't be a hint, it is a value that appears in the dropdown"_. `wt-data-table` gives
-each column filter's `wt-combobox` a first option `{ value: "", label: allLabel }` and also passes
-`allLabel` as its `placeholder`. The table now asks the combobox to display its offered empty-string
-option as a selected value. "Any status" and the other table-filter "Any …" choices use the ordinary
-value style. The Orders screen's staff filter uses it too, so its "Anyone" choice appears as a value.
-The standalone product editor uses the same combobox setting for "Uncategorised" and "No course";
-a variant's inherited values still read as hints. Picking a table filter's "Any …" choice removes
-that filter from the saved view and from the `wt-filter-change` detail map. Other non-table dropdowns
-offering an empty "Any …" or "No …" row were outside A193; their appearance needs a separate review.
+2026-10-02) — DONE (#1084); left open:** Other non-table dropdowns offering an empty "Any …" or
+"No …" row were outside A193; their appearance needs a separate review.
 
-**A table filter's dropdown keeps one width whatever is chosen (A194, owner 2026-10-02) — DONE.**
-Each table filter reserves room for its longest offered label, so choosing "Active" after "Any
-status" does not move the next toolbar control. The shared combobox applies this sizing only when
-the table requests it. The Chromium table test measures the width before and after choosing both a
-shorter and a longer value; the table and combobox suites passed. The rendered table was inspected
-at 390px and 1280px in light and dark themes. The owner has not confirmed whether one common width
-was intended for every filter; this uses one stable width per filter. A filter whose longest choice
-exceeds the available phone width fills its row, and that choice is cut short in the closed control.
+**A table filter's dropdown keeps one width whatever is chosen (A194, owner 2026-10-02) — DONE
+(#1085); left open:** The owner has not confirmed whether one common width was intended for every
+filter; this uses one stable width per filter. A filter whose longest choice exceeds the available
+phone width fills its row, and that choice is cut short in the closed control.
 
-**A dropdown with no search box keeps its blue focus line while its list is open (A256, owner
-2026-10-03) — DONE (#1137).** The owner, on a screenshot of the "Service style" dropdown open:
-_"when a combobox doesn't show a search bar, then leave the blue underline of the field active"_.
-`wt-combobox` now marks its field `data-search` when the list has a search box. While a list
-without one is open, the combobox's own styles keep the field's blue line and blue label; a list
-with a search box still drops them, since the search box's border marks focus. An invalid field
-keeps its red line and a disabled one draws neither. The light theme was inspected by the
-implementer; the dark theme and phone width only by the Codex review seat's screenshots.
-
-**Move the dropdown's open-list field styling out of the shared field styles (A257, owner
-2026-10-03) — DONE.** The shared focus rule is plain `:focus-within`; `wt-combobox` owns both
-open-list focus treatments. The combobox's searchable, searchless, invalid and disabled open-list
-checks remain unchanged.
-
-**A table's pinned Actions column keeps one narrow width (A195, owner 2026-10-02) — DONE.**
-`wt-data-table` gives its `actions` column only the space its heading or cell content needs; other
-columns take the spare width. The one-row Chromium test measures the column with both “Actions” and
-“Acciones”, and the table and accessibility suites passed. Rendered one-row tables were inspected
-at 1280px and 390px, in English and Spanish labels and both themes. A198's options list form uses
-its own table (`apps/dashboard/src/widgets/option-list-form.ts:580`), so it cannot reuse the shared
-component's column rule.
-
-**Every pinned last column keeps a content width (A235, owner 2026-10-03) — DONE.**
-The Content languages screen's `open` column uses `pinned: "end"`
-(`apps/dashboard/src/screens/content-languages-screen.ts:457`). The shared table now sizes it by its
-heading or link, as it does for `actions`. The Chromium table test measures an English Open link
-at 1000px and a Spanish Abrir link at 390px. The shared table and the Content languages screen
-were visually inspected at desktop and phone widths in both themes; the screen showed a translation gap.
-
-**A collapsible section's chevron sits just after its heading (A196, owner 2026-10-02) — DONE.**
-The owner, on the "Edit options list" form: _"the chevron (currently far right) should be just to
-the right of the header, at the moment you don't see it"_. The shared `wt-disclosure` now puts it
-directly after the heading text, including in the extras list form, product editor and content
-languages screen. The focused Chromium test covers the position at desktop and phone widths.
-
-**Chevron sizing across the interface (W60) — DONE.** The shared dropdown icon has a wider drawing;
-disclosures, dropdown fields, dashboard groups, table trees and menu trees give their chevrons more
-room without enlarging other icons or changing touch targets.
-
-**Clicking an option's row on the options list form opens that option (A197, owner 2026-10-02) —
-DONE.** The owner: _"clicking on the options rows should open the edit page, like the previous
-screen"_ — the Modifiers screen's table, where a click anywhere on a row opens it (`wt-data-table`'s
-row activation). The options list form (`apps/dashboard/src/widgets/option-list-form.ts`) draws its
-own `<table>`. Since A170 a click on an option's name, which is a button, opens it as its row menu's
-Edit does. A click elsewhere on the row, or Enter on the row, opens the option's edit form too,
-while the drag handle, the Default radio and the row menu keep doing their own thing. The extras
-list form (`extra-list-form.ts`) draws the same kind of table, but its rows have no editor.
+**A table's pinned Actions column keeps one narrow width (A195, owner 2026-10-02) — DONE (#1086).**
 
 **Clicking an Extras or Options list's row opens its editor, in the product editor and on the
-Modifiers page (W71, owner 2026-10-04) — DONE (#1192; W71f #1198; W71g #1208; W71h #1211).** In the product editor's Modifiers table
-(`apps/dashboard/src/widgets/product-editor.ts`) a click on a list's name or the empty part of its
-row, or Enter or Space on it, does what Edit in the row's menu does (`wt-edit-related`), through a
-row-sized button named "Edit: <list> · <kind>", built as the variants table's is; the drag handle,
-the row menu and Remove keep their own clicks, and a typed name and price, and the attached lists,
-stay through an Options list editor's Cancel and save (`catalogue-screen.test.ts`), after which focus goes back to the row's
-button, or to its menu when the menu's Edit opened the list. On the Modifiers page an Extras row
-now opens like an Options row, with Used by opening only its popup. Left as it was: the focus ring
-of a row's button shows only along the row's top edge, in both tables, as on the shared table.
-Its review's open question, the product editor's unit form and Courses window, was settled by W71f:
-`catalogue-screen.test.ts` now checks that focus goes back to Add unit after the unit form's Cancel
-and Escape, to the price's unit button after its save, and to the course box after the Courses
-window's Done and Escape, each with focus first put somewhere else so only the screen's hand-back
-can reach the target; the unit form's Cancel and Escape cases also check that the chooser is still
-open and Add unit is still there, so lost focus cannot pass as a match between two empty results.
-The unit form's Cancel and Escape cases failed — Add unit was still drawn disabled when the
-hand-back ran, and after Escape focus was lost even when Add unit was opened with a real click — so
-`#returnChildFocus` now waits for the unit form as it does for the list forms. The Courses window
-passed unchanged; with its hand-back removed only the new cases failed, as opening it from the
-course box puts focus on the box first. From W71f's review: (1)
-`docs/developers/design-system.md` (the `wt-modal` paragraph) said the native dialog "returns focus
-to its trigger on close", while the W71f test comments and `product-editor.ts` rely on it going back
-to whatever had focus when the dialog opened; the line dated from #319 (2026-09-11, `git blame`).
-Settled by W71g (owner 2026-10-05: keep the browser's rule, add an optional opener and a fallback;
-#1208): browser tests in `packages/ui/src/components/wt-dialog.test.ts` show that in Chromium focus
-goes back to whatever had it when the dialog opened. When the browser would leave focus on the page
-body or inside the closed dialog, `wt-dialog` (and `wt-modal`) now moves it to its new `opener`
-property if set and able to take focus, otherwise to the first element with tabindex 0 or above that
-is not disabled inside the closest enclosing element that holds one, or that enclosing element
-itself, then further out; when none takes focus, focus stays where the browser left it. It does so
-before sending `wt-close`, so a screen that hands focus back itself still has the last word.
-design-system.md says this. The Printers screen sets `opener` on its Add agent dialog to the tab's
-Add button and drops its own `#refocusAdd`; its edit-printer dialog (the calibration wizard since
-#1227) gets that button as `opener` only where it is on the page, when the wizard follows an add
-from the list, and opened from a printer's details page has none, so the fallback search applies. No
-other screen changed; screens that hand focus back themselves are listed in #1208. Settled by W71h,
-from the same review: (2) W71f's unit-form wait in `#returnChildFocus` worked only because the
-product editor happened to finish redrawing Add unit as enabled in the meantime (seen in Codex's
-timing log). The editor's `returnRelatedFocus` focuses the Add control, or an attached list's row
-button or menu, at once; when it is still drawn disabled, it waits for the editor's next update and
-focuses it then, unless focus has moved meanwhile (`focusOnceEnabled`,
-`apps/dashboard/src/widgets/product-editor.ts`). In `catalogue-screen.test.ts`, with the editor's
-update held back, the unit form's Cancel and Escape and an options list's Cancel and Escape opened
-from an attached row; in `product-editor.test.ts`, with the hand-back called before the editor's
-pending update has run, the Modifiers control, an attached row's button, and focus moved to another
-field during the wait — each failed with its part of the fix removed. The course box is still
-focused once with no wait, because the editor never draws it disabled.
-
-**A click on a switch's knob, track, gap or label flips it once (W76, owner 2026-10-04) — DONE (#1218).** The
-owner, on the Extras editor: _"make the toggle field work when you click anywhere on it, not just on
-one side or the other"_. In the shared `packages/ui/src/components/wt-switch.ts` a click on the round
-knob, in the gap between the switch and its label, or just above the label did nothing before:
-the knob is drawn over the hidden checkbox, and the gap belonged to no part. The switch and its label
-now sit in one inner area that hands such a click to the checkbox, so it flips once, sends one
-`wt-change`, and a listener above the switch in the bubbling phase sees one click. A switch stretched
-wider than its label by its container (the Extras editor's Active is 576 px wide at desktop, its
-label ends about 100 px in) does not flip from the empty space past the label. Space, the focus ring
-and the accessible name are unchanged. A disabled switch still does not flip, and a click on it
-still reaches the page; it now shows the not-allowed cursor over its knob, gap and label, where its
-label showed a pointer before. Tests: real Chromium clicks in
-`packages/ui/src/components/wt-switch.test.ts`; the Extras editor's Active and Preselected were
-clicked the same way at 1280 and 390 px wide in both themes by a probe that was not kept.
+Modifiers page (W71, owner 2026-10-04) — DONE (#1192; W71f #1198; W71g #1208; W71h #1211); left
+open:** Left as it was: the focus ring of a row's button shows only along the row's top edge, in
+both tables, as on the shared table.
 
 **The Extras editor shows Portion beside Price, and a fixed 1 for a product sold by the unit
-(W75, owner 2026-10-04) — DONE (#1194).** In `apps/dashboard/src/widgets/extra-list-form.ts` Portion is a
-column of its own between Preselected and Price, there even when every item is sold by the unit,
-and its heading carries the required star while any row asks for a portion. A product sold by the
-unit is told apart by its unit's id, `EACH_UNIT_ID` (moved to the browser-safe
-`packages/catalogue/src/unit-validation.ts`), not by its decimals: its cell shows a plain 1, the form
-sends no portion for it, so the server stores one, and its inherited price is the unit price
-whatever portion an earlier unit left saved. Every other unit — kg, g, ml, a venue's own — shows an
-editable, required Portion as soon as the product is added, before any save, which ended the owner's
-"Portion appears only after reopening". A row switches between the two when its product's unit
-changes. The drag handle now sits on the first line of the product's name rather than the middle of
-a tall row. Open: the Price heading reads "Price per portion" also over a row sold by the unit.
-Left OPEN from its review, for the owner to decide: (1) the Products list decided "Each" by whether
-the product's unit is in the venue's saved unit list, the Extras editor by the unit's id, so the two
-could disagree (for example before the unit list had loaded) — DONE by W75a (#1205): the Products list now
-uses `EACH_UNIT_ID` too, so a measured product shows its "/ kg" label even before the unit list
-loads. Still open from it: the list's `units` property is no longer read, though the Catalogue
-screen still passes it down through `apps/dashboard/src/widgets/catalogue-browser.ts` and existing
-tests set and assert it, so removing it changes existing tests. And neither screen counts a stored
-unit seeded as `each` as Each, which `isEachUnit` (`packages/catalogue/src/units.ts`) does; no code
-outside tests seeds one. (2) the handle-on-the-first-line alignment applied to the Extras list only — DONE by W75b, below; (3) the editor refuses a blank Portion for every unit
-but Each while the server accepts none for a whole unit with no scale link (ml) and stores 1 — DONE
-by W75c, below.
-
-**Every reorderable table puts its drag handle on the first line of a tall row (W75b, owner
-2026-10-04) — DONE (#1201).** The shared reorder table styles (`packages/ui/src/reorder-table.ts`) now line
-body cells up by the baseline, so the handle sits on the first line of the plain text beside it,
-such as a long, wrapping name, instead of the row's middle; the Extras editor's own rule for this went. The
-Product editor's Modifiers table, the variant table, the Courses list and the option list form start
-their cells at the top and push the text down to the middle of a tap-target-tall first line, so on a
-one-line row the text and the controls still share one centre line (tested for the Product editor
-and the option list form only). The option list form moved off the baseline because its existing
-one-line test failed on CI's Linux Chromium, measuring the radio 1.5 px from the name where the test
-allows 1 px. The Product editor, variant table, Courses list, option list form, section member list,
-Extras editor and Prep stations screen each have a test with a wrapping name. The option list form
-and the section member list had their own centring rules: the section member list's is removed, and
-the option list form's is replaced by the top alignment. See `docs/developers/design-system.md`,
-tables.
-
-**The server refuses a new Extras item with no Portion for every unit but Each (W75c, owner
-2026-10-04) — DONE (#1204).** `assertPortionPrecision` (`packages/catalogue/src/extras.ts`) used to refuse a
-missing portion only for an item sent with no id whose unit had decimals or a scale link. So an item
-sent with an id, whatever its unit, and an item sent with no id for ml or a venue's own whole unit,
-were saved with no portion and stored as 1. It now refuses a new item with no portion as
-`extras.invalid` naming `items.<n>.portion`, unless the product is Each: it has no stored unit, or
-its stored unit was seeded as `each`. An item is new when it is sent with no id, with an id the list
-does not hold (the dashboard's Extras editor gives every row it adds an id of its own), or with an id
-the list holds for a different product. An Each item still takes none and stores 1. An id that
-belongs to another list is refused on `items.<n>.id` before the portion check runs, so it keeps that
-refusal. Tests in `packages/catalogue/src/extras.test.ts` cover the seeded ml unit, a venue's own
-whole unit, both kinds of Each, items sent with an id the list does not hold, on create and on
-update, and an id the list holds sent with a different product. An item sent with an id the list
-holds for the same product and no portion is still accepted; a test holds that it is accepted, not
-what portion it then has. An item sent with a portion is checked as before. Two catalogue test files
-whose lists offered products on a venue's own whole unit now send a portion of 1.
-Left OPEN, found while building it and not in its scope: an item the list already holds that is sent
-again under its id, for the same product and WITHOUT a portion, loses its saved one. Tried with a
-throwaway test: a kg item saved at `0.050`, then `updateExtraList` with `{ id, productId }` and no
-portion, read back `1.000`, because `assertPortionPrecision` does not refuse such an item and
-`writeItems` re-inserts every item with `item.portion ?? "1"`; tried again on 2026-10-05 after the
-different-product change, with an ml item saved at `30`, read back `1.000`. The dashboard's Extras
-editor was not checked for whether it always resends the saved portion. Next step, if the owner
-wants it: refuse such an item when its product is not Each, or keep the portion saved under that id,
-which is for the same product. _2026-10-05: the owner chose to keep it; done by W75d, below._
-
-**A held Extras item sent without a portion keeps its saved portion (W75d, owner 2026-10-05) — DONE
-(#1221).** The owner chose "Keep saved portion" for W75c's open point. `itemPortions`
-(`packages/catalogue/src/extras.ts`, which replaces `assertPortionPrecision`) now decides the portion
-each item stores: an item sent without one stores one when its product is Each, keeps the portion
-saved under its id when the list holds that id for the same product, and is refused as before when
-it is new. Each is checked first, so an item saved at `0.050` whose product has since become Each
-stores one, as the Extras editor intends when it sends no portion for an Each product. A portion sent
-explicitly still replaces the saved one, and an explicit `null` is still refused on
-`items.<n>.portion` (by `parseExtraListInput`), leaving the saved portion in place. Tests in
-`packages/catalogue/src/extras.test.ts`: a held kg item at `0.050` and a held ml item at `30`, the
-second also moved to another position, keep theirs; an explicit portion replaces; an explicit null
-is refused; a held Each item stays at one; and the item whose product became Each. The dashboard's
-Extras editor already sent the saved portion back: a throwaway case in its browser suite resaved a
-list with only its name changed and it sent `30.000` for a saved ml item and `0.050` for a saved kg
-item, and no portion for an Each item. So the lost portion was reachable through the API, not
-through the editor.
-Left OPEN, not in its scope: a held item whose product has since become Each, sent back WITH its old
-portion, is still accepted and keeps it, because a portion equal to the saved one is let through
-before the Each check in `itemPortions` — as it was before #1221. Tried 2026-10-05 on main 884600660
-with a throwaway test: a kg item saved at `0.050`, its product's unit cleared, then
-`updateExtraList` with `{ id, productId, portion: "0.050" }` was not refused and read back `0.050`.
-The Extras editor sends no portion for an Each product, so this is reachable through the API only.
-_2026-10-05: SETTLED by W75e (#1226; owner chose to refuse it)._ `itemPortions` now judges an Each product
-before the equal-to-saved shortcut, deciding Each with `isEachUnit` (`packages/catalogue/src/units.ts`):
-such an item sent with any portion but one is refused on `items.<n>.portion` with `extras.invalid`
-and nothing is saved, while the same item sent without a portion, or with `1.000`, stores one. Tests
-in `packages/catalogue/src/extras.test.ts`.
+(W75, owner 2026-10-04) — DONE (#1194; W75a #1205; W75b #1201; W75c #1204; W75d #1221; W75e #1226);
+left open:** The Price heading reads "Price per portion" also over a row sold by the unit.
+Still open from its review: the Products list's `units` property is no longer read, though the
+Catalogue screen still passes it down through `apps/dashboard/src/widgets/catalogue-browser.ts` and
+existing tests set and assert it, so removing it changes existing tests. And neither screen counts a
+stored unit seeded as `each` as Each, which `isEachUnit` (`packages/catalogue/src/units.ts`) does;
+no code outside tests seeds one.
 
 **A folded Customer-facing names section shows every language's name, inherited ones in italic
-(W77, owner 2026-10-04) — DONE (#1197).** The owner, on an Extras list: _"missing the summary of the values
-(even though they're inherited, not filled in currently)"_. The closed line of the Extras and
-Options list forms' names sections now names every content language in order: its own name, or
-else, in italic, what the open field hints while empty — the default language's name, then the
-list's staff name (`effectiveNamesLine`, `apps/dashboard/src/widgets/form-fields.ts`). A language
-with nothing to fall back to (a new list with no name yet) is left out. Display only: blank fields
-stay blank and what is saved is unchanged.
-Audited: the only other folded section holding customer-facing names is the Product editor's
-Descriptors section, whose Name row says "None specified" for a blank language by A211's decision;
-left as it is (asked of the owner, 2026-10-04).
-A name stored under a regional code such as `en-GB`, which the server's API accepts, is read by
-the forms as the customer-facing resolver reads a request for that language's plain code (W77a,
-#1206, owner 2026-10-04 choosing the form reading it): the plain code first, then its regional ones
-(`languageText`, `apps/dashboard/src/widgets/form-fields.ts`). A till or receipt asking for `en-GB`
-reads `en-GB` before `en`, so a map holding both can show one name in the form and serve the
-other. Tested on the Extras and Options lists and the Product editor's Descriptors (fields,
-summary, description boxes); an option's label, a variant and a menu section reach the same helper
-through `optionalTextFields` but have no case of their own. Saving keeps an untouched language's
-non-blank regional keys; an edited language is saved under its plain code alone and its regional
-keys are dropped (`withLanguageText`), so after a non-empty edit every regional request for that
-language reads the text typed into the field. The Product editor's choice of which field a
-"translation required" refusal points at (`productEditorTranslationField`) reads regional keys
-too, as the server's check does. Still reading the plain code only: the unit form's names, the
-adjustment reasons' names (`packages/adjustments/src/dashboard/reasons-screen.ts`) and the image
-library's names (`packages/media/src/dashboard/image-library.ts`). Left from #1206's review, optional
-tidying: the Product editor keeps a private `text()` helper doing what `languageText` does, and
+(W77, owner 2026-10-04) — DONE (#1197; W77a #1206); left open:**
+The only other folded section holding customer-facing names is the Product editor's Descriptors
+section, whose Name row says "None specified" for a blank language by A211's decision; left as it
+is (asked of the owner, 2026-10-04).
+A name stored under a regional code such as `en-GB` is read by the forms as the plain code first,
+then its regional ones (`languageText`, `apps/dashboard/src/widgets/form-fields.ts`). A till or
+receipt asking for `en-GB` reads `en-GB` before `en`, so a map holding both can show one name in the
+form and serve the other. An option's label, a variant and a menu section reach the same helper
+through `optionalTextFields` but have no case of their own. Still reading the plain code only: the
+unit form's names, the adjustment reasons' names
+(`packages/adjustments/src/dashboard/reasons-screen.ts`) and the image library's names
+(`packages/media/src/dashboard/image-library.ts`). Left from #1206's review, optional tidying: the
+Product editor keeps a private `text()` helper doing what `languageText` does, and
 `product-list.ts` and `extra-list-form.ts` make the same `resolveContentText` call inline for unit
 names; folding them into the one helper was not part of W77a.
 
-**Clicking a product's row on the Products screen opens it (A205) — DONE in A208.**
-
-**The dashboard recovers by itself when the server comes back after a restart (A206, owner
-2026-10-02) — DONE (#1052).** Reproduced with the server serving the built dashboard itself, as the box does
-(the dev stack's page server answers `502` instead, so it never shows `connection.failed`): of 34
-screens open across a restart, 20 kept "This browser could not connect…" or "could not be loaded"
-after their data had come back. The live connection already re-reads every watched query when its
-stream returns; what was missing was telling the screen. `QueryController`
-(`packages/dashboard-kit/src/query-controller.ts`) now takes an optional fourth argument, called
-once every failed read it still watches has applied a value with no new failure reported meanwhile.
-Each screen that keeps a read error clears it there, or already did in its apply callback: a stored
-message only if it is still the one the failed read set, a yes/no flag always (Menus' flag is also
-set by the read in `#openMenuForm`, which a recovery clears too). Profile, Recipe, the two order
-dialogs and the catalogue's placement step, not among the 20, take the same callback. Screens whose
-first load stopped before starting its later reads (Products, Printers, Modifiers, Content
-languages, Approvals, Sales' business day) start them on recovery (Sales' business day: since lane
-A's W18, 2026-10-03, it also stays watched until it answers). Measured on the merged head
-(`41f138d45`) with a 20 s outage: all 34 screens recover, and 32 of 34 opened during the outage;
-measured only before the review's fixes: a 90 s outage recovers and an unsaved form edit is kept.
-Not covered — below, A224.
-
 **Dashboard reads have no time limit, and a save's lost-connection message can vanish when reads
-recover (A224, from A206's review, 2026-10-02) — DONE (lane A's W18, #1125; W18a, #1135; W18b, #1142).** Done: Payments'
-providers and readers, Cloud services' status and Profile's language list now load through the
-shared queries, so a screen opened while the server is down fills in once it is back. Payments asks
-for each reader's status again only when the set of active readers changes, after a change the
-operator made, or from its refresh button, because a status can ask the card provider. On Payments
-and Cloud services, a failed action's message stays when the reads recover, and Cloud services
-ignores a status read that started before a successful action's answer was shown and answered after
-it. Sales keeps watching the business-day read until it has answered, so it loads when only that
-read failed. Roster and Planned vs actual show the error, not their "no locations" prompt, when the
-locations read fails before it has ever answered. Since lane A's W18a, every dashboard `GET` made
-through `createRequest`, except a file download, gives up after 30 seconds (the owner's value,
-2026-10-03): `createRequest` (`packages/dashboard-kit/src/request.ts`) aborts it and it fails as
-`connection.failed`, so a read the server never finishes stops loading (since lane A's W18c,
-2026-10-03, such a read fails as `connection.timed_out`, "Waitron is taking too long to answer…",
-and a fetch that fails on its own still as `connection.failed`; and a reader's status and a
-provider's available readers wait up to 250 seconds, SumUp's pairing status read up to 50 seconds;
-see A255). A read the live data store keeps (`packages/dashboard-kit/src/live-data.ts`) is then
-read again like any other failed one: at once if something asked for it while it waited (the live
-connection, the query's timed refresh, or a save on the same screen), otherwise the next time one
-of those asks. A one-off read, such as opening the product editor, shows the error and is read
-again only when the person tries again.
-Writes have no limit. Since lane A's W18b, a save's or other action's failure is no longer lost
-when the reads recover on the screens that show a read's and an action's failure in one place: each
-remembers whether its message came from a read (the owner's choice, 2026-10-03); the reads' recovery
-clears only a read's message, and a read failing again during the outage no longer replaces an
-action's, except on Devices, where the queue reload after a wrong-number refusal still replaces that
-refusal; the replacing message is marked as a read's, so the reads' recovery clears it if a watched
-read also failed meanwhile, and otherwise it stays until the next action or until the screen is
-reopened (2026-10-05, W104: Devices no longer reloads the queue after a wrong number). An action that
-saves and then re-reads counts a failure after the save as the re-read's. The reload after a
-successful action no longer clears another action's failure on Floor, Service status, Canvases,
-Staff and Payments, and a read an action takes before its write, such as Products' restore, counts
-as a read's.
-Screens: Floor, Roster, Kitchen, Printing rules, Device profiles, Recipes, Purchases, Canvases,
-Approvals, Devices, Service status, Staff, Products, the courses list, Profile, the reprint dialog,
-Diagnostics, Units, Bookings and Prep stations; Payments and Cloud services already kept it, and the
-placement step keeps a save's failures in a list of their own. Prep stations used to clear any
-message on every successful read; an action's message there now stays until the person acts or
-edits again.
-Left as it was (#1142's run-it review, which found the same on `main`): on Device profiles, a
-failed one-off reload's message can stay after fresh data arrives.
+recover (A224, from A206's review, 2026-10-02) — DONE (lane A's W18, #1125; W18a, #1135; W18b, #1142);
+left open:** Left as it was (#1142's run-it review, which found the same on `main`): on
+Device profiles, a failed one-off reload's message can stay after fresh data arrives.
 
 **A dashboard read that waits on an outside service can be cut off at 30 seconds and reported as a
-broken connection (A255, from lane A's W18a, #1135, 2026-10-03) — DONE (#1145, lane A's W18c).** Two
-dashboard reads wait on a card provider, and each now passes its own limit to `createRequest`
-(`packages/dashboard-kit/src/request.ts`, the `timeLimitMs` option). A reader's status
-(`GET /management-api/payments/readers/:id/status`) and the provider's available readers
-(`GET /management-api/payments/providers/:id/available-readers`) wait up to 250 seconds
-(`apps/dashboard/src/api/client.ts`). Stripe gives up on an attempt after 80 seconds of silence
-once connected and tries three times (stated in `defaultMakeStripe`,
-`packages/payments-stripe/src/card-provider.ts`). Its timer is `req.setTimeout` (stripe 22.6.2,
-`esm/net/NodeHttpClient.js`, line 44), and Node starts a socket's timeout only once it has
-connected (measured on Node v26.7.0: a request to an address that never answered, with a 100 ms
-timeout, had not timed out after 1.5 seconds; the control, connected to a silent server, timed out
-at 104 ms). Stripe's pauses between retries add at most about 1.5 seconds (`_getSleepTimeInMS`,
-`esm/RequestSender.js`, lines 218 to 230: half a second, then one second, each randomised to
-between half and all of that, never under half a second), so three attempts that go silent once
-connected take at most about 241.5 seconds. A provider that keeps sending data slowly, or a
-connection that is slow to open, can take longer, since Stripe's limit is on silence, not on the
-whole answer (measured by the run-it review with stripe 22.6.2: with an 80 ms timeout, a body
-trickled in over 327 ms arrived complete). The SumUp pairing dialog's status read waits up to 50
-seconds (`packages/payments-sumup/src/dashboard/client.ts`), above SumUp's two 20-second calls
-(`packages/payments-sumup/src/sumup-client.ts`, line 85). Every other read keeps 30 seconds. A
-read that runs out of time now fails as `connection.timed_out` ("Waitron is taking too long to
-answer. Try again in a moment."; the reader-status surfaces show it since W46, A259), and a fetch that fails on its own still as `connection.failed`; a timed-out read the live
-data store keeps is read again as before. The other reads this entry named do not wait on an outside
-service, read in the code and not run: the Cloud status and backup status reads and the bucket
-settings read look only at local files and the database, and the Cloud network calls belong to
-actions, which have no limit. The test-email reads (`GET /management-api/email` and
-`GET /management-api/email/message/:id`, `apps/server/src/email-inbox-api.ts`, lines 41 and 52) ask
-Mailpit over HTTP with no limit of their own (`apps/server/src/mailpit-client.ts`), but Mailpit is a
-container on the box itself (`deploy/compose.yml`, the `mailpit` service), not an outside service,
-so they keep 30 seconds. The alerts list now asks the card provider outside its transaction
-(A258). The Payments screen asks at most two readers for their status across
-same-origin tabs when Web Locks grants requests, and at most two per tab when it does not (A260).
+broken connection (A255, from lane A's W18a, #1135, 2026-10-03) — DONE (#1145, lane A's W18c).** A
+reader's status and the provider's available readers wait up to 250 seconds. Stripe gives up on an
+attempt after 80 seconds of silence once connected and tries three times (stated in
+`defaultMakeStripe`, `packages/payments-stripe/src/card-provider.ts`). A provider that keeps sending
+data slowly, or a connection that is slow to open, can take longer, since Stripe's limit is on
+silence, not on the whole answer.
 
-**A low SumUp reader battery now reaches the alerts list (A258 — DONE).**
-`GET /management-api/alerts` reads the session, incidents and database-only sources in its
-transaction, then calls the battery source after that transaction closes. The SumUp provider can
-read its sealed key in its own transaction before asking the provider. The route test
-`apps/server/src/alerts-api.test.ts` seeds a real sealed SumUp credential and a reader, then checks
-that a 5% provider response produces `reader.battery_low`. Its red run returned
-`alert.source_unavailable`; its green run returned the low-battery alert. The battery source still
-uses its five-minute cache, covered by `apps/server/src/alert-sources.test.ts`.
-
-**The alerts list's battery check has its own deadline (A258 follow-up — DONE, W58).**
-The server gives the battery source 45 seconds: SumUp's status path makes two HTTP requests in
-turn, each with a 20-second limit (`packages/payments-sumup/src/card-provider.ts` and
-`packages/payments-sumup/src/sumup-client.ts`), while Stripe's retries can run much longer
-(`packages/payments-stripe/src/card-provider.ts`). A stalled source produces one
-`alert.source_unavailable` for card readers while the other alerts still arrive. The browser
-allows 55 seconds for `listAlerts`, leaving time for the server's bounded check and the rest of
-the response. The held-provider route case in `apps/server/src/alerts-api.test.ts` checks the
-response; the browser cases in
-`apps/dashboard/src/api/client.test.ts` check both sides of its limit. A provider call that
-ignores cancellation may continue after the server has answered; the source's five-minute cache
-shares that in-flight call with reads during its lifetime.
-
-**A slow reader no longer hides another reader's battery warning (W91 — DONE).**
-Each reader has its own result under the source's 45-second deadline. A failed or timed-out check
-names that reader in `reader.status_unavailable`; a prompt low-battery result remains visible beside
-it. When every reader check is unavailable, the card-reader area also retains its existing
-`alert.source_unavailable` alert. The route and source tests cover a held reader beside a 5% reader,
-a throwing reader beside a 5% reader, and the unchanged all-prompt result.
-
-**A timed-out card-reader status read now says so without ending pairing (A259, found by W18c's
-run-it review, 2026-10-03) — DONE (W46).** The SumUp pairing dialog keeps its created reader and
-polls again after `connection.timed_out`, showing the shared timeout wording; a different status
-refusal still ends pairing and unpairs it. The Payments reader row and details show the timeout
-wording while other failures keep their existing unknown-status and no-details text. The red-first
-browser cases in `packages/payments-sumup/src/dashboard/sumup-add-reader.test.ts` and
-`apps/dashboard/src/screens/payments-screen.test.ts` separate those paths. Repeated timeouts keep
-polling even after the pairing code's five-minute window because the reader may already have paired;
-the countdown disappears at zero, and only a known paired or processing status can finish or expire
-the attempt. A cancelled dialog still follows its existing orphan-cleanup path.
+**The alerts list's battery check has its own deadline (A258 follow-up — DONE, W58, #1176).** A
+provider call that ignores cancellation may continue after the server has answered; the source's
+five-minute cache shares that in-flight call with reads during its lifetime.
 
 **Several card readers' status reads at once can use up the browser's connections to the box
-(A260, found by W18c's review, 2026-10-03) — DONE (W18c #1145 and W48).** The readers table
-holds at most two status reads across same-origin documents when Web Locks grants requests, with the
-original per-tab two-place limit when the API is unavailable or refuses a request (`takeStatusSlot`,
-`apps/dashboard/src/screens/payments-screen.ts`). In real Chromium, the W48 test held reads in two
-same-origin documents: four started before W48 and two after; removing a document while its reads
-were pending freed both places for the other document. When one document holds both places on a
-silent provider, another document cannot start a reader status request until one finishes or its
-250-second client limit expires (`CARD_PROVIDER_READ_LIMIT_MS`, `apps/dashboard/src/api/client.ts`).
-The W48 test does not measure a real silent provider or the box's HTTP/1.1 connection limit. A
-load a refresh has replaced, and a closed screen's reads still waiting for a slot, give up through
-the status version number
-(`disconnectedCallback` bumps it); a new load on a closed screen (an action that finishes after it
-closed) is stopped by the `isConnected` check in `#loadStatuses`. Before W48 each tab had its own two,
-and W18c's review measured three tabs of the real screen in headless Chromium against held HTTP/1.1
-responses: six status requests reached the server, and an unrelated read was still unanswered after
-3000 ms until one status request was released. The SumUp pairing dialog's status reads (`#pollTick`
-and `#unpairOrphan`, `packages/payments-sumup/src/dashboard/sumup-add-reader.ts`) are outside the
-limit, other screens' reads are not limited, and it was not measured in a real browser against a
-real silent provider. Guard: the "readers' status reads" cases in
-`apps/dashboard/src/screens/payments-screen.test.ts`; at least one of them failed under each of five
-changes tried one at a time: the limit raised to 99, the replaced-load check removed, the
-closed-screen version bump removed, the slot never given back, and the `isConnected` check removed.
-All five were re-run on the final code on 2026-10-03
-(`pnpm --filter @waitron/dashboard exec vitest run src/screens/payments-screen.test.ts -t "status reads"`;
-unchanged, 6 passed). What it was: with five or more active card
-readers and a stalled provider, the Payments screen's status reads (one per active reader, all at
-once, `#loadStatuses` in `apps/dashboard/src/screens/payments-screen.ts`) can hold every connection
-the browser allows to the box for up to 250 seconds, so other dashboard requests wait behind them.
-Measured 2026-10-03 in headless Chromium against a local HTTP/1.1 server: with five requests
-hanging a sixth answered in 3 ms; with six hanging it had not answered after 3 seconds. The box
-serves HTTPS through `node:https` (`apps/server/src/tls.ts`), which is HTTP/1.1, and the
-dashboard's live connection (an EventSource) already holds one connection. Raised in W18c's pull
-request (`fix/slow-read-limit`).
-
-**Payments reader-status tests counted calls before the Web Lock grant (W59, 2026-10-04) — DONE.**
-The dashboard shard failed twice with one call where a test expected two: PR #1165 CI
-`37186851640` at `payments-screen.test.ts:2008`, then main CI `37188446283` attempt 1 at
-the reordered-readers case. `takeStatusSlot` awaits `navigator.locks.request` before calling
-`readerStatus` (`apps/dashboard/src/screens/payments-screen.ts`), while the test's `mount` helper
-waits a fixed 10 ms. The tests now wait for the expected call count before checking that later
-refreshes add no calls; the exact count and call-order assertions remain. The failure did not
-recur locally: on this machine the parent of #1166 and main each passed 12 focused Chromium runs,
-and main passed eight full Payments-file runs before W59; the changed file passed one full run and
-12 focused runs. Those passes do not measure the CI race's frequency.
+(A260, found by W18c's review, 2026-10-03) — DONE (W18c #1145 and W48 #1162); left open:** The W48
+test does not measure a real silent provider or the box's HTTP/1.1 connection limit. The SumUp
+pairing dialog's status reads (`#pollTick` and `#unpairOrphan`,
+`packages/payments-sumup/src/dashboard/sumup-add-reader.ts`) are outside the limit, other screens'
+reads are not limited, and it was not measured in a real browser against a real silent provider.
 
 **Empty-state text shows beside a failed read on Payments and Cloud services (A252, seen 2026-10-03
 while checking lane A's W18) — OPEN.** While its read is failing, Payments still says "No card
 readers yet." under an empty table, and Cloud services says "Checking Cloud connection…" under the
 failure message; the same on `main` before W18. It is the kind of empty-state text W18 removed from
 Roster and Planned vs actual.
-
-**The WAITRON wordmark is nearly invisible in the dashboard's banner in dark mode (A225, seen
-2026-10-02 while checking A206) — DONE (#1128).** The dark lettering of the lockup sat on the dark banner.
-The owner chose to keep the banner's `<img>` and let the browser swap in a dark-theme file by the
-computer's dark-mode setting: the banner is now a `<picture>` whose dark source is
-`packages/ui/brand/waitron-lockup-dark.svg`, written by `build-icons.mjs`. The login card and setup
-wizard were already readable; they paint their inline logo with the tokens. _2026-10-04 (W103): the
-login card no longer draws a logo._
 
 **The dark logo's colours are copies of the dark theme's (A253, 2026-10-03, from A225) — OPEN.**
 `waitron-lockup-dark.svg` is shown through an `<img>`, which cannot read CSS variables, so it carries
@@ -1602,71 +880,17 @@ text and takes the dark values from the `@media (prefers-color-scheme: dark)` bl
 **Next action:** have `build-icons.mjs` read the two dark values from `colors.css` when it runs, so
 there is no copy to keep in step.
 
-**The Products screen as a category tree (A208) — DONE.** Spec
+**The Products screen as a category tree (A208) — DONE (#1064).** Spec
 [2026-10-02-products-category-tree-design.md](superpowers/specs/2026-10-02-products-category-tree-design.md);
 plan [2026-10-02-products-category-tree.md](superpowers/plans/2026-10-02-products-category-tree.md).
-The tree's folder icons use the larger shared icon size on the root, category, new-category and drag-preview rows (W61).
 
-**Deleting a category warns about exactly what will go (W74, owner 2026-10-04) — DONE (#1196).** The owner
-deleted an empty "Mains", one of three top-level categories with that name, and was warned about
-another Mains's product. A reproduction on a running stack found the server always counted and
-deleted the right category; the dashboard was at fault. Fixed:
-- Choosing Delete in a category's row menu now closes the menu, as Rename and Move already did.
-  It stayed open, and once the empty category was deleted and the list redrawn, the open menu
-  belonged to the next category, so a second click deleted or summarised that one.
-- `wt-data-table` keeps each row's page elements with that row's data when rows are added, removed
-  or reordered, in the plain table and the tree, so an open menu stays with its row — where each
-  row's `rowKey` is unique to it. Rows that share a key are still all drawn, and are told apart by
-  which occurrence of the key they are (`repeatKeys`), so a row added ahead with the same key takes
-  over the elements of the row it displaces. A table that sets no `rowKey` keys rows by their
-  position.
-- The "Delete it too" choice counts only active products (a new `activeProducts` in each
-  category's summary); a deactivated product is already out of the list, unless the Status filter
-  is set to show inactive products, and only moves up.
-  Whether a category is deleted at once without the dialog is unchanged, so one holding only
-  deactivated products still asks.
-- The dialog lists each category it will delete by its full path, with "(2 of 3)" where several
-  share a path, in the order the list draws them.
-- Pressing Delete in the dialog reads the categories' contents again; if the numbers of
-  subcategories, active products or routing rules differ from those shown (`#unchanged` in
-  `apps/dashboard/src/widgets/catalogue-browser.ts`), nothing is deleted and the dialog shows the
-  new counts with a message saying so.
-- The server now makes the same comparison inside the delete's own transaction, before anything is
-  written (W74a, #1217). The dashboard sends the counts it read before deleting (the ones its dialog
-  showed, when it asked) with every delete that names a category, and when they no longer match the
-  server deletes nothing and refuses with `category.contents_changed` (409); the dashboard then
-  reads the contents again and shows the new counts with the refusal's own message. Before this, a
-  change between the dashboard's second read and the delete was not seen.
-- Choosing Edit or Delete in a product's row menu, or Edit, Remove or Restore in a variant's, now
-  closes the menu too (W74b, #1219). Those items stopped the click as the category Delete had, so
-  the menu stayed open after each of them. Tested in the list itself, which sends exactly one
-  request per choice; not tested through the whole Products screen that handles the requests.
-- The routing-rules warning counts only the rules the chosen option removes (W74c, #1220). Reproduced
-  first in `apps/server/src/catalogue-api.full-manifest.test.ts`: with one rule on a category and
-  two on its subcategory, the summary reported 3 and moving the contents up removed 1, the
-  subcategory keeping both of its own. Each category's summary now also reports `ownRoutes`, the
-  rules naming the category itself (`summariseFolders`, `packages/catalogue/src/catalogue-items.ts`).
-  Under "Move it up to the parent category" the dialog warns of the selected categories' own rules,
-  summed over every selected one; under "Delete it too", of every rule in the deleted subtrees, as
-  before. The delete sends `ownRoutes` with the other counts it showed, and the dashboard's second
-  read at Delete and the server both treat a change to it like a change to the others.
-- The Printers screen's discovered-device rows no longer share a key (W74d, #1242). Reproduced in a
-  browser test: with two agents reporting one network printer, both rows carried one key, and when
-  a later scan read dropped the first agent's report, the table handed that agent's drawn row to
-  the second agent and removed the second agent's own row. The discovered table's row key now
-  names the reporting agent too. The rows stay one per agent, and Add still registers a network
-  printer once by its address: "registers a network printer two agents see once, and offers Add on
-  neither agent's row afterwards", beside "keeps one agent's row for a printer two agents see when
-  the other agent's report drops" in `apps/dashboard/src/screens/printers-screen.test.ts`. Left as
-  it was: the `data-test` names inside each row (`discovered-row-`, `register-`, `pair-`,
-  `forget-device-` and the rest) use the device alone, so a lookup by name finds the first row
-  drawn for that device.
-- Under "Delete it too" the routing-rules warning says the rules name "these categories or ones
-  inside them" (Spanish: "estas categorías o las que hay dentro de ellas"), since its count
-  includes rules on subcategories the dialog does not list (W74e, #1224). Under "Move it up to the parent
-  category" it keeps "name these categories", which is what that count is.
+**Deleting a category warns about exactly what will go (W74, owner 2026-10-04) — DONE (#1196; W74a #1217;
+W74b #1219; W74c #1220; W74d #1242; W74e #1224).**
 
 Still open from W74:
+- **The Printers screen's discovered-device rows' `data-test` names use the device alone** (W74d,
+  #1242, left as it was): `discovered-row-`, `register-`, `pair-`, `forget-device-` and the rest,
+  so a lookup by name finds the first row drawn for that device.
 - **An empty category's no-dialog delete does not see an inactive product added meanwhile**
   (raised in #1217's review, not reproduced in a test): an empty category is deleted without the
   dialog, and the server compares active products only, so one that gains only an inactive product
@@ -1679,76 +903,12 @@ Still open from W74:
   not traced further). _2026-10-05: W70a (#1265) changes compact height only; this standard
   dialog retains its height._
 
-**The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE.** The
-owner, on two screenshots of the same three options, the Name column starting far to the right
-until one name is long enough to push it left: _"the drag handle column shouldn't auto-expand, so
-the Name column would start just to the left of it"_ (read as: just to the right of the handle).
-The form's table had no column widths, so the browser shared the spare width among the handle,
-Default and menu columns. **Wanted:** the handle, Default and menu columns as narrow as their
-controls, and Name taking the rest. The options list now gives spare width to Name; the extras list
-keeps its grip, Preselected and remove columns at their content widths. Chromium checks cover both
-languages at phone and desktop widths. A195 asked the same of `wt-data-table`'s Actions column; it is
-done too (above).
+**The options list form's drag-handle column stays narrow (A198, owner 2026-10-02) — DONE (#1066).**
 
 **Empty extras and options tables keep their Preselected and Default headings readable (A262, owner
-2026-10-03) — DONE (W49).** The headings stay on one line with no rows in English and Spanish.
-The extras heading extends into the preceding column's spare space while its switch column stays
-narrow; the options heading does the same with Name while the Default radio column stays narrow.
-Chromium cases cover empty tables
-at 1280px and 390px in both languages.
+2026-10-03) — DONE (W49, #1165).**
 
-**The number field with − and + is still too wide (A263, owner 2026-10-03) — DONE (#1151). (The owner chose
-option C: 24px plain − and + either side of a centred number, and clearable Minimum and Maximum
-choices that show the placeholder "None" while empty; a maximum of 0 is refused by the form and the
-request check, and the database CHECK is unchanged.)**
-The owner, on a screenshot of the extras list editor after A202: _"i'm not sure about the
-number fields with the +- buttons, they're very wide"_. Each button was `--wt-tap-min` (44px) wide,
-so 88px of every box was buttons; the box was at least `--wt-stepper-field-width` (152px), or
-`--wt-stepper-field-width-wide` (184px) when its blank value showed words such as "No limit", and a
-longer label such as "Minimum choices" widened it further
-(`packages/ui-core/src/tokens/structure.css`, `packages/ui/src/components/wt-number-stepper.ts`).
-The next step, the owner's choice, was a brainstorm drawing narrower versions side by side for the
-owner to pick from, as A202 did. A202's constraint stood: stacked up/down arrows had been turned down because each came
-to 28px tall, below `--wt-tap-min`. Options raised but not chosen: narrower buttons on the
-dashboard only, an ordinary number box on the dashboard with the steppers kept for touch screens,
-and shorter labels.
-**The owner's direction (2026-10-03):** first _"maybe something simpler like amazon's number
-fields"_, with a screenshot of Amazon's basket quantity (one outline, the number centred between a
-bin or − and a +, plain icons with no filled button squares); then _"it doesn't need to be rounded -
-but the + and - can just be part of the field without needing so much space"_. **On size, the
-owner (2026-10-03):** _"if the buttons are removed from
-each other they don't have to be so big - there's less risk of hitting the wrong thing"_. That is
-the web accessibility standard's own exception. WCAG 2.2's level AA rule, 2.5.8 Target Size
-(Minimum), reads: _"The size of the target for pointer inputs is at least 24 by 24 CSS pixels,
-except when: Spacing Undersized targets (those less than 24 by 24 CSS pixels) are positioned so
-that if a 24 CSS pixel diameter circle is centered on the bounding box of each, the circles do not
-intersect another target or the circle for another undersized target"_. The 44px figure is the
-stricter level AAA rule, 2.5.5 Target Size (Enhanced), which has no spacing exception (both read
-from https://www.w3.org/TR/WCAG22/, 2026-10-03). Waitron's `--wt-tap-min` (44px on both axes) is
-the house rule, written for POS screens staff touch under time pressure
-([design-system.md](developers/design-system.md), "`--wt-tap-min`"), and `wt-number-stepper` was
-used only on dashboard screens when this was decided (`grep -rln wt-number-stepper apps packages`:
-the backup screen, the extras list editor and the venue operations screen).
-**Decided (owner, 2026-10-03), option C from the mockups:**
-
-- − and + are plain icons inside the ordinary field box (not a rounded pill), − at its start and + at its end,
-  with the number centred between them; each is `--wt-stepper-button-width` (24px) wide, kept
-  apart by the number;
-- the label always sits on the box's top line, even while the box is empty;
-- the narrowest box, `--wt-stepper-field-width`, is 88px; `--wt-stepper-field-width-wide` is gone;
-- the stepper has a new `clearable` setting: − at its lowest number or below empties the box
-  instead of being disabled there;
-- in the extras list editor, Minimum and Maximum choices sit under a "Number of choices" heading.
-  Both are clearable from 1, so − goes 3 → 2 → 1 → blank, and an empty box shows "None"
-  ("Ninguna") as its placeholder. A blank minimum is saved as 0, and a saved 0 shows as the empty
-  box; a typed 0 is kept as typed. A blank maximum means no limit. A maximum of 0 is refused by the form
-  (`extras.max_picks_zero`) and by `parseExtraListInput`
-  (`packages/catalogue/src/extra-contract.ts`, `extras.invalid` naming `maxPicks`); the database
-  CHECK in `packages/catalogue/src/schema/extras.ts` is unchanged, because changing it rebuilds the
-  table.
-
-The stepper's row and the tap-target paragraph in design-system.md, and the primitive's axe and
-token-painting tests, changed with it.
+**The number field with − and + is still too wide (A263, owner 2026-10-03) — DONE (#1151).**
 
 **What #1151 left open (2026-10-03):**
 - **The database still accepts a maximum of 0.** The CHECK on `extra_lists` allows `max_picks = 0`
@@ -1767,17 +927,13 @@ token-painting tests, changed with it.
   the table; not re-measured.)
 
 **The extras list editor's columns stay in place as products are added (A264, owner 2026-10-03)
-— DONE (W49).** Fixed table sizing leaves spare width with Product, and long names wrap inside it.
-Chromium cases add a longer product at 1280px and 390px in English and Spanish and check each
-following column's position.
+— DONE (W49, #1165).**
 
 **Each extras row's Preselected switch repeats its column heading beside it (A265, owner
-2026-10-03) — DONE (W49).** The row switch hides the repeated text and keeps its accessible name.
+2026-10-03) — DONE (W49, #1165).**
 
 **An extra's maximum quantity can be left blank for no limit (A266, owner 2026-10-03) — DONE
-(W54).** The editor sends null for a blank item maximum; an absent maximum still defaults to one.
-The server and till enforce the list's Maximum choices independently of the item's limit. The menu
-changes list names a change to or from no limit. Catalogue migration 0023 makes the column nullable.
+(W54, #1169).**
 
 **Update the root null-exception rule after W54 — OPEN (owner rule-file maintenance).**
 `CLAUDE.md` §3 still names only `maxPicks` and `guestCount` as fields where explicit null is a value.
@@ -1785,97 +941,15 @@ An item's `maxQuantity` is now another; `packages/catalogue/src/extra-contract.t
 its absent default and explicit null. Lane D RUNNER §7 bars this campaign from editing the rule file.
 
 **The option form opens with its names section expanded (A199, owner 2026-10-02) — DONE by A170
-(#1040):** the option window no longer folds its names at all, so they show on open on Add and Edit;
-"can still be collapsed" no longer applies, because nothing folds. The
-owner, on screenshots of "Add option": _"on the edit/add options page start with the names block
-expanded as there is very little else on this page"_. The single option's form
-(`apps/dashboard/src/widgets/option-label-form.ts`) held only Name, the "Customer and kitchen names"
-section and Available, and its `wt-disclosure` started closed. **Wanted:** the section opens
-expanded, on both Add and Edit, and can still be collapsed. Read as the single option's form, which
-the screenshots show; the options LIST form's section is left as it is — ask if both were meant.
+(#1040).** Read as the single option's form, which the screenshots show; the options LIST form's
+section is left as it is — ask if both were meant.
 
 **A folded names section's line puts a colon after each field's name (A200, owner 2026-10-02) —
-DONE (#1076).** The owner: _"when rendering the names block "EN Medium, pink in the middle · ES Al punto,
-rosado por dentro · Kitchen AL PUNTO", add a colon after each field: "EN: Medium, pink in the middle
-· ES: Al punto, rosado por dentro · Kitchen: AL PUNTO", and maybe make the field names bold"_. The
-line is built by `namesLine` (`apps/dashboard/src/widgets/form-fields.ts`), used by the options
-list and extras list forms (the option form stopped folding its names with A170).
-_(2026-10-04: now `effectiveNamesLine`, W77.)_ **Decided (owner, 2026-10-02, choosing B of three mockups,
-"although C is good too"):** "EN:", "ES:" and "Kitchen:" (Spanish "Cocina:") in bold, the values
-in the summary's usual muted text. (C, the field names in full-strength text rather than bold, was
-the runner-up.) Bold needs markup, and `wt-disclosure` takes its `summary` as a plain string; give
-the primitive a way to take the parts (a slot, or name/value pairs) rather than building markup in
-each screen. Since A171 the line holds only the customer-facing names, so it has no "Kitchen:" part.
-(2026-10-02: `summaryFields`, built for A219, is that way; `namesLine` and the product editor's
-Kitchen line now use it, and the Descriptors line uses `summaryRows`, built for this item.)
+DONE (#1076).** Looked at, 2026-10-03: in the product editor's Descriptors fold at 390 a long
+English description fills both of its lines, so the Spanish one does not show at all on the closed
+line.
 
-**The product editor's folded sections follow the same pattern, with real values (owner,
-2026-10-02):** _"regarding products, i think we should include the field values not just the fact
-that they're filled in, and we should show a thumbnail of the image too"_. Before A200,
-`product-editor.ts` wrote the Kitchen section as "SOLOMILLO · Mains" and the Descriptors section as
-"customer name (EN, ES) · description (EN) · image". **Decided (owner, 2026-10-02, from mockups):**
-
-- the Kitchen line gives each value after its bold field name: "**Kitchen name:** SOLOMILLO ·
-  **Course:** Mains";
-- the Descriptors line is one row per field, its languages side by side: "**Name:** EN: Beef
-  tenderloin · ES: Solomillo de ternera", then "**Description:** EN: … · ES: …". The Name row is cut
-  to one line, the Description row may wrap to two before it is cut, each with an ellipsis, so it
-  stays two rows however many languages the venue has;
-- the image is not in that line at all: the product's photo sits beside the Name field at the top
-  of the editor, as the product list (`product-list.ts`) shows it beside each product's name (the
-  owner's suggestion). **Clicking it opens the image picker, and the picker moves out of the
-  Descriptors section** (owner, 2026-10-02: _"it should open the image picker, in fact the image
-  picker should move out of the descriptions box i think"_). Before A200, `dashboard-image-upload` was
-  drawn inside that section, with its error under it, and `SECTION_FIELDS.descriptors` listed
-  `image`, so an image error forced the section open; both move with the picker, and an image
-  error then shows beside the photo. The picker is drawn only when the editor has an `api`; the
-  photo's slot needs a state for that too. With no photo, the slot shows a placeholder that still
-  opens the picker (the list's `thumb-placeholder` look). A variant with no photo of its own shows
-  its parent's (`inheritedImage`), and it must be clear that it is inherited. It is a button: a tap
-  target, a focus ring, and a name a screen reader reads ("Change photo" / "Add photo").
-
-LOOK at it at phone width, where a long English description leaves little room for the Spanish.
-
-**Built:** `wt-disclosure` gained `summaryRows` (one row per field, each cut with an ellipsis after
-its own number of lines). `namesLine` returns name and value pairs, so the extras and options lists'
-line reads "**EN:** Make it yours · **ES:** Añádele algo" _(2026-10-04: now `effectiveNamesLine`,
-W77)_. The Kitchen line's labels are the field's
-own "Kitchen name" ("Nombre de cocina") and a new short "Course" ("Curso"). In the Descriptors rows
-only "Name:" and "Description:" are bold; the language codes are plain text, as the decision above
-writes them. The photo is the thumbnail form of `dashboard-image-upload` (`thumbnail`), beside Name
-and stopping where the other fields stop; it is named "Add photo" or "Change photo"; an inherited
-photo has a dashed border and no visible caption: "The main product's photo" describes the photo
-button to a screen reader only (owner, 2026-10-03, choosing that over a visible caption). In the editor,
-Remove moved into the image library window's footer, shown when the product has a photo of its own;
-the variant form and the section details form keep today's photo control. With no
-`api` there is no photo and Name takes the whole row. A refused photo shows its reason under the
-photo and leaves Descriptors closed. Looked at, 2026-10-03, at 1280 and 390 wide in both themes and
-both languages: at 390 a long English description fills both of its lines, so the Spanish one does
-not show at all on the closed line.
-
-**Choosing a product in an extras list adds it at once (A201, owner 2026-10-02) — DONE.** The
-owner, on a screenshot of the extras list form's "Choose a product" dropdown beside an "Add
-product" button: _"make the hint text say "Add a product", remove the button. if you select a
-product in the dropdown it gets added automatically. if you close the chooser without selecting
-then nothing happens"_. The dropdown's prompt now reads "Add a product" (Spanish to match;
-`extras.choose_product`); choosing a product adds its row straight away and resets the prompt,
-and closing without a choice adds nothing. The button and `extras.add_item` are gone. Focus stays
-on the dropdown after an add, so a keyboard user can
-add the next product, and the new row is announced (the form's live region). The owner extended the
-same behavior to the menu screen's members editor (`member-list-editor.ts`): choosing a product or
-section adds it immediately and announces it; replacing an existing member still requires explicit
-confirmation. (Since W88, 2026-10-05, the Menus screen no longer draws that editor or its product
-picker: a menu's Structure tab adds products through Add products in a row's ⋮, and the editor is
-drawn only for a menu's Home page tiles.) The remaining single-choice add pickers are covered by
-A201b below.
-
-**Choosing one thing to add acts at selection (A201b, owner 2026-10-03) — DONE.** In the
-dashboard, choosing a content language or a menu to include saves it immediately and closes
-the dialog on success; closing without a choice saves nothing. A refused save leaves the
-dialog open so you can choose again. Section products and Add to menus let you choose several
-items before saving. Allergen editing was changed separately in A213. The till's station move
-and the dashboard's unit reassignment each ask for confirmation. Setup forms with other required
-fields still wait for those fields before saving.
+**Choosing one thing to add acts at selection (A201b, owner 2026-10-03) — DONE (#1091).**
 
 **Open test gap from A201b:** removing `#closeLostList()` from `#includeMenu` in a disposable
 checkout left `pnpm --filter @waitron/dashboard exec vitest run src/screens/menus-screen.test.ts`
@@ -1883,112 +957,21 @@ green (207/207, 2026-10-03). The suite does not establish whether that guard cat
 disappearing between the last read and selection. Check that race with a focused test, or remove
 the guard if the path cannot occur; its reachability remains unverified.
 
-**The number field's − and + move inside the field, as pale blue buttons (A202, owner 2026-10-02)
-— DONE.** The owner, on a screenshot of the extras form's Minimum and Maximum choices: _"the +-
-fields are very bulky and become difficult to read"_. Their first idea, up and down arrows stacked
-inside the field, made each arrow 28px tall, below `--wt-tap-min`; from mockups (today, A, B, C,
-D1, D2, E1–E3) the owner chose **E3**. **Decided:** in `wt-number-stepper`
-(`packages/ui/src/components/wt-number-stepper.ts`):
-
-- − then + sit INSIDE the filled field box, at its trailing end, instead of bordered squares
-  outside it; each is `--wt-tap-min` wide and the box's full height, so the tap size holds;
-- each button has a pale blue fill with its symbol in the primary blue, and a 1px line before it
-  in the surface colour, separating it from the value and from the other button; the + button
-  takes the box's top-trailing corner radius; a hover darkens the fill a step;
-- a disabled button keeps its fill and only its symbol fades — this replaces the design-system
-  rule that a disabled stepper button dims as a whole through `--wt-opacity-disabled`;
-- the value and its label sit at the box's start like any other field (the mockup's choice; today
-  the number is centred), and "No limit" stays the grey italic prompt.
-
-The pale blue and its hover step are new colour tokens with dark-theme values, as `--wt-*` tokens
-(`packages/ui-core/src/tokens/colors.css` has only `--wt-color-primary` and `--wt-color-on-primary`
-today); their contrast with the symbol must pass the axe test in both themes. What changes with
-the layout: the box widths (`--wt-stepper-field-width`, `-wide`) now include the buttons, the
-compact `hide-label` box, the width-matching between two steppers side by side, the
-`wt-number-stepper` row and the tap-target paragraph in
-[design-system.md](developers/design-system.md), and the primitive's token-painting and axe tests.
-Name every test changed in the PR. LOOK at every screen that uses it
-(`grep -rln wt-number-stepper apps`), in both themes and at phone width. (The look described here was changed by
-A263, 2026-10-03, above.)
-
 **An extra is a fixed portion: a product sold by weight is offered as, say, 50 g a pick (A203,
-owner 2026-10-02) — DONE.** The owner: _"today you can add an extra sold eg per kg, but there is
-nowhere to put a quantity in there. i think extras should always be a fixed amount, so eg if i add
-Jamon @ 100€/kg, we should enter the base amount of (eg) 50g, and when you add it multiple times you
-get 50->100->150 etc"_. The list item now stores a portion and the offer freezes its unit and
-price per portion. The saved child line records its physical amount and price basis; receipt and
-kitchen labels use the saved amount. The menu's published offer stays in use until republishing.
+owner 2026-10-02) — DONE (#1149).** [Design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md);
+[plan](superpowers/plans/2026-10-03-extra-fixed-portion.md).
 
 **An extra sold by the piece prints as `x3` on receipts, kitchen tickets and the till's filed-ticket
-view (W53, owner 2026-10-03) — DONE.** The working line context saves whether its unit is Each when
-the line is added. Each shows its pick count per dish, while weight and volume retain the total
-physical amount and saved abbreviation.
-This amends the display decision in the [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md);
-the filed sale amount and fiscal record are unchanged. The new context column defaults to false on
-existing rows, including open orders. Reset pre-production venues before using W53 with orders
-recorded before this migration; otherwise their live tickets and settled reprints can show the old
-unit wording.
+view (W53, owner 2026-10-03) — DONE (#1152).** Reset pre-production venues before using W53 with
+orders recorded before this migration; otherwise their live tickets and settled reprints can show
+the old unit wording.
 The live till basket still uses `×N` for modifier counts (`apps/till/src/widgets/basket.ts`);
 W53 changes the filed display surfaces.
 
-**Decided (owner, 2026-10-02):**
-
-- an extras list item for a product whose unit is weighed (`hardwareUnit` set) or fractional
-  (`precision > 0`) has a required **portion**, e.g. 50 g, held to the unit's precision; an "each"
-  product's portion is one and the form asks for none; _2026-10-04 (W75): the list editor now asks
-  for a portion for EVERY unit but Each, so whole grams, millilitres and a venue's own units too;
-  the server still accepts a new item of a whole unit with no hardware link (ml, say) without one,
-  and stores 1._ _2026-10-05 (W75c): the server now refuses that too. (W75d): an item the list
-  already holds under its id for the same product, sent again without a portion, keeps its saved
-  one unless its product is Each. (W75e): an item whose product is Each is refused with any
-  portion but one, even when that portion equals the one saved before the product became Each._
-- each pick adds one portion: three picks of 50 g are 150 g, and a dish × 2 doubles that, as the
-  count does today;
-- the item's **Price is per portion**: blank, it is the portion × the product's unit price (50 g ×
-  100 €/kg = 5 € a pick), shown as the price field's hint; filled in, it is that amount per pick;
-- the receipt and the kitchen ticket print the **total amount** — "+ Jamón 150 g" — not
-  "50 g ×3";
-- **no conversion between units** (owner, choosing the simpler of two readings of _"the
-  restaurant can choose the appropriate unit, eg g instead of kg"_): the portion is entered,
-  stored and printed in the product's own unit. A restaurant that wants "50 g" sets the product up
-  in grams (0.10 €/g); one priced per kg enters "0.050" and prints "0.150 kg". The owner accepted
-  that a per-gram price cannot hold a fraction of a cent (13.50 €/kg has no exact per-gram price);
-- **a unit change says where the product is offered** (owner: _"we need some sort of notification
-  of where it is used"_): changing a product's unit — or a parent's, which its variants without
-  their own inherit (2026-10-03 (A222): a variant now always has its product's unit) — shows
-  the extras lists that offer it, because the stored portion is a number
-  in the old unit (50 in g becomes 50 kg). The units screen already lists the products using a
-  unit (`ProductUsingUnit`, `packages/catalogue/src/unit-types.ts`); the same applies when a unit's
-  own precision changes under portions held to it. Name both the affected extras lists and the
-  menus that offer them; warn and save without clearing portions. Each affected menu's pre-publish
-  changes list names the extra's unit change. The till sells that menu's published copy until you
-  republish it. No unit conversion (owner clarification, 2026-10-03).
-
-If precision falls from 3 to 2, a saved `0.055` portion remains 55 thousandths. Preview warns and
-publishing keeps `0.055` with the new unit and allows sales; amount labels show the exact value,
-without rounding it to `0.06`. A new or changed portion must meet current precision, while an
-unchanged saved value remains visible and may pass through an unrelated extras-list edit so you can
-correct it later. This is the warning-only publication behavior in the [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md).
-
-**Implementation:** `extra_list_items.portion` stores thousandths, and the list editor checks a
-new or changed portion against the product's unit. The catalogue resolves one rounded price per
-pick for both the till and server. A child line saves its physical quantity and `price_quantity`;
-held edits, sale lines, adjustments and printed amounts use that frozen basis. The amount reaches
-a sale record, so the branch takes the full review path (risk trigger: fiscal invariants).
-
-The [A203 design](superpowers/specs/2026-10-03-extra-fixed-portion-design.md) and
-[implementation plan](superpowers/plans/2026-10-03-extra-fixed-portion.md) were approved on
-2026-10-03. The implementation follows those decisions.
-
 **A portion-only edit now names the extras list, product, and old and new amounts in the
-pre-publish changes list (W51) — DONE.** The core `working_order_lines.price_quantity` and
-`sale_lines.price_quantity` columns now require a positive count of thousandths (W52) — DONE.
-Reset retained pre-live venues before installing core `0092`, which rebuilds both tables. The
-one-step upgrade test records a foreign-key refusal on a self-referencing working-order line;
-self-referencing sale lines can refuse the later drop too. Other linked tables use cascading
-deletes, so a rebuild can also remove their rows. Core `0093` restores the seven working-order
-line triggers dropped by the rebuild. `sale_lines` is append-only, and this migration copies its
-rows through a new table before its append-only triggers are reinstalled.
+pre-publish changes list (W51) — DONE (#1160).** The core `working_order_lines.price_quantity` and
+`sale_lines.price_quantity` columns now require a positive count of thousandths (W52) — DONE (#1170).
+Reset retained pre-live venues before installing core `0092`, which rebuilds both tables.
 
 **Department menu timetables and queued publication (A204, owner 2026-10-02; refined
 2026-10-04) — SPEC APPROVED; implementation plans queued in lane B; not implemented.**
@@ -2005,48 +988,11 @@ explicit cancellation or replacement.
 2026-10-02) — OPEN.** The owner, on six screenshots of "Edit product" for "Cured beef cecina (per
 kg)". All eleven are in `apps/dashboard/src/widgets/product-editor.ts` unless another file is
 named. All eleven were settled from mockups on 2026-10-02 (A216 on the reading its entry
-records); the decisions follow each entry. A214, A217 and A219 reshaped the Pricing section
-together, in one branch.
+records); the decisions follow each entry.
 LOOK at each on a product AND on a variant's page (the editor shows a variant with its parent's
 values as the blank choices), at 1280 and 390, light and dark.
 
 **No Add category button, and the category shown as a path (A209) — DONE (#1090).**
-The owner: _"we no longer need the add category button. i'm questioning whether we need the
-category dropdown at all now that we can drag products from category to category (although we
-should show the path to the product eg Drinks > Alcoholic drinks > Cocktails) on that page"_. A
-product has one category (`products.categoryId`). **Decided:** the Add category button goes, with
-`editor.add_category`. **Wanted:** the product's full path, "Drinks › Alcoholic drinks ›
-Cocktails", shown on the editor. **Open, ask before building:** whether the "Main category"
-dropdown goes too. Two things it does that dragging may not: a variant's empty category means its
-parent's, and the dropdown is where a variant is given a category of its own — A208's tree
-cannot drag a variant on its own, because a press on a variant row starts no drag; and a product made from "All
-products" has no category until it is dragged. **Clash with A208:** its spec keeps the category
-form (`apps/dashboard/src/widgets/category-form.ts`) for one reason, this button, so once this
-lands the form has no caller left.
-**Decided (owner, 2026-10-02, from mockups, choosing B of three):** the "Main category" field
-goes. Under the window's title the product's path reads "Drinks › Alcoholic drinks › Cocktails"
-with a small "Change" link after it; Change opens the category list as an indented tree, anchored
-at the path text (the owner: _"the dropdown should start from the category text"_), not below the
-Name field. **A variant always has its product's category** (owner: _"i'm not sure that's a good
-idea. maybe we shouldn't allow editing that"_): a variant's page shows its product's path as plain
-text, with no Change. That retires the variant's own category everywhere — the server's
-resolution of a variant's reported category (`variant.effective`, which the Products list and
-reporting read) becomes "always the product's", and variants holding a category of their own are
-cleared (allowed before go-live, §3). (2026-10-03: the owner decided against clearing them; see
-"Left open" below.) Trace every consumer of a variant's `categoryId` first,
-among them the Products list's main-category cell on a variant (A221, `apps/dashboard/src/widgets/product-list.ts`), which
-compares the variant's effective main category with its product's and should then always stay
-empty.
-Built: the editor's first line is the product's path, names joined with " › ", or "Uncategorised";
-on a product it is a link-style `wt-combobox` (`appearance="link"`, with the new option fields
-`depth` and `valueLabel`) whose "Change" opens "Uncategorised" and then every category as an
-indented tree. A variant's page shows its product's path as plain text. On the server a variant's
-effective category is always its product's, a variant's editor save naming a category is refused
-with `product.invalid` and otherwise clears what the row stores, and deleting a category clears it
-from any variant still holding it. The Add category button, `editor.add_category`, the catalogue
-screen's nested category create and the `dashboard-category-form` element went; the Products list
-leaves a variant's category cell empty without comparing. _2026-10-04 (W84): the Main category
-column is gone._
 **Left open:**
 - No migration clears the categories variants already store, and none will be written (owner
   decision, 2026-10-03: no data-migration code before go-live, CLAUDE.md §3, and the dev venue is
@@ -2065,33 +1011,8 @@ column is gone._
   `apps/server/src/configuration-transfer.ts`, from `CORE_CONFIGURATION_TRANSFER` in
   `packages/db/src/configuration-transfer.ts`), so an imported variant can arrive with a stored
   category that the effective category and the editor's read then ignore.
-- Corrected in passing: the colour field entry above pointed at `category-form.test.ts` for the
-  Custom square showing a chosen palette colour. #968 moved that test to `color-field.test.ts`
-  before this branch, so the pointer was already wrong on `main`; it now names the new file.
 
-**Standalone ordering becomes one dropdown (A210) — DONE (#1070).** The owner: _"Standalone ordering can
-be reduced to a single dropdown"_. Before this, `renderOrdering` drew three radio buttons, Public, Staff
-only and Not sold separately, each with an explanation under it. **Wanted:** one `wt-combobox`
-with the three choices. The explanations need a new place: the design system's Forms rule makes a
-field's hint its placeholder, which a dropdown that always holds a value never shows. The
-combobox's option `group` heading is no help; decide between a line under the field for the
-chosen value and a second, muted line inside each option, and ask if neither fits. A variant's
-page shows no ordering choice and keeps showing none.
-**Decided (owner, 2026-10-02, choosing B of three):** closed, it is a plain field showing the
-chosen value, with no explanation under it; opened, each choice carries its explanation as a
-second, muted line. `wt-combobox` learns an optional description per option, drawn as that second
-line and read by a screen reader with the option.
-Built: `renderOrdering` draws one `wt-combobox` named `ordering`, and `ComboboxOption` gained
-`description`, drawn under the label in `--wt-color-text-muted` at `--wt-font-size-sm`. A described
-row is named by its label (`aria-labelledby`) and the description is its `aria-describedby`; a
-long description wraps inside the list rather than widening it. A refusal of `ordering` shows
-under the field as the other dropdowns' do, and the field is disabled while the product saves or
-another of the editor's windows is open, as the radio buttons were.
-**W65 — DONE (2026-10-04):** The Staff only choice now says only “Only staff can order it on its own.”
-The Spanish choice has the equivalent single sentence.
-**Raised while reviewing #1070, settled by A226 (below):** `expectNoA11yViolations` failed only on
-axe's `violations` list, so text set to exactly its background colour, which axe files under
-`incomplete`, passed every a11y test.
+**Standalone ordering becomes one dropdown (A210) — DONE (#1070).**
 
 **The accessibility checks fail when axe cannot confirm a colour contrast because of the colours
 themselves (A226, owner 2026-10-03) — DONE (#1092).** All five copies
@@ -2103,102 +1024,29 @@ and `src/widgets/test-helpers.ts` in `apps/dashboard`, `apps/setup` and `apps/ti
 e0911d714 before deciding: failing on EVERY undecided contrast result would have turned 658 passing
 tests in 84 files red, with 2,555 undecided readings (`bgOverlap` 1,804, `nonBmp` 314,
 `shortTextContent` 198, `elmPartiallyObscured` 128, `elmPartiallyObscuring` 111) and none of the three
-colour reasons; the owner chose to fail on the colour reasons only. Each helper's tests (new files
-`test-helpers.a11y.test.ts` in the three apps) show: text the same colour as its background is
-undecided (`equalRatio`, no violation) and now fails, in both themes; readable text passes; an
-empty `wt-input`, which axe leaves undecided with `bgOverlap`, still passes; and `fgAlpha` and
-`colorParse`, fed through a stubbed `axe.run`, fail — stubbed because axe 4.13.0 never sets
-`fgAlpha`, and none of the colour syntax tried in Chromium produced `colorParse`. Every test file
-calling the helper passed with this helper code (2026-10-03, run per file in each package that
-calls it).
+colour reasons; the owner chose to fail on the colour reasons only.
 **Still not checked:** contrast that axe leaves undecided for any other reason — among them an
 overlapping element (such as an empty `wt-input`), a background image or gradient, content too
 short or not text — passes, so contrast in those places is checked by nobody.
 
-**A folded section says what is missing, not only what is filled in (A211) — DONE (#1096).** The owner:
-_"we should show the missing values under kitchen and descriptors and nutritional info when
-collapsed"_. Before A211, each folded section's line listed only the filled
-values (`renderKitchen`, `renderNutrition` and the Descriptors section), so a product with no
-kitchen name, course, allergens or dietary preferences showed only its heading. **Wanted:**
-every field is named on the line whether or not it has a value, e.g. "**Kitchen name:** none ·
-**Course:** none", "**Allergens:** none specified · **Dietary preferences:** none specified". Build
-it with A200's product-editor decision above (each value after its bold field name, the
-Descriptors line one row per field), which this extends to the empty case. Choose the wording for
-"nothing set" once, in both languages; on a variant's page an empty value shows the parent's
-value, as the fields themselves do (A172).
-**Built:** the product editor's Kitchen, Descriptors and Nutritional info folds name every field
-they hold: Kitchen (kitchen name, course), Descriptors (customer-facing name, description, one row
-each) and Nutritional info (allergens, dietary preferences, now named fields rather than a bare
-list). Nothing set reads "None specified" ("Sin especificar"), the existing
-`modifiers.none_specified` the open allergen and dietary lines already use. In a Descriptors row a
-blank language reads "None specified" in its place ("EN: Steak · ES: None specified"), and a row
-with every language blank reads "None specified" alone. On a product's own page, allergens never
-reviewed and allergens reviewed as none both read "None specified", folded as on the open line. On
-a variant's page the course, description, allergens and dietary preferences left blank show the
-parent's value in italic (a new `placeholder` mark on `wt-disclosure`'s `summaryFields` and
-`summaryRows`), or "None specified", or "Not yet reviewed" for allergens the parent has not had
-reviewed; a variant's kitchen and customer-facing names do not come from its parent, so blank
-they read "None specified" as on a product. A product's course the course list does not hold reads
-"Unavailable selection". Looked at, 2026-10-03, at 1280 and 390 wide in both
-themes and both languages.
+**A folded section says what is missing, not only what is filled in (A211) — DONE (#1096).**
 **Left open:** the same "nothing" still reads two ways in one window: the course dropdown says
 "— none —", and on a variant's page the hints under the open Nutritional info say "None"
 (`editor.allergens_none`, `editor.diet_none`) where the closed line says "None specified". At 390
-wide a two-field line can wrap inside a value ("Dietary preferences: None" / "specified"). The
-options list and extras list forms' names sections still leave a blank name out (`namesLine`).
-_(2026-10-04: no longer — W77 shows the name each blank one falls back to.)_
+wide a two-field line can wrap inside a value ("Dietary preferences: None" / "specified").
 Whether the Pricing fold should also name an empty base price or VAT is a question for the owner.
 
-**An Add course button beside the course dropdown (A212) — DONE (#1087).** The owner:
-_"perhaps we should add an "Add course" button under Courses, which would open a modal to edit
-and order the course list. Currently this lives on the kitchen page, not as a modal. need to
-figure that out"_. The course list is edited, added to and reordered on Venue settings' Kitchen tab
-(`apps/dashboard/src/screens/kitchen-screen.ts`, its "Kitchen courses" section). **To decide:**
-whether the dialog reuses that screen's editor (moved into a widget both use) or the course list
-moves into the dialog alone and the Kitchen tab opens it too; and what the dropdown does when
-the dialog closes — select a course just added, keep the choice if it still exists. Unsaved edits
-to the product must survive the dialog, as they do around Add unit today (`related()`).
-**Decided (owner, 2026-10-02, choosing B of three):** the course dropdown ends with "Edit
-courses…", drawn like A218's make-new choices, which opens a window holding the whole course list:
-drag to reorder, click a name to rename it, ⋮ to remove one (today's deactivate), and Add course
-at the bottom. Venue settings' Kitchen tab shows the same list, replacing its one-card-per-course layout
-with its own Save buttons and typed-in order numbers — so the list is one widget both use.
-Closing the window selects a course just added, and the product's unsaved edits survive it.
-Built: one widget, `dashboard-course-list` (`apps/dashboard/src/widgets/course-list.ts`), on
-Venue settings' Kitchen tab and in the window the product editor's "Edit courses…" opens (from
-`catalogue-screen.ts`). Each change saves as it is made, so the window has one button, Done, where
-the mockup drew Cancel and Done; Done waits for saves still being answered and for an open Delete confirmation to be answered,
-including changes made while it waits (a second Done during the wait does nothing), and stays open with the reason under
-the field when a typed name is refused. A drag is saved in one request,
-`PUT /management-api/courses/:id/position` (`moveCourse`, `apps/server/src/kitchen.ts`), which
-renumbers the active courses. A new course is created after the last one shown, where the old form
-created it at order 0. Closing the window selects the last course added in it if it is still there;
-otherwise a chosen course removed in the window is cleared (on a variant: the parent's course);
-otherwise the choice stays.
-**Left open:** a disabled course keeps its name, because `kitchen_courses_name_key` covers disabled
+**An Add course button beside the course dropdown (A212) — DONE (#1087); left open:** a disabled course keeps its name, because `kitchen_courses_name_key` covers disabled
 rows too, so adding a course with a disabled course's name is refused as taken (measured
 2026-10-03 with a throwaway case in `apps/server/src/kitchen.test.ts`: create "Mains", deactivate
 it, create "Mains" again → `course.name_taken`); a deleted course frees its name (read, not run). Raised in #1087's review and not changed there:
 `wt-combobox`'s `stable-width` attribute (`packages/ui/src/components/wt-combobox.ts`) is not in
 `docs/developers/design-system.md`; and the catalogue-screen test "ignores the closed window's late
 close…" catches its guard's removal only through an unhandled error, because the late close throws
-before it changes anything a state assertion could see. #1087 also fixed two cases in
-`apps/server/src/station-move.test.ts` that failed on every run after 05:00 Madrid on 2026-10-03
-(they wrote notices under a clock pinned to 2 October and listed them under the real one).
+before it changes anything a state assertion could see.
 
-**Allergens and dietary preferences are edited in place (A213) — DONE (#1079).** The owner:
-_"for nutritional info, we can show: Allergens: Nuts, Seeds / Dietary preferences: None specified.
-And when you click on one it converts into a multi-value combobox (ie no need for the Edit
-button)"_, and _"each one doesn't need a box around it, like we've removed them for descriptors
-etc"_. Built: `dashboard-allergen-dietary-picker` draws each field as one borderless line, its
-name in bold and then its values or "None specified" (`modifiers.none_specified`, which replaced
-`modifiers.none_selected`). The line is a button named "Allergens: Milk, Eggs, edit"
-(`modifiers.edit_named`); a click or Enter swaps it for a labelled multiple `wt-combobox` with
-focus in it, Escape swaps it back with focus on the line (the second Escape, when the first closed
-the open list) without closing the product's window, and focus leaving the combobox swaps it back.
-The product picker still offers no "may contain", a stored allergen keeps its presence when another
-is added, and a variant's hints of its parent's values are unchanged.
-**Left open by #1079 (raised in its review, not changed there):** on a variant's page an empty
+**Allergens and dietary preferences are edited in place (A213) — DONE (#1079); left open by #1079
+(raised in its review, not changed there):** on a variant's page an empty
 line reads "None specified" while the grey hint under it gives the parent's values, which reads as
 a contradiction — A211's "an empty value shows the parent's value" is the natural place to settle
 it. And on a product's own page a reviewed-empty allergen list and one nobody has reviewed yet
@@ -2210,64 +1058,19 @@ italic, but the open line still reads "None specified" above the hint, so the fi
 on a product's own page the closed line reads both cases as "None specified" too, as the open line
 does, so the second stands.)
 
-**No box around Pricing (A214) — DONE (#1065).** The owner: _"Pricing also doesn't need the box around it"_.
-Built: `renderPrice` draws a borderless `fieldset class="group"` whose legend is the same upper-case
-muted group label as Classification and Modifiers, or, once A219 folds it, a `wt-disclosure` headed
-like Kitchen. `.bordered-group` had no other user and is gone, with its comment about the variants
-table widening the fieldset: the table now sits in its own section.
+**No box around Pricing (A214) — DONE (#1065).**
 
-**Clicking a variant's row opens its edit window (A215) — DONE (#1049).** The owner: _"variants when
-clicked should open the edit modal"_. In `variant-table.ts` a click anywhere on a row, or Enter on
-it, does what Edit in the row's menu does (`wt-edit`): a transparent button the size of the row
-lies over its name, price and badges, named "Edit: <variant>" and disabled while the product saves
-or another of the editor's windows is open. The drag handle, the Available switch and the row menu
-are lifted above it and keep their own clicks. Left open from its review: a click exactly on the
-Available switch's round knob does not flip it — the run-it reviewer reported the same on `main`
-before the branch, so it is in the shared `wt-switch`, not the row; DONE by W76 (#1218; the knob now flips
-the switch; tested on the switch itself, not in this table).
+**Clicking a variant's row opens its edit window (A215) — DONE (#1049); the click on the Available
+switch's knob, left open from its review, is DONE by W76 (#1218).**
 
-**The price's unit button says "Each" or "per kg", never "per Each" (A216) — DONE (#1057).** The owner:
-_"I don't like "per Each", it should either be "Each" or "per Unit""_. **Decided (owner,
-2026-10-02):** "Each" with no unit, "per <unit>" with one. Built: with no unit the price
-field's button says "Each" ("Unidad") and its label "Price" ("Precio"), or "Base price" ("Precio
-base", the new `editor.base_price`) while a variant is Active; with a unit, "per kg" and "Price
-per kg" or "Base price per kg" as before. The same holds on a variant's own page; the variant
-window, which has no unit button, labels it "Price" (`unitShortLabel` and `renderPrice` in
-`apps/dashboard/src/widgets/product-editor.ts`, `editor.price` in
-`apps/dashboard/src/i18n/strings.ts`). _2026-10-03 (A222): on a variant's own page that text is
-fixed, not a button._
+**The price's unit button says "Each" or "per kg", never "per Each" (A216) — DONE (#1057).**
+**Decided (owner, 2026-10-02):** "Each" with no unit, "per <unit>" with one.
 
-**The variants' status filter becomes a "Show inactive" link (A217) — DONE (#1065).** The owner:
-_"the Variant status filter looks a bit messy where it is placed"_. The "Show variants" dropdown
-(`variant-status`, `variant-table.ts`) stood alone between the base price and the table. Offer
-mockups: for example in the table's header row, beside the Add variant button, or shown only once
-some variant is inactive. Keep its rule that a reported problem or a variant just added never sits
-on a hidden row.
-**Decided (owner, 2026-10-02):** the "Show variants" dropdown goes. A "Show 1 inactive" link sits
-beside Add variant, there only while some variant is Inactive (Remove in a row's menu makes a
-saved variant Inactive; Restore brings it back, and this link is the only way to reach it). The
+**The variants' status filter becomes a "Show inactive" link (A217) — DONE (#1065).** The
 wording is "inactive", to match the rest of the dashboard (owner).
-Built: "Show 1 inactive" / "Show 2 inactive" ("Mostrar 1 inactiva" / "Mostrar 2 inactivas"), a
-link-styled button after Add variant; once chosen it reads "Hide inactive" ("Ocultar inactivas")
-and hides them again. Each product opens with them hidden. The table still shows them itself when a
-reported problem or a just-added unsaved variant would sit on a hidden row, and the link then reads
-"Hide inactive". A Remove that leaves no row on screen puts focus on the link.
 
 **"New extras list…" and "New options list…" leave the modifier dropdown's list (A218) — DONE
-(#1082).** The owner: _"i don't like the new extras list and new options list in the
-modifiers dropdown. how else could we organise those? at the very least they should be at the end
-of the list, separated from the others with a line. could we make it a single "add new
-modifier"? although then we'd need a second click to choose which, or to open a modal with two
-tabs or something"_. Before A218 the two actions (`editor.create_extra_list`,
-`editor.create_option_list`) were the first two choices in "Add extras or options", above the
-lists themselves. **The minimum:** they move to the end, after a dividing line, which
-`wt-combobox` cannot draw today (it has group headings, no divider). Mock up the alternatives for
-the owner: that minimum; one "New modifier…" choice opening a window with Extras and Options
-tabs; and a "New modifier" button beside the dropdown instead of inside it.
-**Decided (owner, 2026-10-02, choosing A of three):** the lists sit under "Extras" and "Options"
-group headings (`wt-combobox`'s existing `group`), and each group ends with its own make-new
-choice, "+ New extras list…" and "+ New options list…", drawn in the primary blue so it does not
-read as a list. No divider is needed.
+(#1082).**
 Built: "Add extras or options" lists the extras lists under an "Extras" heading and the options
 lists under "Options", each group ending with its make-new choice, drawn with a plus icon in the
 primary blue. A group whose lists are all attached, or that has none, still shows its heading and
@@ -2278,58 +1081,18 @@ on a hovered row in the light theme for axe (4.32:1). **Open:** each list still 
 already scrolls, so "+ New options list…" sits at or just below its bottom edge when it opens; and
 `--wt-color-primary-text` has fixed light and dark values that do not follow `--wt-color-primary`,
 and a tenant theme cannot set it (`THEMEABLE_TOKENS`, `packages/layouts/src/theme.ts`) — no screen applies a stored
-tenant theme yet. _2026-10-04 (W66): the price heading now holds a button that opens the Pricing
-unit dialog, where Add unit is a button._
+tenant theme yet.
 
 **With variants, Pricing folds and Variants becomes its own section (A219) — DONE (#1065).**
-The owner: _"when we have variants the vat and base price and status filter are overwhelming.
-they overshadow the variants, which are the interesting bits. perhaps they should be collapsed?"_.
-Once a product has an active variant, the base price is the price each variant falls back to
-(the label switches to `editor.base_price`, or `editor.base_price_unit` with a unit), and VAT and
-the base price filled the top of the Pricing section above the table. **Wanted:** with variants, VAT
-and the base price fold into one line above the table, in A211's pattern (e.g. "**VAT:** Reduced
-(10%) · **Base price:** €38.00 each"), opened by a click; the variants table and Add variant are
-what the section shows. Without variants nothing changes: VAT and the price stay open, since they
-ARE the product's price. The status filter is A217's question; mock up both together. A VAT or
-base-price error must open the fold, as an error in a folded section does today
-(`SECTION_FIELDS`), and a new product with variants but no VAT yet starts with the fold open.
-**Decided (owner, 2026-10-02, choosing A of a second round):** the price comes before VAT,
-everywhere. Once a product has a variant, the whole Pricing section folds like Kitchen or
-Descriptors — heading and arrow, then a muted line "**Base price:** €38.00 per kg · **VAT:**
-Reduced (10%)" — not as a grey box, which reads as a field (the owner). The variants move to
-their own section, "Variants", below it and always open, ending with Add variant and A217's link.
-Without variants, Pricing stays open as today and Variants is just the Add variant button.
-**Built as decided (#1065)**, with these readings: Pricing folds only while some variant is
-Active (the same rule that switches the label to "Base price"); the link toggles back as "Hide
-inactive" / "Ocultar inactivas"; the fold starts open only on a product never saved. **Open:** in
+**Decided (owner, 2026-10-02):** the price comes before VAT, everywhere. **Open:** in
 Spanish the folded line reads "**IVA:** Reduced (10%)". The VAT class name is the stored label,
 which `taxLabel` shows untranslated, and on `main` before #1065 the VAT dropdown already read it
 the same way. Where those labels come from, and whether they should be translated, is not checked.
-Built: the fold follows the base-price label, so it needs an ACTIVE variant; with only Inactive
-ones the price is the product's own and Pricing stays open. The bold names come from a new
-`summaryFields` property on `wt-disclosure` (A200 asked for a way to pass name and value pairs). A
-blank base price is left off the line; with no unit the price reads "€38.00 each" ("38,00 € la
-unidad"). "No VAT yet" was read as a product never saved, and its fold starts open: a product's
-save refuses a missing VAT class (`vatClass` in `packages/catalogue/src/product-editor-input.ts`),
-and a new product's draft starts on General. A VAT, unit or price error opens the fold
-(`SECTION_FIELDS`).
 
-**Product editor section spacing (W67) — DONE.** Consecutive closed detail sections sit closer
-together, while Modifiers has more room below Add variant. The open sections and other forms keep
-their spacing.
-
-**Disclosure opening and closing motion (W68) — DONE.** Shared disclosure sections move their body
-and following content over about a second. Reduced-motion preferences and validation errors reveal
-fields immediately; repeated clicks reverse the motion from its current height.
-
-**The pricing unit is chosen in a dialog (W66, owner 2026-10-04) — DONE (#1188).** The owner, on Product
-editor screenshots: _"the unit selector should open in a modal, it's not obvious that the field gets
-added after clicking the 'per g' button, also there is no way to dismiss it like you would have in a
-modal"_. The price field's unit button, and on a product with variants the unit button in the
+**The pricing unit is chosen in a dialog (W66, owner 2026-10-04) — DONE (#1188).**
+The price field's unit button, and on a product with variants the unit button in the
 variants table's Price heading, open one Pricing unit dialog holding the unit dropdown and Add unit.
-Close and Escape shut it without changing the unit, choosing a unit shuts it, and focus goes back to
-the button that opened it. A refused unit opens it once, and the refusal stays on the price field
-once it is shut. Detail: design-system.md, the `wt-price-input` note under the product editor.
+Detail: design-system.md, the `wt-price-input` note under the product editor.
 Left open by #1188's review, none started: (1) one kind of unit refusal reads "The server rejected
 this value…", and on the price field after a price message "this value" reads as the price — a
 unit-specific sentence needs the owner's wording; (2) the price field's own unit button does not
@@ -2340,17 +1103,7 @@ says dropdown for what is now a button; (5) the product editor's VAT dropdown is
 saving (same on `main` before W66, not checked further).
 
 **Modals come in three sizes chosen for their content (W70, owner 2026-10-04) — DONE (#1222).**
-The owner, on the Product editor: _"the modal is too wide for these forms. we need modals of different
-sizes for different display purposes"_. `wt-modal` takes `size="compact"` (28rem, 448px: a
-confirmation, or one or two short fields), `"standard"` (42rem, 672px: an ordinary editor, the Product
-editor among them) or `"wide"` (64rem, 1024px: a table wider than a form, an image grid, a photo
-beside its uses). On a phone every size fills the screen less its side margins, as before. Every
-modal on the dashboard, the till's modifier picker and the two demo modals now name a size; a modal
-that serves jobs of clearly different sizes picks one per job (the profile's details and
-authenticator setup are standard, its other steps compact). Leaving the size off still gives the wide
-modal, as before. W66's Pricing unit
-chooser stays a small dialog (`wt-dialog`), held to the compact width. Detail: design-system.md,
-the `wt-modal` entry. W70a — DONE (#1265; owner, 2026-10-05,
+Detail: design-system.md, the `wt-modal` entry. W70a — DONE (#1265; owner, 2026-10-05,
 "compact only") — makes compact modals fit their content up to the screen's height, with the body
 scrolling beyond it and footer actions held in view. Standard and wide modals retain their full
 height. The category delete dialog is standard and retains its empty space; W74's height finding
@@ -2372,15 +1125,7 @@ mechanism and modal rollout, then page/navigation coverage; neither rollout is i
 Keep automatic saves and forced session exits on their existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
-— DONE (#1069, and #1073 for a variant's own description, A220b).** The owner: _"the Kitchen name, and
-customer facing names aren't showing the internal name as the default value, at least when I add a variant and fill in
-the internal name the first time"_. A172 built the name hints (kitchen and customer-facing names, in
-all five editors, on a new variant and an existing one). This item added the description hints: in
-the product editor, a blank description in a language other than the venue's default shows the
-default-language description as its grey hint, following it as it is typed; on a variant's page
-still blank in every language, a language the parent left blank shows the parent's default-language
-description (`defaultLanguageHint`, `apps/dashboard/src/widgets/form-fields.ts`). The variant window
-(`variant-form.ts`) has no description fields.
+— DONE (#1069, and #1073 for a variant's own description, A220b).**
 **What a description reader shows — checked by running, 2026-10-02.** A throwaway catalogue test
 built a product described only in Spanish (the default), a variant with its own Spanish description
 and a variant with none, then read them through `listProducts`'s effective read, the product
@@ -2413,15 +1158,6 @@ hint, where there is one, as a product's does; the parent's description is a hin
 variant describes itself in no language.
 
 **Variants in the Products list look like part of their product (A221, owner 2026-10-02) — DONE (#1081).**
-The owner, on a screenshot of an opened "Cured pork loin" with its variant "More pork": _"it is
-there, but it doesn't look very good"_ — a heavy black triangle far to the left, the variant's name
-starting left of its product's in the same bold, and its row repeating "Made at" and filling the
-rest with "—". **Built (mockup B):** a small, muted arrow; "2 variants" in muted text under a
-product's name; opened variants on a `--wt-color-bg` band, lined up under the product's name, showing
-price, status, row menu and a main category only where it differs from the product's. `wt-data-table`
-gained `rowJoinsParent` and a `tree-toggle` part. _2026-10-03 (A209): a variant's category is now
-always its product's, so a variant's row leaves that cell empty._ _2026-10-04 (W84): the Main
-category column is gone._
 **Also check:** tried in the list widget on a test variant, not the owner's data: the arrow showed
 under a search, an ordering filter, for an Unavailable variant and for one with its own main
 category; it was missing only for a variant saved Inactive and for a product with no variant.
@@ -2431,26 +1167,6 @@ editor with no prompt, so a variant added and not saved is lost silently — the
 the owner if it recurs.
 
 **A variant always has its product's unit (A222, owner 2026-10-02) — DONE (#1101).**
-The owner: _"currently variants can have different units from their parents. i think that's a bad idea"_.
-A variant's page offers its own unit today (`renderUnit` in `product-editor.ts`, whose blank
-choice is the parent's unit). **Wanted:** a variant takes its product's unit and cannot set one; the
-field goes from the variant's page and the variant window, the server refuses or ignores a
-variant's unit, and variants holding a unit of their own are cleared (allowed before go-live,
-§3). (2026-10-03: not cleared — the owner chose no clearing migration; see "Left open" below.) The unit decides
-how a line's quantity and price are worked out, which reaches a sale
-record, so this takes the full review path (risk trigger: fiscal invariants); trace every reader
-of a variant's `unitId` first. A203 (extras as a fixed portion) allows for a variant's own unit
-("or a parent's, which its variants without their own inherit") and gets simpler. The owner also
-noted the Products list shows no unit in its price column; A208 builds it ("€19.00 each",
-"€48.00 / kg").
-Built: the server reads a variant's unit as its product's (`unitOwnerJoin` and
-`effectiveProductColumns.pricingUnit`, `packages/catalogue/src/variant-fallback.ts`), so a menu's
-next publish, and the sales made from it, use the product's unit. A variant's editor save naming a
-unit is refused with `product.invalid` (field `unitId`) and otherwise deletes one the variant
-stores; the editor's read gives a variant no unit; and the variant's page shows the product's unit
-beside the price as fixed text, with no unit button or dropdown. Unit management ignores a unit row
-a variant still stores, and deleting a unit deletes such rows. The variant window already offered
-no unit.
 **Left open:**
 - No migration clears the unit rows variants already store: the owner chose this on 2026-10-03,
   as for A209's categories (no data-migration code before go-live, CLAUDE.md §3). The product, menu and unit
@@ -2464,56 +1180,13 @@ no unit.
   unit row, which those reads then ignore.
 
 **An extras list's product dropdown greys a product with variants and says why (A223, owner
-2026-10-02) — DONE (#1098).** Before this, the dropdown (`extra-list-form.ts`, `#itemsSection`) offered every
-top-level product, but saving a list that names one with an Active variant is refused with
-`extras.product_has_variants` (`assertNoParentsWithVariants`, `packages/catalogue/src/extras.ts`),
-because the till never offers such a product as an extra (`readExtraProducts`,
-`packages/catalogue/src/offered-modifiers.ts`). Read, not run. The owner declined offering the
-variants themselves as choices. **Wanted:** such a product is left out of the dropdown, or shown
-greyed and unpickable. **Decided (owner, 2026-10-02):** greyed, with A210's second line saying
-why ("Has variants, so it can't be an extra"; Spanish to match), so a search for it does not just
-come up empty. That needs `wt-combobox` to draw a disabled option, which it could not before A223. **Also:** a
-product already on a list that later gains its first Active variant is silently dropped by the
-till; the list form should mark that row.
-**Run before building:** the existing cases pin both refusals and the till's omission, and pass:
-"an extras list and products with variants" in `packages/catalogue/src/extras.test.ts` (an Active
-variant counts whether Available or not; a product whose only variant is Inactive is accepted),
-"an extra that is a parent with Active variants" in `offered-modifiers.test.ts`, and the two
-"mountCatalogueApi — extras lists and products with variants" cases in
-`apps/server/src/catalogue-api.test.ts`. The "Also" state is refused too: giving a listed product
-an Active variant, from the parent's editor or by making a variant Active, answers
-`product.offered_as_extra` (#578; "a product an extras list offers" in
-`packages/catalogue/src/product-editor.test.ts` and the second of those server cases). Reading
-every write of `products` outside tests found no other path that sets a parent or makes a row
-Active, so the row mark is for rows written some other way (as the tests above write them).
-Built: `ComboboxOption` gained `disabled`: marked `aria-disabled="true"`, label and icon in
-`--wt-color-text-muted` (a primary row too), no hover background, still matched by the search and
-reached by the arrows (the WAI-ARIA practice for a listbox's disabled options), but never chosen by
-a click, Enter or Space, nor by type-ahead on the closed trigger. The extras picker offers a product with an Active
-variant that way, with "Has variants, so it can't be an extra" ("Tiene variantes, así que no puede
-ser un extra") as its second line. A listed row whose product has an Active variant says the same
-under its name, plus "Remove it from this list." ("Quítalo de esta lista."), from the moment the
-form opens; a save is refused in the form, beside that row and in the bottom message, with Save
-disabled until the row is removed. Axe scores no contrast inside an `aria-disabled` row (measured:
-a disabled row painted in the panel's own colour passed every axe case), so the combobox's a11y
-cases measure the greyed label and second line against the panel themselves, 4.5:1 in both themes.
-Seen, not changed: at 390px the items table is wider than its scrolling box with or without the
+2026-10-02) — DONE (#1098).** Seen, not changed: at 390px the items table is wider than its scrolling box with or without the
 mark (scroll width 496 in a 356 box), and the mark wraps in the narrow product column, so a marked
 row is about twice as tall as its neighbours.
 
-**Form fields after A178 (#1010 to #1019).** Done: A178g (#1021), a stepper's box widens to fit its
-label, and in a row too narrow for it narrows again, never below `--wt-stepper-field-width`, and
-cuts the label. Done: A178h (#1023), "Each" on a product and in the variants table's unit heading is drawn as
-a chosen value rather than the grey prompt (the dropdown gives it the stand-in value `__each__`, and
-a save still stores no unit); a variant's "Same as …" keeps the grey look (since A172, #1053, 2026-10-02: the parent's
-value itself, still grey). **Seen while building,
-not changed:**
+**Form fields after A178 (#1010 to #1019).** Done: A178g (#1021) and A178h (#1023). **Seen while
+building, not changed:**
 
-- on a product of its own, the main category's "Uncategorised" and the course's "No course"
-  choices still have the empty value, so the shared dropdown draws them as the grey prompt when
-  chosen, as Each was; the owner's answer on A178c (2026-10-02) asked for the stand-in for Each
-  alone. A193 (2026-10-03) later gave those choices the selected-value look while retaining their
-  empty values;
 - a blank "Time of day" on the backup screen sends `{ hour: 0, minute: NaN }` — the same parsing is
   on `main` before A178b (`#buildSchedule`'s `split(":")`); what the server does with it was not
   checked;
@@ -2541,15 +1214,10 @@ later"_). Open: page headings follow the Typography roles table in
 some dashboard screens' headings (the content languages screen's, for one) take the browser's own
 `<h1>` size, 28px; approvals and email set theirs to `--wt-font-size-lg`; menus and modifiers to
 `--wt-font-size-xl`. Left alone on purpose, sized in `rem`: the till's enrolment number and setup's
-cloud-recovery code (the done screen's break-glass heading and code moved to `--wt-font-size-lg` in
-W34, A244). **Phone check, the
+cloud-recovery code. **Phone check, the
 owner's to do (2026-10-01: "i'll test phones later on"):** Safari on iPhone is widely reported to
 zoom the page in when a field whose text is under 16px is focused — not yet tried here. If it does,
 the usual remedy is to keep field text at 16px on small screens only.
-
-**Build order for the owner's 2026-10-01 items (owner: "yes, all good"):** A178, A175 (#1029),
-A169 (#1026), A176 (#1033), A177 (#1037), A170 (#1040), A171 (#1044) and A172 (#1053) are done,
-A172 built in the new style rather than restyled twice.
 
 **Dragging a row (A180, #994 and #1003) — two things seen, left as they were.** A lifted row in a
 reorder list (`ReorderController`, `apps/dashboard/src/widgets/reorder-table.ts`) shows a faint line
@@ -2568,13 +1236,9 @@ plans to retire the editor.
   till, and refuse only a quantity increase. The till now keeps such a line marked "Not offered
   now"; a line with no stored snapshot whose product the till no longer offers is still dropped with
   `held.product_gone`, and the first edit of the order removes such an extra.
-- **Raising a held line's quantity checks the line's variant and its menu — DONE (#696).** Found
-  stale on 2026-10-05 by W90: since #696 a raise is priced again with the line's menu item and
-  variant (`applyLineEdits`, `apps/server/src/working-order.ts`), and a throwaway test (not kept)
-  saw a raise refused `product.variant_unavailable` once the variant was sold out, and
-  `service_zone.offer_not_allowed` once its menu was made inactive. Since W90 a menu has no switch
-  of its own to check. No kept test pins the refusal of a raise for an Unavailable size or an
-  inactive menu.
+- **Raising a held line's quantity checks the line's variant and its menu — DONE (#696).** Since
+  W90 a menu has no switch of its own to check. **Left open:** no kept test pins the refusal of a
+  raise for an Unavailable size or an inactive menu.
 - **A menu offer created with no price field at all is refused** (`management.request_invalid`);
   only an explicit `null` means "blank, charge the product's own price" — **decided 2026-09-23 by
   the owner:** _"we don't want to confuse 0.00 with `""`"_.
@@ -2699,8 +1363,8 @@ zone, and a venue with none is refused `service_zone.default_missing`.
   dish name above modifier text resolved in the device's own locale. A joined customer-facing line
   can mix languages when a locale exists on one half only. `wt-price-input` was built from scratch
   rather than on `wt-input`'s end slot. `modifier-limits.ts` holds a product rule as well as modifier
-  ones. And five interface faults seen then: the products list heads its Name column "Description",
-  the wordmark is near-invisible in the dark theme (fixed since, A225), "Top sellers" is rendered
+  ones. And four interface faults seen then: the products list heads its Name column "Description",
+  "Top sellers" is rendered
   twice on the overview, the login screen shows an error before anything is submitted, and the
   recipe screen is not routed from anywhere.
 
@@ -2734,9 +1398,6 @@ zone, and a venue with none is refused `service_zone.default_missing`.
   snapping shut mid-selection, make the collapse depend on `relatedTarget`.
 
 ### A1. Checking a fiscal record before it is written — LANDED #331 (2026-09-12)
-
-A record AEAT could not accept is refused at the chain seam before anything is written, and the same
-rules reach the setup boundary and the `waitron-provision venue` command.
 
 ### A1c. Dead pointers to deleted test suites
 
@@ -2801,8 +1462,6 @@ omit the location address when an F1 shows its filed taxpayer domicile; phone/em
 F2/absent-domicile controls remain. Automatic F1 credit/refund/cancellation is refused.
 The operation day is the owner's provisional service-start rule, awaiting asesor confirmation.
 
-The retained whole-branch reviews, focused checks, normal push hook and required current-head CI
-checks passed before landing; four deliberately skipped CI jobs are recorded in the receipts.
 The merge has its own CI run `37433083859`; its result was pending at this dated update. The owner approved the historical-export fixture's current artifact
 refusal, including its could-not-open operator advice; provenance, HTTP400/domain-error,
 unchanged-database and empty-staging checks remain. This is preproduction format rejection,
@@ -2814,38 +1473,6 @@ enabling public F1. The enablement change needs its own direct, invoice-first, u
 offline and zero-total public-path acceptance checks. F3 conversion, F1's R1–R4 correction path
 and foreign-recipient `IDOtro`/`IDType` remain separate decisions. Follow the campaign's current
 queue order; this landing does not start another fiscal item.
-
-**Discard-refresh finding, 2026-10-05:** an installed checkout at `9cbdbede8864bcb0d72157308c7e568d946dc587` logged four unhandled fetch rejections in the refresh group; the plain-refresh case deliberately expected three. The owner authorised fixing this inside A231 at 18:00. The branch now catches a failed held-list refresh after discard and shows the existing load-failure wording, while retaining an action refusal and ignoring a failure superseded by another refresh or session. Its existing retry/countdown/list assertions remain; the three-rejection expectation is now zero with an added displayed-failure assertion. `pnpm --filter @waitron/till exec vitest run src/till-app.test.ts` passed 648 tests without an unhandled-error report after this change. No separate fourth diagnostic was present in that run.
-
-
-**Issue-date correction, 2026-10-05:** the installed-candidate Madrid-midnight probe printed 28 February at 15:05 when its process ran in Los Angeles. A231 now carries the saved `sales.issuedOffsetMinutes` in F1 original/replay responses and uses it for paper and till issue-date formatting. Additional tests cover positive, zero and negative offsets, original/duplicate paper widths, a live venue-zone change and F2 controls. English/Spanish phone/desktop captures in both themes show the 1 March issue date beside the saved 28 February operation date. This is branch verification, not physical paper/QR approval or enablement of F1.
-
-**Recipient-name validation, 2026-10-05:** the invoice-choice route accepted a 121-character name in a real HTTP test. A231 now applies the fiscal backend's name limit while saving the choice, before any bill change, using trimmed Unicode code points. Added exact-limit, supplementary-character, smaller-limit and uncapped controls preserve valid names; existing assertions are unchanged. The eight issuance/consumer suites passed 504 tests, and the final two bill-payment files passed 197 after policy controls were added. This checks the currently disabled public F1 paths and existing consumers; the shared selector is now wired into all five product sale writers, but enabled public F1 direct, invoice-first, unpaid-departure and offline issuance remains unverified. The direct core zero-total F1 case is covered; this does not establish enabled zero-total HTTP issuance. Whole-branch rebase/review/CI and physical paper/QR approval remain open.
-
-**Shared issuance selector, 2026-10-05:** the branch now uses one persisted-choice selector at all five production sale-recording calls, including integrated capture/recovery and unpaid issuance. It repeats the saved recipient validation, selects the node's live full series for F1 and checks the F2 ceiling before filing. A new real received-money test first filed an incomplete saved address; the corrected path refuses before changing the bill, payments or numbering counters. Focused consumer runs passed 578 tests across twelve files; disposable address/series/ceiling/node deletions each failed their checks and restoration passed. Public F1 refusals remain. Walk-up persistence/pre-provider selection, remaining per-path F1 checks, whole-branch rebase/review/CI and physical paper/QR and owner review are still open.
-
-
-**Walk-up preparation, 2026-10-05:** the branch now validates and persists a walk-up invoice choice with its basket, allowing a validated F1 above the simplified ceiling while keeping the omitted-choice and explicit F2 limits. Creation checks the persisted choice against the node's live full series before returning; integrated payment preparation also uses the shared selector before the provider phase. New database cases check recipient/series refusals without a saved basket, F1 normalization and F2 boundaries. Focused server runs passed 713 tests across eleven files, and unedited golden/immutability cases passed 20; disposable guard deletions failed and restoration passed. The public F1 refusals are unchanged, so enabled F1 HTTP payment and remaining per-path issuance checks are still outstanding, alongside rebase, whole-branch reviews/CI and physical paper/QR and owner review.
-
-**2026-10-05 saved-choice growth checkpoint:** the shared bill-growth guard exempts a saved F1 choice on the request's node from the simplified-invoice ceiling. New HTTP cases cover a held basket, a table-line quantity increase, a new table round, merge, and whole/partial transfers into an F1 destination. A transfer from an F1 source into an F2 destination still refuses above the ceiling. Cash and card attempts on the enlarged F1 bill retain `sale.full_invoice_unavailable`; these cases do not enable or demonstrate F1 issuance. The existing F2 refusal and shrinking-bill assertions are unchanged. Remaining payment reservation and per-path F1 issuance checks, rebase/regeneration, full reviews/current-head CI and physical paper/QR and owner review remain open.
-
-**2026-10-05 payment-reservation checkpoint:** cash, manual-card and reader bill payments now pass the backend policy to the shared invoice selector before inserting a new payment. New real-database cases refuse another node's saved choice without changing the bill, payment/provider rows, series or print jobs. Positive cases retain partial F2 payments at the ceiling; F2 above the ceiling and F1 above that ceiling retain their existing refusals. The public F1 gate remains before the selector, so these tests do not enable or demonstrate new F1 money collection. No existing assertion changed. Remaining per-path F1 issuance checks, rebase/regeneration, whole-branch reviews/current-head CI and physical paper/QR and owner review remain open.
-
-**2026-10-05 invoice-choice ownership checkpoint:** the invoice-choice HTTP writer now passes the authenticated request's node to the saved-choice writer. Its read and update both scope the bill to that node. New real-database HTTP cases first accepted another node's F1 and F2 choices; after the fix they return `working_order.not_open` and retain the full bill row and its empty payment list. Another till on the same node can still save the choice. The direct-helper fixtures now supply their node; no existing assertion changed.
-
-The five affected server suites passed 301 tests, the unedited golden huella and inmutabilidad suites passed 20, and the three selected root guards passed 2,010. Server types, focused lint and formatting checks passed. In a frozen-installed disposable candidate, removing both node predicates failed the two cross-node cases while the same-node control passed; restoring them passed all three. Public F1 issuance remains disabled. Remaining per-path issuance checks, rebase/regeneration, whole-branch reviews/current-head CI, physical paper/QR and owner review are still open.
-
-**Acceptance audit and rebase, 2026-10-05:** regenerated A231's unshipped core migrations over main's device-profile retirement, retaining main's SQL/snapshot and the existing populated-series reset refusal. Six migration suites passed 382 tests; selected server paths/configuration passed 464, core record-sale passed 80 and the unedited fiscal gates passed 20. Dedicated F1 received-money completion checks for held edits, line edits, split and adjustment remain; the public issuance gate stays off. Physical paper/QR, whole-branch reviews/current-head CI and owner review remain open.
-
-
-**Received-money edit acceptance, 2026-10-05:** eight new HTTP cases exercise F1 completion after a held-order edit, a line edit, a split and a void. Each valid edit files once through the full series, preserves the received payment and reads back the saved recipient; a split leaves its child unissued with its own F2 choice. Each invalid saved-address case refuses the edit without changing the bill, party, adjustments, payments, invoices, series or print jobs. In an installed disposable checkout, removing the four completion calls failed all eight cases; removing postal-address validation failed the four refusal cases while the four valid cases passed; restoring the code passed all eight. These cases seed already-received money and retain the public refusal of new F1 payments. Whole-branch reviews/current-head CI, physical paper/QR and owner review remain open.
-
-**2026-10-05 recovery and zero-total gate acceptance:** four real-database cases retry a saved F1 with an unlinked captured or accepted-offline card payment, at €1.50 and €3,001.50. Each gets `sale.full_invoice_unavailable` without changing the complete saved order, lines, payment, series, fiscal rows or print jobs, creating a sale/tender, or asking the reader again. Four HTTP cases cover zero-total F1 at `/api/sales` and `/api/pay`, from both an explicit walk-up choice and a saved choice; each retains the order, counters, fiscal rows and print jobs. No existing assertion or production code changed.
-
-Both affected server suites passed 145 tests; the unedited golden huella and immutability suites passed 20. In an installed disposable copy, deleting the integrated stored-choice barrier failed all four F1 recovery cases while the F2 recovery control passed. Deleting the cash/card request and saved-choice barriers failed all four zero-total F1 cases while the F2 ceiling control passed. Restoring the barriers passed all ten selected cases. These experiments establish the named barriers' effect, not permission to enable public F1 issuance. Prospective enabled-F1 direct, invoice-first, unpaid-departure, offline and zero-total public-path acceptance remains for the enablement change after A231p and the remedy approval. Full branch reviews/current-head CI, physical 58/80 mm QR/paper inspection and owner review are still outstanding.
-
-
-**Finish-review corrections, 2026-10-05:** A231 now normalizes the optional full-series CLI code, accepts the contract's explicit null domicile in configuration decoding, and follows the shared Forms contract for field-specific and unscoped request refusals. New CLI cases reproduced three failures, while two unchanged export API cases reproduced the nullable-domicile failure; corrected provisioning and configuration suites passed 129 and 46 tests. The operation-date advisor note retains its dated history and adds an implementation pointer. Public F1 issuance and physical/owner gates remain as above.
 
 ### A231d. Full invoices by email as a PDF, and on an office printer — THIRD VERSION FOR OWNER REVIEW (2026-10-03)
 
@@ -2917,39 +1544,17 @@ an allocation-contract checkpoint, live AEAT probes, offline recovery, correctiv
 a separately owned Cloud registry workstream. The owner approved the revised plan on 2026-10-04;
 it replaces the 2026-10-03 task list while W41s remains the backlog item. The owner approved
 the allocation and recovery contract in §9 and granted W41s-4 a narrow H2 scope exception on
-2026-10-05. Task 2's ordered filing and duplicate-evidence changes landed as [#1213](https://github.com/clintongormley/waitron/pull/1213)
-on 2026-10-05. W41s-1 completed eight synthetic preproduction probes;
+2026-10-05. Task 2 landed as [#1213](https://github.com/clintongormley/waitron/pull/1213).
+W41s-1 completed eight synthetic preproduction probes;
 [the dated protocol receipt](superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1)
-records each outcome and its limits. The owner approved and landed
-[the library probe PR #132](https://github.com/waitron-io/verifactu/pull/132) on 2026-10-05
-(squash `8c680b699942c460ecb1c03f6cb8750130fc6648`); no release tag was created.
+records each outcome and its limits; the library probe PR is
+[waitron-io/verifactu#132](https://github.com/waitron-io/verifactu/pull/132) (no release tag was created).
 **Update, 2026-10-05 (W41s-1d):** [the asesor questions](compliance/asesor-questions.md)
 Q33–Q41 and [the findings, §16](compliance/verifactu-findings.md#16-aeat-test-service-observations-for-conflict-recovery-added-2026-10-05-w41s-1)
 now carry the test-system receipts and their limits. The legal questions remain open.
-**Update, 2026-10-05 (W41s-10c, implementation checkpoint; not landed):** the production
-boot probe now checks the fiscal module's read-only history before migrations. Focused tests
-refuse unstamped preproduction and unknown-environment records, retain empty setup and
-production-history controls, and check that the refused boot preserves the record and stamp.
-The branch also observes zoned AEAT presentation timestamps from background submissions, shows
-measured drift in an alert and till banner, and treats unusable or ambiguous timestamps as unknown.
-The banner describes the last comparison; it does not promise current clock accuracy. Readiness
-refusals show the saved AEAT code and message, and acceptance explains the measured limit of name
-checking in W41s-1's protocol receipt. Cash-sale tests cover both warning and unavailable reads.
-**Update, 2026-10-06:** W41s-10c landed as [#1264](https://github.com/clintongormley/waitron/pull/1264),
-squash `8e2fc9b095f1d7249c2cfa8771f9f87aa4d3a045`, after the owner approved both fiscal PRs.
-The rebase retains Venue details and the fiscal clock warning. The completed Claude review,
-focused checks, normal push hook and every current-head CI job passed before landing.
-The merge has its own CI run `37425891984`; its result is still pending at this update.
-This dated landing supersedes the implementation checkpoint above.
-**Update, 2026-10-06 (landings complete):** every job in W41s-10c merge CI `37425891984`,
-licence `37425891395` and CodeQL `37425891101` completed successfully. A231 #1256 has now
-landed with public F1 disabled; this supersedes the CI/landing next action and provisioning
-checkpoint below. **Next action:** continue the approved dependent W41s tasks in campaign order,
+W41s-10c landed as [#1264](https://github.com/clintongormley/waitron/pull/1264). A231 #1256 has
+landed with public F1 disabled. **Next action:** continue the approved dependent W41s tasks in campaign order,
 keeping each task's fiscal and adviser gates.
-**Update, 2026-10-06 (A231 CI):** the rebased provisioning CLI fixture omitted the required
-taxpayer domicile. Its eight refusal cases failed locally with `Unexpected prompt`; supplying
-the domicile restores them without changing their assertions. The provisioning coverage run
-passes all 207 tests. A231 still needs green CI on the corrected head before landing.
 Public F1 issuance stays disabled pending the physical 58/80 mm paper and QR checks, A231p
 and the asesor's approval. The F1 taxpayer-domicile receipt must omit the location address.
 Task 3 can use the published receipts; D2 retains its remaining plan gates, and D5 still needs
@@ -2966,17 +1571,8 @@ against the fake AEAT; dates from #15). Second, a duplicate answer AEAT reports 
 taken as ours without comparing fingerprints, so an older database copy or a second venue under the
 same tax id collides silently. A review seat also found that a cancellation sent for a colliding
 invoice cancels the other copy's record (measured on the fake AEAT; AEAT keys a cancellation by
-invoice alone); the design never sends one. It proposes seven preventions, five kinds of answer from AEAT, an automatic new
-chain started in its own transaction right after AEAT's reply is saved, with the series read per
-sale (no restart), what the
-dashboard says, AEAT's procedures quoted from primary sources, and eight asesor questions
-(Q33–Q40 in `docs/compliance/asesor-questions.md`, rewritten with their background on 2026-10-03). The
-[plan](superpowers/plans/2026-10-03-fiscal-chain-divergence.md) has seventeen tasks (0–16), starting
-with five probes at AEAT's pre-production service. The owner decided D1–D9 on 2026-10-03 (spec §11):
-automatic new chains, short incrementing series checked against AEAT, nothing waiting for the
-replication work. **Next action:** the owner approves the spec and plan as decided, and sends the asesor
-questions (Q33–Q40 and Q5 f); the build is queued only after approval. Tasks 1, 2, 3, 6, 7, 9, 10 and
-13–16 end `needs-owner-review`.
+invoice alone); the design never sends one. The 2026-10-03
+[plan](superpowers/plans/2026-10-03-fiscal-chain-divergence.md) is replaced by the revised plan above.
 
 ### A2. The setup wizard
 
@@ -3104,15 +1700,7 @@ existing venue retains its saved zone (`applyPreparedLocation`,
 not an edit through that applicator.
 
 **A configuration import does not check a table status's colour (A273, review of W92, 2026-10-05) —
-DONE (#1257).** A save and an import now share one rule, `isStatusColor`
-(`packages/db/src/status-color.ts`), which still allows a short named colour such as `amber`. The
-core module's import check (`validateCoreConfiguration`, `packages/db/src/configuration-transfer.ts`)
-refuses a `table_service_statuses` row whose colour fails it with `setup.request_invalid`
-`{ field: "table_service_statuses.color" }`. The bundle is refused whole when setup opens the
-export, before the staged file is written, and again when it is imported, where provisioning's
-transaction rolls back every venue row. A save's refusal is unchanged
-(`management.request_invalid`). Reproduced first: on `main` a bundle carrying `red;position:fixed`
-imported. Left open: the save's existing refusal test asserts the code but not
+DONE (#1257).** Left open: the save's existing refusal test asserts the code but not
 `{ field: "color" }` (Codex run-it review of #1257); tightening it was out of the item's scope.
 
 **Remaining "?" buttons that should be hints (A237, owner 2026-10-03) — OPEN.** The rule — a short
@@ -3133,13 +1721,6 @@ cards with buttons rather than `wt-choice-row` rows. The certificate help page t
 “not secure” in quotes, where the wizard's first screen (#1107) now writes Not secure without them.
 
 **The setup review screen's "?" buttons (A243, owner 2026-10-03) — DONE (W33, #1143, 2026-10-03).**
-`apps/setup/src/screens/review-screen.ts` no longer shows a "?" button anywhere, so at 1280 px
-wide every row whose label and value each fit on one line is the same height, except the
-certificate row, whose value carries its own Edit button; and each section's explanation is now one
-muted line under its heading
-(`review.help.*` in `apps/setup/src/i18n/strings/venue.ts`, where the seven row explanations and the
-button's label were deleted). The owner had called the "?" buttons messy: a row carrying one was
-taller than its neighbours, and the many bold circles pulled the eye away from the values.
 Left open: no test covers the value cell's own centring (`align-self: center` on the value in
 `review-screen.ts`) — removing it alone leaves all 31 review-screen tests green, because it changes
 nothing until a label is taller than its value (a label wrapping onto two lines). The test that
@@ -3147,46 +1728,13 @@ used to cover it was deleted on the owner's answer to the W33 question; the cert
 covers only the label's centring.
 
 **The "Setup complete" screen lacks the earlier screens' polish (A244, owner 2026-10-03) — DONE
-(W34, #1144).** `apps/setup/src/screens/done-screen.ts`: "not terrible but it doesn't
-have the polish of the previous pages" (owner). What reading it showed: a plain bulleted list of
-underlined links; two near-duplicate sentences ("restarting into trading mode" and "once the server
-is trading"); its own mode-pill style, separate from the review screen's; and `rem` sizes and hex
-fallbacks in its styles, against the token rule. The owner also wanted the Print agent link
-(`done.link.print_agent`) gone from the page: "i don't think we need the print agent anymore".
-Now the Till, Dashboard and Email inbox links are `wt-choice-row` rows (which gained an `href`),
-introduced by one muted sentence; the Print agent link is gone; the device steps and the backup
-nudge sit in cards; the review, provisioning and done screens share one mode pill
-(`apps/setup/src/mode-pill.ts`); and the screen's styles hold no `rem` or `em` sizes, hex colours
-or fallback values.
+(W34, #1144).**
 
-**The till follows the browser's languages before anyone signs in (A245, owner 2026-10-03) — DONE
-in W35.** The public till locales response now uses the dashboard's `resolveLoginLocale` match of
-`Accept-Language`, with the venue's language as fallback. The till applies that match on the enrol
-and lock screens and after logout; a person's choice or saved language wins over a late response.
-An enrolled kitchen display stays in the venue language. The receipt language still comes from the
-location. In the Demo stack's fresh browser, the direct
-enrol screen's language chooser was visible at 1280 and 390 pixels in both themes, and the same was
-true inside Demo's device setup dialog. Screenshots: `~/waitron-campaign/w35-shots/`. The owner's
-earlier missing chooser was not reproduced; no separate chooser change was made.
-
-**A Demo bar on the till and dashboard (A246, owner 2026-10-03) — DONE in W36.** In Demo and
-Preparation, the shared bar links to the dashboard, device page and Email inbox. The dashboard's
-Email inbox link lives there, and the till's device setup and approval screens link directly to
-Settings → Devices so a manager can approve the device. Live keeps its existing mode label.
-W37 added the pretend printer link beside Email inbox.
+**A Demo bar on the till and dashboard (A246, owner 2026-10-03) — DONE in W36 (#1148).**
 
 **The demo venue's names and tax ID come from the country pack (owner 2026-10-05) — DONE in
-W108 (#1276, main 99e986957).** Every demo venue, from the wizard's Demo and from `wa-wt reset demo`, is now the same made-up
-business: legal name Waitron Demo S.L., tax ID `B00000000`, location Casa Delgado, and two
-departments trading as Bar Casa Delgado and Deli Delgado, in English and Spanish alike. The values
-live in the country pack (`CountryDemoIdentity`, `packages/country/src/country.ts`, filled in by
-`packages/country-es`); the random tax ID draw is gone. In Demo the wizard's location name starts
-as Casa Delgado and can be changed, and is explained by a "?" rather than a hint that would not
-show in the filled-in field (Prepare and Live keep the hint); the legal name is no longer copied
-from it, and a refusal of the legal name shows above Next. The summary's Demo note says the legal
-name and tax ID are Waitron's fixed demo values. The departments' internal names still follow the
+W108 (#1276, main 99e986957).** The departments' internal names still follow the
 seed language.
-Screenshots: `~/waitron-campaign-c/w108-shots/`.
 Left open:
 - *A Demo for a country whose pack has no demo values is not refused at the setup route.* The demo
   seed refuses it (`seedInstalledDemo`, `apps/server/src/demo-seed.ts`), but only after the venue
@@ -3218,78 +1766,22 @@ request for `/manage/devices` on 5190 returned the till HTML, while the same pat
 the dashboard HTML (measured 2026-10-03 with `curl`). Make cross-app links reach the other dev
 server without changing their deployed same-origin paths; this also affects setup's existing links.
 
-**Table filters move into a Filters panel, and vanish on an empty table (A248, owner 2026-10-03) —
-DONE in W39.** `wt-data-table` (`packages/ui/src/components/wt-data-table.ts`)
-drew every column filter as a dropdown above the table even when the table had no rows at all — the
-empty Printers screen showed an "Active" filter over "No printers yet". Agreed with the owner, after
-comparing Home Assistant's entity table: on a table with no rows, no filters, search or Columns
-button; otherwise one Filters button with a count of active filters, opening a panel (beside the
-table when wide, full screen on a phone) with one collapsible section per filter, each with its count
-and a clear button, plus clear-all; a funnel mark in a filtered column's heading. Filters were not
-put in the column headings because a phone scrolls columns out of sight and a hidden column still
-filters. The units table's always-on checkboxes become a Select mode, as the product list already
-has.
-
-**Filters panel initial focus — DONE (W39f, owner 2026-10-03).** Opening the panel focuses its first
-filter section, so a second Enter collapses that section without clearing the filters.
-
-**Filters panel sections — DONE (W62, owner 2026-10-04).** Each filter now has a plain heading and
-an always available choice control. The section no longer collapses or shows a value count or its
-own Clear button. Choose "Any …" for one filter, or Clear all for every filter. Opening the panel
-focuses the first choice control. This supersedes W39's section layout and W39f's focus behavior.
-
-**The table's Columns button becomes a Customise dialog (A249, owner 2026-10-03) — DONE.**
-`wt-data-table` has an icon button opening a dialog that lists every column with a show/hide eye.
-The fixed first and pinned end columns are listed but cannot move or hide. Drag and keyboard controls
-reorder the others; Restore defaults resets order and visibility. The table remembers choices when it
-has a `viewKey`. Clicking a column heading still sorts it.
-
-**Column drag feedback in Customise — DONE (W63, owner 2026-10-04).** During a pointer drag, a
-floating copy of the column name follows the pointer and the destination row is highlighted. Both
-clear when the drag ends or the dialog closes; keyboard reordering and saved order still work.
-
-**Menus list heading, rows and Customise rows — DONE (W79, owner 2026-10-04).** Add menu sits in
-the Menus heading's row at its trailing edge, moving under the heading on a phone when it does not
-fit; the empty list still offers it under its sentence, and focus returns to the heading's button
-after a menu is made from the empty list. A click anywhere on a menu's row opens it once, and the
-row's own button is named "Open: <menu>". Every `wt-data-table` row that opens something now
-takes the lifted surface colour while hovered, or while anything in it has focus, pinned Actions
-cell included, because the raised colour it used was the same white as a resting row in the light
-theme. A table shows its Customise columns button only when it has two movable columns, so the Menus
-list, whose Status is its only one, shows none. (Since W87, 2026-10-04, a wide Menus list has a
-second movable column, Changes, and shows the button; see below.) In the Customise dialog a column
-that can never be hidden says "Always shown" instead of drawing a greyed-out eye, fixed rows keep
-the drag handle's space so names line up, and the last shown column's greyed-out eye carries a
-visible "Keep at least one shown".
+**Menus list heading, rows and Customise rows — DONE (W79, #1186, owner 2026-10-04).**
 Left open by W79 (#1186): `docs/developers/design-system.md` still says a list's Create action
 goes in a menu beside the table heading, while Menus, Staff and Units put a text Add button at the
 heading row's trailing edge; the doc only names the exceptions, and whether the rule itself changes
 is the owner's call. And the row-highlight tests focus only the row's own button, so nothing tests
 that a row highlights while another control in it, such as its Actions menu, has focus.
-W79 deleted the two checks that clicking a fixed column's eye left the sort alone, since fixed
-columns no longer have one; W79f puts a check back, on a flat table, in `wt-data-table.test.ts`:
-hiding and showing columns through the Customise dialog keeps the sort column and direction, and
-hiding the sorted column itself (allowed only while another movable column stays shown) stops the
-rows being sorted by it until it is shown again, when the same sort returns.
 
-**Menus list Changes column and top-aligned rows — DONE (W87, owner 2026-10-04).** The Menus list
-has a Changes column when the list is wide enough. A menu with changes since its live version keeps
-"Published", the live version and its time in Status, and shows an "Unpublished changes" link under
-Changes, named for its menu, that opens the menu's Preview tab straight away without opening the
-row; a click with a modifier key is left to the browser. A menu never published, one with no
-changes, and every menu while the states are read or after their read fails show nothing there.
-Clashes stay in Status and the status sort is unchanged. The list's cells now start at their top (a
-new `topAligned` option on `wt-data-table`, set by this list alone); where Changes is a column, the
-name, state, link and row menu start on one line. The list takes one of three layouts by its own
+**Menus list Changes column and top-aligned rows — DONE (W87, #1191, owner 2026-10-04).** The Menus list
+has a Changes column when the list is wide enough, holding an "Unpublished changes" link to the
+menu's Preview tab.
+The list takes one of three layouts by its own
 width. From 50rem it has four columns and the name wraps so that they fit without sideways
 scrolling, even for a long name. Between 30rem and 50rem it has Name, Status and Actions, with the
 link on its own line under the state, so the link stays in view beside a long name. At 30rem or less
-the state and then the link stack under the name. With a second movable column the wide list now
-offers Customise columns, which W79 had left off; the list keeps its column choices under a new key,
-so a choice saved while Status was its only movable column is not read. Left open by W87: the editor
-heading still reads "Unpublished changes · Live: version <n>", which W88 redesigns (done in W88,
-2026-10-05: the heading reads "Menus › <menu>", and "Unpublished changes" is a link to the Preview
-tab). Between 30rem
+the state and then the link stack under the name.
+Left open by W87: between 30rem
 and 50rem a long menu name can still make the table wider than its box (measured in Chromium,
 2026-10-04: by 20 px in English and 29 px in Spanish, at a 600 px window with hyphenated, spaced and
 unbroken names and at 700 px with spaced and unbroken ones, where a hyphenated one did not
@@ -3310,66 +1802,18 @@ not measured on the product list itself. Its "Made at" column also does not set 
 false`, so, judging by the code (not run), a click beside a short station name opens the product
 editor, which the `activatesRow` rule in `docs/developers/design-system.md` forbids. Both predate
 this branch (5b725d672, ca89633f1) and are left for an item of their own.
-Fixed in W88 (2026-10-05, its commit "Menus list: choose the phone or wide layout before the table is
-first drawn"): W87's list was first drawn in its wide layout and switched to the phone layout a
-frame later, which made two `menus-screen.test.ts` cases fail now and then ("offers Customise
-columns only where Status and Changes are columns (390 px)" and "opens the Preview tab from Enter on
-the focused link"). The list now measures its width before its table is first drawn.
 
-**Add products picker selects all listed — DONE (W81, owner 2026-10-04).** The Structure tab's
-"Add several products" button now reads "Add products" ("Añadir productos"). The picker's list has
-a header row whose checkbox lines up with the products' own, labelled "Select all listed" and named
-for screen readers "Select all listed products". It chooses or clears only the products the
-category and search filters list, shows checked, unchecked or mixed from those alone, and leaves
-chosen products a filter hides chosen; Add still adds every chosen product. It is greyed out while
-the picker is busy or nothing matches the filters, and not drawn when there are no products or the
-section already holds them all.
+**Add products picker selects all listed — DONE (W81, #1189, owner 2026-10-04).**
 
-**A menu's Structure tab is one tree — DONE (W88, #1209, main `21b57d280`, 2026-10-05; owner 2026-10-04).** The Structure tab draws the
-menu as one full-width tree table, like the Products tree. Its first row, "Menu: <name>", holds
-New section here, Include a menu and Add products in its ⋮; each section the menu owns holds the
-same three adds, then Edit and Delete, and an add acts on that section from whichever place it was
-chosen. The outline, the right-hand list panel with its own heading, note and bottom "Add a product"
-picker, the path above that panel, and the three buttons beside the tabs are gone; Add products in a
-row's ⋮ replaces the bottom picker, and there is no single-product add in the tree. Members keep
-menu order, and a member moves within its own list by ArrowUp or ArrowDown on its grip, or by
-dragging the grip, with Products' ghost and gap. Names line up at every level, as in the Products
-tree. An included menu opens for browsing; nothing inside
-it has a grip or a ⋮, and its own row reads "Read-only here" with a link to that menu's own editor
-and "Remove from this menu". Opening a section, or choosing an add from its ⋮, makes it the current
-row (bold and underlined); a refusal about another list still names it. After a window closes,
-focus goes back to the ⋮ it was opened from. The editor's heading now reads "Menus › <menu>", with
-Menus an underlined link to the list, and "Unpublished changes" under it is a link to the Preview
-tab (plain words on the Preview tab itself). Products' drag code moved into
-`apps/dashboard/src/widgets/tree-drag.ts`, shared by both trees. The owner approved the existing
-test edits on 2026-10-04 (the list is in the PR). Not checked: a drag with a touch pointer or on a
+**A menu's Structure tab is one tree — DONE (W88, #1209, main `21b57d280`, 2026-10-05; owner 2026-10-04).**
+Not checked: a drag with a touch pointer or on a
 real touch screen; a drag does not scroll the page near its edge (nor does Products'); in Spanish at
 390 px the Type column scrolls partly under the pinned Actions column, which is the table's own
 sideways scroll; the heading's height with "Checking…" or "Could not be checked" was not measured
 against the other states.
 
-**The Menus Structure tree: a folder's name starts left of a product's at the same level — DONE
-(W88, found 2026-10-05 by W88's look).** Every row of the tree, the menu's own row included, now
-draws the Products tree's three slots before its name _(2026-10-06: at phone width the Products tree's product
-rows draw no photo slot; this tree's keep theirs, W85e)_: the table's arrow, a grip or a blank space
-of the same width, and a folder icon in a photo-wide frame or the product's photo, or an empty
-frame of the same size when it has none. Names at one level start at one place, and the Name heading
-sits over the menu's name through the table's `tree-heading` part. W88 was branched before W84
-(#1199) gave the Products tree's All products row its grip space.
-
 **A menu no longer switches a product or size off on its own — DONE (W90, #1216, 2026-10-05;
-owner 2026-10-04).** Whether a product is on a menu is now decided only by the structure of an
-active menu (its own sections and the active menus it includes) and the product's Active state, and
-whether it can be sold now by Available. A size (variant) is sold wherever its product is placed, while it is Active and
-Available. The Prices tab lost its "On this menu" column, the Sold / Switched off choices in its
-edit window and the Sell it / Switch it off clash buttons, and a menu can no longer avoid a price
-clash between the menus it includes by switching the item off. The item PATCH refuses a body carrying
-`offered`, and the size-prices PUT a size entry carrying it (`management.request_invalid`). Catalogue migration
-`0024_drop_menu_offered.sql` removes `menu_items.offered` and rebuilds
-`menu_item_variant_overrides` without its `offered` column, so a row there always holds a price.
-The rule is in [products.md](developers/products.md), _Active and Available_ under _Variants_. The
-test checks this change rewrote or deleted are listed in the PR and in the plan's _Changed test
-checks_ table (`docs/superpowers/plans/2026-10-05-w90-remove-menu-offered-switch.md`).
+owner 2026-10-04).**
 **Upgrading:** a venue whose database holds a size row with an on/off choice and no menu price
 cannot migrate: migrating it fails on
 `CHECK constraint failed: menu_item_variant_overrides_overrides_ck`. Reset a dev venue with
@@ -3386,29 +1830,7 @@ one short (seen 2026-10-05 in a throwaway test, not kept); an older one is refus
 module, in the order they are checked, whose count differs.
 
 **A menu's prices are one editable Price overrides field per row — DONE (W89, #1239,
-2026-10-05; owner 2026-10-04).** The menu editor's Prices tab is now "Price overrides" ("Precios
-propios"); its address keeps `view/prices`. Each product and each size has one price field in its
-row: blank, it shows the price it inherits as its placeholder — one amount, the range across a
-product's Active sizes, or "Set a price" beside a red Clash when its sources disagree (a product
-whose only clash is in one of its sizes shows "—" and says that a variant's sources disagree and
-that variant's price should be set); with an override, it shows that price. Enter or leaving the
-field saves it, Escape puts the stored price back, and emptying it gives the inheritance back. A
-refusal about the price also goes under its field and takes focus there; a status line that stays in
-view says each refusal while its row is shown and, once the prices are read again after the last
-save made, what that save stored, with Undo — unless the status line is then showing a refusal. The
-window behind the product name, and the Before this menu, Menu price, Effective price, Price on this
-menu and From columns, are gone.
-Main category starts shown and keeps its filter; the table keeps its column choices under a new key
-(`waitron.menus.price-overrides.table`), so a choice saved for the old columns is not read (as W87
-did for the Menus list). A Status column says Active or Inactive and links to the product's page;
-the tab now lists Inactive products and sizes (the management prices read includes them, each with
-`active`), while a menu's offers, and what it publishes, still leave them out. A new route,
-`PATCH /management-api/catalogues/:id/items/:itemId/variants/:variantId`, sets one size's price
-alone ([product-categories.md](developers/product-categories.md)); the dashboard no longer calls
-the whole-list `PUT …/variants`, which stays on the server. The pattern is written down in
-[design-system.md](developers/design-system.md), Forms → "A value saved from its own table row".
-No migration. The test checks this change rewrote or deleted are in the PR's "Changed test checks"
-and in the plan (`docs/superpowers/plans/2026-10-05-w89-menu-price-overrides.md`). Not checked:
+2026-10-05; owner 2026-10-04).** Not checked:
 the tab on the running dev stack — the product page opening from a Status link, a real save and
 the re-read after it, and Undo against the real server (the look in Chromium used mounted widgets
 only).
@@ -3419,29 +1841,8 @@ whether its clash comes from its product by matching the two clashes, which can 
 rare setup where they match exactly — telling them apart needs the prices read to say which level
 a clash came from.
 
-**A product has one colour everywhere, taken from its category unless it has its own — DONE (W92,
-#1250, 2026-10-05).** A category can have a colour, set in the Products tree from a colour square
-after its name and count, or from the square inside the box that names a new category or renames
-one (a category is still named inline, the owner's choice of 2026-10-05). A square opens a small
-chooser with the shared swatches, No colour and Custom; choosing is the answer. From a row the
-colour saves at once, alone; from the box it saves with the name on Enter. The box's square is no
-Tab stop, so Tab still leaves the box and saves it as before; from the keyboard a category's colour
-is set from its row's square. A product can have a colour of its own, set from the product
-editor's chooser after Name, whose "Use category colour" choice shows the colour it would take
-instead, or from the product's swatch in a menu's Structure tree, whose dialog says the change
-applies on every menu using the product. A product's colour is its own, else its main category's,
-else the nearest coloured category above that, else none. A variant always takes its parent's: the
-editor clears a variant's colour, and the server refuses a variant body carrying one. A section's
-swatch in the Structure tree opens the section's existing form, and a section's colour still
-paints only its own tile. Each published offer records its product's colour, so a colour edit is a
-change to publish: the menu reads as changed, its Preview tab names the change "colour", and the
-tills show it once the menu is published. On the till, a coloured product or section tile fills
-with its colour and its labels turn black or white, whichever reads better; a sold-out painted tile
-keeps the usual fade (replaced by W92a, 2026-10-05: see below). The swatches sit after the name, not before it, so names at one depth stay
-lined up (W84). The Home page tab's tile preview stays uncoloured
-([W92 spec](superpowers/specs/2026-10-05-w92-product-colours-design.md), Question 3 and
-Decision 8). How it works: [products.md](developers/products.md), _Colour_, and
-[product-categories.md](developers/product-categories.md).
+**A product has one colour everywhere, taken from its category unless it has its own — DONE (W92, #1250,
+2026-10-05).**
 **Upgrading:** two migrations, core `0101_product_color.sql` and catalogue
 `0025_category_color.sql`, each add one nullable column (`products.color`,
 `category_details.color`) with no table rebuild, so a venue migrates in place with no reset.
@@ -3452,9 +1853,7 @@ A section's colour was already in such a version, and the till now paints it on 
 tile. Export a configuration bundle again
 after upgrading: one exported before W92 records older schema versions for core and catalogue,
 which the import refuses (`validateConfigurationBundle`,
-`apps/server/src/configuration-transfer.ts`; read, not run). The test checks this change rewrote
-are listed in the PR's "Changed test checks" and in the plan
-(`docs/superpowers/plans/2026-10-05-w92-product-colours.md`).
+`apps/server/src/configuration-transfer.ts`; read, not run).
 Left open:
 - In the Structure tree, closing the section form opened from a section's swatch puts focus on the
   row's ⋮ menu, while the product colour dialog puts it back on the swatch. Neither is pinned by a
@@ -3467,11 +1866,7 @@ Left open:
 - Some dashboard pixel and drag cases W92 did not change failed once when run in parallel locally
   during the branch's work; the cause was not found. They passed in the PR's dashboard CI shard on
   its final head.
-- **Done (W92a, #1259, 2026-10-05) — a sold-out painted till tile stays readable.** It kept the usual 50%
-  disabled fade, so its labels read at about 2.2:1 to 3.5:1 contrast (measured by the first of the
-  final Codex reviews). Every sold-out till tile, painted or not, is now a grey tile at full
-  strength with its labels at 4.5:1 or more in both themes, and a painted one keeps its colour as a
-  stripe ([products.md](developers/products.md), _Colour_).
+- **Done (W92a, #1259, 2026-10-05) — a sold-out painted till tile stays readable.**
 - W92a's look is the owner's to judge (#1259's "Looks for the owner to judge"; screenshots in lane
   B's `w92a-shots/`): a pale colour's stripe is faint on the light grey (about 1.35:1 for
   `#edabab`) and a dark one's on the dark grey (about 2.11:1 for `#256bb1`); the dark theme's grey
@@ -3485,19 +1880,8 @@ Left open:
   checked against earlier commits.
 
 **A Products drag does not notice when a refresh removes what it is dragging or where it is going —
-DONE (W88a, #1228, 2026-10-05).** Found by W88's pre-merge review. The Products tree
-(`apps/dashboard/src/widgets/product-list.ts`) now checks a drag against the rows the list holds
-after a refresh. A drag whose pressed row a refresh removed before the pointer moved far enough does
-not start (no drag picture, no grabbing cursor, no `drag-items` naming the row). A target category
-that a refresh removed sends no `drop-items` on release; once a refresh has removed any dragged row,
-whether the only one or one of several selected, no category is offered and letting go sends
-nothing. After every update of the table during a drag, the target already chosen is judged again
-and the marks and gap redrawn, so a refresh no longer leaves a mark on a category that is no longer
-a drop target, or the gap on the wrong row; the category is chosen again from the row under the
-pointer only when the pointer moves. Checked by the "a refresh during a drag" cases in
-`apps/dashboard/src/widgets/product-list.test.ts`, all but the All products case seen failing
-without the code that makes it pass. A drag no longer sends a move once a refresh has removed the
-category; one deleted elsewhere before this screen refreshed is still sent, and what the server
+DONE (W88a, #1228, 2026-10-05); left open:** A drag no longer sends a move once a refresh has removed
+the category; one deleted elsewhere before this screen refreshed is still sent, and what the server
 answers to it is not checked.
 
 **Unused editing code in the two widgets the Menus screen no longer edits with — OPEN (W88, owner
@@ -3535,18 +1919,9 @@ Preview tab: the page measured 658 px wide on 2026-10-05 (a throwaway test with 
 fixtures), while the Structure and Prices (since W89, Price overrides) tabs measured 390 px. The editor's heading holds the word;
 the overflow is inside `dashboard-menu-preview` (`apps/dashboard/src/widgets/menu-preview.ts`).
 
-**Filtered table headings stay put — DONE (W64, owner 2026-10-04).** The conditional funnel button
-used to increase a header's height and width when its filter became active. A filtered heading now
-uses an inset coloured line and an accessible filtered label; the Filters toolbar button opens the
-panel. The table keeps its measured column widths when a filter narrows rows and when it clears,
-then sizes them anew when the table's container, rows or column choices change. This supersedes
-W39's funnel mark.
-
-**Products table toolbar and headings stay in view — DONE (W80, #1187, owner 2026-10-04).** On the
-Products screen the table fills the main column, and its rows scroll inside the table's own box
-under its column headings; the page title, the search, Filters, Expand all, Select and Customise
-stay above it. `wt-data-table` gained an opt-in `stickyHeader` for this, set only by the Products
-screen. At every width the table's box is at least three tap targets tall. The dashboard shell
+**Products table toolbar and headings stay in view — DONE (W80, #1187, owner 2026-10-04); left
+open:** `wt-data-table`'s opt-in `stickyHeader` is set only by the Products screen.
+At every width the table's box is at least three tap targets tall. The dashboard shell
 test, with a stub catalogue of 40 uncategorised products, no category open and no message above the
 list, finds only the rows scrolling at 390×844 and 375×667, with about 27px to spare at 375×667
 before W83 (a temporary test, not kept, measured 83px after it on 2026-10-04;
@@ -3567,20 +1942,11 @@ same temporary test; no kept test covers Select mode there. Whether
 that is enough rows is the owner's call.
 
 **Products: Filters and Select at the start of the table's toolbar — DONE (W83, #1193, owner
-2026-10-04).** On Products, Filters (a funnel with its count) and Select (a checklist mark) are icon
-buttons at the toolbar's leading edge, before the search. Each is named for screen readers, shows
-its name in a tooltip that Escape hides, on keyboard focus and, where the pointer can hover, on
-hover, and reads as pressed while
-its panel or Select mode is on. While the table is at least 768px wide, Filters opens a panel
-beside the rows at their left; it stays in view while the rows scroll, a press outside leaves it
-open, and closing it gives the rows their width back. Narrower, it opens full screen. Pressing
-Select again leaves Select mode as Cancel does; the count, Move to…, Delete and Cancel stay at the
-toolbar's end and wrap one by one on a phone. On a phone the search takes its own line under the
-buttons _(2026-10-05, W85d: wherever the list is 40rem wide or less, not only in a narrow window)_. `wt-data-table` gained an opt-in `leadingFilters` for this, set only by Products, and the
-icon button and tooltip styles are shared from `@waitron/ui` (`iconButtonStyles`). One existing
-test assertion changed, for the owner to review: the catalogue browser's toolbar-order test pinned
-the old order (search, Filters, Expand all, Select, Customise) and now pins the new one (Filters,
-Select, search, Expand all, Customise). Left open: on a phone the search is drawn under Expand all
+2026-10-04); left open:** While the table is at least 768px wide, Filters opens a panel beside the
+rows at their left; narrower, it opens full screen. One existing test assertion changed, for the
+owner to review: the catalogue browser's toolbar-order test pinned the old order (search, Filters,
+Expand all, Select, Customise) and now pins the new one (Filters, Select, search, Expand all,
+Customise). Left open: on a phone the search is drawn under Expand all
 and Customise while Tab reaches it before them (two reviewers judged this not a WCAG 1.3.2 or 2.4.3
 failure, by stepping through with the keyboard and reading Chromium's accessibility tree; what a
 screen reader says was not checked) _(2026-10-05, W85d: this now happens wherever the list is 40rem
@@ -3592,352 +1958,81 @@ button is icon-only beside these two but has neither their look nor a tooltip; (
 and its tooltip are a stylesheet and a handler each caller wires by hand, not a `wt-icon-button`
 component — Select is a native `<button>` because `wt-button` does not pass `aria-pressed` through;
 (3) the 768px side-panel threshold is tied by hand to token sizes (768 − 7×44 − 12 = 448, just
-above the table's 440px narrow-tree width); (4) the catalogue browser's phone layout switches on
-the window's width (`@media (max-width: 30rem)`), where the menus and modifiers screens use
-`@container (max-width: 30rem)` _(2026-10-05: fixed in W85d, #1249, below — it now switches on
-the list's own width, at 40rem)_.
+above the table's 440px narrow-tree width).
 
 **Products at phone width: the toolbar takes two lines, not three — DONE (W85d, #1249, owner
-2026-10-05).** The owner saw three toolbar lines on Products: Filters and Select, then the search,
-then Expand all and Customise. The catalogue browser moved its search under the buttons only in a
-window up to 30rem (480px) wide, so a narrow list in a wider window — the sidebar showing, for
-example — missed the rule. Measured in real Chromium in a 1280px window: a list 320 to 430px wide
-drew three lines, and 480 to 600px drew the search beside Filters and Select with Expand all and
-Customise on a second line; all five shared one line at 640px.
-The rule is now a container query on the catalogue browser's own width
-(`@container (max-width: 40rem)`, `apps/dashboard/src/widgets/catalogue-browser.ts`): at that width
-or less, Filters, Select, Expand all and Customise share the first line and the search fills the
-line under them; wider, all five stay on one line as before. Products is the only table with these
-controls (the menu structure table has Expand all and no search; the units, modifiers, content
-languages and menu prices tables use the table's own search and have no Expand all or Select), so
-no other screen changed. The search is given the whole line (`flex-basis: 100%`) as well as moved
-after the buttons: with `order` alone, English lists 620 and 640px wide and a Spanish list 640px
-wide drew all five on one line with the search last. Pinned by the "in a wide window" cases (English lists 320, 430, 620 and
-640px wide; Spanish lists 430, 600 and 640px wide) and the "Spanish list 660px wide" case in
-`apps/dashboard/src/widgets/catalogue-browser.test.ts`; the 390px phone case and the 1280px
-one-line case are unchanged. Looked at on the demo stack at 390, 800, 900 and 1280px, light and
-dark, English and Spanish (local screenshots in `~/waitron-campaign/w85d-shots/`). Not covered:
-Select mode's extra controls at the middle widths.
+2026-10-05).** Not covered: Select mode's extra controls at the middle widths.
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
-2026-10-04).** The All products row, category rows, a category being added and product rows of the
-Products tree draw the same slots before the name — the arrow, a drag grip (a blank one on All
-products and on a category being added) and a folder icon, or a product's photo or its empty
-placeholder frame, one tap target each _(2026-10-06: at phone width a product row draws no photo
-slot, W85e)_ — so on those rows names step in by the table's indent per
-level whether the row is a category or a product, and the Name heading sits over the All products
-name (`wt-data-table` gained a `tree-heading` part for this). A variant's row draws no grip and no
-photo slot; its name is indented to start under its product's name. Before, at one level a
-category's name started 22px left of a product's (measured 2026-10-04 in a temporary test, not
-kept). The Main category column is removed from the table and its Customise list; its search text
-moved into the Name column's, so a category's name or path still finds its products and an empty
-category is found by its parent's path; a saved column choice or order that names the old column
-still applies to the other columns, and the old key is ignored. Seven existing test assertions that pinned the column changed, for the owner to
-review (listed in the PR). Now, a product whose category the dashboard's category list does not hold
+2026-10-04).** Seven existing test assertions that pinned the column changed, for the owner to
+review (listed in the PR). A product whose category the dashboard's category list does not hold
 lists under All products with no "missing" marker; the database refuses a stored product naming a
 category that does not exist (`packages/db/src/schema/catalogue.ts:51`, a foreign key; not tried),
 so this is expected only while the dashboard's category list is behind.
 
-**Products: a product's variants are listed by name — DONE (W85, #1200, owner 2026-10-04).** In the
-Products tree a product's variants are listed under it by name, in the dashboard's numeric-aware
-label order (`byLabel`, so "Ración 2" comes before "Ración 10"), whichever column sorts the table,
-in either direction, and under a sort restored from an earlier visit. Before, they sorted with the
-table like any other row, so a Name sort backwards or a price sort reordered them. `wt-data-table`
-gained `rowKeepsChildOrder`, which the Products list turns on for a product's own row; categories
-and products still sort as before. The order the product editor keeps (drag-reorderable, used by
-menus and ordering) is unchanged: the list sorts a copy. No existing test assertion changed.
-Left open, for the owner to decide whether it needs an item: the order reads each run of digits
-as a whole number, so a decimal weight sorts wrongly — "0,5 kg" before "0,25 kg" (tried in Node
-with the same comparison, not in the dashboard). The rest of the dashboard sorts names the same
-way. _2026-10-05 (W85a): a product's variants now keep the product's own order, below; the
-decimal-weight point no longer applies to them._
-
-**Products: a product's variants are listed in the product's own order — DONE (W85a, #1207, owner
-2026-10-05: "that would be ideal").** This replaces W85's name order, so W85's decimal-weight
-point no longer applies to a product's variants; the number-aware name sort elsewhere still puts
-"0,5 kg" before "0,25 kg". The Products list no longer sorts a product's variants: it draws them in the
-order the API sends, which is the stored variant order the product editor shows and saves
-(`listedVariantsOfProducts`, `packages/catalogue/src/operations.ts`, orders by `variantOrder`), and
-`rowKeepsChildOrder` still keeps that order under every column's sort. Pinned in
-`packages/catalogue/src/variants.test.ts` (two reorders through `setProductVariants`, each read
-back by `listProducts`) and `apps/dashboard/src/widgets/product-list.test.ts`. Three existing
-tests' order checks (W85's name-order group, the status-filter case and the variant-alignment case)
-now check the product's order; listed in the PR.
+**Products: a product's variants are listed by name — DONE (W85, #1200); replaced by W85a (#1207,
+owner 2026-10-05), which lists them in the product's own order.** Left open, for the owner to
+decide whether it needs an item: the dashboard's number-aware name order (`byLabel`) reads each run
+of digits as a whole number, so a decimal weight sorts wrongly — "0,5 kg" before "0,25 kg" (tried
+in Node with the same comparison, not in the dashboard). The rest of the dashboard sorts names this
+way; since W85a it no longer applies to a product's variants.
 
 **Products at phone width: a long name runs under the pinned Actions column, cut with no ellipsis —
-DONE (W85b, #1243; W85c, #1245, owner 2026-10-05).** Found 2026-10-05 during W85a's check, and queued
-by the owner the same day as two items:
+DONE (W85b, #1243; W85c, #1245; W85e, #1275); left open:**
 
-- Fixed in W85b (#1243, 2026-10-05): at 390 px in the demo venue, with Croquetas' variants open,
-  "Ración 10" showed as "Ración 1(" and the product's "4 variantes" as "4 variante", cut off by the
-  pinned Actions column (`~/waitron-campaign/w85a-shots/shot-dark-390.png`, a local screenshot).
-  The table is as wide as its widest row, so a long name widened the Name column and its end sat
-  under the pinned column while the table was unscrolled. Every name in the Products tree's Name
-  column — a category's name with its count and its asterisk for no active station, All products
-  and its count, a product's name with its variant count, and a variant's name — now takes only the
-  room between its own start and the row's pinned cell, measured as if the table were unscrolled,
-  and wraps inside it, a single long word included. The room is measured a frame after the table
-  resizes or redraws, by the same pass that already fitted the category name box (`#fitNames`,
-  `apps/dashboard/src/widgets/product-list.ts`). A name that fits stays on one line. Pinned by the
-  390 px, 430-to-390 px and 1280 px cases in `apps/dashboard/src/widgets/product-list.test.ts`; the
-  redraws tested are a branch opened (also with the table scrolled sideways), a search and
-  selection turned on. Not covered: while a category is being renamed, its count and
-  asterisk follow the name box and are not capped _(2026-10-05: since W72g only at desktop width;
-  at phone width they sit on the line above the box and wrap in what the grip and folder icon leave
-  of the room before the pinned column)_. Wrapping was chosen over an ellipsis because a phone
-  cannot show a cut name's full text. The open point (a name got about 46 px at 390 px, so most
-  words broke part-way) was answered "maybe (b) and (c)" by the owner (b: drop the product photo at phone
-  width; c: narrow the tree's leading slots), and **W85e** (#1275, 2026-10-06) did (b) and narrowed
-  the arrow slot of (c): at phone width (the table's `narrow`) a product row draws no photo, and every tree's
-  arrow slot is one cell padding (12 px) narrower, a toggle button keeping its 44 px tap target by
-  reaching back over the 12 px before it, which on every row is inside its own cell. Measured in the demo venue at 390 px: a product's
-  name room went from 55 to 123 px (English) and 46 to 114 px (Spanish), a category's up 12 px;
-  laptop width unchanged. Categories keep their folder icon, so at phone width a product's name
-  starts one folder slot before a sibling category's. The grip and the 8 px indent step were
-  left as they were: the grip is a tap target, and a narrower step barely tells levels apart.
-  At phone width a product's name also fills the room its photo gave up (the list re-fits names
-  whenever the table's `narrow` changes), and a narrow toggle's focus ring is drawn inside the button so the
-  scrolling box does not clip a top-level one. The Structure tree gains the same 12 px; its long
-  names still clip at 390 px (W92's open point above).
+- Not covered by W85b: while a category is being renamed, its count and asterisk follow the name
+  box and are not capped _(2026-10-05: since W72g only at desktop width; at phone width they sit on
+  the line above the box and wrap in what the grip and folder icon leave of the room before the
+  pinned column)_.
+- The owner answered W85b's open point (a name got about 46 px at 390 px) "maybe (b) and (c)" (b:
+  drop the product photo at phone width; c: narrow the tree's leading slots), and **W85e** (#1275,
+  2026-10-06) did (b) and narrowed the arrow slot of (c). Categories keep their folder icon, so at
+  phone width a product's name starts one folder slot before a sibling category's. The grip and the
+  8 px indent step were left as they were. The Structure tree's long names still clip at 390 px
+  (W92's open point above).
   Left for the owner (the owner's answer was a "maybe"): keep, or undo, either half; hide the
   folder icon too at phone width so product and category names line up again; narrow the indent
   step. Before/after screenshots: `~/waitron-campaign/w85e-shots/pair-*.png` (local).
-- Fixed in W85c (#1245, 2026-10-05): in the product editor's variant table the Unit button sat 4 px
-  (`--wt-space-1`) after the word Price, which read as no gap. The two now have a `--wt-space-2`
-  (8 px) gap between them (`.price-heading`, `apps/dashboard/src/widgets/variant-table.ts`),
-  measured in real Chromium at desktop width, on one line, by the heading-gap case in
-  `apps/dashboard/src/widgets/variant-table.test.ts`. A table 30rem wide or less hides that column
-  and its button, so phone width is unchanged.
 
 **Catalogue: no two categories with one parent, and no two Active products, share a name — DONE
-(W72, #1214, owner 2026-10-05).** A category's name is now refused when another category with the same
-parent (or another top-level category) already has it, on create, rename, move, the bulk move and
-a delete that moves the contents up. An Active product's staff name is refused when another Active
-product or Active variant anywhere in the venue has it, whatever its menu or category, on create,
-rename, reactivation (a product coming back brings its Active variants' names with it), variant
-save and the product editor's save. "Active" means the row's own switch is on and, for a variant,
-its parent's too; a menu's own Active switch is not read. Names are compared ignoring case
-(non-ASCII letters included) and surrounding spaces, in JavaScript, because this engine's
-`lower()` folds ASCII only (`foldName`, `packages/catalogue/src/name-uniqueness.ts`). The checks run
-inside the write's own transaction, which runs alone in the venue's write queue; there is no unique
-index. Each product row stores its folded staff name in `products.name_key` (core migration
-`0098_product_name_key.sql`: an added nullable column and a non-unique index). Every catalogue
-write that sets the name writes the key beside it. A configuration import sets it from each
-imported product's name; a bundle that carries it is refused. The product check looks other rows
-up by that key instead of reading and folding every Active name in the venue, which made each save
-cost more as the catalogue grew and seeding grow quadratically (a review finding). There is no
+(W72, #1214; W72a, #1230; W72b, #1236; W72c, #1237; W72d, #1238; W72e, #1241; W72f, #1252; W72g, #1246;
+W72h, #1247); left open:**
+There is no unique index: each product row stores its folded staff name in `products.name_key`, and
+the product check looks other rows up by that key. There is no
 backfill: a row whose name has not been written since the column was added keeps a null key, and the
 check does not see it until its name is next written (every product editor save writes it) or the
-venue is reset. Refusals are `category.name_taken` and `product.name_taken`, both 409 with
-`{ field, name }`, shown beside the Name field (or the variant row) in English and Spanish, the
-draft kept. Only a clash the write creates is refused, so rows that already shared a name do not
-block an unrelated save; a category that changes parent counts as new where it lands, so moving (or
-moving up) two categories that already share a name into one parent together is refused. The product
-editor checks its whole save at once, so variants may swap names. The demo seed's lunch "Mains"
-reporting category is now "Lunch mains"; both menus still call their section "Mains", and a seed
-test checks both rules on a fresh demo. Stored data is not renamed: a venue that already holds
+venue is reset. Stored data is not renamed: a venue that already holds
 duplicates keeps them until someone renames one.
-A configuration import now holds a bundle to the same two rules (W72a, #1230, 2026-10-05): a bundle with
-two categories in one place, or two Active products or variants, sharing a name is refused whole,
-nothing written, when setup opens the export and again when it is imported
-(`validateCatalogueConfiguration`, `packages/catalogue/src/configuration-transfer.ts`, run by
-`validateConfigurationBundle`); both setup routes that reach it answer the two codes 409, as the
-management API does (`PROVISION_STATUS`, `apps/server/src/setup-api.ts`). It judges what the import
-will store: a product row with no `active` value counts as Active, the column's default, and a row
-whose product `active` is not 0 or 1, or whose category or product name is not text, is refused with
-`setup.request_invalid` naming the column. Setup's live-source screen then names the duplicate and
-asks for it to be renamed in the prepared restaurant and exported again, in English and Spanish.
-Also found in W72's review, and fixed in W72a: a configuration import used to replace ANY text
-value equal to one of the bundle's ids with the new id, in every column (since `fabdb224d1`,
-2026-09-10), so a product or category named exactly like an id in the bundle arrived renamed to a
-random id. It now replaces ids only in a table's `id` column, its foreign-key columns, and the
-columns a module lists as `references` for a reference the schema gives no foreign key
-(`option_lists.default_label_id`, `device_profile_home_layouts.layout_id`). Those two were the only
-such columns a probe found, run over every import in the transfer tests and an import of the demo
-seed; a reference column added later that is no foreign key, `references`, `locationColumns` or
-`omit` entry keeps the old id. Since W72d (#1238, 2026-10-05) a guard fails on one: `scripts/id-columns-are-references.test.ts`
-migrates a real database and refuses any column of a transferred table whose name ends `_id` or
-`_ids` that is not the row's `id`, a foreign key, a `references` entry, a location column or left out
-of the export. It found one such column, `printers.poll_id`, which is free text the operator types
-for a cloud-poll printer, and lists it as not a reference. It knows an id column only by its name,
-so a reference named otherwise is still unseen.
-Since W72b (#1236, 2026-10-05) both setup routes answer an export that cannot be opened as the restore
-routes answer a copy that cannot be opened: `backup.artifact_invalid`, `backup.archive_invalid` and
-`recovery.passphrase_invalid` get 422, where since `fabdb224d1` (2026-09-10) they fell to the
-boundary's default 400. `image.invalid_metadata` and `content.language_invalid` are now listed at
-the 400 they already got, which is what the media routes give them (`packages/media/src/routes.ts`).
-Setup's live-source screen keys its sentence on the code, not the status, so it still shows the
-could-not-open sentence for each.
-Since W72c (#1237, 2026-10-05) an export leaves out each print agent's `node_id`, as it already left out
-its token, host and last-seen time (`CORE_CONFIGURATION_TRANSFER`,
-`packages/db/src/configuration-transfer.ts`). Before, an imported agent kept the exporting venue's
-node id (a run of an export and import read the source venue's node id on the imported row), and the
-Printers screen labels any agent with a node "On this box" (`apps/dashboard/src/screens/printers-screen.ts`,
-read, not run). It now arrives with no node, like an agent a person enrolled; the importing box's
-own agent still enrols as a new row beside it, as it did before (read, not run), because a new venue
-gets a new node id. Giving the imported row the importing box's node was ruled out by a run:
-self-enrolment found that row inactive and refused it with `device.join_revoked`. An export made
-before this change that lists a print agent carries `node_id`, so setup refuses it with
-`setup.request_invalid` naming `print_agents.node_id`; export it again.
-Since W72f (#1252, 2026-10-05) an export also leaves out each print agent's `setup_url` and `setup_port`.
-Before, a run of an export and import read the exporting agent's setup page address and port on the
-imported row, and the Printers screen links an agent's host cell to that address
-(`apps/dashboard/src/screens/printers-screen.ts`), so an imported agent would have linked to the
-exporting machine's setup page. Both now arrive empty. The agents list builds an address from the
-port only for an agent whose node is this box's (`apps/server/src/print-api.ts`, read, not run), and
-an imported agent has no node, and no host either, since the export leaves that out too, so its host
-cell reads "Not reported yet", with no link (`apps/dashboard/src/screens/printers-screen.ts`, read,
-not run), until the agent is reconnected and reports its host, setup address and port again with
-each job pull (`packages/print-agent/src/agent.ts`, read, not run). An export made between W72c
-and this change listed both columns, empty ones included, so one that lists a print agent is
-refused at setup with `setup.request_invalid` naming `print_agents.setup_url` (an older one names
-`print_agents.node_id`, as above); export it again.
-Fixed in W72e (#1241, 2026-10-05): at 390 px the Products tree's category name box used to cut its
-duplicate-name refusal, and `category.invalid`'s, off against the pinned Actions column. The table
-is as wide as its widest row, and the refusal's one long line widened the Name column past the
-screen. The box now takes only the room before the pinned column, measured when it opens and again
-after the table resizes or redraws, and its refusal wraps inside it; a box the table is scrolled
-past is scrolled back to its start (`#fitNameBox`, since W85b `#fitNames`,
-`apps/dashboard/src/widgets/product-list.ts`). The new box for a category being added is the same
-box. Pinned by the 390 px cases in `apps/dashboard/src/widgets/product-list.test.ts`. The fix
-changes only the name box, so the long product names in the phone-width entry above are not
-affected (W85b) _(2026-10-05: since fixed, in the entry above)_. In the demo
-venue at 390 px the tree's leading slots left the box about 55 px, so the refusal wrapped about one
-word a line (local screenshots in `~/waitron-campaign/w72e-shots/`) _(2026-10-05: since W72g the
-box has a line of its own at phone width, below)_.
-Fixed in W72g (#1246, 2026-10-05, the owner's choice): at phone width, while the table carries `narrow`,
-the category name box and its refusal sit on a line of their own under the grip, taking the room
-before the pinned column from the grip's start. The grip, the folder icon and a renamed category's
-count and asterisk stay on the line above, and the count and asterisk wrap in what the grip and icon
-leave of that room. Measured in real Chromium at 390 px with the duplicate-name refusal shown, on
-the test fixture's categories (Food and Drinks at the top level, Beer under Drinks): the box was 243
-px for a top-level category and 235 px for Beer in English, 234 px and 226 px in Spanish; before the
-change most of the same cases measured 118 to 135 px beside the icon. In the demo venue at 390 px,
-after the change, renaming a top-level category and one a level down that were added for the check,
-with a search typed and the duplicate-name refusal shown, the box measured 146 to 163 px on its own
-line under the grip (local screenshots in `~/waitron-campaign/w72g-shots/`). Pinned by the "on
-their own line" cases, the 1280-to-390 px case and the 1280 px "beside the grip and folder icon"
-cases in `apps/dashboard/src/widgets/product-list.test.ts`; desktop width is unchanged. W72g left
-Chromium logging "ResizeObserver loop completed with undelivered notifications" when the table
-crossed 440 px while a name box was open. Fixed in W72h (#1247, 2026-10-05, the owner's choice):
-`wt-data-table` now sets `narrow` a frame after its resize observer reports the new width
-(`packages/ui/src/components/wt-data-table.ts`). `env -u AI_AGENT -u CLAUDECODE pnpm --filter
-@waitron/dashboard exec vitest run src/widgets/product-list.test.ts` printed that error 31 times in
-one run and 29 in another on main f92dc84e6, and none on the W72h branch after its last change.
-Pinned by the "crossing the phone width into rows its layout makes taller" case in
-`packages/ui/src/components/wt-data-table.test.ts`, which failed with the error before the change.
+The guard W72d added (`scripts/id-columns-are-references.test.ts`) knows an id column only by its
+name, so a reference named otherwise is still unseen.
+Since W72c an imported print agent arrives with no node; the importing box's
+own agent still enrols as a new row beside it, as it did before (read, not run).
 
+W72h (#1247) stopped Chromium logging "ResizeObserver loop completed with undelivered
+notifications" from the Products tree's category name box.
 On 2026-10-05 A261-3 also observed this message while running
 `pnpm --filter @waitron/dashboard exec vitest run src/widgets/folder-made-at.test.ts
 src/widgets/catalogue-browser.test.ts`: both the transition candidate and the previous
 `c41ed54910fece4add9f1475bf18034992545e99` commit in a frozen-installed disposable checkout
 reported 164 passing tests and logged the message. Its cause on that path has not been established.
 
-**Products: the Move dialog lists destination categories by full path in name order — DONE (W82, #1210,
-owner 2026-10-04; since 2026-10-05 a tree, W82a, see the last paragraph).** The bulk Move
-dialog's Destination list showed categories in the order the server lists them, by creation time and then id (`listCategories`,
-`packages/catalogue/src/categories.ts`).
-It now sorts them by the full path it shows ("Dinner / Mains"), with `byLabel`
-(`apps/dashboard/src/widgets/category-form.ts`, the comparison the tables sort text with), so
-"Menu 2" comes before "Menu 10" and case is ignored. "All products (top level)" stays first, the
-moved categories and everything under them are still left out, and each entry keeps its category
-id. Pinned in `apps/dashboard/src/widgets/catalogue-browser.test.ts`. No existing test assertion
-changed. Left open: two sibling categories with the same name still show as two identical entries.
-W72 (above) refuses new duplicates and changes the demo seed, but renames no stored category, so
-duplicates already in a venue would still look the same. The same file's Delete dialog already tells such paths apart with
-"(2 of 3)" (`#namedPaths` in `apps/dashboard/src/widgets/catalogue-browser.ts`); the Move list does
-not use it. The order is by the whole path text, so a top-level name with a character that sorts
-before "/" lands between "Menu" and "Menu / Zeta": "Menu (old)" did, measured in review with the
-same `localeCompare` options as `byLabel`. The product editor's category picker instead lists
-categories as a tree, each category's children under it (`categoryTree`,
-`apps/dashboard/src/widgets/classification-fields.ts`). The dialog's `wt-combobox` sets neither
-`searchPlaceholder` nor `noResultsLabel`, and `wt-combobox` defaults them to "Search" and "No
-results" (`packages/ui/src/components/wt-combobox.ts`). So in Spanish the search box reads "Search"
-(seen in the review's Spanish-session run), and an empty search would say "No results" (judged from
-the code, not run). Other screens pass `t("categories.combobox_search")` and
-`t("categories.combobox_no_results")`. This was on `main` before W82 (the dialog's combobox dates
-from 2026-10-01, `5ffa5c633`).
-
-Settled by the owner 2026-10-05 and built in W82a (#1229): the Move list is now the product editor's
-category tree (`categoryTree`, `apps/dashboard/src/widgets/classification-fields.ts`), each
-category's children indented under it and each level in label order, so "Menu (old)" follows
-"Menu" and its children; a chosen destination and a search show the full path, joined with " › "
-as the product editor does. The search box takes the translated "Search" and "No results"
-(checked in English and Spanish in `apps/dashboard/src/widgets/catalogue-browser.test.ts`; the
-English text is also `wt-combobox`'s own default, so the Spanish case is the one that proves
-it). Two sibling categories with the same name are left as they are (owner: "leave it"): they still show
-as two identical entries, in the tree and in a search. The path separator W82a's review asked
-about is settled (owner 2026-10-05: every Products-screen path uses " › "; built in W82b, #1232): the
-Delete dialog's list of categories (`#namedPaths`, `apps/dashboard/src/widgets/catalogue-browser.ts`)
-joins a path with " › ", as the Move dialog does. The Products table shows no path since W84 (#1199)
-removed its Main category column. Settled by the owner 2026-10-05 and built in W82c (#1262): the Menus
-screen joins a path with " › " too — the menu prices table's Main category column and its filter
-list (`menu-prices-table.ts`) and the add-products dialog's category picker
-(`section-add-products.ts`) — because " › " (`PATH_SEPARATOR`) is now `categoryPath`'s default
-(`apps/dashboard/src/widgets/category-form.ts`). The text the Products search box matches
-(`apps/dashboard/src/widgets/product-list.ts`) holds each category path spelled with " › ", " / "
-and " > ", so "Food / Meat / Grill", "Food › Meat › Grill" and "Food > Meat > Grill" all find a
-product in Grill (the path-search cases in `apps/dashboard/src/widgets/product-list.test.ts`). The
-menu prices table's search box matches a product's main category the same three ways
-(`categoryPathSearchText`, used by both). Each spelling sits on its own line of that text, so a
-search running from the end of one spelling into the start of the next does not find the
-product: "Grill Food / Meat" does not find a product in Grill on the Products screen, and "Cerveza
-Bebidas" does not find one in Bebidas › Cerveza in the prices table (a case in each suite). The search inside the Menus screen's two category pickers — the prices
+**Products: the Move dialog's destination categories — DONE (W82, #1210; a tree since W82a, #1229;
+paths joined with " › " in W82b, #1232, and W82c, #1262).** Two sibling categories with the same
+name are left as they are (owner: "leave it"): they still show as two identical entries, in the
+tree and in a search. The search inside the Menus screen's two category pickers — the prices
 table's category filter and the add-products dialog's category list — matches only the text the
 list shows, so a path finds its category there only when typed with " › "; one category's name
-alone still finds it. Those pickers are the shared `wt-combobox`, whose search matches the text
-each option shows (its `valueLabel` where it has one, else its `label`); neither Menus picker sets
-a `valueLabel`, and the combobox was left unchanged.
+alone still finds it. Those pickers are the shared `wt-combobox`, which was left unchanged.
 
-**Sales: the category report names each category by its full path — DONE (W73, #1212, owner 2026-10-04: "we should
-report on category paths, not just the final name").** The Sales screen's category report showed a
-nested category by its own name alone, indented, with its parents' names read only to a screen
-reader; the printed page printed the name alone. So "Food › Mains" and "Lunch › Mains" both read
-"Mains". Each category row now shows its parents' names before its own, in muted text on the
-screen (`apps/dashboard/src/screens/dashboard-sales-screen.ts`), and the printed page prints the
-whole path as the label (`apps/server/src/category-sales-page.ts`); a Directly-in row says
-"Directly in Food › Mains" on both. The indent stays, so the tree's totals still read as before.
-The path is built from the report's own tree, so "at time of sale" shows the recorded names and
-"current" today's; no total changed. Uncategorised, Not recorded and the free-text names under Not
-recorded get no path (a screen reader still hears "Not recorded ›" before the No category recorded
-row and each free-text name, as before). On paper a no-break space joins each "›" to the name before
-it, and the printer layout's `wrapText` (`packages/printing/src/layout.ts`) no longer splits a
-too-long word just before or after a no-break space, so a "›" stays on a line with the end of the
-name before it — except where a split falls on a line with under three columns of room (rows
-nested about 13 deep on 58mm paper, about 19 on 80mm), or where a name's own no-break spaces leave
-no other place to split. The `wrapText` change reaches every printed document: a word with a
-no-break space inside it (a Spanish amount such as "123,50 €" written with one) that is wider than
-its line is now split earlier inside the word rather than at the no-break space; this only happens
-when one word is wider than a whole line. Because every row now carries its whole path, a very deep
-tree prints far more lines than before: the page of the test "never prints a line wider than the
-paper, however long the names or deep the tree" in `apps/server/src/category-sales-page.test.ts`,
-printed at 58mm and 203dpi and counted in drawn lines, went from about 1,000 lines to about 14,500
-(and to about 5,500 on 80mm), measured 2026-10-05, and its print preview is cut short; the owner chose to leave it as it is rather than shorten deep
-paths on paper (2026-10-05). No other output names report categories: the reports API
-answers with the tree, and no other screen or printed page reads it. One existing test check
-changed, because this item changes what it checks: the screen's indent test asserted the parents'
-names were hidden and now asserts they are shown; and five existing checks now expect the full
-path where they expected the bare name (one on the screen, four on the printed page), listed in
-the PR.
+**Sales: the category report names each category by its full path — DONE (W73, #1212).** Because
+every row carries its whole path, a very deep tree prints far more lines than before (the
+deep-tree case in `apps/server/src/category-sales-page.test.ts`, at 58mm and 203dpi, went from about
+1,000 lines to about 14,500, measured 2026-10-05), and its print preview is cut short; the owner
+chose to leave it as it is rather than shorten deep paths on paper (2026-10-05).
 
-**Products: a category's Made at shows where its dishes are made — DONE (W86, #1203, owner 2026-10-04).**
-In the Products tree each category row's Made at cell now shows the category's baseline route, in
-the product rows' words (a station's name, No preparation, No replacement, Nowhere), linked to the
-prep stations screen (`/manage/prep-stations`), where claims and exceptions are managed, never to
-the single-product route tester. Under it, in smaller muted text, it says where the route comes
-from — set on this category, from a named parent category, the default station, or an exception
-that covers the category for every dish in every zone — and adds "some items made elsewhere" when
-the route is not a promise for everything inside: a product or zone exception sends a contained
-dish elsewhere, a subcategory routes somewhere else, or the station has opening hours or was
-closed by hand today (the default station is always open, so it never gets this note).
-The route is worked out in the browser with the shared `chooseMaker`
-(`apps/dashboard/src/widgets/folder-made-at.ts`), as the server works out a product row's
-(`describeMakers`): no service zone, the time of day not applied, a switched-off station's fallback
-followed, inactive products left out. While routing has not loaded the cell stays blank; when the
-routing read fails it reads "Kitchen routing unavailable" (the catalogue screen now tells the two apart).
-All products stays blank. Product rows are unchanged, and no existing test assertion changed; the
-catalogue screen suite's routing stub gained the `stationTimes`, `todayEnds` and `clockReadable`
-fields the real answer carries. Left open: (1) a PRODUCT row reads "Nowhere" whenever the
+**Products: a category's Made at shows where its dishes are made — DONE (W86, #1203; its asterisk
+W86a, #1223, W86b, #1231, W86c, #1234); left open:**
+(1) a PRODUCT row reads "Nowhere" whenever the
 made-at read holds no entry for it (`apps/dashboard/src/widgets/product-list.ts`, the `made-at`
 cell, where `maker === undefined` falls to `product.nowhere`) — the same blank-read-as-no-route
 problem this item fixed for categories, not fixed here. Judged from the code, not run: the first
@@ -3948,34 +2043,10 @@ never lists, so its row always reads Nowhere when the Status filter shows it; (2
 `maker-link` as a product's, so the contrast concern and the missing `activatesRow: false` recorded
 under W87 apply to category rows too (there a click beside the link opens or closes the category;
 judged from the code, not run); (3) a person who may not read routing sees "Kitchen routing
-unavailable" on every category, because a refused read counts as a failed one; (4) judged from the
-code, not run: the category tree's red asterisk ("No kitchen routing rule covers this category",
-`#unroutedFolderIds` in `apps/dashboard/src/widgets/catalogue-browser.ts`) works the route out with
-no station timing, so it does not follow a switched-off station's fallback, while Made at does; a
-category claiming a switched-off station that has a fallback can show the asterisk and a station in
-Made at in the same row. _2026-10-05: settled by W86a (#1223; owner: "follow fallbacks"): the asterisk
-now reads the same route as Made at (`coveredByRule`, in
-`apps/dashboard/src/widgets/folder-made-at.ts`), so a category whose claimed station is switched
-off and whose fallback chain reaches a station that is switched on shows that station in Made at
-and no asterisk, while one whose chain reaches none keeps the asterisk and reads No replacement._
-_2026-10-05: the asterisk's tooltip and accessible name now read "No active station assigned"
-("Ninguna estación activa asignada"; W86b, #1231, owner's wording), key `folders.no_active_station`. The
-old "No kitchen routing rule covers this category" read as if any matching rule cleared the mark._
-_2026-10-05: changed by W86c (#1234; the owner's choice on the open point raised in #1231: the asterisk
-clears whenever the dishes go to a switched-on station, the default station included, or to No
-preparation): it reads the maker Made at shows (`isRouted`, which replaced `coveredByRule`), so a
-category no rule covers shows no asterisk while the venue's default station is switched on, and
-reads Nowhere and keeps the asterisk when that station is switched off or none is set. Like Made at,
-it judges the category's baseline route and leaves out exceptions limited to one service zone or one
-product._
+unavailable" on every category, because a refused read counts as a failed one;
 (5) the "some items made elsewhere" note does not look at whether the categories involved hold any
-products, so it can claim items that do not exist yet: a subcategory with no products whose own
-claim routes elsewhere marks its parent (judged from the code, not run), and an empty category
-covered by a zone exception, or routed to a station that keeps hours or was closed by hand today,
-carries the note itself (the zone and timing cases in
-`apps/dashboard/src/widgets/folder-made-at.test.ts` expect it on categories holding no products);
-whether the words should change is the owner's call. _2026-10-05: the owner chose to keep these
-words._
+products, so it can claim items that do not exist yet; the owner chose to keep these words
+(2026-10-05).
 
 **A guided tutorial for Demo and Preparation (A250, owner 2026-10-03) — OPEN, partly designed, not
 to be built yet (owner: "we just mustn't forget it"); needs a spec before queueing.** A walk-through
@@ -4085,8 +2156,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   with "FOREIGN KEY constraint failed" and the whole core step rolls back. A box applies migrations
   as it starts (`apps/server/src/boot.ts`), so a box whose venue has printed anything will not start
   on this version until its venue is reset (read from the code, not run on a box). Pre-live, there
-  is no data migration (CLAUDE.md §3); the owner's box has printers. C107 landed before the box test
-  by the owner's decision (2026-10-01: "land now, test after"); anything the box timings or
+  is no data migration (CLAUDE.md §3); the owner's box has printers. Anything the box timings or
   photographs show wrong becomes a new item.
 - **Photographs and timings of pictures on paper.** The owner's photographs of a receipt, a kitchen
   ticket, the ruler page, a sample receipt and the test page (C108) on both printers are owed, and
@@ -4315,11 +2385,10 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A4. Till, displays and devices
 
-- **Service, ordering and billing: planned and queued on lane B (2026-09-26).**
-  [Design](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md), Revision 2,
-  approved by the owner and merged as #693;
-  [plan](superpowers/plans/2026-09-26-service-ordering-and-billing.md), Revision 2, eighteen tasks.
-  Task 0's [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md) is approved
+- **Service, ordering and billing.**
+  [Design](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) (#693);
+  [plan](superpowers/plans/2026-09-26-service-ordering-and-billing.md), eighteen tasks;
+  Task 0's [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md)
   (#698). Every task has landed: Task 1 #706, 2 #715, 3 #733, 4 #748, 5 #750, 6 #761, 7 #789,
   8 #806, 9 #814, 10 #908, 11 #916 (with lane B's B11a–B11g), 12 #923, 13 #903, 14 #721, 15 #956,
   16 #981, 17 #991. "Visit" is "party" everywhere since the table actions plan (below). What stays
@@ -4621,8 +2690,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after
       each Escape.** That is deliberate, as its comment says: with `closeReportsDelivered` between
       presses, Chromium 153 let every Escape be refused, and a dialog without `closedby` passed the
-      repeated-Escape tests. The variant form's "saves on Enter and cancels on Escape from a focused field",
-      once listed here with it, is fixed (A220f, #1075; see the flaky-test entry). **Next action:** decide
+      repeated-Escape tests. **Next action:** decide
       whether "closes on a real Escape press" should wait for its `wt-close` instead, keeping the
       timer for the stays-open tests.
     - The till's "Amount off (€)" writes the euro sign into the label rather than taking the
@@ -4653,8 +2721,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   - **Task 13 (#903, standalone ordering).** A product's `ordering` is Public, Staff only or Not
     sold separately; Staff only behaves exactly as Public until guest ordering exists.
   - **Task 14 (#721, several payments against one bill, the server).** The owner's rulings at
-    landing are recorded in the design. **Its payment and refund reads ordered by a timestamp alone
-    now break a same-millisecond tie with `rowid` — DONE (W2, #1121, 2026-10-03).**
+    landing are recorded in the design.
     - **Open:** `apps/server/src/orders-list.ts` (#1027) sorts bill payments and their refunds by
       `created_at, id` and tenders by `id` alone; ids are `randomUUID()`, so a tie, and the tenders'
       whole order, comes out random. The plan asked for `created_at, rowid` in `readBillPayments`.
@@ -4679,10 +2746,6 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       the case "a switch to a prepay zone ends a kitchen-queue retry, and that retry's late failure
       does not bring the notice back" (`apps/till/src/till-app.test.ts`) proving what its title
       says, so B16 left it.
-    - **Completed orders can now be looked up on the dashboard, and an unpaid bill can be found on the till.** B27a adds the server's list, detail,
-      staff, printer choice and audited receipt-copy routes; B27b adds the dashboard screen and its
-      receipt-copy action. B27c adds Find a bill on the till. Spec:
-      `docs/superpowers/specs/2026-10-01-dashboard-orders-design.md`.
     - **The waiting list is drawn only inside the held-orders card**, so a canvas without that
       card shows no waiting list.
     - **Not measured — Pay on a sent `invoice_first` order whose invoice was credited may show the
@@ -4690,60 +2753,18 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       of its credit notes, `readIssuedSales` in `apps/server/src/sale-due.ts`), but Pay loads the
       basket from `GET /api/working-orders/:id/placed`, which carries the order's lines. Reported
       by B16's review fixer from reading; no test shows it.
-    - Lane B item B31 (owner, 2026-10-02): a handheld whose layout has a Counter tab, or a
-      held-orders or prep-queue card, loads the counter's lists at login (since C130 a till
-      likewise loads them only when its layout shows one), and a handheld is offered the card
-      reader, on any pay card and on a bill, only when its device
-      profile has integrated card payment (`#showsCounterLists` and `#cardReader`,
-      `apps/till/src/till-app.ts`). A till follows its profile the same way (C129, #1025); one with no
-      device reads no capabilities at boot, so it is not offered the reader
-      either, and the built-in till profile has the capability. When the server still refuses a
-      reader payment with `device.forbidden_action` (a profile that lost the capability after the
-      till started), the counter and the bill say "This device is not set up to use the card
-      reader" (`card_reader.not_set_up`). At login each counter list shows its own failure with a
-      retry notice, so one list that fails no longer stops the others loading (they are still read
-      one after another, so a read that hangs still delays the rest); this changed for tills too.
-      Left as it was: a handheld never opens the drawer (2026-10-04: changed by A238 — a device
-      whose profile allows the drawer opens it, handhelds included). (Its Station, Pass and Schedule buttons
-      now follow its profile — C130 below.)
-    - **Done (C128, #1031) — who may take a payment.** Every till or handheld payment route now also needs
-      `sale.take_payment`, which every role holds; detail in `docs/developers/conventions-ui.md`.
-    - **Done (C131, #1032) — the counter's pay card goes back to its choices after a reader payment.**
-      Once a reader payment ends with no card outcome to show — refused, failed, or captured — the
-      pay card leaves "Tap or insert card…" for its Cash and Card buttons, with any refusal in the
-      banner; a retry, and the kitchen-station question that can come before one, belong to the
-      attempt, and the spinner comes down once no card attempt is still running (`cardAttemptsOver`,
-      `apps/till/src/widgets/tender-pay.ts`). A bill's pay dialog already dropped the text when its
-      request settled.
+    - Lane B item B31 (owner, 2026-10-02; #1018): at login each counter list shows its own failure
+      with a retry notice, so one list that fails no longer stops the others loading (they are still
+      read one after another, so a read that hangs still delays the rest); this changed for tills too.
     - **Done (C130, #1056) — a device shows the screens its profile assigns, and the person's permissions
-      decide the rest.** A device profile has three switches, "Kitchen button", "Pass button"
-      and "My schedule button" (`show-station`, `show-expo`, `show-schedule` in
-      `CAPABILITY_FLAGS`, `packages/layouts/src/canvas.ts`), on for the built-in till profile and off
-      for the handheld one; the till offers each header button only when its profile has the switch
-      and its layout has no tab of that name, on any device. The lists loaded at sign-in and the
-      first screen come from the layout on every device. The till's sign-in answer carries the
-      person's permission list instead of one yes/no, and the till locks only the cards whose
-      permission the person lacks (today the table-plan editor); the server still checks every
-      permission itself. The till's unused routes to add, rename and remove a table
-      (`POST`/`PATCH`/`DELETE /api/tables`), which checked no permission, are gone. A sign-in that
-      something newer replaced while it was still loading — a second person signing in, the idle
-      lock, or the till moving to another server — now stops at its next step and installs nothing
-      further (`#onLoggedIn`, `apps/till/src/till-app.ts`); what it had already installed before
-      that step is cleared or overwritten by the event that replaced it (a logout or a server
-      switch clears the name and permissions, a newer sign-in overwrites them). Before, it could
-      put the earlier person's name and permission list back on the till, or open the till with
-      nobody signed in; this predated C130 (the same steps on main installed the person and the
-      table-plan yes/no the same way).
+      decide the rest.**
       Left open: a till profile saved before C130, and one newly created on the Device profiles
       screen, has the three switches off until a manager turns them on; a till with no device reads
       no capabilities, so it shows none of the three buttons. A change to a device profile reaches
       a till only when the till starts again — a page load, a move to another server or a
       re-enrolment, or in dev mode the lock screen's switch-device button (the profile is read in
       `#boot`, `apps/till/src/till-app.ts`, as the layout and the hardware switches already are),
-      so signing out and in again does not pick it up. Seen in a visual check on 2026-10-02: at
-      390 wide a handheld's till header ran past the right edge (the page measured 736 wide;
-      Kitchen, Allergens, the operator's name and Log out sat off-screen; fixed by lane C's W27,
-      below), and turning the switches on adds buttons to it. A review measured the header on
+      so signing out and in again does not pick it up. A review measured the header on
       2026-10-02 in real Chromium at 390 px, with the real `till-tab-shell` mounted with two phone
       tabs and an operator signed in: with only Find a bill offered — what main offers every
       handheld; `apps/till/src/widgets/tab-shell.ts` is unchanged by C130 — the page measured
@@ -4752,19 +2773,10 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       the three switches on it measured 843 and 867 px, and the Pass and My schedule buttons sat
       wholly off-screen (fixed by lane C's W27, below). On the handheld, the station screen's back
       button says "Back to counter" though a handheld on the built-in phone layout lands on the
-      floor plan; and clicking the knob (`span.thumb`) of a
-      `wt-switch` that is on does not turn it off (clicking the label or its left edge, or Space,
-      does), seen on the Device profiles screen, on the existing "Integrated card payment" switch
-      too — the same knob already left open under A215 (clicking a variant's row); `packages/ui`
-      is untouched by C130. The knob is DONE by W76 (#1218).
+      floor plan.
     - **Done (C133, #1045) — the till's tabs fit one screen, with or without a notice above them.**
-      The page gives the till the screen less its padding (`apps/till/index.html`), and the error
-      banner and the other notices above the tabs take their height from the tab shell, so the
-      language button stays on screen. The lock and join screens fill at least the height left; a
-      staff list longer than the screen still makes the page scroll to reach the language button,
-      as it did before. Before, the page was taller than the screen even with no banner, by the
-      body's padding and the demo strip. (Since A187, 2026-10-02, the language chooser is at the
-      top right of the lock screen.)
+      A staff list longer than the screen still makes the page scroll to reach the language button
+      (since A187, 2026-10-02, the language chooser is at the top right of the lock screen).
       Left from C133's review, not changed there: the table-order screen's bottom bar still keeps
       a tap target and two gaps clear at its end (`padding-inline-end` on `.bottom-bar`,
       `apps/till/src/screens/till-table-order-screen.ts`) for a floating language button the till
@@ -4785,9 +2797,6 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       in real Chromium at 390 px: with Find a bill, Kitchen, Pass, My schedule, Allergens, the
       language chooser, the operator and Log out all shown, every one sits on screen in English
       and Spanish, and with six tabs in English (`apps/till/src/widgets/tab-shell.test.ts`). The
-      whole till app, signed in on a handheld profile in the setup of the "a round at phone width"
-      case (`apps/till/src/till-app-menu-refresh.test.ts`), measured 390 px wide where it measured
-      601 px before — a probe added for the measurement and removed, not a kept assertion. The
       cost was measured on 2026-10-03 in real Chromium with the tab-shell test's fixture (every
       optional button on, operator "Ana Fernández"); after the fix every figure here was the same in
       English and Spanish. At 390 px with two tabs the header takes four rows and is 237 px tall, on
@@ -4821,15 +2830,6 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       full uses `POST /api/working-orders/:id/collect`.
     - **A dish never sent, on hold or recalled blocks the departure**
       (`unpaid_departure.unfired_dishes`); staff cancel it first.
-    - **Find a bill replaces the counter's list.** A till or handheld can search unpaid bills by
-      invoice number, order number, table or party name, then collect one. The dashboard Orders
-      screen's Unpaid filter shows the same debts. The till-cancel question was C126, now built:
-      see its entry below.
-    - **The till's departure dialog lists a presented bill credited to nothing as owing its full
-      amount — DONE (W26, #1136, 2026-10-03).** `GET /api/parties/:id/bills` now gives each bill with a
-      filed sale an `amountDue`, its invoice's total plus its credit notes, read through
-      `readIssuedSales` as the departure reads it, and the dialog lists each bill at that, so a
-      bill credited to nothing drops out of the list and the button's total.
     - **The table screen still reads a credited presented bill at its full amount.** Its per-bill
       "to pay" line (`apps/till/src/screens/till-table-order-screen.ts`, `bill.outstanding`) and
       the party's total (`apps/till/src/till-app.ts`, summing each bill's `outstanding`) read no
@@ -4840,7 +2840,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       `outstanding` too, but that section is drawn only for an open bill holding a payment
       (`paidInPart`, `apps/till/src/state/bill-state.ts`), and an open bill has no invoice, so no
       credit note reaches it today (read, not run). **Next action:** decide whether those read
-      `amountDue` too, which W26 left out because other screens and the floor read `outstanding`.
+      `amountDue` too, which W26 (#1136) left out because other screens and the floor read
+      `outstanding`.
     - **A 0.00 simplified invoice:** B17's departure, and since B28 (#1005) Pay on a bill whose
       total is zero, file one; whether AEAT accepts it was not tested.
     - **Left by B28's review (#1005), neither acted on.** (1) The reader pay's `tipOf`
@@ -4862,9 +2863,6 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       the trigger allows one there.
   - **Gaps against the service plan's acceptance checks (spec §12)**, from a sweep on
     2026-10-01:
-    - **The merged-party check of §12 item 9 used only a bill whose state is written by hand —
-      DONE (W4, #1124, 2026-10-03):** `apps/server/src/parties.test.ts`, "is owed on the surviving party
-      and blocks Finish until the till collects it under the invoice filed at placing".
     - **No permanent test lays the service screens out at phone and till widths in both themes
       (§12 item 14).** The axe scans run in both themes, mostly at the browser's default size with
       one block at 390 px (`apps/till/src/screens/till-table-order-screen.a11y.test.ts`).
@@ -4879,48 +2877,17 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     (`packages/venue-service/src/dashboard/venue-operations-screen.ts`), whose handler has no such
     check and which does not set `dismissible`. The rest were tried only with a hand-built
     `KeyboardEvent` (`sections-screen`, `modifiers-screen`, `add-to-menus`, `extra-list-form`,
-    `option-list-form`, `option-label-form` and `variant-form`, under `apps/dashboard/src`; the
-    menu prices window that was also on this list went in W89) or not at all (`#guardEscape` in
-    `apps/dashboard/src/screens/menus-screen.ts`). **Next action:** repeat the reasons-screen case
+    `option-list-form`, `option-label-form` and `variant-form`, under `apps/dashboard/src`) or not at all
+    (`#guardEscape` in `apps/dashboard/src/screens/menus-screen.ts`). **Next action:** repeat the reasons-screen case
     recording which element has focus just before the Escape; then press a real Escape during a
     save on each form tried only with a hand-built event or not at all, and move the ones that close
     to `dismissible`.
   - **C126 (cancelling an order whose invoice was issued credits it; owner, 2026-10-02, option b,
     decided without the asesor) — landed as #1030.** `POST /api/working-orders/:id/cancel` (`cancelPlacedOrder`,
-    `apps/server/src/working-order.ts`; the credit in `apps/server/src/cancel-credit.ts`) now issues
-    an R5 corrective invoice, by differences, for the whole invoice in the same transaction, settles
-    the original at nothing owed and abandons the order; an order with no invoice is abandoned with
-    nothing filed.
-    It needs `sale.rectify` from the signed-in person, or from someone holding it who enters their PIN
-    (B33, below), and an enrolled device, whose till the credit
-    note is filed on, and refuses a bill holding a payment or with one in flight. Any placed order,
-    invoiced or not, is now refused `order.payment_in_flight` while a card payment of it is running
-    at the reader in this process. The till's table screen (B32, below) and the counter's waiting
-    list (B34, below) call it. The owner
-    dropped the dashboard Orders screen's "Invoice not credited" mark (2026-10-02 ~12:05): such a bill is to show as Cancelled
-    with its credit note. B27a landed first (#1027) with the mark — `invoiceNotCredited` in
-    `apps/server/src/orders-list.ts` and its cases in `apps/server/src/orders-list.test.ts`; C126,
-    landing second, removes them and updates those cases (owner-approved), and checks an
-    abandoned bill before Paid in `BILL_STATUS`, since the cancel settles the invoice. Open:
-    - **Done (B33, #1041, landed 2026-10-02): the PIN of
-      someone holding `sale.rectify` (a supervisor, manager or admin) lets someone without it cancel and
-      credit an invoiced order.** The cancel's
-      body may carry `override: { personId, pin }`, checked as an unpaid departure, a bill refund
-      and opening the drawer check theirs: a wrong PIN is `pin.invalid` and is counted, per device
-      and per person, in the count those routes share (`overridePinAttempts`,
-      `apps/server/src/till-api.ts`), so wrong tries on any of them add up to one lock-out (the
-      case shows four wrong tries on the cancel locking out the drawer too); the PIN of someone
-      without the permission (staff, in the case) is
-      `authorization.not_permitted`. The credit note's `sales.authorized_by` names the person whose
-      PIN was entered, or the operator when the operator holds `sale.rectify` (the override is then
-      not checked), and
-      the cancel's amendment names the person who cancelled. `recordCorrection` checks the
-      permission again and counts nothing, so the cancel checks the PIN first, with counting, and
-      then hands the same override on; the PIN is therefore checked twice on success. On an order
-      with no invoice the override's PIN is neither checked nor counted, though a malformed
-      override is still refused. Cases:
-      `apps/server/src/cancel-invoiced-order.test.ts`, "cancelling an invoiced order on a
-      supervisor's PIN". The till sends the PIN since B32 (below).
+    `apps/server/src/working-order.ts`; the credit in `apps/server/src/cancel-credit.ts`) issues
+    an R5 corrective invoice, by differences, for the whole invoice. The PIN override is B33
+    (#1041). The owner dropped the dashboard Orders screen's "Invoice not credited" mark
+    (2026-10-02 ~12:05): such a bill is to show as Cancelled with its credit note. Open:
     - **For the owner, from B33's review: the cancel checks the permission after its payment
       refusals.** A bill holding a payment, or with a card payment in flight, is refused for that
       before `sale.rectify` or an override is looked at — the order C126 built, which B33 kept. So
@@ -4928,66 +2895,21 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       PIN sent with that request is neither checked nor counted. The drawer, refund and
       unpaid-departure routes check the permission first. Moving it earlier changes who gets which
       refusal; not decided.
-    - **B32 (the till offers "Cancel and credit"; owner, 2026-10-02 ~12:05) — landed as #1055
-      (main `0f48b8bd5`, 2026-10-02).** On the table screen, a party
-      bill that is placed, has its sale filed and holds no payment shows "Cancel and credit" to
-      anyone signed in (`#billRow`, `apps/till/src/screens/till-table-order-screen.ts`). Its dialog
-      (`apps/till/src/widgets/cancel-credit-dialog.ts`) names the invoice and the amount, takes a
-      required reason and sends the cancel in the operator's name; a 403 `authorization.not_permitted`
-      opens the PIN prompt of the people `GET /api/cancel-credit-authorizers` lists, as the unpaid
-      departure's does. The result names the credit note, read from `GET /api/parties/:id/bills`,
-      whose bills now carry `invoiceNumber` and `creditNotes` once a sale is filed
-      (`readPartyBills`, `apps/server/src/parties.ts`), because the cancel's own answer is an
-      empty 200. When a cancel gets no answer the till does not send it again by itself:
-      it reads the bills again, and a bill now cancelled shows the result. Otherwise the operator
-      may press "Cancel and credit" again; if the first cancel was made after all, the server
-      refuses the second with `working_order.not_placed` ("refuses a second cancel, leaving exactly
-      one credit note", `apps/server/src/cancel-invoiced-order.test.ts`), and the till reads the
-      bills again; when that read shows the bill cancelled, it shows it cancelled, naming the credit
-      note. The dialog's dismiss button reads "Keep the bill" ("Mantener la cuenta"), not the
+    - **B32 (the till offers "Cancel and credit"; owner, 2026-10-02 ~12:05) — landed as #1055.**
+      The dialog's dismiss button reads "Keep the bill" ("Mantener la cuenta"), not the
       shared "Cancel" beside "Cancel and credit" (owner, 2026-10-02). The owner also kept the
       cancel's answer empty, so the till goes on reading the credit note's number from the bills.
       Open:
-      - **Done by B34 (below): counter orders are offered it too.** A counter order placed and
-        invoiced but unpaid (the `invoice_first` mode) now shows "Cancel and credit" on the
-        counter's waiting list.
       - **The approver list is fetched with no time limit.** After a refusal for lack of
         permission the till asks `GET /api/cancel-credit-authorizers` who can approve, and until
         the answer arrives the dialog stays busy with its buttons disabled (`apps/till/src/till-app.ts`,
         the approvers fetch). The unpaid-departure and refund dialogs fetch theirs the same way and
         predate B32; a time limit belongs on all three together. Raised by B32's review by reading
         only; nobody reproduced a stalled answer.
-      - **Done by A233: the table's cancel dialog shows its result before the bills read.** A
-        successful cancel first shows the unnumbered result, then adds the credit-note number when
-        the bills answer. A refusal first releases the busy dialog, then a bills read can resolve an
-        uncertain refusal as a completed cancel. The two Chromium cases in
-        `apps/till/src/till-app-parties.test.ts` hold the bills read unanswered to check both
-        immediate results; the existing completed-read cases check the credit-note number.
     - **Done by B34 (#1077, 2026-10-03; owner, 2026-10-02): a counter order invoiced when it was placed and still
-      unpaid can be cancelled with a credit note at the till.** It is the same action as B32's on a
-      table's bill. On the counter's waiting list (`apps/till/src/widgets/counter-waiting.ts`), an
-      order that is placed and whose invoice was issued shows "Cancel and credit" after Pay and
-      Hand over; an order not yet invoiced, and a paid one, do not. The waiting list "is drawn only
+      unpaid can be cancelled with a credit note at the till.** The waiting list "is drawn only
       inside the held-orders card" (above), so a till layout without that card offers no Cancel and
-      credit for counter orders either. The waiting list (`GET /api/orders/counter-waiting`,
-      `listCounterWaiting` in `apps/server/src/working-order.ts`) now carries `invoiceNumber` on a
-      placed order whose invoice is issued, and on no other. The button opens B32's dialog, with
-      the same dismiss "Keep the bill", and sends the same cancel
-      (`POST /api/working-orders/:id/cancel`) with the same PIN path: without `sale.rectify` the
-      till asks for the PIN of someone who has it, as B33 built. The cancel itself needed no
-      change: `cancelPlacedOrder` reads the order's status, never its party, and C126's own cases
-      already cancel counter orders. After the cancel the dialog shows the result, then the till
-      reads the kitchen queue and, unless the operator has signed out meanwhile, the waiting list
-      again, and the order leaves the list when that read answers. The dialog does not wait for
-      those reads, so an operator can close it and press Cancel and credit on the same row again
-      before the list is read; that second cancel is refused with `working_order.not_placed`, the
-      refusal is shown and the list is read again. A press of the button does nothing while a
-      payment, a park or a place is in flight (`#counterOrderInFlight` in
-      `apps/till/src/till-app.ts`), as a press of the waiting list's Pay does. Cases:
-      `apps/server/src/counter-handover.test.ts`, `apps/server/src/cancel-invoiced-order.test.ts`
-      ("cancelling an invoiced counter order from the counter's waiting list") and
-      `apps/till/src/till-app-counter-cancel-credit.test.ts`. How it differs from the table's
-      path, and what is left open:
+      credit for counter orders either. How it differs from the table's path, and what is left open:
       - **The result does not name the credit note.** The table's dialog reads the credit note's
         number from the party's bills; the waiting list drops a cancelled order, and the cancel's
         answer is empty, so the dialog says "A credit note was issued and the bill is cancelled"
@@ -4998,21 +2920,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
         say), so the dialog says the cancel may have been made and to check the waiting orders (a
         new sentence, `cancel_credit.unconfirmed_counter`). The dialog shows this first, and then the
         till reads the waiting list again.
-      - **Done by A232: cancelling a counter order clears its open basket.** After a successful
-        cancel, the till empties the basket when it holds that order, returns its pay controls to
-        the order stage, and drops a Pay read already loading that order. A basket or pending Pay
-        read for another order stays intact. The Chromium cases in
-        `apps/till/src/till-app-counter-cancel-credit.test.ts` cover those outcomes, including a
-        kitchen-queue read held open after the cancel.
       - **Done by A234: the named counter actions check their starting operator session before a later list read.**
-        The sale, card, place, collect, found-bill, ticket-advance, collection, hand-over, park,
-        retrieve, discard, adjusted-order reread, zone-choice and move-to-table paths check before
-        their later reads. The Chromium cases in
-        `apps/till/src/till-app-boot-and-counter.test.ts`,
-        `apps/till/src/till-app-counter-adjustments.test.ts` and `apps/till/src/till-app.test.ts`
-        hold write answers, list reads and refusals across sign-out; each asserts the corresponding
-        later read or retry does not start. B34 had already checked the cancel-and-credit path in
-        #1077.
       - **The busy-state defect in these counter paths remains open.** `#onConfirmPayment`,
         `#collectCard`, `#onPlaceOrder`, `#onCollectOrder` and `#onFindBillPay` wait for their list
         reads before clearing the flag that marks the basket busy (`submitting` or `placing`), and
@@ -5031,22 +2939,12 @@ The original walkthrough is retained under *Detail → Setup wizard*.
     - **Done by C132 (landed as #1060, 2026-10-03): a credit note's line names the invoice line it reverses.**
       `sale_lines.corrects_line_id` (core migration `0070_sale_line_corrects`, a foreign key to
       `sale_lines.id`) holds, on a corrective invoice's line, the original line it reverses or
-      adjusts; it is null on an ordinary sale's line, on a substitution's, and on a partial
-      correction's line that names none. The whole-order cancel fills it on every reversing line,
-      extras picks included (`reversedLines`, `apps/server/src/cancel-credit.ts`).
-      `recordCorrection` refuses a line naming a line that is not on the invoice it corrects with
-      `sale.correction_line_not_on_invoice`, before a number is allocated. **Decided by the owner
-      at C132's review (2026-10-02 ~23:10), and built: a credit of the whole invoice must reverse
-      it line for line.**
-      Each of its lines names a different invoice line and is that line with the same product,
-      minus its quantity and minus its line total; every invoice line is named. Anything else is
-      refused with `sale.correction_line_not_reversed`, before a number is allocated. A partial
-      correction keeps the looser rule: its lines may name a line or not. No report reads the link
-      yet. Open, for partial corrections only, which no product code makes yet (only tests and demo
-      scripts do): whether a line a correction ADDS (a new charge, not a change to an invoice line)
-      stays unlinked, and whether two adjustments may name the same invoice line. When a report
-      starts reading the link it will want an index on the column, as `sales_corrects_idx` serves
-      `sales.corrects_sale_id`.
+      adjusts. A partial correction keeps the looser rule: its lines may name a line or not. No
+      report reads the link yet. Open, for partial corrections only, which no product code makes yet
+      (only tests and demo scripts do): whether a line a correction ADDS (a new charge, not a change
+      to an invoice line) stays unlinked, and whether two adjustments may name the same invoice
+      line. When a report starts reading the link it will want an index on the column, as
+      `sales_corrects_idx` serves `sales.corrects_sale_id`.
     - **A fully credited bill's original invoice can still be reprinted**, from the till and from
       the dashboard; the server allows it. Whether a reprint should say the invoice was credited is
       not decided.
@@ -5097,9 +2995,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   layout during service, screen plugins and Bizum.
 - **Tables, parties and bills — the till's table actions: DONE (2026-09-29, all thirteen tasks).**
   [plan](superpowers/plans/2026-09-28-table-actions.md); Task 1 #816, 2 #825, 3 #844, 4 #832,
-  5 #852, 6 #818, 7 #864, 8 #869, 9 #874, 10 #875, 11 #881, 12 #888, 13 #897 (which removed the old
-  tab routes and the table's pointer to its bill, and needed every dev venue reset). What stays
-  open:
+  5 #852, 6 #818, 7 #864, 8 #869, 9 #874, 10 #875, 11 #881, 12 #888, 13 #897. What stays open:
   - **Task 6 (#818) and C50 (#847): the ticket of a bill collected after a correction still shows
     the original invoice total.** `collectOrder` queues no receipt on this path; the ticket it
     returns, the original receipt the till offers, and any reprint are all built by
@@ -5227,10 +3123,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   ([testing-guide.md](developers/testing-guide.md)).
   - **Within one extras list, prices are not a column and names are not a column**
     (`apps/till/src/widgets/modifier-picker.ts`) — a checkbox row and a stepper row misalign both the
-    price edges and the name edges, at 1024 and at 390. Since A64 widened the standard modal, on a
-    screen wider than 1072px the picker is 1024px wide and each price sits at the far end of the
-    row from its name: take 1280 into the pass too. _2026-10-05 (W70): the picker is now the
-    standard size, 672px wide (A64's "standard modal" was the 64rem size W70 calls wide)._
+    price edges and the name edges, at 1024 and at 390.
   - **The picker's fieldset legend wraps at phone width and its second line crosses the fieldset's own
     top border**, so the required marker (appended as a plain space) can break onto a line of its own
     sitting on the border rule.
@@ -5361,8 +3254,7 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 ### A5. Incidents and notifications
 
 **Dashboard alerts and the incidents surface — LANDED #363/#368/#371.** Still not built: a standby
-that has fallen behind. The pairing consumer is retired by A268 (2026-10-04), which removes the
-count of devices that tried to join while the window was shut.
+that has fallen behind.
 
 ### A6. Payments
 
@@ -5422,9 +3314,9 @@ count of devices that tried to join while the window was shut.
   - Flaky: `packages/payments-sumup/src/dashboard/sumup-add-reader.test.ts`, "calls onClose when
     the dialog is dismissed with Escape", failed once in a run beside two coverage runs and passed
     three times alone (2026-09-26); its Stripe twin, `stripe-add-reader.test.ts`, was logged failing
-    about one whole-package run in three (2026-09-27). #721 (2026-09-27) made both wait for the native
-    dialog's `close` event before counting `onClose` — the late close report #1075 measured in the
-    variant window. Neither has been re-measured since; on a recurrence, keep the log.
+    about one whole-package run in three (2026-09-27). #721 made both wait for the native
+    dialog's `close` event before counting `onClose`. Neither has been re-measured since; on a
+    recurrence, keep the log.
 - **Slice 2 — the handheld NFC/QR link.** Owner decisions 2026-09-18
   ([2026-09-18-handheld-and-till-hardware-decisions.md](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)
   §2–§3): the waiter carries the reader to the table and settles there; pairing is an NFC sticker, a
@@ -5497,60 +3389,14 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   may not be reachable; next action is to find out whether it is, then either fix the test or drop
   the correction and its test.
 
-- **The configuration export does not tell the shell about an expired session (A236) — DONE (W19, #1116;
-  found 2026-10-03).** `exportConfiguration` in `apps/dashboard/src/api/client.ts` now goes through
-  the request helper with its `as: "blob"` option, as the VAT return download does: an expired
-  session reaches the expiry hook, a successful export counts as activity, and a refusal keeps its
-  `params`. It came in with #296 (`fabdb224d`).
-
-- **Add a device, like adding a printer (A268, owner 2026-10-04) — W104 DONE (#1225, main b1e1ecd3a); W105 DONE (#1235, main b27c17f5c); W106 DONE (#1240, main 812195b7c); W105b DONE (#1248, main ccbe2b41e); W105c DONE (#1251, main 58c65558b); W105f DONE (#1253, main 44ff56380); W105g DONE (#1254, main 969c96972); W105h DONE (#1258, main efa4ecb1b); W105e DONE (#1266, main 5ce168812); W106a DONE (#1272, main 700fdb00e); W105i DONE (#1260, main 998695dc5); W105d DONE (#1263, main 946643aa5). W104–W106, W105b, W105c and W105f DONE; the open points each left are listed below.**
-  Devices may ask to join only while an Add a device dialog is open; the manager presses Pair, taps
-  the device's number, then sets its name, profile and, for a kitchen screen, what it shows. Every
-  device gains an Edit dialog (name, profile, Shows, printers, made here, card reader), the Devices
-  list becomes a table, and it shows each device's battery. Retires the "tried to join" count and
-  A5's pairing alert.
+- **Add a device, like adding a printer (A268, owner 2026-10-04) — DONE: W104 (#1225), W105
+  (#1235), W106 (#1240), W105a (#1244), W105b (#1248), W105c (#1251), W105d (#1263), W105e (#1266),
+  W105f (#1253), W105g (#1254), W105h (#1258), W105i (#1260), W106a (#1272); the open points each
+  left are listed below.**
   [Spec](superpowers/specs/2026-10-04-add-a-device-design.md);
-  [plan](superpowers/plans/2026-10-04-add-a-device.md), three pull requests: W104 the window holds
-  and the Add a device dialog, W105 the device table and Edit dialog, W106 battery.
-  **W104 (done):** the fifteen-minute join window and the "tried to join" count are gone. An open
-  Add a device dialog (Devices page) or Add a print agent dialog (Printers page) takes a hold on the
-  window and renews it while it stays open (`apps/dashboard/src/api/pairing-hold.ts`); outside dev
-  mode a device may ask to join only while some hold is live, and once none is left the waiting
-  device requests are discarded. Tapping the right number claims the request for that login, so
-  another login's check or deny is refused `join_request.claimed` and its approval
-  `join_request.unclaimed`; the claiming login then names the device and picks its profile
-  (`apps/server/src/join-api.ts`). A till refused with `device.pairing_closed` now tells the
-  operator to ask a manager to open Add a device.
-  **W105 (done):** one request, `PATCH /management-api/devices/:id`, saves a device's
-  name, profile, Shows, printers and made-here stations in one transaction (since W105e, 2026-10-05, a
-  kitchen screen's save leaves made-here out), replacing the reassign
-  and made-here routes (`apps/server/src/device-api.ts`). The Devices list is a table with an Edit
-  dialog and a two-press Disable in each active row's menu; a disabled device's row does not open
-  (`rowClickable`, new on `wt-data-table`). The card reader is read when the dialog opens (since W105e, only when the session holds
-  `payments.manage`) and saved second, through its own route; without `payments.manage` the field is not shown.
-  **W105b (done, #1248):** a disabled device can come back as itself. If its browser asks to join while an Add a
-  device dialog is open, the server checks the browser's old device cookie and marks the request
-  "returning" with the device's own id, name, profile and station or watcher
-  (`apps/server/src/join-requests.ts`). The dialog lists it under its old name with "Disabled
-  device. Enabling it restores its settings." (since W105g, 2026-10-05, the hint reads "Disabled
-  device. Its profile was deleted: choose one to enable it." instead when the device's profile was
-  retired; see (8) under "Left OPEN by W105" below) and an Enable (Habilitar) button in place of Pair;
-  after the usual number check the step is titled "Enable <name>" and starts filled in
-  (`apps/dashboard/src/screens/devices-screen.ts`). A station or watcher that is gone or switched
-  off starts empty, to choose again; so does a profile missing from the dashboard's list of
-  profiles, which since W105c is what a profile deleted while only disabled devices held it looks
-  like; since W105g (2026-10-05) Profile also starts empty whenever the server reports the profile
-  retired, even while that list has not yet been re-read. If the device asks again while its Enable dialog is open, the
-  new ask replaces the old one under the same id; the dialog closes without sending a discard,
-  which the server would answer as naming an ask already gone, and says the device asked again
-  with new numbers. Cancel and the number check name the ask by its
-  `createdAt` as well as its id, and an ask that has been replaced is answered
-  `join_request.not_found`, unless a number check's pairing hold has lapsed, which is answered
-  `device.pairing_hold_lapsed` first. Enable turns the same device row back on; it keeps
-  its made-here stations, card reader and history, and its printers if its profile is unchanged.
-  The disabled row in the Devices table gets no Enable action: the device has to ask again to
-  prove itself, so a row button could only open Add a device.
-  Open points: (1) the slow hash check runs only when the cookie names a disabled device, so the
+  [plan](superpowers/plans/2026-10-04-add-a-device.md).
+  Left OPEN by W105b (#1248, a disabled device coming back as itself): (1) the slow hash check runs
+  only when the cookie names a disabled device, so the
   response time hints that an id is a disabled device; asks are rate-limited and, outside dev mode,
   accepted only while Add a device is open. (2) Someone holding a copy of a disabled device's
   current cookie can ask first and so replace that cookie; outside dev mode they still cannot get in
@@ -5561,56 +3407,15 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   previous one (accepting it included, once the device is later disabled), is not forced later.
   It must first prove the token the previous ask issued, a scrypt check, so sharing a millisecond is
   unlikely, but nothing in the code rules it out.
-  **W105f (done, #1253):** Disable ends every shift session open on the device in the same transaction
-  (`POST /management-api/devices/:id/revoke`, the only path that disables a device), so a signed-in
-  person's next request is refused `session.required` straight away; other devices' sessions are
-  untouched. The till's sign-in checks the PIN outside any transaction, so inside the transaction
-  that opens the session it checks the device again (`assertDeviceStillProven`,
-  `apps/server/src/device-session.ts`): still active, and still holding the token hash the cookie
-  was verified against, or it is refused `device.unauthorized` and no session opens. A Disable, or a
-  Disable and then an Enable, landing while the PIN is checked leaves no session open
-  (`apps/server/src/join-e2e.test.ts`; with that check removed both cases fail). The refusal of a
-  session on a disabled device (`device.unauthorized`) stays, and Enable still ends the device's
-  sessions, as a second line for a device turned off outside the Disable route (with that call
-  removed, the join e2e case turning a device off directly fails).
-  **W105i (done, #1260):** the same in-transaction check now hands back the device as it stands at that
-  moment, and the sign-in refuses it `device.forbidden_action` (`action: "sign_in"`) if its profile
-  is now a kitchen screen's, so a till moved onto a kitchen-screen profile while the PIN is checked
-  opens no session; a move onto another till profile still signs in. The refusal before the PIN
-  check stays, so a kitchen screen is turned away before any PIN work. `POST /api/session` is the
-  only route that opens a session tied to a device: `loginWithPin` (`packages/identity/src/login.ts`)
-  is otherwise called only by test code (the fixtures under `apps/server/src/testing/` and
-  `packages/identity/test/` among it) and three demo scripts under `apps/server/scripts/`, and
-  dashboard and mirror sessions name no device. Cases in `apps/server/src/join-e2e.test.ts` and
-  `apps/server/src/device-session.test.ts`; with either check removed, its case fails. Still open:
-  a shift session already open when its device is moved onto a kitchen-screen profile stays
-  open — a review signed in on a till, moved it onto a kitchen-screen profile through the management
-  route, and found one session still open; whether such a move should end the device's sessions is
-  not decided.
-  **W106 (done, #1240):** `devices` gains three empty-by-default columns: the battery level,
-  whether it is charging and when that was reported (core `0099`). A paired device sends both to
-  `PUT /api/device/battery`, which refuses a level outside 0 to 100 and stores at most one report a
-  minute unless the charging state changed (`apps/server/src/device-api.ts`). The till sends a
-  report when it starts as a paired device and whenever the level or charging state changes, and
-  re-sends its current reading every five minutes, one send at a time, so a steady battery is not
-  greyed as stale; it does so only where the browser has `navigator.getBattery`
-  (`apps/till/src/api/battery-report.ts`). The
-  Devices table's Battery column, between Shows and Status, shows "82%" with a lightning mark while
-  charging, "Not reported" for a device that never sent one, and greys a report more than ten
-  minutes old, adding when it was taken (since W106a, "updated 11 minutes ago"). A report that passes ten minutes while the
-  page is open is greyed then, without the list being read again
-  (`apps/dashboard/src/screens/devices-screen.ts`). No low-battery alert: that is A272, still open.
-  Left OPEN by W106: (a) done by W106a (#1272; owner 2026-10-05: "relative time '5 minutes ago' with
-  hover/click to show the actual timestamp"): the greyed battery report says "updated 11 minutes
-  ago" / "actualizado hace 11 minutos", the Add a device dialog "Accepting devices: closes in 4
-  minutes" / "Se aceptan dispositivos: se cierra dentro de 4 minutos", and the Add print agent
-  dialog "Open: closes in 4 minutes" / "Abierto: se cierra dentro de 4 minutos" (a window already
-  past reads "closes now"). The words come from the new shared primitive `wt-relative-time`
-  (`packages/ui/src/components/wt-relative-time.ts`, through `apps/dashboard/src/widgets/relative-time.ts`),
-  which redraws itself when its words would change; hovering or tapping them shows the full date
-  and time ("5 de octubre de 2026 a las 11:49"), which is also their screen-reader description. The
-  exact time is in the BROWSER's time zone: the relative-time widget receives no venue time zone. Other dashboard
-  places still showing a bare `YYYY-MM-DD HH:MM` (`formatIsoMinute`), not changed: the Devices "Last
+  Left OPEN by W105i (#1260, a till moved onto a kitchen-screen profile during a PIN sign-in opens no
+  session): a shift session already open when its device is moved onto a kitchen-screen profile
+  stays open — a review signed in on a till, moved it onto a kitchen-screen profile through the
+  management route, and found one session still open; whether such a move should end the device's
+  sessions is not decided.
+  Left OPEN by W106 (battery, #1240): (a) the relative-time words (W106a, #1272, `wt-relative-time`)
+  show the exact time in the BROWSER's time zone: the relative-time widget receives no venue time
+  zone. Other dashboard places still showing a bare `YYYY-MM-DD HH:MM` (`formatIsoMinute`), not
+  changed: the Devices "Last
   seen" column; on Printers, a print agent's join request, an agent's Last seen (its table and Edit), a
   printer's Last print and Last seen (its status view) and Last print (the printers table), "Seen on {agent} · {time}" (`printers.seen_at`), and the print
   queue's Created and Delivered columns; the menu status and preview's "published {time}"
@@ -5627,57 +3432,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   smaller than `--wt-tap-min`, under WCAG 2.2 criterion 2.5.8's exception for a target in a
   sentence (`docs/developers/design-system.md`); whether they should take a 44px hit area instead
   is the owner's call.
-  Left OPEN by W105, not acted on: (5) done by W105d (#1263; owner's choice (a), 2026-10-05): a kitchen
-  screen's Edit dialog keeps the station or watcher it holds after it was switched off, offered in
-  its group and marked "(Disabled)" / "(Deshabilitada)" for a station and "(Disabled)" /
-  "(Deshabilitado)" for a watcher (`devices.watcher_disabled_mark`; W105d shipped "(Removed)", W110b
-  (#1278) changed it), so a rename saves it unchanged; only switched-on ones are offered as
-  new choices. The save route accepts the device's own station or watcher unchanged
-  (`resolveDeviceBinding`'s `kept`, `apps/server/src/device.ts`) and still refuses a switch to a
-  switched-off one; Enable does not pass `kept`, so a returning device must choose a switched-on one.
-  `GET /management-api/devices` reports each row's `binding` (name and whether it is switched on).
-  Still open: the Devices table's Shows column reads "— no station —" for a screen on a switched-off
-  station, because it looks the name up in the switched-on list; `binding.name` could fill it. (6) done by W105a (#1244): printers and devices both say Disable/Deshabilitar,
-  status Disabled, and printers' Add again is now Enable; card readers followed in W110 (#1255): Disable/Deshabilitar,
-  Enable/Habilitar, Disabled/Deshabilitado, and their Add again/Volver a añadir is now Enable/Habilitar. (7) done by W105e (#1266, 2026-10-05): a
-  kitchen screen's Edit dialog hides Made here and its save leaves `madeHereStationIds` out, and the
-  device edit route leaves a device's made-here stations as they are when the field is absent; an
-  explicit null or a non-list is still refused `management.request_invalid`
-  (`apps/server/src/device-api.ts`). A made-here station switched off while the dialog is open no
-  longer refuses a kitchen screen's save. (8) done by W105c (#1251): deleting a profile ignores disabled devices (owner
-  decision 2026-10-05). A profile only disabled devices hold is RETIRED, not deleted, because
-  `devices.device_profile_id` is NOT NULL, and the rebuild that changing it needs fails once a row
-  in a table keying into `devices` with RESTRICT names a device (fiscal records among them;
-  CLAUDE.md §3's rebuild rule): `device_profiles.retired_at` is set, the name is free again, and its canvas and printer
-  lists are let go (`deleteDeviceProfile`, `packages/layouts/src/device-profile-store.ts`). A
-  profile an active device holds is still refused `device_profile.in_use`. A returning device whose
-  profile was retired opens Enable with Profile empty; Enable with the old profile is refused
-  `device_profile.not_found`. Done by W105h (#1258): the Devices table reads "Profile deleted" / "Perfil
-  eliminado", muted, for a device on a retired profile, from `profileRetired` on each row of
-  `GET /management-api/devices`; and a configuration export leaves a retired profile behind
-  (`leaveBehindWhenSet: "retired_at"`, `packages/db/src/configuration-transfer.ts`) together with
-  every bundled row whose foreign key names it, which is its `device_profile_home_layouts` rows. Those
-  rows still stay in the exporting venue's own table. The Enable hint's wording, done by W105g (#1254, owner decision
-  2026-10-05): when the returning device's profile was retired, the waiting list's hint reads
-  "Disabled device. Its profile was deleted: choose one to enable it." / "Dispositivo deshabilitado.
-  Su perfil se eliminó: elige uno para habilitarlo." (`devices.enable_hint_profile_deleted`), and
-  every other returning device keeps "Enabling it restores its settings."; the server says which, as
-  `returning.profileRetired` in the device join list (`returningDevicesOf`,
-  `apps/server/src/join-requests.ts`). The device join list's live updates now name
-  `device_profiles` too (`joinRequests`, `apps/dashboard/src/api/live-queries.ts`, pinned in its
-  test), so a profile deleted while a returning device's request is showing re-reads the list. (9) done by W105e (#1266, 2026-10-05): while the profile is unchanged, a printer the device
-  holds that its profile no longer lists is offered and chosen, marked "Name (not on this profile)"
-  / "Nombre (no está en este perfil)" (`devices.printer_not_on_profile_mark`; a switched-off one
-  also reads "(Disabled)"), and Save keeps it; a changed profile no longer offers it
-  (`#printerOptions`, `apps/dashboard/src/screens/devices-screen.ts`). When the held printer is not in the
-  dashboard's printer list, nothing extra is
-  offered and Save still keeps the held printer. (10) done by W105e (#1266, 2026-10-05): the dashboard tells the
-  Devices screen whether the session holds `payments.manage` (`canManageReaders`, from the "who am I"
-  read in `apps/dashboard/src/dashboard-app.ts`); without it Edit never draws the card reader field
-  nor asks about readers. With it the reader is read as before; a read refused with `authorization.not_permitted` hides the
-  field, and any other failure of that read is shown at the bottom of Edit. If the session loses
-  `payments.manage` while Edit is open (the dashboard re-reads permissions when the tab comes back
-  into view), the field goes and a Save pressed after that sends no reader. Review suggestions #1235 did not take, listed in its description: the edit
+  Left OPEN by W105: (5) the Devices table's Shows column reads "— no station —" for a screen on a
+  switched-off station, because it looks the name up in the switched-on list; `binding.name` could
+  fill it. Review suggestions #1235 did not take, listed in its description: the edit
   route checks permission before the device id where revoke checks the id first; its body is the
   whole device rather than only the fields named (since W105e, made-here may be left out); it can write the device row up to three times;
   `rowClickable` and `rowActivation` could be one option; a save fetches the list twice; Edit and
@@ -5709,36 +3466,14 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   tab that misses the dev chooser (the chooser's failure is swallowed, `apps/till/src/till-app.ts`)
   lands on the most recently paired device's login. **Next action:** a short spec for per-tab device
   secrets and per-tab sign-ins usable in Demo, and reproduce the owner's report first.
-- **A dev tab that remembers a device a reset deleted goes back to the device picker (W107) — DONE:
-  landed as #1270 (main `44c6c8bbc`, 2026-10-06).** The tab used to boot to the join screen, and joining from it could not recover
-  it: run on the demo stack 2026-10-06, a join sent with a stale `x-waitron-dev-device` header
-  created and approved a new device, but `GET /api/device/me` kept answering `device.unauthorized`
-  because in dev mode the server reads the header instead of the device cookie
-  (`apps/server/src/device-session.ts`). Now a dev tab whose remembered device is refused
-  `device.unauthorized` forgets it and shows the picker. If the picker's device list then fails to
-  load, the tab shows the join screen instead, and a join from it no longer sends the forgotten id.
-  Outside dev mode the browser still gets the join screen, and any other failure keeps the
-  remembered device (`#boot`, `apps/till/src/till-app.ts`).
 - **A low-battery alert (A272, idea, 2026-10-04) — OPEN.** A268 shows each device's battery on the
   Devices list; nothing alerts when a handheld runs low.
 
 - **A till is a device (A238) — DONE: landed as #1164 (main `065354d26`, 2026-10-04); every
-  venue needs a reset.** Follow-ups queued 2026-10-04: W56 (the Sales screen's section title reads
-  "Tender by device") is done; W57 is done in this change: the two hand-run operator scripts now
-  record sales and corrections as "Operator script" / "Script del operador". Its source CHECK
-  migrations also require the accepted pre-live venue reset: rebuilding `working_orders` may delete
-  open order rows through cascading foreign keys, while other populated tables refuse the rebuild.
-  Deferred in the PR: three refactors of sign-in-adjacent code, and renaming the `seedTill` test
-  fixtures. The `tills` table is gone; every record names its source (usually the device; otherwise
-  the dashboard or a named background job)
-  and, for a device, the device; a device's profile decides whether it takes cash (`take-cash`) and
-  opens the drawer (`open-cash-drawer`), and lists the receipt and payment slip printers its devices
-  may switch between mid-service; setup creates no till, and the server reads no
-  `WAITRON_TILL_TILL_ID`; the receipt, payment-slip, reprint and drawer routes use the requesting
-  device's current printers. Ships with a venue reset: every venue, the owner's box included, is
-  wiped and set up again. Spec: `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`;
-  plan: `docs/superpowers/plans/2026-10-03-till-is-a-device.md`. Pieces 2 and 3 follow it (A239,
-  A240).
+  venue needs a reset.** Follow-ups W56 and W57 are done. Deferred in the PR: three refactors of
+  sign-in-adjacent code, and renaming the `seedTill` test fixtures. Spec:
+  `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`; plan:
+  `docs/superpowers/plans/2026-10-03-till-is-a-device.md`. Pieces 2 and 3 follow it (A239, A240).
 
 - **Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner,
   2026-10-03).** Piece 2 of A238. Each top-up or removal of cash from a till device's drawer is a
@@ -5757,17 +3492,11 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   handheld until then (A238). Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs
   A238 (landed as #1164) and A239.
 
-- **A pretend printer in Demo mode (A241) — DONE in W37.** Demo and Preparation provide a printer
-  for receipts, kitchen tickets and separate drawer openings. A manager can open its page from the
-  Demo bar beside Email inbox and see the printed jobs newest first. Live deactivates the pretend
-  printer and does not serve the page.
+- **A pretend printer in Demo mode (A241) — DONE in W37 (#1159).**
 
-- **A pretend connected card reader in Demo mode (A247) — DONE in W38.** Demo and Preparation
-  offer a pretend reader beside the instant simulator. The till waits for its decision, while a
-  manager opens Card reader from the Demo bar to approve or decline the amount. Cancel on the till
-  clears the pending payment. Live offers neither the reader nor its page. If demos use multiple
-  tills at once, add a till label to each pending amount so the manager can choose the right one;
-  the current page shows amounts alone.
+- **A pretend connected card reader in Demo mode (A247) — DONE in W38 (#1172); left open:** if
+  demos use multiple tills at once, add a till label to each pending amount so the manager can
+  choose the right one; the current page shows amounts alone.
 
 - **The rest of the Printing rules screen (A242) — SETTLED by A261 (owner, 2026-10-03).** The page
   is deleted: kitchen ticket printers move to Prep stations, the receipt print mode to Departments
@@ -5780,14 +3509,6 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   question another way — that header now collapses its section, as every other header does — so
   whether this page is still wanted, and what would open it, is the owner's call. If wanted, it
   needs a spec: brainstorm what each section's page says.
-
-- **The report screens get their own sidebar section, Reporting (A251, owner 2026-10-03) — DONE
-  (#1146, lane A's W41).** Sales & takings, the VAT return, the adjustments module's Adjustment report and
-  Orders, in that order, sit in a collapsible section headed Reporting ("Informes"); Overview stays
-  on top in a group of its own with no heading, and a staff session's short list (My schedule,
-  Orders) sits in that headless group, unchanged. The section keeps the id `reports`, so the module
-  is untouched; a group's `itemsAfterModules` (`NAV_GROUPS`, `apps/dashboard/src/dashboard-app.ts`)
-  are listed after its module screens, which is how Orders comes last.
 
 - **A generated display name is the first given name and first surname (C38, #827, owner decision
   2026-09-28).** Left as they were, from #827's review: unlike the two staff forms, the profile
@@ -5844,11 +3565,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   others) are held only by the dialog's own 768px limit — whether they should follow the modal's
   form width is the owner's call.
 
-- **Content languages are managed on the page itself (C111, #987):** Add language uses the compact
-  width (W70, #1222) and fits its content (W70a), settling the one-field dialog's size and empty
-  space. Left open: at 390px the Spanish "Hacer predeterminado" and "Quitar" fit side by side with
-  the dashboard's own padding (16px a side), and stack when the page is padded 24px a side, so on
-  a phone narrower than 390px they can stack.
+- **Content languages are managed on the page itself (C111, #987) — left open:** at 390px the
+  Spanish "Hacer predeterminado" and "Quitar" fit side by side with the dashboard's own padding
+  (16px a side), and stack when the page is padded 24px a side, so on a phone narrower than 390px
+  they can stack.
 
 - **Hints shown as placeholders (C104, #966; C119, #967):** the owner chose on 2026-10-01 to leave as
   they are the hints cut off in their fields and the fields whose own placeholder shows instead of
@@ -5944,7 +3664,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   their generic words (`editor.field_rejected` in `apps/dashboard/src/screens/catalogue-screen.ts`
   `#rejectedField`; `venue.field_refused` in
   `packages/venue-service/src/dashboard/venue-operations-screen.ts`), not the refusal's own
-  sentence (the setup half was done by C62, #895);
+  sentence;
   (2) controls with no place for an error keep their refusal in the bottom message — `wt-switch`
   (`active` on the ingredient, extras and options forms; `available` on the product
   editor), the allergen and dietary-origin pickers on the ingredient form, and the purchase form's
@@ -5953,7 +3673,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   `purchase.duplicate` (supplier tax id and invoice number), a purchase line's rate, base, tax or
   type, `hours.N` on venue operations,
   `provisioning.duplicate_series_code` and `territory_country_mismatch` on the setup venue screen;
-  (4) on the backup screen (its retention boxes done by C63, #860): a refusal naming
+  (4) on the backup screen: a refusal naming
   `destinationDir` or `schedule` still shows in the page banner rather than under the folder field
   or above the button (both seen by running, in the Codex run-it review of C63), and so, read and
   not run, does every other refusal; the backup folder is required but not marked, and Turn on
@@ -6108,9 +3828,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   design still needs to decide where custom roles belong in that check.
 - **Dropdowns sort by the label the person reads, with `Intl.Collator`; a list in a lifecycle order
   says so** (owner decision 2026-09-12). **`wt-select` is retired** (owner, 2026-10-02): `wt-combobox`
-  is the one dropdown, and after A178b–e every native select in product code is one;
-  `scripts/native-form-fields.test.ts` fails on a new native one written in a screen's `.ts` source
-  (A178f). Still open:
+  is the one dropdown (A178b–f). Still open:
   `wt-combobox` does not sort its options, and `wt-data-table`'s `localeCompare` takes no locale.
 - **The till's schedule screen tells the person to try again and gives them no way to** (found
   2026-10-03 by review of lane C's W14; read, not run). A failed load shows
@@ -6162,11 +3880,6 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   (`docs/compliance/asesor-questions.md:465`, `docs/compliance/verifactu-findings.md:678`); their tip
   claim is TRUE and the legal track is kept separate. **Next action:** whoever next works the
   compliance track widens those two sentences.
-- **Repeated demo-seed venue fixtures — DONE (W8).** The eight suites with a repeated
-  `provisionVenue`/`nextNif` pair now use
-  `apps/server/scripts/demo-seed/testing/provision-venue.ts`. Their original NIF ranges, check
-  letter styles, invoice locales, PINs and admin emails are passed explicitly. The dated-sales
-  suite has its own one-off venue setup and was outside this repeated group.
 - **`wt-combobox`** (#351): a searchable dropdown in `packages/ui` — pick one option or several
   (`multiple`), and optionally offer to add what was typed when nothing matches. Left out on
   purpose, per its design: searching on the server, disabling single options, taking part in a
@@ -6219,55 +3932,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     `tenant_receipts`, the control, sent one; 2026-10-04: `tills` is gone, A238). _(2026-10-05,
     W111: it also asks again when the location's address changes, read through `locations`; not
     re-probed for printers.)_
-- **The receipt's top block is centred and carries the venue's address, a phone, an email, a slogan
-  and a logo — DONE (W111, #1261, owner 2026-10-05).** The owner asked: "For receipts, we need
-  to include phone number, address, email address (maybe). Possibly room for a slogan, and allow
-  uploading an image for a logo. Also this text should be centred on the receipt". After the QR
-  block, which still opens the receipt (C123, below), the printed receipt now prints centred, in this
-  order: the logo, the trading name, the legal name, the slogan, the address lines, `Tel. <phone>`,
-  the email, the duplicate label and `NIF: …`; the footer message is centred too. Item lines and
-  totals keep their columns and the practice warning keeps its place and alignment
-  (`formatReceipt`, `apps/server/src/receipt-ticket.ts`). The Receipts screen's preview prints the
-  same, and the till's on-screen ticket shows the same lines, with the library image itself as the
-  logo rather than the printed dots. None of it enters the filed record or its hash.
-  - **Settings live in the existing `tenant_receipts.receipt` JSON, so there is no migration.**
-    `ReceiptConfig` (`packages/layouts/src/types.ts`) gains `phone`, `email`, `printAddress` and
-    `logo` beside `headerSubtitle` and `footerMessage`. `headerSubtitle` keeps its key; the Receipts
-    screen calls it Slogan / Eslogan. A phone is at most 30 characters and passes the shared
-    `isValidTelephone` (`packages/shared/src/telephone.ts`: 6 to 15 digits, a "+" only at the
-    start); an email is at most 254 characters, with no space around it, and passes identity's
-    `isValidEmail`; an empty one means not set. The Receipts screen checks both before saving. A bad value is refused `receipt.invalid` with a
-    `reason` (`invalid_phone`, `invalid_email`, `invalid_logo`, `image_not_found`, `not_boolean`),
-    shown under its field (`validateReceiptConfig`, `packages/layouts/src/validate.ts`).
-  - **The address is the venue location's own**, never typed again: street line 1, line 2,
-    "postal code city", and the province unless it names the city (`addressLines`,
-    `apps/server/src/venue-address.ts`). A switch on the Receipts screen leaves it off
-    (`printAddress: false`); the screen shows the address it will print, or says the location has
-    none saved.
-  - **The logo is turned into printable black-and-white dots once, when the settings are saved, not
-    when a receipt prints.** Decoding an image uses sharp, which must not run inside a transaction
-    because the decode would hold the venue's one write lock (`prepareImage`,
-    `packages/media/src/prepare.ts`), and a receipt is built inside the sale's transaction. The
-    save stores one picture per paper width in the same JSON (`logoRasters`, drawn by `drawLogoRasters`,
-    `apps/server/src/receipt-logo.ts`); `getReceipt` leaves them out, so neither the dashboard's read
-    nor the till's boot carries them. Printing reads the settings and that paper's picture in one
-    read through `getPrintedReceipt` (`packages/layouts/src/receipt-store.ts`), which answers no logo, rather than failing the sale,
-    for a stored picture of the wrong shape — a configuration import copies the JSON unchecked. The
-    image is picked and uploaded through the media library, whose upload refuses an over-large,
-    non-image or unreadable file with its own codes; an image the receipt uses cannot be deleted
-    from the library (a `receipt` usage, `packages/media/src/images.ts`). If it vanishes anyway, the
-    stored pictures still print.
-  - **The logo's bound:** scaled, keeping its proportions and enlarged if small, to fit the width the
-    QR may take (`safeWidthDots`: 360 dots on 58 mm, 504 on 80 mm) and at most 160 dots high
-    (`LOGO_MAX_HEIGHT_DOTS`, `packages/printing/src/dither.ts`) — 20 mm at 203 dpi, 22.6 mm at
-    180 dpi. So a square or tall image takes at most about 2 cm of roll, while a wordmark up to
-    about three times as wide as it is tall still uses the QR's full width on 80 mm paper, 504
-    dots (about 63 mm at 203 dpi).
-  - **A reprint shows the current trim:** the address, phone, email, slogan and logo are read when a
-    copy prints (`buildReceiptBytes`, `apps/server/src/receipt-print.ts`), not kept with the sale, so
-    a copy of an earlier sale shows today's.
-  - **Resolved by A231 #1256 (2026-10-06):** on an F1
-    that prints the taxpayer's domicile, the location address is not printed as well.
+- **The receipt's top block — logo, address, phone, email and slogan, centred — DONE (W111, #1261);
+  left open:**
   - **Overlap with A231d (invoices by email):** its approved design adds a contact email and
     optional phone to the location's settings; the venue-wide `phone` and `email` above already
     exist, so whoever builds A231d decides whether to reuse them rather than add a second contact
@@ -6289,65 +3955,32 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     receipt is built — untested, and I believe it predates W111.
   - Not yet checked on paper: the logo, and the centred block, on the owner's box (FYI in the
     campaign's questions file). Local screenshots in `~/waitron-campaign/w111-shots/`.
-- **«QR tributario:» above the QR (C115, owner 2026-09-30) — done (2026-10-01, #999).** Both the
-  printed receipt (`apps/server/src/receipt-ticket.ts`) and the till's on-screen ticket
-  (`apps/till/src/screens/till-ticket-view.ts`) print the caption, in Spanish whatever the receipt
-  language, on its own line directly above the QR. Follow-ups:
-  - **The caption, the QR and the VERI\*FACTU line open the invoice — done (2026-10-02, C123,
-    #1038; owner, 2026-10-01).** AEAT's «Detalle de las especificaciones técnicas del código «QR»
-    de la factura…», version 0.5.0 of 10/12/2025, section 3, says «El código «QR» se situará al
-    principio de la factura, antes de que empiece el contenido de ésta generado por el sistema
-    informático de facturación, a menos que se justifique la existencia de algún obstáculo para
-    ello, en cuyo caso, deberá quedar siempre bien visible y estar claramente separado y
-    diferenciado –de forma que destaque– del resto de contenidos y otros posibles «QR», ocupando un
-    lugar preeminente.» The printed receipt and the till's on-screen ticket now start with the
-    caption, the QR and the VERI\*FACTU line, then a blank line (on screen, a dividing line), then
-    the venue's name and the rest in the order they had. A practice (Demo or Prepare) ticket still
-    starts with its practice warning, above the QR, because that warning says the whole ticket is
-    not a real invoice. The caption and the VERI\*FACTU line are no longer written into the
-    receipt code: the fiscal backend supplies them (`receiptQrText` on `FiscalBackend`,
-    `packages/fiscal/src/backend.ts`), the Veri\*Factu backend with those two Spanish texts and the
-    no-regime backend with none (owner, 2026-10-02). A receipt with no QR — the no-regime backend
-    never makes one — prints neither the caption nor the VERI\*FACTU line (owner, 2026-10-02); a
-    receipt printed with the QR but no words from the backend would print the QR alone. The
-    printer's sample receipt and the Receipts preview take the words from the venue's backend too,
-    and show no QR when it has none.
+- **«QR tributario:» above the QR (C115, owner 2026-09-30) — DONE (#999).** Follow-ups:
+  - **The caption, the QR and the VERI\*FACTU line open the invoice — DONE (C123, #1038).**
+    AEAT's «Detalle de las especificaciones técnicas del código «QR» de la factura…», version
+    0.5.0 of 10/12/2025, section 3, says «El código «QR» se situará al principio de la factura,
+    antes de que empiece el contenido de ésta generado por el sistema informático de facturación,
+    a menos que se justifique la existencia de algún obstáculo para ello, en cuyo caso, deberá
+    quedar siempre bien visible y estar claramente separado y diferenciado –de forma que destaque–
+    del resto de contenidos y otros posibles «QR», ocupando un lugar preeminente.»
   - Left as it is (owner, 2026-10-01: "leave it"): the same section asks for the caption and the
     VERI\*FACTU line in a readable typeface and size, equal to or larger than the rest of the
     invoice's data. On the till's screen (read from its styles, not measured) both take the ticket's
     ordinary size while the venue name and the TOTAL row are drawn larger; on the printed receipt
     every line of text is drawn at one size (read, not checked on paper).
-- **One receipt language per location (C113, owner 2026-09-30) — landed 2026-10-02 as #1014,
-  owner-approved.** A receipt prints in ONE language, never two, with no choice when the original
-  prints, and dish names print as they were saved. The language is the first entry of the location's saved list
-  (`locations.invoice_locales`), read in the transaction that files the sale (`readReceiptLanguage`,
-  `packages/catalogue/src/operations.ts`); a reprint asked for without a language prints in the
-  language the sale was filed in (`sales.locale`). The fixed words come from Spain's country pack
-  (`packages/country-es/src/receipt-labels.ts`). You set it on Venue settings' **Receipts** tab or
-  setup's venue screen; **in Catalonia it is fixed to Catalan**
-  ([regional-language-rules.md](compliance/regional-language-rules.md), Catalonia). Server: `GET`
-  and `PUT /management-api/receipt-language` (`apps/server/src/location-settings-api.ts`).
-  - **A copy can be printed in another receipt language (C114, landed 2026-10-02 as #1022).** Where the till reprints an issued receipt (the finished
-    sale's Reprint and a paid bill's Receipt), a venue whose country offers more than one receipt
-    language asks which, starting on the first of these it offers: the language the sale was filed
-    in, the location's, the first offered; a country with one reprints at once. Only the
-    fixed words, money, date and percentages follow the choice; dish names, unit names and option
-    answers print as the sale was filed. The copy is marked as one, files nothing and opens no
-    drawer. `POST /api/sales/:id/reprint` takes an optional `language`, refused with
-    `management.request_invalid` (`field: "language"`) unless it is one of the country pack's
-    receipt languages, which `GET /api/till` lists as `receiptLanguages`. A copy is offered in every
-    receipt language the pack has, even in Catalonia: a product choice, which includes Spanish, the
-    customer's right there on request (Spain's Constitutional Court, ruling 88/2017;
-    [regional-language-rules.md](compliance/regional-language-rules.md), Catalonia). The till learns
-    the filed language from the sale it just recorded, and for a paid bill from `receiptLanguage` in
-    the party's bill list (`readPartyBills`, `apps/server/src/parties.ts`). Catalonia's reason on
-    setup and the Receipts tab of Venue settings say a copy can be printed in another language. The dashboard
-    Printers screen's Resend still sends a job's stored bytes again (owner, 2026-10-02), and the
-    Orders screen's copy (`reprintOrderReceipt`, `apps/server/src/orders-reprint.ts`) prints in the
-    language the sale was filed in. Two tidy-ups #1022's review raised and left, because each changes
-    files outside it: the till's four choice dialogs (`apps/till/src/widgets/`) each carry their own
-    radio-option styles, which could be one shared set; and three older dashboard screens name
-    languages with their own code rather than `languageDisplayName` (`packages/shared`).
+- **One receipt language per location (C113, owner 2026-09-30) — DONE (#1014).** A receipt prints
+  in ONE language, never two, with no choice when the original prints, and dish names print as they
+  were saved. The language is the first entry of the location's saved list
+  (`locations.invoice_locales`); **in Catalonia it is fixed to Catalan**
+  ([regional-language-rules.md](compliance/regional-language-rules.md), Catalonia).
+  - **A copy can be printed in another receipt language (C114) — DONE (#1022).** A copy is offered
+    in every receipt language the pack has, even in Catalonia: a product choice, which includes
+    Spanish, the customer's right there on request (Spain's Constitutional Court, ruling 88/2017;
+    [regional-language-rules.md](compliance/regional-language-rules.md), Catalonia). Two tidy-ups
+    #1022's review raised and left, because each changes files outside it: the till's four choice
+    dialogs (`apps/till/src/widgets/`) each carry their own radio-option styles, which could be one
+    shared set; and three older dashboard screens name languages with their own code rather than
+    `languageDisplayName` (`packages/shared`).
   - **Open, for the owner:**
     - **A change is refused while an open order at the location holds a line**
       (`receipt.language_orders_open`; narrowed by C124, #1020, 2026-10-02, with core
@@ -6371,9 +4004,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
       is not among the languages those names were saved in, its receipt prints the new language's
       fixed words with a dish name in an old language (`lineName`'s fallback,
       `apps/server/src/receipt-ticket.ts`; read in the code: the test checks what is filed, not a
-      printed receipt). An invoice-first order is filed at placing and keeps
-      the language it was filed in (the case "accepts a change while an invoice-first order is
-      placed, and collecting it keeps the language it was filed in" in the same test file).
+      printed receipt).
     - The refusal's count of blocking orders is not shown on the Receipts tab of Venue settings: `codeMessage` fills
       in no values.
     - **The payment slip was left alone.** Its words («JUSTIFICANTE DE PAGO», «Importe»,
@@ -6448,7 +4079,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   demo seed (`apps/server/scripts/demo-seed/seed-catalogue.ts`). The proper fix drives the list from
   the venue's region and the languages it chose, which probably means setup asking; do it when there
   is a second region or country to be wrong about.
-- **A visible list of missing translations (C122, owner 2026-10-01) — done (2026-10-01, #1006).** The
+- **A visible list of missing translations (C122, owner 2026-10-01) — DONE (#1006).** The
   Content languages page's **Missing translations** section lists, per enabled language, what has
   no customer-facing name in it.
   - What a diner sees when a name is missing (measured 2026-10-01): with default Spanish and a
@@ -6480,13 +4111,6 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   language alphabetically rather than the default. The receipt fills the variant's text per
   receipt language before it gets there (`apps/server/src/working-order.ts`), so whether any
   surface shows the difference is unknown; reproduce before fixing.
-- **The menu section form's customer-name hints skip the default language — DONE (W11, #1112; found
-  2026-10-02 during A172).** Each blank customer-facing name in
-  `apps/dashboard/src/widgets/section-details-form.ts` now hints the default language's name, then
-  the internal name, because the form passes its default language to `optionalTextFields` as the
-  product, variant, options list, option and extras list editors do. The same form is the menu's
-  Create and Rename form (`#renderMenuForm`, `apps/dashboard/src/screens/menus-screen.ts`), so a
-  menu's own names are hinted the same way.
 - **The default-change check counts deleted and switched-off things — OPEN (noted 2026-10-01 by
   C122; I believe this predates the branch).** `listContentTranslationGaps`
   (`packages/catalogue/src/content-languages.ts`) has no `active` filter on top-level products,
@@ -6520,131 +4144,30 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
   special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.
   Eight build steps, each its own queue item.
-  Step 7 (venue details) is implemented. Its shared server
-  reader/writer now has focused checks for normalization, field-specific stale drafts, no-op
-  retries and province/clock refusals after a sale, order history or daily close. The new
-  venue-details GET/PATCH routes use venue-view/configuration permissions and return field
-  refusals. Additional controls exercise retained sale rows, full-row retention, rollback,
-  no-op change-feed silence, and both real-sale/clock-save queue orders. Configuration export
-  includes corrected details; import keeps its separately created target address and clock.
-  Both boot account-email callbacks now read the venue clock on each send; real SMTP checks
-  cover invitations, resets and profile email changes, with the shutdown reset check retained.
-  Additional consumer checks exercise saved clocks in current station/booking reads,
-  retained backup/cloud deadlines followed by new-clock scheduling, printer calibration,
-  operational report windows and frozen closes, receipt reprints, and workforce summary/roster
-  reads with midnight offsets. Sent kitchen assignments stay equal through allowed corrections.
-  W111's current address printing is retained separately from filed identity and trading snapshots.
-  The dashboard client and passive live-query dependencies now cover venue details and their
-  history restrictions; its patch/validation helper keeps untouched legacy-null fields out.
-  Direct CLI creation controls retain the deployed venue and series on changed details.
-  Numeric-offset clock edits are refused consistently with the reporting validator; named
-  zones such as `Etc/GMT+2` remain accepted. The Venue details panel is the initial tab,
-  with live draft/error separation, changed-field confirmation, clock-change boundaries and
-  each worker's retained backup deadline. The current server report route and the rendered
-  roster's stored wall times have before/after receipts. EN/ES, light/dark and phone/desktop
-  states have accessibility scans and retained screenshots.
-  This build changes no schema.
-  [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) was approved on 2026-10-05;
-  its build landed as [PR #1269](https://github.com/clintongormley/waitron/pull/1269) on
-  2026-10-06 at `924a94b745275627003db2912156dfbb266aa3ae`. Current-head package checks
-  and coverage passed in CI `37385456975`; the 603-second Claude review findings were resolved.
-  Existing installations require the approved venue reset to provision timing defaults; no
-  old-value conversion or backfill is included. The exact-merge CI run is `37386339024`.
-  CI exposed missing timing-default rows in direct server fixtures and incomplete provisioning
-  cleanup; the fixtures now include the required rows, and cleanup removes timing children first.
-  The Spanish reminder check now uses the approved Deshabilitado wording.
-  Additional browser checks cover retained printer IDs, tied station/watcher ordering, extra
-  routing explanations, retryable watcher refusals and dialog cancellation/invalid rename recovery.
-  A refused unassigned-folder claim keeps its field message beside that folder; unavailable watcher
-  metadata keeps the retained watcher ID visible on its printer choice.
-  The schema foundation adds venue defaults and separate nullable station
-  timing storage. Provisioning now creates 5/10/15 defaults, with a supervisor-readable defaults
-  API whose writes refuse an invalid effective station order. Station creation and edits now write
-  independent nullable overrides. The management list, kitchen queue, pass, floor bands/signals and
-  overdue report resolve inherited values, and configuration transfer carries defaults and overrides.
-  The station-health API now returns dish-row counts, per-band lateness and oldest-first kitchen
-  drilldowns with remaining quantities, using one captured time. Supervisors can read it; staff
-  cannot. The screen now observes the health read and refreshes elapsed values every fifteen
-  seconds. A shared table renders live counts, per-band and state drilldowns, remaining quantities,
-  Default/Disabled labels and separate printer/screen problems. Health refreshes retain open drafts;
-  read recovery waits for the failing read and preserves action refusals. The five subject tabs now
-  have stable deep links, Back restoration and creation actions beside the strip; old tester links
-  open Routing, where category claims, exceptions and the tester remain mounted. Interim station
-  hours sit below the panels.
-  Category wording and Disable/Enable actions apply in both languages. Tickets now lists printer
-  selections, current kitchen screens and following watchers, with links to Devices and Watchers.
-  Its multi-select saves a complete printer set in one request; a refused set retains its draft and
-  previous mappings. Disabled printers can be removed from retained assignments but not added.
-  Printing rules now links to Tickets and Watchers instead of editing either printer assignment;
-  its drawer controls remain for step 8. Watchers retains a printer conflict until Tickets releases
-  every station mapping for the selected printers, without clearing an unrelated save error.
-  Tickets localises its empty state.
-  Watcher printer selections now have a whole-set API using the existing printer-management
-  permission and assignment checks in one transaction. A refused new mapping rolls back earlier
-  moves; an already selected disabled printer can be retained or cleared. The Prep client exposes
-  that write. The Watchers printer editor now submits a whole selection beside its shown output,
-  explains station and disabled-printer conflicts, permits transfer from another watcher, and keeps
-  refused drafts retryable through live reads. Cancel/Escape sends no write; a successful save closes
-  before refreshing. Watchers now uses a table with the printer picker in its Printers cell.
-  Follows and service-zone cells choose every member or an explicit list; Runs the pass uses its
-  own choice editor. Rename and Disable sit in the row menu. Screens includes retained inactive
-  bindings and links to Devices. Cell drafts and save refusals survive live reads; Rename writes
-  saved values for every other field, leaving unsaved drafts out of its request. The watcher-printer
-  handover is implemented. Stations now
-  offers confirmed Open/Close for today and Back to the schedule actions, with retry after a write refusal. Default and unscheduled stations
-  say Always open without an action; disabled stations and an unreadable clock offer no hours
-  action. Today now shows the next scheduled opening or closing, distinguishing tomorrow and later
-  weekdays; overlapping or adjoining intervals keep the station open until the actual closure.
-  Its passive minute refresh changes the displayed state without a database event. Stations now
-  has Rename, Make default and confirmed Disable/Enable row actions, plus pointer and keyboard
-  ordering saved as one validated active-station set. Rename submits only the name and closes before
-  refresh; refusal retains an editable draft. The Prep page explicitly reads retained station
-  metadata so disabled health rows can show their state and Enable action; ordinary station lists
-  remain active-only. Settings now has independent choice editors for Show the rest of the order
-  and When closed, work goes to; the default station reads Never closes without a fallback control.
-  A fallback save confirms its destination inside the cell; changing that draft requires a new
-  confirmation. Refusals retain a retryable draft, local validation focuses the choice, Cancel and
-  Escape discard, and live reads preserve typed choices and save errors. English/Spanish,
-  light/dark, phone/desktop saved, picker, refusal and confirmation captures were inspected.
-  Settings now shows the three effective late flags, distinguishing inherited minutes from an
-  explicit override even when it equals the venue default. Each numeric cell saves its own field;
-  clearing it inherits the default. Local checks enforce whole positive minutes and effective order,
-  focus the invalid cell and disable Save after an invalid submission. Server refusals keep the
-  draft retryable. Live defaults refresh inherited values while retaining drafts and action errors.
-  Supervisors can now open the live Stations overview and its read-only drilldowns. The page
-  loads only station metadata and current status, without printer, device or catalogue management
-  reads; configuration tabs and actions are absent. Saved configuration links return to Stations.
-  Routing cards no longer repeat printer/screen/watcher relationships, late-flag summaries or
-  the rest-of-order switch; those appear in Tickets and Settings. The standalone fallback editor
-  now lives
-  in the Settings cell, retaining destination confirmation, disabled choices, empty-to-null
-  saves and field refusals. Disabled stations remain editable at the bottom of Settings, labelled
-  Disabled; changing their fallback does not enable them. Confirming an unchanged fallback sends
-  no write, including a retained disabled destination. Routing no longer repeats Today, Make default,
-  Disable or Enable actions; they use the Stations table, with the same confirmation and refusal
-  paths. Whole-record editing and duplicate station status/output warnings have also left Routing.
-  Rename, ordering and Settings cells retain their separate write paths; station creation retains
-  its form. Rename refuses a draft whose station disappeared during a live refresh. Stations gets
-  its output problems from the health snapshot, with warning text wrapped within the shared name
-  width so it does not stretch the table into a single long line. The 2026-10-05 Claude run-it review
-  reproduced missing-default kitchen reads returning empty results; the readers now refuse
-  `station.timing_missing` instead. Seven consumer regression cases and the defaults-readiness
-  guard cover this refusal; no migration backfill or old-value conversion was added. The old
+  [Step 1, PR #1166](https://github.com/clintongormley/waitron/pull/1166) gathers Receipts,
+  Tables and Kitchen settings into tabs; supervisors can read Tables and Kitchen, while writes
+  remain manager-only (owner amendment, 2026-10-04).
+  [Step 2](superpowers/plans/2026-10-04-departments-and-zones.md) (#1233) puts departments and
+  zones in one editable tree and keeps today's zone-menu and device-default-zone controls
+  temporarily in that screen. A261-2c — DONE (#1285). Non-fiscal
+  placement accepts an over-limit order; collection refuses the over-limit invoice without taking
+  money (owner decision, 2026-10-06). A261-2d — DONE (#1274); left open:
+  A rename refusal without a supplied name remains a database error, rather than returning an
+  undefined name.
+  Outside this zone item, `apps/server/src/tables.ts` still translates every unique refusal in `createTable`,
+  `updateTable`, `createStatus` and `updateStatus` to a label collision; a separate
+  follow-up should identify each label key and force another-key clash.
+  A261-2e — DONE ([PR #1277](https://github.com/clintongormley/waitron/pull/1277)); left open:
+  A261-2e's review also found that `declarations` in
+  `apps/server/src/configuration-transfer.ts` uses `module:<name>` when a local module lacks
+  its transfer declaration. Reachability with the installed module list is unverified;
+  distinguish that local build defect from an incompatible artifact if it can reach setup.
+  [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) — DONE
+  ([PR #1269](https://github.com/clintongormley/waitron/pull/1269)). Printing rules' drawer
+  controls remain for step 8. The old
   numeric columns carry a retirement note. Review notes retained for future cleanup: the overview
   API object still exposes write methods (server routes remain the permission boundary), and
-  station reordering repeats an active filter after an active-only read. No write-permission
-  defect was reported. Push-hook validation and current-head CI passed before landing.
-  Venue settings › Kitchen now reads and
-  replaces the venue-wide late flags. Its required whole-minute fields validate every invalid
-  value and their order, naming a station when the server refuses the effective result. A refusal
-  retains a retryable draft; live reads update saved values without replacing it. Supervisors see
-  the saved defaults without edit controls. Enter saves, Cancel/Escape discards, and a successful
-  write closes the form before a separate refresh. The saved, invalid and station-refusal states
-  have English/Spanish, light/dark, phone/desktop browser checks and inspected captures.
-  The generated station-parent rebuild failed the populated upgrade with a foreign-key refusal;
-  the landed build uses the plan’s storage-redesign option. Approved decisions
-  cover what live counts include, ready-but-unserved work, interim station hours, inactive display
-  bindings and the core station-table rebuild/reset risk.
+  station reordering repeats an active filter after an active-only read.
   [Step 5 Hours plan](superpowers/plans/2026-10-05-hours.md) was approved on 2026-10-05;
   its standard week, special-date list/calendar and shared menu/wages date interface are not
   implemented. Its Prep stations dependency is landed; follow the lane queue for the build.
@@ -6672,20 +4195,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   read-only default-cell permissions, retained disabled targets, zone cleanup and pre-live routing
   reset. It replaces claims/ordered exceptions without conversion, with five stored coordinate
   classes and populated-upgrade/configuration-transfer checks.
-  [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) was approved by the owner on
-  2026-10-05. Its build is implemented: the shared server writer,
-  authenticated API, live consumer controls, and core dashboard editor. The editor validates changed fields, retains drafts across passive updates,
-  requires warning acknowledgement, and offers read-only supervisor access. Clock previews use one captured instant, the reporting boundary resolver and actual
-  scheduled backup deadlines; before/after report and rendered roster checks retain recorded facts.
-  The approved policy allows current display-name/street/city
-  corrections and same-province postcode edits, preserves recorded names and facts, keeps taxpayer
-  identity read-only, and locks province/clock after sales. Clock edits also stop after order history
-  or a daily close. Pre-sale province edits need equal fiscal/language/clock context and the same
-  sourced holiday region; absent that holiday capability only real province edits stay locked.
-  The approval also covers no-op and stale-draft behavior, legacy-null field validation, warning
-  acknowledgement, the default tab and clock-change previews using the existing reporting resolver.
-  No schema migration or reset is proposed; changes needing another fiscal/geographic context or
-  history removal use a separately approved setup/reset instead. Step 2 is already landed; later
+  [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) — DONE (#1281).
+  Changes needing another fiscal/geographic context or
+  history removal use a separately approved setup/reset instead. Later
   Hours/holidays/menu builds retain their own compatibility tests.
   [Step 8 Printing rules and drawer policy retirement plan](superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
   was approved by the owner on 2026-10-05; its build remains open.
@@ -6697,48 +4209,6 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   old bookmarks, incompatible export refusal and explicit reset approval if the populated locations
   upgrade cannot preserve cross-set rows and triggers. Existing guards remain unchanged; useful
   screen checks move to surviving surfaces before retirement, with any deletion lacking an equally strict replacement requiring approval.
-  [Step 1, PR #1166](https://github.com/clintongormley/waitron/pull/1166) gathers Receipts,
-  Tables and Kitchen settings into tabs; supervisors can read Tables and Kitchen, while writes
-  remain manager-only (owner amendment, 2026-10-04).
-  [Step 2](superpowers/plans/2026-10-04-departments-and-zones.md) puts departments and zones in one
-  editable tree, resolves quick-sale and receipt choices by department with optional zone overrides,
-  and keeps today's zone-menu and device-default-zone controls temporarily in that screen. Its
-  follow-up A261-2c retires
-  `locations.order_flow` and the legacy `invoice_first` style throughout
-  placement, collection, management selectors, shared types and stored service contexts.
-  Placement returns the order id/status without invoicing; collection follows the zone's
-  payment timing. Public till boot no longer exposes the retired timing field. Issued-bill tests create explicit unpaid
-  invoices and retain financial, permission, source-device and drawer assertions.
-  Non-fiscal placement accepts an over-limit order; collection refuses the over-limit
-  invoice without taking money (owner decision, 2026-10-06).
-  This change requires a venue reset: core/0106 rebuilds locations and venue-service/0020
-  rebuilds departments and service policies. The owner approved both populated-upgrade
-  reset entries on 2026-10-06. No compatibility or data-preservation path is included.
-  The Numbered collection choice applies to `prepay` and `ticket_then_pay` quick sales.
-  A261-2f explains the quick-sale-only scope in English and Spanish on the department and
-  zone Order number cells and editors. Filled choices use the shared help button; table-tab
-  orders are not numbered. Browser checks open both controls in both themes at phone and desktop widths.
-  A261-2d identifies the `floor_zones` name key in `createServiceZone` and the
-  server's `createZone`/`updateZone`; primary-key clashes remain database errors. Focused
-  real-database tests force all three clashes and retain duplicate-name and rollback checks.
-  A rename refusal without a supplied name remains a database error, rather than returning an
-  undefined name.
-  The sibling audit found no such translation in department create/rename. Outside this zone
-  item, `apps/server/src/tables.ts` still translates every unique refusal in `createTable`,
-  `updateTable`, `createStatus` and `updateStatus` to a label collision; a separate
-  follow-up should identify each label key and force another-key clash.
-  [A261-2e, PR #1277](https://github.com/clintongormley/waitron/pull/1277) is landed. It runs an encrypted export captured from `c47122f55^` through the current setup import
-  route. It answers `setup.request_invalid` (`module:core`); every database table's rows match
-  their before-state and the staging directory remains empty. Setup now tells you in English and
-  Spanish to export again from a box running the current version for a module-version or
-  module-set mismatch. A committed fixture retains the original export bytes; this adds
-  no compatibility converter or migration.
-  A261-2e's review also found that `declarations` in
-  `apps/server/src/configuration-transfer.ts` uses `module:<name>` when a local module lacks
-  its transfer declaration. Reachability with the installed module list is unverified;
-  distinguish that local build defect from an incompatible artifact if it can reach setup.
-  The database-row comparison observes the request's outcome; the staging-files assertion
-  is the check that failed when validation was bypassed in the disposable review copy.
   [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED;
   profile access and transfers queued in lane D, equipment queued in lane E; not implemented.**
@@ -6854,8 +4324,8 @@ guards (#307); real hardware bringup (#302); `linux/amd64`-only images (#325, pu
 carries amd64 alone); the backup + recovery-key wizard (#295); guided node onboarding, all four modes
 (#296); the print-agent process, its box wiring and on-node auto-enrolment (#282, #289, #308, #311); the
 CA-trust onboarding guidance, connection retry/help and the per-OS certificate walkthrough (#330,
-reworked #346); the print agent's own AppArmor profile and its Bluetooth availability report (A129,
-#862; `scan off` and `Disconnected` added by A134, #887); `waitron.sh install` refreshing the box's
+reworked #346); the print agent's own AppArmor profile and its Bluetooth availability report (A129, #862;
+`scan off` and `Disconnected` added by A134, #887); `waitron.sh install` refreshing the box's
 own copy of the script (C83, #890).
 Proven end to end 2026-09-09: blank box → phone setup → provision → trading over HTTPS → enrolled
 till → a recorded preproduction sale.
@@ -7109,7 +4579,7 @@ approved.
 - **On-device agent** — a till hosting a print agent, the single-box venue's box-death printing path.
   Needs a native app; parked behind the go-native decision.
 - **`runAgentOnce` (`packages/printing/src/runtime.ts`) has no caller in the tree outside its own
-  package's tests** (a refused `done` report no longer marks a sent job failed since C70, #866). A
+  package's tests** (C70, #866). A
   refused report still rolls back every job of its batch when the caller's transaction rolls back,
   so all of them print again (measured 2026-09-29 with a scratch probe). A process that holds the
   venue database and runs the agent itself, and wants to confine a refused report, should call
@@ -7118,20 +4588,7 @@ approved.
 
 ### B7. Provisioning and build debt
 
-**`@waitron/verifactu` 0.2.1 (A230, owner 2026-10-03) — landed as #1099.** Waitron moved from
-0.1.0 to `^0.2.1` (0.2.1 is A230a: the library now accepts a zero VAT amount when the base times the
-rate rounds to 0.00). The fingerprint, built record and XML are unchanged for the same input (both
-published packages fed the same records; controls showed a difference is reported). Done with it:
-`ClaveRegimen: "01"` on every VAT line; the lookup states `Correcto`/`AceptadoConErrores`/`Anulado`
-(0.1.0's names would not have matched a real AEAT answer); a missing `TiempoEsperaEnvio`; a reply
-line with no readable status gets its own branch (`fiscal.estado_desconocido`); `validate` is given
-the record's own generation time as `now`; validation warnings are split by code (totals →
-`fiscal.record_totals_disagree`, the rest filed and flagged `fiscal.record_flagged`); a voided sale's
-lookup is read through its cancellation; test tax IDs carry a correct check letter and the golden
-test's pinned one was corrected with its fingerprint re-pinned (owner-approved). Caught at entry: a
-sale over €3,010.00 (`sale.total_exceeds_simplified_limit`, limit from the fiscal seat), a customer's
-tax ID or legal name in `recordSubstitution` (`counterparty.invalid`), a venue legal name over 120
-characters. Left open:
+**`@waitron/verifactu` 0.2.1 (A230, owner 2026-10-03) — landed as #1099.** Left open:
   - **A resent cancellation AEAT already holds now counts as accepted when AEAT's stored fingerprint
     matches the cancellation's** (`drain.ts`'s `handleDuplicate`; a mismatch still halts with
     `fiscal.duplicado_anulado`). Shown against the library's fake only; what real AEAT answers to a
@@ -7169,18 +4626,6 @@ characters. Left open:
   started from inside the app container can remove the Docker volumes the script removes, or has
   to empty them instead.
 
-- **DONE 2026-10-03 (W29): the bucket-stream reader checks missing fields.** A test fixture sealed
-  a `backup.stream` row with each of its seven fields omitted in turn; all seven reader cases first
-  returned a value and now refuse `server.credential_unusable` naming the field. A route test first
-  got an error for the omitted endpoint; `GET /api/backup/stream` now reports a stored but unusable
-  bucket with `bucket: null`. A Chromium panel case in English and Spanish checked that Change and
-  Turn off remain available, the recovery-kit action is hidden, and the missing settings are
-  explained. The first-start case keeps its restore marker and holds streaming until the settings
-  are repaired; the test then writes complete settings and the next start clears the marker. An
-  archive-restore case first received the raw credential error; it now receives
-  `restore.stream_source_unchecked` with reason `bucket`. The four
-  focused server suites passed 172 tests with
-  `pnpm --filter @waitron/server exec vitest run src/stream-host.test.ts src/stream-api.route.test.ts src/rebuild-first-start.test.ts src/restore-stream.test.ts --reporter=dot`.
 - **Reading a credential does not re-check it against `PURPOSES` — owner decision 2026-09-15.**
   `getCredential`/`tryGetCredential` (`packages/credentials/src/store.ts`) return what was sealed,
   rather than refuse the read, which would stop every venue holding that kind of secret the moment
@@ -7188,17 +4633,11 @@ characters. Left open:
   against the current list only when it re-seals one: it skips a secret already on the current key
   (`rotateCredentials`, `packages/credentials/src/store.ts`), so an out-of-date one stops a key
   rotation only when it is on an older key, until it is re-entered.
-- **Unused payment adapter `nodeId` arguments — DONE (W8).** The card-provider build path,
-  the SumUp adapter, and Stripe's terminal, device, reversal and reconciliation paths no longer
-  carry the value they did not read.
 - **A box that mints its certificate before NTP sync persists a wrong validity window**, with no
   renewal path yet. Ties to a time-health check and certificate renewal.
 - **Shutdown closes the database even when stopping background work fails (C71, #870)**
   (`apps/server/src/boot.ts`). One consequence: if stopping Litestream itself fails, the store is
   now closed while Litestream may still be running; nothing tests that case.
-  - **DONE (W3):** a failed start aborts the cloud duties, waits for each separately, and closes
-    live events even if change-feed unsubscribe throws. Both cases failed before the change and pass
-    in `apps/server/src/boot.failed-start.test.ts`; the failed start still releases the venue folder.
 - **Two concurrent first provisions can still race past the venue guard** (2026-09-14). Both can
   pass the empty-`locations` check and carry on down the venue path; `apps/server/src/provision.ts`
   says in as many words that callers must serialise provisioning, and nothing enforces it — the
@@ -7207,15 +4646,7 @@ characters. Left open:
   neither plan dies on a `tenants_*` key. **Next action:** decide where the lock belongs — a
   database advisory lock around guard→stamp→apply is the obvious home — and prove it with two
   concurrent provisions against a real database, not with the row-level check alone.
-- **DONE — a short `dayCutover` and its long form now identify the same venue (W6).**
-  `planVenue` turns `"06:00"` into `"06:00:00"` before creating the location action, and
-  `applyVenue` normalizes both values when comparing a stored location with the plan. Real-database
-  retry tests saw `provisioning.second_venue` before each fix and success afterwards in both
-  directions: long stored then short planned, and short stored then long planned. The old note's
-  claim that the database always reads a time value back in the long form was wrong: `timeOfDay` is
-  a text column (`packages/db/src/schema/columns.ts`), and a repeated short-form plan succeeded
-  before this change. The venue-plan test also checks the normalized action directly.
-- **Creation/provisioning `dayCutover` still needs input validation.** The W6 review passed `"24:00"` and `"99:99"`
+- **Creation/provisioning `dayCutover` still needs input validation.** The W6 review (#1104) passed `"24:00"` and `"99:99"`
   through `planVenue`; both emerged with seconds appended. **Next action:** choose the validation
   boundary and a domain refusal, then test invalid values before they reach storage.
 
@@ -7239,10 +4670,7 @@ characters. Left open:
 - **The `ci` step passes only when every needed job succeeded or was skipped, and prints each
   result (A274, owner 2026-10-06) — DONE (#1283).**
 - **A job GitHub never acquired a runner for may still let `ci` pass (A274 follow-up) — DONE
-  (A276, #1286).** `ci` now also reads each needed job's conclusion from GitHub's jobs API, which recorded
-  the 2026-10-05 never-acquired job as `cancelled` (the `gh api` read of run 37368759185 is in the
-  section linked below). Shown on GitHub for a failed, a timed-out and a
-  hand-cancelled never-run job; GitHub's own "not acquired" cancellation could not be produced on
+  (A276, #1286).** GitHub's own "not acquired" cancellation could not be produced on
   demand, so that exact case is not demonstrated. See
   [ci-and-gates.md](developers/ci-and-gates.md), "The `ci` check passes only when every needed job
   succeeded or was skipped".
@@ -7270,8 +4698,7 @@ characters. Left open:
   test in about 2.5 s. Since 31 s is just past the probe's 30 s `RESTORE_MS` ceiling, the likeliest
   reading is a `litestream restore` against versitygw that never finished and was stopped there.
   That is inferred: the error's `exitCode` was not in the log, and the run was not repeated before
-  this was written down. The PR's own change is not on that path; the test's sales go through
-  `POST /api/sales`, which does not reach `readPartyBills`. W30 adds failure diagnostics with the
+  this was written down. W30 adds failure diagnostics with the
   child exit code when available, whether the restore was abandoned, and whatever Litestream
   output was captured; output may be empty on abandonment. The cause of the one-off failure remains
   open. Next action: inspect those details from any new failing run before choosing a repair.
@@ -7548,9 +4975,7 @@ characters. Left open:
     `transfer-lines.test.ts`, "(the TS-4 shape)" in `move-merge.test.ts`, "TS-4's move guards" and
     "TS-2 status" in `split-bill.test.ts`.
   - Found by #621 (the rest of `apps/till`), not fixable in a comments-only change.
-    **The empty walk-up options test in `apps/till/src/till-app.test.ts` is now a real case — DONE
-    (W25, #1131, 2026-10-03):** it fails when the paid line drops its options answer, and when it carries
-    the names the picker copied onto the line for display. The review reported that "resets any
+    The review reported that "resets any
     leftover drill/active tab on login" still passes with login's own clearing line deleted, because
     logout clears the same state first (run in review, not re-run here). A question the prune moved
     here from a deleted `menu-filter.ts` comment: should the `no-meat`/`no-fish` lenses also hide a
@@ -7794,16 +5219,13 @@ characters. Left open:
     `packages/fiscal`'s guard forbids ENGLISH regime terms; its list is half Spanish.
     `no-hardcoded-margin.test.ts` scans only the files directly in `packages/fiscal/src`, not
     `src/testing/`, and does not say so.
-  - **Shift times are stored in one spelling — DONE (W22, 2026-10-03):** `addShift` and
-    `updateShift` write both shift ends as the UTC whole second (`shiftInterval`,
-    `packages/workforce/src/clocking.ts`).
-    Open, found by #1134's review and not taken there: the dashboard's shift dialog
+  - **Shift times are stored in one spelling — DONE (W22, #1134); left open,** found by #1134's
+    review and not taken there: the dashboard's shift dialog
     (`apps/dashboard/src/widgets/shift-dialog.ts`) builds the end time on the START's day, so a
     shift that runs past midnight (22:00–02:00) is refused as `shift.invalid` — as it was before
     #1134. And an edit keeps the shift's stored offsets, so moving a shift across a summer-time
     change keeps the old offset. Next action: let the dialog put the end on the next day when it
     is not after the start, and derive each offset from the venue's time zone for the date.
-  - The unused payment reconciliation and SumUp provider `nodeId` options were removed in W8.
   - Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
     the SumUp provider's `resolvePending`) do not both succeed: #558's review measured
     `["fulfilled","payment.not_found"]`, so the second pass throws partway instead of skipping the
@@ -7848,9 +5270,7 @@ characters. Left open:
     test titles still say "before connecting" and "before opening a connection", and one title
     ("rather than opening the working directory") rests on the false reason above.
   - `packages/fiscal-verifactu` code, found by #562; not changed unless marked:
-    - **`drain.ts`'s Route B lookup (`client.consultar`) no longer holds the venue's single writer
-      across an AEAT round trip: it runs before the transaction that saves AEAT's reply — PARTLY
-      DONE (W21, 2026-10-03).**
+    - **`drain.ts`'s Route B lookup (`client.consultar`) — PARTLY DONE (W21, #1130).**
       - **Open:** a failed lookup, when the save reaches its line, still backs the whole batch off,
         discarding every line's outcome and the reply's receipt code (the CSV, one per
         submission), which AEAT does not send again.
@@ -7878,9 +5298,7 @@ characters. Left open:
     `server.internal`; `events.test.ts` has no case for the restore and fiscal-test dispatchers; the
     `*.css?inline` declaration in `vite-env.d.ts` is redundant (vite/client declares it);
     `vitest.config.ts` excludes `.stryker-tmp` in a package with no Stryker config; `paintCanvas` in
-    `widgets/test-helpers.ts` has no accessibility suite that fails without it; `done-screen.ts`'s
-    styles used hex fallbacks and `rem`, and a CSS comment inside its style string was history —
-    DONE (W34, A244); and `connection-screen.ts`'s `connection-continue` event is not named `wt-*`
+    `widgets/test-helpers.ts` has no accessibility suite that fails without it; and `connection-screen.ts`'s `connection-continue` event is not named `wt-*`
     and carries no `detail`.
   - "Nothing under `apps/` may import a regime package (`scripts/module-seams.test.ts`)", which #567
     deleted from `apps/setup/src/server-fields.ts`, is too wide: with
@@ -7988,13 +5406,6 @@ characters. Left open:
   replaced…", which holds the copy of `/--.*$/` in `scripts/module-graph-honesty.test.ts`: a fix to
   one touches the other's code.
 
-- **DONE — `scripts/errors-reachable.test.ts` and `scripts/module-seams.test.ts` ignore imports
-  inside comments (W7).** Each guard now scans text after `blankComments`, with a commented-import
-  regression case. The shared reader still guesses whether `/` opens a regular expression, and
-  imports written inside strings can still match. `scripts/column-vocabulary.test.ts` also
-  has a `withoutComments`, left out on purpose: it runs only on the text between an import's
-  braces, which its header says holds no string or template literal.
-
 - **Nobody has timed `packages/db/src/testing/schema-conformance.ts` under a mutation run — OPEN
   (2026-09-23).** `packages/db`'s mutation run is split across ten parallel CI jobs by
   `scripts/mutation-shard.mjs`, which packs whole files into jobs by file size in bytes. That file is
@@ -8040,21 +5451,7 @@ characters. Left open:
   code change. The original log and screenshot were kept; the cause is unexplained, so retain them
   again on the next sighting rather than re-running to green.
 - **A sixth: `apps/dashboard/src/widgets/variant-form.test.ts` → "saves on Enter and cancels on
-  Escape from a focused field" — FIXED (A220f, #1075).** Seen in CI 2026-09-20 on #469, failing at
-  `expect(cancel).toHaveBeenCalledTimes(1)`. Cause, measured 2026-10-03 with a throwaway probe that
-  repeated the test's own Enter-then-Escape sequence 150 times: when `userEvent.keyboard("{Escape}")`
-  resolved, the native dialog was already shut every time, but in 13 of 150 its `close` event — which
-  `wt-dialog` re-sends as `wt-close`, and the variant window as `wt-cancel` — had not yet been
-  delivered; it arrived within 50 ms each time. Focus stayed on the field after Enter in all 150, so
-  the older idea that the save moves focus did not happen in those runs. The test now awaits `closeReportsDelivered()`
-  before counting the cancel, the helper its sibling tests use for the same wait. Measured on that
-  one test, run alone 40 times without the new line and 40 times with it, from `apps/dashboard`:
-  `pass=0; fail=0; for i in $(seq 1 40); do if gtimeout 120 pnpm exec vitest run src/widgets/variant-form.test.ts -t "saves on Enter and cancels on Escape" > /tmp/a220f/before-$i.log 2>&1; then pass=$((pass+1)); else fail=$((fail+1)); fi; done; echo "before: pass=$pass fail=$fail"`
-  (the second loop wrote `after-$i.log`): 10 of 40 failed before, 0 of 40 after; the probe with the same wait, 400 repeats: 41 late cancels,
-  all delivered once the wait returned, none missing. Control: with the window's `@wt-close` handler
-  deleted, the fixed test fails at the same assertion. An independent review re-measured on 2026-10-03:
-  5 of 40 failed without the wait and 0 of 40 with it; its 400-repeat probe saw 23 late cancels,
-  every one delivered once the wait returned.
+  Escape from a focused field" — FIXED (A220f, #1075).**
 - **A fifth: a stray `:hover` state in `test-dashboard`'s browser a11y suite — FIXED in #350; two
   pieces still open.** The `dashboard-app.a11y.test.ts` heading-order sighting is a different rule
   with no colour evidence, so nothing here explains it — treat it as still unexplained. And
@@ -8096,12 +5493,12 @@ characters. Left open:
   the two weaknesses the new guard states about itself: it reads text, and it judges a file rather
   than a call chain.
 
-- **No comment or test title names a PostgreSQL SQLSTATE as today's behaviour — DONE (C127, #1036; the two shipped migrations' comments followed in #1042).**
+- **No comment or test title names a PostgreSQL SQLSTATE as today's behaviour — DONE (C127, #1036, #1042); left open:**
   **#1042 needs every venue migrated before it reset** — the owner's box included (dev venues: `wa-wt reset demo <name>`): it changed the hashes of `packages/db/drizzle/0001_behavioural_triggers.sql` and `packages/media/drizzle/0001_image_references.sql`, so boot refuses such a venue with `provisioning.database_ahead`.
   Still unprobed: the remaining "not a 500" titles across the `apps/server` route suites, which name
   no engine.
 
-- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92 and by C127's second pull request (#1039), which renamed the `pg` handles to `suite`, dropped five `.sqlite.` infixes and retitled the `bytea` test).**
+- **Small renames and dead exports the sweep found and could not make — OPEN (T2, 2026-09-23; narrowed by A92 and #1039).**
   Still open: `apps/server/src/working-order-reads.sqlite.test.ts` keeps its `.sqlite.` infix
   because the approved slice 3d plan (`docs/superpowers/plans/2026-10-01-watchers-slice-3d.md`)
   ran it by that name. PF8 landed as #1088; rename the file and its references in the next T2
@@ -8139,7 +5536,6 @@ characters. Left open:
   if there is none, say so in the comment and stop calling the case a guard test.
 - *Small:* `test-light` reports success without naming what it ran; `packages/ui` can hang the `test-ui` shard, cause unconfirmed; the classifier's `root=`
   output line is read by no consumer.
-- **The topic files no longer describe PostgreSQL as current — DONE (C127, #1036).**
 
 ---
 
@@ -8148,22 +5544,8 @@ characters. Left open:
 Each fits one sitting, and none needs a spec. Correctness first, then by area. A *Small* item that
 turns out to need a design moves to its track.
 
-**While Add a printer is open, a scan that finds devices starts the next one with no pause — DONE (W5)
-(found 2026-09-30 by a trial Codex review of C117's branch; on `main` since #955).** In
-`packages/print-agent/src/agent.ts`, a scan pass that finishes with devices wakes the loop
-(`discover`), the woken loop polls at once instead of waiting out the 2-second pause (`start`), and
-that poll starts the next pass because none is running and the discovery window is still open
-(`tick`). So passes run back to back for as long as the window is open, each followed by an extra
-job pull. The review's test drove the real loop with a fake host whose scan returns one USB device
-at once, no queued jobs, for 250 ms: it counted 195 pulls where it allows at most 2; the loop from
-before #955 made one. How quickly a real scan returns on a box, for example one with only a USB
-printer, has not been measured, so how often a real box repeats is not known. The running loop
-starts passes at least one polling interval apart, while sending a finished pass's devices on the
-next pull. A 250 ms fast-scan case checks delivery without repeat passes; a controlled-clock case
-checks that an empty scan starts again at the next interval.
-
-**Comments and docs still name drizzle-orm 0.45.2; 0.45.3 is installed — OPEN (found 2026-10-03 by
-#1139's review).** #1139 updated `scripts/journal-monotonic.test.ts` and one citation in
+**Comments and docs still name drizzle-orm 0.45.2; 0.45.3 is installed — OPEN (found 2026-10-03 by #1139's
+review).** #1139 updated `scripts/journal-monotonic.test.ts` and one citation in
 `docs/developers/conventions-data.md`, and checked their line numbers against 0.45.3. Still naming
 0.45.2: `apps/server/src/restore-fiscal-e2e.test.ts:310` and
 `packages/store/src/node-sqlite-adapter.ts:34`, where the review found only the number stale; and
@@ -8239,10 +5621,6 @@ reading unless marked run:
   the dialog itself. `apps/dashboard/src/widgets/allergen-picker.ts` avoids the problem by mounting
   a fresh dialog for each open (`keyed`). Seen once under coverage load in a test (run); we believe
   a person cannot reopen it that fast; not tested.
-- DONE (lane A's W20, #1118): the product editor's variant form
-  (`apps/dashboard/src/widgets/variant-form.ts`) no longer turns the dialog's late `wt-close` into a
-  Cancel once the editor has closed it; it carries the `!this.open` check the Units, Options and
-  Extras forms do (C68, #863; C74, #878).
 - `login-screen.ts` checks an account link's purpose with `=== null`, so a reply with no purpose at
   all would pass; the server always sends one.
 - Guards no test can reach, left uncovered rather than deleted: the canvas editor's "no draft" and
@@ -8256,45 +5634,7 @@ change (owner decision 2026-09-23; PR #536).** The ticket belongs to the TILL, n
 who started it, so a late result shown on that device after a change of operator is right; the
 payment belongs to the table, so no payment is lost.
 
-**Till code that no test can reach, and small till defects — DONE (W24, #1127; found 2026-09-23, till
-coverage, PR #536).**
-
-- `till-app.ts`: the branches that switched the screen when the shell was not showing are gone,
-  with `#onShowFloor` and the app's `show-floor` listener. Every sender of those events is drawn
-  only inside the tab shell; the receipt is in the commit. Sent from the lock screen, six of the
-  events unlocked the till before the change; each event is now checked on a till and on a
-  handheld: it stays locked, reads neither the stations nor the floor, and leaves no destination
-  in the address. The counter screen keeps its own floor button, which the app never draws (it
-  mounts the counter only `embedded`).
-- Four more gaps, found by the branch's review and reproduced on the code before the branch, now
-  closed: tab-select does nothing on a locked till; floor-refresh and move-held-order-open (now one
-  handler) do nothing on it; open-table does nothing on it; new-sale no longer empties the basket
-  logout keeps. A new case sends a tab-select in the same call stack as logout, before the shell is
-  redrawn, and it is ignored; by reading, nothing sends one there today.
-- Back-to-floor's lock check moved to its top. No test tells the two positions apart: moving it
-  back failed nothing.
-- Show-station, show-expo, show-schedule, open-allergens and back-to-counter no longer clear the
-  lock screen's message (found by a re-read; a new case per event, on a till and on a handheld,
-  failed on these five before the fix).
-- `#showTicket` now always opens the ticket overlay (a tab payment answered after logout reaches
-  it; the next sign-in clears it, pinned by a new case). Opening a table now checks for the shell
-  first; before that, sent from the lock screen it seated a free table and read the stations (run
-  in review). Its inner shell check stays; by reading, no path reaches its other side now (not
-  run). The shell's `.tabs` reads a narrowed local instead of `?? []`.
-- Removed as unreachable: the check that the timeout handle is set before `clearTimeout` in
-  `trust-check.ts`, the "active" check in `session-activity.ts`'s `#shouldHoldWakeLock`, the
-  kitchen-display return in the station screen's `#selectStation`, and the no-next-step return in
-  the station queue's `#bump`. Left by decision: `session-activity.ts`'s default `onIdle`, a
-  placeholder the type needs that is never called (the default configuration is logged out, and
-  the idle timer runs only when logged in).
-- `api/server-router.ts` no longer copies a server's `nodeId` into its private list.
-- `deviceKindLabel` looks kinds up in a `Map`, so `constructor`, `toString` and `__proto__` come
-  back as themselves.
-- Two wake-lock tests are renamed to what they test. In `apps/till/src/session-activity.test.ts`,
-  "starts and stops cleanly on the browser's own Wake Lock API when none is injected"; the truly
-  absent case is that file's existing "no navigator" test. In `apps/till/src/till-app.test.ts`,
-  "session activity: with no injected controller, a logout still reaches the lock screen". The two
-  live-floor titles now say they select the floor tab.
+**Till code that no test can reach, and small till defects — DONE (W24, #1127).**
 
 **Two more till lookups read inherited object properties — OPEN (found by W24's review,
 2026-10-03, by reading, not run).** Both look a string key up in a plain object, so a key such as
@@ -8313,12 +5653,6 @@ coverage, PR #536).**
 reading, not run).** `session-activity.ts`'s `#shouldRunIdleTimer` keeps the `this.#active &&` check
 that `#shouldHoldWakeLock` lost, and its callers look the same. **Next action:** remove the check
 with a receipt, as W24 did for `#shouldHoldWakeLock`, or keep it by decision.
-
-**The email-change form calls an empty code field an "authentication code" — DONE (W12, #1114; found by
-C61's review, #859, 2026-09-29).** In the Profile screen's email mode a blank confirmation code now
-shows `profile.email_code_required` ("Enter the code from your email" / "Introduce el código de tu
-correo"); the authenticator-app setup keeps `profile.code_required`
-(`apps/dashboard/src/screens/profile-screen.ts`, the form's own validation).
 
 **The tunnel's stand-in relay pairs with sockets that have already gone — OPEN (found 2026-09-23,
 writing tunnel's coverage tests, PR #506).** `packages/tunnel/src/testing/relay.ts` is test-only:
@@ -8407,14 +5741,11 @@ package cannot import an app — is true and skips the third option: `@waitron/d
 input. This decides whether a box files against the real AEAT or the test one (`CLAUDE.md` §5), so
 two copies held together by hand is the wrong shape for it.
 
-**`packages/migrations` opened its own raw `node:sqlite` connection — DONE (W45).** `apply.ts`
-now takes its `migrations.lock` through `@waitron/store`'s `openLock(path, waitMs)`, which sets the
-busy timeout before trying the lock. `apply.concurrency.test.ts` checks the two-process migration
-order and `packages/store/src/migration-lock.test.ts` checks refusal and release. The earlier claim
-that this was the only non-test raw engine import outside `packages/store` was too broad: a 2026-10-03
-search of non-test files under `apps/` and `packages/` also found `apps/server/src/recovery-lock.ts` and
-`apps/server/scripts/cloud-backup-fixture.ts`. Their uses are outside W45's scope. **Next action:**
-review each remaining raw connection separately before deciding whether a shared store API fits.
+**`packages/migrations` opened its own raw `node:sqlite` connection — DONE (W45, #1155); left
+open:** a 2026-10-03 search of non-test files under `apps/` and `packages/` also found raw engine
+imports in `apps/server/src/recovery-lock.ts` and `apps/server/scripts/cloud-backup-fixture.ts`.
+**Next action:** review each remaining raw connection separately before deciding whether a shared
+store API fits.
 
 **Files that still spell the store's file names themselves (left by #757, which exported them
 from `@waitron/store`).** Outside test files and `bench/`: `apps/server/src/cloud-snapshot-archive.ts`
@@ -8686,15 +6017,14 @@ hook, which is bespoke code on a fiscal path and a decision rather than a bump.
   the output. A file snapshot would fail with a readable diff; whether this repo wants snapshot
   files at all is an owner decision.
 
-**`node-forge` has a high-severity security alert with no fixed version — OPEN (Dependabot alert
-#20, 2026-10-01).** Every version up to 1.4.0, the one in the lockfile, accepts some RSA signatures
+**`node-forge` has a high-severity security alert with no fixed version — OPEN (Dependabot alert #20,
+2026-10-01).** Every version up to 1.4.0, the one in the lockfile, accepts some RSA signatures
 it should reject when checking them. It is a direct dependency of `packages/server-kit`,
 `apps/server` and `apps/print-agent`. From reading the code on 2026-10-02 (nothing run), product
 code only creates and signs certificates and certificate requests with it
 (`packages/server-kit/src/certificate.ts`, `apps/server/src/self-signed-cert.ts`,
 `apps/server/src/cloud-remote.ts`); it checks signatures with it only in tests. **Next action:**
 bump it when a fixed version is published, and run the certificate suites in those three packages.
-The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
 
 **Left behind by the passkey library upgrade (#453, 2026-09-19).** `@simplewebauthn/server` and
 `@simplewebauthn/browser` moved to 14.
@@ -8710,9 +6040,6 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   towards reachable rather than away.
 - **The version-14 browser helpers are unused.** Whether `browserSupportsPasskeys()` would improve
   the login screen's `browserSupportsWebAuthnAutofill()` gate has not been assessed.
-- **`verifyAuthenticationResponse` has no algorithm list to pin** (it verifies against the stored
-  public key and takes no such parameter); the asymmetry with the registration ceremony looks like
-  an oversight and is not.
 
 **Correctness:**
 
@@ -8790,36 +6117,34 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
 **Dashboard, till and setup:**
 
 - **One word for "switched off, kept for the record" across the dashboard — done by W110
-  (#1255); what each point leaves open is said under it.** The owner's rule (2026-10-05): a record switched off but kept
-  says **Disable / Deshabilitar**, comes back with **Enable / Habilitar**, and reads **Active** or
-  **Disabled** (Deshabilitado or Deshabilitada, agreeing with the noun); **Delete / Eliminar** only
-  for a real delete. W110 moved products, variants, options and extras lists, departments, zones,
-  stations, floor tables, table statuses, adjustment reasons, users and card readers onto it (W105a,
-  #1244, and W105b had done printers, print agents and devices), renaming the string keys that no
-  longer said what they show; the rule is in `docs/developers/design-system.md`, "Switching off
-  versus deleting". (a) is done by W110a (#1268): a printer's Active status reads "Activa", agreeing with
-  "Deshabilitada" as lists and variants already did, and print agents read "Activo" from a key of their own
-  (`printers.agent_status_active`). (c) is done by W110c (#1271): a disabled product's own row on the
-  products list offers Enable, not Disable, through the editor's own save; a bulk selection of
-  products that are all disabled already offers no Disable (no bulk Enable exists). Two owner
-  questions from W110c, in its PR: whether a bulk Enable is wanted, and whether that all-disabled
-  selection's Disable should be greyed out like the toolbar's other buttons rather than hidden.
-  W110c's review read #1269 as having added a test for (e); not re-checked, so (e) below may be
-  stale. (b) is done by W110b (#1278): a watcher's and a kitchen course's row offers **Delete** when nothing refers to it and **Disable** when something does, and on a Delete the server applies the same rule in the one transaction (a watcher is referred to by a device or a watcher's Done mark; a course by a product, a draft line, an order line or a kitchen item — the `WATCHER_REFERENCES` and `COURSE_REFERENCES` lists, held to the database's foreign keys by `apps/server/src/in-use-references.test.ts`, which sees declared keys only). A real delete asks first. The Disable action sends `?disable=true` on the DELETE route, and the server then only switches the row off, never deletes it. Disabled ones are listed after the active ones, on the Prep stations page's Watchers tab and in the course list, with **Enable** (a new `POST /management-api/watchers/:id/reactivate`, refused `watcher.name_taken` when an active watcher has the name; a course through `PATCH /management-api/courses/:id`). A re-enabled watcher keeps its follows but not its printers, which Disable drops. The kitchen screen and the Devices screen say a watcher was disabled, not removed, and the Devices Edit dialog marks a held disabled watcher "(Disabled)"/"(Deshabilitado)" (`devices.watcher_disabled_mark`, which W105d had as "(Removed)"). Left open from (b): `GET /management-api/watchers` needs `venue.configure` where the stations and courses lists need only `venue.view` (it did before W110b; the owner's call); and a Delete label can be stale, because the watcher list does not re-read on a watcher's Done marks nor the course list on draft lines, order lines or kitchen items, in which case a confirmed Delete switches the row off instead. The course in-use read searches `order_draft_lines`, `working_order_lines` and `ticket_items`, which have no index on `course_id`; adding one is a migration, left out of W110b. Found along the way: `apps/dashboard/src/screens/kitchen-screen.timing.a11y.test.ts` (from #1269) writes `look/venue-defaults-*.png` screenshots into `apps/dashboard/src/screens/` on every run, which git shows as untracked. (d) Zones and adjustment reasons now offer Enable (W110d,
-  #1273): a disabled zone's row in the venue screen's policy tree, and a
-  disabled reason's row menu on the reasons screen (through a new
-  `POST /management-api/adjustments/reasons/:reasonId/reactivate`). Departments and floor tables
-  still cannot be enabled: a department needs an `active` field on
+  (#1255); what each point leaves open is said under it.** The owner's rule (2026-10-05): a record
+  switched off but kept says **Disable / Deshabilitar**, comes back with **Enable / Habilitar**, and
+  reads **Active** or **Disabled** (Deshabilitado or Deshabilitada, agreeing with the noun);
+  **Delete / Eliminar** only for a real delete. The rule is in `docs/developers/design-system.md`,
+  "Switching off versus deleting". (a) is done by W110a (#1268). (c) is done by W110c (#1271); two
+  owner questions from W110c, in its PR: whether a bulk Enable is wanted, and whether an
+  all-disabled selection's Disable should be greyed out like the toolbar's other buttons rather than
+  hidden. W110c's review read #1269 as having added a test for (e); not re-checked, so (e) below may
+  be stale. (b) is done by W110b (#1278). Left open from (b): `GET /management-api/watchers` needs
+  `venue.configure` where the stations and courses lists need only `venue.view` (it did before
+  W110b; the owner's call); and a Delete label can be stale, because the watcher list does not
+  re-read on a watcher's Done marks nor the course list on draft lines, order lines or kitchen
+  items, in which case a confirmed Delete switches the row off instead. The course in-use read
+  searches `order_draft_lines`, `working_order_lines` and `ticket_items`, which have no index on
+  `course_id`; adding one is a migration, left out of W110b. Found along the way:
+  `apps/dashboard/src/screens/kitchen-screen.timing.a11y.test.ts` (from #1269) writes
+  `look/venue-defaults-*.png` screenshots into `apps/dashboard/src/screens/` on every run, which git
+  shows as untracked. (d) Zones and adjustment reasons now offer Enable (W110d, #1273). Departments
+  and floor tables still cannot be enabled: a department needs an `active` field on
   `PATCH /management-api/venue-service/departments/:departmentId`
   (`packages/venue-service/src/routes.ts`), and floor tables need a list that includes disabled
   tables plus `active` on `PATCH /management-api/tables/:id` (`apps/server/src/management-api.ts`,
-  `apps/dashboard/src/api/client.ts`). They were left out because, when W110d started, lane D's
-  A261-3 (#1269) changed those files; it has since landed, but lane B's paused W93 worktree
-  (`feat/device-home-page`) has uncommitted changes in `apps/server/src/management-api.ts`,
-  `apps/dashboard/src/api/client.ts`, `apps/dashboard/src/api/live-queries.ts` and
-  `packages/venue-service/src/operations.ts`, so they are a follow-up to take once W93 lands. Found along the way, each left as it is: enabling a zone leaves its tables
-  disabled, and its routing exceptions, watcher zones and till starting zones gone, because
-  disabling deleted or switched those off and Enable does not restore them;
+  `apps/dashboard/src/api/client.ts`). Lane B's paused W93 worktree (`feat/device-home-page`) has
+  uncommitted changes in `apps/server/src/management-api.ts`, `apps/dashboard/src/api/client.ts`,
+  `apps/dashboard/src/api/live-queries.ts` and `packages/venue-service/src/operations.ts`, so they
+  are a follow-up to take once W93 lands. Found along the way, each left as it is: enabling a zone
+  leaves its tables disabled, and its routing exceptions, watcher zones and till starting zones
+  gone, because disabling deleted or switched those off and Enable does not restore them;
   `PATCH /management-api/zones/:id` sets `active: true` on a zone whose department is disabled,
   with no refusal (read in `updateZone`, `apps/server/src/tables.ts`, not run), though the screen
   does not offer Enable there; a department's row in the policy tree still offers Disable when the
@@ -8967,20 +6292,17 @@ its cloud support-service proposal is tracked in Cloud and is not approved by th
 
 **SQLite + Litestream replaces PostgreSQL** (owner decision 2026-09-16). The architecture is
 [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md),
-whose §11 is the build order. The failover-loop prototype gate is done (#392, #395, #406, #411, #415,
-#417, #422, #425; [the results note](research/2026-09-16-sqlite-failover-prototype.md)); its one
+whose §11 is the build order. The failover-loop prototype gate is done (#392, #395, #406, #411, #415, #417, #422, #425;
+[the results note](research/2026-09-16-sqlite-failover-prototype.md)); its one
 negative result, **S2** — a handed-over batch can re-file a sale the receiver already filed, which
 costs one wasted AEAT call (error 3000, already read as filed) — produced the fence-before-ship rule
 in topology design §5.2. The tag `pre-sqlite-migration` (`c9d80c59`) marks the last commit before
 any of this code. **Slice 1, the storage swap, is complete (2026-09-23; F1 #489, T1 #490, T2 #492,
 T3 #494, and its preparation tasks).** **Slice 2, stream and cold restore, is complete
-(2026-09-25;** #513, #540, #543, #548, #554, #557, #560, #566, #569, #590, #619, #627, #628, #630,
-#642, #646 and #652, with follow-ups #573, #576, #594, #599, #608, #643, #647, #649 and #650): a
-venue streams `venue.db` continuously to an S3-compatible bucket the owner supplies, a dead box is
-rebuilt from that bucket with one recovery kit and carries on under a fresh fiscal chain, and staff
-see how current the copy is. **Next: slice 3, seats and promotion. Its first task is already
-decided: credentials move to a venue key** stored in `venue.db` only in locked form — do not reopen
-it.
+(2026-09-25;** #513, #540, #543, #548, #554, #557, #560, #566, #569, #590, #619, #627, #628, #630, #642, #646
+and #652, with follow-ups #573, #576, #594, #599, #608, #643, #647, #649 and #650).
+**Next: slice 3, seats and promotion. Its first task is already decided: credentials move to a
+venue key** stored in `venue.db` only in locked form — do not reopen it.
 
 **What the prototype gate left open (the receipts are in the results note):**
 
@@ -9033,8 +6355,6 @@ change what deleting a person does.
   activity), so the screen then offers no key until it is reopened.
 - The edit-settings form can meet `backup.recovery_key_exists` when a rotate (from another tab or
   admin) lands after it fetched the key.
-- DONE: A later `apply` keeps the "key rotated" date that `rotate` wrote to `backup.env`, including
-  when the key was rotated before an archive destination was configured.
 - The owner's call: `rotate` with a destination loaded rebuilds `backup.env` from the running
   settings rather than keeping the file's other lines, so a destination added to the file by hand
   and not yet loaded is dropped.
@@ -9061,7 +6381,6 @@ job runs only on the primary — kept by design (owner, 2026-09-24).
   provider that refuses it with a status other than 501 fails the day's prune
   (`stream.prune_failed`). `probeBucket` deletes one object at a time, so it cannot reveal such a
   provider; having it delete its test object through `deleteMany` would.
-- Done by W31: the English-only guard scans `@waitron/store`, including its tests.
 - Nothing in the package has been run against a real provider's bucket: the unit tests drive the
   real S3 client over a scripted network, and the loop test drives it against versitygw.
 - `apps/server/src/rejoin-command.test.ts`'s sidecar assertions do not test the wipe (its fixture
@@ -9084,8 +6403,6 @@ job runs only on the primary — kept by design (owner, 2026-09-24).
   `backup.stream_request_failed` and `#movePointer` (`packages/stream/src/supervisor.ts`) logs
   `stream.pointer_write_failed` and retries every `OPEN_RETRY_MS` until the supervisor stops, never
   reaching `refused`.
-- Whether a cut-off primary should stream is decided: see *Replication, membership & failover —
-  residuals* (owner, 2026-09-24).
 - The server's 8-second shutdown stops the stream last, after the Cloud snapshot loop, so on a large
   database Litestream may not finish its last upload (it is still told to stop and does not outlive
   the server).
@@ -9222,8 +6539,8 @@ Open:
   observed, and the fold-back of a 256 MiB file is still timed only by the bench rig (results note,
   1b), not through the supervisor.
 
-**A130, A133 and A135 — a sale can wait behind Litestream's own checkpoint (DONE: A130 #868, A133
-#889, A135 #907 and #917).** A probe that reproduced the pause test's one failure on `main` (run
+**A130, A133 and A135 — a sale can wait behind Litestream's own checkpoint (DONE: A130 #868, A133 #889,
+A135 #907 and #917).** A probe that reproduced the pause test's one failure on `main` (run
 36559470238) on one runner in 20 found the CI runner's disk stalling, not the bucket, and the stream
 tests' CI step now sets `TMPDIR=/dev/shm`. The figures are in
 [testing-guide.md](developers/testing-guide.md), "A sale can wait behind Litestream's own
@@ -9286,40 +6603,6 @@ and #723).**
   against the names versitygw gives its errors.
 - The case "refused while the run is stopping" catches a removed stop check only through the order
   two pending steps finish in, so re-run that removal if `#bucketAnswers` is restructured.
-
-**Done (#W32): the images ship notice files for npm packages bundled into their JavaScript.** The
-owner's rule (2026-09-24) is that a change adding third-party code to the image carries its licence
-notices; the server bundles (`scripts/bundle-node.mjs`, esbuild), the three SPAs (`vite build`,
-copied to `/app/web/`) and the print-agent bundle (copied to `/app/print-agent.js` in
-`deploy/Dockerfile`'s `print-agent` stage) carry npm packages whose `LICENSE` files are left behind
-by bundling. The app image's `/app/third-party/` holds notices for libvips, Litestream, the Iosevka
-font, the Moby template the print agent's AppArmor profile is copied from, the Material Symbols
-icons, the Google Sans font, and Google's "G" mark (its trademark line in the notice); the print-agent image's holds only `python3-minimal/` (since A140; bluez's copyright files are
-not copied). Measured 2026-09-24: `apps/server/src/bin.ts` bundled with `bundle-node.mjs`'s options
-took in 81 npm packages, 76 of which have a `LICENSE` file, and the output kept one block of legal
-comments covering 9 source files from 8 of those packages; `apps/till` built with `vite build`
-contains Lit, whose source opens with a `@license` comment, and its output holds no `@license` or
-`/*!` comment at all. The other server bundles, the print-agent bundle and the dashboard and setup
-SPAs were not built. The build now generates a notice per server JavaScript bundle and one per
-web app from the bundlers' input lists, including a pinned fallback when a published tarball has
-no licence file. The app image copies the server and web notices into `/app/third-party/npm/`;
-the print-agent image copies its own. The image-smoke job checks the built copies.
-
-**Box script constraints found by T2 (#492), for anyone working near the box.** `is_production` in
-`deploy/waitron.sh` once failed OPEN and a caller wiped a production box with no
-`--force-production`; its tests now extract the one-liner from the shipped script and run it under a
-real `sh`.
-
-- **The box's throwaway state-volume containers no longer name an image.** They go through
-  `docker compose run --rm --no-deps -T --entrypoint sh app`, so the helper is the image the box runs
-  — **and it therefore runs as an ordinary user, not root.** The `--entrypoint` is not cosmetic:
-  without it the arguments go to the image's ENTRYPOINT, which (since 2026-09-24) refuses them and
-  exits non-zero, which `is_production` reads as "cannot establish" and then refuses every reset as
-  production.
-- **`docker compose up -d` does not remove a service deleted from the file**, and `waitron.sh`
-  overwrites the installed compose file from the ref on every install, so `--remove-orphans` is on
-  the install `up` and the reset's `down` and `up`; the retired `waitron_db` VOLUME is left on disk
-  deliberately, and `deploy/README.md` says so and how to remove it.
 
 **What slice 1 left (#490 and the preparation tasks):**
 
@@ -9405,10 +6688,6 @@ conflict.
 - **Modules are core to the product** (opt-in domains, third-party modules later); fiscal is swappable
   by jurisdiction (Veri\*Factu / TicketBAI / none). New domains land as modules, and no new core table
   without a stated reason (CLAUDE.md §3).
-- **Register and device are both kept.** A register (`tills`; UI "register"/"caja") is the drawer
-  counted at close; a device is the screen. Several devices ring into one register. _2026-10-03:
-  superseded by A238 — a till is a device and the `tills` table goes,
-  `docs/superpowers/specs/2026-10-03-till-is-a-device-design.md`._
 - **Rerouting lives in the till web app** for every device kind; the device credential stays an
   httpOnly cookie. A native agent is built for hardware only, printing first.
 - **No relay.** Remote access is the cloud instance forwarding the box's name down the box↔instance
@@ -9463,9 +6742,9 @@ partial scope; the detail for a live thread is in its track.
 membership, promotion and rejoin (#197–#272; what is left is under
 *Replication, membership & failover — residuals*) · backup and restore (BR-1..BR-4 plus the wizard
 and guided Cloud snapshot restore for test venues) · the bucket stream and cold restore (SQLite
-slice 2) · SIF topology (`#33`, `node_id` re-key) · the module system (#212–#262; country packs
-#292) · the printing subsystem (`@waitron/printing` plus the db-free `@waitron/print-agent`,
-#282–#335) · the layout designer and device profiles (#194–#234, #246, #269) · CI and test infra
+slice 2) · SIF topology (`#33`, `node_id` re-key) · the module system (#212–#262; country packs #292)
+· the printing subsystem (`@waitron/printing` plus the db-free `@waitron/print-agent`, #282–#335)
+· the layout designer and device profiles (#194–#234, #246, #269) · CI and test infra
 (scoped CI, pre-push hook, shared-container tests, job-sharding, root scope) · localisation
 (per-user `persons.locale`, live language switch, venue-default derivation) · logging and
 diagnostics (Slice 1, #192).
@@ -9541,9 +6820,7 @@ The `incidents` table is written by several producers: the fiscal drain when AEA
 the payments reconciler on drift, the Stripe device provider, the card provider pool, and — since A1 —
 the chain-append seam when a record's totals disagree with its own VAT lines. #368 added the reader
 (`listOpenIncidents`, `packages/core/src/incidents.ts`) and the dashboard bell and Alerts surface that
-displays them. It is one surface serving every producer, which is why it was not folded into A1: a
-screen shaped around that branch's two arithmetic warnings would be the wrong shape for the ones
-already waiting.
+displays them. It is one surface serving every producer.
 
 ### Logging, diagnostics & one-touch bug report (A9; Slice 1 landed #192)
 
@@ -9749,11 +7026,7 @@ that slice 3 has to restore:
 
 Built: the VAT summary and the sales side of modelo 303 (#76), the purchases side, the form's boxes
 and the DR303 file (#91), and its download route, `GET /management-api/reports/modelo-303`, with
-monthly and quarterly periods (#98). An annual period is refused: `requireLiquidationPeriod` in
-`apps/server/src/report-api.ts` accepts only `01`..`12` and `1T`..`4T` (trimmed and upper-cased
-first), and its comment gives the reason — the annual summary is modelo 390, not a 303. The
-dashboard's VAT return screen (in the sidebar right after Sales, shown to a session holding `report.export`)
-downloads the file — DONE (#1106). Two pre-filing caveats a human must clear before the first
+monthly and quarterly periods (#98); and the dashboard's VAT return screen (#1106). Two pre-filing caveats a human must clear before the first
 LIVE 303 filing: validate the DR303 file once against the real AEAT "por fichero" uploader (we
 omit página 2, régimen simplificado); and an asesor must confirm the **prorrata** treatment
 (`computeInputVat` scales only the cuota by `deductible_proportion`). Deferred build slices:
