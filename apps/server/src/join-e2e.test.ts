@@ -17,6 +17,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import {
+  deviceProfileAdmissionRoles,
   hashPin,
   hashSessionToken,
   loginWithPin,
@@ -912,6 +913,86 @@ describe("a disabled device comes back as the same device", () => {
     const signedIn = await signIn(app, jar, person!.id);
     expect(moved).toBe(true);
     expect(signedIn.status).toBe(200);
+    expect(await openSessionsOn(deviceId)).toBe(1);
+  });
+
+  it("a sign-in overtaken by a move onto a till profile that does not admit the person is refused, and opens no session", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountWithSignIn(venue);
+    const profileId = await seedProfile("till");
+    const managersOnly = await seedProfile("till");
+    await suite.db
+      .insert(deviceProfileAdmissionRoles)
+      .values({ deviceProfileId: managersOnly, role: "manager" });
+    const holdId = await openWindow(app, venue);
+    const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
+    const [person] = await suite.db
+      .insert(persons)
+      .values({ displayName: "Camarera", pinHash: hashPin("4321"), role: "staff" })
+      .returning({ id: persons.id });
+    let moved = false;
+    between.pinCheckAndSignIn = async () => {
+      between.pinCheckAndSignIn = async () => {};
+      await moveOnto(app, venue, deviceId, managersOnly, null);
+      moved = true;
+    };
+
+    const late = await signIn(app, jar, person!.id);
+    expect(moved).toBe(true);
+    expect(late.status).toBe(401);
+    expect((await errorOf(late)).code).toBe("pin.invalid");
+    expect(late.headers.get("set-cookie")).toBeNull();
+    expect(await openSessionsOn(deviceId)).toBe(0);
+  });
+
+  it("a sign-in overtaken by the till's own switch to a profile that does not admit the person is refused, and opens no session", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = mountWithSignIn(venue);
+    const profileId = await seedProfile("till");
+    const managersOnly = await seedProfile("till");
+    await suite.db
+      .insert(deviceProfileAdmissionRoles)
+      .values({ deviceProfileId: managersOnly, role: "manager" });
+    const holdId = await openWindow(app, venue);
+    const { deviceId, jar } = await addDevice(app, venue, holdId, "Bar till", profileId);
+    const approved = await send(app, "PATCH", `/management-api/devices/${deviceId}`, {
+      cookie: venue.managerCookie,
+      body: {
+        name: "Bar till",
+        profileId,
+        stationId: null,
+        watcherId: null,
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+        approvedProfileIds: [managersOnly],
+      },
+    });
+    expect(approved.status).toBe(204);
+    const [manager, staff] = await suite.db
+      .insert(persons)
+      .values([
+        { displayName: "Encargada", pinHash: hashPin("4321"), role: "manager" },
+        { displayName: "Camarera", pinHash: hashPin("4321"), role: "staff" },
+      ])
+      .returning({ id: persons.id });
+    const managerIn = await signIn(app, jar, manager!.id);
+    expect(managerIn.status).toBe(200);
+    let switched = false;
+    between.pinCheckAndSignIn = async () => {
+      between.pinCheckAndSignIn = async () => {};
+      const res = await send(app, "POST", "/api/device/active-profile", {
+        cookie: `${jar}; ${deviceCookieFrom(managerIn)}`,
+        body: { profileId: managersOnly },
+      });
+      expect(res.status).toBe(200);
+      switched = true;
+    };
+
+    const late = await signIn(app, jar, staff!.id);
+    expect(switched).toBe(true);
+    expect(late.status).toBe(401);
+    expect((await errorOf(late)).code).toBe("pin.invalid");
+    expect(late.headers.get("set-cookie")).toBeNull();
     expect(await openSessionsOn(deviceId)).toBe(1);
   });
 
