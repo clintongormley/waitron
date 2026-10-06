@@ -28,8 +28,6 @@ export type FrozenOfferedModifier =
 
 export type FrozenOfferVariant = Omit<MenuOfferVariant, OverlayOfferField>;
 
-/** Absent from a document published before the setting existed: a published version is never
- * rewritten. */
 type PublishedOrdering = { ordering?: MenuOffer["ordering"] };
 
 export type FrozenOffer = Omit<

@@ -5462,7 +5462,7 @@ describe("mountCatalogueApi — Device Home Page", () => {
     expect(await malformed.json()).toMatchObject({ error: { code: "management.request_invalid" } });
   });
 
-  it("adds, moves, replaces and removes shortcuts through the menu's own routes, refusing one the menu does not reach", async () => {
+  it("adds, moves and removes shortcuts through the menu's own routes, refusing one the menu does not reach", async () => {
     const app = mountApp();
     const m = await menuWithTargets(app);
     const soup = await json<{ id: string; position: number }>(

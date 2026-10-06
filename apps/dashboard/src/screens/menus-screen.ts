@@ -24,7 +24,7 @@ import "@waitron/ui/src/components/wt-slider.js";
 import { PATH_SEPARATOR } from "../widgets/category-form.js";
 import { memberName } from "../widgets/member-list-editor.js";
 import "../widgets/menu-structure-table.js";
-import { HOME_KEY, type StructureAddAction } from "../widgets/menu-structure-table.js";
+import { HOME_KEY, ROOT_KEY, type StructureAddAction } from "../widgets/menu-structure-table.js";
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import "../widgets/device-home-preview.js";
@@ -1319,7 +1319,7 @@ export class MenusScreen extends LitElement {
   }
 
   #returnFocusTo(path: string[], shut = false): void {
-    this.#focusReturn = { menuId: this.menuId!, key: path.join("/") || "root" };
+    this.#focusReturn = { menuId: this.menuId!, key: path.join("/") || ROOT_KEY };
     this.#windowShut = shut;
   }
 

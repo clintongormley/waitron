@@ -1550,7 +1550,7 @@ declare global {
 - [ ] **Step 2: implement.**
   - State: delete `homeLayouts`, `homeLayoutId`, `layoutForm`, `layoutFormName`,
     `layoutFormErrors`, `deletingLayout`, `deleteLayoutError` (`:514-530`); add `menuHome: MenuHome | null`,
-    `homeDevice: HomeDevice = "handheld"`, `homeSaving = false`, `homeFieldErrors: Partial<Record<keyof HomeDisplay, string>>`,
+    `homeDevice: HomeDevice = "handheld"`, `homeSaving = false` (2026-10-06: removed in finishing review; `homePending !== null` reads the same), `homeFieldErrors: Partial<Record<keyof HomeDisplay, string>>`,
     `addingShortcut: "product" | "section" | null`, `shortcutError = ""`.
   - Reads: `#watchHome` watches `getMenuHome` (`:933-945`); `#showView` keeps it while the view is
     `structure` or `home` and releases it otherwise (`:971-973`); the preview is watched while the
@@ -1573,7 +1573,7 @@ declare global {
     radios (each with a `legend` and its field error beneath as `<p class="field-error"
     role="alert">`), and a preview `section` holding `dashboard-device-home-preview`
     (`.document=${this.preview?.document ?? null}`, `device=${this.homeDevice}`), with the
-    preview's own loading line until the preview is read. `#saveDisplay(patch)` sets `homeSaving`,
+    preview's own loading line until the preview is read. `#saveDisplay(patch)` sets `homeSaving` (2026-10-06: removed in finishing review; `homePending !== null` reads the same),
     calls `setHomeDisplay(menuId, this.homeDevice, patch)`, maps a `menu.home_display_invalid` whose
     `params.device` is the shown device to `homeFieldErrors[params.field]` and anything else to
     `homeError`; the live queries read the home and the preview again.
@@ -1765,7 +1765,7 @@ file.
 
 | file:line | Before | After | Why |
 | --- | --- | --- | --- |
-| `packages/ui/src/tap-target-and-focus.test.ts:41`, `:49` | the case title and the exact-set `toEqual` list of field elements name `wt-button`, `wt-combobox`, `wt-input`, `wt-number-stepper`, `wt-price-input`, `wt-switch` and `wt-textarea` | both gain `wt-slider`; every existing entry unchanged | the new primitive is held to the same tap-target and focus rule |
+| `packages/ui/src/tap-target-and-focus.test.ts:41`, `:43` | the case title and the exact-set `toEqual` list of field elements name `wt-button`, `wt-combobox`, `wt-input`, `wt-number-stepper`, `wt-price-input`, `wt-switch` and `wt-textarea` | both gain `wt-slider`; every existing entry unchanged | the new primitive is held to the same tap-target and focus rule |
 
 ### Task 5
 
@@ -1788,11 +1788,10 @@ defaulting to the `columns: 3` it always passed).
 
 ### Task 6
 
-No assertion deleted, and no existing fixture grew. One check changed: in `live-queries.test.ts`'s
-`it.each` table of dependencies, the `listHomeLayouts` row was renamed in place to `getMenuHome`,
-with the same arguments and tables. Every other check in `menu-structure-table.test.ts`,
-`menu-structure-table.a11y.test.ts` and `client-routes.test.ts` that this task touched is new (a
-`describe` block, an a11y case and one route case). The structure table's `home` property defaults to null, so the
+No assertion changed or deleted, and no existing fixture grew: every check in
+`menu-structure-table.test.ts`, `menu-structure-table.a11y.test.ts`, `client-routes.test.ts` and
+`live-queries.test.ts` is new (a `describe` block, an a11y case, one route case, and one row added to
+the `it.each` table of dependencies). The structure table's `home` property defaults to null, so the
 existing cases, which pass none, draw no Device Home Page row and read as before. A missing
 shortcut's kind reads `members.missing` ("No longer available" | "Ya no está disponible"), the label
 `memberKindLabel` gives a `missing` reference, not a separate "Missing" word.
@@ -1815,7 +1814,7 @@ shortcut's kind reads `members.missing` ("No longer available" | "Ya no está di
 | `…menus-screen.a11y.test.ts:430`, `:440` | the layout form and the layout delete window | deleted | D2 |
 | `apps/dashboard/src/widgets/home-layout-editor.test.ts`, `home-layout-editor.a11y.test.ts` | the layout editor | files deleted with it; the preview's checks are in `device-home-preview.test.ts` and its a11y file (Task 7), the tile list's in `menu-structure-table.test.ts` (Task 6) | D2, D10 |
 | `apps/dashboard/src/api/client-routes.test.ts:837-894`, `:1037-1052` | the layout and tile client methods' routes | deleted; Task 6's "reads a menu's Device Home Page and writes its shortcuts and display settings" | D2, D9 |
-| `apps/dashboard/src/api/live-queries.test.ts:110-116` | `listHomeLayouts`' dependencies | renamed in place to `getMenuHome` (Task 6's row), the same arguments and tables | D2 |
+| `apps/dashboard/src/api/live-queries.test.ts:110-116` | `listHomeLayouts`' dependencies | deleted; Task 6's `getMenuHome` row (net over the branch it reads as a rename, with the same arguments and tables) | D2 |
 | `…menus-screen.test.ts:5652` **[implementer]** | adds, removes and moves tiles: the `addHomeTile` call check, the read count reaching 2 after the add and 3 after the remove, and `writeCalls` `["addHomeTile", "removeHomeTile", "moveHomeTile"]` | removes (through the shortcut row's Remove) and moves only: the add's call check goes, the read count reaches 2 after the remove and stays 2 after the move, and `writeCalls` is `["removeHomeShortcut", "moveHomeShortcut"]`. Adding goes through the picker, pinned by the new case "adds the chosen target at once and closes, reading the home again" | D9 |
 | `…menus-screen.test.ts:5684` **[implementer]** | the tile list is disabled during an add until the layouts are read again | the tree is disabled during a remove until the home is read again (an add now goes through the picker, whose cases hold its own `busy`); a move still leaves it usable | D9 |
 | `…menus-screen.test.ts:5703` **[implementer]** | a refused tile add is explained in `home-error` | a refused shortcut remove is explained in `member-error`; a refused add is the picker's (combobox `error` and `form.fix_fields` for a refusal about the chosen target, the code's message alone at the bottom otherwise). The refused move's code changed from `menu_section.not_found` to `menu.shortcut_unreachable`, and the refused remove takes `menu_section.not_found`, so the case's two refusals show different messages; the check that a refused move reads the home again is unchanged | D9 |

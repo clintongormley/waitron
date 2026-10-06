@@ -36,7 +36,7 @@ import type {
 } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
-const ROOT_KEY = "root";
+export const ROOT_KEY = "root";
 /** The Device Home Page row's key, and the list key its shortcuts' order is kept under. */
 export const HOME_KEY = "home";
 

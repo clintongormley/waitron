@@ -221,6 +221,7 @@ test("shows an error under the control as an alert that describes the input", as
   const input = inputOf(el);
   const alert = el.shadowRoot!.querySelector('[role="alert"]')!;
   expect(alert.textContent).toBe("Pick at least 2");
+  expect(el.shadowRoot!.querySelector("[data-error]")).toBe(alert);
   expect(alert.id).not.toBe("");
   expect(input.getAttribute("aria-describedby")).toBe(alert.id);
   expect(input.getAttribute("aria-invalid")).toBe("true");

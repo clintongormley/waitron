@@ -3979,9 +3979,8 @@ describe("menuOfferToTillProduct", () => {
     expect(menuOfferToTillProduct(offer)).not.toHaveProperty("menuVersionId");
   });
 
-  // The menu browser hides a product by this value, so each of the three must arrive as sent, and a
-  // version published before the setting existed must arrive with none.
-  it("carries who may order the offer on its own, and nothing when the version carries none", () => {
+  // The menu browser hides a product by this value, so each of the three must arrive as sent.
+  it("carries who may order the offer on its own, and nothing when the offer carries none", () => {
     const offer: TillMenuOffer = {
       id: "offer-bacon",
       menuId: "menu-1",
@@ -4019,7 +4018,7 @@ describe("menuOfferToTillProduct", () => {
     expect(menuOfferToTillProduct(offer)).not.toHaveProperty("ordering");
   });
 
-  it("carries the offer's colour, null included, and nothing when the version carries none", () => {
+  it("carries the offer's colour, null included, and nothing when the offer carries none", () => {
     const offer: TillMenuOffer = {
       id: "offer-beer",
       menuId: "menu-1",

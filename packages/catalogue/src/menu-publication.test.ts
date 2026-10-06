@@ -713,7 +713,7 @@ describe("a category's colour", () => {
   });
 });
 
-describe("a live version published before offers carried a colour", () => {
+describe("a live version whose offers carry no colour", () => {
   /** Makes the menu's live version a copy of its current one with no `color` on any offer; a
    * section's colour predates it and stays. */
   async function liveWithoutOfferColors(menuId: string): Promise<string> {
@@ -749,7 +749,7 @@ describe("a live version published before offers carried a colour", () => {
     return earlier!.id;
   }
 
-  it("is still served, serves no colour, and its menu shows each offer's colour as a change", async () => {
+  it("is served, serves no colour, and its menu shows each offer's colour as a change", async () => {
     const f = await menusFixture(fx.db);
     const lunch = await liveWithoutOfferColors(f.lunch);
     const live = await app((tx) => readLiveDocuments(tx, [f.lunch]));
