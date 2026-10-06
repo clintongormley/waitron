@@ -2818,3 +2818,48 @@ server settings writes, hover contrast and activated native reload remain unveri
 behavioral assertions are unchanged; the API fixture's settings return gained its declared type
 so it can represent capped as well as uncapped values. W69 remains partial: configuration/canvas,
 device-profile integration, remaining shell/page routes and the advancing-owner audit are open.
+
+
+## 2026-10-06: Canvas page draft checkpoint
+
+You now get the shared warning when Cancel would leave an edited canvas, including a new
+canvas that has not had its first write. The page compares its trimmed name and detached
+CanvasDef, preserving nested card data and ordered tabs/cards. Reversing existing edits clears
+the scope. Changing preview selection does not itself alter the comparison payload.
+
+The focused cases use real native inputs and the actual Cancel button. Keep retains the edited
+name; Discard restores the local baseline and returns to the list without a write. Reconnect
+retains an existing or new page's baseline. A successful write commits its captured name and
+definition before URL mutation or refresh, while later input remains dirty. Failed writes keep
+protection. A departed success cannot refresh the reconnected owner; a departed refusal cannot
+replace its message, and an old write cannot release a new save's busy gate.
+
+Verification commands:
+
+```sh
+pnpm --filter @waitron/dashboard exec vitest run src/screens/canvas-editor-screen.unsaved.test.ts src/screens/canvas-editor-screen.test.ts src/screens/canvas-editor-screen.a11y.test.ts src/screens/canvas-editor/validate-canvas.test.ts
+pnpm --filter @waitron/dashboard typecheck
+pnpm exec eslint apps/dashboard/src/screens/canvas-editor-screen.ts apps/dashboard/src/screens/canvas-editor-screen.unsaved.test.ts
+```
+
+The initial page tests failed on missing dirty protection. Correcting the new fixture to contain
+all sale-critical cards exposed the expected protection failures in both deferred-save cases;
+the first incomplete fixture had stopped at validation. Deferred-reply tests then reproduced a
+stale refusal and a stale refresh. A new-canvas reconnect test failed on the URL restorer clearing
+an unsaved canvas with no persisted id. The first guarded-save test initially checked only the
+rendered list; adding its final URL assertion exposed a discarded route attempt. The original
+history-versus-pending-create assertion caught a regression during that fix and remains unchanged.
+
+Eight EN/ES, light/dark, 390/1280 flows exercised native Cancel, Keep and Discard with two axe
+scans per flow. Four capture sheets were inspected. At phone width the retained name field lies
+below the viewport; the input value is asserted, while the overview capture shows the retained
+page and its warning. These are a minimal LeaveController shell with synthetic API responses.
+Full settings/sidebar/history integration, same-canvas tab changes, actual canvas persistence,
+hover accessibility and activated native reload remain unverified. A final detached-control test
+observed Save submitting after disconnect; the connected-owner gate now refuses that call.
+
+Deletion controls and exact logs live in the lane's local
+`receipts/w69-canvas-page-20261006/`. No existing behavioral assertion changed; the existing
+name-dialog fixture gained valid tabs and required selling cards so the new page-save cases reach
+the writer. W69 remains incomplete: contributed explicit-save settings, device profiles after
+W97, remaining page/till/context routes, native reload and the advancing-owner audit are next.

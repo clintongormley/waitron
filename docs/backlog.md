@@ -1173,6 +1173,15 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Canvas page drafts now register their name and copied definition on the branch. Cancel asks before
+leaving an edited or newly created canvas; Keep retains it and Discard returns to the gallery
+without writing. Reverted existing values are clean. Accepted saves commit the submitted snapshot
+before their URL change or list refresh; later edits remain protected. Deferred-reply cases cover
+reconnected drafts, stale errors and a newer save's busy state. The dated audit records focused
+browser tests, deletion controls and inspected EN/ES, light/dark, phone/desktop warning captures.
+Full dashboard route/history integration, same-canvas tab navigation and activated native reload
+remain unverified. Contributed settings and the advancing device-profile audit keep W69 incomplete.
+
 The bill discount limit now has its own protection on the branch. Keep retains your typed limit;
 Discard restores its starting value without writing settings. Saving a reason leaves an edited
 limit unsaved, and saving the limit leaves an edited reason unsaved. An accepted limit write

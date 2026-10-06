@@ -33,6 +33,11 @@ import {
 import { validateCanvasDraft } from "./canvas-editor/validate-canvas.js";
 import type { Canvas, DashboardApi } from "../api/client.js";
 
+interface CanvasEntry {
+  name: string;
+  definition: CanvasDef;
+}
+
 interface CreateEntry {
   name: string;
   formFactor: FormFactor;
@@ -233,6 +238,29 @@ export class CanvasEditorScreen extends LitElement {
   #leave?: LeaveCoordinator;
   readonly #createId = {};
   readonly #duplicateId = {};
+  readonly #editorId = {};
+  #editorScope?: DraftScope<CanvasEntry | null>;
+  #editorBaseline?: CanvasEntry | null;
+
+  #editorEntry(): CanvasEntry | null {
+    return this.draft === null
+      ? null
+      : { name: this.draftName.trim() || this.draftName, definition: this.draft };
+  }
+
+  async #requestCancelEditor(): Promise<void> {
+    if (!this.isConnected || this.saving) return;
+    if (!this.#leave) {
+      this.#cancelEditor();
+      return;
+    }
+    await this.#leave.request({
+      scopes: [this.#editorId],
+      reason: "cancel",
+      proceed: () => this.#cancelEditor(),
+    });
+  }
+
   #createScope?: DraftScope<CreateEntry>;
   #duplicateScope?: DraftScope<string>;
   #createBaseline?: CreateEntry;
@@ -263,6 +291,27 @@ export class CanvasEditorScreen extends LitElement {
   override willUpdate(): void {
     if (!this.isConnected) return;
     this.#leave ??= leaveCoordinatorFor(this);
+    if (this.mode !== "editor" || this.draft === null) {
+      this.#editorScope?.dispose();
+      this.#editorScope = undefined;
+      this.#editorBaseline = undefined;
+    } else if (!this.#editorScope) {
+      this.#editorScope = this.#leave?.register<CanvasEntry | null>({
+        id: this.#editorId,
+        parent: this,
+        current: () => this.#editorEntry(),
+        snapshot: (value) => structuredClone(value),
+        equal: sameValue,
+        restore: (value) => {
+          this.draft = value === null ? null : structuredClone(value.definition);
+          this.draftName = value?.name ?? "";
+          this.selection = null;
+          this.activeTabIndex = 0;
+        },
+      });
+      this.#editorScope?.commit(this.#editorBaseline ?? null);
+      this.#editorScope?.changed();
+    }
     if (!this.createOpen) {
       this.#createScope?.dispose();
       this.#createScope = undefined;
@@ -303,6 +352,12 @@ export class CanvasEditorScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    ++this.#editorRequest;
+    ++this.#saveRequest;
+    ++this.#editorSession;
+    this.saving = false;
+    this.#editorScope?.dispose();
+    this.#editorScope = undefined;
     this.#createScope?.dispose();
     this.#duplicateScope?.dispose();
     this.#createScope = undefined;
@@ -312,6 +367,8 @@ export class CanvasEditorScreen extends LitElement {
   }
 
   #editorRequest = 0;
+  #saveRequest = 0;
+  #editorSession = 0;
   #savedTabKeys = new Set<string>();
   readonly #url = new UrlStateController(
     this,
@@ -319,7 +376,7 @@ export class CanvasEditorScreen extends LitElement {
       ++this.#editorRequest;
       const id = this.#url.read("canvas");
       if (id === null) {
-        if (this.mode === "editor") this.#cancelEditor(true);
+        if (this.mode === "editor" && this.editingId !== null) this.#cancelEditor(true);
       } else if (id === this.editingId && this.draft !== null) {
         this.#selectTab(this.#requestedTabIndex(this.draft), true);
       } else {
@@ -425,6 +482,7 @@ export class CanvasEditorScreen extends LitElement {
       this[field] = event.detail.value;
       if (field === "createName") this.#createScope?.changed();
       if (field === "duplicateName") this.#duplicateScope?.changed();
+      if (field === "draftName") this.#editorScope?.changed();
     };
   }
 
@@ -435,13 +493,13 @@ export class CanvasEditorScreen extends LitElement {
     this.#createScope?.changed();
   }
 
-  /** Nothing is written until Guardar. `structuredClone` keeps the shared `DEFAULT_CANVASES` template
-   * untouched by the editor's edits. */
   #confirmCreate(): void {
     if (!this.isConnected || !this.createOpen) return;
     this.#createScope?.commit(this.#createEntry());
     this.#nameDialog("create")?.closeAfter("saved");
     ++this.#editorRequest;
+    ++this.#editorSession;
+    this.#editorBaseline = null;
     this.draft = structuredClone(DEFAULT_CANVASES[this.createFormFactor]);
     this.draftName = this.createName;
     this.editingId = null;
@@ -454,8 +512,8 @@ export class CanvasEditorScreen extends LitElement {
 
   // ── Editar ─────────────────────────────────────────────────────────────────────────────────────
 
-  /** Fetches the canvas fresh via `getCanvas(id)` rather than reusing the possibly-stale list row. */
   async #openEditor(id: string, fromHistory = false): Promise<void> {
+    ++this.#editorSession;
     const request = ++this.#editorRequest;
     this.#showError(null);
     try {
@@ -467,9 +525,12 @@ export class CanvasEditorScreen extends LitElement {
         this.#showError("canvas.invalid");
         return;
       }
+      ++this.#editorSession;
       this.#savedTabKeys = new Set(parsed.tabs.map((tab) => tab.key));
       this.draft = structuredClone(parsed);
       this.draftName = canvas.name;
+      this.#editorBaseline = structuredClone(this.#editorEntry());
+      this.#editorScope?.commit(this.#editorBaseline);
       this.editingId = id;
       this.activeTabIndex = fromHistory ? this.#requestedTabIndex(parsed) : 0;
       this.selection = null;
@@ -487,7 +548,9 @@ export class CanvasEditorScreen extends LitElement {
   /** Every draft edit assigns a fresh {@link CanvasDef} so Lit and the `<canvas-grid-preview>` both
    * re-render. Never mutate the current draft in place. */
   #updateDraft(next: CanvasDef): void {
+    if (!this.isConnected || this.mode !== "editor") return;
     this.draft = next;
+    this.#editorScope?.changed();
   }
 
   #updateActiveTab(mutate: (tab: TabDef) => TabDef): void {
@@ -631,6 +694,7 @@ export class CanvasEditorScreen extends LitElement {
 
   #cancelEditor(fromHistory = false): void {
     ++this.#editorRequest;
+    ++this.#editorSession;
     this.#url.write({ canvas: null, "canvas-tab": null }, fromHistory);
     this.mode = "list";
     this.draft = null;
@@ -741,10 +805,9 @@ export class CanvasEditorScreen extends LitElement {
 
   // ── Save ─────────────────────────────────────────────────────────────────────────────────────────
 
-  /** The server accepts `""` as a name, so an empty name is refused here. */
   async #save(): Promise<void> {
-    if (this.saving) return;
-    const request = this.#editorRequest;
+    if (!this.isConnected || this.saving) return;
+    const request = this.#editorSession;
     const draft = this.draft;
     if (draft === null) return;
     const name = this.draftName.trim();
@@ -758,31 +821,31 @@ export class CanvasEditorScreen extends LitElement {
       return;
     }
     const id = this.editingId;
+    const saveRequest = ++this.#saveRequest;
     this.saving = true;
+    this.#showError(null);
     try {
-      await this.#mutate(async () => {
-        if (id !== null) await this.api.updateCanvas(id, name, draft);
-        else {
-          const created = await this.api.createCanvas(name, draft);
-          if (request === this.#editorRequest) {
-            this.#savedTabKeys = new Set(draft.tabs.map((tab) => tab.key));
-            this.editingId = created.id;
-            this.#writeEditorUrl(true);
-          }
-        }
-        if (request === this.#editorRequest)
-          this.#savedTabKeys = new Set(draft.tabs.map((tab) => tab.key));
-        // A finished write belongs to the draft submitted, not a destination opened during the request.
-        if (
-          request === this.#editorRequest &&
-          this.draft === draft &&
-          this.draftName.trim() === name
-        )
-          this.#cancelEditor();
-      });
+      let created: { id: string } | undefined;
+      if (id !== null) await this.api.updateCanvas(id, name, draft);
+      else created = await this.api.createCanvas(name, draft);
+      if (!this.isConnected || request !== this.#editorSession || saveRequest !== this.#saveRequest)
+        return;
+      this.#editorBaseline = structuredClone({ name, definition: draft });
+      this.#editorScope?.commit(this.#editorBaseline);
+      this.#savedTabKeys = new Set(draft.tabs.map((tab) => tab.key));
+      if (created) {
+        this.editingId = created.id;
+        this.#writeEditorUrl(true);
+      }
+      if (this.draft === draft && this.draftName.trim() === name) this.#cancelEditor();
+    } catch (error) {
+      if (this.isConnected && request === this.#editorSession && saveRequest === this.#saveRequest)
+        this.#showError(codeOf(error));
+      return;
     } finally {
-      this.saving = false;
+      if (saveRequest === this.#saveRequest) this.saving = false;
     }
+    if (this.isConnected && saveRequest === this.#saveRequest) await this.#load();
   }
 
   // ── Duplicar ───────────────────────────────────────────────────────────────────────────────────
@@ -1251,7 +1314,7 @@ export class CanvasEditorScreen extends LitElement {
             <wt-button
               variant="secondary"
               data-test="editor-cancel"
-              @click=${() => this.#cancelEditor()}
+              @click=${() => void this.#requestCancelEditor()}
               >${t("canvas_editor.cancel")}</wt-button
             >
             <wt-button

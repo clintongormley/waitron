@@ -1,22 +1,40 @@
 import { LitElement, html } from "lit";
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { LeaveController } from "@waitron/ui";
+import { LeaveController, NavigationGuard } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { Canvas, DashboardApi } from "../api/client.js";
 import "./canvas-editor-screen.js";
 
+const originalUrl = location.href;
 const canvas: Canvas = {
   id: "c1",
   name: "Counter",
-  definition: { formFactor: "till", tabs: [] },
+  definition: {
+    formFactor: "till",
+    tabs: [
+      {
+        key: "counter",
+        title: "Counter",
+        columns: 12,
+        cards: [
+          { type: "product-grid", colSpan: 8, rowSpan: 6, config: {} },
+          { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
+          { type: "total", colSpan: 4, rowSpan: 1, config: {} },
+          { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
+        ],
+      },
+    ],
+  },
 };
 class CanvasLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   api = {
     listCanvases: async () => [canvas],
+    getCanvas: async () => canvas,
+    updateCanvas: vi.fn(async () => undefined),
     createCanvas: vi.fn(async () => ({ id: "copy" })),
   } as unknown as DashboardApi;
   override render() {
@@ -27,6 +45,7 @@ class CanvasLeaveApp extends LitElement {
 customElements.define("canvas-leave-test-app", CanvasLeaveApp);
 afterEach(() => {
   cleanupWidgets();
+  history.replaceState(null, "", originalUrl);
   setLocale("en-GB");
 });
 type Screen = HTMLElementTagNameMap["dashboard-canvas-editor-screen"];
@@ -372,4 +391,364 @@ it("invalid raw Duplicate name remains protected while empty submission is refus
       "[data-test=duplicate-name]",
     )!.value,
   ).toBe("   ");
+});
+
+async function editor(api?: DashboardApi) {
+  const { app, screen } = await fixture("create", api);
+  const dialog =
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>("[data-dialog=create]")!;
+  expect(await dialog.requestClose("cancel")).toBe(true);
+  await closeReportsDelivered();
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-c1]")!.click();
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=editor-name]")?.textContent)
+    .toBe("Counter");
+  return { app, screen };
+}
+async function canvasName(screen: Screen, value: string) {
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=canvas-settings]")!.click();
+  await screen.updateComplete;
+  const field =
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=canvas-name]")!;
+  await field.updateComplete;
+  const input = field.shadowRoot!.querySelector("input")!;
+  await userEvent.fill(page.elementLocator(input), value);
+  await screen.updateComplete;
+  return input;
+}
+it("canvas page Cancel keeps edited name then Discard returns to list without writing", async () => {
+  const { app, screen } = await editor();
+  const input = await canvasName(screen, "Evening");
+  expect(unload()).toBe(true);
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=editor-cancel]")!.click();
+  expect((await question(app)).open).toBe(true);
+  expect(screen.shadowRoot!.querySelector("[data-test=editor-name]")!.textContent).toBe("Evening");
+  await choose(app, "keep");
+  expect(input.value).toBe("Evening");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=editor-cancel]")!.click();
+  await choose(app, "discard");
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=canvas-row-c1]"))
+    .not.toBeNull();
+  expect(unload()).toBe(false);
+  expect(app.api.updateCanvas).not.toHaveBeenCalled();
+});
+it("canvas page reverted name closes cleanly", async () => {
+  const { app, screen } = await editor();
+  expect(unload()).toBe(false);
+  await canvasName(screen, "Evening");
+  expect(unload()).toBe(true);
+  await canvasName(screen, " Counter ");
+  expect(unload()).toBe(false);
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=editor-cancel]")!.click();
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=canvas-row-c1]"))
+    .not.toBeNull();
+  expect((await question(app)).open).toBe(false);
+});
+it("canvas page nested card changes are protected and reversing them clears the scope", async () => {
+  const { app, screen } = await editor();
+  const preview = screen.shadowRoot!.querySelector("canvas-grid-preview")!;
+  preview.dispatchEvent(
+    new CustomEvent("resize-card", { detail: { index: 0, colSpan: 7, rowSpan: 6 } }),
+  );
+  await screen.updateComplete;
+  expect(unload()).toBe(true);
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=editor-cancel]")!.click();
+  expect((await question(app)).open).toBe(true);
+  await choose(app, "keep");
+  preview.dispatchEvent(
+    new CustomEvent("resize-card", { detail: { index: 0, colSpan: 8, rowSpan: 6 } }),
+  );
+  await screen.updateComplete;
+  expect(unload()).toBe(false);
+});
+it("canvas page newly created local definition remains unsaved before its first write", async () => {
+  const { app, screen } = await fixture("create");
+  await name(screen, "create", "Evening");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-create]")!.click();
+  await screen.updateComplete;
+  expect(unload()).toBe(true);
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=editor-cancel]")!.click();
+  expect((await question(app)).open).toBe(true);
+  await choose(app, "keep");
+  expect(screen.shadowRoot!.querySelector("[data-test=editor-name]")!.textContent).toBe("Evening");
+  expect(app.api.createCanvas).not.toHaveBeenCalled();
+});
+it("canvas page detach aborts a question and reconnect retains its original baseline", async () => {
+  const { app, screen } = await editor();
+  await canvasName(screen, "Evening");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=editor-cancel]")!.click();
+  const old = await question(app);
+  expect(old.open).toBe(true);
+  screen.remove();
+  expect(unload()).toBe(false);
+  expect((await question(app)).open).toBe(false);
+  app.shadowRoot!.appendChild(screen);
+  await screen.updateComplete;
+  expect(unload()).toBe(true);
+  old.dispatchEvent(
+    new CustomEvent("wt-unsaved-choice", {
+      detail: { decision: "discard" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await screen.updateComplete;
+  expect(screen.shadowRoot!.querySelector("[data-test=editor-name]")!.textContent).toBe("Evening");
+});
+for (const accepted of [false, true]) {
+  it(`canvas page ${accepted ? "accepted write commits submitted definition before failed refresh" : "refused write retains protection"}`, async () => {
+    let finish!: () => void;
+    let written = false;
+    const api = {
+      listCanvases: async () => {
+        if (written) throw { code: "connection.failed" };
+        return [canvas];
+      },
+      getCanvas: async () => canvas,
+      updateCanvas: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        if (!accepted) throw { code: "connection.failed" };
+        written = true;
+      }),
+    } as unknown as DashboardApi;
+    const { app, screen } = await editor(api);
+    await canvasName(screen, "Evening");
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await screen.updateComplete;
+    expect(api.updateCanvas).toHaveBeenCalledExactlyOnceWith("c1", "Evening", canvas.definition);
+    if (accepted) await canvasName(screen, "Late edit");
+    finish();
+    await expect.poll(() => screen.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+    expect(unload()).toBe(true);
+    expect(screen.shadowRoot!.querySelector("[data-test=editor-name]")!.textContent).toBe(
+      accepted ? "Late edit" : "Evening",
+    );
+    if (accepted) {
+      await canvasName(screen, "Evening");
+      expect(unload()).toBe(false);
+    }
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=editor-cancel]")!.click();
+    expect((await question(app)).open).toBe(!accepted);
+  });
+}
+
+for (const accepted of [false, true]) {
+  it(`canvas page departed ${accepted ? "accepted" : "refused"} write cannot replace a reconnected draft or message`, async () => {
+    let finish!: () => void;
+    const api = {
+      listCanvases: vi.fn(async () => [canvas]),
+      getCanvas: async () => canvas,
+      updateCanvas: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        if (!accepted) throw { code: "canvas.name_taken" };
+      }),
+    } as unknown as DashboardApi;
+    const { app, screen } = await editor(api);
+    await canvasName(screen, "Evening");
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await screen.updateComplete;
+    screen.remove();
+    expect(unload()).toBe(false);
+    app.shadowRoot!.appendChild(screen);
+    await screen.updateComplete;
+    const reads = (api.listCanvases as ReturnType<typeof vi.fn>).mock.calls.length;
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await screen.updateComplete;
+    expect(screen.shadowRoot!.querySelector("[data-test=editor-name]")?.textContent).toBe(
+      "Evening",
+    );
+    expect(screen.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(unload()).toBe(true);
+    expect(api.listCanvases).toHaveBeenCalledTimes(reads);
+    expect(
+      screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!
+        .disabled,
+    ).toBe(false);
+  });
+}
+it("canvas page unchanged successful save retires its scope before list refresh", async () => {
+  let dirtyDuringRead: boolean | undefined;
+  let written = false;
+  const api = {
+    listCanvases: async () => {
+      if (written) {
+        dirtyDuringRead = app.leave.coordinator.isDirty();
+        throw { code: "connection.failed" };
+      }
+      return [canvas];
+    },
+    getCanvas: async () => canvas,
+    updateCanvas: vi.fn(async () => {
+      written = true;
+    }),
+  } as unknown as DashboardApi;
+  const { app, screen } = await editor(api);
+  await canvasName(screen, "Evening");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await expect.poll(() => dirtyDuringRead).toBe(false);
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=canvas-row-c1]"))
+    .not.toBeNull();
+  expect((await question(app)).open).toBe(false);
+  expect(unload()).toBe(false);
+});
+it("canvas page accepted write invalidates an outstanding discard of a newer draft", async () => {
+  let finish!: () => void;
+  const api = {
+    listCanvases: async () => [canvas],
+    getCanvas: async () => canvas,
+    updateCanvas: vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    ),
+  } as unknown as DashboardApi;
+  const { app, screen } = await editor(api);
+  await canvasName(screen, "Evening");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await screen.updateComplete;
+  await canvasName(screen, "Newer");
+  const pending = app.leave.coordinator.request({
+    scopes: [screen],
+    reason: "navigation",
+    proceed: () => screen.remove(),
+  });
+  const old = await question(app);
+  expect(old.open).toBe(true);
+  finish();
+  expect(await pending).toBe("stale");
+  old.dispatchEvent(
+    new CustomEvent("wt-unsaved-choice", {
+      detail: { decision: "discard" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await screen.updateComplete;
+  expect(screen.isConnected).toBe(true);
+  expect(screen.shadowRoot!.querySelector("[data-test=editor-name]")!.textContent).toBe("Newer");
+  expect(unload()).toBe(true);
+});
+it("canvas page changing a draft aborts an outstanding Cancel question", async () => {
+  const { app, screen } = await editor();
+  await canvasName(screen, "Evening");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=editor-cancel]")!.click();
+  const old = await question(app);
+  expect(old.open).toBe(true);
+  screen
+    .shadowRoot!.querySelector("[data-test=canvas-name]")!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Newer" } }));
+  await screen.updateComplete;
+  expect((await question(app)).open).toBe(false);
+  old.dispatchEvent(
+    new CustomEvent("wt-unsaved-choice", {
+      detail: { decision: "discard" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await screen.updateComplete;
+  expect(screen.shadowRoot!.querySelector("[data-test=editor-name]")!.textContent).toBe("Newer");
+});
+
+it("canvas page old write cannot release a new save's busy gate after reconnect", async () => {
+  const finishes: Array<() => void> = [];
+  const api = {
+    listCanvases: async () => [canvas],
+    getCanvas: async () => canvas,
+    updateCanvas: vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishes.push(resolve);
+        }),
+    ),
+  } as unknown as DashboardApi;
+  const { app, screen } = await editor(api);
+  await canvasName(screen, "Evening");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await screen.updateComplete;
+  screen.remove();
+  app.shadowRoot!.appendChild(screen);
+  await screen.updateComplete;
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  await screen.updateComplete;
+  expect(finishes).toHaveLength(2);
+  finishes[0]!();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await screen.updateComplete;
+  expect(
+    screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!
+      .disabled,
+  ).toBe(true);
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=editor-cancel]")!.click();
+  expect((await question(app)).open).toBe(false);
+  expect(screen.shadowRoot!.querySelector("[data-test=editor-name]")!.textContent).toBe("Evening");
+  finishes[1]!();
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=canvas-row-c1]"))
+    .not.toBeNull();
+  expect(unload()).toBe(false);
+});
+
+it("canvas page unsaved new definition survives disconnect without a persisted canvas URL", async () => {
+  const { app, screen } = await fixture("create");
+  await name(screen, "create", "Evening");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-create]")!.click();
+  await screen.updateComplete;
+  expect(unload()).toBe(true);
+  screen.remove();
+  expect(unload()).toBe(false);
+  app.shadowRoot!.appendChild(screen);
+  await screen.updateComplete;
+  expect(screen.shadowRoot!.querySelector("[data-test=editor-name]")?.textContent).toBe("Evening");
+  expect(unload()).toBe(true);
+});
+
+it("canvas page first accepted save commits before its canvas URL changes", async () => {
+  const { app, screen } = await fixture("create");
+  await name(screen, "create", "Evening");
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-create]")!.click();
+  await screen.updateComplete;
+  expect(unload()).toBe(true);
+  const guard = new NavigationGuard(window, {
+    isDirty: () => app.leave.coordinator.isDirty(),
+    request: (proceed) =>
+      app.leave.coordinator.request({ scopes: [screen], reason: "navigation", proceed }),
+  });
+  try {
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await expect.poll(() => app.api.createCanvas).toHaveBeenCalledOnce();
+    await screen.updateComplete;
+    expect((await question(app)).open).toBe(false);
+    await expect
+      .poll(() => screen.shadowRoot!.querySelector("[data-test=canvas-row-c1]"))
+      .not.toBeNull();
+    expect(unload()).toBe(false);
+    await expect.poll(() => location.pathname).toBe("/manage/canvas-editor");
+  } finally {
+    guard.dispose();
+  }
+});
+
+it("canvas page departed Save and name controls cannot submit or alter its retained draft", async () => {
+  const { app, screen } = await editor();
+  await canvasName(screen, "Evening");
+  screen.remove();
+  screen
+    .shadowRoot!.querySelector("[data-test=canvas-name]")!
+    .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Departed" } }));
+  screen.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+  expect(app.api.updateCanvas).not.toHaveBeenCalled();
+  app.shadowRoot!.appendChild(screen);
+  await screen.updateComplete;
+  expect(screen.shadowRoot!.querySelector("[data-test=editor-name]")!.textContent).toBe("Evening");
+  expect(unload()).toBe(true);
 });
