@@ -18,6 +18,7 @@ import type {
 } from "../api/client.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
+import { conjunctionList } from "../i18n/list.js";
 import { localizedName } from "../i18n/localized.js";
 import { PATH_SEPARATOR } from "./category-form.js";
 import { describeSetting } from "./price-source.js";
@@ -80,18 +81,6 @@ export function statusWords(status: MenuStatus): {
         label: t("menu_status.changed"),
         live: { version: fill("menu_status.changed_version", number), time },
       };
-}
-
-const listFormats = new Map<string, Intl.ListFormat>();
-
-function list(items: readonly string[]): string {
-  const locale = currentLocale();
-  let format = listFormats.get(locale);
-  if (format === undefined) {
-    format = new Intl.ListFormat(locale, { type: "conjunction" });
-    listFormats.set(locale, format);
-  }
-  return format.format(items);
 }
 
 /**
@@ -265,7 +254,7 @@ export class MenuPreviewPanel extends LitElement {
   }
 
   #places(paths: readonly (readonly string[])[]): string {
-    return list(paths.map((path) => this.#place(path)));
+    return conjunctionList(paths.map((path) => this.#place(path)));
   }
 
   /** A change at one place: its own wording at the top level, else `key` with the place filled. */
@@ -383,7 +372,7 @@ export class MenuPreviewPanel extends LitElement {
   #source(change: MenuChange): string {
     const source = t(SOURCES[change.source]);
     return change.alsoOn?.length
-      ? fill("menu_preview.also_on", { source, menus: list(change.alsoOn) })
+      ? fill("menu_preview.also_on", { source, menus: conjunctionList(change.alsoOn) })
       : source;
   }
 

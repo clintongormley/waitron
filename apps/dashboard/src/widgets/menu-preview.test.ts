@@ -543,37 +543,6 @@ it("keeps the click that asks for a publish or a retry from reaching the page ar
   expect(clicks).toEqual([]);
 });
 
-it("builds one list formatter per language and reuses it", async () => {
-  const Original = Intl.ListFormat;
-  const built: string[] = [];
-  vi.spyOn(Intl, "ListFormat").mockImplementation(function (
-    locale?: Intl.LocalesArgument,
-    options?: Intl.ListFormatOptions,
-  ) {
-    built.push(String(locale));
-    return new Original(locale, options);
-  } as unknown as typeof Intl.ListFormat);
-  const changes: MenuChange[] = [
-    {
-      kind: "product_moved",
-      productId: "p-soup",
-      name: "Soup",
-      from: [["Starters"]],
-      to: [[], ["Mains", "Hot"]],
-      source: "this_menu",
-      alsoOn: ["Dinner Menu", "Terrace Menu"],
-    },
-  ];
-  const el = await mount({ preview: preview(changes) });
-  setLocale("es-ES");
-  el.requestUpdate();
-  await el.updateComplete;
-  el.requestUpdate();
-  await el.updateComplete;
-  expect(items(el, "changes")[0]).toContain("Dinner Menu y Terrace Menu");
-  expect(new Set(built).size).toBe(built.length);
-});
-
 it("offers the publish when the menu differs from its live version but no change can be listed", async () => {
   const el = await mount({ preview: preview([]) });
   expect(text(q(el, '[data-test="no-changes"]'))).toBe(t("menu_preview.no_changes"));
