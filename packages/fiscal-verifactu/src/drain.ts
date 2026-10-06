@@ -566,7 +566,7 @@ async function haltOpenChainClaims(
       ) and (
         select count(run.codigo_error) = ${SAME_CODE_REFUSAL_LIMIT}
           and count(distinct run.codigo_error) = 1
-          and min(run.estado) = 'rechazado' and max(run.estado) = 'rechazado'
+          and sum(run.estado = 'rechazado') = ${SAME_CODE_REFUSAL_LIMIT}
         from (
           select preceding_envio.estado, preceding_envio.codigo_error
           from registros_facturacion preceding
