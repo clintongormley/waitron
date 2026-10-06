@@ -256,7 +256,7 @@ declare module "@waitron/shared" {
 
     /**
      * The same ongoing check, one per chain: AEAT refused `count` records of the chain in a row
-     * with the code `codigo`, and the chain's next records are held unsent (./drain.ts,
+     * with the code `codigo`, and the chain's next records are held (./drain.ts,
      * `SAME_CODE_REFUSAL_LIMIT`). Never thrown.
      */
     "fiscal.refusals_repeated": { codigo: string; count: number };
