@@ -373,10 +373,10 @@ is in production" below).
 - A default station's special-date cells are dormant, not deleted: a save never removes one because
   the request left it out (no request can carry it), and duplicating a date copies it. It applies
   again if the station stops being the default, so that change is refused with `hours.invalid`
-  when, on a special date from the venue's yesterday on (every special date when its clock cannot
-  be read), the hours it kept would clash with the day before or after, or open or close at a
-  minute the clock skips (`assertDemotedStationHours`, `hours.ts`). The refusal names the special
-  date to move or delete.
+  when, on a special date from the venue's yesterday on, the hours it kept would clash with the day
+  before or after, or open or close at a minute the clock skips (`assertDemotedStationHours`,
+  `hours.ts`). When the venue's clock cannot be read, only the clash is checked, on every special
+  date. The refusal names the special date to move or delete.
 - A cell's periods are replaced by deleting and inserting the whole set, so a reordering cannot trip
   the position index midway ("Editing rows one at a time can break a unique index the final state
   satisfies" above).

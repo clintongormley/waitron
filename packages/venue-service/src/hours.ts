@@ -611,12 +611,12 @@ async function assertEndpointsOccur(
 /**
  * Refuses letting `stationId` stop being the default when the schedule it would resume breaks a
  * rule a save holds, on a special date from the venue's yesterday onwards (a period that opened
- * yesterday can still be running), or on any special date when its clock cannot be read: a cell
- * it kept while it was the default opens or closes at a minute the clock skips (`field` `opensAt`
- * or `closesAt`), or its hours overlap across a midnight with the day before or after (`field`
- * `date`). `date` is always a special date and, for an overlap, the one of the two days that holds
- * a kept cell when either does: the Hours page cannot edit a default station's cells, but it can
- * move or delete that date.
+ * yesterday can still be running): a cell it kept while it was the default opens or closes at a
+ * minute the clock skips (`field` `opensAt` or `closesAt`), or its hours overlap across a midnight
+ * with the day before or after (`field` `date`). When the clock cannot be read, only the overlap
+ * rule runs, on every special date. `date` is always a special date and, for an overlap, the one
+ * of the two days that holds a kept cell when either does: the Hours page cannot edit a default
+ * station's cells, but it can move or delete that date.
  */
 export async function assertDemotedStationHours(
   tx: Transaction,
