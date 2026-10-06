@@ -18,6 +18,7 @@ import type {
   RegistroAlta,
 } from "@waitron/verifactu";
 import { writeAck } from "./acks.js";
+import type { FacturaParams, LineaParams, Operacion } from "./errors.js";
 import { openFilingCase, type FilingCaseCause } from "./filing-cases.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
@@ -731,8 +732,6 @@ async function resolveLines(
   return { lines, unmatched, descuadrada: tallies ? null : reply.map(lineaParams) };
 }
 
-type Operacion = "Alta" | "Anulacion";
-
 function operacionOf(registro: EnvioRegistro): Operacion {
   return "RegistroAlta" in registro ? "Alta" : "Anulacion";
 }
@@ -918,8 +917,6 @@ async function openCase(
 }
 
 type UnknownAnswer = Omit<ErrorParams["fiscal.estado_desconocido"], "registroId" | "csv">;
-type FacturaParams = NonNullable<UnknownAnswer["identidadEnviada"]>;
-type LineaParams = NonNullable<UnknownAnswer["lineaRespuesta"]>;
 
 function answerOf(linea: RespuestaLinea): Pick<UnknownAnswer, "estado" | "codigo" | "mensaje"> {
   return {

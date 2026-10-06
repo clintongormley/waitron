@@ -2,15 +2,17 @@
 // declare a fresh ambient module of the same name.
 import "@waitron/shared";
 
+export type Operacion = "Alta" | "Anulacion";
+
 /** An invoice as AEAT's `IDFactura` names it; the date is `DD-MM-YYYY`. */
-interface FacturaParams {
+export interface FacturaParams {
   idEmisorFactura: string;
   numSerieFactura: string;
   fechaExpedicionFactura: string;
 }
 
 /** One line of AEAT's reply as it arrived; `tipoOperacion` is its raw operation text. */
-interface LineaParams extends FacturaParams {
+export interface LineaParams extends FacturaParams {
   refExterna: string | null;
   tipoOperacion: string | null;
   estado: string | null;
@@ -143,7 +145,7 @@ declare module "@waitron/shared" {
       mensaje: string | null;
       csv: string | null;
       lookupFailed?: boolean;
-      operacionEnviada?: "Alta" | "Anulacion";
+      operacionEnviada?: Operacion;
       identidadEnviada?: FacturaParams;
       lineaRespuesta?: LineaParams;
       lineasEnRespuesta?: number;
