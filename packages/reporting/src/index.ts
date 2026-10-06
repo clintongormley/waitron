@@ -4,6 +4,7 @@ export {
   currentBusinessDay,
   readLocationClock,
   validateBusinessDay,
+  validateTimeZone,
   validatedRangeWindow,
   venueMomentAt,
 } from "./business-day.js";

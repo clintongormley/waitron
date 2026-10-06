@@ -13,6 +13,7 @@ import {
   type Interval,
 } from "./hours-rules.js";
 import { CALENDAR_COLOURS, type CalendarColour, type LocalDate } from "./hours-types.js";
+import { isReadableZone, skippedEndpoint } from "./hours-clock.js";
 import { HOURS_CELL_MODES } from "./schema/hours.js";
 import "./errors.js";
 
@@ -112,8 +113,12 @@ function storedMode(row: Row, table: string): string {
  * out a clash between two days already past in the venue's zone when the bundle was made, and
  * checks every pair when that date cannot be read. It reads no day cutover, so for a venue whose
  * cutover or numeric-offset zone a save finds unreadable (and then checks every pair), it can still
- * leave past pairs out. A default station's cells may travel, as the default keeps them, and take
- * no part in the clash check.
+ * leave past pairs out. A special-date period may not open or close at a minute the clocks skip in
+ * the venue's zone, unless its date and the day after were both past at export. With no readable
+ * zone that goes unchecked, as a save leaves it unchecked for an unreadable clock; but reading no
+ * cutover, it is checked for a venue whose zone reads and whose cutover does not, which a save
+ * leaves unchecked. A default station's cells may travel, as the default keeps them, and take no
+ * part in either check.
  */
 export function validateHoursConfiguration(
   tables: Tables,
@@ -184,6 +189,11 @@ export function validateHoursConfiguration(
     cells.push({ key, cell: { mode, periods: datePeriods.get(row.id) ?? [] } });
     cellsByDate.set(row.special_date_id, cells);
   }
+  const defaults = new Set(
+    (tables.kitchen_stations ?? []).filter((row) => row.is_default === 1).map((row) => row.id),
+  );
+  const today = exportDate(bundle);
+  const zone = bundle !== undefined && isReadableZone(bundle.timeZone) ? bundle.timeZone : null;
   const states = new Map<LocalDate, DateState>();
   for (const [id, { date, closeWholeVenue, row }] of dates) {
     const cells = cellsByDate.get(id) ?? [];
@@ -199,6 +209,16 @@ export function validateHoursConfiguration(
         }),
       }),
     );
+    if (zone !== null && pairMatters(date, today)) {
+      const applied = input.cells.filter(
+        (entry) => !(entry.subject.kind === "station" && defaults.has(entry.subject.id)),
+      );
+      const skipped = skippedEndpoint(date, applied, zone);
+      if (skipped !== null)
+        refuse(
+          `special_date_hours_periods.${skipped.end === "opensAt" ? "opens_at" : "closes_at"}`,
+        );
+    }
     states.set(date, {
       closeWholeVenue,
       cells: new Map(
@@ -207,14 +227,10 @@ export function validateHoursConfiguration(
     });
   }
 
-  const defaults = new Set(
-    (tables.kitchen_stations ?? []).filter((row) => row.is_default === 1).map((row) => row.id),
-  );
   const subjects = [
     ...[...departments].map((id) => `department:${id as string}`),
     ...[...stations].filter((id) => !defaults.has(id)).map((id) => `station:${id as string}`),
   ];
-  const today = exportDate(bundle);
   for (const key of subjects) {
     const week = (weekday: number) => weekIntervals.get(key)?.[weekday] ?? null;
     for (const date of states.keys())

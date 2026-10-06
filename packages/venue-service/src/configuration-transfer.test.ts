@@ -389,6 +389,69 @@ describe("validateHoursConfiguration", () => {
     });
   });
 
+  describe("a special-date period that opens or closes at a minute the clocks skip", () => {
+    // Madrid's clocks go from 02:00 to 03:00 on Sunday 28 March 2027; London's go from 01:00 to
+    // 02:00 that morning, so 02:30 occurs there.
+    function skipped(date: string, opensAt: string, closesAt: string): Tables {
+      const tables = validTables();
+      tables.special_dates![0]!.date = date;
+      const bar = tables.special_date_hours_periods![0]!;
+      bar.opens_at = opensAt;
+      bar.closes_at = closesAt;
+      return tables;
+    }
+    const exported = (createdAt: string, timeZone = "Europe/Madrid") => ({
+      createdAt: new Date(createdAt),
+      timeZone,
+    });
+    const before = exported("2026-10-06T10:00:00Z");
+
+    it("is refused at its opening, as a save refuses it", () => {
+      expect(() =>
+        validateHoursConfiguration(skipped("2027-03-28", "02:30:00", "04:00:00"), before),
+      ).toThrowError(refusal("special_date_hours_periods.opens_at"));
+    });
+
+    it("is refused at a closing that falls on the next day", () => {
+      expect(() =>
+        validateHoursConfiguration(skipped("2027-03-27", "23:00:00", "02:30:00"), before),
+      ).toThrowError(refusal("special_date_hours_periods.closes_at"));
+    });
+
+    it("is accepted in a zone where that minute occurs", () => {
+      expect(() =>
+        validateHoursConfiguration(
+          skipped("2027-03-28", "02:30:00", "04:00:00"),
+          exported("2026-10-06T10:00:00Z", "Europe/London"),
+        ),
+      ).not.toThrow();
+    });
+
+    it("is accepted once its date was past at export", () => {
+      expect(() =>
+        validateHoursConfiguration(
+          skipped("2027-03-28", "02:30:00", "04:00:00"),
+          exported("2027-04-15T10:00:00Z"),
+        ),
+      ).not.toThrow();
+    });
+
+    it("is accepted on a default station's retained cell", () => {
+      const tables = skipped("2027-03-28", "13:00:00", "16:00:00");
+      tables.special_date_hours![2]!.mode = "periods";
+      tables.special_date_hours_periods!.push(periodRow("sdh-kitchen", 0, "02:30:00", "04:00:00"));
+      expect(() => validateHoursConfiguration(tables, before)).not.toThrow();
+    });
+
+    it("is accepted when the zone is not known or cannot be read, as a save checks nothing then", () => {
+      const tables = skipped("2027-03-28", "02:30:00", "04:00:00");
+      expect(() => validateHoursConfiguration(tables)).not.toThrow();
+      expect(() =>
+        validateHoursConfiguration(tables, exported("2026-10-06T10:00:00Z", "Not/A_Zone")),
+      ).not.toThrow();
+    });
+  });
+
   it("ignores a default station's retained cells when checking clashes", () => {
     const tables = validTables();
     const kitchen = openWeek({ station_id: KITCHEN }, "22:00:00", "03:00:00");

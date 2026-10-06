@@ -1,5 +1,6 @@
-import { civilDateOf, venueMomentAt } from "@waitron/reporting";
-import type { LocalDate } from "./hours-types.js";
+import { civilDateOf, validateTimeZone, venueMomentAt } from "@waitron/reporting";
+import { addDays } from "./hours-rules.js";
+import type { DateHoursCell, LocalDate } from "./hours-types.js";
 
 export interface VenueLocalMoment {
   readonly civilDate: LocalDate;
@@ -25,6 +26,16 @@ export function venueLocalMoment(
 /** Whether the venue's zone and cutover can be read at all. */
 export function isReadableClock(clock: { timeZone: string; dayCutover: string }): boolean {
   return venueMomentAt(new Date(0), clock) !== null;
+}
+
+/** Whether a zone alone can be read, by the rule {@link isReadableClock} applies to it. */
+export function isReadableZone(timeZone: string): boolean {
+  try {
+    validateTimeZone(timeZone);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const MINUTE_MS = 60_000;
@@ -87,4 +98,24 @@ export function clockChangesBetween(from: Date, to: Date, timeZone: string): Dat
     changes.push(new Date(high * MINUTE_MS));
   }
   return changes;
+}
+
+/**
+ * The first period, by its cell's index and its own position, that opens or closes at a minute the
+ * clock skips on `date`; a closing after midnight is checked on the next date.
+ */
+export function skippedEndpoint(
+  date: LocalDate,
+  cells: readonly Pick<DateHoursCell, "cell">[],
+  timeZone: string,
+): { index: number; position: number; end: "opensAt" | "closesAt" } | null {
+  for (const [index, { cell }] of cells.entries())
+    for (const [position, period] of cell.periods.entries()) {
+      const closingDate = period.closesAt > period.opensAt ? date : addDays(date, 1);
+      if (localTimeOccurrences(date, period.opensAt, timeZone).length === 0)
+        return { index, position, end: "opensAt" };
+      if (localTimeOccurrences(closingDate, period.closesAt, timeZone).length === 0)
+        return { index, position, end: "closesAt" };
+    }
+  return null;
 }

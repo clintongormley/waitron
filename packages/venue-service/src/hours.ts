@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gte, inArray, isNotNull, lte, ne, or, type SQL } fr
 import { kitchenStations, newId, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
-import { isReadableClock, localTimeOccurrences, venueLocalMoment } from "./hours-clock.js";
+import { isReadableClock, skippedEndpoint, venueLocalMoment } from "./hours-clock.js";
 import {
   addDays,
   calendarTone,
@@ -568,27 +568,6 @@ async function readableZone(tx: Transaction, cfg: VenueScope): Promise<string | 
 }
 
 /**
- * The first period, as its cell's index and its own field, that opens or closes at a minute the
- * clock skips on `date`; a closing after midnight is checked on the next date.
- */
-function skippedEndpoint(
-  date: LocalDate,
-  cells: readonly DateHoursCell[],
-  timeZone: string,
-): { index: number; field: string } | null {
-  for (const [index, { cell }] of cells.entries())
-    for (const [position, period] of cell.periods.entries()) {
-      const field = `cells.${index}.cell.periods.${position}`;
-      const closingDate = period.closesAt > period.opensAt ? date : addDays(date, 1);
-      if (localTimeOccurrences(date, period.opensAt, timeZone).length === 0)
-        return { index, field: `${field}.opensAt` };
-      if (localTimeOccurrences(closingDate, period.closesAt, timeZone).length === 0)
-        return { index, field: `${field}.closesAt` };
-    }
-  return null;
-}
-
-/**
  * Refuses a period that opens or closes at a minute the venue's clock skips on that date. A clock
  * that cannot be read checks nothing.
  */
@@ -600,7 +579,8 @@ async function assertEndpointsOccur(
   const zone = await readableZone(tx, cfg);
   if (zone === null) return;
   const skipped = skippedEndpoint(input.date, input.cells, zone);
-  if (skipped !== null) invalidHours(skipped.field);
+  if (skipped !== null)
+    invalidHours(`cells.${skipped.index}.cell.periods.${skipped.position}.${skipped.end}`);
 }
 
 /**
