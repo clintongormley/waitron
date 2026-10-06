@@ -221,6 +221,7 @@ function shownBody(value: unknown, categoryIds: readonly string[]): ShownFolderC
       typeof entry.id !== "string" ||
       !isUuid(entry.id) ||
       !count(entry.folders) ||
+      !count(entry.products) ||
       !count(entry.activeProducts) ||
       !count(entry.routes) ||
       !count(entry.ownRoutes)
@@ -229,6 +230,7 @@ function shownBody(value: unknown, categoryIds: readonly string[]): ShownFolderC
     return {
       id: entry.id,
       folders: entry.folders,
+      products: entry.products,
       activeProducts: entry.activeProducts,
       routes: entry.routes,
       ownRoutes: entry.ownRoutes,

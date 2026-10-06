@@ -370,13 +370,10 @@ export interface FolderSummary {
   /** Routing rules naming the category itself: what moving its contents up removes. */
   ownRoutes: number;
 }
-/**
- * One selected category's counts as the client read them before deleting it (its dialog showed
- * them, when it asked).
- */
+/** One selected category's counts as the client read them before deleting it. */
 export type ShownFolderCounts = Pick<
   FolderSummary,
-  "id" | "folders" | "activeProducts" | "routes" | "ownRoutes"
+  "id" | "folders" | "products" | "activeProducts" | "routes" | "ownRoutes"
 >;
 export interface Unit {
   id: string;

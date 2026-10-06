@@ -1682,7 +1682,7 @@ it("deletes only completely summarised empty folders without asking", async () =
     expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
       { productIds: [], categoryIds: ["f"] },
       "move_up",
-      [{ id: "f", folders: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
+      [{ id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
     ),
   );
   expect(dialog(el)).toBeNull();
@@ -1726,7 +1726,7 @@ it("shows folder contents and routes, defaults to moving up, and sends delete ch
     expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
       { productIds: [], categoryIds: ["d"] },
       "delete",
-      [{ id: "d", folders: 1, activeProducts: 2, routes: 1, ownRoutes: 1 }],
+      [{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 }],
     ),
   );
 });
@@ -1925,7 +1925,7 @@ it("reads the contents again at Delete and, when they changed, shows the new cou
     expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: [], categoryIds: ["d"] },
       "move_up",
-      [{ id: "d", folders: 2, activeProducts: 3, routes: 1, ownRoutes: 1 }],
+      [{ id: "d", folders: 2, products: 3, activeProducts: 3, routes: 1, ownRoutes: 1 }],
     ),
   );
   expect(el.api.summariseFolders).toHaveBeenCalledTimes(3);
@@ -1960,6 +1960,24 @@ it.each([
     }
   },
 );
+it("at Delete, sends the count of every product read then when only inactive products changed", async () => {
+  const el = await mountBrowser();
+  const shown = { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 };
+  vi.mocked(el.api.summariseFolders)
+    .mockResolvedValueOnce([shown])
+    .mockResolvedValue([{ ...shown, products: 3 }]);
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: [], categoryIds: ["d"] },
+      "move_up",
+      [{ id: "d", folders: 1, products: 3, activeProducts: 2, routes: 1, ownRoutes: 1 }],
+    ),
+  );
+});
 it("deletes nothing when a category is gone by the time Delete is pressed", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.summariseFolders)
@@ -2063,10 +2081,10 @@ it("after a failed second read keeps Delete enabled, and pressing it again reads
   expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
     { productIds: [], categoryIds: ["d"] },
     "move_up",
-    [{ id: "d", folders: 1, activeProducts: 2, routes: 1, ownRoutes: 1 }],
+    [{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 }],
   );
 });
-it("sends the counts the dialog showed with the delete, one entry per selected category", async () => {
+it("sends the counts read before deleting with the delete, one entry per selected category", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.summariseFolders).mockResolvedValue([
     { id: "b", folders: 0, products: 1, activeProducts: 1, routes: 2, ownRoutes: 2 },
@@ -2082,8 +2100,8 @@ it("sends the counts the dialog showed with the delete, one entry per selected c
       { productIds: [], categoryIds: ["f", "b"] },
       "move_up",
       [
-        { id: "f", folders: 3, activeProducts: 4, routes: 0, ownRoutes: 0 },
-        { id: "b", folders: 0, activeProducts: 1, routes: 2, ownRoutes: 2 },
+        { id: "f", folders: 3, products: 5, activeProducts: 4, routes: 0, ownRoutes: 0 },
+        { id: "b", folders: 0, products: 1, activeProducts: 1, routes: 2, ownRoutes: 2 },
       ],
     ),
   );
@@ -2116,7 +2134,7 @@ it("when the server refuses because the contents changed, shows the new counts, 
   expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
     { productIds: [], categoryIds: ["d"] },
     "move_up",
-    [{ id: "d", folders: 1, activeProducts: 2, routes: 1, ownRoutes: 1 }],
+    [{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 }],
   );
   await vi.waitFor(() =>
     expect(
@@ -2128,7 +2146,7 @@ it("when the server refuses because the contents changed, shows the new counts, 
   expect(el.api.deleteCatalogueItems).toHaveBeenLastCalledWith(
     { productIds: [], categoryIds: ["d"] },
     "move_up",
-    [{ id: "d", folders: 2, activeProducts: 3, routes: 1, ownRoutes: 1 }],
+    [{ id: "d", folders: 2, products: 3, activeProducts: 3, routes: 1, ownRoutes: 1 }],
   );
   await vi.waitFor(() => expect(dialog(el)).toBeNull());
 });
@@ -2160,7 +2178,7 @@ it("when the server refuses an empty category's delete because it is no longer e
   expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
     { productIds: [], categoryIds: ["f"] },
     "move_up",
-    [{ id: "f", folders: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
+    [{ id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
   );
 });
 it("deletes a folder through its own row action", async () => {
@@ -2174,7 +2192,7 @@ it("deletes a folder through its own row action", async () => {
     expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
       { productIds: [], categoryIds: ["d"] },
       "move_up",
-      [{ id: "d", folders: 1, activeProducts: 2, routes: 1, ownRoutes: 1 }],
+      [{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 }],
     ),
   );
 });
@@ -2204,7 +2222,7 @@ it("deleting an empty category from its menu acts on that category alone, and le
     expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
       { productIds: [], categoryIds: ["m1"] },
       "move_up",
-      [{ id: "m1", folders: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
+      [{ id: "m1", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
     ),
   );
   expect(el.api.summariseFolders).toHaveBeenCalledExactlyOnceWith(["m1"]);
@@ -2372,8 +2390,8 @@ it("counts overlapping selected folders once in the delete consent", async () =>
       { productIds: [], categoryIds: ["d", "b"] },
       "move_up",
       [
-        { id: "d", folders: 1, activeProducts: 2, routes: 1, ownRoutes: 0 },
-        { id: "b", folders: 0, activeProducts: 1, routes: 1, ownRoutes: 1 },
+        { id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 0 },
+        { id: "b", folders: 0, products: 1, activeProducts: 1, routes: 1, ownRoutes: 1 },
       ],
     ),
   );
@@ -2434,7 +2452,7 @@ it("keeps the captured Delete request when Cancel exits selection during the sum
     expect(el.api.deleteCatalogueItems).toHaveBeenCalledExactlyOnceWith(
       { productIds: [], categoryIds: ["f"] },
       "move_up",
-      [{ id: "f", folders: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
+      [{ id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
     ),
   );
   expect(dialog(el)).toBeNull();

@@ -318,11 +318,15 @@ to approve unknown contents. The dialog lists each category being deleted by its
 "(2 of 3)" where several categories share a path. Pressing **Delete** in the dialog reads the counts
 again; if the numbers of subcategories, active products or routing rules (in the subtree, or
 naming the category itself) have changed, it deletes nothing, shows the new counts and asks you to
-confirm again. The delete request carries the counts
-the dashboard read before deleting, and the server compares them again inside the delete itself: if
+confirm again; a change in disabled products alone does not stop it, because the dialog does not
+show them. The delete request carries the counts
+the dashboard read before deleting, the number of all products, disabled ones included, among them,
+and the server compares them again inside the delete itself: if
 they no longer match, nothing is deleted and the dialog shows the new counts with the refusal's own
 message. If an empty category, which is deleted without confirmation, has gained subcategories,
-active products or routing rules by then, the dialog opens with its new counts. A refused action
+products (disabled ones included) or routing rules by then, the dialog opens with its new counts.
+The dialog does not count disabled products, so when only a disabled product was added it shows the
+refusal's message beside counts that look unchanged. A refused action
 keeps its dialog open with a message at the bottom.
 Deleting a category removes its station claim and every exception naming it, because both tables
 have a cascading foreign key to `categories`. The dialog's routing-rule warning counts the rules the
@@ -354,8 +358,7 @@ category colour that is neither null nor lowercase `#rrggbb`, as `setup.request_
 | `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes, ownRoutes }[]`; `products` includes disabled products, `activeProducts` leaves them out; `routes` counts the rules naming the category or any category below it, `ownRoutes` those naming the category itself |
 
 Both ID arrays are required and contain distinct UUIDs. `to` is a category ID or null. `contents`
-is `move_up` or `delete`. `shown` is the counts the client read before deleting (the ones its
-dialog showed, when it asked): one `{ id, folders, activeProducts, routes, ownRoutes }` per selected category,
+is `move_up` or `delete`. `shown` is the counts the client read before deleting: one `{ id, folders, products, activeProducts, routes, ownRoutes }` per selected category,
 exactly, with whole numbers of zero or more. It is required when `categoryIds` is not empty and
 ignored when it is. For example, once you have created Cocktails and your products, use their
 returned IDs to move two products and a category together:
