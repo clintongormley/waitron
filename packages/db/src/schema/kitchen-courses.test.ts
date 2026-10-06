@@ -136,11 +136,11 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
     expect(isRefusal(eRandom, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
-  it("wires all three course columns with a foreign key to kitchen_courses", async () => {
+  it("wires all four course columns with a foreign key to kitchen_courses", async () => {
     // The behavioural case above covers products.course_id only; this catches a copy-paste error
-    // in the other two, such as a course FK pointing at kitchen_stations. SQLite stores no name for
-    // a foreign key, so each is found by table and column.
-    for (const table of ["products", "working_order_lines", "ticket_items"]) {
+    // in the others, such as a course FK pointing at kitchen_stations. SQLite stores no name for a
+    // foreign key, so each is found by table and column.
+    for (const table of ["products", "order_draft_lines", "working_order_lines", "ticket_items"]) {
       const keys = suite.db.all<{ table: string; from: string; to: string }>(
         sql.raw(`select "table", "from", "to" from pragma_foreign_key_list('${table}')`),
       );

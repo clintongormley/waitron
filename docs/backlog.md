@@ -6423,13 +6423,16 @@ bump it when a fixed version is published, and run the certificate suites in tho
   owner questions from W110c, in its PR: whether a bulk Enable is wanted, and whether an
   all-disabled selection's Disable should be greyed out like the toolbar's other buttons rather than
   hidden. W110c's review read #1269 as having added a test for (e); not re-checked, so (e) below may
-  be stale. (b) is done by W110b (#1278). Left open from (b): `GET /management-api/watchers` needs
-  `venue.configure` where the stations and courses lists need only `venue.view` (it did before
-  W110b; the owner's call); and a Delete label can be stale, because the watcher list does not
-  re-read on a watcher's Done marks nor the course list on draft lines, order lines or kitchen
-  items, in which case a confirmed Delete switches the row off instead. The course in-use read
-  searches `order_draft_lines`, `working_order_lines` and `ticket_items`, which have no index on
-  `course_id`; adding one is a migration, left out of W110b. Found along the way:
+  be stale. (b) is done by W110b (#1278). Two of its loose ends are closed by A285:
+  `GET /management-api/watchers` now needs only `venue.view`, like the stations and courses lists
+  (writes still need `venue.configure`), and `products`, `order_draft_lines`, `working_order_lines`
+  and `ticket_items` each have an index on `course_id` (core migration
+  `packages/db/drizzle/0111_course_id_indexes.sql`), which the course in-use read uses. The
+  dashboard's read-only Prep stations screen still shows only its Stations tab, so a view-only
+  manager does not see the watcher list there. Left open by the owner's choice: a Delete label can
+  be stale, because the watcher list does not re-read on a watcher's Done marks nor the course list
+  on draft lines, order lines or kitchen items, in which case a confirmed Delete switches the row
+  off instead. Found along the way:
   `apps/dashboard/src/screens/kitchen-screen.timing.a11y.test.ts` (from #1269) writes
   `look/venue-defaults-*.png` screenshots into `apps/dashboard/src/screens/` on every run, which git
   shows as untracked. (d) Zones and adjustment reasons offer Enable (W110d, #1273); departments

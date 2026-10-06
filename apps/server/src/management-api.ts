@@ -1499,8 +1499,6 @@ export function mountManagementApi(
   );
 
   // ── Zones and tables ──
-  // Unlike the status verbs, the zone, table, station and course verbs do not authorize, so these
-  // routes gate through `withVenueAuth`.
   app.post("/management-api/zones", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1747,7 +1745,7 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
       const includeDisabled = c.req.query("includeDisabled") === "true";
-      const watchers = await withVenueAuth(deps, sessionId, async (tx) => {
+      const watchers = await withVenueReadAuth(deps, sessionId, async (tx) => {
         const rows = await listWatchers(tx, cfg, includeDisabled);
         return includeDisabled ? withInUse(tx, WATCHER_REFERENCES, rows) : rows;
       });

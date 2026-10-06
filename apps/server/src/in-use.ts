@@ -8,6 +8,10 @@ export interface Reference {
   column: SQLiteColumn;
 }
 
+export function referenceQuery(tx: Transaction, { table, column }: Reference, ids: string[]) {
+  return tx.selectDistinct({ id: column }).from(table).where(inArray(column, ids));
+}
+
 /** Which of `ids` any of `references` names: at most one query per reference, however many ids. */
 export async function idsInUse(
   tx: Transaction,
@@ -16,9 +20,9 @@ export async function idsInUse(
 ): Promise<Set<string>> {
   const wanted = [...new Set(ids)];
   const used = new Set<string>();
-  for (const { table, column } of references) {
+  for (const reference of references) {
     if (used.size === wanted.length) break;
-    const rows = await tx.selectDistinct({ id: column }).from(table).where(inArray(column, wanted));
+    const rows = await referenceQuery(tx, reference, wanted);
     for (const row of rows) used.add(row.id as string);
   }
   return used;
