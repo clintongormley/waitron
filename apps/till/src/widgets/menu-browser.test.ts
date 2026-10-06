@@ -1999,6 +1999,164 @@ describe("till-menu-browser", () => {
     });
   });
 
+  describe("a section a diet filter empties keeps its place, greyed (A297)", () => {
+    // Favourites holds Lemonade and Café; the filter hides both. Drinks follows it.
+    const filtered = PRODUCTS.filter((each) => each !== lemonade && each !== cafe);
+
+    function box(button: Button): { x: number; y: number } {
+      const { x, y } = button.getBoundingClientRect();
+      return { x, y };
+    }
+
+    it("stays at its structure position, disabled and saying nothing matches, the next tile not moving", async () => {
+      const { el, host } = await mount({ products: PRODUCTS });
+      await widen(host, 800);
+      const unfilteredDrinks = box(entry(el, "structure", "Drinks (EN)"));
+
+      el.products = filtered;
+      el.unfilteredProducts = PRODUCTS;
+      await el.updateComplete;
+      await widen(host, 800);
+
+      expect(names(entries(el, "structure"))).toEqual([
+        "Favourites (EN)",
+        "Drinks (EN)",
+        "Comida (ES)",
+        "plain-internal",
+        "Agua",
+      ]);
+      const favouritesTile = entry(el, "structure", "Favourites (EN)");
+      expect(favouritesTile.dataset.kind).toBe("section");
+      expect(favouritesTile.disabled).toBe(true);
+      expect(favouritesTile.hasAttribute("data-filtered")).toBe(true);
+      expect(favouritesTile.hasAttribute("data-sold-out")).toBe(false);
+      expect(favouritesTile.querySelector(".kind")!.textContent!.trim()).toBe(
+        "Nothing matches the filter",
+      );
+      expect(box(entry(el, "structure", "Drinks (EN)"))).toEqual(unfilteredDrinks);
+      expect(entry(el, "structure", "Drinks (EN)").hasAttribute("data-filtered")).toBe(false);
+      expect(entry(el, "structure", "Drinks (EN)").disabled).toBe(false);
+    });
+
+    it("does not open when tapped", async () => {
+      const { el } = await mount({ products: filtered, unfilteredProducts: PRODUCTS });
+      await tap(el, entry(el, "structure", "Favourites (EN)"));
+      expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
+      expect(breadcrumb(el)).toBe("");
+      expect(notice(el)).toBeNull();
+    });
+
+    it("says it in the till's language", async () => {
+      setLocale("es-ES");
+      const { el } = await mount({ products: filtered, unfilteredProducts: PRODUCTS });
+      expect(
+        entry(el, "structure", "Favoritos (ES)").querySelector(".kind")!.textContent!.trim(),
+      ).toBe("Nada coincide con el filtro");
+    });
+
+    it("is greyed where the filter hid what the inactive products left", async () => {
+      const { el } = await mount({
+        products: filtered,
+        unfilteredProducts: PRODUCTS.filter((each) => each !== cafe),
+      });
+      expect(entry(el, "structure", "Favourites (EN)").hasAttribute("data-filtered")).toBe(true);
+    });
+
+    it("leaves out a section whose products are all inactive, the next tile moving up, as before", async () => {
+      const { el, host } = await mount({ products: PRODUCTS });
+      await widen(host, 800);
+      const firstPlace = box(entry(el, "structure", "Favourites (EN)"));
+
+      el.products = filtered;
+      el.unfilteredProducts = filtered;
+      await el.updateComplete;
+      await widen(host, 800);
+
+      expect(names(entries(el, "structure"))).toEqual([
+        "Drinks (EN)",
+        "Comida (ES)",
+        "plain-internal",
+        "Agua",
+      ]);
+      expect(box(entry(el, "structure", "Drinks (EN)"))).toEqual(firstPlace);
+      expect(root(el).querySelector("[data-filtered]")).toBeNull();
+    });
+
+    it("leaves out a section whose products are all not sold separately, as before", async () => {
+      const extrasOnly = PRODUCTS.map((each) =>
+        each === lemonade || each === cafe
+          ? { ...each, ordering: "not_sold_separately" as const }
+          : each,
+      );
+      const { el } = await mount({ products: extrasOnly, unfilteredProducts: extrasOnly });
+      expect(names(entries(el, "structure"))).not.toContain("Favourites (EN)");
+      expect(root(el).querySelector("[data-filtered]")).toBeNull();
+    });
+
+    it("keeps a section whose products are all sold out as before: not greyed, and it opens", async () => {
+      // The section itself is pinned without a filter in "keeps a section whose products are all
+      // sold out, in place, with its products greyed".
+      const { el } = await mount({
+        menu: soldOutMenu(),
+        products: PRODUCTS,
+        unfilteredProducts: PRODUCTS,
+      });
+      const soldOut = entry(el, "structure", "Sold out (EN)");
+      expect(soldOut.disabled).toBe(false);
+      expect(soldOut.hasAttribute("data-filtered")).toBe(false);
+      await tap(el, soldOut);
+      expect(breadcrumb(el)).toBe("Home › Sold out (EN)");
+    });
+
+    it("draws a shortcut to such a section as the greyed tile, not a blank", async () => {
+      const { el } = await mount({
+        menu: lunch(withShortcuts([sectionTile("sec-fav"), productTile("water")])),
+        products: filtered,
+        unfilteredProducts: PRODUCTS,
+      });
+      expect(names(entries(el, "shortcuts"))).toEqual(["Favourites (EN)", "Agua"]);
+      expect(root(el).querySelectorAll('[data-region="shortcuts"] .slot')).toHaveLength(0);
+      const shortcut = entry(el, "shortcuts", "Favourites (EN)");
+      expect(shortcut.disabled).toBe(true);
+      expect(shortcut.hasAttribute("data-filtered")).toBe(true);
+    });
+
+    it("greys a nested section the filter empties, in its place inside the open section", async () => {
+      const { el } = await mount({
+        products: PRODUCTS.filter((each) => each !== cana),
+        unfilteredProducts: PRODUCTS,
+      });
+      await tap(el, entry(el, "structure", "Drinks (EN)"));
+      const shown = entries(el, "section");
+      expect(names(shown)).toEqual(["Cola", "Lemonade", "Beer (EN)"]);
+      expect(shown.map((button) => button.hasAttribute("data-filtered"))).toEqual([
+        false,
+        false,
+        true,
+      ]);
+      await tap(el, entry(el, "section", "Beer (EN)"));
+      expect(breadcrumb(el)).toBe("Home › Drinks (EN)");
+    });
+
+    it("still says Not found when the filter empties the section that is open", async () => {
+      const { el } = await mount({ menu: lunch(withShortcuts(COUNTER_TILES)) });
+      await tap(el, entry(el, "shortcuts", "Beer (EN)"));
+      el.products = PRODUCTS.filter((each) => each !== cana);
+      el.unfilteredProducts = PRODUCTS;
+      await el.updateComplete;
+      expect(notice(el)).toBe("Not found");
+      expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
+    });
+
+    it("still hides a product the filter rejects", async () => {
+      const { el } = await mount({
+        products: PRODUCTS.filter((each) => each !== water),
+        unfilteredProducts: PRODUCTS,
+      });
+      expect(names(entries(el, "structure"))).not.toContain("Agua");
+    });
+  });
+
   describe("an open section the menu no longer holds (§9)", () => {
     it("says Not found and returns home when a new menu drops the open section", async () => {
       const { el } = await mount();

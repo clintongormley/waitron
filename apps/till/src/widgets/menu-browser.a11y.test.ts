@@ -184,6 +184,33 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
+  it("home with a plain and a painted section the diet filter empties, greyed between products, has no violations", async () => {
+    const hidden = ["p-cola", "p-cana", "p-burger", "p-cafe"];
+    const { el, host } = await mount(theme, {
+      columns: 3,
+      products: products.filter((each) => !hidden.includes(each.id)),
+      unfilteredProducts: products,
+      menu: {
+        ...menu,
+        structure: { members: [member("jamon"), drinks, member("blue"), red, member("pink")] },
+      },
+    });
+    const greyed = [
+      ...el.shadowRoot!.querySelectorAll<HTMLElement & { disabled: boolean }>(
+        '[data-region="structure"] wt-button[data-filtered]',
+      ),
+    ];
+    expect(greyed.map((each) => each.querySelector(".name")!.textContent!.trim())).toEqual([
+      "Drinks (EN)",
+      "Red (EN)",
+    ]);
+    for (const tile of greyed) {
+      expect(tile.disabled).toBe(true);
+      expect(tile.querySelector(".kind")!.textContent!.trim()).toBe("Nothing matches the filter");
+    }
+    await expectNoA11yViolations(host);
+  });
+
   it("home blanks for empty and undrawable targets have no violations", async () => {
     const { el, host } = await mount(theme);
     el.menu = {

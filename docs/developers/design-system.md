@@ -241,7 +241,9 @@ painted or not, is filled `--wt-color-surface-sunken` with `--wt-color-text` lab
 `wt-button`'s disabled fade, and a painted one keeps its colour only on its left edge, as an inset
 stripe `--wt-space-1` wide edged on the tile's side by a one-pixel `--wt-color-text` line, which
 reaches 3:1 against both the fill and the stripe wherever the stripe alone does not
-([products.md](products.md), _Colour_, has the measurements). Reach for the filled-background idiom only for a colour that is itself the data,
+([products.md](products.md), _Colour_, has the measurements). A section tile a diet filter
+emptied keeps `wt-button`'s disabled fade instead, and reads "Nothing matches the filter" where an
+openable one reads "Section". Reach for the filled-background idiom only for a colour that is itself the data,
 never as a shortcut around a `--wt-color-*` token.
 
 **A menu's Device Home Page, on the till and in the dashboard's preview.** Both draw it from one

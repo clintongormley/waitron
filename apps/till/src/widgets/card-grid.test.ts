@@ -683,10 +683,17 @@ describe("till-card-grid's product-grid card: the menu browser", () => {
     expect(browser().columns).toBe(4);
   });
 
-  it("hides a product the diet lens rejects, and a section it leaves with nothing", async () => {
+  it("hides a product the diet lens rejects, and greys in place a section it leaves with nothing", async () => {
     const { browser } = await mountBrowser({ selectedDiet: "vegan" });
     expect(browser().products).toEqual([salad]);
-    expect(shownNames(browser(), "structure")).toEqual(["Salad"]);
+    expect(browser().unfilteredProducts).toEqual([salad, steak]);
+    expect(shownNames(browser(), "structure")).toEqual(["Salad", "lunch mains"]);
+    const mains = browser().shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      '[data-region="structure"] wt-button[data-kind="section"]',
+    )!;
+    expect(mains.disabled).toBe(true);
+    expect(mains.hasAttribute("data-filtered")).toBe(true);
+    expect(browser().shadowRoot!.textContent).not.toContain("Steak");
   });
 
   it("hands the browser the same products while nothing it reads changes", async () => {
