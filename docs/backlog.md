@@ -1872,7 +1872,7 @@ Left open:
   checked against earlier commits.
 
 **Menu search lists the shown menu first, then each other menu the device is served — DONE (W94,
-#PR, 2026-10-06).** The till's menu search groups matches by menu, the shown one first, each tile
+#1291, 2026-10-06).** The till's menu search groups matches by menu, the shown one first, each tile
 that menu's own offer and price; [design-system.md](developers/design-system.md), _The till's menu
 search_.
 
