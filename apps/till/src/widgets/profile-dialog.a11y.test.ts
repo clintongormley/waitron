@@ -17,6 +17,8 @@ const STATES: [string, Partial<TillProfileDialog>][] = [
   ["a refusal naming no field", { error: { code: "device.payment_in_progress" } }],
   ["an order in progress", { orderOpen: true }],
   ["an unsaved order change", { draftUnsaved: true }],
+  ["an order change refused and replaced", { draftReplaced: true }],
+  ["a station the profile does not list", { error: { code: "station.not_allowed" } }],
   ["a switch out", { busy: true }],
 ];
 
