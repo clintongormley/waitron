@@ -251,3 +251,18 @@ a replacement editor. Busy fields and dismissal are disabled.
 `purchase-form.unsaved.test.ts` and `purchases-screen.unsaved.test.ts` under `apps/dashboard/src/`
 exercise these cases alongside the existing form, screen and accessibility suites. Purchase modal
 protection is implemented; dashboard navigation and page protection remain Task 5/6 work.
+
+### Print-agent rename checkpoint (2026-10-06)
+
+On the W69 branch, agent rename now registers the trimmed submitted name independently of the
+printer forms. Cancel and native Escape retain that name until Discard; Keep returns focus, and
+changing back to the starting name removes the unload warning. Pending writes disable input and
+close controls. Successful writes commit their captured name before list refresh; a delivered
+newer input remains dirty. Replacement and disconnect dispose the prior scope and invalidate its
+question, and a late successful/refused rename cannot close or mark the replacement editor.
+Reopening survives the previous native close report; successful saves finish without waiting on
+that delayed event.
+`apps/dashboard/src/screens/printer-agent.unsaved.test.ts` exercises these paths alongside the
+unchanged printer behavior/accessibility suites. Synthetic beforeunload cancellation checks the
+listener, not the browser's native reload prompt, which remains Task 5. The printer row above is
+still partial: printer naming, connection, calibration and pairing proof remain to be wired.

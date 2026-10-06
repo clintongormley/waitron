@@ -1242,6 +1242,13 @@ equal without rounding; invalid input stays distinct. Successful writes commit b
 and a late successful/refused reply leaves a replacement editor alone. Busy fields and dismissal
 are disabled. Focused cases are in the purchase-form and purchases-screen `*.unsaved.test.ts`
 suites under `apps/dashboard/src/`.
+Print-agent rename now protects the normalized name through Cancel, native Escape and dirty-only
+unload handling. Keep returns focus to the name; Discard closes once. Pending writes disable the
+input and dismissal. A successful rename commits its submitted name before refresh; newer delivered
+input stays dirty, and a departed write cannot close or mark a replacement editor. Disconnect
+removes its scope and outstanding question. Reopening survives an earlier native close report,
+and successful saves finish before that delayed report arrives. Focused cases are in
+`apps/dashboard/src/screens/printer-agent.unsaved.test.ts`, alongside the unchanged printer suites.
 Other audited modal owners and page/navigation protection remain
 to be wired. Keep automatic saves on their existing paths.
 

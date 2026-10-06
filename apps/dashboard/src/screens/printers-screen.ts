@@ -10,6 +10,10 @@ import {
   baseStyles,
   type DataTableColumn,
   type WtModal,
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -557,6 +561,44 @@ export class PrintersScreen extends LitElement {
   @state() private testError: string | null = null;
   @state() private editingPrinter: EditablePrinter | null = null;
   @state() private editingAgent: PrintAgentRow | null = null;
+  #agentScope?: DraftScope<string>;
+  #agentLeave?: LeaveCoordinator;
+  #agentOpening = 0;
+  readonly #beforeAgentClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.submitting &&
+    (await this.#agentLeave!.request({ scopes: [this.#agentScope!.id], reason, proceed() {} })) ===
+      "proceeded";
+
+  #editAgent(agent: PrintAgentRow): void {
+    this.#disposeAgentDraft();
+    this.editingAgent = { ...agent };
+    const modal = this.renderRoot.querySelector<WtModal>("[data-test=edit-agent-modal]");
+    if (modal) modal.open = true;
+    this.#agentLeave = leaveCoordinatorFor(this);
+    this.#agentScope = this.#agentLeave?.register<string>({
+      id: {},
+      current: () => this.editingAgent!.name.trim(),
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (name) => {
+        this.editingAgent = { ...this.editingAgent!, name };
+      },
+    });
+  }
+
+  #finishAgentEdit(opening: number): void {
+    if (opening !== this.#agentOpening) return;
+    this.#disposeAgentDraft();
+    this.editingAgent = null;
+    this.#restoreEditFocus();
+  }
+
+  #disposeAgentDraft(): void {
+    this.#agentOpening++;
+    this.#agentScope?.dispose();
+    this.#agentScope = undefined;
+    this.#agentLeave = undefined;
+  }
   /** Whether the open agent, printer or printer-name form has been submitted since it opened. */
   @state() private formAttempted = false;
   @state() private preview: PrintJobPreview | null = null;
@@ -698,6 +740,8 @@ export class PrintersScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#disposeAgentDraft();
+    this.editingAgent = null;
     const readding = this.#readdingId;
     this.#readdingId = undefined;
     // Not #deactivatePrinter, whose reload would read the lists again for a screen that is gone, and
@@ -1597,7 +1641,7 @@ export class PrintersScreen extends LitElement {
           this.#rememberEditTrigger(event);
           this.formAttempted = false;
           this.errorKey = null;
-          this.editingAgent = { ...agent };
+          this.#editAgent(agent);
         }}
         >${t("action.edit")}</wt-button
       >
@@ -1863,15 +1907,18 @@ export class PrintersScreen extends LitElement {
   #renderEditAgent(): TemplateResult | typeof nothing {
     const agent = this.editingAgent;
     if (!agent) return nothing;
+    const opening = this.#agentOpening;
     const nameError = this.formAttempted && !agent.name.trim() ? t("form.name_required") : "";
     return html`<wt-modal
       size="compact"
       heading=${t("printers.edit_agent")}
       data-test="edit-agent-modal"
       .open=${true}
-      @wt-close=${() => {
-        this.editingAgent = null;
-        this.#restoreEditFocus();
+      .dismissible=${!this.submitting}
+      .beforeClose=${this.#agentScope ? this.#beforeAgentClose : undefined}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.#finishAgentEdit(opening);
       }}
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector("[data-test=save-agent]"))}
     >
@@ -1883,10 +1930,12 @@ export class PrintersScreen extends LitElement {
         .value=${agent.name}
         .invalid=${nameError !== ""}
         .error=${nameError}
+        .disabled=${this.submitting}
         data-test="edit-agent-name"
         @wt-change=${(e: CustomEvent<{ value: string }>) => {
           e.stopPropagation();
           this.editingAgent = { ...agent, name: e.detail.value };
+          this.#agentScope?.changed();
         }}
       ></wt-input>
       <p>${t("printers.agent_host")}: ${agent.host ?? t("printers.not_reported")}</p>
@@ -1897,6 +1946,7 @@ export class PrintersScreen extends LitElement {
       >
         <wt-button
           slot="cancel"
+          .disabled=${this.submitting}
           data-test="cancel-edit-agent"
           @click=${() => void this.#closeModal("edit-agent-modal")}
           >${t("action.cancel")}</wt-button
@@ -1905,7 +1955,7 @@ export class PrintersScreen extends LitElement {
           variant="primary"
           data-test="save-agent"
           ?loading=${this.submitting}
-          ?disabled=${nameError !== ""}
+          ?disabled=${this.submitting || nameError !== ""}
           @click=${() => void this.#saveAgent()}
           >${t("action.save")}</wt-button
         >
@@ -1921,10 +1971,32 @@ export class PrintersScreen extends LitElement {
       this.#focusFirstInvalid("[data-test=edit-agent-modal]");
       return;
     }
-    await this.#submit(async () => {
-      await this.api.updateAgent(agent.id, { name: agent.name.trim() });
-      await this.#closeModal("edit-agent-modal");
-    });
+    if (this.submitting) return;
+    const opening = this.#agentOpening;
+    const scope = this.#agentScope;
+    const submitted = agent.name.trim();
+    const active = () => this.isConnected && opening === this.#agentOpening;
+    this.submitting = true;
+    this.errorKey = null;
+    try {
+      await this.api.updateAgent(agent.id, { name: submitted });
+      if (active()) {
+        scope?.commit(submitted);
+        if (!scope?.isDirty()) {
+          const modal = this.renderRoot.querySelector<WtModal>("[data-test=edit-agent-modal]");
+          if (modal?.open) {
+            modal.closeAfter("saved");
+            await modal.updateComplete;
+            this.#finishAgentEdit(opening);
+          }
+        }
+      }
+      if (this.isConnected) await this.#load();
+    } catch (error) {
+      if (active()) this.errorKey = codeOf(error);
+    } finally {
+      this.submitting = false;
+    }
   }
 
   #openPrinter(p: Printer, event?: Event): void {
@@ -2763,6 +2835,13 @@ export class PrintersScreen extends LitElement {
   async #closeModal(id: string): Promise<void> {
     const modal = this.renderRoot.querySelector<WtModal>(`[data-test="${id}"]`);
     if (!modal?.open) return;
+    if (id === "edit-agent-modal") {
+      if (this.submitting) return;
+      if (this.#agentScope) {
+        await modal.requestClose("cancel");
+        return;
+      }
+    }
     if (id === "new-printer-modal") this.#endScan();
     // Native close restores focus before wt-close removes the draft and modal from the template.
     const closed = new Promise<void>((resolve) =>
