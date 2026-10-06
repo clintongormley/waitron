@@ -1,0 +1,99 @@
+import { afterEach, describe, it } from "vitest";
+import type { MenuDocument } from "../api/client.js";
+import type { DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
+import {
+  cleanupWidgets,
+  documentProduct,
+  documentSection,
+  expectNoA11yViolations,
+  menuDocument,
+  mountWidget,
+} from "./test-helpers.js";
+import "./device-home-preview.js";
+import type { DeviceHomePreview } from "./device-home-preview.js";
+
+afterEach(cleanupWidgets);
+
+const SHORTCUTS: DocumentTile[] = [
+  { kind: "product", productId: "p-lemonade" },
+  { kind: "empty" },
+  { kind: "section", sectionId: "s-drinks" },
+];
+
+/** Drinks › Beer, a dark-painted Lemonade with a photo, a pale-painted Ham, and a plain Water. */
+function lunch(tiles: "colours" | "thumbnails" = "colours"): MenuDocument {
+  const drinks = {
+    ...documentSection("s-drinks", "Drinks", [documentProduct("mi-beer", "p-beer")]),
+    color: "#1f3a5f",
+    image: "drinks.webp",
+  } as const;
+  const document = menuDocument(
+    [
+      drinks,
+      documentProduct("mi-lemonade", "p-lemonade"),
+      documentProduct("mi-ham", "p-ham"),
+      documentProduct("mi-water", "p-water"),
+    ],
+    { "p-beer": "Beer", "p-lemonade": "Lemonade", "p-ham": "Ham", "p-water": "Water" },
+  );
+  Object.assign(document.offers["mi-lemonade"]!, { image: "lemonade.webp", color: "#256bb1" });
+  document.offers["mi-ham"]!.color = "#f5e663";
+  return {
+    ...document,
+    home: {
+      shortcuts: SHORTCUTS,
+      handheld: { ...document.home.handheld, tiles },
+      till: { ...document.home.till, tiles },
+    },
+  };
+}
+
+async function search(el: DeviceHomePreview, text: string): Promise<void> {
+  const input = el
+    .shadowRoot!.querySelector('[data-region="search"] wt-input')!
+    .shadowRoot!.querySelector("input")!;
+  input.value = text;
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+}
+
+describe.each(["light", "dark"] as const)("device home preview (%s)", (theme) => {
+  it.each(["handheld", "till"] as const)("renders %s accessibly", async (device) => {
+    const { host } = await mountWidget<DeviceHomePreview>(
+      "dashboard-device-home-preview",
+      { document: lunch(), device },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders Thumbnails accessibly", async () => {
+    const { host } = await mountWidget<DeviceHomePreview>(
+      "dashboard-device-home-preview",
+      { document: lunch("thumbnails") },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders an open section accessibly", async () => {
+    const { el, host } = await mountWidget<DeviceHomePreview>(
+      "dashboard-device-home-preview",
+      { document: lunch() },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>('[data-region="structure"] wt-button.tile')!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a search with no results accessibly", async () => {
+    const { el, host } = await mountWidget<DeviceHomePreview>(
+      "dashboard-device-home-preview",
+      { document: lunch() },
+      theme,
+    );
+    await search(el, "nothing like this");
+    await expectNoA11yViolations(host);
+  });
+});
