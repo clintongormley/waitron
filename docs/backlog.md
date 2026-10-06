@@ -5493,7 +5493,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Left OPEN by W105, not acted on: (5) done by W105d (#1263; owner's choice (a), 2026-10-05): a kitchen
   screen's Edit dialog keeps the station or watcher it holds after it was switched off or removed,
   offered in its group and marked "(Disabled)" / "(Deshabilitada)" for a station and "(Removed)" /
-  "(Eliminado)" for a watcher, so a rename saves it unchanged; only switched-on ones are offered as
+  "(Eliminado)" for a watcher (since W110b "(Disabled)" / "(Deshabilitado)"), so a rename saves it unchanged; only switched-on ones are offered as
   new choices. The save route accepts the device's own station or watcher unchanged
   (`resolveDeviceBinding`'s `kept`, `apps/server/src/device.ts`) and still refuses a switch to a
   switched-off one; Enable does not pass `kept`, so a returning device must choose a switched-on one.
@@ -8606,15 +8606,7 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   questions from W110c, in its PR: whether a bulk Enable is wanted, and whether that all-disabled
   selection's Disable should be greyed out like the toolbar's other buttons rather than hidden.
   W110c's review read #1269 as having changed (b)'s watcher wording and added a test for (e); not
-  re-checked, so (b) and (e) below may be stale. Left open: (b) A kitchen-screen watcher's **Remove** marks the
-  watcher inactive and drops its printers, its screens then say it was removed, and no watcher list
-  shows it or brings it back (`removeWatcher`, `apps/server/src/watchers.ts`); since W105d the Edit
-  dialog of a kitchen screen that holds it shows it marked "(Removed)", and a save keeps it; that
-  mark (`devices.watcher_removed_mark`) is to follow whatever wording the owner picks here. Remove is
-  neither a delete nor a switch-off; a kitchen course's **Remove** is the same kind of action: it sets `active: false` and
-  keeps the row, and no screen lists it or brings it back (`deactivateCourse`; `listCourses` returns
-  active courses only, `apps/server/src/kitchen.ts`). Both keep
-  "Remove" until the owner decides which they are. (d) Zones and adjustment reasons now offer Enable (W110d,
+  re-checked, so (b) and (e) below may be stale. (b) is done by W110b: a watcher's and a kitchen course's row offers **Delete** when nothing refers to it and **Disable** when something does, and the server decides by the same rule in the one transaction (a watcher is referred to by a device or a watcher's Done mark; a course by a product, a draft line, an order line or a kitchen item — the `WATCHER_REFERENCES` and `COURSE_REFERENCES` lists, held to the database's foreign keys by `apps/server/src/in-use-references.test.ts`, which sees declared keys only). A real delete asks first. Disabled ones are listed after the active ones, on the Prep stations page's Watchers tab and in the course list, with **Enable** (a new `POST /management-api/watchers/:id/reactivate`, refused `watcher.name_taken` when an active watcher has the name; a course through `PATCH /management-api/courses/:id`). A re-enabled watcher keeps its follows but not its printers, which Disable drops. The kitchen screen and the Devices screen say a watcher was disabled, not removed, and the Devices Edit dialog marks a held disabled watcher "(Disabled)"/"(Deshabilitado)" (`devices.watcher_disabled_mark`, which W105d had as "(Removed)"). Left open from (b): `updateCourse` (the course PATCH) does not check the venue (one location today; read, not run). Found along the way: `apps/dashboard/src/screens/kitchen-screen.timing.a11y.test.ts` (from #1269) writes `look/venue-defaults-*.png` screenshots into `apps/dashboard/src/screens/` on every run, which git shows as untracked. (d) Zones and adjustment reasons now offer Enable (W110d,
   #1273): a disabled zone's row in the venue screen's policy tree, and a
   disabled reason's row menu on the reasons screen (through a new
   `POST /management-api/adjustments/reasons/:reasonId/reactivate`). Departments and floor tables

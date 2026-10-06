@@ -2402,7 +2402,7 @@ removing a product from a menu removes that offer.
 
 Something switched off but kept — a product, a variant, an options or extras list, a zone, a
 department, a station, a table, a table status, an adjustment reason, a user, a printer, a print
-agent, a device, a card reader — is switched off with **Disable** (options and extras lists and
+agent, a device, a card reader, and a watcher or a kitchen course that something refers to — is switched off with **Disable** (options and extras lists and
 table statuses are switched back on with an **Active** switch in their form), and where a screen has
 an action that brings it back, that action is **Enable**. Some have no Enable on any screen yet; the backlog entry "One word
 for switched off, kept for the record" in `docs/backlog.md` lists them. Its status reads **Active**
@@ -2412,12 +2412,12 @@ which may delete that row (Remove from this list, Remove image, a passkey). "Res
 
 In Spanish the action is **Deshabilitar** and **Habilitar**, and the status agrees with the noun the
 screen uses: **Activo** or **Deshabilitado** for a producto, departamento, estado, motivo, usuario,
-lector, agente or dispositivo; **Activa** or **Deshabilitada** for a variante, lista, zona,
+lector, agente, dispositivo, punto de seguimiento or curso; **Activa** or **Deshabilitada** for a variante, lista, zona,
 estación, mesa or impresora. "Desactivar", "Reactivar", "Restaurar", "Volver a añadir" and
 "Inactivo" are not used for a record that is kept. A setting turned off (backups, a toggle) is not a record and keeps its own
 words.
 
-Where a screen has both, the action follows what the code does: the products list's bulk action
+Where a screen has both, the action follows what the code does: a watcher's or a kitchen course's row offers Delete when nothing refers to it and Disable when something does, because the server deletes or switches it off by the same rule; the products list's bulk action
 reads Disable while only products are selected (and is not offered when every selected product is
 disabled already) and Delete once a category is in the selection,
 because the category itself is deleted. Products selected directly are disabled; the products
