@@ -69,6 +69,7 @@ const devices: DeviceRow[] = [
     kind: "kds_station",
     stationId: "s1",
     watcherId: null,
+    binding: { name: "Cocina", active: true },
     label: "Pantalla Cocina",
     active: true,
     lastSeenAt: "2026-08-25T14:30:00.000Z",
@@ -87,6 +88,7 @@ const devices: DeviceRow[] = [
     kind: "kds_station",
     stationId: null,
     watcherId: null,
+    binding: null,
     label: "Pase",
     active: false,
     lastSeenAt: null,
@@ -348,6 +350,7 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
         id: "till",
         kind: "till",
         stationId: null,
+        binding: null,
         madeHereStationIds: ["s2"],
       };
       const { el, host } = await mountWidget<DevicesScreen>(

@@ -4,7 +4,14 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { desc, eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { deviceProfiles, devices, ticketItems, withTransaction } from "@waitron/db";
+import {
+  deviceProfiles,
+  devices,
+  kitchenStations,
+  ticketItems,
+  watchers,
+  withTransaction,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { authorizeManager, endDeviceSessions, type Permission } from "@waitron/identity";
 import {
@@ -444,19 +451,41 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             batteryCharging: devices.batteryCharging,
             batteryReportedAt: devices.batteryReportedAt,
             enrolledAt: devices.enrolledAt,
+            stationName: kitchenStations.name,
+            stationActive: kitchenStations.active,
+            watcherName: watchers.name,
+            watcherActive: watchers.active,
           })
           .from(devices)
           .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
+          .leftJoin(kitchenStations, eq(kitchenStations.id, devices.stationId))
+          .leftJoin(watchers, eq(watchers.id, devices.watcherId))
           .orderBy(desc(devices.enrolledAt)),
         madeHere: await listMadeHereStations(tx),
       }));
       return c.json(
-        rows.map(({ formFactor, profileRetiredAt, ...row }) => ({
-          ...row,
-          profileRetired: profileRetiredAt !== null,
-          kind: kindOfFormFactor(formFactor),
-          madeHereStationIds: madeHere.get(row.id) ?? [],
-        })),
+        rows.map(
+          ({
+            formFactor,
+            profileRetiredAt,
+            stationName,
+            stationActive,
+            watcherName,
+            watcherActive,
+            ...row
+          }) => ({
+            ...row,
+            binding:
+              stationName !== null
+                ? { name: stationName, active: stationActive === true }
+                : watcherName !== null
+                  ? { name: watcherName, active: watcherActive === true }
+                  : null,
+            profileRetired: profileRetiredAt !== null,
+            kind: kindOfFormFactor(formFactor),
+            madeHereStationIds: madeHere.get(row.id) ?? [],
+          }),
+        ),
       );
     }),
   );
@@ -507,6 +536,8 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
             deviceProfileId: devices.deviceProfileId,
             receiptPrinterId: devices.receiptPrinterId,
             paymentSlipPrinterId: devices.paymentSlipPrinterId,
+            stationId: devices.stationId,
+            watcherId: devices.watcherId,
           })
           .from(devices)
           .where(ownDeviceById(id));
@@ -532,6 +563,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
           profileId,
           stationId,
           watcherId,
+          kept: { stationId: device.stationId, watcherId: device.watcherId },
         });
         const held = await updateDeviceSettings(
           tx,

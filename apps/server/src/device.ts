@@ -107,6 +107,11 @@ export async function resolveDeviceBinding(
     profileId: string;
     stationId?: string | null;
     watcherId?: string | null;
+    /**
+     * The station and watcher the device already holds: keeping one is accepted even after it was
+     * switched off, so an edit need not re-choose it. Never passed when enabling a device.
+     */
+    kept?: { stationId: string | null; watcherId: string | null };
   },
 ): Promise<{
   stationId: string | null;
@@ -127,11 +132,14 @@ export async function resolveDeviceBinding(
     if (input.stationId == null && input.watcherId == null)
       throw new AppError("device.station_required", {});
     if (input.stationId != null) {
-      await requireLiveStation(tx, cfg, input.stationId);
+      if (input.stationId !== input.kept?.stationId)
+        await requireLiveStation(tx, cfg, input.stationId);
       stationId = input.stationId;
     } else if (input.watcherId != null) {
       const watcher = await readWatcher(tx, cfg, input.watcherId);
-      if (!watcher?.active) throw new AppError("watcher.not_found", { watcherId: input.watcherId });
+      const kept = input.watcherId === input.kept?.watcherId;
+      if (watcher === null || !(watcher.active || kept))
+        throw new AppError("watcher.not_found", { watcherId: input.watcherId });
       watcherId = input.watcherId;
     }
   } else if (input.watcherId != null) {

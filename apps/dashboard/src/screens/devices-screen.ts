@@ -123,6 +123,20 @@ function bindingIds(binding: string): { stationId: string | null; watcherId: str
   };
 }
 
+/** The Shows choice a device holds, by the name the server reports for it. */
+interface HeldBinding {
+  value: string;
+  name: string;
+}
+
+/** The device's stored station or watcher as a Shows choice, whether or not it is switched on. */
+function heldBinding(device: DeviceRow): HeldBinding | null {
+  if (device.binding === null) return null;
+  const value =
+    device.stationId !== null ? `station:${device.stationId}` : `watcher:${device.watcherId}`;
+  return { value, name: device.binding.name };
+}
+
 /**
  * Whether a joining device of this form factor binds a station or watcher: only a `kds` screen does.
  * The server re-derives this, so it only decides whether to show the picker.
@@ -348,6 +362,8 @@ export class DevicesScreen extends LitElement {
     paymentSlipPrinterId: "",
     madeHere: [],
   };
+  /** Edit's Shows offers it even when switched off; a save replaces it with what was saved. */
+  @state() private editHeld: HeldBinding | null = null;
   @state() private editAttempted = false;
   @state() private editRefusal: FieldRefusal = null;
   @state() private editError: string | null = null;
@@ -814,10 +830,11 @@ export class DevicesScreen extends LitElement {
   #openEdit(device: DeviceRow): void {
     const epoch = ++this.#editEpoch;
     this.editing = device;
+    this.editHeld = heldBinding(device);
     this.editForm = {
       name: device.label,
       profileId: device.deviceProfileId ?? "",
-      binding: this.#activeBinding(device),
+      binding: this.editHeld?.value ?? this.#activeBinding(device),
       receiptPrinterId: device.receiptPrinterId ?? "",
       paymentSlipPrinterId: device.paymentSlipPrinterId ?? "",
       madeHere: device.madeHereStationIds,
@@ -955,10 +972,12 @@ export class DevicesScreen extends LitElement {
     this.editSaving = true;
     this.editError = null;
     this.editRefusal = null;
+    const savedBinding = this.#editBindingShown() ? form.binding : "";
+    const picked = this.#bindingOptions().find((option) => option.value === savedBinding);
     const sent = {
       name: form.name.trim(),
       profileId: form.profileId,
-      ...bindingIds(this.#editBindingShown() ? form.binding : ""),
+      ...bindingIds(savedBinding),
       receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
       paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
       ...(this.#editBindingShown() ? {} : { madeHereStationIds: this.#madeHereToSend() }),
@@ -981,6 +1000,8 @@ export class DevicesScreen extends LitElement {
     }
     this.#reloadDevices().catch((error: unknown) => this.#showReadError(error));
     if (epoch !== this.#editEpoch) return;
+    if (savedBinding !== this.editHeld?.value)
+      this.editHeld = picked === undefined ? null : { value: savedBinding, name: picked.label };
     // The reader save below can fail and keep the dialog open, which then edits what was just saved.
     const { name: label, profileId: deviceProfileId, ...rest } = sent;
     this.editing = { ...device, ...rest, label, deviceProfileId };
@@ -1278,6 +1299,7 @@ export class DevicesScreen extends LitElement {
     errors: IdentityErrors,
     on: { name(value: string): void; profile(value: string): void; binding(value: string): void },
     disabled = false,
+    held: HeldBinding | null = null,
   ): TemplateResult {
     return html`<wt-input
         data-test=${`${prefix}-name`}
@@ -1327,7 +1349,7 @@ export class DevicesScreen extends LitElement {
               placeholder=${t("devices.join_pick_binding")}
               searchPlaceholder=${t("categories.combobox_search")}
               noResultsLabel=${t("categories.combobox_no_results")}
-              .options=${this.#bindingOptions()}
+              .options=${this.#bindingOptions(held)}
               .value=${values.binding}
               ?disabled=${disabled}
               .error=${errors.binding}
@@ -1338,23 +1360,42 @@ export class DevicesScreen extends LitElement {
       }`;
   }
 
-  #bindingOptions(): { value: string; label: string; group: string }[] {
-    return [
-      ...this.stations
-        .filter((station) => station.active)
-        .map((station) => ({
-          value: `station:${station.id}`,
-          label: station.name,
+  /** The switched-on stations and watchers, plus `held` in its group, marked, when it is not one. */
+  #bindingOptions(
+    held: HeldBinding | null = null,
+  ): { value: string; label: string; group: string }[] {
+    const stationOptions = this.stations
+      .filter((station) => station.active)
+      .map((station) => ({
+        value: `station:${station.id}`,
+        label: station.name,
+        group: t("devices.stations_group"),
+      }));
+    const watcherOptions = this.watchers
+      .filter((watcher) => watcher.active)
+      .map((watcher) => ({
+        value: `watcher:${watcher.id}`,
+        label: watcher.name,
+        group: t("devices.watchers_group"),
+      }));
+    if (
+      held !== null &&
+      ![...stationOptions, ...watcherOptions].some((o) => o.value === held.value)
+    ) {
+      if (held.value.startsWith("station:"))
+        stationOptions.push({
+          value: held.value,
+          label: `${held.name} (${t("devices.station_disabled_mark")})`,
           group: t("devices.stations_group"),
-        })),
-      ...this.watchers
-        .filter((watcher) => watcher.active)
-        .map((watcher) => ({
-          value: `watcher:${watcher.id}`,
-          label: watcher.name,
+        });
+      else
+        watcherOptions.push({
+          value: held.value,
+          label: `${held.name} (${t("devices.watcher_removed_mark")})`,
           group: t("devices.watchers_group"),
-        })),
-    ];
+        });
+    }
+    return [...stationOptions, ...watcherOptions];
   }
 
   #renderSettingsStep(errors: IdentityErrors): TemplateResult {
@@ -1457,6 +1498,7 @@ export class DevicesScreen extends LitElement {
             binding: (value) => this.#setEdit({ binding: value }, "binding"),
           },
           this.editSaving,
+          this.editHeld,
         )}
         <wt-combobox
           data-test="edit-receipt-printer"

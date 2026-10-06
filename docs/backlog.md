@@ -5475,9 +5475,16 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   smaller than `--wt-tap-min`, under WCAG 2.2 criterion 2.5.8's exception for a target in a
   sentence (`docs/developers/design-system.md`); whether they should take a 44px hit area instead
   is the owner's call.
-  Left OPEN by W105, not acted on: (5) a kitchen screen whose station or watcher was switched off
-  opens with Shows empty, so even a rename asks for a new one; whether to let it keep a switched-off
-  one is the owner's call. (6) done by W105a (#1244): printers and devices both say Disable/Deshabilitar,
+  Left OPEN by W105, not acted on: (5) done by W105d (owner's choice (a), 2026-10-05): a kitchen
+  screen's Edit dialog keeps the station or watcher it holds after it was switched off or removed,
+  offered in its group and marked "(Disabled)" / "(Deshabilitada)" for a station and "(Removed)" /
+  "(Eliminado)" for a watcher, so a rename saves it unchanged; only switched-on ones are offered as
+  new choices. The save route accepts the device's own station or watcher unchanged
+  (`resolveDeviceBinding`'s `kept`, `apps/server/src/device.ts`) and still refuses a switch to a
+  switched-off one; Enable does not pass `kept`, so a returning device must choose a switched-on one.
+  `GET /management-api/devices` reports each row's `binding` (name and whether it is switched on).
+  Still open: the Devices table's Shows column reads "— no station —" for a screen on a switched-off
+  station, because it looks the name up in the switched-on list; `binding.name` could fill it. (6) done by W105a (#1244): printers and devices both say Disable/Deshabilitar,
   status Disabled, and printers' Add again is now Enable; card readers followed in W110 (#1255): Disable/Deshabilitar,
   Enable/Habilitar, Disabled/Deshabilitado, and their Add again/Volver a añadir is now Enable/Habilitar. (7) done by W105e (#1266, 2026-10-05): a
   kitchen screen's Edit dialog hides Made here and its save leaves `madeHereStationIds` out, and the
@@ -8577,9 +8584,11 @@ The two `@grpc/grpc-js` alerts raised the same day were closed by #1028.
   selection's Disable should be greyed out like the toolbar's other buttons rather than hidden.
   W110c's review read #1269 as having changed (b)'s watcher wording and added a test for (e); not
   re-checked, so (b) and (e) below may be stale. Left open: (b) A kitchen-screen watcher's **Remove** marks the
-  watcher inactive and drops its printers, its screens then say it was removed, and nothing lists or
-  brings it back (`removeWatcher`, `apps/server/src/watchers.ts`), so it is neither a delete nor a
-  switch-off; a kitchen course's **Remove** is the same kind of action: it sets `active: false` and
+  watcher inactive and drops its printers, its screens then say it was removed, and no watcher list
+  shows it or brings it back (`removeWatcher`, `apps/server/src/watchers.ts`); since W105d the Edit
+  dialog of a kitchen screen that holds it shows it marked "(Removed)", and a save keeps it; that
+  mark (`devices.watcher_removed_mark`) is to follow whatever wording the owner picks here. Remove is
+  neither a delete nor a switch-off; a kitchen course's **Remove** is the same kind of action: it sets `active: false` and
   keeps the row, and no screen lists it or brings it back (`deactivateCourse`; `listCourses` returns
   active courses only, `apps/server/src/kitchen.ts`). Both keep
   "Remove" until the owner decides which they are. (d) Zones and adjustment reasons now offer Enable (W110d,
