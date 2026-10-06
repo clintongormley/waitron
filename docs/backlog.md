@@ -6688,27 +6688,15 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   editable tree, resolves quick-sale and receipt choices by department with optional zone overrides,
   and keeps today's zone-menu and device-default-zone controls temporarily in that screen. Its
   follow-up A261-2c removes the retired `locations.order_flow` column after a separate rebuild audit.
-  Owner decision, 2026-10-05: retire the legacy `invoice_first` collection-ticket path
-  in A261-2c alongside the column, with a venue reset accepted. That implementation has not
-  landed; the owner approved the exact populated-upgrade reset fixture on 2026-10-06;
-  placement no longer files a deferred invoice, and waiting-order collection no longer selects
-  the retired mode. Issued-bill fixtures explicitly use the existing issuance primitives so
-  correction, collection, permissions and cash-drawer checks retain their assertions. The exact
-  populated-upgrade reset fixture passes locally. Management routes now refuse the retired style,
-  department/zone selectors offer current styles only, and public till boot and placement responses
-  omit retired metadata. Placement retains the simplified-invoice-limit refusal without filing.
-  The offer fixture now sets zone payment timing explicitly and does not read the retired till
-  setting. Issued-bill VAT fixtures retain their amounts and rates through explicit unpaid issuance.
-  The owner approved the handheld/till placement/filing replacement on 2026-10-06.
-  Shared service-mode types now exclude the retired style; boot configuration no longer carries
-  the unused timing field. Issued-bill move and VAT fixtures explicitly issue unpaid invoices,
-  preserving their financial assertions. The three stored service-mode checks also refuse the
-  retired value through a generated venue-service rebuild. The populated-upgrade guard refuses
-  that rebuild at departments; the owner approved its exact reset entry on 2026-10-06.
-  The owner approved the moved-table placement/collection replacement and future checks of
-  that same retirement pattern on 2026-10-06. The moved-table route test now requires no filing
-  at placement and one invoice at collection, retaining the total and single-send assertions.
-  Whole-branch review and CI remain pending.
+  A261-2c retires `locations.order_flow` and the legacy `invoice_first` style throughout
+  placement, collection, management selectors, shared types and stored service contexts.
+  Placement returns the order id/status without invoicing; collection follows the zone's
+  payment timing. Public till boot no longer exposes the retired timing field. Placement
+  retains the simplified-invoice-limit refusal. Issued-bill tests create explicit unpaid
+  invoices and retain financial, permission, source-device and drawer assertions.
+  This change requires a venue reset: core/0104 rebuilds locations and venue-service/0020
+  rebuilds departments and service policies. The owner approved both populated-upgrade
+  reset entries on 2026-10-06. No compatibility or data-preservation path is included.
   The Numbered collection choice applies to `prepay` and `ticket_then_pay` quick sales.
   A261-2f explains the quick-sale-only scope in English and Spanish on the department and
   zone Order number cells and editors. Filled choices use the shared help button; table-tab
