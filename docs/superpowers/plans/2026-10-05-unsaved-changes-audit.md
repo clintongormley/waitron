@@ -3197,3 +3197,45 @@ sign-in choices, starting screen and kitchen lists are staged inputs; `#cancel` 
 its scope. Configuration exemptions, remaining dashboard/till/context/history routes and the
 complete advancing-owner inventory also remain open. Tasks 1/4/5/6 remain partial; W69 is not
 ready for finish-branch or landing. The dependency on W97 is now released.
+
+
+## 2026-10-07 Device profiles checkpoint
+
+The expanded W97 Device profiles owner now registers with the shared leave coordinator. Its
+comparison uses the submitted name trimming, canvas, form factor, inactivity value, capability
+membership, ordered printer preferences, department/zone choices, sign-in roles and person rules,
+starting screen and kitchen membership. The wire's existing omission decisions remain separate.
+Cancel asks before returning to the list; Keep preserves input and focus, and Discard returns to
+the list. Clean, trimmed and reverted values leave directly.
+
+An accepted write commits its submitted comparison before reading the list again. Newer input
+stays in the editor; an accepted create supplies the id for its next Update. A refused write keeps
+the draft. A departed reply does not change a replacement editor, and its completion cannot release
+a replacement write's busy gate. Departed write and refresh refusals also leave a reconnected list's
+message alone; both error cases failed before the result-lifetime check was added. Late create defaults commit only their initialized scope values,
+leaving an earlier typed name dirty. Disconnect clears the local editor and unregisters its scope.
+
+Receipts retained by Lane E under `receipts/w69-profiles-20261007`:
+
+- The corrected first browser run reported 16 failing cases and one passing accepted-save case.
+  The reconnect case separately failed because the replacement Save remained disabled. The final
+  five-suite family reports 180 passing cases, including the unchanged Device profiles behavior
+  and accessibility suites and the Device Edit/Pair draft suites. No existing assertion changed.
+- Eight independent deletions report their intended failures beside a passing list-load control:
+  Cancel coordination, submitted-value commit, departed-write check, busy-gate identity, default
+  baseline commit, admission-role comparison, kitchen-set comparison and departed-error lifetime.
+  The last deletion fails both departed-refusal cases; the others each fail one case.
+  Restoring the final candidate reports 26 owner cases
+  passing. The initial commit-deletion run also broke its changed-name save control; that run is
+  not counted as an independent control. The final controlled runs use the unchanged list case.
+- Eight native-input/Cancel/Keep/Discard flows cover EN/ES, light/dark and measured 390/1280
+  viewports. Sixteen scoped axe scans pass; sixteen captures were inspected. These are the real
+  Device profiles screen and shared warning with a synthetic API, without DashboardApp or server
+  persistence. The first visual attempt was refused by Vite's screenshot path check and is not
+  counted; the corrected run saves within the disposable candidate and copies its captures out.
+- The focused root suites report 2112 passes. Dashboard typechecking, focused source lint,
+  formatting and diff checks pass. Full current-head CI and whole-branch review have not run.
+
+This completes the Device profiles owner stage. Configuration exemptions, remaining actual
+DashboardApp/till/context/sidebar/tab/breadcrumb/history routes and the advancing-owner audit
+remain open. Tasks 1/4/5/6 remain partial; W69 is not ready for finish-branch or landing.

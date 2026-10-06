@@ -1596,6 +1596,15 @@ before refresh, while newer delivered input remains dirty. Disconnect clears the
 pending questions; departed replies and controls leave replacement forms alone. Provider checks
 remain direct-close confirmations. Focused cases are in
 `apps/dashboard/src/screens/payment-attestation.unsaved.test.ts`. Other modal owners remain pending.
+Device profiles now protect the staged name, canvas, form factor, inactivity, capabilities,
+ordered printer preferences, department/zone choices, sign-in rules, starting screen and kitchen
+choices. Cancel offers Keep editing or Discard; submitted-value reverts close directly. A successful
+write commits its submitted snapshot before refresh, retaining newer input. A create with newer
+input becomes an edit of its accepted id. Disconnect releases the departed editor and prevents
+its late reply from replacing a reopened draft or releasing another save. Focused cases are in
+`apps/dashboard/src/screens/device-profiles-screen.unsaved.test.ts`; the dated W69 audit records
+browser, deletion-control and visual receipts. Configuration exemptions and the complete shell
+navigation/context/history matrix remain pending; W69 remains in progress.
 Printer detail name/connection are page owners for the remaining page/navigation work. Other audited
 modal owners also remain to be wired. Keep automatic saves on their existing paths.
 Department Add/Edit, zone Add/configuration, department hours and menu-assignment dialogs now

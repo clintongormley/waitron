@@ -1,7 +1,16 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, formMessage, formMessageStyles } from "@waitron/ui";
+import {
+  submitOnEnter,
+  baseStyles,
+  formMessage,
+  formMessageStyles,
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+} from "@waitron/ui";
+import { sameValue } from "../widgets/product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
@@ -49,6 +58,23 @@ import type {
 } from "../api/client.js";
 
 type PrinterListKey = keyof ProfilePrinterLists;
+
+interface ProfileDraft {
+  name: string;
+  canvasId: string | null;
+  capabilities: CapabilityFlag[];
+  formFactor: FormFactor;
+  inactivityMinutes: number | null;
+  printerLists: ProfilePrinterLists;
+  kitchenLists: ProfileKitchenLists;
+  departmentId: string;
+  everyZone: boolean;
+  zoneIds: string[];
+  startingZoneId: string;
+  roles: PersonRole[];
+  exceptions: PersonException[];
+  startingScreen: string | null;
+}
 
 const PRINTER_LISTS = [
   {
@@ -383,6 +409,77 @@ export class DeviceProfilesScreen extends LitElement {
 
   @state() private deleteTarget: DeviceProfile | null = null;
 
+  #draftScope?: DraftScope<ProfileDraft>;
+  #leave?: LeaveCoordinator;
+  #saveTurn = 0;
+
+  #draftValue(): ProfileDraft {
+    const ordering = this.#ordering();
+    return {
+      name: this.draftName.trim(),
+      canvasId: this.draftCanvasId,
+      capabilities: this.draftCapabilities
+        .filter((flag) => ordering || sharedDisplayMay(flag))
+        .sort(),
+      formFactor: this.draftFormFactor,
+      inactivityMinutes: ordering ? this.draftInactivityMinutes : null,
+      printerLists: {
+        receiptPrinterIds: [...this.draftPrinterLists.receiptPrinterIds],
+        paymentSlipPrinterIds: [...this.draftPrinterLists.paymentSlipPrinterIds],
+      },
+      kitchenLists: ordering
+        ? { stationIds: [], watcherIds: [] }
+        : {
+            stationIds: [...this.draftKitchenLists.stationIds].sort(),
+            watcherIds: [...this.draftKitchenLists.watcherIds].sort(),
+          },
+      departmentId: ordering ? this.draftDepartmentId : "",
+      everyZone: ordering ? this.draftEveryZone : true,
+      zoneIds: ordering && !this.draftEveryZone ? [...this.draftZoneIds].sort() : [],
+      startingZoneId: ordering ? this.draftStartingZoneId : "",
+      roles: ordering ? [...this.draftRoles].sort() : [],
+      exceptions: ordering
+        ? this.draftExceptions
+            .map((entry) => ({ ...entry }))
+            .sort((a, b) => a.personId.localeCompare(b.personId))
+        : [],
+      startingScreen: ordering ? this.draftStartingScreen : null,
+    };
+  }
+
+  #registerDraft(): void {
+    this.#draftScope?.dispose();
+    this.#leave = leaveCoordinatorFor(this);
+    this.#draftScope = this.#leave?.register<ProfileDraft>({
+      id: this,
+      current: () => this.#draftValue(),
+      snapshot: (value) => structuredClone(value),
+      equal: sameValue,
+      restore: (value) => {
+        this.draftName = value.name;
+        this.draftCanvasId = value.canvasId;
+        this.draftCapabilities = [...value.capabilities];
+        this.draftFormFactor = value.formFactor;
+        this.draftInactivityMinutes = value.inactivityMinutes;
+        this.draftPrinterLists = structuredClone(value.printerLists);
+        this.draftKitchenLists = structuredClone(value.kitchenLists);
+        this.draftDepartmentId = value.departmentId;
+        this.draftEveryZone = value.everyZone;
+        this.draftZoneIds = [...value.zoneIds];
+        this.draftStartingZoneId = value.startingZoneId;
+        this.draftRoles = [...value.roles];
+        this.draftExceptions = value.exceptions.map((entry) => ({ ...entry }));
+        this.draftStartingScreen = value.startingScreen;
+      },
+    });
+  }
+
+  override disconnectedCallback(): void {
+    this.#clearDraft();
+    this.mode = "list";
+    super.disconnectedCallback();
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
@@ -582,6 +679,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.draftStartingZoneId = "";
     this.#settleStartingZone();
     this.#clearRefusal("department", "zones", "startingZone");
+    this.#draftScope?.changed();
   }
 
   #onEveryZone(event: CustomEvent<{ checked: boolean }>): void {
@@ -593,6 +691,7 @@ export class DeviceProfilesScreen extends LitElement {
       : this.#departmentZones(this.draftDepartmentId).map((zone) => zone.id);
     this.#settleStartingZone();
     this.#clearRefusal("zones", "startingZone");
+    this.#draftScope?.changed();
   }
 
   #onZone(event: CustomEvent<{ checked: boolean }>, zoneId: string): void {
@@ -606,6 +705,7 @@ export class DeviceProfilesScreen extends LitElement {
     );
     this.#settleStartingZone();
     this.#clearRefusal("zones", "startingZone");
+    this.#draftScope?.changed();
   }
 
   #onStartingZone(event: CustomEvent<{ value: string }>): void {
@@ -613,6 +713,7 @@ export class DeviceProfilesScreen extends LitElement {
     this.#scopeEdited = true;
     this.draftStartingZoneId = event.detail.value;
     this.#clearRefusal("startingZone");
+    this.#draftScope?.changed();
   }
 
   // ── Who can sign in ──────────────────────────────────────────────────────────────────────────────
@@ -621,6 +722,7 @@ export class DeviceProfilesScreen extends LitElement {
     event.stopPropagation();
     this.draftRoles = toggleMembership(this.draftRoles, ROLES, role, event.detail.checked);
     this.#clearRefusal("roles");
+    this.#draftScope?.changed();
   }
 
   #onPersonRule(event: CustomEvent<{ value: string }>, personId: string): void {
@@ -637,6 +739,7 @@ export class DeviceProfilesScreen extends LitElement {
     }
     this.draftExceptions = exceptions;
     this.#clearRefusal("people");
+    this.#draftScope?.changed();
   }
 
   #ruleOf(personId: string): "" | "allow" | "deny" {
@@ -656,6 +759,11 @@ export class DeviceProfilesScreen extends LitElement {
   // ── New / Edit ─────────────────────────────────────────────────────────────────────────────────
 
   #clearDraft(): void {
+    this.#saveTurn++;
+    this.saving = false;
+    this.#draftScope?.dispose();
+    this.#draftScope = undefined;
+    this.#leave = undefined;
     this.editingId = null;
     this.draftName = "";
     this.draftCanvasId = null;
@@ -689,6 +797,9 @@ export class DeviceProfilesScreen extends LitElement {
     this.#clearDraft();
     this.#showError(null);
     this.mode = "editor";
+    this.#registerDraft();
+    const baseline = this.#draftValue();
+    const scope = this.#draftScope;
     const opened = this.#opened;
     this.api.getProfileScopeChoices().then(
       (choices) => {
@@ -699,6 +810,11 @@ export class DeviceProfilesScreen extends LitElement {
         if (departments.length !== 1) return;
         this.draftDepartmentId = departments[0]!.id;
         this.#settleStartingZone();
+        scope?.commit({
+          ...baseline,
+          departmentId: this.draftDepartmentId,
+          startingZoneId: this.draftStartingZoneId,
+        });
       },
       (error: unknown) => {
         if (opened === this.#opened) this.#showReadError(error);
@@ -751,6 +867,7 @@ export class DeviceProfilesScreen extends LitElement {
       this.draftExceptions = [...profile.personExceptions];
       this.draftStartingScreen = profile.startingScreen;
       this.mode = "editor";
+      this.#registerDraft();
     } catch (error) {
       if (opened === this.#opened) this.#showReadError(error);
     }
@@ -760,6 +877,7 @@ export class DeviceProfilesScreen extends LitElement {
     event.stopPropagation();
     this.draftName = event.detail.value;
     this.#clearRefusal("name");
+    this.#draftScope?.changed();
   }
 
   #onCanvas(event: CustomEvent<{ value: string }>): void {
@@ -767,12 +885,14 @@ export class DeviceProfilesScreen extends LitElement {
     const value = event.detail.value;
     this.draftCanvasId = value === "" ? null : value;
     this.#clearRefusal("canvas");
+    this.#draftScope?.changed();
   }
 
   #onFormFactor(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.draftFormFactor = event.detail.value as FormFactor;
     this.#clearRefusal("actions");
+    this.#draftScope?.changed();
   }
 
   #onInactivity(event: CustomEvent<{ value: string }>): void {
@@ -781,6 +901,7 @@ export class DeviceProfilesScreen extends LitElement {
     const minutes = Number(raw);
     this.draftInactivityMinutes = raw === "" || Number.isNaN(minutes) ? null : minutes;
     this.#clearRefusal("inactivity");
+    this.#draftScope?.changed();
   }
 
   /** Switching off the screen a profile starts on starts it on the first tab instead. */
@@ -794,12 +915,14 @@ export class DeviceProfilesScreen extends LitElement {
     ) as CapabilityFlag[];
     if (!event.detail.checked && this.draftStartingScreen === flag) this.draftStartingScreen = null;
     this.#clearRefusal("actions", "startingScreen");
+    this.#draftScope?.changed();
   }
 
   #onStartingScreen(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.draftStartingScreen = event.detail.value === "" ? null : event.detail.value;
     this.#clearRefusal("startingScreen");
+    this.#draftScope?.changed();
   }
 
   /** Appended when switched on: the order decides which printer a joining device starts on. */
@@ -814,6 +937,7 @@ export class DeviceProfilesScreen extends LitElement {
       ...this.draftPrinterLists,
       [key]: event.detail.checked ? [...others, printerId] : others,
     };
+    this.#draftScope?.changed();
   }
 
   #onKitchenToggle(
@@ -828,6 +952,7 @@ export class DeviceProfilesScreen extends LitElement {
       [key]: event.detail.checked ? [...others, id] : others,
     };
     this.#clearRefusal(key);
+    this.#draftScope?.changed();
   }
 
   /**
@@ -891,15 +1016,20 @@ export class DeviceProfilesScreen extends LitElement {
     const to = list.indexOf(neighbour);
     [list[from], list[to]] = [neighbour, printerId];
     this.draftPrinterLists = { ...this.draftPrinterLists, [key]: list };
+    this.#draftScope?.changed();
   }
 
-  #cancel(): void {
-    this.#clearDraft();
-    this.mode = "list";
-    this.#showError(null);
+  async #cancel(): Promise<void> {
+    if (this.saving) return;
+    const proceed = () => {
+      this.#clearDraft();
+      this.mode = "list";
+      this.#showError(null);
+    };
+    if (this.#draftScope) await this.#leave!.request({ scopes: [this], reason: "cancel", proceed });
+    else proceed();
   }
 
-  /** The server accepts `""` as a name, so an empty name is refused here. */
   async #save(): Promise<void> {
     if (this.saving) return;
     this.attempted = true;
@@ -926,35 +1056,58 @@ export class DeviceProfilesScreen extends LitElement {
     const printerLists = this.draftPrinterLists;
     const extras = this.#extrasToSend(formFactor);
     const extrasArg = extras === undefined ? [] : ([extras] as const);
+    const scope = this.#draftScope;
+    const submitted = this.#draftValue();
+    const opened = this.#opened;
+    const active = () => this.isConnected && opened === this.#opened;
+    const turn = ++this.#saveTurn;
+    let resultTurn = turn;
     this.saving = true;
     let written = false;
     try {
-      if (id !== null)
-        await this.api.updateDeviceProfile(
-          id,
-          name,
-          canvasId,
-          capabilities,
-          formFactor,
-          inactivityTimeoutSeconds,
-          printerLists,
-          ...extrasArg,
-        );
-      else
-        await this.api.createDeviceProfile(
-          name,
-          canvasId,
-          capabilities,
-          formFactor,
-          inactivityTimeoutSeconds,
-          printerLists,
-          ...extrasArg,
-        );
+      const saved =
+        id !== null
+          ? await this.api.updateDeviceProfile(
+              id,
+              name,
+              canvasId,
+              capabilities,
+              formFactor,
+              inactivityTimeoutSeconds,
+              printerLists,
+              ...extrasArg,
+            )
+          : await this.api.createDeviceProfile(
+              name,
+              canvasId,
+              capabilities,
+              formFactor,
+              inactivityTimeoutSeconds,
+              printerLists,
+              ...extrasArg,
+            );
       written = true;
-      this.#clearDraft();
-      this.mode = "list";
-      this.profiles = await this.api.listDeviceProfiles();
+      if (!active()) return;
+      scope?.commit(submitted);
+      if (scope?.isDirty()) {
+        this.editingId = saved.id;
+        this.#loaded = saved;
+        this.#loadedKitchenLists = structuredClone(submitted.kitchenLists);
+      } else {
+        this.#clearDraft();
+        this.mode = "list";
+      }
+      resultTurn = this.#saveTurn;
+      const profiles = await this.api.listDeviceProfiles();
+      if (this.isConnected && resultTurn === this.#saveTurn && (this.mode === "list" || active()))
+        this.profiles = profiles;
     } catch (error) {
+      if (
+        !this.isConnected ||
+        resultTurn !== this.#saveTurn ||
+        (this.mode === "editor" && !active())
+      )
+        return;
       if (written) this.#showReadError(error);
       else {
         const refused = this.#refusedField(error);
@@ -965,7 +1118,7 @@ export class DeviceProfilesScreen extends LitElement {
         }
       }
     } finally {
-      this.saving = false;
+      if (turn === this.#saveTurn) this.saving = false;
     }
   }
 
@@ -1613,7 +1766,8 @@ export class DeviceProfilesScreen extends LitElement {
             slot="cancel"
             variant="secondary"
             data-test="profile-cancel"
-            @click=${() => this.#cancel()}
+            ?disabled=${this.saving}
+            @click=${() => void this.#cancel()}
             >${t("device_profiles.cancel")}</wt-button
           >
           <wt-button
