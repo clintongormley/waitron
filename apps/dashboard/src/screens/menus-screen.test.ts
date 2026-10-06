@@ -706,6 +706,16 @@ function rowOf(el: MenusScreen, key: string): HTMLElement | null {
   return inStructure(el, `tr[data-row-key="${CSS.escape(key)}"]`);
 }
 
+function reorderToggle(el: MenusScreen): HTMLButtonElement {
+  return q<HTMLButtonElement>(el, '[data-test="reorder"]')!;
+}
+
+/** Turns the Structure tree's Reorder mode on or off, as a click on its toggle does. */
+async function pressReorder(el: MenusScreen): Promise<void> {
+  reorderToggle(el).click();
+  await settleStructure(el);
+}
+
 /** Opens or closes a section by its row, as a click on it does. */
 async function toggleRow(el: MenusScreen, key: string): Promise<void> {
   rowOf(el, key)!.querySelector<HTMLElement>(".row-activate")!.click();
@@ -2171,6 +2181,7 @@ it("edits section details and deletes its owned descendants while keeping includ
 it("ArrowUp and ArrowDown reorder the list being edited, and focus stays on the moved row", async () => {
   const client = api();
   const el = await mountLunch(client);
+  await pressReorder(el);
   const list = structureRows(el);
   const handle = () =>
     list.shadowRoot.querySelector<HTMLButtonElement>('[data-test="drag-m-burger"]')!;
@@ -3343,6 +3354,7 @@ describe("the Structure tree", () => {
     expect(client.removeSectionMember).toHaveBeenCalledExactlyOnceWith("s-fav", "m-fav-lemonade");
 
     await settleStructure(el);
+    await pressReorder(el);
     const grip = inStructure<HTMLButtonElement>(el, '[data-test="drag-m-burger"]')!;
     grip.focus();
     grip.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
@@ -3374,6 +3386,7 @@ describe("the Structure tree", () => {
     await toggleRow(el, "m-drinks");
     await toggleRow(el, "m-fav");
     await toggleRow(el, "m-fav/m-fav-drinks");
+    await pressReorder(el);
     const grip = inStructure<HTMLButtonElement>(el, '[data-test="drag-m-drinks/m-lager"]')!;
     grip.focus();
     grip.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
@@ -3407,6 +3420,120 @@ describe("the Structure tree", () => {
     );
   });
 
+  describe("Reorder mode", () => {
+    beforeEach(() => {
+      const before = currentLocale();
+      setLocale("en");
+      onTestFinished(() => setLocale(before));
+    });
+
+    const grips = (el: MenusScreen) => allInStructure(el, '[data-test^="drag-"]');
+
+    it("starts with no grip on any row and the Reorder toggle not pressed", async () => {
+      const el = await mountLunch();
+      await toggleRow(el, "m-drinks");
+      expect(grips(el)).toEqual([]);
+      expect(reorderToggle(el).getAttribute("aria-pressed")).toBe("false");
+      expect(q(el, '[data-test="reorder-done"]')).toBeNull();
+    });
+
+    it("offers Reorder as an icon button with a tooltip; pressed, every owned row has a grip, and an arrow on one moves it", async () => {
+      const client = api();
+      const el = await mountLunch(client);
+      await toggleRow(el, "m-drinks");
+      const toggle = reorderToggle(el);
+      expect(toggle.localName).toBe("button");
+      expect(toggle.getAttribute("type")).toBe("button");
+      expect(toggle.getAttribute("slot")).toBe("toolbar-start");
+      expect(toggle.getAttribute("aria-label")).toBe("Reorder");
+      const tooltip = toggle.querySelector<HTMLElement>(".icon-tooltip")!;
+      expect(tooltip.textContent!.trim()).toBe("Reorder");
+      expect(tooltip.getAttribute("aria-hidden")).toBe("true");
+      // The shared icon-button look, so the styles reached this screen: a native button's border
+      // is 2px outset, and an unstyled tooltip is always shown.
+      expect(getComputedStyle(toggle).borderTopStyle).toBe("solid");
+      expect(getComputedStyle(toggle).borderTopWidth).toBe("1px");
+      expect(getComputedStyle(tooltip).display).toBe("none");
+      expect(toggle.assignedSlot).not.toBeNull();
+      expect(toggle.getBoundingClientRect().width).toBeGreaterThan(0);
+
+      await pressReorder(el);
+      expect(toggle.getAttribute("aria-pressed")).toBe("true");
+      const owned = allInStructure(el, 'tbody tr[data-row-key^="m-"]');
+      expect(owned.map((tr) => tr.dataset.rowKey)).toEqual([
+        "m-burger",
+        "m-drinks",
+        "m-drinks/m-lager",
+        "m-drinks/m-beer",
+        "m-drinks/m-lemonade",
+        "m-fav",
+      ]);
+      for (const tr of owned)
+        expect(tr.querySelector('[part~="drag-grip"]'), tr.dataset.rowKey).not.toBeNull();
+
+      const handle = inStructure<HTMLButtonElement>(el, '[data-test="drag-m-burger"]')!;
+      handle.focus();
+      await userEvent.keyboard("{ArrowDown}");
+      await vi.waitFor(() =>
+        expect(client.moveSectionMember).toHaveBeenCalledWith("root-lunch", "m-burger", 1),
+      );
+      await settleStructure(el);
+      expect(structureRows(el).shadowRoot.activeElement).toBe(
+        inStructure(el, '[data-test="drag-m-burger"]'),
+      );
+    });
+
+    it("names Reorder in Spanish", async () => {
+      setLocale("es");
+      const el = await mountLunch();
+      expect(reorderToggle(el).getAttribute("aria-label")).toBe("Reordenar");
+      expect(reorderToggle(el).querySelector(".icon-tooltip")!.textContent!.trim()).toBe(
+        "Reordenar",
+      );
+      await pressReorder(el);
+      expect(text(q(el, '[data-test="reorder-done"]'))).toBe("Listo");
+    });
+
+    it("leaves the mode by Done, handing focus back to the toggle, and by a second press", async () => {
+      const el = await mountLunch();
+      await pressReorder(el);
+      const done = q(el, '[data-test="reorder-done"]')!;
+      expect(done.localName).toBe("wt-button");
+      expect(done.getAttribute("slot")).toBe("toolbar-end");
+      expect(done.assignedSlot).not.toBeNull();
+      expect(done.getBoundingClientRect().width).toBeGreaterThan(0);
+      expect(text(done)).toBe("Done");
+      expect(grips(el).length).toBeGreaterThan(0);
+      done.focus();
+      await userEvent.keyboard("{Enter}");
+      await settleStructure(el);
+      expect(grips(el)).toEqual([]);
+      expect(q(el, '[data-test="reorder-done"]')).toBeNull();
+      expect(reorderToggle(el).getAttribute("aria-pressed")).toBe("false");
+      expect(el.shadowRoot!.activeElement).toBe(reorderToggle(el));
+
+      await pressReorder(el);
+      expect(grips(el).length).toBeGreaterThan(0);
+      await pressReorder(el);
+      expect(grips(el)).toEqual([]);
+      expect(q(el, '[data-test="reorder-done"]')).toBeNull();
+    });
+
+    it("turns the mode off when another menu is opened", async () => {
+      const el = await mountLunch();
+      await pressReorder(el);
+      expect(structure(el).reordering).toBe(true);
+      history.pushState(null, "", DINNER_PATH);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
+      await vi.waitFor(() => expect(structure(el)).not.toBeNull());
+      await settleStructure(el);
+      expect(structure(el).reordering).toBe(false);
+      expect(reorderToggle(el).getAttribute("aria-pressed")).toBe("false");
+      expect(q(el, '[data-test="reorder-done"]')).toBeNull();
+    });
+  });
+
   describe("an included menu", () => {
     async function mountWithWines(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
       const client = includeClient({
@@ -3418,6 +3545,7 @@ describe("the Structure tree", () => {
 
     it("opens for browsing, and offers no ⋮ or grip on anything inside it", async () => {
       const { el } = await mountWithWines();
+      await pressReorder(el);
       await toggleRow(el, "included-wine");
       expect(childKeys(el, "included-wine")).toEqual([
         "included-wine/wine-red",
@@ -3687,6 +3815,7 @@ describe("the Structure tree", () => {
         removeSectionMember: vi.fn(() => held.promise),
       });
       const el = await mountLunch(client);
+      await pressReorder(el);
       await toggleRow(el, "m-drinks");
       if (write === "an add") {
         await rowAction(el, "m-drinks", "open-add-products");

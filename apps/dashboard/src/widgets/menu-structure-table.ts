@@ -126,8 +126,11 @@ export class MenuStructureTable extends LitElement {
         width: var(--wt-tap-min);
         margin-inline-end: var(--wt-space-3);
       }
-      /* The table's arrow, the grip and the folder come before the menu's own name. */
+      /* The table's arrow, the grip while reordering, and the folder come before the menu's name. */
       wt-data-table::part(tree-heading) {
+        margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-3));
+      }
+      :host([reordering]) wt-data-table::part(tree-heading) {
         margin-inline-start: calc(
           var(--tree-arrow-width) + 2 * var(--wt-tap-min) + var(--wt-space-3)
         );
@@ -255,6 +258,9 @@ export class MenuStructureTable extends LitElement {
   })
   current: string[] = [];
   @property({ type: Boolean }) busy = false;
+  /** Whether rows carry grips and can be moved. On by default, so a mount that wants a tree
+   * without them passes `.reordering=${false}`. */
+  @property({ type: Boolean, reflect: true }) reordering = true;
   /** Null draws no Device Home Page row. */
   @property({ attribute: false }) home: MenuHome | null = null;
 
@@ -285,6 +291,11 @@ export class MenuStructureTable extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("reordering") && !this.reordering && this.#drag) {
+      const active = this.#drag.active;
+      this.#finishDrag();
+      if (active) blockClickAfterDrag(true);
+    }
     if (changed.has("products")) {
       this.#productById = new Map(this.products.map((product) => [product.id, product]));
       this.#productNames = new Map(this.products.map(({ id, name }) => [id, name]));
@@ -663,6 +674,7 @@ export class MenuStructureTable extends LitElement {
   }
 
   #grip(row: MovableRow) {
+    if (!this.reordering) return nothing;
     if (row.kind === "member" && row.readOnly) return gripSpace;
     return html`<button
       part="drag-grip"
@@ -680,7 +692,7 @@ export class MenuStructureTable extends LitElement {
   /** The Device Home Page's and the menu's rows: no grip, the folder, and a note when empty. */
   #topCell(row: HomeRow | RootRow, empty: string | null, emptyTest: string) {
     return html`<span part="folder-cell"
-      >${gripSpace}${folderIcon}<span part="name-stack"
+      >${this.reordering ? gripSpace : nothing}${folderIcon}<span part="name-stack"
         >${this.#nameSpan(row)}${
           empty === null ? nothing : html`<span part="note" data-test=${emptyTest}>${empty}</span>`
         }</span
@@ -900,6 +912,8 @@ export class MenuStructureTable extends LitElement {
         .rowKey=${(row: Row) => row.key}
         .rowParent=${(row: Row) => row.parentKey}
         @wt-expand-change=${this.#expandChange}
+        ><slot name="toolbar-start" slot="toolbar-start"></slot
+        ><slot name="toolbar-end" slot="toolbar-end"></slot
       ></wt-data-table>
       <div role="status" aria-live="polite" class="reorder-status">${this.announcement}</div>
       ${dragGhost(this.ghost)}`;
