@@ -6568,9 +6568,19 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   The sibling audit found no such translation in department create/rename. Outside this zone
   item, `apps/server/src/tables.ts` still translates every unique refusal in `createTable`,
   `updateTable`, `createStatus` and `updateStatus` to a label collision; a separate
-  follow-up should identify each label key and force another-key clash. Old configuration-bundle
-  import was not
-  verified in this review and remains outside the pre-live compatibility policy.
+  follow-up should identify each label key and force another-key clash.
+  A261-2e runs an encrypted export captured from `c47122f55^` through the current setup import
+  route. It answers `setup.request_invalid` (`module:core`); every database table's rows match
+  their before-state and the staging directory remains empty. Setup now tells you in English and
+  Spanish to export again from a box running the current version for a module-version or
+  module-set mismatch. A committed fixture retains the original export bytes; this adds
+  no compatibility converter or migration.
+  A261-2e's review also found that `declarations` in
+  `apps/server/src/configuration-transfer.ts` uses `module:<name>` when a local module lacks
+  its transfer declaration. Reachability with the installed module list is unverified;
+  distinguish that local build defect from an incompatible artifact if it can reach setup.
+  The database-row comparison observes the request's outcome; the staging-files assertion
+  is the check that failed when validation was bypassed in the disposable review copy.
   [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED;
   profile access and transfers queued in lane D, equipment queued in lane E; not implemented.**

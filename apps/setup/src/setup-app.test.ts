@@ -2614,6 +2614,67 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   it.each([
     [
       "en-GB",
+      "This export is not compatible with this Waitron version. Export it again from a box running the current version, then load the new export.",
+    ],
+    [
+      "es-ES",
+      "Esta exportación no es compatible con esta versión de Waitron. Vuelve a exportar desde un equipo con la versión actual y carga la nueva exportación.",
+    ],
+  ] as const)(
+    "explains how to replace an incompatible configuration export (%s)",
+    async (locale, sentence) => {
+      try {
+        for (const field of ["module:core", "modules"]) {
+          const el = await mountSetupApp(
+            stubApi({
+              stageConfiguration: vi.fn().mockRejectedValue({
+                code: "setup.request_invalid",
+                params: { field },
+                status: 400,
+              }),
+            }),
+          );
+          setLocale(locale);
+          configurationRequest(
+            el,
+            new File(["encrypted"], "prepared.waitron-config"),
+            "passphrase",
+          );
+          await flush(el);
+          expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
+          expect(readDraft(el).configurationImport).toBeUndefined();
+          expect(
+            el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]"),
+          ).toBeNull();
+        }
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+
+  it.each([
+    ["setup.request_invalid", "artifact"],
+    ["setup.request_invalid", "module:"],
+    ["setup.request_invalid", 12],
+    ["setup.request_invalid", undefined],
+    ["backup.artifact_invalid", "module:core"],
+  ])("keeps other configuration refusals generic (%s, %s)", async (code, field) => {
+    const el = await mountSetupApp(
+      stubApi({
+        stageConfiguration: vi.fn().mockRejectedValue({ code, params: { field }, status: 400 }),
+      }),
+    );
+    configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+    await flush(el);
+    expect(await bottomOf(await screenHost(el, "live-source"))).toBe(
+      "The configuration export could not be opened. Check the file and passphrase.",
+    );
+  });
+
+  it.each([
+    [
+      "en-GB",
       "category.name_taken",
       "The export has two categories named “Bebidas” in the same place. Rename one in your prepared restaurant, export again, then load the new export.",
     ],

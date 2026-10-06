@@ -300,9 +300,16 @@ const CONFIGURATION_NAME_MESSAGES: Record<string, StringKey> = {
   "product.name_taken": "shell.configuration.product_name_taken",
 };
 
-/** The sentence for a refusal of a configuration export the operator chose to load. */
 function describeConfigurationRefusal(error: unknown): Message {
   const { code, params } = (error ?? {}) as ApiError;
+  if (
+    code === "setup.request_invalid" &&
+    typeof params?.field === "string" &&
+    (params.field === "modules" ||
+      (params.field.startsWith("module:") && params.field.length > "module:".length))
+  ) {
+    return say("shell.configuration.incompatible_version");
+  }
   const key = typeof code === "string" ? CONFIGURATION_NAME_MESSAGES[code] : undefined;
   const name = params?.name;
   return key !== undefined && typeof name === "string" && name !== ""
