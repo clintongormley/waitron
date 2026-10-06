@@ -1,7 +1,14 @@
 import { DashboardQueries } from "../api/query-controller.js";
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+} from "@waitron/ui";
+import { sameValue } from "../widgets/product-editor-model.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -20,6 +27,36 @@ import type {
 /** Mirrors the server's `MIN_PASSPHRASE_LENGTH` (`apps/server/src/recovery-bundle.ts`) for fast
  * feedback on a PASTED key; the server stays the authority. */
 const MIN_KEY_LENGTH = 12;
+
+interface ArchiveDraft {
+  mode: "configure" | "settings" | "rotate";
+  destinationDir: string;
+  daysMode: "daily" | "weekdays";
+  weekdays: number[];
+  timeMode: "auto" | "fixed";
+  atTime: string;
+  retainCount: string;
+  retainDays: string;
+  pastedKey: string;
+  advancedPaste: boolean;
+}
+interface ExportDraft {
+  passphrase: string;
+  confirm: string;
+}
+
+function archivePayload(value: ArchiveDraft): unknown {
+  const pastedKey = value.advancedPaste ? value.pastedKey : "";
+  if (value.mode === "rotate") return { pastedKey };
+  return {
+    destinationDir: value.destinationDir.trim(),
+    days: value.daysMode === "daily" ? "daily" : [...value.weekdays].sort((a, b) => a - b),
+    at: value.timeMode === "auto" ? "auto" : value.atTime,
+    count: parseRetention(value.retainCount) ?? value.retainCount,
+    daysRetained: parseRetention(value.retainDays) ?? value.retainDays,
+    ...(value.mode === "configure" ? { pastedKey } : {}),
+  };
+}
 
 /** A box's text as the number `Number()` reads from it, when that is a safe integer above 0
  * (so `7.0` is 7 and `1e2` is 100); `null` for a blank box and for anything else. */
@@ -193,6 +230,8 @@ export class BackupScreen extends LitElement {
   @state() private oldKey: string | null = null;
 
   @state() private editSettings = false;
+  @state() private configureAfterApply = false;
+  #configureUsesHeldKey = false;
   /** Fetched on entering edit mode so a settings change re-applies under the SAME key. Held off the
    * reactive state so it is never rendered. */
   #reuseKey: string | null = null;
@@ -209,13 +248,127 @@ export class BackupScreen extends LitElement {
 
   /** Keyed by the key text so a re-render reuses the URL rather than leaking a fresh one. */
   #blobUrls = new Map<string, string>();
+  #leave?: LeaveCoordinator;
+  #archiveScope?: DraftScope<ArchiveDraft>;
+  #archiveMode?: ArchiveDraft["mode"];
+  #exportScope?: DraftScope<ExportDraft>;
+  readonly #exportOwner = {};
+  #generation = 0;
+
+  #archiveValue(): ArchiveDraft {
+    return {
+      mode: this.editSettings
+        ? "settings"
+        : this.configureAfterApply || !this.status?.enabled
+          ? "configure"
+          : "rotate",
+      destinationDir: this.destinationDir,
+      daysMode: this.daysMode,
+      weekdays: [...this.weekdays],
+      timeMode: this.timeMode,
+      atTime: this.atTime,
+      retainCount: this.retainCount,
+      retainDays: this.retainDays,
+      pastedKey: this.pastedKey,
+      advancedPaste: this.advancedPaste,
+    };
+  }
+
+  #exportValue(): ExportDraft {
+    return { passphrase: this.configurationPassphrase, confirm: this.configurationConfirm };
+  }
+
+  #trackArchive(): void {
+    if (!this.isConnected || !this.#leave) return;
+    const mode = this.#archiveValue().mode;
+    if (!this.status?.isPrimary || this.status.managedByEnvironment) {
+      this.#archiveScope?.dispose();
+      this.#archiveScope = undefined;
+      this.#archiveMode = undefined;
+      return;
+    }
+    if (this.#archiveMode === mode) return;
+    this.#archiveScope?.dispose();
+    this.#archiveMode = mode;
+    this.#archiveScope = this.#leave?.register<ArchiveDraft>({
+      id: this,
+      current: () => this.#archiveValue(),
+      snapshot: (value) => ({ ...value, weekdays: [...value.weekdays] }),
+      equal: (a, b) => sameValue(archivePayload(a), archivePayload(b)),
+      restore: (value) => {
+        this.destinationDir = value.destinationDir;
+        this.daysMode = value.daysMode;
+        this.weekdays = [...value.weekdays];
+        this.timeMode = value.timeMode;
+        this.atTime = value.atTime;
+        this.retainCount = value.retainCount;
+        this.retainDays = value.retainDays;
+        this.pastedKey = value.pastedKey;
+        this.advancedPaste = value.advancedPaste;
+      },
+    });
+  }
+
+  protected override updated(changed: PropertyValues): void {
+    this.#trackArchive();
+    if (
+      [
+        "destinationDir",
+        "daysMode",
+        "weekdays",
+        "timeMode",
+        "atTime",
+        "retainCount",
+        "retainDays",
+        "pastedKey",
+        "advancedPaste",
+      ].some((name) => changed.has(name))
+    )
+      this.#archiveScope?.changed();
+    if (changed.has("configurationPassphrase") || changed.has("configurationConfirm"))
+      this.#exportScope?.changed();
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.#leave = leaveCoordinatorFor(this);
+    this.#exportScope = this.#leave?.register<ExportDraft>({
+      id: this.#exportOwner,
+      current: () => this.#exportValue(),
+      snapshot: (value) => ({ ...value }),
+      equal: sameValue,
+      restore: (value) => {
+        this.configurationPassphrase = value.passphrase;
+        this.configurationConfirm = value.confirm;
+      },
+    });
+    this.#trackArchive();
     void this.#load();
   }
 
   override disconnectedCallback(): void {
+    this.#generation++;
+    this.#archiveScope?.dispose();
+    this.#archiveScope = undefined;
+    this.#archiveMode = undefined;
+    this.#exportScope?.dispose();
+    this.#exportScope = undefined;
+    this.#leave = undefined;
+    this.configurationPassphrase = "";
+    this.configurationConfirm = "";
+    this.pastedKey = "";
+    this.advancedPaste = false;
+    this.savedIt = false;
+    this.#reuseKey = null;
+    this.editSettings = false;
+    this.submitting = false;
+    this.exportingConfiguration = false;
+    this.configureAfterApply = false;
+    this.#configureUsesHeldKey = false;
+    this.mintedKey = null;
+    this.oldKey = null;
+    this.#watcherAsked = false;
+    this.#minting = null;
     for (const url of this.#blobUrls.values()) URL.revokeObjectURL(url);
     this.#blobUrls.clear();
     super.disconnectedCallback();
@@ -226,6 +379,10 @@ export class BackupScreen extends LitElement {
     this.errorKey = null;
     try {
       await this.#queries.watch("getBackupStatus", [], async (value) => {
+        if (this.#archiveMode === "configure" && this.#archiveScope?.isDirty() && value.enabled) {
+          this.#configureUsesHeldKey = this.#reusesHeldKey;
+          this.configureAfterApply = true;
+        }
         this.status = value;
         this.refreshErrorKey = null;
         await this.#mintIfNone();
@@ -246,18 +403,20 @@ export class BackupScreen extends LitElement {
   }
 
   #mint(): Promise<void> {
+    const generation = this.#generation;
     this.#minting ??= this.#requestKey().finally(() => {
-      this.#minting = null;
+      if (generation === this.#generation) this.#minting = null;
     });
     return this.#minting;
   }
 
   async #requestKey(): Promise<void> {
+    const generation = this.#generation;
     try {
       const { key } = await this.api.mintBackupKey();
-      this.mintedKey = key;
+      if (generation === this.#generation) this.mintedKey = key;
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (generation === this.#generation) this.errorKey = codeOf(error);
     }
   }
 
@@ -270,7 +429,8 @@ export class BackupScreen extends LitElement {
    * nor sends one. */
   get #reusesHeldKey(): boolean {
     return (
-      this.status?.enabled === false &&
+      (this.status?.enabled === false || this.#configureUsesHeldKey) &&
+      this.status !== undefined &&
       this.status.recoveryKeySet &&
       !this.status.recoveryKeyTooShort
     );
@@ -373,18 +533,28 @@ export class BackupScreen extends LitElement {
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
     };
+    const submitted = this.#archiveValue();
+    const generation = this.#generation;
+    const scope = this.#archiveScope;
     try {
-      this.status = await this.api.applyBackup(body);
+      const status = await this.api.applyBackup(body);
+      if (generation !== this.#generation) return;
+      scope?.commit(submitted);
+      this.configureAfterApply = scope?.isDirty() ?? false;
+      this.#configureUsesHeldKey = this.configureAfterApply && !sendsKey;
+      this.status = status;
       // The bucket copy's panel reads the same key.
       if (sendsKey) this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.savedIt = false;
-      this.advancedPaste = false;
-      this.pastedKey = "";
-      await this.#mint();
+      if (!this.configureAfterApply) {
+        this.advancedPaste = false;
+        this.pastedKey = "";
+        await this.#mint();
+      }
     } catch (error) {
-      this.#onApplyRefused(error);
+      if (generation === this.#generation) this.#onApplyRefused(error);
     } finally {
-      this.submitting = false;
+      if (generation === this.#generation) this.submitting = false;
     }
   }
 
@@ -393,38 +563,65 @@ export class BackupScreen extends LitElement {
     this.errorKey = null;
     this.refreshErrorKey = null;
     this.submitting = true;
+    const submitted = this.#archiveValue();
+    const generation = this.#generation;
+    const scope = this.#archiveScope;
     try {
-      this.status = await this.api.rotateBackupKey({ recoveryKey: this.#effectiveKey });
+      const status = await this.api.rotateBackupKey({ recoveryKey: this.#effectiveKey });
+      if (generation !== this.#generation) return;
+      this.status = status;
+      scope?.commit(submitted);
       // The bucket copy's kit carries the key, so its panel has to read the new one now.
       this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.savedIt = false;
-      this.advancedPaste = false;
-      this.pastedKey = "";
+      if (!scope?.isDirty()) {
+        this.advancedPaste = false;
+        this.pastedKey = "";
+        scope?.commit(this.#archiveValue());
+      }
       this.oldKey = null;
       await this.#mint();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (generation === this.#generation) this.errorKey = codeOf(error);
     } finally {
-      this.submitting = false;
+      if (generation === this.#generation) this.submitting = false;
     }
   }
 
   async #showOldKey(): Promise<void> {
+    const generation = this.#generation;
     this.errorKey = null;
     try {
       const { key } = await this.api.getBackupRecoveryKey();
-      this.oldKey = key;
+      if (generation === this.#generation) this.oldKey = key;
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (generation === this.#generation) this.errorKey = codeOf(error);
     }
   }
 
   async #startEdit(): Promise<void> {
+    const generation = this.#generation;
+    if (
+      this.#leave &&
+      (await this.#leave.request({ scopes: [this], reason: "navigation", proceed() {} })) !==
+        "proceeded"
+    )
+      return;
+    if (generation === this.#generation) await this.#openSettings();
+  }
+
+  async #openSettings(): Promise<void> {
+    const generation = this.#generation;
+    const opening = archivePayload(this.#archiveValue());
     this.errorKey = null;
     try {
       const { key } = await this.api.getBackupRecoveryKey();
+      if (
+        generation !== this.#generation ||
+        !sameValue(opening, archivePayload(this.#archiveValue()))
+      )
+        return;
       if (key === null) {
-        // An enabled box always has a key; a null here means nothing to re-apply against.
         this.errorKey = "backup.recovery_key_missing";
         return;
       }
@@ -434,7 +631,7 @@ export class BackupScreen extends LitElement {
       if (this.status) this.#prefillFromStatus(this.status);
       this.editSettings = true;
     } catch (error) {
-      this.errorKey = codeOf(error);
+      if (generation === this.#generation) this.errorKey = codeOf(error);
     }
   }
 
@@ -450,21 +647,33 @@ export class BackupScreen extends LitElement {
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
     };
+    const submitted = this.#archiveValue();
+    const generation = this.#generation;
+    const scope = this.#archiveScope;
     try {
-      this.status = await this.api.applyBackup(body);
-      this.editSettings = false;
-      this.#reuseKey = null;
+      const status = await this.api.applyBackup(body);
+      if (generation !== this.#generation) return;
+      this.status = status;
+      scope?.commit(submitted);
+      if (!scope?.isDirty()) {
+        this.editSettings = false;
+        this.#reuseKey = null;
+      }
     } catch (error) {
-      this.#onApplyRefused(error);
+      if (generation === this.#generation) this.#onApplyRefused(error);
     } finally {
-      this.submitting = false;
+      if (generation === this.#generation) this.submitting = false;
     }
   }
 
   #cancelEdit(): void {
-    this.editSettings = false;
-    this.#reuseKey = null;
-    this.errorKey = null;
+    const proceed = () => {
+      this.editSettings = false;
+      this.#reuseKey = null;
+      this.errorKey = null;
+    };
+    if (this.#leave) void this.#leave.request({ scopes: [this], reason: "cancel", proceed });
+    else proceed();
   }
 
   /** A non-`wall-clock` running schedule (the box-image `interval` form the UI cannot author) leaves
@@ -558,21 +767,26 @@ export class BackupScreen extends LitElement {
       return;
     }
     this.exportingConfiguration = true;
+    const submitted = this.#exportValue();
+    const generation = this.#generation;
+    const scope = this.#exportScope;
     try {
-      const artifact = await this.api.exportConfiguration(this.configurationPassphrase);
+      const artifact = await this.api.exportConfiguration(submitted.passphrase);
+      if (generation !== this.#generation) return;
       const url = URL.createObjectURL(artifact);
       const download = document.createElement("a");
       download.href = url;
       download.download = `waitron-configuration-${this.#fileStamp}.enc`;
       download.click();
       URL.revokeObjectURL(url);
-      this.configurationPassphrase = "";
-      this.configurationConfirm = "";
+      if (this.configurationPassphrase === submitted.passphrase) this.configurationPassphrase = "";
+      if (this.configurationConfirm === submitted.confirm) this.configurationConfirm = "";
+      scope?.commit({ passphrase: "", confirm: "" });
       this.configurationAttempted = false;
     } catch {
-      this.configurationRequestFailed = true;
+      if (generation === this.#generation) this.configurationRequestFailed = true;
     } finally {
-      this.exportingConfiguration = false;
+      if (generation === this.#generation) this.exportingConfiguration = false;
     }
   }
 
@@ -680,10 +894,10 @@ export class BackupScreen extends LitElement {
               ? html`<p class="hint" data-test="not-primary">${t("backup.status.not_primary")}</p>`
               : nothing
         }
-        ${writable && !s.enabled ? this.#renderConfigure() : nothing}
+        ${writable && (!s.enabled || this.configureAfterApply) ? this.#renderConfigure() : nothing}
         ${writable && s.enabled && this.editSettings ? this.#renderEditSettings() : nothing}
         ${
-          writable && s.enabled && !this.editSettings
+          writable && s.enabled && !this.editSettings && !this.configureAfterApply
             ? html`<wt-button
                   variant="secondary"
                   data-test="edit-settings"

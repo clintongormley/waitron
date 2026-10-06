@@ -3294,3 +3294,55 @@ its existing automatic/retained order lifecycles need the design's acceptance ch
 Backup/export's actual request fields, then reconcile these owners and the complete advancing
 modal/page inventory. Tasks 2/3 stay complete; Tasks 1/4/5/6 remain partial. W69 is not ready for
 finish-branch or landing.
+
+## 2026-10-07 Backup/export checkpoint
+
+Backup now registers archive inputs and export credentials separately. The archive snapshot uses
+trimmed destinations, weekday set equality and parsed valid retention values, while invalid raw
+retention remains distinguishable. Generated key output, saved-key acknowledgements and status
+remain exempt. Settings Cancel and the switch from rotation to settings use the shared decision.
+Keep preserves native fields; Discard restores only the requested archive snapshot. Export
+credentials remain independent when you enter or cancel archive settings.
+
+Accepted Apply, settings Save and rotation each commit their submitted snapshot. Newer input stays
+in its form; setup keeps its controls when an accepted write or another caller's enabling read
+would otherwise switch to the rotation view. Export clears only credential fields still matching
+the submitted values and leaves newer values protected. Departed writes, key mints, key reveals
+and settings-key reads cannot change a reconnected opening in the focused cases. A settings-key
+read also leaves rotation input alone if that input changed while the read waited.
+
+The real dashboard cases exercise sidebar navigation, indexed Back/Forward, voluntary sign-out,
+language replacement and forced expiry with archive/export inputs. Forced expiry cancels an
+unanswered decision and clears the export fields without calling voluntary logout. The native
+confirmation cases exercise Cancel, Escape, Keep and Discard in EN/ES, both token themes and
+390/1280 viewport settings. Their eight scoped axe scans passed; sixteen warning/kept captures
+were inspected. The capture paths now sit under the ignored `__screenshots__/` directory.
+These fixtures use synthetic API replies. They do not establish server backup behavior,
+full-shell accessibility or a native browser reload prompt. The dark token captures do not emulate
+colour-scheme media, and the whole-screen screenshots include the browser harness's outer canvas.
+
+Receipts and commands are retained in Lane E `receipts/w69-backup-20261007/`. The initial owner
+cases failed before integration. The later setup, key-read/reveal, live-branch and form-switch
+cases each failed before their correction. An initial rotation selector was wrong and corrected
+before the expected failing run. The detached-update case first used a settings transition that
+masked the problem; using the unchanged configure mode exposed the missing registration. Its
+first correction still captured the baseline at the next input, so the final connection path
+registers before that input. The first form-switch wrapper kept the coordinator pending during
+the key read and failed the existing reconnect check; the final wrapper ends the decision before
+starting the read. Existing behavioral assertions were not edited.
+
+Login credentials, till schedule/enrolment, till navigation/retained-order acceptance and the
+complete advancing-owner inventory remain pending. Tasks 2/3 stay complete; Tasks 1/4/5/6 remain
+partial. W69 is not ready for finish-branch or landing.
+
+Focused command `pnpm --filter @waitron/dashboard exec vitest run
+src/screens/backup-screen.unsaved.test.ts src/screens/backup-screen.test.ts
+src/screens/stream-settings-panel.unsaved.test.ts src/screens/stream-settings-panel.test.ts
+src/dashboard-app.backup-unsaved.test.ts` passed 276 cases. Root native-field, token-name,
+module-seam and English-vocabulary guards passed 3404 cases. Dashboard types, scoped ESLint,
+source Prettier and diff checks passed. Ten independent installed-copy deletions failed their
+intended cases beside passing controls; the restored selection passed thirteen cases and the
+three candidate files byte-matched. No existing assertion, fiscal routine or migration changed.
+Full-document Prettier checks find formatting differences in both backlog and this audit on the
+unchanged checkpoint HEAD too; their baseline comparison is retained. This checkpoint leaves
+those unrelated historical formatting differences in place.

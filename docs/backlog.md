@@ -1173,6 +1173,14 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Backup/export now protects your archive settings, pasted recovery key and export credentials on
+the branch. Cancel keeps edited settings until you choose Discard. An accepted archive write and
+an accepted export each clear only their own draft; newer input remains protected. Focused cases
+also keep a setup draft visible when another caller enables archives and reject departed writes
+and key replies after reconnect. The real dashboard tests exercise sidebar navigation,
+Back/Forward, voluntary sign-out, language replacement and forced expiry. The dated audit records
+the failing-first cases, deletion controls and inspected native confirmation flows.
+
 Kitchen late flags now use the shared warning on the branch. Cancel and native Escape keep your
 edited minutes until you choose Discard; normalized reverts and accepted writes are clean.
 A refused save keeps the draft. Input delivered during Save stays protected against the submitted
@@ -1183,7 +1191,7 @@ scoped accessibility scans are recorded in the dated audit.
 
 The service setting switches/dropdowns, bump mode and fire control remain immediate writes.
 Their pending and refused writes do not acquire discard protection or clear a different draft's
-question in the new tests. Backup/export, login credentials, till schedule/enrolment and the till
+question in the new tests. Login credentials, till schedule/enrolment and the till
 shell/order-state acceptance audit still need work. W69 is not ready for finishing or landing.
 
 W97 (#1311) is integrated on the branch. Device Edit now protects its approved-profile choices,
