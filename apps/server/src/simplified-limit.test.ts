@@ -537,20 +537,26 @@ describe("a bill payment", () => {
 });
 
 describe("placing and collecting a ticket-then-pay counter order", () => {
-it("does not file a saved F1 choice while original delivery is unavailable", async () => {
-    const id = await parked(venue.app, invoiceFirst, { Mitad: 1 });
+  it("places a saved F1 choice without filing, then refuses unavailable original delivery at collection", async () => {
+    const id = await parked(venue.app, ticketThenPay, { Mitad: 1 });
     venue.db.run(sql`update working_orders set invoice_type = 'F1',
       recipient_tax_id = 'B12345674', recipient_legal_name = 'Cliente SL',
       recipient_address = 'Calle Mayor 2, 28013 Madrid', recipient_country_code = 'ES'
       where id = ${id}`);
     const before = written();
 
-    const answer = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/place`, {});
+    const placed = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/place`, {});
+    expect(placed).toEqual({ status: 200, json: { id, status: "placed" } });
+    expect(written()).toEqual(before);
+    expect(orderRow(id)!.status).toBe("placed");
+    const answer = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/collect`, {
+      tender: { method: "cash", amount: "4000.00" },
+    });
 
     expect(answer.status).toBe(409);
     expect(answer.json).toEqual({ code: "sale.full_invoice_unavailable", params: {} });
     expect(written()).toEqual(before);
-    expect(orderRow(id)!.status).toBe("open");
+    expect(orderRow(id)!.status).toBe("placed");
   });
 
   it("allows an order at the limit to be placed without filing or taking money", async () => {

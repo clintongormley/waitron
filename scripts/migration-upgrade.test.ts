@@ -244,7 +244,7 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   "venue-service/0020_retire_invoice_first": {
     refused: ["DROP TABLE `departments`", "FOREIGN KEY constraint failed"],
   },
-  "core/0104_retire_location_order_flow": {
+  "core/0106_retire_location_order_flow": {
     refused: ["DROP TABLE `locations`", "FOREIGN KEY constraint failed"],
   },
   // Rebuilds `menu_items`; dropping the old one is refused while a non-cascading child holds rows.

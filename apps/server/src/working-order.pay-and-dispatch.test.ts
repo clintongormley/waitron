@@ -1650,6 +1650,7 @@ describe("prepare & collect — zone payment timing", () => {
       lines: [],
       tender: { method: "cash", amount: "3.50" },
     });
+    expect(collected.invoiceType).toBe("F2");
     expect(collected.invoiceNumber).toBe("A/1");
     expect(collected.total).toBe("3.50");
     expect(collected.qr).not.toBe("");

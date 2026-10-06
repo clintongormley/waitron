@@ -6687,8 +6687,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   [Step 2](superpowers/plans/2026-10-04-departments-and-zones.md) puts departments and zones in one
   editable tree, resolves quick-sale and receipt choices by department with optional zone overrides,
   and keeps today's zone-menu and device-default-zone controls temporarily in that screen. Its
-  follow-up A261-2c removes the retired `locations.order_flow` column after a separate rebuild audit.
-  A261-2c remains on the unmerged `refactor/retire-location-order-flow` branch. It retires
+  follow-up A261-2c retires
   `locations.order_flow` and the legacy `invoice_first` style throughout
   placement, collection, management selectors, shared types and stored service contexts.
   Placement returns the order id/status without invoicing; collection follows the zone's
@@ -6696,7 +6695,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   invoices and retain financial, permission, source-device and drawer assertions.
   Non-fiscal placement accepts an over-limit order; collection refuses the over-limit
   invoice without taking money (owner decision, 2026-10-06).
-  This change requires a venue reset: core/0104 rebuilds locations and venue-service/0020
+  This change requires a venue reset: core/0106 rebuilds locations and venue-service/0020
   rebuilds departments and service policies. The owner approved both populated-upgrade
   reset entries on 2026-10-06. No compatibility or data-preservation path is included.
   The Numbered collection choice applies to `prepay` and `ticket_then_pay` quick sales.

@@ -1813,6 +1813,7 @@ export async function collectOrder(
       return ticket;
     }
 
+    await refuseUnavailableFullInvoice(tx, req.id);
     const order = await priceStoredOrderForIssuance(tx, req.id);
     return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
   });

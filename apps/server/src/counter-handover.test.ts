@@ -114,7 +114,7 @@ function saleCount(id: string): number {
 }
 
 describe("handing over a counter order sent without payment", () => {
-it("saves an F1 recipient on a placed ticket before any invoice exists", async () => {
+  it("saves an F1 recipient on a placed ticket before any invoice exists", async () => {
     const id = await placed("ticket_then_pay", "Tarta");
     const before = await orderRow(id);
     expect(before.status).toBe("placed");
