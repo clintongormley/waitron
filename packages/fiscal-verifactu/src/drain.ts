@@ -49,8 +49,8 @@ const MAX_CONSULTA_PAGES = 10;
 
 /** How many records immediately before a never-sent record on its chain must all be refused
  * with one code for `haltOpenChainClaims` to hold it. A record still awaiting its answer among
- * them breaks the run. The held chain's first record is sent hourly (`claimProbes`), and the hold
- * is lifted once that send breaks the run (`releaseSettledBrakeHolds`). */
+ * them breaks the run. The chain's first held record is sent hourly when `claimProbes` finds it
+ * due, and the hold is lifted once that send breaks the run (`releaseSettledBrakeHolds`). */
 export const SAME_CODE_REFUSAL_LIMIT = 3;
 
 /** The first retry's wait, and the per-attempt doubling unit `backoffMs` scales from. */
@@ -875,7 +875,8 @@ async function resolveLines(
   for (const linea of respuesta.RespuestaLinea) {
     // Skipped rather than thrown: one unmatched line must not back the whole batch off and discard
     // every other line of this response. The skipped row stays `enviando` until
-    // `recoverStaleClaims` or a restart requeues it.
+    // `recoverStaleClaims` or a restart requeues it; a skipped probe stays `detenido` until its
+    // next probe.
     const row = linea.RefExterna !== undefined ? byId.get(linea.RefExterna) : undefined;
     if (row === undefined) continue;
     const resolved = resolveEstadoEfectivo(linea);
@@ -1006,7 +1007,7 @@ async function applyOutcome(
   }
 }
 
-/** The case a person decides, opened in the same transaction as the outcome and its incident. */
+/** The case a person decides, opened in the same transaction as the outcome. */
 async function openCase(
   tx: Transaction,
   row: DueRow,
@@ -1220,12 +1221,12 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | n
  *     `fiscal.duplicado_anulado` rather than retrying forever.
  *   - Route B (all other duplicates): a consulta reads the record AEAT holds under this identity.
  *     A matching fingerprint and installation confirm our record. A mismatch halts; missing
- *     evidence leaves the row pending. An anulación belongs here because `Anulada` on a resent anulación
- *     is most likely AEAT holding that very anulación: the verifactu library's live preproduction
- *     check asserts that the final consulta "reports the invoice as `Anulado` with the cancellation
- *     record's hash" (`sources/README.md`; the "final cancelled-record consulta" stage in
- *     `scripts/live-aeat.mjs`), no recorded run of it is cited here, and the library's fake does the
- *     same.
+ *     evidence leaves the row pending, or a probe `detenido` for its next probe. An anulación
+ *     belongs here because `Anulada` on a resent anulación is most likely AEAT holding that very
+ *     anulación: the verifactu library's live preproduction check asserts that the final consulta
+ *     "reports the invoice as `Anulado` with the cancellation record's hash" (`sources/README.md`;
+ *     the "final cancelled-record consulta" stage in `scripts/live-aeat.mjs`), no recorded run of
+ *     it is cited here, and the library's fake does the same.
  *
  * `resolveLines` makes Route B's consulta before this transaction opens; a failed one leaves this
  * record unknown, as missing evidence does.

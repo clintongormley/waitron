@@ -243,8 +243,8 @@ declare module "@waitron/shared" {
     "fiscal.submission_delayed": { count: number; hours: number };
 
     /**
-     * The same ongoing check: `count` records have stopped submitting (`envios.estado = detenido`)
-     * and need a human — a halted chain never drains itself. Never thrown.
+     * The same ongoing check: `count` records have stopped submitting (`envios.estado = detenido`).
+     * Never thrown.
      */
     "fiscal.submission_stopped": { count: number };
 

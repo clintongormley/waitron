@@ -23,9 +23,10 @@ export interface Ack {
 }
 
 /**
- * The SINGLE source of truth for the envío-estado → `AckState` mapping. Every terminal estado maps
- * to the settled state a downstream consumer acts on; every non-terminal estado (`pendiente` /
- * `enviando`) yields `null` — there is nothing to acknowledge yet, so `writeAck` no-ops on it.
+ * The SINGLE source of truth for the envío-estado → `AckState` mapping. `aceptado`,
+ * `aceptado_con_errores`, `rechazado` and `detenido` map to the state a downstream consumer acts
+ * on; `pendiente` and `enviando` yield `null` — there is nothing to acknowledge yet, so `writeAck`
+ * no-ops on them.
  */
 export function ackStateOf(estado: string): AckState | null {
   switch (estado) {
@@ -82,10 +83,9 @@ export async function writeAck(tx: Transaction, registroId: string, now: Date): 
   `);
 }
 
-/** Removes a record's ack row. Used when reconcile resets an `aceptado` record to `pendiente` (a
- * `noTrace` remediation): `ackStateOf('pendiente')` is null, so the record must carry NO ack, or the
- * committed ack would disagree with the estado (the acks invariant). The drainer writes a fresh ack
- * when it re-accepts the record. Idempotent — deleting an absent ack is a no-op. */
+/** Removes a record's ack row, whenever a record goes back to `pendiente`: `ackStateOf('pendiente')`
+ * is null, so the record must carry NO ack, or the committed ack would disagree with the estado
+ * (the acks invariant). Idempotent — deleting an absent ack is a no-op. */
 export async function deleteAck(tx: Transaction, registroId: string): Promise<void> {
   await tx.execute(sql`delete from acks where registro_id = ${registroId}`);
 }
