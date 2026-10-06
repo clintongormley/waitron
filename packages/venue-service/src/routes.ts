@@ -24,12 +24,10 @@ import {
   zoneRemovalImpact,
   listDepartments,
   listSalePolicies,
-  listDepartmentHours,
   listDeviceDefaultZones,
   listServiceZones,
   listVenueReadiness,
   listZoneMenuAssignments,
-  replaceDepartmentHours,
   setDepartmentSalePolicyField,
   setDeviceDefaultZone,
   setZoneSalePolicyOverride,
@@ -74,7 +72,7 @@ import {
 } from "./hours.js";
 import type { HoursSubject, LocalDate, SpecialDateInput, WeekDay } from "./hours-types.js";
 import type { RoutingChange } from "./routing-types.js";
-import { replaceStationHours, setStationFallback, setStationToday } from "./station-times.js";
+import { setStationFallback, setStationToday } from "./station-times.js";
 import "./errors.js";
 
 const [{ permission: MANAGE_VENUE_SERVICE }] = VENUE_SERVICE_PERMISSIONS;
@@ -124,32 +122,6 @@ function requireSalePolicyField(field: string, value: unknown, zone: boolean) {
     return value as "auto" | "on_request" | "never";
   if (!zone && field === "printTradingName" && typeof value === "boolean") return value;
   throw new AppError("management.request_invalid", { field });
-}
-
-function requireHours(
-  body: Record<string, unknown>,
-): { weekday: number; opensAt: string; closesAt: string }[] {
-  if (!Array.isArray(body.hours))
-    throw new AppError("management.request_invalid", { field: "hours" });
-  return body.hours.map((value, index) => {
-    if (typeof value !== "object" || value === null)
-      throw new AppError("management.request_invalid", { field: `hours.${index}` });
-    const interval = value as Record<string, unknown>;
-    const { weekday, opensAt, closesAt } = interval;
-    if (
-      typeof weekday !== "number" ||
-      !Number.isInteger(weekday) ||
-      weekday < 0 ||
-      weekday > 6 ||
-      typeof opensAt !== "string" ||
-      !CLOCK_TIME.test(opensAt) ||
-      typeof closesAt !== "string" ||
-      !CLOCK_TIME.test(closesAt) ||
-      opensAt === closesAt
-    )
-      throw new AppError("management.request_invalid", { field: `hours.${index}` });
-    return { weekday, opensAt, closesAt };
-  });
 }
 
 function requireMode(value: unknown, field: string): ServiceMode {
@@ -514,17 +486,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       }),
     );
 
-    app.put("/management-api/venue-service/stations/:stationId/hours", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const stationId = requireUuidParam(c.req.param("stationId"), "StationId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        const hours = requireHours(body);
-        await gated(sessionId, (tx) => replaceStationHours(tx, ctx.cfg, stationId, hours));
-        return c.body(null, 204);
-      }),
-    );
-
     app.put("/management-api/venue-service/stations/:stationId/fallback", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
@@ -571,7 +532,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           zones: await listServiceZones(tx, ctx.cfg, { includeInactive: true }),
           salePolicies: await listSalePolicies(tx, ctx.cfg),
           deviceZones: await listDeviceDefaultZones(tx, ctx.cfg),
-          hours: await listDepartmentHours(tx, ctx.cfg),
           zoneMenus: await listZoneMenuAssignments(tx, ctx.cfg),
           readiness: await listVenueReadiness(tx, ctx.cfg),
           settings: { editSentLines: await readEditSentLines(tx) },
@@ -762,17 +722,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         await gated(sessionId, (tx) => deactivateDepartment(tx, ctx.cfg, departmentId));
-        return c.body(null, 204);
-      }),
-    );
-
-    app.put("/management-api/venue-service/departments/:departmentId/hours", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        const hours = requireHours(body);
-        await gated(sessionId, (tx) => replaceDepartmentHours(tx, ctx.cfg, departmentId, hours));
         return c.body(null, 204);
       }),
     );

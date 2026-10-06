@@ -250,8 +250,6 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
   it.each([
     "closed",
     "warnings",
-    "hours",
-    "invalid-hours",
     "fallback",
     "fallback-confirmation",
     "close-confirmation",
@@ -264,7 +262,6 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
     "refused-close",
     "refused-fallback",
     "refused-switch-off",
-    "refused-hours",
   ] as const)("checks %s", async (state) => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
@@ -366,7 +363,7 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
                 {
                   weekday: 5,
                   opensAt: "22:00",
-                  closesAt: state === "invalid-hours" ? "22:00" : "02:00",
+                  closesAt: "02:00",
                 },
               ],
               fallbackStationId: "kitchen",
@@ -381,9 +378,6 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
       setStationToday: vi.fn().mockRejectedValue({ code: "time_zone.unreadable" }),
       setStationFallback: vi.fn().mockRejectedValue({ code: "station.fallback_loop" }),
       deactivateStation: vi.fn().mockRejectedValue({ code: "station.not_found" }),
-      setStationHours: vi
-        .fn()
-        .mockRejectedValue({ code: "station.invalid", params: { field: "hours.0" } }),
     } as unknown as PrepStationsApi;
     host.append(el);
     await new Promise((r) => setTimeout(r, 0));
@@ -420,9 +414,8 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
         expect(settingsQ('[data-test="settings-fallback-confirmation"]')).not.toBeNull();
       }
     }
-    const action = state.includes("hours")
-      ? "edit-hours"
-      : state === "close-confirmation" || state === "refused-close"
+    const action =
+      state === "close-confirmation" || state === "refused-close"
         ? "close-today"
         : state === "switch-off" || state === "refused-switch-off"
           ? "disable"
@@ -435,12 +428,6 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
       (el.shadowRoot!.querySelector<HTMLElement>(selector) ??
         summary.querySelector<HTMLElement>(selector))!.click();
       await el.updateComplete;
-      if (state === "invalid-hours" || state === "refused-hours") {
-        const form = el.shadowRoot!.querySelector("station-hours-form")!;
-        await (form as unknown as { updateComplete: Promise<boolean> }).updateComplete;
-        form.shadowRoot!.querySelector<HTMLElement>('[data-test="save-hours"]')!.click();
-        await (form as unknown as { updateComplete: Promise<boolean> }).updateComplete;
-      }
     }
     if (state.startsWith("refused-")) {
       if (state === "refused-fallback") {
@@ -451,7 +438,7 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
         settingsQ('[data-test="save-settings-cell"]').click();
         await el.updateComplete;
         settingsQ('[data-test="save-settings-cell"]').click();
-      } else if (state !== "refused-hours") {
+      } else {
         el.shadowRoot!.querySelector<HTMLElement>('[data-test="confirm-station-action"]')!.click();
         await el.updateComplete;
         if (state === "refused-switch-off")
@@ -470,8 +457,7 @@ describe.each(["light", "dark"] as const)("station timing accessibility (%s)", (
         expect(choice.value).toBe("");
         expect(settingsQ('[data-test="save-settings-cell"]').hasAttribute("disabled")).toBe(false);
       } else {
-        const form = el.shadowRoot!.querySelector("station-hours-form");
-        expect((form?.shadowRoot ?? el.shadowRoot)!.querySelector('[role="alert"]')).not.toBeNull();
+        expect(el.shadowRoot!.querySelector('[role="alert"]')).not.toBeNull();
       }
     }
     await expectNoA11yViolations(host);

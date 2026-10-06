@@ -31,7 +31,6 @@ import { AppError, type LocationId } from "@waitron/shared";
 import {
   departmentSalePolicies,
   departments,
-  departmentHours,
   deviceZoneDefaults,
   orderServiceContexts,
   saleReceiptHeaders,
@@ -70,70 +69,9 @@ export async function listDepartments(tx: Transaction, cfg: VenueScope): Promise
   return rows.map((row) => ({ ...row, defaultServiceMode: row.defaultServiceMode as ServiceMode }));
 }
 
-export interface DepartmentHoursInterval {
-  departmentId: string;
-  weekday: number;
-  opensAt: string;
-  closesAt: string;
-}
-
-/**
- * The form {@link replaceDepartmentHours} writes a venue-local wall-clock time in: `HH:MM:SS`. The
- * columns are text, so two spellings of one interval would be two entries in
- * `department_hours_interval_key`, and the dashboard slices a stored value to five characters. This
- * checks length alone: the one caller outside tests, the hours route, admits only `HH:MM`
- * (`CLOCK_TIME` in `./routes.ts`).
- */
+/** Pads an `HH:MM` wall-clock time to the one stored spelling, `HH:MM:SS`; it checks length alone. */
 export function storedTime(value: string): string {
   return value.length === 5 ? `${value}:00` : value;
-}
-
-export async function listDepartmentHours(
-  tx: Transaction,
-  cfg: VenueScope,
-): Promise<DepartmentHoursInterval[]> {
-  return tx
-    .select({
-      departmentId: departmentHours.departmentId,
-      weekday: departmentHours.weekday,
-      opensAt: departmentHours.opensAt,
-      closesAt: departmentHours.closesAt,
-    })
-    .from(departmentHours)
-    .innerJoin(departments, eq(departments.id, departmentHours.departmentId))
-    .where(eq(departments.locationId, cfg.locationId))
-    .orderBy(departmentHours.weekday, departmentHours.opensAt, departmentHours.id);
-}
-
-/**
- * Replaces one department's whole opening-hours set by deleting it and inserting the new one, not
- * by rewriting rows one at a time, which can break `department_hours_interval_key` midway (CLAUDE.md
- * §3). No foreign key points at `department_hours`. One write transaction runs on the venue file at
- * a time, so two saves cannot interleave; the pattern is stated on `assertExtraListForWrite`
- * (`packages/catalogue/src/extras.ts`).
- */
-export async function replaceDepartmentHours(
-  tx: Transaction,
-  cfg: VenueScope,
-  departmentId: string,
-  hours: Omit<DepartmentHoursInterval, "departmentId">[],
-): Promise<void> {
-  const [department] = await tx
-    .select({ id: departments.id })
-    .from(departments)
-    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)));
-  if (department === undefined) throw new AppError("department.not_found", { departmentId });
-  await tx.delete(departmentHours).where(eq(departmentHours.departmentId, departmentId));
-  if (hours.length > 0) {
-    await tx.insert(departmentHours).values(
-      hours.map((interval) => ({
-        departmentId,
-        weekday: interval.weekday,
-        opensAt: storedTime(interval.opensAt),
-        closesAt: storedTime(interval.closesAt),
-      })),
-    );
-  }
 }
 
 export async function listZoneMenuAssignments(tx: Transaction, cfg: VenueScope) {

@@ -2,7 +2,7 @@ import type { StationThresholds, TimingBand } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import type { RouteTarget, RoutingModel, ExceptionInput, RouteExplanation } from "../routing.js";
 import type { RoutingChange, RoutingMove } from "../routing-types.js";
-import type { WeeklyInterval, RoutingMoment } from "../routing.js";
+import type { RoutingMoment } from "../routing.js";
 import type { WatcherView } from "./watchers-seen.js";
 
 export interface OutputsDown {
@@ -252,9 +252,6 @@ export class PrepStationsApi {
   }
   activateStation(id: string): Promise<void> {
     return this.request(`/management-api/stations/${id}`, "PATCH", { active: true });
-  }
-  setStationHours(id: string, hours: readonly WeeklyInterval[]): Promise<void> {
-    return this.request(`/management-api/venue-service/stations/${id}/hours`, "PUT", { hours });
   }
   setStationFallback(id: string, fallbackStationId: string | null): Promise<void> {
     return this.request(`/management-api/venue-service/stations/${id}/fallback`, "PUT", {

@@ -2,9 +2,8 @@ import { and, eq, ne } from "drizzle-orm";
 import { kitchenStations, type Transaction } from "@waitron/db";
 import { readLocationClock, venueMomentAt, type VenueMoment } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
-import { storedTime, type VenueScope } from "./operations.js";
-import type { WeeklyInterval } from "./routing.js";
-import { stationDayStates, stationFallbacks, stationHours } from "./schema/station-times.js";
+import type { VenueScope } from "./operations.js";
+import { stationDayStates, stationFallbacks } from "./schema/station-times.js";
 import "./errors.js";
 
 export async function venueMoment(
@@ -21,25 +20,6 @@ async function requireStation(tx: Transaction, cfg: VenueScope, stationId: strin
     .from(kitchenStations)
     .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.locationId, cfg.locationId)));
   if (station === undefined) throw new AppError("station.not_found", { stationId });
-}
-
-export async function replaceStationHours(
-  tx: Transaction,
-  cfg: VenueScope,
-  stationId: string,
-  hours: readonly WeeklyInterval[],
-): Promise<void> {
-  await requireStation(tx, cfg, stationId);
-  await tx.delete(stationHours).where(eq(stationHours.stationId, stationId));
-  if (hours.length > 0)
-    await tx.insert(stationHours).values(
-      hours.map((interval) => ({
-        stationId,
-        weekday: interval.weekday,
-        opensAt: storedTime(interval.opensAt),
-        closesAt: storedTime(interval.closesAt),
-      })),
-    );
 }
 
 export async function setStationFallback(

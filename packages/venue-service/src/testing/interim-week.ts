@@ -1,5 +1,4 @@
-// Test support: suites written against the interim weekly store seed the same opening in the
-// standard week routing reads.
+// Test support: seeds a station's standard week from a list of weekly intervals.
 import { randomUUID } from "node:crypto";
 import type { Transaction } from "@waitron/db";
 import { replaceWeekHours } from "../hours.js";

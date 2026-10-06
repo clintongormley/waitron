@@ -58,7 +58,6 @@ const model: VenueServiceView = {
     },
   ],
   salePolicies: { departments: [], zones: [] },
-  hours: [{ departmentId: "d2", weekday: 1, opensAt: "09:00:00", closesAt: "18:00:00" }],
   zoneMenus: [{ zoneId: "z1", menuId: "m1", displayOrder: 0, isDefault: true }],
   menus: [
     { id: "m1", name: "Casa Delgado", active: true },
@@ -228,16 +227,17 @@ describe("venue operations screen", () => {
     expect(tabs.map((tab) => tab.getAttribute("data-key"))).toEqual(["departments", "zones"]);
   });
 
-  it("keeps department hours available outside the legacy tabs", async () => {
+  it("has no department hours section of its own: hours live on the Hours page", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
-    await selectTab(el, "zones");
-    const hours = table(el, "hours");
-    expect(hours.closest("wt-tabs")).toBeNull();
-    expect(hours.checkVisibility()).toBe(true);
-    await action(el, "new-hours");
-    expect(modal(el)?.getAttribute("heading")).toBe("Add hours");
+    for (const tab of ["departments", "zones"]) {
+      await selectTab(el, tab);
+      expect(el.shadowRoot!.querySelector('[data-test="hours"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-test="hours-actions"]')).toBeNull();
+      expect(find(el, '[data-test="new-hours"]')).toBeNull();
+    }
+    expect(table(el, "policy-tree")).not.toBeNull();
   });
 
   it("keeps device starting zones available below the policy tree outside the legacy tabs", async () => {
@@ -1082,22 +1082,32 @@ describe("venue operations screen", () => {
     expect(modal(el)?.textContent).toMatch(/Dining room:\s*2 active tables/);
   });
 
-  it("opens hours for the chosen policy-tree department", async () => {
+  it("opens the Hours page focused on the chosen policy-tree department", async () => {
+    history.replaceState(null, "", "/manage/venue-operations");
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
     const tree = table(el, "policy-tree").shadowRoot!;
     const hours = tree.querySelector<HTMLElement>('[data-test="hours-tree-department-d2"]')!;
-    hours
-      .closest("wt-row-actions")!
-      .shadowRoot!.querySelector<HTMLButtonElement>("button")!
-      .click();
-    hours.click();
-    await settle(el);
-    expect(modal(el)!.getAttribute("heading")).toBe("Add hours");
-    expect(
-      (find(el, 'wt-combobox[name="hours-department"]') as HTMLElement & { value: string }).value,
-    ).toBe("d2");
+    expect(hours.textContent!.trim()).toBe("Opening hours");
+    const visits: string[] = [];
+    const record = () => visits.push(location.pathname);
+    window.addEventListener("popstate", record);
+    const before = history.length;
+    try {
+      hours
+        .closest("wt-row-actions")!
+        .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+        .click();
+      hours.click();
+      await settle(el);
+    } finally {
+      window.removeEventListener("popstate", record);
+    }
+    expect(location.pathname).toBe("/manage/hours/department/d2");
+    expect(history.length).toBe(before + 1);
+    expect(visits).toEqual(["/manage/hours/department/d2"]);
+    expect(modal(el)).toBeNull();
   });
 
   it("shows the effective quick-sale and receipt policy beside each department and zone", async () => {
@@ -1852,7 +1862,7 @@ describe("venue operations screen", () => {
     expect(printTradingName).toBe(false);
   });
 
-  it("keeps the tree, Hours and zone-menu Add outside the tabs", async () => {
+  it("keeps the tree and zone-menu Add outside the tabs", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
@@ -1865,10 +1875,6 @@ describe("venue operations screen", () => {
       ),
     ).not.toBeNull();
     expect(find(el, '[data-test="new-department"]')!.checkVisibility()).toBe(true);
-    expect(tabs.querySelector('[slot="actions"] [data-test="new-hours"]')).toBeNull();
-    expect(
-      el.shadowRoot!.querySelector('[data-test="hours-actions"] [data-test="new-hours"]'),
-    ).not.toBeNull();
     expect(tabs.querySelector('[slot="departments"] [data-test="new-department"]')).toBeNull();
     await selectTab(el, "zones");
     await action(el, "menus-tree-zone-z1");
@@ -1882,9 +1888,9 @@ describe("venue operations screen", () => {
     expect(tabs.querySelector('[slot="zones"] [data-test="new-assignment-z1"]')).toBeNull();
   });
 
-  it("puts Add department and Add hours under their empty tables' sentence, each opening its editor", async () => {
+  it("puts Add department under its empty table's sentence, opening its editor", async () => {
     const el = await mount({
-      load: vi.fn().mockResolvedValue({ ...model, departments: [], hours: [] }),
+      load: vi.fn().mockResolvedValue({ ...model, departments: [] }),
     } as unknown as VenueServiceApi);
     await selectTab(el, "departments");
     const department = table(el, "departments").querySelector<HTMLElement>(
@@ -1892,26 +1898,9 @@ describe("venue operations screen", () => {
     )!;
     expect(department.assignedSlot).not.toBeNull();
     expect(department.textContent!.trim()).toBe("Add department");
-    const hours = table(el, "hours").querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
-    expect(hours.assignedSlot).not.toBeNull();
-    expect(hours.textContent!.trim()).toBe("Add hours");
-    expect(hours.hasAttribute("disabled")).toBe(true);
     department.click();
     await settle(el);
     expect(modal(el)!.getAttribute("heading")).toBe("Add department");
-  });
-
-  it("opens the hours editor from the empty hours table's Add hours", async () => {
-    const el = await mount({
-      load: vi.fn().mockResolvedValue({ ...model, hours: [] }),
-    } as unknown as VenueServiceApi);
-    await selectTab(el, "departments");
-    expect(table(el, "departments").querySelector("[slot=empty-action]")).toBeNull();
-    const hours = table(el, "hours").querySelector<HTMLElement>(":scope > [slot=empty-action]")!;
-    expect(hours.hasAttribute("disabled")).toBe(false);
-    hours.click();
-    await settle(el);
-    expect(modal(el)!.getAttribute("heading")).toBe("Add hours");
   });
 
   it("puts Make available under a zone's empty menu table, opening the menu editor", async () => {
@@ -1933,14 +1922,12 @@ describe("venue operations screen", () => {
   const emptySentences = {
     en: {
       departments: "No departments yet.",
-      hours: "No opening hours yet.",
       zones: "No service zones yet.",
       tills: "No active tills.",
       "zone-menus": "No menus in this service zone yet.",
     },
     es: {
       departments: "Todavía no hay departamentos.",
-      hours: "Todavía no hay horarios de apertura.",
       zones: "Todavía no hay zonas de servicio.",
       tills: "No hay cajas activas.",
       "zone-menus": "Todavía no hay cartas en esta zona de servicio.",
@@ -1957,14 +1944,12 @@ describe("venue operations screen", () => {
       load: vi.fn().mockResolvedValue({
         ...model,
         departments: [],
-        hours: [],
         floorZones: [],
         devices: [],
       }),
     } as unknown as VenueServiceApi);
     await selectTab(empty, "departments");
     expect(emptySentence(empty, "departments")).toBe(expected.departments);
-    expect(emptySentence(empty, "hours")).toBe(expected.hours);
     await selectTab(empty, "zones");
     expect(emptySentence(empty, "zones")).toBe(expected.zones);
     expect(emptySentence(empty, "tills")).toBe(expected.tills);
@@ -2262,20 +2247,7 @@ describe("venue operations screen", () => {
     }
   });
 
-  it("uses localized weekday names", async () => {
-    setLocale("es");
-    const el = await mount({
-      load: vi.fn().mockResolvedValue(model),
-    } as unknown as VenueServiceApi);
-    await selectTab(el, "departments");
-    expect(tableText(el, "hours")).toContain("Lunes");
-    expect(tableText(el, "hours")).toContain("09:00");
-    expect(tableText(el, "hours")).toContain("18:00");
-    await action(el, "new-hours");
-    expect(options(field(el, "hours-weekday"))).toContain("Domingo");
-  });
-
-  it("shows departments, trading names, zones, menu defaults and hours", async () => {
+  it("shows departments, trading names, zones and menu defaults", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
     } as unknown as VenueServiceApi);
@@ -2285,9 +2257,6 @@ describe("venue operations screen", () => {
     await selectTab(el, "departments");
     expect(tableText(el, "departments")).toContain("Restaurant and bar");
     expect(tableText(el, "departments")).toContain("Casa Delgado Deli");
-    expect(tableText(el, "hours")).toContain("Monday");
-    expect(tableText(el, "hours")).toContain("09:00");
-    expect(tableText(el, "hours")).toContain("18:00");
     await selectTab(el, "zones");
     expect(tableText(el, "zones")).toContain("Dining room");
     expect(tableText(el, "zones")).toContain("Deli counter");
@@ -2558,51 +2527,6 @@ it("edits a department and retains its draft when saving fails", async () => {
     defaultServiceMode: "ticket_then_pay",
   });
   expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
-});
-
-it("creates, edits and deletes hours while preserving other intervals in the department", async () => {
-  const hoursModel: VenueServiceView = {
-    ...model,
-    hours: [
-      ...model.hours,
-      { departmentId: "d2", weekday: 2, opensAt: "10:00:00", closesAt: "19:00:00" },
-      { departmentId: "d1", weekday: 1, opensAt: "12:00:00", closesAt: "23:00:00" },
-    ],
-  };
-  const api = {
-    load: vi.fn().mockResolvedValue(hoursModel),
-    replaceHours: vi.fn().mockResolvedValue(undefined),
-  } as unknown as VenueServiceApi;
-  const el = await mount(api);
-  await selectTab(el, "departments");
-  await action(el, "new-hours");
-  field(el, "hours-department").value = "d2";
-  field(el, "hours-weekday").value = "3";
-  field(el, "hours-opens").value = "11:00";
-  field(el, "hours-closes").value = "20:00";
-  await action(el, "save-editor");
-  expect(api.replaceHours).toHaveBeenLastCalledWith("d2", [
-    { weekday: 1, opensAt: "09:00", closesAt: "18:00" },
-    { weekday: 2, opensAt: "10:00", closesAt: "19:00" },
-    { weekday: 3, opensAt: "11:00", closesAt: "20:00" },
-  ]);
-  await action(el, "edit-hours-0");
-  expect(field(el, "hours-department").value).toBe("d2");
-  expect(field(el, "hours-department").disabled).toBe(true);
-  expect(field(el, "hours-weekday").value).toBe("1");
-  expect(field(el, "hours-opens").value).toBe("09:00");
-  expect(field(el, "hours-closes").value).toBe("18:00");
-  field(el, "hours-opens").value = "08:30";
-  await action(el, "save-editor");
-  expect(api.replaceHours).toHaveBeenLastCalledWith("d2", [
-    { weekday: 2, opensAt: "10:00", closesAt: "19:00" },
-    { weekday: 1, opensAt: "08:30", closesAt: "18:00" },
-  ]);
-  await action(el, "delete-hours-0");
-  await action(el, "save-editor");
-  expect(api.replaceHours).toHaveBeenLastCalledWith("d2", [
-    { weekday: 2, opensAt: "10:00", closesAt: "19:00" },
-  ]);
 });
 
 it("edits a zone policy and can return it to the department's service mode", async () => {
@@ -2876,7 +2800,6 @@ describe("the venue lists' column choosers", () => {
 
   it.each([
     ["departments", "departments", "waitron.venue.departments.table", ["trading", "mode", "state"]],
-    ["departments", "hours", "waitron.venue.hours.table", ["day", "opens", "closes"]],
     ["zones", "zones", "waitron.venue.zones.table", ["department", "mode", "default"]],
     ["zones", "zone-menus", "waitron.venue.zone-menus.table", ["default", "order"]],
   ] as const)(
@@ -2911,7 +2834,6 @@ describe("the venue lists' column choosers", () => {
     } as unknown as VenueServiceApi);
     await selectTab(el, "departments");
     expect(chooser(el, "departments")).toBe("Personalizar columnas");
-    expect(chooser(el, "hours")).toBe("Personalizar columnas");
     await selectTab(el, "zones");
     await action(el, "menus-tree-zone-z1");
     expect(chooser(el, "zones")).toBe("Personalizar columnas");
@@ -2926,7 +2848,7 @@ describe("the venue lists' column choosers", () => {
     await selectTab(el, "departments");
     await selectTab(el, "zones");
     await action(el, "menus-tree-zone-z1");
-    for (const name of ["departments", "hours", "zones", "zone-menus"]) {
+    for (const name of ["departments", "zones", "zone-menus"]) {
       const list = table(el, name) as Element & {
         alwaysShownColumnLabel: string;
         lastShownColumnLabel: string;
@@ -2938,27 +2860,6 @@ describe("the venue lists' column choosers", () => {
 });
 
 describe("the venue editors refuse an incomplete form", () => {
-  it("requires opening and closing times, and refuses them equal", async () => {
-    const api = {
-      load: vi.fn().mockResolvedValue(model),
-      replaceHours: vi.fn(),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "departments");
-    await action(el, "new-hours");
-    await action(el, "save-editor");
-    expect(fieldError(el, "hours-opens")).toBe("This field is required.");
-    expect(fieldError(el, "hours-closes")).toBe("This field is required.");
-    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
-    field(el, "hours-opens").value = "10:00";
-    field(el, "hours-closes").value = "10:00";
-    await action(el, "save-editor");
-    expect(fieldError(el, "hours-opens")).toBe("Opening and closing times must differ.");
-    expect(fieldError(el, "hours-closes")).toBe("Opening and closing times must differ.");
-    expect(await bottom(el)).toBe("Correct the highlighted fields to continue.");
-    expect(api.replaceHours).not.toHaveBeenCalled();
-  });
-
   it("requires a department for a zone when none is active", async () => {
     const api = {
       load: vi.fn().mockResolvedValue({
@@ -3282,13 +3183,6 @@ describe("an editor's messages", () => {
   // holds Save.
   it.each([
     {
-      tab: "departments",
-      open: ["edit-hours-0"],
-      method: "replaceHours",
-      code: "department.not_found",
-      control: "hours-department",
-    },
-    {
       tab: "zones",
       open: ["edit-zone-z1"],
       method: "configureZone",
@@ -3319,10 +3213,10 @@ describe("an editor's messages", () => {
   it("says a refusal naming a field the editor does not show above Save, and leaves Save usable", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
-      replaceHours: vi.fn().mockRejectedValue(invalidRequest("hours.0")),
+      configureZone: vi.fn().mockRejectedValue(invalidRequest("zoneId")),
     } as unknown as VenueServiceApi);
-    await selectTab(el, "departments");
-    await action(el, "edit-hours-0");
+    await selectTab(el, "zones");
+    await action(el, "edit-zone-z1");
     await action(el, "save-editor");
     expect(await bottom(el)).toBe("The change could not be saved.");
     expect(el.shadowRoot!.querySelector("[data-field-error]")).toBeNull();
@@ -3451,7 +3345,6 @@ it("returns focus to a retained row or the tree's Add action when that row is go
   await action(el, "edit-department-d2");
   const updated = structuredClone(model);
   updated.departments = [updated.departments[0]!];
-  updated.hours = [];
   load.mockResolvedValue(updated);
   liveData.invalidate([{ type: "departments", id: "d2" }]);
   await vi.waitFor(() => expect(column(el, "departments", 0)).toEqual(["Restaurant and bar"]));
@@ -3468,7 +3361,6 @@ it("returns focus to the tree's Add action when an edited department disappears"
   await action(el, "edit-tree-department-d2");
   const updated = structuredClone(model);
   updated.departments = [updated.departments[0]!];
-  updated.hours = [];
   load.mockResolvedValue(updated);
   liveData.invalidate([{ type: "departments", id: "d2" }]);
   await vi.waitFor(() =>
@@ -3594,22 +3486,6 @@ describe("where focus goes when an editor opened from an Add button closes", () 
         view.departments = [...view.departments, made];
         return made;
       }),
-      replaceHours: vi.fn(
-        async (
-          departmentId: string,
-          hours: { weekday: number; opensAt: string; closesAt: string }[],
-        ) => {
-          view.hours = [
-            ...view.hours.filter((row) => row.departmentId !== departmentId),
-            ...hours.map((row) => ({
-              departmentId,
-              weekday: row.weekday,
-              opensAt: `${row.opensAt}:00`,
-              closesAt: `${row.closesAt}:00`,
-            })),
-          ];
-        },
-      ),
       allowMenu: vi.fn(
         async (
           zoneId: string,
@@ -3628,30 +3504,19 @@ describe("where focus goes when an editor opened from an Add button closes", () 
     table: string;
     add: string;
     empty: Partial<VenueServiceView>;
-    write: "createDepartment" | "replaceHours" | "allowMenu";
+    write: "createDepartment" | "allowMenu";
     show: (el: VenueOperationsScreen) => Promise<void>;
     fill: (el: VenueOperationsScreen) => void;
   }[] = [
     {
       table: "departments",
       add: "new-department",
-      empty: { departments: [], hours: [] },
+      empty: { departments: [] },
       write: "createDepartment",
       show: (el: VenueOperationsScreen) => selectTab(el, "departments"),
       fill: (el: VenueOperationsScreen) => {
         field(el, "department-name").value = "Events";
         field(el, "trading-name").value = "Casa Events";
-      },
-    },
-    {
-      table: "hours",
-      add: "new-hours",
-      empty: { hours: [] },
-      write: "replaceHours",
-      show: (el: VenueOperationsScreen) => selectTab(el, "zones"),
-      fill: (el: VenueOperationsScreen) => {
-        field(el, "hours-opens").value = "09:00";
-        field(el, "hours-closes").value = "17:00";
       },
     },
     {
@@ -3668,11 +3533,9 @@ describe("where focus goes when an editor opened from an Add button closes", () 
   ];
   function top(el: VenueOperationsScreen, add: string) {
     const button = el.shadowRoot!.querySelector<HTMLElement>(
-      add === "new-hours"
-        ? `[data-test="hours-actions"] [data-test="${add}"]`
-        : add.startsWith("new-assignment-")
-          ? `[data-test="zone-menu-actions"] [data-test="${add}"]`
-          : `[data-test="policy-tree-actions"] [data-test="${add}"]`,
+      add.startsWith("new-assignment-")
+        ? `[data-test="zone-menu-actions"] [data-test="${add}"]`
+        : `[data-test="policy-tree-actions"] [data-test="${add}"]`,
     );
     expect(button, add).not.toBeNull();
     return button!;
@@ -3727,10 +3590,8 @@ describe("where focus goes when an editor opened from an Add button closes", () 
     },
   );
 
-  it("draws no button in the hours or a zone's menu table once they have rows", async () => {
+  it("draws no button in a zone's menu table once it has rows", async () => {
     const el = await mount(writingApi({}) as unknown as VenueServiceApi);
-    await selectTab(el, "departments");
-    expect(inBox(el, "hours")).toBeNull();
     await selectTab(el, "zones");
     await action(el, "menus-tree-zone-z1");
     expect(inBox(el, "zone-menus")).toBeNull();
@@ -3807,46 +3668,6 @@ describe("the venue screen's fields are the shared field components", () => {
       tradingName: "Casa Delgado Events",
       defaultServiceMode: "ticket_then_pay",
     });
-  });
-
-  // Fails if a dropdown given no value stops starting on its first choice, or the times stop
-  // being read from the shared time fields.
-  it("opens new hours on the first department and Sunday, and saves the times typed", async () => {
-    const api = {
-      load: vi.fn().mockResolvedValue(model),
-      replaceHours: vi.fn().mockResolvedValue(undefined),
-    } as unknown as VenueServiceApi;
-    const el = await mount(api);
-    await selectTab(el, "departments");
-    await action(el, "new-hours");
-    const department = dropdown(el.shadowRoot!, "hours-department");
-    expect([department.label, department.required, department.search, department.value]).toEqual([
-      "Department",
-      true,
-      "auto",
-      "d1",
-    ]);
-    expect(options(department)).toEqual([
-      ["d1", "Restaurant and bar"],
-      ["d2", "Deli"],
-    ]);
-    const day = dropdown(el.shadowRoot!, "hours-weekday");
-    expect([day.label, day.required, day.search, day.value]).toEqual(["Day", true, "auto", "0"]);
-    expect(options(day).map(([value]) => value)).toEqual(["0", "1", "2", "3", "4", "5", "6"]);
-    for (const [key, label] of [
-      ["hours-opens", "Opens"],
-      ["hours-closes", "Closes"],
-    ] as const) {
-      const time = textBox(el, key);
-      expect([time.label, time.required, time.type]).toEqual([label, true, "time"]);
-    }
-    await chooseOption(day, "3");
-    await type(el, "hours-opens", "11:00");
-    await type(el, "hours-closes", "20:00");
-    await action(el, "save-editor");
-    expect(api.replaceHours).toHaveBeenCalledWith("d1", [
-      { weekday: 3, opensAt: "11:00", closesAt: "20:00" },
-    ]);
   });
 
   // Fails if the zone's own service style loses its "use the department's" choice, or a zone with
@@ -4009,10 +3830,6 @@ describe("the venue tables at phone width", () => {
       { ...model.departments[0]!, name: "Restaurante, terraza y barra de la planta principal" },
       model.departments[1]!,
     ],
-    hours: [
-      ...model.hours,
-      { departmentId: "d1", weekday: 2, opensAt: "12:00:00", closesAt: "23:00:00" },
-    ],
     floorZones: [
       { id: "z1", name: "Comedor principal junto a la terraza del jardín" },
       model.floorZones[1]!,
@@ -4024,7 +3841,6 @@ describe("the venue tables at phone width", () => {
   };
   const tables: { name: string; tab: string; open?: string; rows: number }[] = [
     { name: "departments", tab: "departments", rows: phoneModel.departments.length },
-    { name: "hours", tab: "departments", rows: phoneModel.hours.length },
     { name: "zones", tab: "zones", rows: phoneModel.floorZones.length },
     { name: "zone-menus", tab: "zones", open: "menus-tree-zone-z1", rows: 1 },
   ];

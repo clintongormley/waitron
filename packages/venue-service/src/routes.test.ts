@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { setClaim } from "./routing-store.js";
-import { replaceStationHours, setStationToday } from "./station-times.js";
+import { setStationToday } from "./station-times.js";
 import { seedStationWeek } from "./testing/interim-week.js";
 import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 import { saveSpecialDate } from "./hours.js";
@@ -639,37 +639,23 @@ describe("venue service management routes", () => {
     expect(saved.rows).toEqual([{ receipt_print_mode: "never" }]);
   });
 
-  it("saves station hours and validates each interval", async () => {
+  it("serves no interval-list hours writes and no department hours in the venue read", async () => {
     const fx = await fixture();
-    const path = `/management-api/venue-service/stations/${fx.stationId}/hours`;
-    expect(
-      (
-        await send(fx.app, "PUT", path, fx.managerCookie, {
-          hours: [{ weekday: 5, opensAt: "19:00", closesAt: "21:00" }],
-        })
-      ).status,
-    ).toBe(204);
-    for (const [body, field] of [
-      [{}, "hours"],
-      [{ hours: "bad" }, "hours"],
-      [{ hours: [{ weekday: 7, opensAt: "19:00", closesAt: "21:00" }] }, "hours.0"],
-      [{ hours: [{ weekday: 5, opensAt: "19:00", closesAt: "19:00" }] }, "hours.0"],
-    ] as const) {
-      const response = await send(fx.app, "PUT", path, fx.managerCookie, body);
-      expect(response.status).toBe(400);
-      expect(await response.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field } },
-      });
-    }
-    const unknown = await send(
-      fx.app,
-      "PUT",
-      `/management-api/venue-service/stations/${crypto.randomUUID()}/hours`,
-      fx.managerCookie,
-      { hours: [] },
-    );
-    expect(unknown.status).toBe(404);
-    expect(await unknown.json()).toMatchObject({ error: { code: "station.not_found" } });
+    const department = (await (
+      await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
+        name: "Restaurant",
+        defaultServiceMode: "table_tab",
+      })
+    ).json()) as { id: string };
+    const hours = [{ weekday: 5, opensAt: "19:00", closesAt: "21:00" }];
+    for (const path of [
+      `/management-api/venue-service/stations/${fx.stationId}/hours`,
+      `/management-api/venue-service/departments/${department.id}/hours`,
+    ])
+      expect((await send(fx.app, "PUT", path, fx.managerCookie, { hours })).status).toBe(404);
+    const listed = await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie);
+    expect(listed.status).toBe(200);
+    expect(Object.keys((await listed.json()) as object)).not.toContain("hours");
   });
 
   it("saves and clears a fallback while refusing loops and a missing key", async () => {
@@ -1328,24 +1314,6 @@ describe("venue service management routes", () => {
         await send(
           fx.app,
           "PUT",
-          `/management-api/venue-service/departments/${department.id}/hours`,
-          fx.managerCookie,
-          {
-            hours: [
-              { weekday: 1, opensAt: "09:00", closesAt: "14:00" },
-              { weekday: 1, opensAt: "17:00", closesAt: "23:00" },
-              { weekday: 6, opensAt: "18:00", closesAt: "01:00" },
-            ],
-          },
-        )
-      ).status,
-    ).toBe(204);
-
-    expect(
-      (
-        await send(
-          fx.app,
-          "PUT",
           `/management-api/venue-service/zones/${fx.zoneId}`,
           fx.managerCookie,
           { departmentId: department.id, serviceMode: "prepay" },
@@ -1381,11 +1349,6 @@ describe("venue service management routes", () => {
           departmentId: department.id,
           serviceMode: "prepay",
         },
-      ],
-      hours: [
-        { departmentId: department.id, weekday: 1, opensAt: "09:00:00", closesAt: "14:00:00" },
-        { departmentId: department.id, weekday: 1, opensAt: "17:00:00", closesAt: "23:00:00" },
-        { departmentId: department.id, weekday: 6, opensAt: "18:00:00", closesAt: "01:00:00" },
       ],
       zoneMenus: [{ zoneId: fx.zoneId, menuId: fx.menuId, displayOrder: 0, isDefault: true }],
       readiness: [{ code: "zone.menu_unpublished", zoneId: fx.zoneId }],
@@ -1472,87 +1435,6 @@ describe("venue service management routes", () => {
         )
       ).status,
     ).toBe(404);
-  });
-
-  it("refuses an hours body that is not a list of intervals and keeps the saved hours", async () => {
-    const fx = await fixture();
-    const department = (await (
-      await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
-        name: "Restaurant",
-        defaultServiceMode: "table_tab",
-      })
-    ).json()) as { id: string };
-    const path = `/management-api/venue-service/departments/${department.id}/hours`;
-    const saved = { weekday: 2, opensAt: "12:00", closesAt: "16:00" };
-    expect((await send(fx.app, "PUT", path, fx.managerCookie, { hours: [saved] })).status).toBe(
-      204,
-    );
-    const cases: { body: unknown; field: string }[] = [
-      { body: {}, field: "hours" },
-      { body: { hours: saved }, field: "hours" },
-      { body: { hours: [saved, null] }, field: "hours.1" },
-      { body: { hours: [saved, "Monday"] }, field: "hours.1" },
-    ];
-    for (const { body, field } of cases) {
-      const rejected = await send(fx.app, "PUT", path, fx.managerCookie, body);
-      expect(rejected.status).toBe(400);
-      expect(await rejected.json()).toEqual({
-        error: { code: "management.request_invalid", params: { field } },
-      });
-    }
-    expect(
-      (
-        (await (
-          await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-        ).json()) as { hours: unknown[] }
-      ).hours,
-    ).toEqual([
-      { departmentId: department.id, weekday: 2, opensAt: "12:00:00", closesAt: "16:00:00" },
-    ]);
-  });
-
-  it("refuses an interval with an impossible weekday or clock time, naming its position", async () => {
-    const fx = await fixture();
-    const department = (await (
-      await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
-        name: "Restaurant",
-        defaultServiceMode: "table_tab",
-      })
-    ).json()) as { id: string };
-    const path = `/management-api/venue-service/departments/${department.id}/hours`;
-    const valid = { weekday: 3, opensAt: "09:00", closesAt: "14:00" };
-    expect((await send(fx.app, "PUT", path, fx.managerCookie, { hours: [valid] })).status).toBe(
-      204,
-    );
-    // Each interval has one bad field and every other field valid.
-    for (const bad of [
-      { ...valid, weekday: "3" },
-      { ...valid, weekday: 2.5 },
-      { ...valid, weekday: -1 },
-      { ...valid, weekday: 7 },
-      { ...valid, opensAt: 900 },
-      { ...valid, opensAt: ["10:00"] },
-      { ...valid, opensAt: "24:00" },
-      { ...valid, closesAt: undefined },
-      { ...valid, closesAt: ["15:00"] },
-      { ...valid, closesAt: "14:60" },
-      { ...valid, closesAt: "09:00" },
-    ]) {
-      const rejected = await send(fx.app, "PUT", path, fx.managerCookie, { hours: [valid, bad] });
-      expect(rejected.status).toBe(400);
-      expect(await rejected.json()).toEqual({
-        error: { code: "management.request_invalid", params: { field: "hours.1" } },
-      });
-    }
-    expect(
-      (
-        (await (
-          await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-        ).json()) as { hours: unknown[] }
-      ).hours,
-    ).toEqual([
-      { departmentId: department.id, weekday: 3, opensAt: "09:00:00", closesAt: "14:00:00" },
-    ]);
   });
 
   it("stores a zone menu's explicit display order and refuses one that is not a whole number from zero", async () => {
@@ -2359,9 +2241,6 @@ it("applies scheduled hours through the explain route and honors manual open onl
       .values({ ...cfg, name: "Upstairs" })
       .returning();
     await setClaim(tx, cfg, fx.categoryId, { kind: "station", stationId: station!.id });
-    await replaceStationHours(tx, cfg, station!.id, [
-      { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
-    ]);
     await seedStationWeek(tx, cfg, station!.id, [
       { weekday: 5, opensAt: "18:00", closesAt: "21:00" },
     ]);

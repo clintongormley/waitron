@@ -50,6 +50,8 @@ import { seedNode } from "@waitron/db/testing/seed.js";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
+import { readWeekHours, replaceWeekHours } from "./hours.js";
+import type { WeekDay } from "./hours-types.js";
 import { createException, resolveMakers, setClaim } from "./routing-store.js";
 import { routeExceptions } from "./schema/routing.js";
 import { deviceZoneDefaults, zoneSalePolicies, zoneMenus } from "./schema/service.js";
@@ -67,7 +69,6 @@ import {
   findOrderServiceModes,
   findOrderServiceZones,
   getOrderServiceContext,
-  listDepartmentHours,
   listDepartments,
   listWorkingLineContexts,
   listServiceZones,
@@ -75,7 +76,6 @@ import {
   listZoneOffers,
   recordOrderServiceContext,
   recordWorkingLineContexts,
-  replaceDepartmentHours,
   resolveNewOrderZone,
   resolveSalePolicy,
   recordSaleReceiptHeader,
@@ -1113,9 +1113,10 @@ describe("departments", () => {
     ]);
   });
 
-  it("refuses hours and deactivation for a department outside this venue, and an empty set clears the hours", async () => {
+  it("refuses hours and deactivation for a department outside this venue, and an unset week clears the hours", async () => {
     const here = { locationId: brandLocationId(await seedLocation("Venue")) };
     const there = { locationId: brandLocationId(await seedLocation("Second venue")) };
+    const at = new Date("2026-10-06T10:00:00Z");
     await scoped(async (tx) => {
       const department = await createDepartment(tx, here, {
         name: "Restaurant",
@@ -1125,28 +1126,61 @@ describe("departments", () => {
         name: "Elsewhere",
         defaultServiceMode: "table_tab",
       });
-      const openingHours = [{ weekday: 1, opensAt: "09:00", closesAt: "17:00" }];
-      await replaceDepartmentHours(tx, here, department.id, openingHours);
-      await replaceDepartmentHours(tx, there, elsewhere.id, openingHours);
+      const openingHours = (): WeekDay[] =>
+        [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+          weekday,
+          cell:
+            weekday === 1
+              ? {
+                  mode: "periods",
+                  periods: [{ id: randomUUID(), opensAt: "09:00", closesAt: "17:00" }],
+                }
+              : { mode: "closed", periods: [] },
+        }));
+      const unset: WeekDay[] = [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        cell: { mode: "not_set", periods: [] },
+      }));
+      const asDepartment = (id: string) => ({ kind: "department" as const, id });
+      await replaceWeekHours(tx, here, asDepartment(department.id), openingHours(), at);
+      await replaceWeekHours(tx, there, asDepartment(elsewhere.id), openingHours(), at);
+      const stored = await readWeekHours(tx, there, asDepartment(elsewhere.id));
 
       for (const departmentId of [elsewhere.id, UNKNOWN_ID]) {
-        const notFound = { code: "department.not_found", params: { departmentId } };
         await expect(
-          rejection(replaceDepartmentHours(tx, here, departmentId, [])),
-        ).resolves.toEqual(notFound);
-        await expect(rejection(deactivateDepartment(tx, here, departmentId))).resolves.toEqual(
-          notFound,
-        );
+          rejection(replaceWeekHours(tx, here, asDepartment(departmentId), unset, at)),
+        ).resolves.toEqual({ code: "hours.invalid", params: { field: "subject" } });
+        await expect(rejection(deactivateDepartment(tx, here, departmentId))).resolves.toEqual({
+          code: "department.not_found",
+          params: { departmentId },
+        });
       }
-      await expect(listDepartmentHours(tx, there)).resolves.toEqual([
-        { departmentId: elsewhere.id, weekday: 1, opensAt: "09:00:00", closesAt: "17:00:00" },
+      expect(stored.map(({ weekday, cell }) => [weekday, cell.mode])).toEqual([
+        [0, "closed"],
+        [1, "periods"],
+        [2, "closed"],
+        [3, "closed"],
+        [4, "closed"],
+        [5, "closed"],
+        [6, "closed"],
       ]);
+      expect(stored[1]!.cell.periods.map(({ opensAt, closesAt }) => [opensAt, closesAt])).toEqual([
+        ["09:00", "17:00"],
+      ]);
+      await expect(readWeekHours(tx, there, asDepartment(elsewhere.id))).resolves.toEqual(stored);
       await expect(listDepartments(tx, there)).resolves.toEqual([
         expect.objectContaining({ id: elsewhere.id, active: true }),
       ]);
 
-      await replaceDepartmentHours(tx, here, department.id, []);
-      await expect(listDepartmentHours(tx, here)).resolves.toEqual([]);
+      await replaceWeekHours(tx, here, asDepartment(department.id), unset, at);
+      await expect(readWeekHours(tx, here, asDepartment(department.id))).resolves.toEqual(unset);
+      expect(
+        (
+          await tx.execute<{ n: number }>(
+            sql`select count(*) as n from hours_week_cells where department_id = ${department.id}`,
+          )
+        ).rows,
+      ).toEqual([{ n: 0 }]);
     });
   });
 

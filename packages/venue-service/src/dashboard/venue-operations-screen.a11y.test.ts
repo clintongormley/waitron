@@ -20,7 +20,6 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
         salePolicies: { departments: [], zones: [] },
         deviceZones: [],
         devices: [],
-        hours: [],
         zoneMenus: [],
         menus: [],
         floorZones: [],
@@ -105,7 +104,6 @@ describe.each(["light", "dark"] as const)("department editor accessibility (%s)"
         salePolicies: { departments: [], zones: [] },
         deviceZones: [],
         devices: [],
-        hours: [],
         zoneMenus: [],
         menus: [],
         floorZones: [],
@@ -147,11 +145,10 @@ function findDeep(root: ParentNode, selector: string): HTMLElement | null {
 
 describe.each(["light", "dark"] as const)("venue editors' fields accessibility (%s)", (theme) => {
   test.each([
-    ["the hours editor, after a failed press", "departments", ["new-hours"], true],
-    ["the zone editor", "zones", ["edit-zone-z1"], false],
-    ["the menu editor", "zones", ["menus-tree-zone-z1", "new-assignment-z1"], false],
-    ["the tills' starting zones", "zones", [], false],
-  ] as const)("%s", async (_name, tab, steps, press) => {
+    ["the zone editor", "zones", ["edit-zone-z1"]],
+    ["the menu editor", "zones", ["menus-tree-zone-z1", "new-assignment-z1"]],
+    ["the tills' starting zones", "zones", []],
+  ] as const)("%s", async (_name, tab, steps) => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
     const el = document.createElement("dashboard-venue-operations-screen") as VenueOperationsScreen;
@@ -180,7 +177,6 @@ describe.each(["light", "dark"] as const)("venue editors' fields accessibility (
         salePolicies: { departments: [], zones: [] },
         deviceZones: [],
         devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
-        hours: [],
         zoneMenus: [{ zoneId: "z1", menuId: "m1", displayOrder: 0, isDefault: true }],
         menus: [
           { id: "m1", name: "Lunch", active: true },
@@ -189,7 +185,6 @@ describe.each(["light", "dark"] as const)("venue editors' fields accessibility (
         floorZones: [{ id: "z1", name: "Dining room" }],
         settings: { editSentLines: true },
       }),
-      replaceHours: vi.fn(),
     } as unknown as VenueServiceApi;
     host.append(el);
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -201,16 +196,6 @@ describe.each(["light", "dark"] as const)("venue editors' fields accessibility (
       findDeep(el.shadowRoot!, `[data-test="${step}"]`)!.click();
       await new Promise((resolve) => setTimeout(resolve, 0));
       await el.updateComplete;
-    }
-    if (press) {
-      el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-editor"]')!.click();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await el.updateComplete;
-      expect(
-        el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
-          'wt-input[name="hours-opens"]',
-        )!.error,
-      ).not.toBe("");
     }
     expect(findDeep(el.shadowRoot!, "wt-combobox")).not.toBeNull();
     await expectNoA11yViolations(host);

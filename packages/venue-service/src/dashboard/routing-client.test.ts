@@ -2,16 +2,14 @@ import { expect, it, vi } from "vitest";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 import { PrepStationsApi } from "./routing-client.js";
 
-it("writes station hours, fallback and today to venue service, and reads output failures passively", async () => {
+it("writes station fallback and today to venue service, and reads output failures passively", async () => {
   const request = vi.fn(async () => ({ printersDown: [], screensDark: [] }));
   const api = new PrepStationsApi(request as DashboardRequest);
-  const hours = [{ weekday: 5, opensAt: "22:00", closesAt: "02:00" }];
-  await api.setStationHours("bar", hours);
+  expect("setStationHours" in api).toBe(false);
   await api.setStationFallback("bar", null);
   await api.setStationToday("bar", "closed");
   await api.listOutputsDown();
   expect(request.mock.calls).toEqual([
-    ["/management-api/venue-service/stations/bar/hours", "PUT", { hours }],
     ["/management-api/venue-service/stations/bar/fallback", "PUT", { fallbackStationId: null }],
     ["/management-api/venue-service/stations/bar/today", "PUT", { state: "closed" }],
     ["/management-api/stations/outputs-down", "GET", undefined, { passive: true }],

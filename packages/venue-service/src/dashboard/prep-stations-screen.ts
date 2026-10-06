@@ -32,7 +32,6 @@ import type {
   RouteExplanation,
 } from "../routing.js";
 import type { RoutingChange, RoutingMove, StationTimes } from "../routing-types.js";
-import type { WeeklyInterval } from "../routing.js";
 import { exceptionSentence } from "./exception-sentence.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import type {
@@ -45,13 +44,11 @@ import type {
 } from "./routing-client.js";
 import { watchersOfStation, watchersSeeing, type WatcherView } from "./watchers-seen.js";
 import { t } from "./strings.js";
-import "./station-hours-form.js";
 import "./station-health-table.js";
 import { watcherInputErrors } from "./watcher-form.js";
 
 type StationAction =
   | { kind: "today"; stationId: string; state: "open" | "closed" | null }
-  | { kind: "hours"; stationId: string }
   | { kind: "fallback" | "switch_off"; stationId: string; choice: string; confirming: boolean }
   | { kind: "switch_on"; stationId: string };
 const format = (key: Parameters<typeof t>[0], values: Record<string, string> = {}) =>
@@ -317,8 +314,6 @@ export class PrepStationsScreen extends LitElement {
   @state() private stationAction?: StationAction;
   @state() private stationActionError = "";
   @state() private stationFieldError = "";
-  private editingHours: readonly WeeklyInterval[] = [];
-  @state() private hoursServerErrors: Record<number, string> = {};
   @state() private tab: PrepTab = "stations";
   @state() private stationOrder?: string[];
   @state() private stationAnnouncement = "";
@@ -1395,15 +1390,6 @@ export class PrepStationsScreen extends LitElement {
       >
     </div>`;
   }
-  #hoursSummary(hours: readonly WeeklyInterval[]) {
-    if (!hours.length) return t("prep.always_open");
-    return hours
-      .map(
-        (row) =>
-          `${t(`venue.day.${row.weekday}` as "venue.day.0")} ${row.opensAt}–${row.closesAt}${row.closesAt < row.opensAt ? ` ${t("prep.next_day")}` : ""}`,
-      )
-      .join(", ");
-  }
   #fallbackOptions(id: string) {
     const stored = this.#times(id)?.fallbackStationId;
     const stations = this.view?.routing.stations ?? [];
@@ -1419,12 +1405,9 @@ export class PrepStationsScreen extends LitElement {
   }
   #openStationAction(action: StationAction) {
     if (this.busy) return;
-    if (action.kind === "hours")
-      this.editingHours = (this.#times(action.stationId)?.hours ?? []).map((row) => ({ ...row }));
     this.stationAction = action;
     this.stationActionError = "";
     this.stationFieldError = "";
-    this.hoursServerErrors = {};
   }
   #cancelStationAction() {
     if (!this.busy) this.stationAction = undefined;
@@ -1459,7 +1442,7 @@ export class PrepStationsScreen extends LitElement {
         : format("prep.fallback_closed_ask", { station: this.#stationName(choice) })
     }`;
   }
-  async #saveStationAction(hours?: readonly WeeklyInterval[]) {
+  async #saveStationAction() {
     const action = this.stationAction;
     if (!action || this.busy) return;
     this.busy = true;
@@ -1468,7 +1451,6 @@ export class PrepStationsScreen extends LitElement {
     let fallbackSaved = false;
     try {
       if (action.kind === "today") await this.api.setStationToday(action.stationId, action.state);
-      if (action.kind === "hours") await this.api.setStationHours(action.stationId, hours ?? []);
       if (action.kind === "fallback" || action.kind === "switch_off") {
         const choice = action.choice || null;
         if (choice !== this.#times(action.stationId)?.fallbackStationId) {
@@ -1483,11 +1465,7 @@ export class PrepStationsScreen extends LitElement {
     } catch (e) {
       if (fallbackSaved) await this.#load();
       const code = codeOf(e);
-      const field = (e as { params?: { field?: string } } | undefined)?.params?.field;
-      if (action.kind === "hours" && field?.startsWith("hours.")) {
-        const index = Number(field.slice(6));
-        if (Number.isInteger(index)) this.hoursServerErrors = { [index]: t("venue.time_distinct") };
-      } else if (code === "station.fallback_loop" || code === "route.station_inactive")
+      if (code === "station.fallback_loop" || code === "route.station_inactive")
         this.stationFieldError = t(
           code === "station.fallback_loop" ? "prep.fallback_loop" : "prep.station_disabled",
         );
@@ -2944,17 +2922,6 @@ export class PrepStationsScreen extends LitElement {
     if (!action) return nothing;
     const station = this.view?.stations.find((row) => row.id === action.stationId);
     const times = this.#times(action.stationId);
-    if (action.kind === "hours")
-      return html`<station-hours-form
-        data-test="station-action-modal"
-        .inDialog=${true}
-        .hours=${this.editingHours}
-        .serverErrors=${this.hoursServerErrors}
-        .saveError=${this.stationActionError}
-        .busy=${this.busy}
-        @hours-save=${(event: CustomEvent<{ hours: WeeklyInterval[] }>) => void this.#saveStationAction(event.detail.hours)}
-        @hours-cancel=${() => this.#cancelStationAction()}
-      ></station-hours-form>`;
     const end = this.#todayEnd();
     const isFallback = action.kind === "fallback" || action.kind === "switch_off";
     const heading =
@@ -3056,123 +3023,100 @@ export class PrepStationsScreen extends LitElement {
       ${
         view
           ? html`<wt-tabs
-                label=${t("prep.title")}
-                .value=${this.tab}
-                .items=${(this.readOnly ? (["stations"] as const) : PREP_TABS).map((key) => ({ key, label: t(`prep.tab.${key}`) }))}
-                @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
-                  if (event.target !== event.currentTarget) return;
-                  const tab = PREP_TABS.find((tab) => tab === event.detail.value);
-                  if (!tab || (this.readOnly && tab !== "stations")) return;
-                  this.tab = tab;
-                  this.#url.write({ dashboard: "prep-stations", view: tab });
-                }}
-              >
-                ${
-                  this.readOnly
-                    ? nothing
-                    : html`<div slot="actions">
-                        <wt-button @click=${() => this.#openStation()} data-test="new-station"
-                          >${t("prep.new_station")}</wt-button
-                        >
-                        <wt-button
-                          data-test="new-watcher"
-                          @click=${() => {
-                            this.watcherEditor = {};
-                            this.watcherRefusal = undefined;
-                          }}
-                          >${t("watchers.new")}</wt-button
-                        >
-                      </div>`
-                }
-                <div slot="stations">
-                  <div
-                    class="reorder-status"
-                    data-test="station-order-status"
-                    role="status"
-                    aria-live="polite"
-                  >
-                    ${this.stationAnnouncement}
-                  </div>
-                  <prep-station-health-table
-                    .snapshot=${this.health}
-                    .stations=${view.stations.map((station) => ({ ...station, displayOrder: this.stationOrder?.indexOf(station.id) ?? station.displayOrder }))}
-                    .actions=${this.readOnly ? {} : Object.fromEntries(view.stations.map((station) => [station.id, this.#stationMenu(station)]))}
-                    .today=${Object.fromEntries(
-                      view.stations.map((station) => {
-                        const status = this.#todayCell(station);
-                        return [station.id, status === nothing ? "" : status];
-                      }),
-                    )}
-                  ></prep-station-health-table>
-                </div>
-                ${
-                  this.readOnly
-                    ? nothing
-                    : html`<div slot="routing">
-                          ${this.#tester()}${this.#exceptions()}
-                          <div class="cards">
-                            ${active.map((s) => this.#stationCard(s))}<wt-card
-                              data-test="no-preparation"
-                              ><h2>${t("prep.no_preparation")}</h2>
-                              ${this.#chips(null)}<wt-button
-                                variant="secondary"
-                                data-test="claim-no-preparation"
-                                @click=${() => {
-                                  this.editor = { kind: "claim", stationId: null };
-                                }}
-                                >${t("prep.claim_folder")}</wt-button
-                              ></wt-card
-                            >${this.#unassigned()}
-                          </div>
-                          ${
-                            inactive.length
-                              ? html`<section>
-                                  <h2>${t("prep.disabled")}</h2>
-                                  ${inactive.map(
-                                    (station) =>
-                                      html`<wt-card data-test=${`inactive-${station.id}`}
-                                        ><h3>${station.name}</h3>
-                                        <p>
-                                          ${this.#times(station.id)?.closedSendsTo ? format("prep.off_goes_to", { station: this.#stationName(this.#times(station.id)!.closedSendsTo!) }) : t("prep.off_asks")}
-                                        </p>
-                                        <p>
-                                          ${this.#times(station.id)?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}
-                                        </p>
-                                      </wt-card>`,
-                                  )}
-                                </section>`
-                              : nothing
-                          }
-                          ${off.length ? html`<p>${t("prep.disabled")}: ${off.map((c) => html`${this.#path(c.categoryId)} — ${this.#targetName(c.target)}. ${this.#times(c.target.kind === "station" ? c.target.stationId : "")?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}`)}</p>` : nothing}
-                        </div>
-                        <div slot="tickets">${this.#tickets()}</div>
-                        <div slot="watchers">${this.#watchers()}</div>
-                        <div slot="settings">${this.#settings()}</div>`
-                }
-              </wt-tabs>
+              label=${t("prep.title")}
+              .value=${this.tab}
+              .items=${(this.readOnly ? (["stations"] as const) : PREP_TABS).map((key) => ({ key, label: t(`prep.tab.${key}`) }))}
+              @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
+                if (event.target !== event.currentTarget) return;
+                const tab = PREP_TABS.find((tab) => tab === event.detail.value);
+                if (!tab || (this.readOnly && tab !== "stations")) return;
+                this.tab = tab;
+                this.#url.write({ dashboard: "prep-stations", view: tab });
+              }}
+            >
               ${
                 this.readOnly
                   ? nothing
-                  : html`<section data-test="interim-station-hours">
-                      <h2>${t("venue.hours")}</h2>
-                      ${active
-                        .filter((station) => !station.isDefault)
-                        .map(
-                          (station) => html`
-                            <p>
-                              ${station.name}:
-                              ${this.#hoursSummary(this.#times(station.id)?.hours ?? [])}
-                            </p>
-                            <wt-button
+                  : html`<div slot="actions">
+                      <wt-button @click=${() => this.#openStation()} data-test="new-station"
+                        >${t("prep.new_station")}</wt-button
+                      >
+                      <wt-button
+                        data-test="new-watcher"
+                        @click=${() => {
+                          this.watcherEditor = {};
+                          this.watcherRefusal = undefined;
+                        }}
+                        >${t("watchers.new")}</wt-button
+                      >
+                    </div>`
+              }
+              <div slot="stations">
+                <div
+                  class="reorder-status"
+                  data-test="station-order-status"
+                  role="status"
+                  aria-live="polite"
+                >
+                  ${this.stationAnnouncement}
+                </div>
+                <prep-station-health-table
+                  .snapshot=${this.health}
+                  .stations=${view.stations.map((station) => ({ ...station, displayOrder: this.stationOrder?.indexOf(station.id) ?? station.displayOrder }))}
+                  .actions=${this.readOnly ? {} : Object.fromEntries(view.stations.map((station) => [station.id, this.#stationMenu(station)]))}
+                  .today=${Object.fromEntries(
+                    view.stations.map((station) => {
+                      const status = this.#todayCell(station);
+                      return [station.id, status === nothing ? "" : status];
+                    }),
+                  )}
+                ></prep-station-health-table>
+              </div>
+              ${
+                this.readOnly
+                  ? nothing
+                  : html`<div slot="routing">
+                        ${this.#tester()}${this.#exceptions()}
+                        <div class="cards">
+                          ${active.map((s) => this.#stationCard(s))}<wt-card
+                            data-test="no-preparation"
+                            ><h2>${t("prep.no_preparation")}</h2>
+                            ${this.#chips(null)}<wt-button
                               variant="secondary"
-                              data-test=${`edit-hours-${station.id}`}
-                              @click=${() => this.#openStationAction({ kind: "hours", stationId: station.id })}
-                              >${t("prep.edit_hours")}</wt-button
-                            >
-                          `,
-                        )}
-                    </section>`
-              }`
+                              data-test="claim-no-preparation"
+                              @click=${() => {
+                                this.editor = { kind: "claim", stationId: null };
+                              }}
+                              >${t("prep.claim_folder")}</wt-button
+                            ></wt-card
+                          >${this.#unassigned()}
+                        </div>
+                        ${
+                          inactive.length
+                            ? html`<section>
+                                <h2>${t("prep.disabled")}</h2>
+                                ${inactive.map(
+                                  (station) =>
+                                    html`<wt-card data-test=${`inactive-${station.id}`}
+                                      ><h3>${station.name}</h3>
+                                      <p>
+                                        ${this.#times(station.id)?.closedSendsTo ? format("prep.off_goes_to", { station: this.#stationName(this.#times(station.id)!.closedSendsTo!) }) : t("prep.off_asks")}
+                                      </p>
+                                      <p>
+                                        ${this.#times(station.id)?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}
+                                      </p>
+                                    </wt-card>`,
+                                )}
+                              </section>`
+                            : nothing
+                        }
+                        ${off.length ? html`<p>${t("prep.disabled")}: ${off.map((c) => html`${this.#path(c.categoryId)} — ${this.#targetName(c.target)}. ${this.#times(c.target.kind === "station" ? c.target.stationId : "")?.closedSendsTo ? t("prep.disabled_hint") : t("prep.disabled_no_replacement")}`)}</p>` : nothing}
+                      </div>
+                      <div slot="tickets">${this.#tickets()}</div>
+                      <div slot="watchers">${this.#watchers()}</div>
+                      <div slot="settings">${this.#settings()}</div>`
+              }
+            </wt-tabs>`
           : nothing
       }${this.error && !this.editor ? html`<p class="error" role="alert">${this.error}</p>` : nothing}${this.readOnly ? nothing : html`${this.#dialog()}${this.#previewDialog()}${this.#stationActionDialog()}${this.#watcherDialogs()}${this.#watcherRenameDialog()}${this.#renameDialog()}`}`;
   }
