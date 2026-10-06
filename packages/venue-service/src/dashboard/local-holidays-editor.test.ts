@@ -487,10 +487,34 @@ describe("Local holidays: adding and changing an entry", () => {
     },
   );
 
+  it("keeps a refusal under its field while another field changes, and drops it once that field changes", async () => {
+    const { api, state } = server();
+    const el = await mount(api);
+    await click(el, part(el, "add-local"));
+    await setField(el, "holidayDate", "2026-09-08");
+    await setField(el, "holidayName", "Feria");
+    state.writes.push({ reject: { code: "holiday.date_taken", params: { date: "2026-09-08" } } });
+    await click(el, saveButton(el));
+    expect(field(el, "holidayDate")!.error).toBe("Tue, 8 Sept 2026 already has a local holiday.");
+
+    await setField(el, "holidayName", "Feria de abril");
+    expect(field(el, "holidayDate")!.error).toBe("Tue, 8 Sept 2026 already has a local holiday.");
+    expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
+
+    await setField(el, "holidayDate", "2026-09-09");
+    expect(field(el, "holidayDate")!.error).toBe("");
+    expect(await bottomMessage(el)).toBe("");
+    expect(saveButton(el).disabled).toBe(false);
+  });
+
   it.each([
     [
       { code: "holiday.local_limit", params: { limit: 2 } },
       "You can enter at most 2 local holidays a year.",
+    ],
+    [
+      { code: "holiday.local_limit", params: { limit: 1 } },
+      "You can enter at most 1 local holiday a year.",
     ],
     [
       { code: "holiday.local_limit", params: { limit: 0 } },
