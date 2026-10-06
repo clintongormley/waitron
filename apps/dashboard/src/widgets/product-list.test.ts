@@ -1295,7 +1295,6 @@ describe("product-list", () => {
         }),
         product({ id: "ham", name: "Jamón", unitId: "kg", unit: kilo, unitPrice: "48.00" }),
       ],
-      units: [kilo],
       unitLanguage: language,
     });
     const root = await tableRoot(el);
@@ -1309,7 +1308,6 @@ describe("product-list", () => {
     const tray: Unit = { id: "tray", name: { es: "bandeja" }, abbreviation: {}, precision: 0 };
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "bun", unitId: "tray", unit: tray, variants: [bunVariant] })],
-      units: [tray],
       unitLanguage: "es",
     });
     const root = await tableRoot(el);
@@ -1323,10 +1321,9 @@ describe("product-list", () => {
     expect(unit("bun:small")).toBe("/ bandeja");
   });
 
-  it("names a measured unit after its price before the venue's unit list has loaded", async () => {
+  it("names a measured unit after its price from the product's own unit", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "ham", unitId: "kg", unit: kilo, unitPrice: "48.00" })],
-      units: [],
       unitLanguage: "en",
     });
     const unit = cellUnder(await tableRoot(el), "ham", t("product.price"))
@@ -1813,7 +1810,7 @@ describe("the product list at phone width", () => {
       }),
   );
 
-  /** The open name box against its row's grip (or grip space) and folder icon. */
+  /** The open name box against its row's grip (or grip space) and leading slot. */
   async function nameBoxLine(root: ShadowRoot) {
     const edges = await nameBoxEdges(root);
     const box = root.querySelector<HTMLElementTagNameMap["wt-input"]>(
@@ -1824,7 +1821,11 @@ describe("the product list at phone width", () => {
     return {
       edges,
       box: box.getBoundingClientRect(),
-      grip: row.querySelector('.drag-grip, [part~="grip-space"]')!.getBoundingClientRect(),
+      // With reordering off the row has no grip, so its line starts at the folder frame.
+      grip: (
+        row.querySelector('.drag-grip, [part~="grip-space"]') ??
+        row.querySelector('[part~="folder-frame"]')!
+      ).getBoundingClientRect(),
       icon: row.querySelector('[part~="folder-frame"]')!.getBoundingClientRect(),
       error: error.textContent,
       errorOverflows: error.scrollWidth > error.clientWidth,
@@ -1855,14 +1856,20 @@ describe("the product list at phone width", () => {
 
   it.each(
     ["en-GB", "es-ES"].flatMap((locale) =>
-      ["f", "d", "b"].map((categoryId) => ({ locale, categoryId })),
+      ["f", "d", "b"].flatMap((categoryId) =>
+        [true, false].map((reordering) => ({ locale, categoryId, reordering })),
+      ),
     ),
   )(
-    "puts a renamed category's name box and its refusal on their own line under the grip at 390 px ($locale, $categoryId)",
-    ({ locale, categoryId }) =>
+    "puts a renamed category's name box and its refusal on their own line under the grip or its slot at 390 px ($locale, $categoryId, reordering: $reordering)",
+    ({ locale, categoryId, reordering }) =>
       onPhone(locale, 390, async () => {
-        // An asterisk and Drinks' two-part count leave the least room beside the grip and icon.
-        const { el, root } = await mountNarrowTree({ unroutedFolderIds: ["f", "d", "b"] });
+        // An asterisk leaves the least room beside the grip or colour-square slot; the count is hidden
+        // at this width, so the `count` part measured below has an empty box.
+        const { el, root } = await mountNarrowTree({
+          unroutedFolderIds: ["f", "d", "b"],
+          reordering,
+        });
         await openWithRefusal(el, { kind: "rename", categoryId });
         const line = await nameBoxLine(root);
         expectOwnLine(line);
@@ -1877,23 +1884,32 @@ describe("the product list at phone width", () => {
 
   it.each(
     ["en-GB", "es-ES"].flatMap((locale) =>
-      [null, "d", "b"].map((parentId) => ({ locale, parentId })),
+      [null, "d", "b"].flatMap((parentId) =>
+        [true, false].map((reordering) => ({ locale, parentId, reordering })),
+      ),
     ),
   )(
-    "puts a new category's name box and its refusal on their own line under the grip space at 390 px ($locale, $parentId)",
-    ({ locale, parentId }) =>
+    "puts a new category's name box and its refusal on their own line under the grip space at 390 px ($locale, $parentId, reordering: $reordering)",
+    ({ locale, parentId, reordering }) =>
       onPhone(locale, 390, async () => {
-        const { el, root } = await mountNarrowTree();
+        const { el, root } = await mountNarrowTree({ reordering });
         await openWithRefusal(el, { kind: "create", parentId });
         expectOwnLine(await nameBoxLine(root));
       }),
   );
 
-  it.each(["en-GB", "es-ES"])(
-    "moves an open name box onto its own line when the screen narrows from 1280 to 390 px (%s)",
-    (locale) =>
+  it.each(
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      [true, false].map((reordering) => ({ locale, reordering })),
+    ),
+  )(
+    "moves an open name box onto its own line when the screen narrows from 1280 to 390 px ($locale, reordering: $reordering)",
+    ({ locale, reordering }) =>
       onPhone(locale, 1280, async () => {
-        const { el, table, root } = await mountTree({ unroutedFolderIds: ["f", "d", "b"] });
+        const { el, table, root } = await mountTree({
+          unroutedFolderIds: ["f", "d", "b"],
+          reordering,
+        });
         await openWithRefusal(el, { kind: "rename", categoryId: "d" });
         expect(table.hasAttribute("narrow")).toBe(false);
         await page.viewport(390, 844);
@@ -1906,13 +1922,13 @@ describe("the product list at phone width", () => {
       [
         { kind: "rename", categoryId: "b" } as const,
         { kind: "create", parentId: "d" } as const,
-      ].map((draft) => ({ locale, draft })),
+      ].flatMap((draft) => [true, false].map((reordering) => ({ locale, draft, reordering }))),
     ),
   )(
-    "keeps the name box beside the grip and folder icon at 1280 px ($locale, $draft.kind)",
-    ({ locale, draft }) =>
+    "keeps the name box beside the grip and folder slot at 1280 px ($locale, $draft.kind, reordering: $reordering)",
+    ({ locale, draft, reordering }) =>
       onPhone(locale, 1280, async () => {
-        const { el, root } = await mountTree();
+        const { el, root } = await mountTree({ reordering });
         await openWithRefusal(el, draft);
         const line = await nameBoxLine(root);
         expect(line.box.top).toBeLessThan(line.grip.bottom);
@@ -2070,7 +2086,7 @@ describe("the product list at phone width", () => {
   );
 
   it.each(["en-GB", "es-ES"])(
-    "keeps a long category's swatch, after its wrapped name, before the pinned actions at 390 px (%s)",
+    "keeps a long category's swatch, before its wrapped name, before the pinned actions at 390 px (%s)",
     (locale) =>
       onPhone(locale, 390, async () => {
         const { root } = await mountLong();
@@ -2088,7 +2104,11 @@ describe("the product list at phone width", () => {
         )!;
         expect(name.lines).toBeGreaterThan(1);
         expect(name.right).toBeLessThanOrEqual(pinned);
-        expect(swatch.top).toBeGreaterThanOrEqual(name.top);
+        // Measured again: the names are fitted, and the row laid out anew, after the first frame.
+        const fitted = row
+          .querySelector<HTMLElement>('[data-test="color-long"]')!
+          .getBoundingClientRect();
+        expect(fitted.right).toBeLessThanOrEqual(name.left);
       }),
   );
 
@@ -2588,33 +2608,30 @@ describe("the product list as a tree", () => {
     expect(box.getAttribute("label")).toBe(t("folders.name"));
   });
 
-  it("lines a new category's folder icon up with its sibling categories' icons", async () => {
+  it("lines a new category's folder slot up with its sibling categories' slots", async () => {
     const { el, root } = await mountTree();
     el.nameDraft = { kind: "create", parentId: null };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
     const iconLeft = (key: string) =>
       root
-        .querySelector(`tr[data-row-key="${key}"] wt-icon[name="folder"]`)!
+        .querySelector(`tr[data-row-key="${key}"] [part~="folder-frame"]`)!
         .getBoundingClientRect().left;
     expect(iconLeft("draft:new")).toBe(iconLeft("folder:d"));
     expect(iconLeft("draft:new")).toBe(iconLeft("folder:f"));
   });
 
-  it("draws large folder icons on root, nested and new category rows and on a category drag", async () => {
+  it("draws no folder icon on root, nested and new category rows, and a large one on a category drag", async () => {
     const { el, root } = await mountTree();
     await openRow(el, "folder:d");
     el.nameDraft = { kind: "create", parentId: "d" };
     await el.updateComplete;
     await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-    for (const key of [ROOT_KEY, "folder:d", "folder:b", "draft:new"]) {
-      const icon = root.querySelector<HTMLElement>(
-        `tr[data-row-key="${key}"] wt-icon[name="folder"]`,
-      )!;
-      expect(icon.shadowRoot!.querySelector("svg")).not.toBeNull();
-      expect(icon.getBoundingClientRect().width).toBe(18);
-      expect(icon.getBoundingClientRect().height).toBe(18);
-    }
+    for (const key of [ROOT_KEY, "folder:d", "folder:b", "draft:new"])
+      expect(
+        root.querySelector(`tr[data-row-key="${key}"] wt-icon[name="folder"]`),
+        key,
+      ).toBeNull();
 
     const grip = root.querySelector<HTMLElement>('tr[data-row-key="folder:d"] .drag-grip')!;
     grip.dispatchEvent(
@@ -2780,10 +2797,10 @@ describe("the product list as a tree", () => {
     expect(chip("f").getAttribute("part")).toBe("color-swatch empty");
     expect(getComputedStyle(chip("f")).backgroundColor).toBe("rgba(0, 0, 0, 0)");
     expect(getComputedStyle(chip("f")).borderTopWidth).toBe("1px");
-    // Drawn after the name and its count, so names at one depth still line up.
+    // Drawn before the name, in the slot a product's photo takes.
     const row = root.querySelector('tr[data-row-key="folder:d"]')!;
-    expect(button("d").getBoundingClientRect().left).toBeGreaterThanOrEqual(
-      row.querySelector('[data-test="count-d"]')!.getBoundingClientRect().right,
+    expect(button("d").getBoundingClientRect().right).toBeLessThanOrEqual(
+      row.querySelector("strong")!.getBoundingClientRect().left,
     );
 
     const expanded = () => row.getAttribute("aria-expanded");
@@ -3534,7 +3551,7 @@ describe("the Products tree's Name column", () => {
         const expected = all[0]!.name.left + (row.level - 1) * step;
         expect(row.name.left, row.key).toBeCloseTo(expected, 0);
       }
-      // The grip and the folder icon or photo sit in the same slots on every row of one level.
+      // The grip and the colour square or photo sit in the same slots on every row of one level.
       for (const row of all) {
         const twin = all.find((other) => other.level === row.level && other.key !== row.key);
         if (!twin) continue;
@@ -3549,7 +3566,7 @@ describe("the Products tree's Name column", () => {
     expect(pieces(root, "loin:s250").name.left).toBeCloseTo(pieces(root, "loin").name.left, 0);
   });
 
-  it("lines each row's grip, icon or photo and name up on one middle", async () => {
+  it("lines each row's grip, colour square or photo and name up on one middle", async () => {
     const { root } = await mountDeep();
     for (const key of ROWS.slice(1)) {
       const { grip, media, name } = pieces(root, key);
@@ -3603,7 +3620,7 @@ describe("the Products tree's Name column", () => {
 
     const PRODUCTS = new Set(["cola", "salad", "chop", "loin", "ribs", "bread"]);
 
-    it("draws no photo or placeholder, so a product's name starts right after its grip, and keeps each category's folder", async () => {
+    it("draws no photo or placeholder, so a product's name starts right after its grip, and keeps each category's leading slot", async () => {
       const { root } = await mountPhone();
       const photos = [
         ...root.querySelectorAll<HTMLElement>('[part~="thumb-frame"], [part~="thumb-placeholder"]'),
@@ -3622,10 +3639,14 @@ describe("the Products tree's Name column", () => {
       }
     });
 
-    it.each([false, true])(
-      "still steps every name in evenly per level, a product's starting one folder slot before a category's (selecting: %s)",
-      async (selecting) => {
-        const { root } = await mountPhone({ selecting });
+    it.each(
+      [false, true].flatMap((selecting) =>
+        [true, false].map((reordering) => ({ selecting, reordering })),
+      ),
+    )(
+      "still steps every name in evenly per level, a product's starting one folder slot before a category's (selecting: $selecting, reordering: $reordering)",
+      async ({ selecting, reordering }) => {
+        const { root } = await mountPhone({ selecting, reordering });
         const all = ROWS.map((key) => ({ key, ...pieces(root, key === "root" ? ROOT_KEY : key) }));
         const step = all.find(({ key }) => key === "folder:d")!.name.left - all[0]!.name.left;
         expect(step).toBeGreaterThan(0);
@@ -3679,6 +3700,114 @@ describe("the Products tree's Name column", () => {
         );
       },
     );
+  });
+
+  describe("with reordering off", () => {
+    async function at(width: number, body: () => Promise<void>) {
+      const restore = { width: window.innerWidth, height: window.innerHeight };
+      try {
+        await page.viewport(width, 844);
+        await body();
+      } finally {
+        await page.viewport(restore.width, restore.height);
+      }
+    }
+
+    async function mountOff(width: number) {
+      const mounted = await mountDeep({ reordering: false });
+      await vi.waitFor(() => expect(mounted.table.hasAttribute("narrow")).toBe(width < 440));
+      for (let i = 0; i < 2; i += 1) await new Promise(requestAnimationFrame);
+      return mounted;
+    }
+
+    it.each([1280, 390])("draws no grip and no grip space on any row at %i px", (width) =>
+      at(width, async () => {
+        const { root } = await mountOff(width);
+        expect(root.querySelectorAll("tbody tr[data-row-key]").length).toBe(ROWS.length + 1);
+        expect(root.querySelector('.drag-grip, [part~="grip-space"]')).toBeNull();
+      }),
+    );
+
+    it("lifts nothing for a mouse press-and-move on a product or a category", async () => {
+      const { el, root } = await mountDeep({ reordering: false });
+      const offered: string[][] = [];
+      el.addEventListener("drag-items", (event) =>
+        offered.push((event as CustomEvent<{ keys: string[] }>).detail.keys),
+      );
+      const press = (target: Element, pointerId: number, pointerType: string) => {
+        const box = target.getBoundingClientRect();
+        for (const [type, dy] of [
+          ["pointerdown", 0],
+          ["pointermove", 40],
+        ] as const)
+          target.dispatchEvent(
+            new PointerEvent(type, {
+              bubbles: true,
+              composed: true,
+              pointerId,
+              pointerType,
+              clientX: box.x + 8,
+              clientY: box.y + 8 + dy,
+            }),
+          );
+      };
+      press(root.querySelector('tr[data-row-key="bread"] [part~="product-cell"]')!, 1, "mouse");
+      press(root.querySelector('tr[data-row-key="folder:f"] [part~="folder-cell"]')!, 2, "mouse");
+      press(root.querySelector('tr[data-row-key="cola"] [part~="product-cell"]')!, 3, "touch");
+      expect(offered).toEqual([]);
+      expect(root.querySelector('[part~="dragging"]')).toBeNull();
+      document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1 }));
+    });
+
+    it.each([1280, 390])("puts the Name heading over All products' name at %i px", (width) =>
+      at(width, async () => {
+        const { root } = await mountOff(width);
+        const heading = root.querySelector<HTMLElement>('thead th button[data-sort="name"]')!;
+        expect(heading.getBoundingClientRect().left).toBeCloseTo(
+          pieces(root, ROOT_KEY).name.left,
+          0,
+        );
+      }),
+    );
+
+    it.each([1280, 390])("starts a variant's name under its product's at %i px", (width) =>
+      at(width, async () => {
+        const { root } = await mountOff(width);
+        expect(pieces(root, "loin:s250").name.left).toBeCloseTo(pieces(root, "loin").name.left, 0);
+      }),
+    );
+
+    it("ends a drag held when the mode turns off, sending no drop and leaving no row marked", async () => {
+      const { el, root } = await mountDeep();
+      const drops: unknown[] = [];
+      el.addEventListener("drop-items", (event) => drops.push((event as CustomEvent).detail));
+      const at = (target: Element, type: string, over: Element = target) => {
+        const box = over.getBoundingClientRect();
+        target.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            composed: true,
+            cancelable: true,
+            pointerId: 1,
+            clientX: box.x + 8,
+            clientY: box.y + 8,
+          }),
+        );
+      };
+      const bread = root.querySelector('tr[data-row-key="bread"] [part~="product-cell"]')!;
+      const food = root.querySelector('tr[data-row-key="folder:f"] [part~="folder-cell"]')!;
+      at(bread, "pointerdown");
+      at(food, "pointermove");
+      await el.updateComplete;
+      expect(root.querySelector('[part~="dragging"]')).not.toBeNull();
+      el.reordering = false;
+      await el.updateComplete;
+      at(food, "pointerup");
+      await el.updateComplete;
+      expect(drops).toEqual([]);
+      expect(root.querySelector('[part~="dragging"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-test="drag-ghost"]')).toBeNull();
+    });
   });
 
   it("shows no Main category column and offers none in Customise", async () => {
@@ -4155,4 +4284,160 @@ describe("a refresh during a drag", () => {
     press(after.querySelector(`${allProducts} [part~="folder-cell"]`)!, "pointerup");
     expect(drops).toEqual([{ keys: ["cola"], folderId: null }]);
   });
+});
+
+describe("a category row's leading slot", () => {
+  async function atWidth(width: number, body: () => Promise<void>) {
+    const restore = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(width, 844);
+      await body();
+    } finally {
+      await page.viewport(restore.width, restore.height);
+    }
+  }
+
+  const rectOf = (root: ShadowRoot, selector: string) =>
+    root.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
+
+  it.each(
+    [1280, 390].flatMap((width) => [true, false].map((reordering) => ({ width, reordering }))),
+  )(
+    "draws no folder icon and puts each category's swatch in its leading slot, before its name ($width px, reordering: $reordering)",
+    ({ width, reordering }) =>
+      atWidth(width, async () => {
+        const { el, root } = await mountTree({
+          reordering,
+          categories: [{ ...drinks, color: "#b12525" }, beer, food],
+        });
+        await openRow(el, "folder:d");
+        el.nameDraft = { kind: "create", parentId: "d" };
+        await el.updateComplete;
+        await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+        expect(root.querySelectorAll('tbody tr wt-icon[name="folder"]')).toHaveLength(0);
+        for (const id of ["d", "b", "f"]) {
+          const row = `tr[data-row-key="folder:${id}"]`;
+          const swatch = root.querySelector(`${row} [data-test="color-${id}"]`)!;
+          expect(swatch.closest('[part~="folder-frame"]'), id).not.toBeNull();
+          expect(swatch.getBoundingClientRect().right, id).toBeLessThanOrEqual(
+            rectOf(root, `${row} strong`).left,
+          );
+        }
+        if (width === 1280) {
+          // Bread and Food both sit in All products; Cola and Beer both in Drinks.
+          expect(rectOf(root, 'tr[data-row-key="folder:f"] strong').left).toBeCloseTo(
+            rectOf(root, 'tr[data-row-key="bread"] strong').left,
+            0,
+          );
+          expect(rectOf(root, 'tr[data-row-key="folder:b"] strong').left).toBeCloseTo(
+            rectOf(root, 'tr[data-row-key="cola"] strong').left,
+            0,
+          );
+        }
+      }),
+  );
+
+  it.each([true, false])(
+    "draws one colour square on a category being renamed, the name box's own (reordering: %s)",
+    async (reordering) => {
+      const { el, root } = await mountTree({
+        reordering,
+        categories: [{ ...drinks, color: "#b12525" }, beer, food],
+      });
+      el.nameDraft = { kind: "rename", categoryId: "d" };
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+      const row = root.querySelector('tr[data-row-key="folder:d"]')!;
+      const squares = row.querySelectorAll('[part~="color-swatch"]');
+      expect(squares).toHaveLength(1);
+      expect(squares[0]!.closest('[data-test="name-box-color"]')).not.toBeNull();
+      const frame = row.querySelector('[part~="folder-frame"]')!;
+      expect(frame.childElementCount).toBe(0);
+    },
+  );
+});
+
+describe("a category whose name wraps", () => {
+  it.each(
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      [true, false].map((reordering) => ({ locale, reordering })),
+    ),
+  )(
+    "keeps its grip and swatch beside the name's first line at 390 px ($locale, reordering: $reordering)",
+    async ({ locale, reordering }) => {
+      const restore = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        locale: currentLocale(),
+      };
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        const { root } = await mountTree({
+          categories: [
+            {
+              id: "long",
+              name: "Charcuterie y quesos ibéricos de bellota",
+              parentId: null,
+              color: "#b12525",
+            },
+          ],
+          products: [],
+          reordering,
+        });
+        for (let frame = 0; frame < 3; frame++) await new Promise(requestAnimationFrame);
+        const row = root.querySelector('tr[data-row-key="folder:long"]')!;
+        const text = document.createRange();
+        text.selectNodeContents(row.querySelector("strong")!);
+        const lines = [...text.getClientRects()];
+        const first = lines[0]!;
+        const firstMiddle = first.top + first.height / 2;
+        const whole = text.getBoundingClientRect();
+        const wholeMiddle = whole.top + whole.height / 2;
+        expect(new Set(lines.map(({ bottom }) => Math.round(bottom))).size).toBeGreaterThan(1);
+        for (const part of [...(reordering ? [".drag-grip"] : []), '[data-test="color-long"]']) {
+          const box = row.querySelector(part)!.getBoundingClientRect();
+          const middle = box.top + box.height / 2;
+          expect(Math.abs(middle - firstMiddle), part).toBeLessThanOrEqual(3);
+          expect(wholeMiddle - middle, part).toBeGreaterThan(first.height / 3);
+        }
+      } finally {
+        setLocale(restore.locale);
+        await page.viewport(restore.width, restore.height);
+      }
+    },
+  );
+});
+
+describe("a category's count", () => {
+  it.each(["en-GB", "es-ES"].flatMap((locale) => [390, 1280].map((width) => ({ locale, width }))))(
+    "is hidden on a phone and shown on a wide screen ($locale, $width px)",
+    async ({ locale, width }) => {
+      const restore = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        locale: currentLocale(),
+      };
+      try {
+        setLocale(locale);
+        await page.viewport(width, 844);
+        const { el, root } = await mountTree();
+        await openRow(el, "folder:d");
+        await vi.waitFor(() => expect(root.host.hasAttribute("narrow")).toBe(width === 390));
+        const counts = [...root.querySelectorAll<HTMLElement>('[part~="count"]')];
+        expect(counts.map((count) => count.dataset.test)).toEqual(
+          expect.arrayContaining(["count-root", "count-d", "count-b", "count-f"]),
+        );
+        for (const count of counts) {
+          const test = count.dataset.test;
+          expect(count.textContent!.trim(), test).not.toBe("");
+          if (width === 390) expect(getComputedStyle(count).display, test).toBe("none");
+          else expect(count.getBoundingClientRect().width, test).toBeGreaterThan(0);
+        }
+      } finally {
+        setLocale(restore.locale);
+        await page.viewport(restore.width, restore.height);
+      }
+    },
+  );
 });

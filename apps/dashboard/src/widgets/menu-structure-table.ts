@@ -40,9 +40,9 @@ export const ROOT_KEY = "root";
 /** The Device Home Page row's key, and the list key its shortcuts' order is kept under. */
 export const HOME_KEY = "home";
 
-const folderIcon = html`<span part="folder-frame"
-  ><wt-icon name="folder" size="lg"></wt-icon
-></span>`;
+/** A section's swatch slot, at a product photo's width; blank on the menu's and home's rows. */
+const folderFrame = (content: unknown = nothing) =>
+  html`<span part="folder-frame">${content}</span>`;
 const gripSpace = html`<span part="grip-space" aria-hidden="true"
   ><wt-icon name="grip"></wt-icon
 ></span>`;
@@ -126,8 +126,11 @@ export class MenuStructureTable extends LitElement {
         width: var(--wt-tap-min);
         margin-inline-end: var(--wt-space-3);
       }
-      /* The table's arrow, the grip and the folder come before the menu's own name. */
+      /* The table's arrow, the grip while reordering, and the swatch slot come before the menu's name. */
       wt-data-table::part(tree-heading) {
+        margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-3));
+      }
+      :host([reordering]) wt-data-table::part(tree-heading) {
         margin-inline-start: calc(
           var(--tree-arrow-width) + 2 * var(--wt-tap-min) + var(--wt-space-3)
         );
@@ -192,6 +195,14 @@ export class MenuStructureTable extends LitElement {
         display: inline-flex;
         flex-direction: column;
       }
+      /* A flex row takes its first item's baseline unless an item aligns by baseline, so without
+         this the row lines up by the grip's or the swatch slot's baseline, not the name's. As tall as
+         the slot and centred in it, the stack still sits level with the slot. */
+      wt-data-table::part(folder-stack) {
+        align-self: baseline;
+        justify-content: center;
+        min-height: var(--wt-tap-min);
+      }
       wt-data-table::part(current) {
         font-weight: var(--wt-font-weight-bold);
         text-decoration: underline;
@@ -255,6 +266,9 @@ export class MenuStructureTable extends LitElement {
   })
   current: string[] = [];
   @property({ type: Boolean }) busy = false;
+  /** Whether rows carry grips and can be moved. On by default, so a mount that wants a tree
+   * without them passes `.reordering=${false}`. */
+  @property({ type: Boolean, reflect: true }) reordering = true;
   /** Null draws no Device Home Page row. */
   @property({ attribute: false }) home: MenuHome | null = null;
 
@@ -285,6 +299,11 @@ export class MenuStructureTable extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("reordering") && !this.reordering && this.#drag) {
+      const active = this.#drag.active;
+      this.#finishDrag();
+      if (active) blockClickAfterDrag(true);
+    }
     if (changed.has("products")) {
       this.#productById = new Map(this.products.map((product) => [product.id, product]));
       this.#productNames = new Map(this.products.map(({ id, name }) => [id, name]));
@@ -663,6 +682,7 @@ export class MenuStructureTable extends LitElement {
   }
 
   #grip(row: MovableRow) {
+    if (!this.reordering) return nothing;
     if (row.kind === "member" && row.readOnly) return gripSpace;
     return html`<button
       part="drag-grip"
@@ -677,10 +697,10 @@ export class MenuStructureTable extends LitElement {
     </button>`;
   }
 
-  /** The Device Home Page's and the menu's rows: no grip, the folder, and a note when empty. */
+  /** The Device Home Page's and the menu's rows: no grip, a blank slot, and a note when empty. */
   #topCell(row: HomeRow | RootRow, empty: string | null, emptyTest: string) {
     return html`<span part="folder-cell"
-      >${gripSpace}${folderIcon}<span part="name-stack"
+      >${this.reordering ? gripSpace : nothing}${folderFrame()}<span part="name-stack folder-stack"
         >${this.#nameSpan(row)}${
           empty === null ? nothing : html`<span part="note" data-test=${emptyTest}>${empty}</span>`
         }</span
@@ -707,7 +727,8 @@ export class MenuStructureTable extends LitElement {
       >`;
     const { node, key } = row;
     const grip = this.#grip(row);
-    const stack = html`<span part="name-stack"
+    const stack = html`<span
+      part=${node.ref.kind === "section" ? "name-stack folder-stack" : "name-stack"}
       >${this.#nameSpan(row)}${
         node.includedMenuId && !row.readOnly
           ? html`<span part="note" data-test=${`read-only-${key}`}
@@ -717,7 +738,7 @@ export class MenuStructureTable extends LitElement {
       }</span
     >`;
     if (node.ref.kind === "section")
-      return html`<span part="folder-cell">${grip}${folderIcon}${stack}${this.#swatch(row)}</span>`;
+      return html`<span part="folder-cell">${grip}${folderFrame(this.#swatch(row))}${stack}</span>`;
     const image = this.#productById.get(node.ref.productId)?.image ?? null;
     return html`<span part="product-cell"
       >${grip}${
@@ -734,7 +755,7 @@ export class MenuStructureTable extends LitElement {
     >`;
   }
 
-  /** After the name, so names at one depth still start on one line. */
+  /** A section's goes in its leading slot; a product's after its name, as its photo has that slot. */
   #swatch(row: MemberRow) {
     const { node, key, name } = row;
     let color: string | null;
@@ -900,6 +921,8 @@ export class MenuStructureTable extends LitElement {
         .rowKey=${(row: Row) => row.key}
         .rowParent=${(row: Row) => row.parentKey}
         @wt-expand-change=${this.#expandChange}
+        ><slot name="toolbar-start" slot="toolbar-start"></slot
+        ><slot name="toolbar-end" slot="toolbar-end"></slot
       ></wt-data-table>
       <div role="status" aria-live="polite" class="reorder-status">${this.announcement}</div>
       ${dragGhost(this.ghost)}`;

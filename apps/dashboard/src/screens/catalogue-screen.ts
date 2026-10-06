@@ -692,7 +692,6 @@ export class CatalogueScreen extends LitElement {
               .categories=${this.categories}
               .extraLists=${this.extraLists}
               .optionLists=${this.optionLists}
-              .units=${this.units}
               .unitLanguage=${
                 this.contentLanguages?.languages[0] ??
                 this.contentLanguages?.defaultLanguage ??

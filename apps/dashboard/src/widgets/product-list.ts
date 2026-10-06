@@ -41,7 +41,7 @@ import {
   modifierListNames,
   type ModifierListChoice,
 } from "./product-editor-model.js";
-import type { CategorySummary, MadeAt, Product, Unit } from "../api/client.js";
+import type { CategorySummary, MadeAt, Product } from "../api/client.js";
 import type { FolderMadeAt } from "./folder-made-at.js";
 import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
 import {
@@ -51,9 +51,9 @@ import {
 
 export const ROOT_KEY = "root";
 
-const folderIcon = html`<span part="folder-frame"
-  ><wt-icon name="folder" size="lg"></wt-icon
-></span>`;
+/** A category's swatch slot, at a product photo's width; blank where the row has no swatch. */
+const folderFrame = (content: unknown = nothing) =>
+  html`<span part="folder-frame">${content}</span>`;
 /** How long a drag must rest on a closed category before it opens. */
 export const HOVER_OPEN_MS = 600;
 const DRAFT_KEY = "draft:new";
@@ -120,23 +120,33 @@ export class ProductList extends LitElement {
       }
       /* Cell templates are rendered in wt-data-table's shadow root, so ::part is the one boundary
          crossing used for their presentation. */
+      /* Laid out as a product's cell is, so a wrapped name keeps its grip and swatch beside its
+         first line. */
       wt-data-table::part(folder-cell) {
+        display: block;
+      }
+      /* The name box's room is a flex basis; the phone's grid rule below still wins. */
+      wt-data-table::part(naming) {
         display: flex;
         align-items: center;
       }
       wt-data-table::part(folder-frame) {
         display: inline-flex;
         flex: none;
+        vertical-align: middle;
         justify-content: center;
         width: var(--wt-tap-min);
         margin-inline-end: var(--wt-space-3);
       }
       wt-data-table::part(tree-heading) {
+        margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-3));
+      }
+      :host([reordering]) wt-data-table::part(tree-heading) {
         margin-inline-start: calc(
           var(--tree-arrow-width) + 2 * var(--wt-tap-min) + var(--wt-space-3)
         );
       }
-      /* On a phone a product's photo gives its slot to the name; a category keeps its folder. */
+      /* On a phone a product's photo gives its slot to the name; a category keeps its swatch slot. */
       wt-data-table[narrow]::part(thumb-frame),
       wt-data-table[narrow]::part(thumb-placeholder) {
         display: none;
@@ -165,9 +175,10 @@ export class ProductList extends LitElement {
         user-select: none;
         cursor: var(--reorder-drag-cursor, grab);
       }
-      /* All products and a category being added cannot be dragged, but keep the grip's space. */
       wt-data-table::part(grip-space) {
+        display: inline-block;
         flex: none;
+        vertical-align: middle;
         width: var(--wt-tap-min);
       }
       wt-data-table::part(thumb-frame),
@@ -216,23 +227,32 @@ export class ProductList extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
+      /* On a phone a category's name keeps the room. */
+      wt-data-table[narrow]::part(count) {
+        display: none;
+      }
       /* A column flex box takes its first item's baseline, so the row still lines up by the name. */
+      wt-data-table::part(folder-name),
       wt-data-table::part(name-stack) {
         display: inline-flex;
         flex-direction: column;
       }
-      /* Drawn at the end of its tap target, against the grip. */
       wt-data-table::part(tree-toggle) {
         padding-inline-end: var(--wt-space-1);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         text-align: end;
       }
-      /* The table draws a variant at its product's indent; this is the product's grip and photo. */
       wt-data-table::part(variant-name) {
+        padding-inline-start: calc(var(--wt-tap-min) + var(--wt-space-3));
+      }
+      :host([reordering]) wt-data-table::part(variant-name) {
         padding-inline-start: calc(2 * var(--wt-tap-min) + var(--wt-space-3));
       }
       wt-data-table[narrow]::part(variant-name) {
+        padding-inline-start: 0;
+      }
+      :host([reordering]) wt-data-table[narrow]::part(variant-name) {
         padding-inline-start: var(--wt-tap-min);
       }
       wt-data-table::part(price-unit) {
@@ -261,7 +281,7 @@ export class ProductList extends LitElement {
         display: contents;
       }
       /* On a phone the name box takes a line of its own. The \`folder-cell\` span is held to the
-         room #fitNames measures, so the count and asterisk wrap there instead of running under the
+         room #fitNames measures, so the asterisk wraps there instead of running under the
          pinned column. */
       wt-data-table[narrow]::part(naming) {
         display: grid;
@@ -297,6 +317,9 @@ export class ProductList extends LitElement {
   /** Fills a bounded flex column, with the table's rows scrolling under its headings. */
   @property({ type: Boolean, reflect: true, attribute: "sticky-header" }) stickyHeader = false;
   @property({ type: Boolean }) selecting = false;
+  /** Whether rows carry grips and can be dragged. On by default, so a mount that wants a tree
+   * without them passes `.reordering=${false}`. */
+  @property({ type: Boolean, reflect: true }) reordering = true;
   @property({ attribute: false }) selected: string[] = [];
   @property({ attribute: false }) products: Product[] = [];
   @property({ attribute: false }) madeAt: Record<string, MadeAt> = {};
@@ -308,7 +331,6 @@ export class ProductList extends LitElement {
   @property({ type: Boolean }) routingFailed = false;
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
-  @property({ attribute: false }) units: readonly Unit[] = [];
   /** The content language a stored unit's abbreviation is read in. */
   @property() unitLanguage = "en";
   /** The search box's text; while it lasts, the table holds every category above a match open. */
@@ -380,6 +402,7 @@ export class ProductList extends LitElement {
   /** A mouse drags a category or product from anywhere on its row; a finger only from the grip, so it
    * can still scroll; a control on the row is never a drag handle. */
   readonly #pointerDown = (event: PointerEvent): void => {
+    if (!this.reordering) return;
     const path = event
       .composedPath()
       .filter((item): item is HTMLElement => item instanceof HTMLElement);
@@ -580,6 +603,11 @@ export class ProductList extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("reordering") && !this.reordering && this.#pointerDrag) {
+      const active = this.#pointerDrag.active;
+      this.#finishDrag();
+      if (active) blockClickAfterDrag(true);
+    }
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("categories") || changed.has("products")) this.#counts = this.#count();
@@ -943,14 +971,7 @@ export class ProductList extends LitElement {
           variant
             ? html`<span part="variant-name">${variant.name}</span>`
             : html`<span part=${ancestorOnly ? "product-cell context" : "product-cell"}>
-                <button
-                  class="drag-grip"
-                  part="drag-grip"
-                  type="button"
-                  aria-label=${`${t("folders.drag")}: ${product.name}`}
-                >
-                  <wt-icon name="grip"></wt-icon></button
-                >${
+                ${this.#grip(product.name)}${
                   product.image === null
                     ? html`<span
                         part="thumb-placeholder"
@@ -1150,6 +1171,23 @@ export class ProductList extends LitElement {
       >`;
   }
 
+  #grip(name: string) {
+    return this.reordering
+      ? html`<button
+          class="drag-grip"
+          part="drag-grip"
+          type="button"
+          aria-label=${`${t("folders.drag")}: ${name}`}
+        >
+          <wt-icon name="grip"></wt-icon>
+        </button>`
+      : nothing;
+  }
+
+  #gripSpace() {
+    return this.reordering ? html`<span part="grip-space"></span>` : nothing;
+  }
+
   #columns(): DataTableColumn<ListRow>[] {
     return this.#productColumns().map((column) => ({
       key: column.key,
@@ -1162,15 +1200,17 @@ export class ProductList extends LitElement {
         if (row.kind === "draft")
           return column.key === "name"
             ? html`<span part="folder-cell naming"
-                ><span part="grip-space"></span>${folderIcon}${this.#nameBox()}</span
+                >${this.#gripSpace()}${folderFrame()}${this.#nameBox()}</span
               >`
             : nothing;
         if (row.kind === "root") {
           if (column.key === "name")
             return html`<span part="folder-cell"
-              ><span part="grip-space"></span>${folderIcon}<span part="folder-name"
-                ><strong>${t("folders.all_products")}</strong
-                ><span part="count" data-test="count-root">${this.#contents(null)}</span></span
+              >${this.#gripSpace()}${folderFrame()}<span part="folder-name"
+                ><span
+                  ><strong>${t("folders.all_products")}</strong
+                  ><span part="count" data-test="count-root">${this.#contents(null)}</span></span
+                ></span
               ></span
             >`;
           if (column.key === "actions")
@@ -1199,30 +1239,25 @@ export class ProductList extends LitElement {
                 : nothing
             }`;
           return html`<span part=${this.#renaming(folder.id) ? "folder-cell naming" : "folder-cell"}
-            ><button
-              class="drag-grip"
-              part="drag-grip"
-              type="button"
-              aria-label=${`${t("folders.drag")}: ${folder.name}`}
-            >
-              <wt-icon name="grip"></wt-icon></button
-            >${folderIcon}${
+            >${this.#grip(folder.name)}${
               this.#renaming(folder.id)
-                ? html`${this.#nameBox()}<span part="name-after">${after}</span>`
-                : html`<span part="folder-name"
-                    ><strong>${folder.name}</strong>${after}<button
-                      part="swatch-button"
-                      type="button"
-                      data-test=${`color-${folder.id}`}
-                      aria-label=${t("folders.edit_color").replace("{name}", folder.name)}
-                      @click=${(event: Event) => {
-                        event.stopPropagation();
-                        this.#send("folder-color", { folderId: folder.id });
-                      }}
-                    >
-                      ${swatchChip(folder.color)}
-                    </button></span
-                  >`
+                ? html`${folderFrame()}${this.#nameBox()}<span part="name-after">${after}</span>`
+                : html`${folderFrame(
+                      html`<button
+                        part="swatch-button"
+                        type="button"
+                        data-test=${`color-${folder.id}`}
+                        aria-label=${t("folders.edit_color").replace("{name}", folder.name)}
+                        @click=${(event: Event) => {
+                          event.stopPropagation();
+                          this.#send("folder-color", { folderId: folder.id });
+                        }}
+                      >
+                        ${swatchChip(folder.color)}
+                      </button>`,
+                    )}<span part="folder-name"
+                      ><span><strong>${folder.name}</strong>${after}</span></span
+                    >`
             }</span
           >`;
         }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import {
   combinedFixture,
   cleanupWidgets,
@@ -448,6 +448,28 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
         (q(el, 'wt-modal[data-test="add-shortcut"]') as HTMLElement & { open: boolean }).open,
       ).toBe(true),
     );
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible Structure tab in Reorder mode, the toggle pressed and Done shown", async () => {
+    const { el, host } = await mount("populated", theme, LUNCH);
+    q(el, '[data-test="reorder"]').click();
+    await vi.waitFor(() => expect(q(el, '[data-test="reorder-done"]')).not.toBeNull());
+    expect(q(el, '[data-test="reorder"]').getAttribute("aria-pressed")).toBe("true");
+    await vi.waitFor(() =>
+      expect(treeRows(el).querySelector('[part~="drag-grip"]')).not.toBeNull(),
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible Reorder tooltip on keyboard focus", async () => {
+    const { el, host } = await mount("populated", theme, LUNCH);
+    const toggle = q(el, '[data-test="reorder"]');
+    (document.activeElement as HTMLElement | null)?.blur();
+    for (let i = 0; i < 30 && el.shadowRoot!.activeElement !== toggle; i += 1)
+      await userEvent.tab();
+    expect(el.shadowRoot!.activeElement).toBe(toggle);
+    expect(getComputedStyle(toggle.querySelector(".icon-tooltip")!).display).toBe("block");
     await expectNoA11yViolations(host);
   });
 

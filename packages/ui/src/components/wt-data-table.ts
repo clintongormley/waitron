@@ -1758,9 +1758,19 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (closed.length > 0) this.#setOpen(closed, true);
     await this.updateComplete;
     this.#padScroll();
-    this.shadowRoot!.querySelector(`tr[data-row-key="${CSS.escape(key)}"]`)?.scrollIntoView({
-      block: "nearest",
-    });
+    const tr = this.shadowRoot!.querySelector(`tr[data-row-key="${CSS.escape(key)}"]`);
+    if (!tr) return;
+    tr.scrollIntoView({ block: "nearest" });
+    const scroll = tr.closest<HTMLElement>(".scroll")!;
+    // Chromium sets the scroll position to the nearest whole pixel (measured at a device pixel
+    // ratio of 1), which can leave a row part of a pixel under the headings. A larger overlap is
+    // a row taller than the view, which this leaves where scrollIntoView put it.
+    const clear =
+      scroll.getBoundingClientRect().top +
+      scroll.clientTop +
+      (parseFloat(scroll.style.scrollPaddingBlockStart) || 0);
+    const under = clear - tr.getBoundingClientRect().top;
+    if (under > 0 && under < 1) scroll.scrollTop = Math.floor(scroll.scrollTop - under);
   }
 
   /** A pinned cell is layered above the row's activator, so a click on its empty space reaches the

@@ -567,8 +567,8 @@ const DEEP_ROWS = [
   "included-wine/wine-lager",
 ];
 
-async function mountDeep() {
-  const el = await mount({ nodes: [...lunchNodes(), wines()] });
+async function mountDeep(props: Partial<MenuStructureTable> = {}) {
+  const el = await mount({ nodes: [...lunchNodes(), wines()], ...props });
   for (const key of ["m-drinks", "m-drinks/m-beer", "included-wine", "included-wine/wine-red"]) {
     table(el).setExpanded(key, true);
     await settle(el);
@@ -577,7 +577,7 @@ async function mountDeep() {
   return el;
 }
 
-/** Where a row's name text, grip slot and folder or photo slot start, and where their middles are. */
+/** Where a row's name text, grip slot and leading slot start, and where their middles are. */
 function pieces(el: MenuStructureTable, key: string) {
   const tr = row(el, key)!;
   const box = (rect: DOMRect | undefined) =>
@@ -599,13 +599,13 @@ function pieces(el: MenuStructureTable, key: string) {
   };
 }
 
-it.each([1280, 390])(
-  "starts every name one even step further in per level, the menu, sections, included menus and products alike (%ipx)",
-  async (width) => {
+it.each([1280, 390].flatMap((width) => [true, false].map((reordering) => ({ width, reordering }))))(
+  "starts every name one even step further in per level, the menu, sections, included menus and products alike ($width px, reordering: $reordering)",
+  async ({ width, reordering }) => {
     const before = { width: window.innerWidth, height: window.innerHeight };
     try {
       await page.viewport(width, 844);
-      const el = await mountDeep();
+      const el = await mountDeep({ reordering });
       const rows = DEEP_ROWS.map((key) => ({ key, ...pieces(el, key) }));
       const step = rows.find(({ level }) => level === 2)!.name.left - rows[0]!.name.left;
       expect(step).toBeGreaterThan(0);
@@ -616,7 +616,8 @@ it.each([1280, 390])(
           (other) => other.level === current.level && other.key !== current.key,
         );
         if (!twin) continue;
-        expect(current.grip?.left, current.key).toBeCloseTo(twin.grip!.left, 0);
+        if (reordering) expect(current.grip?.left, current.key).toBeCloseTo(twin.grip!.left, 0);
+        else expect(current.grip, current.key).toBeUndefined();
         expect(current.media?.left, current.key).toBeCloseTo(twin.media!.left, 0);
       }
     } finally {
@@ -634,19 +635,60 @@ it("keeps a blank grip slot on the menu's row, so its name starts where the Prod
   const gap = parseFloat(tokens.getPropertyValue("--wt-space-3"));
   expect(tap).toBeGreaterThan(0);
   const start = tr.querySelector(".tree-cell")!.getBoundingClientRect().left;
-  // The table's arrow, the grip, the folder, then the gap before the name.
+  // The table's arrow, the grip, the leading slot, then the gap before the name.
   expect(pieces(el, "root").name.left - start).toBeCloseTo(3 * tap + gap, 0);
 });
 
 // The name and any note under it (an included menu's "read only here") are centred as one.
-it("lines each row's grip, folder or photo and name up on one middle", async () => {
-  const el = await mountDeep();
-  for (const key of DEEP_ROWS) {
-    const { grip, media, stack } = pieces(el, key);
-    expect(Math.abs(grip!.middle - media!.middle), key).toBeLessThanOrEqual(1);
-    expect(Math.abs(stack.middle - media!.middle), key).toBeLessThanOrEqual(3);
-  }
-});
+it.each([true, false])(
+  "lines each row's grip, leading slot and name up on one middle (reordering: %s)",
+  async (reordering) => {
+    const el = await mountDeep({ reordering });
+    for (const key of DEEP_ROWS) {
+      const { grip, media, stack } = pieces(el, key);
+      if (reordering) expect(Math.abs(grip!.middle - media!.middle), key).toBeLessThanOrEqual(1);
+      else expect(grip, key).toBeUndefined();
+      expect(Math.abs(stack.middle - media!.middle), key).toBeLessThanOrEqual(3);
+    }
+  },
+);
+
+it.each([1280, 390].flatMap((width) => [true, false].map((reordering) => ({ width, reordering }))))(
+  "lines a section's swatch and name up with its arrow and its Type on one middle ($width px, reordering: $reordering)",
+  async ({ width, reordering }) => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(width, 844);
+      const el = await mountDeep({ reordering });
+      const middle = (rect: DOMRect) => rect.top + rect.height / 2;
+      const textMiddle = (node: Element) => {
+        const text = document.createRange();
+        text.selectNodeContents(node);
+        return middle(text.getBoundingClientRect());
+      };
+      for (const key of ["m-drinks", "m-drinks/m-beer", "m-fav", "included-wine/wine-red"]) {
+        const tr = row(el, key)!;
+        const arrow = middle(
+          tr.querySelector(".tree-arrow, .tree-toggle")!.getBoundingClientRect(),
+        );
+        const kind = textMiddle(tr.querySelector('[data-test="kind"]')!);
+        const swatch = middle(tr.querySelector('[part~="color-swatch"]')!.getBoundingClientRect());
+        const name = textMiddle(tr.querySelector('[data-test="name"]')!);
+        for (const [what, at] of [
+          ["swatch", swatch],
+          ["name", name],
+        ] as const) {
+          // The table lines its larger arrow glyph up by baseline, which put the arrow's middle
+          // 2.5 px above the Type text's in every row measured.
+          expect(Math.abs(at - arrow), `${key} ${what} to arrow`).toBeLessThanOrEqual(3);
+          expect(Math.abs(at - kind), `${key} ${what} to Type`).toBeLessThanOrEqual(2);
+        }
+      }
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);
 
 it.each([1280, 390])(
   "puts the Name heading over the menu's name, also at phone width, where the tree's arrow slot narrows (%ipx)",
@@ -848,6 +890,65 @@ function marked(el: MenuStructureTable, part: string): string[] {
 function ghost(el: MenuStructureTable): HTMLElement | null {
   return el.shadowRoot!.querySelector<HTMLElement>('[data-test="drag-ghost"]');
 }
+
+describe("with reordering off", () => {
+  const HOME_WITH_SHORTCUT: MenuHome = {
+    homeSectionId: "s-home",
+    shortcuts: [
+      {
+        memberId: "t-one",
+        position: 0,
+        ref: { kind: "product", productId: "p-burger" },
+        missingName: null,
+        name: "Burger",
+        reachable: true,
+      },
+    ],
+    handheld: { columns: 3, tiles: "colours", order: "home_first" },
+    till: { columns: 6, tiles: "colours", order: "home_first" },
+  };
+
+  it.each([1280, 390])(
+    "draws no grip or grip space on any row, and puts the Name heading over the menu's name (%ipx)",
+    async (width) => {
+      const before = { width: window.innerWidth, height: window.innerHeight };
+      try {
+        await page.viewport(width, 844);
+        const el = await mountDeep({ reordering: false });
+        el.home = HOME_WITH_SHORTCUT;
+        await settle(el);
+        for (let i = 0; i < 3; i += 1) await new Promise(requestAnimationFrame);
+        await toggle(el, "home");
+        expect(shown(el)).toContain("home/t-one");
+        expect(all(el, "tbody tr[data-row-key]").length).toBe(DEEP_ROWS.length + 2);
+        expect(all(el, '[part~="drag-grip"], [part~="grip-space"]')).toEqual([]);
+        expect(table(el).hasAttribute("narrow")).toBe(width === 390);
+        const heading = inTable(el, 'thead [part~="tree-heading"]')!;
+        expect(heading.getBoundingClientRect().left).toBeCloseTo(pieces(el, "root").name.left, 0);
+      } finally {
+        await page.viewport(before.width, before.height);
+      }
+    },
+  );
+
+  it("ends a drag held when the mode turns off, sending no move and leaving no row marked", async () => {
+    const el = await mount();
+    const moves = listen(el, "wt-member-move");
+    const from = grip(el, "m-burger");
+    pointer(from, "pointerdown");
+    pointer(from, "pointermove", nameAt(el, "m-fav"));
+    await settle(el);
+    expect(marked(el, "dragging")).toEqual(["m-burger"]);
+    el.reordering = false;
+    await settle(el);
+    pointer(nameAt(el, "m-fav"), "pointerup");
+    await settle(el);
+    expect(moves).toEqual([]);
+    expect(marked(el, "dragging")).toEqual([]);
+    expect(marked(el, "drop-gap-after")).toEqual([]);
+    expect(ghost(el)).toBeNull();
+  });
+});
 
 it("drags a member below a sibling, marking it, with a ghost and a gap, and sends one move on release", async () => {
   const el = await mount();
@@ -1320,15 +1421,59 @@ describe("colour swatches", () => {
     }
   });
 
-  it("draws a swatch after the row's name", async () => {
+  it("draws a product's swatch after its name and a section's before it", async () => {
     const el = await mountColoured();
-    for (const key of ["m-burger", "m-drinks"]) {
-      const name = row(el, key)!.querySelector('[part~="name-stack"]')!.getBoundingClientRect();
-      expect(swatchOf(el, key).getBoundingClientRect().left, key).toBeGreaterThanOrEqual(
-        name.right,
-      );
-    }
+    const nameOf = (key: string) =>
+      row(el, key)!.querySelector('[part~="name-stack"]')!.getBoundingClientRect();
+    expect(swatchOf(el, "m-burger").getBoundingClientRect().left).toBeGreaterThanOrEqual(
+      nameOf("m-burger").right,
+    );
+    expect(swatchOf(el, "m-drinks").getBoundingClientRect().right).toBeLessThanOrEqual(
+      nameOf("m-drinks").left,
+    );
   });
+
+  it.each(
+    [1280, 390].flatMap((width) => [true, false].map((reordering) => ({ width, reordering }))),
+  )(
+    "draws no folder icon and puts each section's swatch in its leading slot, before its name ($width px, reordering: $reordering)",
+    async ({ width, reordering }) => {
+      const before = { width: window.innerWidth, height: window.innerHeight };
+      try {
+        await page.viewport(width, 844);
+        const red = { ...wines() };
+        red.children = red.children!.map((child) =>
+          child.memberId === "wine-red" ? { ...child, color: "#7a1f3d" } : child,
+        );
+        const el = await mountColoured({ reordering, nodes: [...paintedLunch(), red] });
+        await toggle(el, "included-wine");
+        expect(
+          table(el).shadowRoot!.querySelectorAll('tbody tr wt-icon[name="folder"]'),
+        ).toHaveLength(0);
+        for (const [key, part] of [
+          ["m-drinks", "swatch-button"],
+          ["included-wine", "swatch-box"],
+          ["included-wine/wine-red", "swatch-box"],
+        ] as const) {
+          const swatch = swatchOf(el, key);
+          expect(swatch.getAttribute("part"), key).toBe(part);
+          expect(swatch.closest('[part~="folder-frame"]'), key).not.toBeNull();
+          const name = row(el, key)!.querySelector('[part~="name-stack"]')!.getBoundingClientRect();
+          expect(swatch.getBoundingClientRect().right, key).toBeLessThanOrEqual(name.left);
+        }
+        if (width === 1280) {
+          const nameLeft = (key: string) => {
+            const text = document.createRange();
+            text.selectNodeContents(row(el, key)!.querySelector('[data-test="name"]')!);
+            return text.getBoundingClientRect().left;
+          };
+          expect(nameLeft("m-drinks")).toBeCloseTo(nameLeft("m-burger"), 0);
+        }
+      } finally {
+        await page.viewport(before.width, before.height);
+      }
+    },
+  );
 
   it("sends a product's colour request from its swatch, toggling no row and starting no drag", async () => {
     const el = await mountColoured();

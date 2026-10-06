@@ -6,6 +6,8 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { live } from "lit/directives/live.js";
 import {
   baseStyles,
+  iconButtonStyles,
+  trackIconTooltip,
   focusFirstInvalid,
   setContentLanguages,
   currentContentLanguages,
@@ -16,6 +18,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-tabs.js";
@@ -245,6 +248,7 @@ function withOrder(
 export class MenusScreen extends LitElement {
   static override styles = [
     baseStyles,
+    iconButtonStyles,
     css`
       .field-error {
         color: var(--wt-color-danger);
@@ -504,6 +508,8 @@ export class MenusScreen extends LitElement {
   /** The member ids followed from the menu's top level to the list being edited. */
   @state() private path: string[] = [];
   @state() private busy = false;
+  /** Whether the Structure tree shows its grips; each menu opens with it off. */
+  @state() private structureReordering = false;
   @state() private memberError: string | null = null;
   @state() private view: Tab = TABS[0];
 
@@ -1079,6 +1085,7 @@ export class MenusScreen extends LitElement {
     this.menuForm = null;
     this.menuId = menuId;
     this.path = [];
+    this.structureReordering = false;
     this.structure = null;
     this.structureError = false;
     this.memberError = null;
@@ -2043,6 +2050,7 @@ export class MenusScreen extends LitElement {
         .categories=${this.categories}
         .current=${this.path}
         .busy=${this.busy}
+        .reordering=${this.structureReordering}
         .home=${this.menuHome}
         menuName=${this.#menuName()}
         @wt-shortcut-add=${(event: CustomEvent<{ kind: "product" | "section" }>) => {
@@ -2106,7 +2114,44 @@ export class MenusScreen extends LitElement {
             this.sections.find((section) => section.id === event.detail.sectionId) ?? null;
           this.deleteSectionError = "";
         }}
-      ></dashboard-menu-structure-table>`;
+        ><!-- A native button: wt-button does not pass aria-pressed to its inner button. -->
+        <button
+          type="button"
+          slot="toolbar-start"
+          class="icon-button"
+          data-test="reorder"
+          aria-label=${t("menus.reorder")}
+          aria-pressed=${String(this.structureReordering)}
+          @click=${() => {
+            this.structureReordering = !this.structureReordering;
+          }}
+          @pointerenter=${trackIconTooltip}
+          @pointerleave=${trackIconTooltip}
+          @focus=${trackIconTooltip}
+          @blur=${trackIconTooltip}
+        >
+          <wt-icon name="grip"></wt-icon
+          ><span class="icon-tooltip" aria-hidden="true">${t("menus.reorder")}</span>
+        </button>
+        ${
+          this.structureReordering
+            ? html`<wt-button
+                slot="toolbar-end"
+                data-test="reorder-done"
+                variant="secondary"
+                @click=${() => void this.#leaveReordering()}
+                >${t("action.done")}</wt-button
+              >`
+            : nothing
+        }</dashboard-menu-structure-table
+      >`;
+  }
+
+  /** Done removes itself, so focus goes back to the mode's toggle rather than to the page. */
+  async #leaveReordering(): Promise<void> {
+    this.structureReordering = false;
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>('[data-test="reorder"]')?.focus();
   }
 
   #renderPrices() {
