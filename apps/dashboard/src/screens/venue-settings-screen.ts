@@ -8,10 +8,17 @@ import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
 /** The page's tabs in the order they show; a module's panel names one of these keys. */
-export const VENUE_SETTINGS_TABS = ["receipts", "tables", "adjustment-reasons", "kitchen"] as const;
+export const VENUE_SETTINGS_TABS = [
+  "venue-details",
+  "receipts",
+  "tables",
+  "adjustment-reasons",
+  "kitchen",
+] as const;
 export type VenueSettingsTab = (typeof VENUE_SETTINGS_TABS)[number];
 
 const TAB_LABELS: Record<VenueSettingsTab, StringKey> = {
+  "venue-details": "venue_settings.tab.venue_details",
   receipts: "venue_settings.tab.receipts",
   tables: "venue_settings.tab.tables",
   "adjustment-reasons": "venue_settings.tab.adjustment_reasons",

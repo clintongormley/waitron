@@ -2450,9 +2450,11 @@ Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`. Departments and zones
 uses the single `/manage/venue-operations` page; old tab addresses are replaced with that URL. Venue settings
-(`/manage/venue-settings`) uses `receipts`, `tables`, `adjustment-reasons` and `kitchen`; a tab
+(`/manage/venue-settings`) starts with `venue-details`, followed by `receipts`, `tables`,
+`adjustment-reasons` and `kitchen`; a tab
 appears only when a panel on it is visible to the session, and an address naming a hidden tab
-opens the first visible tab. The dashboard preserves module-owned
+opens the first visible tab. Venue details needs `venue.view`; its editor needs `venue.configure`.
+An explicit Receipts link keeps that tab selected. The dashboard preserves module-owned
 `view` segments while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
 the tab:
 `/manage/menus/menu/<id>/view/<key>`, with `structure`, `prices` and `preview` (`dashboardPath`,

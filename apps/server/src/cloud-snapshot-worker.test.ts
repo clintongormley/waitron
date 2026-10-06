@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -6,6 +6,12 @@ import { createHash, randomUUID } from "node:crypto";
 import type { CloudConnectionStatus } from "./cloud-client.js";
 import type { CloudCaptureGrant, CloudCaptureMetadata, CloudCapturePoint } from "./cloud-backup.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
+import { withTransaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { setupVenue } from "./testing/venue-fixtures.js";
+import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
+import { resolveVenueClock } from "./report-api.js";
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((p) => rm(p, { recursive: true, force: true })));
@@ -424,4 +430,103 @@ it("does not read the venue clock while the next snapshot is not due", async () 
   };
   await createCloudSnapshotWorker(f.deps).tick(signal());
   expect(f.captures()).toBe(1);
+});
+
+describe("cloud snapshot venue clock edits", () => {
+  const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+  it("keeps the persisted deadline and adopts the saved clock after that capture completes", async () => {
+    const venue = await setupVenue(suite.db);
+    const f = await fixture();
+    f.deps.sourceNodeId = "11111111-1111-4111-8111-111111111111";
+    f.deps.readClock = () =>
+      withTransaction(suite.db, (tx) => resolveVenueClock(tx, venue.cfg.nodeId));
+    const worker = createCloudSnapshotWorker(f.deps);
+    const statePath = join(f.root, "cloud-snapshots/state.json");
+    const state = async () => JSON.parse(await readFile(statePath, "utf8")) as { nextAt: number };
+    await worker.tick(signal());
+    expect(f.captures()).toBe(1);
+    expect(new Date((await state()).nextAt).toISOString()).toBe("2026-09-25T03:32:00.000Z");
+    const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx, venue.cfg));
+    await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, venue.cfg, {
+        expected: initial.details,
+        changes: { timeZone: "UTC", dayCutover: "04:30" },
+      }),
+    );
+    await worker.tick(signal());
+    expect(f.captures()).toBe(1);
+    expect(new Date((await state()).nextAt).toISOString()).toBe("2026-09-25T03:32:00.000Z");
+    f.advance(Date.parse("2026-09-25T03:32:00Z") - f.deps.now().getTime());
+    await worker.tick(signal());
+    expect(f.captures()).toBe(2);
+    expect(new Date((await state()).nextAt).toISOString()).toBe("2026-09-25T05:02:00.000Z");
+    f.advance(90 * 60000);
+    await worker.tick(signal());
+    expect(f.captures()).toBe(3);
+    expect(new Date((await state()).nextAt).toISOString()).toBe("2026-09-26T05:02:00.000Z");
+    expect(f.points.size).toBe(3);
+  });
+});
+
+it("exposes the persisted next capture deadline, including after worker restart and disable", async () => {
+  const f = await fixture();
+  const observed: Array<number | null> = [];
+  const worker = createCloudSnapshotWorker({ ...f.deps, onScheduled: (at) => observed.push(at) });
+  await worker.tick(signal());
+  const saved = JSON.parse(await readFile(join(f.root, "cloud-snapshots/state.json"), "utf8")) as {
+    nextAt: number;
+  };
+  expect(observed.at(-1)).toBe(saved.nextAt);
+  const restarted = createCloudSnapshotWorker({
+    ...f.deps,
+    onScheduled: (at) => observed.push(at),
+  });
+  await restarted.tick(signal());
+  expect(observed.at(-1)).toBe(saved.nextAt);
+  expect(f.captures()).toBe(1);
+  f.status.installation!.state = "revoked";
+  await restarted.tick(signal());
+  expect(observed.at(-1)).toBeNull();
+});
+
+it("clears an observed deadline when status fails and recovers the persisted deadline later", async () => {
+  const f = await fixture();
+  let observed: number | null = null;
+  const worker = createCloudSnapshotWorker({
+    ...f.deps,
+    onScheduled: (at) => {
+      observed = at;
+    },
+  });
+  await worker.tick(signal());
+  const saved = JSON.parse(await readFile(join(f.root, "cloud-snapshots/state.json"), "utf8")) as {
+    nextAt: number;
+  };
+  expect(observed).toBe(saved.nextAt);
+  const status = f.deps.connection.status;
+  f.deps.connection.status = async () => {
+    throw new Error("status unavailable");
+  };
+  await expect(worker.tick(signal())).rejects.toThrow("status unavailable");
+  expect(observed).toBeNull();
+  f.deps.connection.status = status;
+  await worker.tick(signal());
+  expect(observed).toBe(saved.nextAt);
+  expect(f.captures()).toBe(1);
+});
+it("clears the observed deadline when a tick is aborted before status", async () => {
+  const f = await fixture();
+  let observed: number | null = null;
+  const worker = createCloudSnapshotWorker({
+    ...f.deps,
+    onScheduled: (at) => {
+      observed = at;
+    },
+  });
+  await worker.tick(signal());
+  expect(observed).not.toBeNull();
+  const controller = new AbortController();
+  controller.abort();
+  await worker.tick(controller.signal);
+  expect(observed).toBeNull();
 });

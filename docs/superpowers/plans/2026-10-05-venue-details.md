@@ -14,6 +14,8 @@
 
 **Review:** A fresh-context Claude seat compared a frozen draft with only the three source specs on 2026-10-05 (269 seconds). The driver corrected its 13 scope, validation, interface, receipt and compatibility findings and audited the writer’s later scope corrections. An independent Sol-high third reader checked the 13 corrections and found one outer-body error-field ambiguity; the driver defined `body` explicitly and pinned the exact HTTP response. The same reader rechecked those two passages and found no actionable issue. Both reviews checked document consistency, not runtime behavior. The writer's source inspection and document self-check are not those reviews. No implementation, behavioral test, migration or server was run while writing this plan.
 
+> **Implementation receipt, 2026-10-06:** W111 landed as `9516e42d0` after this plan's base and added current venue-address printing through `apps/server/src/venue-address.ts` and `receipt-print.ts`. The C10 observation below is historical. The new reprint control checks the corrected current address separately from the unchanged filed issuer, trading-name snapshot, issuance facts, totals and fiscal/drawer rows. It adds no address-printing behavior. Its command and observed output are recorded in the implementation commit.
+
 ## Global constraints
 
 - All recommendations in this plan await owner approval. Do not turn them into approved spec decisions in comments or tests before that approval.

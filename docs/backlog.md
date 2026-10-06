@@ -2998,17 +2998,21 @@ package, eg Spain has two time zones, one for mainland and one for las canarias"
 not let anyone choose it: it takes the zone from the province of the venue's address (Spain's pack,
 `packages/country-es/src/spain.ts:180`, gives Las Palmas and Santa Cruz de Tenerife
 `Atlantic/Canary` and every other province `Europe/Madrid`; the UK pack gives `Europe/London`). But
-the column, `locations.time_zone`, is plain text, and configuration import checks only that the
-value is a string (`apps/server/src/configuration-transfer.ts:297-309`), so an imported file can set
-a zone no pack offers; provisioning copies whatever it is given (`packages/provisioning/src/venue-apply.ts`).
+the column, `locations.time_zone`, is plain text, and provisioning copies whatever it is given
+(`packages/provisioning/src/venue-apply.ts`).
 Readers then disagree about a bad zone: reporting throws, bookings falls back to Madrid, account
 emails to UTC. **Wanted:** each country pack lists the zones it allows (Spain: Madrid and Canary),
-and every writer of a venue's time zone — setup, configuration import, provisioning — refuses one
-not on its country's list. A dropdown is needed only if a venue could ever need a zone other than
+and creation/provisioning writers refuse a zone not on its country's list. A dropdown is needed
+only if a venue could ever need a zone other than
 its province's; for Spain the province decides. (Aside: a Canary venue cannot be set up yet — the
 pack marks the Canary tax territory unsupported.) Slice 3b's station opening hours ignore hours
 when the zone cannot be read, as a last defence
 ([plan](superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md), S8).
+A261 step 7's approved plan separately permits a named-zone override before dated history;
+its editor validates named zones and refuses numeric offsets. Importing configuration into an
+existing venue retains its saved zone (`applyPreparedLocation`,
+`apps/server/src/configuration-transfer.ts`); importing venue details is a creation concern,
+not an edit through that applicator.
 
 **A configuration import does not check a table status's colour (A273, review of W92, 2026-10-05) —
 DONE (#1257).** A save and an import now share one rule, `isStatusColor`
@@ -5500,7 +5504,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   (`packages/ui/src/components/wt-relative-time.ts`, through `apps/dashboard/src/widgets/relative-time.ts`),
   which redraws itself when its words would change; hovering or tapping them shows the full date
   and time ("5 de octubre de 2026 a las 11:49"), which is also their screen-reader description. The
-  exact time is in the BROWSER's time zone: the dashboard reads no venue time zone. Other dashboard
+  exact time is in the BROWSER's time zone: the relative-time widget receives no venue time zone. Other dashboard
   places still showing a bare `YYYY-MM-DD HH:MM` (`formatIsoMinute`), not changed: the Devices "Last
   seen" column; on Printers, a print agent's join request, an agent's Last seen (its table and Edit), a
   printer's Last print and Last seen (its status view) and Last print (the printers table), "Seen on {agent} · {time}" (`printers.seen_at`), and the print
@@ -6403,12 +6407,36 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Departments and zones; other screens still await their own one-department survey. Tab billing and
   the shared calendar remain open.
 - **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — SPEC
-  APPROVED; steps 1–3 implemented, later steps open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
+  APPROVED; steps 1–3 and 7 implemented, later steps open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
   The sidebar's Venue operations group; Venue settings with one tab per group
   (Receipts moves there); Departments and zones as one table edited in place; Prep stations as one
   tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
   special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.
   Eight build steps, each its own queue item.
+  Step 7 (venue details) is implemented. Its shared server
+  reader/writer now has focused checks for normalization, field-specific stale drafts, no-op
+  retries and province/clock refusals after a sale, order history or daily close. The new
+  venue-details GET/PATCH routes use venue-view/configuration permissions and return field
+  refusals. Additional controls exercise retained sale rows, full-row retention, rollback,
+  no-op change-feed silence, and both real-sale/clock-save queue orders. Configuration export
+  includes corrected details; import keeps its separately created target address and clock.
+  Both boot account-email callbacks now read the venue clock on each send; real SMTP checks
+  cover invitations, resets and profile email changes, with the shutdown reset check retained.
+  Additional consumer checks exercise saved clocks in current station/booking reads,
+  retained backup/cloud deadlines followed by new-clock scheduling, printer calibration,
+  operational report windows and frozen closes, receipt reprints, and workforce summary/roster
+  reads with midnight offsets. Sent kitchen assignments stay equal through allowed corrections.
+  W111's current address printing is retained separately from filed identity and trading snapshots.
+  The dashboard client and passive live-query dependencies now cover venue details and their
+  history restrictions; its patch/validation helper keeps untouched legacy-null fields out.
+  Direct CLI creation controls retain the deployed venue and series on changed details.
+  Numeric-offset clock edits are refused consistently with the reporting validator; named
+  zones such as `Etc/GMT+2` remain accepted. The Venue details panel is the initial tab,
+  with live draft/error separation, changed-field confirmation, clock-change boundaries and
+  each worker's retained backup deadline. The current server report route and the rendered
+  roster's stored wall times have before/after receipts. EN/ES, light/dark and phone/desktop
+  states have accessibility scans and retained screenshots.
+  This build changes no schema.
   [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) was approved on 2026-10-05;
   its build landed as [PR #1269](https://github.com/clintongormley/waitron/pull/1269) on
   2026-10-06 at `924a94b745275627003db2912156dfbb266aa3ae`. Current-head package checks
@@ -6537,17 +6565,21 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   read-only default-cell permissions, retained disabled targets, zone cleanup and pre-live routing
   reset. It replaces claims/ordered exceptions without conversion, with five stored coordinate
   classes and populated-upgrade/configuration-transfer checks.
-  [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) is written for owner
-  review; its editor is not implemented. Recommendations allow current display-name/street/city
-  corrections and same-province postcode edits, preserve recorded names and facts, keep taxpayer
-  identity read-only, and lock province/clock after sales. Clock edits also stop after order history
+  [Step 7 Venue details plan](superpowers/plans/2026-10-05-venue-details.md) was approved by the owner on
+  2026-10-05. Its build is implemented: the shared server writer,
+  authenticated API, live consumer controls, and core dashboard editor. The editor validates changed fields, retains drafts across passive updates,
+  requires warning acknowledgement, and offers read-only supervisor access. Clock previews use one captured instant, the reporting boundary resolver and actual
+  scheduled backup deadlines; before/after report and rendered roster checks retain recorded facts.
+  The approved policy allows current display-name/street/city
+  corrections and same-province postcode edits, preserves recorded names and facts, keeps taxpayer
+  identity read-only, and locks province/clock after sales. Clock edits also stop after order history
   or a daily close. Pre-sale province edits need equal fiscal/language/clock context and the same
   sourced holiday region; absent that holiday capability only real province edits stay locked.
-  Review choices also cover no-op and stale-draft behavior, legacy-null field validation, warning
+  The approval also covers no-op and stale-draft behavior, legacy-null field validation, warning
   acknowledgement, the default tab and clock-change previews using the existing reporting resolver.
   No schema migration or reset is proposed; changes needing another fiscal/geographic context or
-  history removal use a separately approved setup/reset instead. Build waits for plan approval,
-  with step 2 already landed; later Hours/holidays/menu builds retain their own compatibility tests.
+  history removal use a separately approved setup/reset instead. Step 2 is already landed; later
+  Hours/holidays/menu builds retain their own compatibility tests.
   [Step 8 Printing rules and drawer policy retirement plan](superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
   was approved by the owner on 2026-10-05; its build remains open.
   It removes the redundant
@@ -7069,7 +7101,7 @@ characters. Left open:
   claim that the database always reads a time value back in the long form was wrong: `timeOfDay` is
   a text column (`packages/db/src/schema/columns.ts`), and a repeated short-form plan succeeded
   before this change. The venue-plan test also checks the normalized action directly.
-- **`dayCutover` still needs input validation.** The W6 review passed `"24:00"` and `"99:99"`
+- **Creation/provisioning `dayCutover` still needs input validation.** The W6 review passed `"24:00"` and `"99:99"`
   through `planVenue`; both emerged with seconds appended. **Next action:** choose the validation
   boundary and a domain refusal, then test invalid values before they reach storage.
 
@@ -9287,7 +9319,7 @@ partial scope; the detail for a live thread is in its track.
 | 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations; AEAT certificate install and renewal after setup (A9); cert distribution to a promoted node; a foreign business customer's identifier type (A1a) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329) | webhook `recordSale` hand-off; reconcile remediation UI; the handheld NFC/QR link (A6) |
 | 5 | Identity | persons/sessions, PIN (+ wrong-PIN back-off: per device at sign-in and for override PINs), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce |
-| 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297) | multiple locations, edit/deactivate; then location-scope the by-id verb family |
+| 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297) | multiple-location creation/editing/deactivation; then location-scope the by-id verb family |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, canvas/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
 | 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file and its download route and its dashboard screen, purchase-invoice UI; dashboard sales screen (with a category sales report, at time of sale or current, printable) + business-overview home | fiscal filing remainder parked (*Detail → Reporting*) |
 | 9 | Deployment | the box as two containers with `waitron.sh` install/reset (#285, #314); guided node onboarding (#296); boot diagnosability (#310); CA-trust onboarding + per-OS certificate walkthrough (#330); till reroute S1–S6; promotion endpoint (#272) | USB installer (B3); cloud standby live link + the Waitron Cloud boundary |

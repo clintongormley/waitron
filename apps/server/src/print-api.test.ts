@@ -58,6 +58,7 @@ import {
   type EnrolRateLimiter,
 } from "./enrol-rate-limit.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
 import "./errors.js";
 
 // The print routes end to end in-process. Tests share the seeded tenant and create their own
@@ -1929,6 +1930,77 @@ describe("mountPrintApi — management: print-test-page", () => {
       .where(eq(printJobs.printerId, printerId));
     return rows.map((row) => ({ ...row, payload: new Uint8Array(row.payload) }));
   }
+
+  it("prints calibration in the committed venue zone without remounting the routes", async () => {
+    const app = mountApp({ now: () => NOW });
+    const printerId = await createNetworkPrinter(app, "10.0.0.129", 9100, "Clock edit calibration");
+    const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx, { locationId }));
+    expect(initial.details.timeZone).toBe("Europe/Madrid");
+    const print = async () => {
+      const response = await app.request(`/management-api/printers/${printerId}/print-test-page`, {
+        method: "POST",
+        headers: { cookie: managerCookie, "accept-language": "en-GB" },
+      });
+      expect(response.status).toBe(202);
+      const { jobId } = (await response.json()) as { jobId: string };
+      return printedLines((await jobsFor(printerId)).find((job) => job.id === jobId)!.payload).join(
+        "\n",
+      );
+    };
+    expect(await print()).toContain("1 Oct 2026, 15:05");
+    const saved = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(
+        tx,
+        { locationId },
+        {
+          expected: initial.details,
+          changes: { timeZone: "UTC" },
+        },
+      ),
+    );
+    try {
+      expect(await print()).toContain("1 Oct 2026, 13:05");
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          writeVenueDetails(
+            tx,
+            { locationId },
+            {
+              expected: saved.model.details,
+              changes: { timeZone: "Invalid/Zone" },
+            },
+          ),
+        ),
+      ).rejects.toMatchObject({
+        code: "venue.detail_invalid",
+        params: { field: "timeZone", reason: "time_zone" },
+      });
+      const noOp = await withTransaction(suite.db, (tx) =>
+        writeVenueDetails(
+          tx,
+          { locationId },
+          {
+            expected: saved.model.details,
+            changes: { timeZone: "UTC" },
+          },
+        ),
+      );
+      expect(noOp.changed).toBe(false);
+      expect(await print()).toContain("1 Oct 2026, 13:05");
+    } finally {
+      const latest = await withTransaction(suite.db, (tx) => readVenueDetails(tx, { locationId }));
+      await withTransaction(suite.db, (tx) =>
+        writeVenueDetails(
+          tx,
+          { locationId },
+          {
+            expected: latest.details,
+            changes: { timeZone: initial.details.timeZone },
+          },
+        ),
+      );
+    }
+  });
 
   it.each([
     { acceptLanguage: "en-GB,en;q=0.9", locale: "en-GB", dateTime: "1 Oct 2026, 14:05" },

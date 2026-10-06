@@ -3,7 +3,10 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
+import { setupVenue } from "./testing/venue-fixtures.js";
+import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
+import { resolveVenueClock } from "./report-api.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decryptArtifact } from "./artifact-cipher.js";
@@ -597,6 +600,73 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     expect(backend.objects.size).toBe(1);
     expect(logged.filter(([, event]) => event === "backup.schedule_failed")).toEqual([]);
     expect(sleeps).toBe(0);
+  });
+
+  it("keeps an existing backup deadline through a venue edit and uses the saved clock next cycle", async () => {
+    const venue = await setupVenue(suite.db);
+    const controller = new AbortController();
+    const backend = new FakeBackend("clock-edit");
+    let now = new Date("2026-10-06T00:00:00Z");
+    let edited = false;
+    const archivedAt: string[] = [];
+    const sleeps: number[] = [];
+    await runBackupSweep(
+      loopDeps(backend, {
+        db: suite.db,
+        signal: controller.signal,
+        log: vi.fn(),
+        now: () => now,
+        schedule: { kind: "wall-clock", days: "daily", at: "auto" },
+        readClock: () => withTransaction(suite.db, (tx) => resolveVenueClock(tx, venue.cfg.nodeId)),
+        archive: async (outFile) => {
+          archivedAt.push(now.toISOString());
+          await writeFile(outFile, "DUMP-BYTES");
+        },
+        sleep: async (ms) => {
+          sleeps.push(ms);
+          if (!edited) {
+            const initial = await withTransaction(suite.db, (tx) =>
+              readVenueDetails(tx, venue.cfg),
+            );
+            await withTransaction(suite.db, (tx) =>
+              writeVenueDetails(tx, venue.cfg, {
+                expected: initial.details,
+                changes: { timeZone: "UTC", dayCutover: "04:30" },
+              }),
+            );
+            edited = true;
+          }
+          now = new Date(now.getTime() + ms);
+          if (archivedAt.length === 3) controller.abort();
+        },
+      }),
+    );
+    expect(archivedAt).toEqual([
+      "2026-10-06T00:00:00.000Z",
+      "2026-10-06T03:36:00.000Z",
+      "2026-10-06T05:06:00.000Z",
+    ]);
+    expect(sleeps.slice(0, 6)).toEqual([3600000, 3600000, 3600000, 2160000, 3600000, 1800000]);
+    expect(backend.objects.size).toBe(3);
+  });
+
+  it("exposes its retained interval deadline until abort clears it", async () => {
+    const controller = new AbortController();
+    const observed: Array<number | null> = [];
+    const instant = Date.parse("2026-10-06T00:00:00Z");
+    await runBackupSweep(
+      loopDeps(new FakeBackend("preview"), {
+        signal: controller.signal,
+        log: vi.fn(),
+        now: () => new Date(instant),
+        onScheduled: (at) => observed.push(at),
+        sleep: async () => {
+          expect(observed.at(-1)).toBe(instant + 10);
+          controller.abort();
+        },
+      }),
+    );
+    expect(observed).toEqual([null, instant + 10, null]);
   });
 
   it("waits to a wall-clock schedule's nextFireMs, reading the clock each cycle", async () => {

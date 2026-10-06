@@ -66,6 +66,7 @@ export interface BackupSupervisorDeps {
   log: Logger;
   /** DI for tests; defaults to `openVenueDatabase`. */
   openVenue?: (directory: string) => Promise<VenueDatabase>;
+  onScheduled?: (at: number | null) => void;
   now?: () => Date;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }
@@ -150,6 +151,7 @@ export class BackupSupervisor {
         readClock: this.#deps.readClock,
         outcomes: this.#deps.outcomes,
         signal: controller.signal,
+        onScheduled: this.#deps.onScheduled,
         onStored: () => {
           // A replaced sweep is aborted before `reload()` waits for it, and its in-flight tick can
           // still store an archive under the OLD key during that wait.

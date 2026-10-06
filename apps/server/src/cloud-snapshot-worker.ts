@@ -31,6 +31,7 @@ export interface CloudSnapshotDeps {
   isPrimary(): boolean;
   readClock(): Promise<ScheduleClock>;
   now?: () => Date;
+  onScheduled?: (at: number | null) => void;
   createArchive(
     grant: CloudCaptureGrant,
     at: Date,
@@ -131,11 +132,18 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
   const now = deps.now ?? (() => new Date());
   let running = false;
   async function tick(signal: AbortSignal) {
-    if (running || signal.aborted || !deps.isPrimary()) return;
+    if (running) return;
+    if (signal.aborted || !deps.isPrimary()) {
+      deps.onScheduled?.(null);
+      return;
+    }
     running = true;
     try {
       const status = await deps.connection.status();
-      if (signal.aborted || !deps.isPrimary()) return;
+      if (signal.aborted || !deps.isPrimary()) {
+        deps.onScheduled?.(null);
+        return;
+      }
       await mkdir(dir, { recursive: true, mode: 0o700 });
       if (!(await lstat(dir)).isDirectory()) unavailable();
       await chmod(dir, 0o700);
@@ -163,8 +171,10 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
         !status.installation.services.some(
           (s) => s.service === "retained_snapshots" && s.state !== "unconfigured",
         )
-      )
+      ) {
+        deps.onScheduled?.(null);
         return;
+      }
       state ??= {
         version: 1,
         installationId: registration.installationId,
@@ -172,6 +182,7 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
         nextAt: 0,
         lastMonth: "",
       };
+      deps.onScheduled?.(state.pending || state.nextAt <= now().getTime() ? null : state.nextAt);
       if (!state.pending && now().getTime() < state.nextAt) {
         await rm(file, { force: true });
         return;
@@ -193,6 +204,7 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
         );
         delete state!.pending;
         await save();
+        deps.onScheduled?.(state!.nextAt);
         await rm(file, { force: true });
       };
       let p = state.pending;
@@ -258,6 +270,9 @@ export function createCloudSnapshotWorker(deps: CloudSnapshotDeps) {
       await save();
       await deps.connection.publishCapture(p.id, p.metadata, signal);
       await complete();
+    } catch (error) {
+      deps.onScheduled?.(null);
+      throw error;
     } finally {
       running = false;
     }

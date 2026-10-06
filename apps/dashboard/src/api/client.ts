@@ -28,6 +28,58 @@ import type {
 } from "@waitron/catalogue/src/product-types.js";
 import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
 export type { Product, ProductEditorValue, ProductEditorVariant, ProductEditorInput };
+export interface VenueDetailValues {
+  name: string;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  postalCode: string | null;
+  city: string | null;
+  province: string | null;
+  timeZone: string;
+  dayCutover: string;
+}
+export type VenueDetailField = keyof VenueDetailValues;
+export type VenueDetailPatch = Partial<VenueDetailValues>;
+export type DetailReason =
+  | "sales"
+  | "orders"
+  | "daily_close"
+  | "geography_context"
+  | "current_details_only"
+  | "holiday_geography"
+  | "clock_effects";
+export interface VenueDetailsModel {
+  details: VenueDetailValues;
+  issuer: { country: string; legalName: string; taxId: string };
+  hasSales: boolean;
+  hasOrderHistory: boolean;
+  hasDailyClose: boolean;
+  policy: Record<
+    VenueDetailField,
+    { decision: "allow" | "allow_with_warning" | "refuse"; reasons: DetailReason[] }
+  >;
+  provinces: { code: string; name: string }[];
+}
+export interface VenueDetailWrite {
+  changes: VenueDetailPatch;
+  expected: VenueDetailValues;
+}
+
+export interface VenueClockView {
+  timeZone: string;
+  dayCutover: string;
+  civilDate: string;
+  timeOfDay: string;
+  businessDay: string;
+  transitions: { at: string; civilDate: string; boundaryAt: string; boundaryTime: string }[];
+}
+export interface VenueClockPreview {
+  at: string;
+  current: VenueClockView | null;
+  proposed: VenueClockView;
+  backupDeadlines: { archive: string | null; cloud: string | null };
+}
+
 export interface MadeAt {
   stationId: string | null;
   stationName: string | null;
@@ -2235,6 +2287,24 @@ export class DashboardApi {
   }
 
   // ── Receipt-trim configuration ────────────────────────────────────────────────────────────────
+
+  getVenueDetails(): Promise<VenueDetailsModel> {
+    return this.#request("/management-api/venue-details", "GET");
+  }
+
+  getVenueClockPreview(clock: {
+    timeZone: string;
+    dayCutover: string;
+  }): Promise<VenueClockPreview> {
+    const query = new URLSearchParams(clock);
+    return this.background.#request(`/management-api/venue-details/clock-preview?${query}`, "GET");
+  }
+
+  patchVenueDetails(
+    input: VenueDetailWrite,
+  ): Promise<{ changed: boolean; model: VenueDetailsModel }> {
+    return this.#request("/management-api/venue-details", "PATCH", input);
+  }
 
   getLocationSettings(): Promise<{ name: string; operationDescription: string }> {
     return this.#request("/management-api/location-settings", "GET");

@@ -6,6 +6,7 @@ import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
 import type { DashboardApi } from "./api/client.js";
 import "./dashboard-app.js";
+import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 import type { DashboardApp } from "./dashboard-app.js";
 
 // "widgets" adds kitchen panels this session may see and an adjustment-reasons panel it may not;
@@ -74,7 +75,7 @@ afterEach(() => {
   setLocale("es-ES");
 });
 
-function stubApi(role = "manager"): DashboardApi {
+function stubApi(role = "manager", permissions = ["test.use"]): DashboardApi {
   const pending = () => vi.fn(() => new Promise(() => undefined));
   return {
     getMe: vi.fn().mockResolvedValue({
@@ -85,13 +86,14 @@ function stubApi(role = "manager"): DashboardApi {
       venueLocale: "es-ES",
       sessionDefault: "es-ES",
       venueName: "Deli Test SL",
-      permissions: ["test.use"],
+      permissions,
       modules: ["widgets"],
     }),
     getGoogleConfig: vi.fn().mockResolvedValue({ configured: false }),
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     getSalesOverview: pending(),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
+    getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
     getReceipt: pending(),
     getLocationSettings: pending(),
     getReceiptLanguage: pending(),
@@ -108,12 +110,16 @@ function stubApi(role = "manager"): DashboardApi {
   } as unknown as DashboardApi;
 }
 
-async function mount(path: string, role = "manager"): Promise<DashboardApp> {
+async function mount(
+  path: string,
+  role = "manager",
+  permissions = ["test.use"],
+): Promise<DashboardApp> {
   const url = new URL(location.href);
   url.pathname = path;
   history.replaceState(null, "", url);
   const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-    api: stubApi(role),
+    api: stubApi(role, permissions),
     request: async () => [] as never,
   });
   await vi.waitFor(() =>
@@ -190,4 +196,32 @@ it("refuses to start when a module repeats a core panel's id", async () => {
     list.length = 0;
     list.push(...original);
   }
+});
+
+it.each([
+  ["manager", ["venue.view", "venue.configure", "test.use"], false],
+  ["supervisor", ["venue.view", "test.use"], true],
+])(
+  "mounts core venue details for %s using venue.configure for editing",
+  async (role, permissions, readOnly) => {
+    const el = await mount("/manage/venue-settings", role, permissions);
+    expect(tabKeys(el)[0]).toBe("venue-details");
+    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+    const panel = page(el).shadowRoot!.querySelector(
+      "dashboard-venue-details-panel",
+    ) as HTMLElement & { readOnly: boolean };
+    expect(panel).not.toBeNull();
+    expect(panel.readOnly).toBe(readOnly);
+    expect(panel.shadowRoot!.querySelector("h1")).toBeNull();
+    expect(page(el).shadowRoot!.querySelectorAll("h1")).toHaveLength(1);
+  },
+);
+it("preserves an explicitly selected Receipts link for a manager with venue access", async () => {
+  const el = await mount("/manage/venue-settings/view/receipts", "manager", [
+    "venue.view",
+    "venue.configure",
+  ]);
+  expect(tabKeys(el)[0]).toBe("venue-details");
+  expect(location.pathname).toBe("/manage/venue-settings/view/receipts");
+  expect(page(el).shadowRoot!.querySelector("wt-tabs")!.value).toBe("receipts");
 });

@@ -165,3 +165,24 @@ describe("the Venue settings page", () => {
     ).toEqual(["Recibos", "Mesas", "Motivos de ajuste", "Cocina"]);
   });
 });
+
+it.each([
+  ["en-GB", "Venue details"],
+  ["es-ES", "Datos del local"],
+])(
+  "opens Venue details first in %s while preserving explicit Receipts links",
+  async (locale, label) => {
+    setLocale(locale);
+    navigate("/manage/venue-settings");
+    const el = await mount([panel("r", "receipts"), panel("v", "venue-details")]);
+    expect(tabKeys(el)).toEqual(["venue-details", "receipts"]);
+    expect(selected(el)).toBe("venue-details");
+    expect(location.pathname).toBe("/manage/venue-settings/view/venue-details");
+    expect(
+      tabs(el)!.shadowRoot!.querySelector('[data-key="venue-details"]')?.textContent?.trim(),
+    ).toBe(label);
+    await select(el, "receipts");
+    expect(location.pathname).toBe("/manage/venue-settings/view/receipts");
+    expect(selected(el)).toBe("receipts");
+  },
+);

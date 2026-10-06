@@ -51,6 +51,7 @@ import "./screens/modifiers-screen.js";
 import "./screens/menus-screen.js";
 import "./screens/units-screen.js";
 import "./screens/receipts-screen.js";
+import "./screens/venue-details-panel.js";
 import "./screens/content-languages-screen.js";
 import "./screens/service-status-screen.js";
 import "./screens/floor-screen.js";
@@ -257,6 +258,16 @@ type CoreSettingsPanel = AccessRule & {
 };
 
 const CORE_SETTINGS_PANELS: readonly CoreSettingsPanel[] = [
+  {
+    key: "venue-details",
+    tab: "venue-details",
+    requiresPermission: "venue.view",
+    render: (api, canConfigure) =>
+      html`<dashboard-venue-details-panel
+        .api=${api}
+        .readOnly=${!canConfigure}
+      ></dashboard-venue-details-panel>`,
+  },
   {
     key: "receipts",
     tab: "receipts",

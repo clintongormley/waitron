@@ -258,6 +258,7 @@ export const QUERY_DEPENDENCIES = {
   listPurchaseInvoices: ["purchase_invoices", "purchase_invoice_vat"],
   getReceipt: ["tenant_receipts", "locations"],
   getLocationSettings: ["locations"],
+  getVenueDetails: ["locations", "tenants", "sales", "working_orders", "daily_closes"],
   getReceiptLanguage: ["locations"],
   getProductRecipe: ["recipe_lines", "ingredients", "products"],
   listIngredients: ["ingredients"],

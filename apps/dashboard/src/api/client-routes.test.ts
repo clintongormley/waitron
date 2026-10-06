@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
 import { DashboardApi, type BackupApplyBody, type ProductEditorInput } from "./client.js";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
@@ -1069,4 +1070,60 @@ it("downloads the modelo 303 file for the chosen period as an ordinary GET, byte
   expect(init.credentials).toBe("include");
   expect(new Headers(init.headers).has("x-waitron-live")).toBe(false);
   expect([...new Uint8Array(await file.arrayBuffer())]).toEqual([0x4e, 0xd1, 0x0a]);
+});
+
+it("reads current venue details and submits only the changed fields with the original snapshot", async () => {
+  const model = venueDetailsFixture();
+  const saved = { changed: true, model: venueDetailsFixture({ name: "New venue" }) };
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValueOnce(jsonResponse(model))
+    .mockResolvedValueOnce(jsonResponse(saved));
+  const api = new DashboardApi("", fetchImpl);
+  expect(await api.getVenueDetails()).toEqual(model);
+  expect(
+    await api.patchVenueDetails({ changes: { name: "New venue" }, expected: model.details }),
+  ).toEqual(saved);
+  expect(callsOf(fetchImpl)).toEqual([
+    ["/management-api/venue-details", "GET", undefined],
+    [
+      "/management-api/venue-details",
+      "PATCH",
+      {
+        changes: { name: "New venue" },
+        expected: {
+          name: "Venue",
+          addressLine1: "Calle Mayor 1",
+          addressLine2: null,
+          postalCode: "28001",
+          city: "Madrid",
+          province: "Madrid",
+          timeZone: "Europe/Madrid",
+          dayCutover: "06:00",
+        },
+      },
+    ],
+  ]);
+});
+
+it("reads a venue clock preview passively with encoded clock values", async () => {
+  const response = {
+    at: "2026-10-06T02:00:00.000Z",
+    current: null,
+    proposed: {},
+    backupDeadlines: { archive: null, cloud: null },
+  };
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(response));
+  const api = new DashboardApi("", fetchImpl);
+  await expect(
+    api.getVenueClockPreview({ timeZone: "Etc/GMT+2", dayCutover: "02:30" }),
+  ).resolves.toEqual(response);
+  expect(callsOf(fetchImpl)).toEqual([
+    [
+      "/management-api/venue-details/clock-preview?timeZone=Etc%2FGMT%2B2&dayCutover=02%3A30",
+      "GET",
+      undefined,
+    ],
+  ]);
+  expect(new Headers(fetchImpl.mock.calls[0]![1].headers).get("x-waitron-live")).toBe("1");
 });

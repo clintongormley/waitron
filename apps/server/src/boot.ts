@@ -1381,9 +1381,6 @@ async function bootServer(
   const contentLanguageRules = await readVenueContentLanguageRules(db, {
     locationId: till.locationId,
   });
-  const venueTimeZone = await readVenueTimeZone(db, {
-    locationId: till.locationId,
-  });
   const cardProvider = await buildCardProvider(
     db,
     config.onboardingIntent,
@@ -1499,7 +1496,15 @@ async function bootServer(
   }
   const resolveAccountEmail = () =>
     resolveEmailDelivery(db, ring, config.devMode || till.practiceMode === true);
-  mountLocationSettingsApi(app, { db, cfg: till, fiscal: enabledFiscal }, log);
+  const backupDeadlines: { archive: string | null; cloud: string | null } = {
+    archive: null,
+    cloud: null,
+  };
+  mountLocationSettingsApi(
+    app,
+    { db, cfg: till, fiscal: enabledFiscal, readBackupDeadlines: () => ({ ...backupDeadlines }) },
+    log,
+  );
   mountReceiptPreviewApi(app, { db, cfg: till, receiptQrText: tillBackend.receiptQrText }, log);
   const managementApi = mountManagementApi(
     app,
@@ -1516,9 +1521,13 @@ async function bootServer(
       credentialKeyRing: totpKeyRing,
       // Resolved on every send, so a newly configured or rotated SMTP gateway takes effect at once.
       sendAccountEmail: async (message) => {
-        const delivery = await resolveAccountEmail();
+        // Queue both reads before an answered reset can reach shutdown's drain.
+        const [delivery, timeZone] = await Promise.all([
+          resolveAccountEmail(),
+          readVenueTimeZone(db, { locationId: till.locationId }),
+        ]);
         if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
-        await createAccountEmailSender({ ...delivery.smtp, timeZone: venueTimeZone })(message);
+        await createAccountEmailSender({ ...delivery.smtp, timeZone })(message);
       },
     },
     log,
@@ -1612,9 +1621,12 @@ async function bootServer(
       accountActionBaseUrl: `${config.managementOrigin}/`,
       privacyNoticeUrl: config.privacyNoticeUrl,
       sendAccountEmail: async (message) => {
-        const delivery = await resolveAccountEmail();
+        const [delivery, timeZone] = await Promise.all([
+          resolveAccountEmail(),
+          readVenueTimeZone(db, { locationId: till.locationId }),
+        ]);
         if (delivery.mode === "unconfigured") throw new Error("account email is not configured");
-        await createAccountEmailSender({ ...delivery.smtp, timeZone: venueTimeZone })(message);
+        await createAccountEmailSender({ ...delivery.smtp, timeZone })(message);
       },
     },
     log,
@@ -1642,6 +1654,9 @@ async function bootServer(
         return resolveVenueClock(tx, till.nodeId);
       }),
     outcomes: backupOutcomes,
+    onScheduled: (at) => {
+      backupDeadlines.archive = at === null ? null : new Date(at).toISOString();
+    },
     log,
   });
   undoOnFailure.push(() => backupSupervisor.stop());
@@ -2080,6 +2095,9 @@ async function bootServer(
           stateDir: config.stateDir,
           connection: cloudConnection,
           sourceNodeId: till.nodeId,
+          onScheduled: (at) => {
+            backupDeadlines.cloud = at === null ? null : new Date(at).toISOString();
+          },
           isPrimary: cloudPrimary,
           readClock: () => withTransaction(db, (tx) => resolveVenueClock(tx, till.nodeId)),
           createArchive: (grant, at, signal) =>
