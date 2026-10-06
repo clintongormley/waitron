@@ -173,6 +173,20 @@ describe("the submission id of a confirmation", () => {
     expect(submissionFor("wo-1", tenEuros, kept, ids("sub-2")).request.submissionId).toBe("sub-1");
   });
 
+  it("is fresh after the device changed profile, whose refusal fails the payment recorded under the id", () => {
+    const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
+    const unanswered = unansweredAfter(first, { code: "device.profile_changed", status: 409 });
+
+    expect(unanswered).toBeNull();
+    expect(submissionFor("wo-1", tenEuros, unanswered, ids("sub-2")).request.submissionId).toBe(
+      "sub-2",
+    );
+    const forbidden = unansweredAfter(first, { code: "device.forbidden_action", status: 403 });
+    expect(submissionFor("wo-1", tenEuros, forbidden, ids("sub-3")).request.submissionId).toBe(
+      "sub-1",
+    );
+  });
+
   it("is fresh once the server says the id is taken by another request", () => {
     const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
     const unanswered = unansweredAfter(first, { code: "submission.id_reused", status: 409 });
