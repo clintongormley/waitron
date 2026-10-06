@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createFakeAeat } from "@waitron/verifactu/testing";
-import type { RespuestaLinea, VerifactuClient } from "@waitron/verifactu";
+import { createClient } from "@waitron/verifactu";
+import type { IDFactura, RespuestaLinea, VerifactuClient } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import {
   appendCancellation,
@@ -1018,10 +1019,21 @@ describe("drain — resolving a case releases nothing", () => {
 
 describe("drain — a reply line is applied only when its reference and its invoice match one record", () => {
   /** The `IDFactura` AEAT's reply carries for the record `facturaKey` (from the seeding fixtures). */
-  const idOf = (facturaKey: string) => {
+  const idOf = (facturaKey: string): IDFactura => {
     const [IDEmisorFactura, NumSerieFactura, FechaExpedicionFactura] = facturaKey.split("|");
-    return { IDEmisorFactura, NumSerieFactura, FechaExpedicionFactura };
+    return {
+      IDEmisorFactura: IDEmisorFactura!,
+      NumSerieFactura: NumSerieFactura!,
+      FechaExpedicionFactura: FechaExpedicionFactura!,
+    };
   };
+
+  /** An invoice as `fiscal.estado_desconocido`'s params spell it. */
+  const asParams = (id: IDFactura) => ({
+    idEmisorFactura: id.IDEmisorFactura,
+    numSerieFactura: id.NumSerieFactura,
+    fechaExpedicionFactura: id.FechaExpedicionFactura,
+  });
 
   async function unknownParamsOf(registroId: string): Promise<Record<string, unknown>[]> {
     const { rows } = await suite.db.execute<{ params: string }>(sql`
@@ -1073,14 +1085,16 @@ describe("drain — a reply line is applied only when its reference and its invo
     const csv = expect.any(String);
     const rejectedLine = {
       refExterna: rejected,
-      idFactura: idOf(seeded.facturaKeys[0]!),
+      tipoOperacion: "Alta",
+      ...asParams(idOf(seeded.facturaKeys[0]!)),
       estado: "Incorrecto",
       codigo: 1100,
       mensaje: "Campo obligatorio ausente",
     };
     const acceptedLine = {
       refExterna: rejected,
-      idFactura: idOf(seeded.facturaKeys[1]!),
+      tipoOperacion: "Alta",
+      ...asParams(idOf(seeded.facturaKeys[1]!)),
       estado: "Correcto",
       codigo: null,
       mensaje: null,
@@ -1092,7 +1106,8 @@ describe("drain — a reply line is applied only when its reference and its invo
         codigo: null,
         mensaje: null,
         csv,
-        identidadEnviada: idOf(seeded.facturaKeys[0]!),
+        operacionEnviada: "Alta",
+        identidadEnviada: asParams(idOf(seeded.facturaKeys[0]!)),
         lineasRespuesta: [rejectedLine, acceptedLine],
       },
     ]);
@@ -1103,7 +1118,8 @@ describe("drain — a reply line is applied only when its reference and its invo
         codigo: null,
         mensaje: null,
         csv,
-        identidadEnviada: idOf(seeded.facturaKeys[1]!),
+        operacionEnviada: "Alta",
+        identidadEnviada: asParams(idOf(seeded.facturaKeys[1]!)),
         lineasRespuesta: [acceptedLine],
       },
     ]);
@@ -1139,11 +1155,11 @@ describe("drain — a reply line is applied only when its reference and its invo
       expect(result.recordsAccepted).toBe(1);
       expect(await unknownParamsOf(mismatched!)).toEqual([
         expect.objectContaining({
-          identidadEnviada: idOf(seeded.facturaKeys[0]!),
+          identidadEnviada: asParams(idOf(seeded.facturaKeys[0]!)),
           lineasRespuesta: [
             expect.objectContaining({
               refExterna: mismatched,
-              idFactura: { ...idOf(seeded.facturaKeys[0]!), ...differs },
+              ...asParams({ ...idOf(seeded.facturaKeys[0]!), ...differs }),
               estado: "Correcto",
             }),
           ],
@@ -1174,11 +1190,11 @@ describe("drain — a reply line is applied only when its reference and its invo
       expect(result.recordsAccepted).toBe(1);
       expect(await unknownParamsOf(unreferenced!)).toEqual([
         expect.objectContaining({
-          identidadEnviada: idOf(seeded.facturaKeys[1]!),
+          identidadEnviada: asParams(idOf(seeded.facturaKeys[1]!)),
           lineasRespuesta: [
             expect.objectContaining({
               refExterna: refExterna ?? null,
-              idFactura: idOf(seeded.facturaKeys[1]!),
+              ...asParams(idOf(seeded.facturaKeys[1]!)),
             }),
           ],
         }),
@@ -1222,5 +1238,116 @@ describe("drain — a reply line is applied only when its reference and its invo
 
     await drain(deps(wire.client), new Date(FIRST.getTime() + backoffMs(1)));
     expect(wire.sent).toEqual([[mismatched, later.registroId]]);
+  });
+
+  /**
+   * Answers through the real client and its XML parser: each line keeps the reference and invoice
+   * the fake AEAT gave it, says `Correcto`, and carries `operacion` as its `Operacion` element.
+   */
+  function answeringWith(real: VerifactuClient, operacion: string): VerifactuClient {
+    return {
+      submit: async (cabecera, registros) => {
+        const respuesta = await real.submit(cabecera, registros);
+        const lineas = respuesta.RespuestaLinea.map(
+          ({ IDFactura: id, RefExterna }) =>
+            `<RespuestaLinea><IDFactura><IDEmisorFactura>${id.IDEmisorFactura}</IDEmisorFactura>` +
+            `<NumSerieFactura>${id.NumSerieFactura}</NumSerieFactura>` +
+            `<FechaExpedicionFactura>${id.FechaExpedicionFactura}</FechaExpedicionFactura>` +
+            `</IDFactura>${operacion}<RefExterna>${RefExterna}</RefExterna>` +
+            `<EstadoRegistro>Correcto</EstadoRegistro></RespuestaLinea>`,
+        );
+        const xml =
+          `<Envelope><Body><RespuestaRegFactuSistemaFacturacion><CSV>${respuesta.CSV}</CSV>` +
+          `<EstadoEnvio>Correcto</EstadoEnvio><TiempoEsperaEnvio>5</TiempoEsperaEnvio>` +
+          `${lineas.join("")}</RespuestaRegFactuSistemaFacturacion></Body></Envelope>`;
+        return createClient({
+          endpoint: "https://aeat.invalid/",
+          fetch: async () => new Response(xml),
+        }).submit(cabecera, registros);
+      },
+      consultar: (...args) => real.consultar(...args),
+    };
+  }
+
+  const tipo = (tipoOperacion: string) =>
+    `<Operacion><TipoOperacion>${tipoOperacion}</TipoOperacion></Operacion>`;
+
+  /** One record waiting to be sent as `operation`: a fresh alta, or the anulación of a filed one. */
+  async function waitingAs(
+    aeat: ReturnType<typeof fakeAeat>,
+    operation: "Alta" | "Anulacion",
+  ): Promise<{ id: string; now: Date; facturaKey: string }> {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const [original] = seeded.registroIds;
+    const facturaKey = seeded.facturaKeys[0]!;
+    if (operation === "Alta") return { id: original!, now: FIRST, facturaKey };
+    await drain(deps(aeat.client()), FIRST);
+    expect((await envioOf(original!)).estado).toBe("aceptado");
+    const id = await appendCancellation(suite.db, seeded, original!, 2);
+    return { id, now: SECOND, facturaKey };
+  }
+
+  it.each([
+    ["registration", "Alta", "Anulacion"],
+    ["cancellation", "Anulacion", "Alta"],
+  ] as const)(
+    "leaves a %s unknown when its only line says AEAT took it as the other operation",
+    async (_kind, sent, answered) => {
+      const aeat = fakeAeat();
+      const { id, now, facturaKey } = await waitingAs(aeat, sent);
+
+      const result = await drain(deps(answeringWith(aeat.client(), tipo(answered))), now);
+
+      expect(await envioOf(id)).toMatchObject({
+        estado: "pendiente",
+        incidencia: true,
+        proximo_intento_en: new Date(now.getTime() + backoffMs(1)).toISOString(),
+      });
+      expect(await ackOf(id)).toBeUndefined();
+      expect(result.recordsAccepted).toBe(0);
+      expect(await unknownParamsOf(id)).toEqual([
+        {
+          registroId: id,
+          estado: null,
+          codigo: null,
+          mensaje: null,
+          csv: expect.any(String),
+          operacionEnviada: sent,
+          identidadEnviada: asParams(idOf(facturaKey)),
+          lineasRespuesta: [
+            {
+              refExterna: id,
+              tipoOperacion: answered,
+              ...asParams(idOf(facturaKey)),
+              estado: "Correcto",
+              codigo: null,
+              mensaje: null,
+            },
+          ],
+        },
+      ]);
+      expect(await incidentCodes()).toEqual(["fiscal.estado_desconocido"]);
+      expect(await cases()).toEqual([]);
+    },
+  );
+
+  it.each([
+    ["registration whose line states Alta", "Alta", tipo("Alta")],
+    ["cancellation whose line states Anulacion", "Anulacion", tipo("Anulacion")],
+    ["registration whose line has no Operacion", "Alta", ""],
+    [
+      "registration whose Operacion has no TipoOperacion",
+      "Alta",
+      "<Operacion><Subsanacion>N</Subsanacion></Operacion>",
+    ],
+  ] as const)("applies the line of a %s", async (_label, sent, operacion) => {
+    const aeat = fakeAeat();
+    const { id, now } = await waitingAs(aeat, sent);
+
+    const result = await drain(deps(answeringWith(aeat.client(), operacion)), now);
+
+    expect(await envioOf(id)).toMatchObject({ estado: "aceptado", incidencia: false });
+    expect(result.recordsAccepted).toBe(1);
+    expect(await incidentCodes()).toEqual([]);
   });
 });

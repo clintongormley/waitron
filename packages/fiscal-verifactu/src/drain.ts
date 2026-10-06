@@ -654,6 +654,7 @@ interface ResolvedLine {
 /** A claimed row the reply gave no line that can be applied to it. */
 interface UnmatchedRow {
   row: DueRow;
+  operacionEnviada: Operacion;
   identidadEnviada: IDFactura;
   candidates: RespuestaLinea[];
 }
@@ -661,6 +662,12 @@ interface UnmatchedRow {
 interface ResolvedReply {
   lines: ResolvedLine[];
   unmatched: UnmatchedRow[];
+}
+
+type Operacion = "Alta" | "Anulacion";
+
+function operacionOf(registro: EnvioRegistro): Operacion {
+  return "RegistroAlta" in registro ? "Alta" : "Anulacion";
 }
 
 /** The invoice a record names on the wire; an anulación names it under the `...Anulada` fields. */
@@ -675,6 +682,14 @@ function sentIdentityOf(registro: EnvioRegistro): IDFactura {
     IDEmisorFactura: id.IDEmisorFacturaAnulada,
     NumSerieFactura: id.NumSerieFacturaAnulada,
     FechaExpedicionFactura: id.FechaExpedicionFacturaAnulada,
+  };
+}
+
+function facturaParams(id: IDFactura): FacturaParams {
+  return {
+    idEmisorFactura: id.IDEmisorFactura,
+    numSerieFactura: id.NumSerieFactura,
+    fechaExpedicionFactura: id.FechaExpedicionFactura,
   };
 }
 
@@ -693,10 +708,11 @@ function sameFactura(a: IDFactura, b: IDFactura): boolean {
 /**
  * Pairs each claimed row with the one reply line it can trust: a row's candidates are the lines
  * carrying its `RefExterna` or naming the invoice it was sent as, and a line is applied only when
- * it is the row's sole candidate and does both. Any other row is unmatched, its outcome unknown:
- * a reply whose references and invoices disagree cannot say which record AEAT accepted. Matched
- * lines keep AEAT's order, and Route B's lookups run one at a time. A lookup's failure is kept
- * rather than thrown, so it leaves only its own record unknown (`handleDuplicate`).
+ * it is the row's sole candidate, does both, and names no `TipoOperacion` other than the one the
+ * row was sent as. Any other row is unmatched, and is marked unknown: such a reply cannot say
+ * which record AEAT accepted. Matched lines keep AEAT's order, and Route B's lookups run one at a
+ * time. A lookup's failure is kept rather than thrown, so it leaves only its own record unknown
+ * (`handleDuplicate`).
  */
 async function resolveLines(
   client: VerifactuClient,
@@ -720,6 +736,7 @@ async function resolveLines(
   const matchedRow = new Map<RespuestaLinea, DueRow>();
   const unmatched: UnmatchedRow[] = [];
   batch.forEach((row, i) => {
+    const operacionEnviada = operacionOf(registros[i]!);
     const identidadEnviada = sentIdentityOf(registros[i]!);
     const positions = new Set([
       ...(byRef.get(row.id) ?? []),
@@ -727,14 +744,16 @@ async function resolveLines(
     ]);
     const candidates = [...positions].sort((a, b) => a - b).map((at) => reply[at]!);
     const [only] = candidates;
+    const tipo = only?.Operacion?.TipoOperacion;
     if (
       candidates.length === 1 &&
       only!.RefExterna === row.id &&
-      sameFactura(only!.IDFactura, identidadEnviada)
+      sameFactura(only!.IDFactura, identidadEnviada) &&
+      (tipo === undefined || tipo === operacionEnviada)
     ) {
       matchedRow.set(only!, row);
     } else {
-      unmatched.push({ row, identidadEnviada, candidates });
+      unmatched.push({ row, operacionEnviada, identidadEnviada, candidates });
     }
   });
 
@@ -772,9 +791,9 @@ async function lookUp(client: VerifactuClient, row: DueRow): Promise<Lookup> {
 }
 
 /**
- * Applies every line with its own outcome, whatever an earlier line of the same reply did (design
- * §7.1, docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md). This reply is
- * never returned again.
+ * Applies every matched line with its own outcome, whatever an earlier line of the same reply did
+ * (design §7.1, docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md),
+ * and marks each unmatched row unknown (`resolveLines`). This reply is never returned again.
  */
 async function persistResponse(
   tx: Transaction,
@@ -789,19 +808,17 @@ async function persistResponse(
   for (const line of lines) {
     await applyOutcome(tx, line, csv, now, result, sentIds);
   }
-  for (const { row, identidadEnviada, candidates } of unmatched) {
+  for (const { row, operacionEnviada, identidadEnviada, candidates } of unmatched) {
     await awaitReadableAnswer(tx, row, csv, now, result, {
       estado: null,
       codigo: null,
       mensaje: null,
-      identidadEnviada,
+      operacionEnviada,
+      identidadEnviada: facturaParams(identidadEnviada),
       lineasRespuesta: candidates.map((linea) => ({
         refExterna: linea.RefExterna ?? null,
-        idFactura: {
-          IDEmisorFactura: linea.IDFactura.IDEmisorFactura,
-          NumSerieFactura: linea.IDFactura.NumSerieFactura,
-          FechaExpedicionFactura: linea.IDFactura.FechaExpedicionFactura,
-        },
+        tipoOperacion: linea.Operacion?.TipoOperacion ?? null,
+        ...facturaParams(linea.IDFactura),
         ...answerOf(linea),
       })),
     });
@@ -904,6 +921,7 @@ async function openCase(
 }
 
 type UnknownAnswer = Omit<ErrorParams["fiscal.estado_desconocido"], "registroId" | "csv">;
+type FacturaParams = NonNullable<UnknownAnswer["identidadEnviada"]>;
 
 function answerOf(linea: RespuestaLinea): Pick<UnknownAnswer, "estado" | "codigo" | "mensaje"> {
   return {
