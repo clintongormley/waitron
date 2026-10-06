@@ -945,3 +945,43 @@ The final focused family command,
 passed 681 browser cases. The unedited `write-path.e2e.test.ts` and `inmutabilidad.test.ts` passed
 20 cases. Changed-file lint, till types, formatting and diff checks passed. This verifies the
 dead-end modal family on the branch, not completion of W69 or either proposed PR.
+
+
+## 2026-10-06 modifier-picker checkpoint
+
+Cancel and native Escape now protect your edited variant, extras pick/count, options answer or
+kitchen note. Keep retains the draft. Discard restores this picker before reporting its existing
+cancellation once. A fresh picker captures preselected defaults; a reopened picker captures the
+recorded selections instead. Counts include list identity, and map insertion or offered order
+does not make an otherwise reverted selection dirty. Notes compare their trimmed submitted value.
+
+Add/Save commits this child decision at the existing synchronous parent handoff. It does not
+commit an independent parent draft or make a server order/payment write. Incomplete choices
+remain protected when Confirm refuses them. Background offer updates and reconnects retain the
+baseline; disconnected controls and old warning answers cannot submit or cancel a replacement.
+The actual menu and basket cases exercise Keep/Discard without changing a line, explicit Add/Save,
+and preservation of a basket line's existing note and quantity.
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/widgets/modifier-picker.unsaved.test.ts src/widgets/modifier-picker.test.ts src/widgets/menu-browser.test.ts src/widgets/basket.test.ts src/widgets/tender-pay.test.ts src/screens/till-counter-screen.test.ts src/screens/till-table-order-screen.test.ts --reporter=dot
+```
+
+The first new-suite run reported 14 failing cases and one passing clean/revert control. After
+implementation, two new assertions incorrectly read the parent product id as the variant id;
+the existing `productAsVariant` reader puts that identity in `variantId`. The new fixture also
+lacked required variant selling values and extras portion/unit fields. Correcting only that new
+fixture and its assertions passed 63 cases across the picker suites. Additional background,
+list-identity, parent-draft, forced-reset and real-parent controls passed; the final seven-suite
+command above passed 598 browser cases. No existing test assertion was changed. Unedited golden
+write-path and immutability suites passed 20 cases.
+
+Five separate controls in a freshly installed disposable candidate each failed one intended
+assertion after removing the pre-close callback, submitted commit, change notification, departed
+control guard, or reconnect baseline commit. Restoring the candidate passed all 21 new cases.
+Eight temporary visual cases covered EN/ES, both themes and measured 390/1280 iframe widths, with
+16 axe scans and 16 inspected editor/warning captures. Temporary visual source, captures and
+failure screenshots were archived outside the repository; the disposable candidate was removed.
+
+Station choice and the remaining audited modal owners still need Task 4 work. Page/history and
+inline owners remain Tasks 5–6. This checkpoint completes the modifier-picker family; neither
+proposed W69 PR is ready.

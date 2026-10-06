@@ -1425,6 +1425,13 @@ reconnects keep the baseline. Focused cases are in `dead-ends-dialog.unsaved.tes
 actual till-shell suite. Other modal owners and page/navigation work remain open.
 
 
+The till modifier picker now protects edited variants, extras quantities, option answers and kitchen
+notes through Cancel and native Escape on the branch. Keep retains the selections; Discard resets
+this picker without adding or changing a basket line. Add/Save commits the local selection at its
+existing parent handoff. Reverted values, preselected defaults and an unchanged reopened line close
+directly. The real menu and basket cases are in `modifier-picker.unsaved.test.ts`; station choice,
+payment and other modal owners, plus page/navigation work, remain open.
+
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
 **What a description reader shows — checked by running, 2026-10-02.** A throwaway catalogue test
