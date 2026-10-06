@@ -357,6 +357,140 @@ describe("floor-screen", () => {
   });
 });
 
+describe("floor-screen — enabling a disabled table", () => {
+  const MIXED: DashboardTable[] = [
+    { ...TWO_TABLES[0]!, posX: 100, posY: 100, shape: "round", rotation: 0 },
+    { ...TWO_TABLES[1]!, active: false, posX: 300, posY: 300, shape: "square", rotation: 0 },
+  ];
+  const ENABLED: DashboardTable[] = MIXED.map((table) => ({ ...table, active: true }));
+
+  it("reads the tables with the disabled ones too", async () => {
+    const api = stubApi({}, ZONES, MIXED);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    expect(api.listTables).toHaveBeenCalledWith({ includeDisabled: true });
+    expect(q(el, "[data-test=table-row-t2]")).not.toBeNull();
+  });
+
+  it("offers Enable, not Disable, on a disabled table and marks it Disabled; an active one still offers Disable", async () => {
+    setLocale("en-GB");
+    try {
+      const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", {
+        api: stubApi({}, ZONES, MIXED),
+      });
+      await flush(el);
+      expect(q(el, "[data-test=table-deactivate-t2]")).toBeNull();
+      expect(q(el, "[data-test=table-enable-t2]")!.textContent!.trim()).toBe("Enable");
+      expect(q(el, "[data-test=table-status-t2]")!.textContent!.trim()).toBe("Disabled");
+      expect(q(el, "[data-test=table-enable-t1]")).toBeNull();
+      expect(q(el, "[data-test=table-status-t1]")).toBeNull();
+      expect(q(el, "[data-test=table-deactivate-t1]")!.textContent!.trim()).toBe("Disable");
+    } finally {
+      setLocale("es-ES");
+    }
+  });
+
+  it("in Spanish, says Habilitar and Deshabilitada", async () => {
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", {
+      api: stubApi({}, ZONES, MIXED),
+    });
+    await flush(el);
+    expect(q(el, "[data-test=table-enable-t2]")!.textContent!.trim()).toBe("Habilitar");
+    expect(q(el, "[data-test=table-status-t2]")!.textContent!.trim()).toBe("Deshabilitada");
+  });
+
+  it("sends active: true for that table, then shows it active with Disable again", async () => {
+    const listTables = vi
+      .fn()
+      .mockResolvedValueOnce(MIXED.map((table) => ({ ...table })))
+      .mockResolvedValue(ENABLED.map((table) => ({ ...table })));
+    const api = stubApi({ listTables }, ZONES, MIXED);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    q(el, "[data-test=table-enable-t2]")!.click();
+    await flush(el);
+    expect(api.updateTable).toHaveBeenCalledExactlyOnceWith("t2", { active: true });
+    expect(listTables).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(q(el, "[data-test=table-enable-t2]")).toBeNull());
+    expect(q(el, "[data-test=table-status-t2]")).toBeNull();
+    expect(q(el, "[data-test=table-deactivate-t2]")).not.toBeNull();
+    expect(q(el, "[role=alert]")).toBeNull();
+  });
+
+  it("shows a refused Enable as a localised alert and leaves the table disabled", async () => {
+    const api = stubApi(
+      { updateTable: vi.fn().mockRejectedValue({ code: "table.not_found" }) },
+      ZONES,
+      MIXED,
+    );
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    q(el, "[data-test=table-enable-t2]")!.click();
+    await flush(el);
+    expect(q(el, "[role=alert]")!.textContent).toContain(codeMessage("table.not_found", "es-ES"));
+    expect(q(el, "[data-test=table-enable-t2]")).not.toBeNull();
+    expect(api.listTables).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers no Enable on a disabled table whose zone is disabled; a zoneless or active-zone one keeps it", async () => {
+    const api = stubApi({}, ZONES, [
+      { ...TWO_TABLES[1]!, id: "t5", label: "8", zoneId: "z-disabled", active: false },
+      { ...TWO_TABLES[0]!, id: "t6", label: "9", active: false },
+      { ...TWO_TABLES[1]!, id: "t7", label: "10", active: false },
+    ]);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    expect(q(el, "[data-test=table-status-t5]")!.textContent!.trim()).toBe("Deshabilitada");
+    expect(q(el, "[data-test=table-enable-t5]")).toBeNull();
+    expect(q(el, "[data-test=table-deactivate-t5]")).toBeNull();
+    expect(q(el, "[data-test=table-enable-t6]")).not.toBeNull();
+    expect(q(el, "[data-test=table-enable-t7]")).not.toBeNull();
+  });
+
+  it("shows the server's refusal to enable a table in a disabled zone or department in words; both languages have wording", async () => {
+    const generic = {
+      es: codeMessage("test.unmapped", "es"),
+      en: codeMessage("test.unmapped", "en"),
+    };
+    expect(codeMessage("table.zone_inactive", "es")).not.toBe(generic.es);
+    expect(codeMessage("table.zone_inactive", "en")).not.toBe(generic.en);
+    const api = stubApi(
+      { updateTable: vi.fn().mockRejectedValue({ code: "table.zone_inactive" }) },
+      ZONES,
+      MIXED,
+    );
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    q(el, "[data-test=table-enable-t2]")!.click();
+    await flush(el);
+    expect(q(el, "[role=alert]")!.textContent).toContain(
+      codeMessage("table.zone_inactive", "es-ES"),
+    );
+    expect(q(el, "[data-test=table-enable-t2]")).not.toBeNull();
+    expect(api.listTables).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a disabled table off the plan's canvas and tray", async () => {
+    const api = stubApi({}, ZONES, [
+      ...MIXED,
+      { ...TWO_TABLES[1]!, id: "t3", label: "6", active: false },
+      { ...MIXED[1]!, id: "t4", label: "7", active: true, posX: 600 },
+    ]);
+    const { el } = await mountWidget<FloorScreen>("dashboard-floor-screen", { api });
+    await flush(el);
+    q(el, '[data-tab="plano"]')!.dispatchEvent(new Event("click"));
+    await el.updateComplete;
+    const canvas = q(el, "wt-floor-canvas") as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await canvas.updateComplete;
+    // Comedor is the first zone tab; t1 has no zone, so it is on "Sin zona".
+    expect(canvas.shadowRoot!.querySelector('[data-table="t4"]')).not.toBeNull();
+    expect(canvas.shadowRoot!.querySelector('[data-table="t2"]')).toBeNull();
+    expect(q(el, '[data-tray-table="t3"]')).toBeNull();
+  });
+});
+
 describe("floor-screen — Plano editor (FP-2)", () => {
   const Z1_TABLES: DashboardTable[] = [
     {

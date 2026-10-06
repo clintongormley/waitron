@@ -6190,27 +6190,34 @@ bump it when a fixed version is published, and run the certificate suites in tho
   `course_id`; adding one is a migration, left out of W110b. Found along the way:
   `apps/dashboard/src/screens/kitchen-screen.timing.a11y.test.ts` (from #1269) writes
   `look/venue-defaults-*.png` screenshots into `apps/dashboard/src/screens/` on every run, which git
-  shows as untracked. (d) Zones and adjustment reasons now offer Enable (W110d, #1273). Departments
-  and floor tables still cannot be enabled: a department needs an `active` field on
-  `PATCH /management-api/venue-service/departments/:departmentId`
-  (`packages/venue-service/src/routes.ts`), and floor tables need a list that includes disabled
-  tables plus `active` on `PATCH /management-api/tables/:id` (`apps/server/src/management-api.ts`,
-  `apps/dashboard/src/api/client.ts`). They were held back while W93 changed the same
-  files; W93 landed (#1287, 2026-10-06), so they can be taken now. Found along the way, each left as it is: enabling a zone
-  leaves its tables disabled, and its routing exceptions, watcher zones and till starting zones
-  gone, because disabling deleted or switched those off and Enable does not restore them;
-  `PATCH /management-api/zones/:id` sets `active: true` on a zone whose department is disabled,
-  with no refusal (read in `updateZone`, `apps/server/src/tables.ts`, not run), though the screen
-  does not offer Enable there; a department's row in the policy tree still offers Disable when the
-  department is already disabled (zones had the same fault and W110d fixed it); creating a
-  department with a name another department has answers 500 `server.internal`, because there is
-  no `department.name_taken` code (run on W110d's branch: a second
-  `POST /management-api/venue-service/departments` with the same name); and a disabled zone's
-  name and its "Disabled" word are drawn with no space between them ("Dining roomDisabled", seen
-  in W110d's screenshots of the policy tree). (e) a test gap, reported by W110's review and not
-  re-checked: `#fallbackReason` (`packages/venue-service/src/dashboard/prep-stations-screen.ts`)
-  turns the server's `switched_off` reason into `prep.test_disabled` for both of its callers, and
-  the review found no test for the caller that explains an extra falling back to another station.
+  shows as untracked. (d) Zones and adjustment reasons offer Enable (W110d, #1273); departments
+  and floor tables do too (W110e). A department is enabled through `active` on
+  `PATCH /management-api/venue-service/departments/:departmentId`, from its policy-tree row and
+  the departments tab; floor tables through `active` on `PATCH /management-api/tables/:id`, which
+  refuses `table.zone_inactive` while the table's zone, or that zone's department, is disabled;
+  the floor screen reads `GET /management-api/tables?includeDisabled=true`, keeping disabled
+  tables off the plan, and offers no Enable on a table whose zone is disabled. W110e also put a
+  space between a disabled zone's name and its "Disabled" word in the policy tree. Found along
+  the way, each left as it is: enabling a zone or a department leaves what disabling switched off
+  as it is — a department's zones stay disabled, a zone's tables stay disabled, and its routing
+  exceptions, watcher zones and till starting zones stay gone; `PATCH /management-api/zones/:id`
+  sets `active: true` on a zone whose department is disabled, with no refusal (`updateZone`,
+  `apps/server/src/tables.ts`; run on W110e's branch: 204), though the screen does not offer
+  Enable there; `PATCH /management-api/tables/:id` with a `zoneId` and no `active` moves an
+  active table into a disabled zone and leaves it active (run on W110e's branch: 204), though the
+  floor screen offers only active zones; creating a department with a name another department has
+  answers 500 `server.internal`, because there is no `department.name_taken` code (run on W110d's branch: a
+  second `POST /management-api/venue-service/departments` with the same name); a table can still
+  be enabled, or created, in an active zone that has no department, and staff then cannot open a
+  bill on it, because `resolveZoneContext` (`packages/venue-service/src/operations.ts`)
+  inner-joins `zone_service_policies` and `openTab` answers `service_zone.not_found` (read, not
+  run); and an active
+  zone with no department has its "Unconfigured" word drawn the same way the disabled word was,
+  with no space before it (read in `venue-operations-screen.ts`, not seen). (e) a test gap,
+  reported by W110's review and not re-checked: `#fallbackReason`
+  (`packages/venue-service/src/dashboard/prep-stations-screen.ts`) turns the server's
+  `switched_off` reason into `prep.test_disabled` for both of its callers, and the review found
+  no test for the caller that explains an extra falling back to another station.
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile`; the Spanish
   form-factor label differs between two pickers ("TPV" vs "Caja registradora") — an owner copy call.
 - An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional

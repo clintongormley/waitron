@@ -21,6 +21,7 @@ import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
+import { configureZone, createDepartment, deactivateDepartment } from "@waitron/venue-service";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -1115,6 +1116,248 @@ describe("/management-api/tables", () => {
       id: string;
     }[];
     expect(list.find((t) => t.id === id)).toBeUndefined();
+  });
+
+  describe("disabled tables: the includeDisabled list and PATCH active", () => {
+    async function newTable(): Promise<string> {
+      const res = await req(
+        "/tables",
+        { method: "POST", body: JSON.stringify({ label: unique("en") }) },
+        managerCookie,
+      );
+      return ((await res.json()) as { id: string }).id;
+    }
+    async function listAll(): Promise<{ id: string; active: boolean }[]> {
+      const res = await req("/tables?includeDisabled=true", { method: "GET" }, managerCookie);
+      expect(res.status).toBe(200);
+      return (await res.json()) as { id: string; active: boolean }[];
+    }
+
+    it("GET ?includeDisabled=true lists a disabled table with active: false; the plain GET still drops it", async () => {
+      const id = await newTable();
+      expect((await req(`/tables/${id}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
+      expect((await listAll()).find((t) => t.id === id)).toMatchObject({ active: false });
+      const plain = (await (await req("/tables", { method: "GET" }, managerCookie)).json()) as {
+        id: string;
+      }[];
+      expect(plain.find((t) => t.id === id)).toBeUndefined();
+    });
+
+    it("PATCH active: true enables a disabled table; PATCH active: false disables it again", async () => {
+      const id = await newTable();
+      await req(`/tables/${id}`, { method: "DELETE" }, managerCookie);
+
+      const enable = await req(
+        `/tables/${id}`,
+        { method: "PATCH", body: JSON.stringify({ active: true }) },
+        managerCookie,
+      );
+      expect(enable.status).toBe(204);
+      expect((await listAll()).find((t) => t.id === id)).toMatchObject({ active: true });
+      const plain = (await (await req("/tables", { method: "GET" }, managerCookie)).json()) as {
+        id: string;
+      }[];
+      expect(plain.find((t) => t.id === id)).toBeDefined();
+
+      const disable = await req(
+        `/tables/${id}`,
+        { method: "PATCH", body: JSON.stringify({ active: false }) },
+        managerCookie,
+      );
+      expect(disable.status).toBe(204);
+      expect((await listAll()).find((t) => t.id === id)).toMatchObject({ active: false });
+    });
+
+    it("PATCH active beside an edit applies both", async () => {
+      const id = await newTable();
+      await req(`/tables/${id}`, { method: "DELETE" }, managerCookie);
+      const label = unique("both");
+      const res = await req(
+        `/tables/${id}`,
+        { method: "PATCH", body: JSON.stringify({ label, active: true }) },
+        managerCookie,
+      );
+      expect(res.status).toBe(204);
+      expect((await listAll()).find((t) => t.id === id)).toMatchObject({ label, active: true });
+    });
+
+    it("PATCH refuses an explicit null or a non-boolean active (400, field active) and changes nothing", async () => {
+      const id = await newTable();
+      await req(`/tables/${id}`, { method: "DELETE" }, managerCookie);
+      for (const active of [null, "true", 1]) {
+        const res = await req(
+          `/tables/${id}`,
+          { method: "PATCH", body: JSON.stringify({ active }) },
+          managerCookie,
+        );
+        expect(res.status, String(active)).toBe(400);
+        expect(await res.json()).toMatchObject({
+          error: { code: "management.request_invalid", params: { field: "active" } },
+        });
+      }
+      expect((await listAll()).find((t) => t.id === id)).toMatchObject({ active: false });
+    });
+
+    it("PATCH active: true on an unknown id → 404 table.not_found", async () => {
+      const res = await req(
+        "/tables/00000000-0000-4000-8000-000000000000",
+        { method: "PATCH", body: JSON.stringify({ active: true }) },
+        managerCookie,
+      );
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({ error: { code: "table.not_found" } });
+    });
+
+    async function tableInServiceZone(): Promise<{
+      departmentId: string;
+      zoneId: string;
+      tableId: string;
+    }> {
+      const cfg = tillConfigFromVenue(venue);
+      const zoneId = await createZone(unique("Served"));
+      const departmentId = await withTransaction(suite.db, async (tx) => {
+        const department = await createDepartment(tx, cfg, {
+          name: unique("Dept"),
+          defaultServiceMode: "table_tab",
+        });
+        await configureZone(tx, cfg, { zoneId, departmentId: department.id });
+        return department.id;
+      });
+      const res = await req(
+        "/tables",
+        { method: "POST", body: JSON.stringify({ label: unique("zt"), zoneId }) },
+        managerCookie,
+      );
+      expect(res.status).toBe(201);
+      return { departmentId, zoneId, tableId: ((await res.json()) as { id: string }).id };
+    }
+    async function enable(tableId: string, extra: Record<string, unknown> = {}) {
+      return req(
+        `/tables/${tableId}`,
+        { method: "PATCH", body: JSON.stringify({ ...extra, active: true }) },
+        managerCookie,
+      );
+    }
+
+    it("PATCH active: true enables a disabled table whose zone and department are active", async () => {
+      const { tableId } = await tableInServiceZone();
+      expect((await req(`/tables/${tableId}`, { method: "DELETE" }, managerCookie)).status).toBe(
+        204,
+      );
+      expect((await enable(tableId)).status).toBe(204);
+      expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({ active: true });
+    });
+
+    it("PATCH active: true under a disabled zone → 409 table.zone_inactive, and the table stays disabled", async () => {
+      const { zoneId, tableId } = await tableInServiceZone();
+      expect((await req(`/zones/${zoneId}`, { method: "DELETE" }, managerCookie)).status).toBe(204);
+      expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({ active: false });
+
+      const res = await enable(tableId);
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        error: { code: "table.zone_inactive", params: { tableId, zoneId } },
+      });
+      expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({ active: false });
+    });
+
+    it("PATCH active: true under a disabled department → 409 table.zone_inactive, even once the zone itself is enabled", async () => {
+      const { departmentId, zoneId, tableId } = await tableInServiceZone();
+      await withTransaction(suite.db, (tx) =>
+        deactivateDepartment(tx, tillConfigFromVenue(venue), departmentId),
+      );
+      expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({ active: false });
+
+      const underDisabledZone = await enable(tableId);
+      expect(underDisabledZone.status).toBe(409);
+      expect(await underDisabledZone.json()).toMatchObject({
+        error: { code: "table.zone_inactive", params: { tableId, zoneId } },
+      });
+
+      expect(
+        (
+          await req(
+            `/zones/${zoneId}`,
+            { method: "PATCH", body: JSON.stringify({ active: true }) },
+            managerCookie,
+          )
+        ).status,
+      ).toBe(204);
+      const underDisabledDepartment = await enable(tableId);
+      expect(underDisabledDepartment.status).toBe(409);
+      expect(await underDisabledDepartment.json()).toMatchObject({
+        error: { code: "table.zone_inactive", params: { tableId, zoneId } },
+      });
+      expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({ active: false });
+    });
+
+    it("PATCH active: true with a zoneId judges the zone the table moves to", async () => {
+      const { zoneId, tableId } = await tableInServiceZone();
+      await req(`/zones/${zoneId}`, { method: "DELETE" }, managerCookie);
+      const { zoneId: liveZoneId, tableId: other } = await tableInServiceZone();
+
+      const res = await enable(tableId, { zoneId: liveZoneId });
+      expect(res.status).toBe(204);
+      expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({
+        active: true,
+        zoneId: liveZoneId,
+      });
+
+      await req(`/tables/${other}`, { method: "DELETE" }, managerCookie);
+      const intoDisabled = await enable(other, { zoneId });
+      expect(intoDisabled.status).toBe(409);
+      expect(await intoDisabled.json()).toMatchObject({
+        error: { code: "table.zone_inactive", params: { tableId: other, zoneId } },
+      });
+      expect((await listAll()).find((t) => t.id === other)).toMatchObject({
+        active: false,
+        zoneId: liveZoneId,
+      });
+    });
+
+    it("PATCH active: false and an edit without active still apply under a disabled zone", async () => {
+      const { zoneId, tableId } = await tableInServiceZone();
+      await req(`/zones/${zoneId}`, { method: "DELETE" }, managerCookie);
+      const label = unique("renamed");
+      expect(
+        (
+          await req(
+            `/tables/${tableId}`,
+            { method: "PATCH", body: JSON.stringify({ label }) },
+            managerCookie,
+          )
+        ).status,
+      ).toBe(204);
+      expect(
+        (
+          await req(
+            `/tables/${tableId}`,
+            { method: "PATCH", body: JSON.stringify({ active: false }) },
+            managerCookie,
+          )
+        ).status,
+      ).toBe(204);
+      expect((await listAll()).find((t) => t.id === tableId)).toMatchObject({
+        label,
+        active: false,
+      });
+    });
+
+    it("a STAFF session is refused the includeDisabled list and PATCH active (403)", async () => {
+      const id = await newTable();
+      for (const res of [
+        await req("/tables?includeDisabled=true", { method: "GET" }, staffCookie),
+        await req(
+          `/tables/${id}`,
+          { method: "PATCH", body: JSON.stringify({ active: false }) },
+          staffCookie,
+        ),
+      ]) {
+        expect(res.status).toBe(403);
+        expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+      }
+      expect((await listAll()).find((t) => t.id === id)).toMatchObject({ active: true });
+    });
   });
 
   it("DELETE an unknown id → 404 table.not_found; a malformed :id → 404 too", async () => {

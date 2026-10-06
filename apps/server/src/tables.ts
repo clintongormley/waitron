@@ -3,7 +3,7 @@
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { deactivateServiceZone } from "@waitron/venue-service";
+import { deactivateServiceZone, departments, zoneServicePolicies } from "@waitron/venue-service";
 import { authorizeManager } from "@waitron/identity";
 import {
   diningTables,
@@ -43,6 +43,23 @@ async function requireZone(tx: Transaction, zoneId: string): Promise<void> {
     .where(eq(floorZones.id, zoneId))
     .limit(1);
   if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
+}
+
+/**
+ * A zone with no service policy has no department to judge, so only the zone's own flag counts.
+ * `zoneId` exists: a supplied one was checked by `requireZone`, a stored one by
+ * `dining_tables_zone_fk`.
+ */
+async function requireZoneInService(tx: Transaction, tableId: string, zoneId: string) {
+  const [row] = await tx
+    .select({ zoneActive: floorZones.active, departmentActive: departments.active })
+    .from(floorZones)
+    .leftJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
+    .leftJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+    .where(eq(floorZones.id, zoneId));
+  if (!row!.zoneActive || row!.departmentActive === false) {
+    throw new AppError("table.zone_inactive", { tableId, zoneId });
+  }
 }
 
 /** `createdAt` is an ISO string. */
@@ -89,7 +106,11 @@ export async function createTable(
   }
 }
 
-export async function listTables(tx: Transaction, cfg: TillConfig): Promise<DiningTable[]> {
+export async function listTables(
+  tx: Transaction,
+  cfg: TillConfig,
+  options: { includeDisabled?: boolean } = {},
+): Promise<DiningTable[]> {
   return tx
     .select({
       id: diningTables.id,
@@ -104,7 +125,12 @@ export async function listTables(tx: Transaction, cfg: TillConfig): Promise<Dini
       rotation: diningTables.rotation,
     })
     .from(diningTables)
-    .where(and(eq(diningTables.locationId, cfg.locationId), eq(diningTables.active, true)))
+    .where(
+      and(
+        eq(diningTables.locationId, cfg.locationId),
+        options.includeDisabled ? undefined : eq(diningTables.active, true),
+      ),
+    )
     .orderBy(diningTables.label);
 }
 
@@ -113,14 +139,28 @@ export async function updateTable(
   // Unused; kept for the uniform `(tx, cfg, …)` verb surface.
   _cfg: TillConfig,
   id: string,
-  input: { label?: string; zoneId?: string; capacity?: number },
+  input: { label?: string; zoneId?: string; capacity?: number; active?: boolean },
 ): Promise<void> {
-  const patch: { label?: string; zoneId?: string | null; capacity?: number | null } = {};
+  const patch: {
+    label?: string;
+    zoneId?: string | null;
+    capacity?: number | null;
+    active?: boolean;
+  } = {};
   if (input.label !== undefined) patch.label = input.label;
   if (input.capacity !== undefined) patch.capacity = input.capacity;
+  if (input.active !== undefined) patch.active = input.active;
   if (input.zoneId !== undefined) {
     patch.zoneId = input.zoneId;
     await requireZone(tx, input.zoneId);
+  }
+  if (input.active === true) {
+    const [table] = await tx
+      .select({ zoneId: diningTables.zoneId })
+      .from(diningTables)
+      .where(eq(diningTables.id, id));
+    const zoneId = input.zoneId ?? table?.zoneId ?? null;
+    if (table !== undefined && zoneId !== null) await requireZoneInService(tx, id, zoneId);
   }
 
   let updated: { id: string }[];

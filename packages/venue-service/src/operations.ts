@@ -231,6 +231,20 @@ export async function updateDepartment(
   if (row === undefined) throw new AppError("department.not_found", { departmentId });
 }
 
+/** Leaves its zones disabled: disabling the department switched them off. */
+export async function activateDepartment(
+  tx: Transaction,
+  cfg: VenueScope,
+  departmentId: string,
+): Promise<void> {
+  const [row] = await tx
+    .update(departments)
+    .set({ active: true })
+    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)))
+    .returning({ id: departments.id });
+  if (row === undefined) throw new AppError("department.not_found", { departmentId });
+}
+
 export async function departmentRemovalImpact(
   tx: Transaction,
   cfg: VenueScope,

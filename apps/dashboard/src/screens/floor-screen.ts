@@ -29,6 +29,7 @@ import type { DashboardApi, DashboardTable, FloorZone, TableShape } from "../api
 interface EditableTable {
   id: string;
   label: string;
+  active: boolean;
   capacity: number | null;
   zoneId: string | null;
   posX: number | null;
@@ -78,6 +79,14 @@ export class FloorScreen extends LitElement {
         gap: var(--wt-space-3);
       }
       .empty {
+        color: var(--wt-color-text-muted);
+      }
+      .disabled-group {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-3);
+      }
+      .disabled {
         color: var(--wt-color-text-muted);
       }
       .row {
@@ -178,6 +187,7 @@ export class FloorScreen extends LitElement {
     return tables.map((t) => ({
       id: t.id,
       label: t.label,
+      active: t.active,
       capacity: t.capacity,
       zoneId: t.zoneId,
       posX: t.posX ?? null,
@@ -194,7 +204,7 @@ export class FloorScreen extends LitElement {
         this.#queries.watch("listZones", [], (rows) => {
           this.zones = rows;
         }),
-        this.#queries.watch("listTables", [], (rows) => {
+        this.#queries.watch("listTables", [{ includeDisabled: true }], (rows) => {
           this.tables = this.#tablesDrafts.merge(this.tables, this.#toEditableTables(rows));
         }),
       ]);
@@ -207,7 +217,7 @@ export class FloorScreen extends LitElement {
   async #loadTables(): Promise<void> {
     if (this.#readErrorShown) this.#showError(null);
     try {
-      await this.#queries.watch("listTables", [], (rows) => {
+      await this.#queries.watch("listTables", [{ includeDisabled: true }], (rows) => {
         this.tables = this.#tablesDrafts.merge(this.tables, this.#toEditableTables(rows));
       });
     } catch (error) {
@@ -288,6 +298,16 @@ export class FloorScreen extends LitElement {
     }
   }
 
+  async #enableTable(id: string): Promise<void> {
+    this.#showError(null);
+    try {
+      await this.api.updateTable(id, { active: true });
+      await this.#load();
+    } catch (error) {
+      this.#showError(codeOf(error));
+    }
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────────────────────────────
 
   #renderTable(tbl: EditableTable): TemplateResult {
@@ -343,13 +363,31 @@ export class FloorScreen extends LitElement {
             @click=${() => void this.#saveTable(tbl.id)}
             >${t("action.save")}</wt-button
           >
-          <wt-button
-            variant="danger"
-            size="sm"
-            data-test="table-deactivate-${tbl.id}"
-            @click=${() => void this.#deactivateTable(tbl.id)}
-            >${t("action.disable")}</wt-button
-          >
+          ${
+            tbl.active
+              ? html`<wt-button
+                  variant="danger"
+                  size="sm"
+                  data-test="table-deactivate-${tbl.id}"
+                  @click=${() => void this.#deactivateTable(tbl.id)}
+                  >${t("action.disable")}</wt-button
+                >`
+              : html`<span class="disabled-group"
+                  ><span class="disabled" data-test="table-status-${tbl.id}"
+                    >${t("floor.table_disabled")}</span
+                  >${
+                    tbl.zoneId === null || this.zones.some((zone) => zone.id === tbl.zoneId)
+                      ? html`<wt-button
+                          variant="secondary"
+                          size="sm"
+                          data-test="table-enable-${tbl.id}"
+                          @click=${() => void this.#enableTable(tbl.id)}
+                          >${t("action.enable")}</wt-button
+                        >`
+                      : nothing
+                  }</span
+                >`
+          }
         </div>
       </wt-card>
     </li>`;
@@ -493,10 +531,11 @@ export class FloorScreen extends LitElement {
 
   #renderPlano(): TemplateResult {
     const knownZoneIds = new Set(this.zones.map((z) => z.id));
-    const tabs = buildZoneTabs(this.zones, this.tables, t("floor.zoneless"));
+    const tables = this.tables.filter((tbl) => tbl.active);
+    const tabs = buildZoneTabs(this.zones, tables, t("floor.zoneless"));
     const activeKey = resolveActiveTabKey(this.activeZone, tabs);
     // The "Sin zona" tab also gathers tables whose zone has been deactivated.
-    const visible = this.tables.filter((tbl) =>
+    const visible = tables.filter((tbl) =>
       activeKey === null ? isTableZoneless(tbl, knownZoneIds) : tbl.zoneId === activeKey,
     );
     const placed = visible.filter((tbl) => tbl.posX != null);

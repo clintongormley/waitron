@@ -2431,8 +2431,7 @@ Something switched off but kept — a product, a variant, an options or extras l
 department, a station, a table, a table status, an adjustment reason, a user, a printer, a print
 agent, a device, a card reader, and a watcher or a kitchen course that something refers to — is switched off with **Disable** (options and extras lists and
 table statuses are switched back on with an **Active** switch in their form), and where a screen has
-an action that brings it back, that action is **Enable**. Some have no Enable on any screen yet; the backlog entry "One word
-for switched off, kept for the record" in `docs/backlog.md` lists them. Its status reads **Active**
+an action that brings it back, that action is **Enable**. Its status reads **Active**
 or **Disabled**; there is no "Enabled" status. **Delete** is only for something really deleted, and **Remove** for taking a row out of a list or a link off a record,
 which may delete that row (Remove from this list, Remove image, a passkey). "Restore", "Add again", "Deactivate", "Reactivate" and
 "Inactive" are not used for a record that is kept.
