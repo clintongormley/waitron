@@ -696,12 +696,15 @@ describe("till-card-grid's product-grid card: the menu browser", () => {
     expect(browser().shadowRoot!.textContent).not.toContain("Steak");
   });
 
-  it("hands the browser the same products while nothing it reads changes", async () => {
+  it("hands the browser the same products, filtered and unfiltered, while nothing it reads changes", async () => {
     const { el, browser } = await mountBrowser();
     const first = browser().products;
+    const firstUnfiltered = browser().unfilteredProducts;
     el.busy = true;
     await el.updateComplete;
     expect(browser().products).toBe(first);
+    expect(firstUnfiltered).toBeDefined();
+    expect(browser().unfilteredProducts).toBe(firstUnfiltered);
   });
 
   describe("search across the served menus", () => {

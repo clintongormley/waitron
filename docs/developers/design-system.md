@@ -259,8 +259,9 @@ fewer where a tile would be narrower than twice `--wt-tap-min` plus `--wt-space-
 (`HOME_GRID_COLUMNS`), so a narrow screen shows fewer columns in the same reading order. In Colours
 mode a tile is painted as above. In Thumbnails mode a tile with an image shows it above its name,
 4:3 with `--wt-radius-sm` corners, and is not painted; a tile with no image is painted as in
-Colours mode, or neutral. A section tile always keeps its "Section" word under its name, so a
-section and a product differ without colour; its image, when shown, takes the folder icon's place.
+Colours mode, or neutral. A section tile always has a second line under its name — "Section", or
+on the till "Nothing matches the filter" for one a diet filter emptied — so a section and a product
+differ without colour; its image, when shown, takes the folder icon's place.
 
 **Menu wording.** Spanish restaurant menus are "cartas"; an account menu remains "menú".
 The Structure tree and shortcut picker label an included menu "Menu: <name>" / "Carta: <name>",

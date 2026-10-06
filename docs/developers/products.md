@@ -477,7 +477,10 @@ a draft leaves it out of what it sends and offers it for removal, and the counte
 is removed. A line already stored on a held order or tab is not marked, and still sends and pays,
 because it was already ordered. The server refuses a new standalone line for such a dish with
 `product.not_sold_separately`, by the same published setting. A diet filter that staff turn on
-hides the dishes it rejects. One that cannot be sold now keeps its button, greyed, and a tap on it
+hides the dishes it rejects. A section it leaves with nothing keeps its place, faded and not
+openable, reading "Nothing matches the filter" (`unfilteredProducts`,
+`apps/till/src/widgets/menu-browser.ts`) — in the full menu, as a shortcut and inside an open
+section. One that cannot be sold now keeps its button, greyed, and a tap on it
 does nothing (`hasSomethingToSell`, `apps/till/src/widgets/product-pick.ts`), so the buttons around
 it do not move; the till's
 menu-state poll greys and restores it without reloading the offers (`apps/till/src/till-app.ts`). A
@@ -495,7 +498,8 @@ where a tile would be narrower than its minimum, so a phone held upright shows t
 canvas card that sets its own column count keeps it. In Colours mode a tile fills with its
 colour (_Colour_, above); in Thumbnails mode it shows the product's or section's image instead, and
 a tile with no image falls back to its colour, else the plain tile. A shortcut whose target the
-till does not show keeps its place as an empty slot, so the shortcuts after it do not move. The
+till does not show keeps its place as an empty slot, so the shortcuts after it do not move; a
+shortcut to a section a diet filter emptied shows that section's faded tile in the slot instead. The
 display and the shortcuts come from the menu's published version, so a change reaches the till
 only when the menu is published.
 
