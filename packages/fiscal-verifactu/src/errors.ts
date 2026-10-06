@@ -2,17 +2,14 @@
 // declare a fresh ambient module of the same name.
 import "@waitron/shared";
 
-/**
- * The invoice AEAT's `IDFactura` identifies, spelt as the sibling codes' params spell it; the date
- * is `DD-MM-YYYY`.
- */
+/** An invoice as AEAT's `IDFactura` names it; the date is `DD-MM-YYYY`. */
 interface FacturaParams {
   idEmisorFactura: string;
   numSerieFactura: string;
   fechaExpedicionFactura: string;
 }
 
-/** One line of AEAT's reply as it arrived, with its raw operation text (`null` when it has none). */
+/** One line of AEAT's reply as it arrived; `tipoOperacion` is its raw operation text. */
 interface LineaParams extends FacturaParams {
   refExterna: string | null;
   tipoOperacion: string | null;
@@ -102,10 +99,9 @@ declare module "@waitron/shared" {
 
     /**
      * `./drain.ts`'s `applyOutcome`: AEAT rejected this record outright. Constructed, never thrown —
-     * only built to hand its `.code`/`.params` to `recordIncidentOnce`. `registroId` is there
-     * because `incidents` has no foreign key back to `registros_facturacion`; it is the only
-     * traceback from an incident row to its record, and every code below that carries one uses the
-     * same name.
+     * only built to hand its `.code`/`.params` to `recordIncident`. `registroId` is there because
+     * `incidents` has no foreign key back to `registros_facturacion`; it is the only traceback from
+     * an incident row to its record, and every code below that carries one uses the same name.
      */
     "fiscal.registro_rechazado": {
       registroId: string;
@@ -126,18 +122,19 @@ declare module "@waitron/shared" {
     /**
      * `./drain.ts`: whether AEAT stored this record is unknown — its reply line has a missing or
      * unrecognised status; the line is a duplicate (error 3000) whose lookup failed or did not
-     * settle whose record AEAT holds; or the reply does not hold exactly one line naming this
-     * record's reference or its invoice, with that one line naming both and naming no operation
-     * other than the one the record was sent as. A warning: the record waits for a later send.
-     * `estado` is the line's raw status text; `csv` is the envío's, kept because AEAT never returns
-     * it again. `lookupFailed` is present only when a duplicate lookup ran: `true` when it failed,
-     * `false` when it answered without settling it. `operacionEnviada`, `identidadEnviada` and
-     * `lineasRespuesta` are present only for the third cause: the operation and invoice this record
-     * was sent as, and every reply line naming its reference or that invoice (empty when none did),
-     * each with its raw operation text (`null` when it carries none); `estado`, `codigo` and
-     * `mensaje` are then `null`, since such a line may describe another record.
-     * `lineasSinRegistro`, whatever the cause, is present only when the same reply held lines
-     * naming no record of the envío by reference or by invoice: those lines, in AEAT's order.
+     * settle whose record AEAT holds; or the reply gave no line that can be trusted to be this
+     * record's. A warning: the record waits for a later send. `estado` is the line's raw status
+     * text; `csv` is the envío's, kept because AEAT never returns it again. `lookupFailed` is
+     * present only when a duplicate lookup ran: `true` when it failed, `false` when it answered
+     * without settling it.
+     *
+     * Lines are paired with records by position. `operacionEnviada` and `identidadEnviada` (the
+     * operation and invoice this record was sent as) are present only for the third cause, and
+     * `estado`, `codigo` and `mensaje` are then `null`, since the line may describe another
+     * record. With them comes either `lineaRespuesta`, the line at this record's position, when
+     * it carries another reference or none, names another invoice, or names another operation; or
+     * `lineasEnRespuesta`, the reply's line count, when that differs from the number of records
+     * sent (the lines themselves are in `fiscal.respuesta_descuadrada`).
      */
     "fiscal.estado_desconocido": {
       registroId: string;
@@ -148,22 +145,22 @@ declare module "@waitron/shared" {
       lookupFailed?: boolean;
       operacionEnviada?: "Alta" | "Anulacion";
       identidadEnviada?: FacturaParams;
-      lineasRespuesta?: LineaParams[];
-      lineasSinRegistro?: LineaParams[];
+      lineaRespuesta?: LineaParams;
+      lineasEnRespuesta?: number;
     };
 
     /**
-     * `./drain.ts`'s `persistResponse`: AEAT's reply to an envío held lines naming none of its
-     * records by reference or by invoice, and no `fiscal.estado_desconocido` stored for that reply
-     * carries them — every record was applied, or each such incident was not stored because one
-     * for the same sale and code was still open. A warning raised on the sale of the envío's first
-     * record; `registroIds` are the envío's records in the order sent, `csv` is the envío's, and
-     * `lineasSinRegistro` are those lines, none of which was applied.
+     * `./drain.ts`'s `persistResponse`: AEAT answered an envío with a different number of lines
+     * than records sent, so no line was applied and each record is `fiscal.estado_desconocido`. A
+     * warning raised on the sale of the envío's first record; `registroIds` are the envío's
+     * records in the order sent, `csv` is the envío's, and `lineasRespuesta` the reply's lines in
+     * AEAT's order. While one is open for that sale, `incidents_open_dedup` stores no other, so a
+     * later mismatched reply to an envío starting with the same record keeps none of its lines.
      */
-    "fiscal.linea_sin_registro": {
+    "fiscal.respuesta_descuadrada": {
       registroIds: string[];
       csv: string | null;
-      lineasSinRegistro: LineaParams[];
+      lineasRespuesta: LineaParams[];
     };
 
     /**

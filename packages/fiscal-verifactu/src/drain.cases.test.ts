@@ -1008,7 +1008,7 @@ describe("drain — resolving a case releases nothing", () => {
   });
 });
 
-describe("drain — a reply line is applied only when its reference and its invoice match one record", () => {
+describe("drain — reply lines are paired with the records sent by position", () => {
   /** The `IDFactura` AEAT's reply carries for the record `facturaKey` (from the seeding fixtures). */
   const idOf = (facturaKey: string): IDFactura => {
     const [IDEmisorFactura, NumSerieFactura, FechaExpedicionFactura] = facturaKey.split("|");
@@ -1026,6 +1026,16 @@ describe("drain — a reply line is applied only when its reference and its invo
     fechaExpedicionFactura: id.FechaExpedicionFactura,
   });
 
+  /** A reply line as the incidents' params spell it. */
+  const lineParams = (linea: RespuestaLinea) => ({
+    refExterna: linea.RefExterna ?? null,
+    tipoOperacion: linea.Operacion?.TipoOperacion ?? null,
+    ...asParams(linea.IDFactura),
+    estado: linea.EstadoRegistro ?? null,
+    codigo: linea.CodigoErrorRegistro ?? null,
+    mensaje: linea.DescripcionErrorRegistro ?? null,
+  });
+
   async function unknownParamsOf(registroId: string): Promise<Record<string, unknown>[]> {
     const { rows } = await suite.db.execute<{ params: string }>(sql`
       select params from incidents where code = 'fiscal.estado_desconocido'
@@ -1035,23 +1045,62 @@ describe("drain — a reply line is applied only when its reference and its invo
       .filter((params) => params["registroId"] === registroId);
   }
 
-  /** Every line of AEAT's reply for `registroId` arrives twice. */
-  function doublingLine(client: VerifactuClient, registroId: string): VerifactuClient {
+  async function incidentsCoded(
+    code: string,
+  ): Promise<{ sale_id: string | null; params: Record<string, unknown> }[]> {
+    const { rows } = await suite.db.execute<{ sale_id: string | null; params: string }>(sql`
+      select sale_id, params from incidents where code = ${code}
+    `);
+    return rows.map((row) => ({
+      sale_id: row.sale_id,
+      params: JSON.parse(row.params) as Record<string, unknown>,
+    }));
+  }
+
+  async function saleOf(registroId: string): Promise<string> {
+    const { rows } = await suite.db.execute<{ sale_id: string }>(sql`
+      select sale_id from registros_facturacion where id = ${registroId}
+    `);
+    return rows[0]!.sale_id;
+  }
+
+  /**
+   * AEAT's whole reply passes through `reshape` before the drain reads it; `delivered` holds the
+   * lines of the last reply it handed over.
+   */
+  function reshaping(
+    client: VerifactuClient,
+    reshape: (lines: RespuestaLinea[]) => RespuestaLinea[],
+  ): { client: VerifactuClient; delivered: RespuestaLinea[] } {
+    const delivered: RespuestaLinea[] = [];
     return {
-      submit: async (cabecera, registros) => {
-        const respuesta = await client.submit(cabecera, registros);
-        return {
-          ...respuesta,
-          RespuestaLinea: respuesta.RespuestaLinea.flatMap((linea) =>
-            linea.RefExterna === registroId ? [linea, { ...linea }] : [linea],
-          ),
-        };
+      delivered,
+      client: {
+        submit: async (cabecera, registros) => {
+          const respuesta = await client.submit(cabecera, registros);
+          delivered.splice(0, delivered.length, ...reshape(respuesta.RespuestaLinea));
+          return { ...respuesta, RespuestaLinea: [...delivered] };
+        },
+        consultar: (...args) => client.consultar(...args),
       },
-      consultar: (...args) => client.consultar(...args),
     };
   }
 
-  it("applies neither line when another invoice's line carries a record's reference", async () => {
+  /** A line naming no record of any envío: neither its reference nor its invoice is ours. */
+  const strayLine: RespuestaLinea = {
+    IDFactura: {
+      IDEmisorFactura: "B99999999",
+      NumSerieFactura: "STRAY/1",
+      FechaExpedicionFactura: "01-07-2026",
+    },
+    Operacion: { TipoOperacion: "Alta" },
+    RefExterna: "not-ours",
+    EstadoRegistro: "Incorrecto",
+    CodigoErrorRegistro: 1100,
+    DescripcionErrorRegistro: "Campo obligatorio ausente",
+  } as RespuestaLinea;
+
+  it("applies the first record's own line and leaves the second unknown when the second's line carries the first's reference", async () => {
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 2 });
     const [rejected, accepted] = seeded.registroIds;
@@ -1062,46 +1111,17 @@ describe("drain — a reply line is applied only when its reference and its invo
 
     const result = await drain(deps(acceptedLineMisnamed), FIRST);
 
-    const retry = new Date(FIRST.getTime() + backoffMs(1)).toISOString();
-    for (const id of [rejected!, accepted!]) {
-      expect(await envioOf(id)).toMatchObject({
-        estado: "pendiente",
-        incidencia: true,
-        proximo_intento_en: retry,
-      });
-      expect(await ackOf(id)).toBeUndefined();
-    }
-    expect(result.recordsAccepted).toBe(0);
-    expect(result.recordsHalted).toBe(0);
     const csv = expect.any(String);
-    const rejectedLine = {
-      refExterna: rejected,
-      tipoOperacion: "Alta",
-      ...asParams(idOf(seeded.facturaKeys[0]!)),
-      estado: "Incorrecto",
-      codigo: 1100,
-      mensaje: "Campo obligatorio ausente",
-    };
-    const acceptedLine = {
-      refExterna: rejected,
-      tipoOperacion: "Alta",
-      ...asParams(idOf(seeded.facturaKeys[1]!)),
-      estado: "Correcto",
-      codigo: null,
-      mensaje: null,
-    };
-    expect(await unknownParamsOf(rejected!)).toEqual([
-      {
-        registroId: rejected,
-        estado: null,
-        codigo: null,
-        mensaje: null,
-        csv,
-        operacionEnviada: "Alta",
-        identidadEnviada: asParams(idOf(seeded.facturaKeys[0]!)),
-        lineasRespuesta: [rejectedLine, acceptedLine],
-      },
-    ]);
+    expect(await envioOf(rejected!)).toMatchObject({ estado: "rechazado", incidencia: true });
+    expect(await ackOf(rejected!)).toBe("rejected");
+    expect(await envioOf(accepted!)).toMatchObject({
+      estado: "pendiente",
+      incidencia: true,
+      proximo_intento_en: new Date(FIRST.getTime() + backoffMs(1)).toISOString(),
+    });
+    expect(await ackOf(accepted!)).toBeUndefined();
+    expect(result.recordsAccepted).toBe(0);
+    expect(result.recordsHalted).toBe(1);
     expect(await unknownParamsOf(accepted!)).toEqual([
       {
         registroId: accepted,
@@ -1111,14 +1131,131 @@ describe("drain — a reply line is applied only when its reference and its invo
         csv,
         operacionEnviada: "Alta",
         identidadEnviada: asParams(idOf(seeded.facturaKeys[1]!)),
-        lineasRespuesta: [acceptedLine],
+        lineaRespuesta: {
+          refExterna: rejected,
+          tipoOperacion: "Alta",
+          ...asParams(idOf(seeded.facturaKeys[1]!)),
+          estado: "Correcto",
+          codigo: null,
+          mensaje: null,
+        },
       },
     ]);
     expect(await incidentCodes()).toEqual([
       "fiscal.estado_desconocido",
-      "fiscal.estado_desconocido",
+      "fiscal.registro_rechazado",
     ]);
-    expect(await cases()).toEqual([]);
+    expect((await cases()).map((c) => [c.registroId, c.cause])).toEqual([
+      [rejected, "fiscal.registro_rechazado"],
+    ]);
+  });
+
+  it("applies neither line of a pair AEAT answered in the other order", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    const [first, second] = seeded.registroIds;
+    const swapped = reshaping(aeat.client(), (lines) => [...lines].reverse());
+
+    const result = await drain(deps(swapped.client), FIRST);
+
+    expect(result.recordsAccepted).toBe(0);
+    const [secondLine, firstLine] = swapped.delivered;
+    expect(firstLine!.RefExterna).toBe(first);
+    for (const [id, other] of [
+      [first!, secondLine!],
+      [second!, firstLine!],
+    ] as const) {
+      expect(await envioOf(id)).toMatchObject({ estado: "pendiente", incidencia: true });
+      expect(await ackOf(id)).toBeUndefined();
+      expect(await unknownParamsOf(id)).toEqual([
+        expect.objectContaining({ lineaRespuesta: lineParams(other) }),
+      ]);
+    }
+  });
+
+  it.each([
+    ["one line fewer than the records sent", 3, (lines: RespuestaLinea[]) => lines.slice(0, 2)],
+    [
+      "one line more than the records sent, naming no record",
+      2,
+      (lines: RespuestaLinea[]) => [...lines, strayLine],
+    ],
+    [
+      "one line more than the records sent, a copy of the first",
+      2,
+      (lines: RespuestaLinea[]) => [...lines, lines[0]!],
+    ],
+    ["no lines at all", 2, () => []],
+  ] as const)(
+    "applies no line, and keeps the reply's lines once, when the reply holds %s",
+    async (_label, count, reshape) => {
+      const aeat = fakeAeat();
+      const seeded = await seedPendingEnvios(suite.db, { count });
+      const reply = reshaping(aeat.client(), reshape);
+
+      const result = await drain(deps(reply.client), FIRST);
+
+      expect(result.recordsAccepted).toBe(0);
+      expect(result.recordsHalted).toBe(0);
+      const lineasEnRespuesta = reply.delivered.length;
+      expect(lineasEnRespuesta).not.toBe(count);
+      for (const [i, id] of seeded.registroIds.entries()) {
+        expect(await envioOf(id)).toMatchObject({
+          estado: "pendiente",
+          incidencia: true,
+          proximo_intento_en: new Date(FIRST.getTime() + backoffMs(1)).toISOString(),
+        });
+        expect(await ackOf(id)).toBeUndefined();
+        expect(await unknownParamsOf(id)).toEqual([
+          {
+            registroId: id,
+            estado: null,
+            codigo: null,
+            mensaje: null,
+            csv: expect.any(String),
+            operacionEnviada: "Alta",
+            identidadEnviada: asParams(idOf(seeded.facturaKeys[i]!)),
+            lineasEnRespuesta,
+          },
+        ]);
+      }
+      expect(await incidentsCoded("fiscal.respuesta_descuadrada")).toEqual([
+        {
+          sale_id: await saleOf(seeded.registroIds[0]!),
+          params: {
+            registroIds: seeded.registroIds,
+            csv: expect.any(String),
+            lineasRespuesta: reply.delivered.map(lineParams),
+          },
+        },
+      ]);
+      expect((await incidentCodes()).filter((c) => c !== "fiscal.estado_desconocido")).toEqual([
+        "fiscal.respuesta_descuadrada",
+      ]);
+      expect(await cases()).toEqual([]);
+    },
+  );
+
+  it("keeps only the first mismatched reply's lines while its incident is open", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const [only] = seeded.registroIds;
+    await drain(deps(reshaping(aeat.client(), () => []).client), FIRST);
+    const retry = new Date(FIRST.getTime() + backoffMs(1));
+
+    const second = reshaping(aeat.client(), (lines) => [...lines, strayLine]);
+    await drain(deps(second.client), retry);
+
+    expect(second.delivered).toHaveLength(2);
+    expect(await envioOf(only!)).toMatchObject({
+      estado: "pendiente",
+      proximo_intento_en: new Date(retry.getTime() + backoffMs(2)).toISOString(),
+    });
+    expect(await incidentsCoded("fiscal.respuesta_descuadrada")).toEqual([
+      expect.objectContaining({
+        params: expect.objectContaining({ lineasRespuesta: [] }),
+      }),
+    ]);
   });
 
   it.each([
@@ -1126,7 +1263,7 @@ describe("drain — a reply line is applied only when its reference and its invo
     ["invoice number", { NumSerieFactura: "OTHER/1" }],
     ["issue date", { FechaExpedicionFactura: "19-07-2026" }],
   ])(
-    "leaves a record unknown when its own line names another invoice by %s",
+    "leaves a record unknown when the line at its position names another invoice by %s",
     async (_field, differs) => {
       const aeat = fakeAeat();
       const seeded = await seedPendingEnvios(suite.db, { count: 2 });
@@ -1145,16 +1282,20 @@ describe("drain — a reply line is applied only when its reference and its invo
       expect(await ackOf(matched!)).toBe("accepted");
       expect(result.recordsAccepted).toBe(1);
       expect(await unknownParamsOf(mismatched!)).toEqual([
-        expect.objectContaining({
+        {
+          registroId: mismatched,
+          estado: null,
+          codigo: null,
+          mensaje: null,
+          csv: expect.any(String),
+          operacionEnviada: "Alta",
           identidadEnviada: asParams(idOf(seeded.facturaKeys[0]!)),
-          lineasRespuesta: [
-            expect.objectContaining({
-              refExterna: mismatched,
-              ...asParams({ ...idOf(seeded.facturaKeys[0]!), ...differs }),
-              estado: "Correcto",
-            }),
-          ],
-        }),
+          lineaRespuesta: expect.objectContaining({
+            refExterna: mismatched,
+            ...asParams({ ...idOf(seeded.facturaKeys[0]!), ...differs }),
+            estado: "Correcto",
+          }),
+        },
       ]);
       expect(await cases()).toEqual([]);
     },
@@ -1164,7 +1305,7 @@ describe("drain — a reply line is applied only when its reference and its invo
     ["a reference outside this envío", "not-in-this-batch"],
     ["no reference at all", undefined],
   ])(
-    "leaves a record unknown when the only line naming its invoice carries %s",
+    "leaves a record unknown when the line at its position names its invoice but carries %s",
     async (_label, refExterna) => {
       const aeat = fakeAeat();
       const seeded = await seedPendingEnvios(suite.db, { count: 2 });
@@ -1182,32 +1323,40 @@ describe("drain — a reply line is applied only when its reference and its invo
       expect(await unknownParamsOf(unreferenced!)).toEqual([
         expect.objectContaining({
           identidadEnviada: asParams(idOf(seeded.facturaKeys[1]!)),
-          lineasRespuesta: [
-            expect.objectContaining({
-              refExterna: refExterna ?? null,
-              ...asParams(idOf(seeded.facturaKeys[1]!)),
-            }),
-          ],
+          lineaRespuesta: expect.objectContaining({
+            refExterna: refExterna ?? null,
+            ...asParams(idOf(seeded.facturaKeys[1]!)),
+          }),
         }),
       ]);
     },
   );
 
-  it("leaves a record unknown when its line arrives twice, identical", async () => {
-    const aeat = fakeAeat();
-    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
-    const [doubled] = seeded.registroIds;
+  it.each([
+    ["an identical copy", "Correcto"],
+    ["a copy saying Incorrecto", "Incorrecto"],
+  ] as const)(
+    "applies a record's own line and consults no other, when the next record's line is %s of it",
+    async (_label, estado) => {
+      const aeat = fakeAeat();
+      const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+      const [applied, unknown] = seeded.registroIds;
+      const reply = reshaping(aeat.client(), ([own]) => [
+        own!,
+        { ...own!, EstadoRegistro: estado },
+      ]);
 
-    const result = await drain(deps(doublingLine(aeat.client(), doubled!)), FIRST);
+      const result = await drain(deps(reply.client), FIRST);
 
-    expect(await envioOf(doubled!)).toMatchObject({ estado: "pendiente", incidencia: true });
-    expect(await ackOf(doubled!)).toBeUndefined();
-    expect(result.recordsAccepted).toBe(0);
-    const params = await unknownParamsOf(doubled!);
-    expect(params).toHaveLength(1);
-    expect(params[0]!["lineasRespuesta"]).toHaveLength(2);
-    expect(await incidentCodes()).toEqual(["fiscal.estado_desconocido"]);
-  });
+      expect(await envioOf(applied!)).toMatchObject({ estado: "aceptado", incidencia: false });
+      expect(result.recordsAccepted).toBe(1);
+      expect(await envioOf(unknown!)).toMatchObject({ estado: "pendiente", incidencia: true });
+      expect(await unknownParamsOf(unknown!)).toEqual([
+        expect.objectContaining({ lineaRespuesta: lineParams(reply.delivered[1]!) }),
+      ]);
+      expect(await incidentCodes()).toEqual(["fiscal.estado_desconocido"]);
+    },
+  );
 
   it("sends no later record of a chain whose record was left unknown by a mismatched line until that record's retry", async () => {
     const aeat = fakeAeat();
@@ -1283,7 +1432,7 @@ describe("drain — a reply line is applied only when its reference and its invo
     ["cancellation", "Anulacion", "Alta"],
     ["registration", "Alta", "Modificacion"],
   ] as const)(
-    "leaves a %s unknown when its only line names an operation other than the one sent (%s → %s)",
+    "leaves a %s unknown when the line at its position names an operation other than the one sent (%s → %s)",
     async (_kind, sent, answered) => {
       const aeat = fakeAeat();
       const { id, now, facturaKey } = await waitingAs(aeat, sent);
@@ -1306,16 +1455,14 @@ describe("drain — a reply line is applied only when its reference and its invo
           csv: expect.any(String),
           operacionEnviada: sent,
           identidadEnviada: asParams(idOf(facturaKey)),
-          lineasRespuesta: [
-            {
-              refExterna: id,
-              tipoOperacion: answered,
-              ...asParams(idOf(facturaKey)),
-              estado: "Correcto",
-              codigo: null,
-              mensaje: null,
-            },
-          ],
+          lineaRespuesta: {
+            refExterna: id,
+            tipoOperacion: answered,
+            ...asParams(idOf(facturaKey)),
+            estado: "Correcto",
+            codigo: null,
+            mensaje: null,
+          },
         },
       ]);
       expect(await incidentCodes()).toEqual(["fiscal.estado_desconocido"]);
@@ -1341,193 +1488,5 @@ describe("drain — a reply line is applied only when its reference and its invo
     expect(await envioOf(id)).toMatchObject({ estado: "aceptado", incidencia: false });
     expect(result.recordsAccepted).toBe(1);
     expect(await incidentCodes()).toEqual([]);
-  });
-
-  /** A line naming no record of any envío: neither its reference nor its invoice is ours. */
-  const strayLine: RespuestaLinea = {
-    IDFactura: {
-      IDEmisorFactura: "B99999999",
-      NumSerieFactura: "STRAY/1",
-      FechaExpedicionFactura: "01-07-2026",
-    },
-    Operacion: { TipoOperacion: "Alta" },
-    RefExterna: "not-ours",
-    EstadoRegistro: "Incorrecto",
-    CodigoErrorRegistro: 1100,
-    DescripcionErrorRegistro: "Campo obligatorio ausente",
-  } as RespuestaLinea;
-
-  /** `strayLine` as the incidents' params spell a reply line. */
-  const strayParams = {
-    refExterna: "not-ours",
-    tipoOperacion: "Alta",
-    idEmisorFactura: "B99999999",
-    numSerieFactura: "STRAY/1",
-    fechaExpedicionFactura: "01-07-2026",
-    estado: "Incorrecto",
-    codigo: 1100,
-    mensaje: "Campo obligatorio ausente",
-  };
-
-  /** AEAT's reply, after `rewrite`, gains `strayLine` at its end. */
-  function withStrayLine(
-    client: VerifactuClient,
-    rewrite: (linea: RespuestaLinea) => RespuestaLinea = (linea) => linea,
-  ): VerifactuClient {
-    return {
-      submit: async (cabecera, registros) => {
-        const respuesta = await client.submit(cabecera, registros);
-        return {
-          ...respuesta,
-          RespuestaLinea: [...respuesta.RespuestaLinea.map(rewrite), strayLine],
-        };
-      },
-      consultar: (...args) => client.consultar(...args),
-    };
-  }
-
-  async function incidentsCoded(
-    code: string,
-  ): Promise<{ sale_id: string | null; params: Record<string, unknown> }[]> {
-    const { rows } = await suite.db.execute<{ sale_id: string | null; params: string }>(sql`
-      select sale_id, params from incidents where code = ${code}
-    `);
-    return rows.map((row) => ({
-      sale_id: row.sale_id,
-      params: JSON.parse(row.params) as Record<string, unknown>,
-    }));
-  }
-
-  async function saleOf(registroId: string): Promise<string> {
-    const { rows } = await suite.db.execute<{ sale_id: string }>(sql`
-      select sale_id from registros_facturacion where id = ${registroId}
-    `);
-    return rows[0]!.sale_id;
-  }
-
-  it("puts a line naming no record of the envío on the unknown record's incident", async () => {
-    const aeat = fakeAeat();
-    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
-    const [mismatched, matched] = seeded.registroIds;
-    const client = withStrayLine(aeat.client(), (linea) =>
-      linea.RefExterna === mismatched
-        ? { ...linea, IDFactura: { ...linea.IDFactura, NumSerieFactura: "OTHER/1" } }
-        : linea,
-    );
-
-    const result = await drain(deps(client), FIRST);
-
-    expect(await envioOf(mismatched!)).toMatchObject({ estado: "pendiente", incidencia: true });
-    expect(await envioOf(matched!)).toMatchObject({ estado: "aceptado", incidencia: false });
-    expect(result.recordsAccepted).toBe(1);
-    expect(await unknownParamsOf(mismatched!)).toEqual([
-      {
-        registroId: mismatched,
-        estado: null,
-        codigo: null,
-        mensaje: null,
-        csv: expect.any(String),
-        operacionEnviada: "Alta",
-        identidadEnviada: asParams(idOf(seeded.facturaKeys[0]!)),
-        lineasRespuesta: [
-          {
-            refExterna: mismatched,
-            tipoOperacion: "Alta",
-            ...asParams({ ...idOf(seeded.facturaKeys[0]!), NumSerieFactura: "OTHER/1" }),
-            estado: "Correcto",
-            codigo: null,
-            mensaje: null,
-          },
-        ],
-        lineasSinRegistro: [strayParams],
-      },
-    ]);
-    expect(await incidentCodes()).toEqual(["fiscal.estado_desconocido"]);
-  });
-
-  it("puts a line naming no record on every unknown record's incident, whatever made it unknown", async () => {
-    const aeat = fakeAeat();
-    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
-    const client = withStrayLine(aeat.client(), (linea) => ({
-      ...linea,
-      EstadoRegistro: undefined,
-    }));
-
-    await drain(deps(client), FIRST);
-
-    for (const id of seeded.registroIds) {
-      expect(await unknownParamsOf(id)).toEqual([
-        {
-          registroId: id,
-          estado: null,
-          codigo: null,
-          mensaje: null,
-          csv: expect.any(String),
-          lineasSinRegistro: [strayParams],
-        },
-      ]);
-    }
-    expect(await incidentCodes()).toEqual([
-      "fiscal.estado_desconocido",
-      "fiscal.estado_desconocido",
-    ]);
-  });
-
-  it("keeps a line naming no record in a fiscal.linea_sin_registro incident when every record was applied", async () => {
-    const aeat = fakeAeat();
-    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
-
-    const result = await drain(deps(withStrayLine(aeat.client())), FIRST);
-
-    for (const id of seeded.registroIds) {
-      expect(await envioOf(id)).toMatchObject({ estado: "aceptado", incidencia: false });
-    }
-    expect(result.recordsAccepted).toBe(2);
-    expect(await incidentsCoded("fiscal.linea_sin_registro")).toEqual([
-      {
-        sale_id: await saleOf(seeded.registroIds[0]!),
-        params: {
-          registroIds: seeded.registroIds,
-          csv: expect.any(String),
-          lineasSinRegistro: [strayParams],
-        },
-      },
-    ]);
-    expect(await incidentCodes()).toEqual(["fiscal.linea_sin_registro"]);
-    expect(result.incidentsRaised).toBe(1);
-    expect(await cases()).toEqual([]);
-  });
-
-  it("keeps a line naming no record in a fiscal.linea_sin_registro incident when the unknown record's incident is already open", async () => {
-    const aeat = fakeAeat();
-    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
-    const [unknown] = seeded.registroIds;
-    const otherInvoice = (linea: RespuestaLinea) => ({
-      ...linea,
-      IDFactura: { ...linea.IDFactura, NumSerieFactura: "OTHER/1" },
-    });
-    await drain(deps(rewritingLines(aeat.client(), otherInvoice)), FIRST);
-    expect(await unknownParamsOf(unknown!)).toHaveLength(1);
-    const retry = new Date(FIRST.getTime() + backoffMs(1));
-
-    await drain(deps(withStrayLine(aeat.client(), otherInvoice)), retry);
-
-    expect(await envioOf(unknown!)).toMatchObject({
-      estado: "pendiente",
-      proximo_intento_en: new Date(retry.getTime() + backoffMs(2)).toISOString(),
-    });
-    expect(await unknownParamsOf(unknown!)).toEqual([
-      expect.not.objectContaining({ lineasSinRegistro: expect.anything() }),
-    ]);
-    expect(await incidentsCoded("fiscal.linea_sin_registro")).toEqual([
-      {
-        sale_id: await saleOf(unknown!),
-        params: {
-          registroIds: [unknown],
-          csv: null,
-          lineasSinRegistro: [strayParams],
-        },
-      },
-    ]);
   });
 });
