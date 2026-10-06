@@ -1278,8 +1278,14 @@ reader draft, and a failed list refresh does not turn an accepted write into uns
 Newer delivered input remains dirty against the submitted snapshot. Replacing or disconnecting
 an editor cancels its question; detached controls and late replies leave the current editor alone.
 Focused cases are in `apps/dashboard/src/screens/device-edit.unsaved.test.ts`, alongside the
-unchanged device behavior and accessibility suites. Pairing settings and Payments reader dialogs
-remain pending with the other modal owners.
+unchanged device behavior and accessibility suites. Device pairing settings now protect the
+submitted name, profile and Shows selection after number proof, including returning-device defaults.
+Cancel, native Escape and closing Add ask before cleanup; Keep retains the draft and pairing hold.
+Successful pairing commits before refresh, while a newer delivered value stays dirty without allowing
+another acceptance of the completed request. Request replacement, disconnect and delayed native close
+reports invalidate departed settings. Focused cases are in
+`apps/dashboard/src/screens/device-pair.unsaved.test.ts`. Payments reader dialogs and the other
+modal owners remain pending.
 Printer detail name/connection are page owners for the remaining page/navigation work. Other audited
 modal owners also remain to be wired. Keep automatic saves on their existing paths.
 

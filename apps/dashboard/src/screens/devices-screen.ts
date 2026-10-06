@@ -366,6 +366,41 @@ export class DevicesScreen extends LitElement {
   /** Set once the server has approved or deleted the request, so closing Pair has nothing to discard. */
   #pairSettled = false;
   #pairEpoch = 0;
+  #pairLeave?: LeaveCoordinator;
+  #pairScope?: DraftScope<Parameters<DashboardApi["acceptDeviceJoinRequest"]>[1]>;
+  readonly #beforePairClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.#pairLeave ||
+    (await this.#pairLeave.request({
+      scopes: this.#pairScope ? [this.#pairScope.id] : [],
+      reason,
+      proceed() {},
+    })) === "proceeded";
+
+  #pairPayload(): Parameters<DashboardApi["acceptDeviceJoinRequest"]>[1] {
+    const { stationId, watcherId } = bindingIds(this.#bindingShown() ? this.chosenBinding : "");
+    return {
+      name: this.pairName.trim(),
+      profileId: this.chosenProfileId,
+      ...(stationId === null ? {} : { stationId }),
+      ...(watcherId === null ? {} : { watcherId }),
+    };
+  }
+
+  #registerPairDraft(): void {
+    this.#pairScope?.dispose();
+    this.#pairLeave = leaveCoordinatorFor(this);
+    this.#pairScope = this.#pairLeave?.register({
+      id: {},
+      current: () => this.#pairPayload(),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) =>
+        a.name === b.name &&
+        a.profileId === b.profileId &&
+        a.stationId === b.stationId &&
+        a.watcherId === b.watcherId,
+      restore: () => {},
+    });
+  }
   @state() private armedRemoveId: string | null = null;
   @state() private errorKey: string | null = null;
   /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
@@ -574,15 +609,12 @@ export class DevicesScreen extends LitElement {
     this.addError = null;
   }
 
-  async #closeModal(id: string): Promise<void> {
-    const modal = this.renderRoot.querySelector<WtModal>(`[data-test="${id}"]`);
-    if (!modal?.open) return;
-    // Native close restores focus before wt-close takes the modal out of the template.
-    const closed = new Promise<void>((resolve) =>
-      modal.addEventListener("wt-close", () => resolve(), { once: true }),
-    );
-    modal.open = false;
-    await closed;
+  async #finishPair(epoch: number, reason: "saved" | "security"): Promise<void> {
+    if (epoch !== this.#pairEpoch) return;
+    const modal = this.renderRoot.querySelector<WtModal>("[data-test=pair-modal]");
+    modal?.closeAfter(reason);
+    if (modal) await modal.updateComplete;
+    if (epoch === this.#pairEpoch) this.#closePair();
   }
 
   /**
@@ -595,6 +627,9 @@ export class DevicesScreen extends LitElement {
     const request = this.pairRequest;
     if (request === null) return;
     this.#pairEpoch++;
+    this.#pairScope?.dispose();
+    this.#pairScope = undefined;
+    this.#pairLeave = undefined;
     this.pairRequest = null;
     this.checking = false;
     this.submitting = false;
@@ -621,15 +656,25 @@ export class DevicesScreen extends LitElement {
     const now = rows.find((row) => row.id === open.id);
     if (now === undefined || now.createdAt === open.createdAt) return;
     this.#pairSettled = true;
-    void this.#closeModal("pair-modal").then(() => {
-      this.#closePair();
-      if (this.addingDevice) this.askedAgain = waitingName(now);
+    const epoch = this.#pairEpoch;
+    const addEpoch = this.#addEpoch;
+    void this.#finishPair(epoch, "security").then(() => {
+      if (this.addingDevice && addEpoch === this.#addEpoch) this.askedAgain = waitingName(now);
     });
   }
 
   async #openPair(request: JoinRequestRow): Promise<void> {
     this.#closePair();
     const epoch = ++this.#pairEpoch;
+    const addEpoch = this.#addEpoch;
+    await this.updateComplete;
+    if (
+      !this.isConnected ||
+      !this.addingDevice ||
+      addEpoch !== this.#addEpoch ||
+      epoch !== this.#pairEpoch
+    )
+      return;
     this.#pairSettled = false;
     this.pairRequest = request;
     this.addError = null;
@@ -670,6 +715,7 @@ export class DevicesScreen extends LitElement {
     this.formAttempted = false;
     this.fieldRefusal = null;
     this.pairError = null;
+    this.#registerPairDraft();
   }
 
   /** A wrong number is terminal: the server deleted the request before answering. */
@@ -703,8 +749,7 @@ export class DevicesScreen extends LitElement {
       }
       this.#pairSettled = true;
       this.pendingJoins = this.pendingJoins.filter((row) => row.id !== request.id);
-      await this.#closeModal("pair-modal");
-      this.#closePair();
+      await this.#finishPair(epoch, "security");
       this.addError = code;
     }
   }
@@ -748,7 +793,7 @@ export class DevicesScreen extends LitElement {
 
   async #submitPair(): Promise<void> {
     const request = this.pairRequest;
-    if (request === null || this.submitting) return;
+    if (request === null || this.submitting || this.#pairSettled) return;
     this.formAttempted = true;
     const own = this.#ownErrors();
     if (own.name || own.profile || own.binding) {
@@ -758,19 +803,15 @@ export class DevicesScreen extends LitElement {
       });
       return;
     }
-    const { stationId, watcherId } = bindingIds(this.#bindingShown() ? this.chosenBinding : "");
+    const submitted = this.#pairPayload();
+    const scope = this.#pairScope;
     const epoch = this.#pairEpoch;
     this.submitting = true;
     this.pairError = null;
     this.fieldRefusal = null;
     let result: { name: string };
     try {
-      result = await this.api.acceptDeviceJoinRequest(request.id, {
-        name: this.pairName.trim(),
-        profileId: this.chosenProfileId,
-        ...(stationId === null ? {} : { stationId }),
-        ...(watcherId === null ? {} : { watcherId }),
-      });
+      result = await this.api.acceptDeviceJoinRequest(request.id, submitted);
     } catch (error) {
       if (epoch !== this.#pairEpoch) return;
       this.submitting = false;
@@ -784,11 +825,12 @@ export class DevicesScreen extends LitElement {
       return;
     }
     if (epoch !== this.#pairEpoch) return;
+    scope?.commit(submitted);
+    this.submitting = false;
     this.#pairSettled = true;
     this.pendingJoins = this.pendingJoins.filter((row) => row.id !== request.id);
-    await this.#closeModal("pair-modal");
-    this.#closePair();
     this.added = { name: result.name, enabled: Boolean(request.returning) };
+    if (!scope?.isDirty()) await this.#finishPair(epoch, "saved");
     try {
       await this.#reloadDevices();
     } catch (error) {
@@ -1366,6 +1408,7 @@ export class DevicesScreen extends LitElement {
 
   #renderAddDialog(): TemplateResult | typeof nothing {
     if (!this.addingDevice) return nothing;
+    const epoch = this.#addEpoch;
     const until = this.#openUntil();
     const [before, after] = t("devices.add_hint").split("{address}");
     return html`<wt-modal
@@ -1375,7 +1418,11 @@ export class DevicesScreen extends LitElement {
       .open=${true}
       .opener=${this.renderRoot.querySelector<HTMLElement>(".heading [data-test=open-add-device]")}
       .dismissible=${!this.submitting}
-      @wt-close=${() => this.#endAdding()}
+      .beforeClose=${this.#pairScope ? this.#beforePairClose : undefined}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (epoch === this.#addEpoch) this.#endAdding();
+      }}
     >
       ${this.qr === "" ? nothing : html`<img class="qr" data-test="device-qr" src=${this.qr} alt=${t("devices.qr_alt")} />`}
       <p class="hint">
@@ -1408,7 +1455,7 @@ export class DevicesScreen extends LitElement {
         ><wt-button
           slot="cancel"
           data-test="add-device-close"
-          @click=${() => void this.#closeModal("add-device-modal")}
+          @click=${() => void this.renderRoot.querySelector<WtModal>("[data-test=add-device-modal]")?.requestClose("cancel")}
           >${t("action.close")}</wt-button
         ></wt-form-actions
       >
@@ -1560,6 +1607,7 @@ export class DevicesScreen extends LitElement {
   }
 
   #renderSettingsStep(errors: IdentityErrors): TemplateResult {
+    const epoch = this.#pairEpoch;
     return html`<div class="pair-fields">
       ${this.#renderIdentityFields(
         "pair",
@@ -1567,17 +1615,23 @@ export class DevicesScreen extends LitElement {
         errors,
         {
           name: (value) => {
+            if (!this.isConnected || epoch !== this.#pairEpoch) return;
             this.pairName = value;
             this.fieldRefusal = clearedRefusal(this.fieldRefusal, "name");
+            this.#pairScope?.changed();
           },
           profile: (value) => {
+            if (!this.isConnected || epoch !== this.#pairEpoch) return;
             this.chosenProfileId = value;
             this.chosenBinding = "";
             this.fieldRefusal = clearedRefusal(this.fieldRefusal, "profile", "binding");
+            this.#pairScope?.changed();
           },
           binding: (value) => {
+            if (!this.isConnected || epoch !== this.#pairEpoch) return;
             this.chosenBinding = value;
             this.fieldRefusal = clearedRefusal(this.fieldRefusal, "binding");
+            this.#pairScope?.changed();
           },
         },
         this.submitting,
@@ -1588,6 +1642,7 @@ export class DevicesScreen extends LitElement {
   #renderPairDialog(): TemplateResult | typeof nothing {
     const request = this.pairRequest;
     if (request === null) return nothing;
+    const epoch = this.#pairEpoch;
     const settings = this.pairStep === "settings";
     const errors = settings ? this.#pairErrors() : { name: "", profile: "", binding: "" };
     const marked = errors.name !== "" || errors.profile !== "" || errors.binding !== "";
@@ -1599,7 +1654,11 @@ export class DevicesScreen extends LitElement {
       heading=${pairTitle(request)}
       .open=${true}
       .dismissible=${!this.submitting}
-      @wt-close=${() => this.#closePair()}
+      .beforeClose=${this.#pairScope ? this.#beforePairClose : undefined}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        if (epoch === this.#pairEpoch) this.#closePair();
+      }}
     >
       ${settings ? this.#renderSettingsStep(errors) : this.#renderNumberStep()}
       <wt-form-actions
@@ -1611,7 +1670,7 @@ export class DevicesScreen extends LitElement {
           slot="cancel"
           data-test="pair-cancel"
           ?disabled=${this.submitting}
-          @click=${() => void this.#closeModal("pair-modal")}
+          @click=${() => void this.renderRoot.querySelector<WtModal>("[data-test=pair-modal]")?.requestClose("cancel")}
           >${t("action.cancel")}</wt-button
         >
         ${
@@ -1620,7 +1679,7 @@ export class DevicesScreen extends LitElement {
                 variant="primary"
                 data-test="pair-submit"
                 ?loading=${this.submitting}
-                ?disabled=${blocked}
+                ?disabled=${blocked || this.#pairSettled}
                 @click=${() => void this.#submitPair()}
                 >${pairAction(request)}</wt-button
               >`

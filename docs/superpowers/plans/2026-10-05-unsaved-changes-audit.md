@@ -358,3 +358,21 @@ the existing device behavior/accessibility suites remain unchanged. Eight EN/ES,
 phone/desktop confirmation renderings also ran with axe. Synthetic unload checks cover listener
 cancellation; the browser reload prompt is still Task 5. Device pairing settings and Payments
 reader dialogs remain pending; the Device/Reader inventory row is not complete.
+
+### Device pairing settings checkpoint (2026-10-06)
+
+On the W69 branch, pairing settings register their existing acceptance payload after number proof
+or a previously claimed request opens its settings. The baseline includes returning-device defaults;
+comparison trims the name and keeps profile and station/watcher IDs. Cancel/native Escape and Add
+Close use the shared decision. Keep preserves settings and the pairing hold; Discard performs the
+existing request cleanup once. Number verification and waiting/QR output remain exempt. Pending
+acceptance retains its existing nondismissible controls.
+
+Acceptance commits the captured payload before list refresh. Newer delivered input remains dirty
+against it, but the completed request cannot be accepted again. A replaced request or removed screen
+disposes its question; late replies, detached inputs and delayed native close reports leave a new
+editor alone. An Add dialog closed during an awaited child opening cannot reopen that child.
+`apps/dashboard/src/screens/device-pair.unsaved.test.ts` exercises these cases alongside the unchanged
+device suites. Eight English/Spanish, light/dark, phone/desktop confirmation renderings ran with axe
+and were inspected. Synthetic unload cases test listener cancellation, not the native reload prompt.
+Device modal owners are wired; Payments reader dialogs and the other modal/page owners remain pending.
