@@ -4626,10 +4626,19 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       written: with a delayed order-update body, a zone moved to Deli still answered 200. **Owner
       decision (2026-10-06 ~23:50): accepted, not to be fixed** — a write already reaching the
       server when the switch or move commits is treated as having arrived first, so the checks stay
-      outside the write transaction. What is still to check is A307: that neither a zone move nor a
-      profile switch decides anything from the orders or sessions present when it commits (for
-      example A298 ending a device's sessions on a move to a kitchen-screen profile), since a write
-      slipping in just after such a decision would leave the state it was meant to prevent.
+      outside the write transaction. A307 checked what a zone move or profile switch decides from
+      the state present when it commits. A zone move (`configureZone`,
+      `packages/venue-service/src/operations.ts`) decides nothing from it. Ending the sessions a new
+      profile does not admit, every one on a kitchen screen (A298), holds: the PIN sign-in re-checks
+      the device and the person's admission inside its own transaction, and
+      `apps/server/src/join-e2e.test.ts` pins a sign-in overtaken by a move and by the till's own
+      switch. The refusal while a card payment is in progress did not hold: a payment could start
+      after the switch committed. Now the provider's write of the `attempting` row refuses
+      `device.profile_changed`, charging nothing, when the device is no longer on the profile the
+      request was checked under (`insertAttempting`, `packages/payments/src/store.ts`; SumUp and
+      Stripe terminal only). Still open: the practice-mode simulator writes no `attempting` row, so
+      a switch during a practice card payment is never refused; and a refused bill reader payment
+      stays `pending` until the bill-payment loop fails it (both read, not run).
 - **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
   states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a
   booking, Needs clearing, Bill requested and the kitchen signals), which a venue can switch off,
