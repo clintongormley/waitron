@@ -409,9 +409,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
         const body = await readJsonBody<Record<string, unknown>>(c);
         const copies = await gated(sessionId, (tx) => {
-          const extra = Object.keys(body).find((key) => key !== "dates");
-          if (extra !== undefined)
-            throw new AppError("management.request_invalid", { field: extra });
+          onlyKeys(body, ["dates"]);
           return duplicateHolidayNamedSpecialDates(
             tx,
             ctx.cfg,
