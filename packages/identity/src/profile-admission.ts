@@ -73,6 +73,47 @@ export async function canUseDeviceProfile(
   return person !== undefined && admits(roles, person);
 }
 
+/** The profiles of `profileIds` that {@link canUseDeviceProfile} admits `personId` to, in that order. */
+export async function profilesAdmitting(
+  tx: Transaction,
+  personId: string,
+  profileIds: readonly string[],
+): Promise<string[]> {
+  if (profileIds.length === 0) return [];
+  const [person] = await tx
+    .select({ role: persons.role })
+    .from(persons)
+    .where(and(eq(persons.id, personId), eq(persons.status, "active")));
+  if (person === undefined) return [];
+  const roles = await tx
+    .select({ profileId: deviceProfiles.id, role: deviceProfileAdmissionRoles.role })
+    .from(deviceProfiles)
+    .leftJoin(
+      deviceProfileAdmissionRoles,
+      eq(deviceProfileAdmissionRoles.deviceProfileId, deviceProfiles.id),
+    )
+    .where(inArray(deviceProfiles.id, [...profileIds]));
+  const exceptions = await tx
+    .select({
+      profileId: deviceProfileAdmissionPersons.deviceProfileId,
+      admitted: deviceProfileAdmissionPersons.admitted,
+    })
+    .from(deviceProfileAdmissionPersons)
+    .where(
+      and(
+        eq(deviceProfileAdmissionPersons.personId, personId),
+        inArray(deviceProfileAdmissionPersons.deviceProfileId, [...profileIds]),
+      ),
+    );
+  return profileIds.filter((profileId) => {
+    const rows = roles.filter((row) => row.profileId === profileId);
+    if (rows.length === 0) return false;
+    const named = rows.flatMap((row) => (row.role === null ? [] : [row.role]));
+    const exception = exceptions.find((row) => row.profileId === profileId)?.admitted ?? null;
+    return admits(named.length === 0 ? "every" : new Set(named), { ...person, exception });
+  });
+}
+
 /** The people {@link canUseDeviceProfile} admits to `profileId`, in the shape and order of
  * `listActiveStaff`. */
 export async function listStaffAdmittedTo(

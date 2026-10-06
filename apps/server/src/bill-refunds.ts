@@ -41,6 +41,7 @@ import type { Attestation, BillBalance, BillRefundView } from "./bill-payments.j
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { enqueueBillRefundDrawer } from "./receipt-print.js";
+import type { TenderKind } from "./device-session.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import { fingerprint } from "./parties.js";
 import { refusePaymentInFlight } from "./working-order.js";
@@ -486,7 +487,7 @@ export async function refundTender(
   db: Database,
   workingOrderId: string,
   paymentId: string,
-): Promise<"cash" | "hand-keyed-card" | "reader-card" | undefined> {
+): Promise<TenderKind | undefined> {
   const [payment] = await db
     .select({ method: billPayments.method })
     .from(billPayments)
@@ -505,15 +506,12 @@ export async function refundTender(
  */
 async function refundOverrideToCheck(
   db: Database,
-  workingOrderId: string,
-  paymentId: string,
+  tender: TenderKind | undefined,
   req: BillRefundRequest,
   sessionId: string,
 ): Promise<{ personId: string; pin: string } | undefined> {
   if (req.override === undefined) return undefined;
-  const confirmsHandKeyedCard =
-    req.manualConfirmed === true &&
-    (await refundTender(db, workingOrderId, paymentId)) === "hand-keyed-card";
+  const confirmsHandKeyedCard = req.manualConfirmed === true && tender === "hand-keyed-card";
   return overrideToCheck(
     db,
     { sessionId, permission: "sale.refund" },
@@ -533,7 +531,8 @@ async function refundOverrideToCheck(
  *
  * Cash and staff-confirmed standalone-terminal refunds are completed in this transaction. A
  * connected card refund is written `pending` before its provider is asked (design §6b), and the
- * bill is locked until the evidence settles it.
+ * bill is locked until the evidence settles it. `tender` is what {@link refundTender} answered for
+ * the payment.
  */
 export async function refundBillPayment(
   deps: BillRefundDeps,
@@ -542,16 +541,11 @@ export async function refundBillPayment(
   paymentId: string,
   req: BillRefundRequest,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
+  tender: TenderKind | undefined,
 ): Promise<BillRefundResult> {
   const applied = money(decimal(req.appliedAmount));
   const tip = money(decimal(req.tipAmount));
-  const toCheck = await refundOverrideToCheck(
-    deps.db,
-    workingOrderId,
-    paymentId,
-    req,
-    operator.sessionId,
-  );
+  const toCheck = await refundOverrideToCheck(deps.db, tender, req, operator.sessionId);
   let release = (): void => {};
   try {
     const begun = await withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) => {

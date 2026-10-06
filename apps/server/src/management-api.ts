@@ -74,7 +74,6 @@ import {
   getDeviceProfileWithPrinters,
   getStoredLogoRasters,
   getTenantTheme,
-  isSharedDisplay,
   listCanvases,
   listDeviceProfiles,
   putReceipt,
@@ -84,7 +83,6 @@ import {
   updateDeviceProfile,
   validateReceiptConfig,
   type DeviceProfileRow,
-  type FormFactor,
   type ProfilePrinterLists,
 } from "@waitron/layouts";
 import { imageExists, readImageBytes } from "@waitron/media";
@@ -559,8 +557,6 @@ type ProfileScope = {
   startingZoneId: string | null;
 };
 
-const NO_SCOPE: ProfileScope = { departmentId: null, allowedZoneIds: null, startingZoneId: null };
-
 /** The scope fields the body names; each one it omits is left out, and null is kept as null. */
 function parseProfileScope(body: ProfileBody): Partial<ProfileScope> {
   const scope: Partial<ProfileScope> = {};
@@ -604,31 +600,6 @@ function parseProfileAdmission(body: ProfileBody): Partial<ProfileAdmission> {
     admission.personExceptions = exceptions;
   }
   return admission;
-}
-
-/**
- * Each scope field the body omits keeps its stored value, as the other optional fields of a PUT
- * do; a new profile has none stored, so an omitted `allowedZoneIds` is every zone. A kitchen
- * display keeps no scope, so it starts from none rather than from what was stored. A profile that
- * is not one is refused without a department.
- */
-async function saveProfileScope(
-  tx: Transaction,
-  deps: ManagementApiDeps,
-  profile: { id: string; formFactor: FormFactor },
-  scope: Partial<ProfileScope>,
-): Promise<void> {
-  let base = NO_SCOPE;
-  if (!isSharedDisplay(profile.formFactor)) {
-    const [stored] = await VENUE_SERVICE.readProfileServiceScopes(tx, [profile.id]);
-    base = stored!;
-    if (Object.keys(scope).length === 0 && base.departmentId !== null) return;
-  }
-  await VENUE_SERVICE.setProfileServiceScope(tx, requireVenueCfg(deps), profile.id, {
-    departmentId: scope.departmentId === undefined ? base.departmentId : scope.departmentId,
-    allowedZoneIds: scope.allowedZoneIds === undefined ? base.allowedZoneIds : scope.allowedZoneIds,
-    startingZoneId: scope.startingZoneId === undefined ? base.startingZoneId : scope.startingZoneId,
-  });
 }
 
 /** Each profile row with where it serves and who may sign in on it, as last saved. */
@@ -1487,7 +1458,7 @@ export function mountManagementApi(
             paymentSlipPrinterIds: lists.paymentSlipPrinterIds ?? [],
           },
         });
-        await saveProfileScope(tx, deps, created, scope);
+        await VENUE_SERVICE.setProfileServiceScope(tx, requireVenueCfg(deps), created.id, scope);
         await saveKitchenLists(tx, deps, created.id, kitchenLists);
         await setProfileAdmission(tx, created.id, admission);
         return (await withProfileAccess(tx, [created]))[0];
@@ -1527,7 +1498,7 @@ export function mountManagementApi(
           startingScreen: body.startingScreen,
           printerLists,
         });
-        await saveProfileScope(tx, deps, updated, scope);
+        await VENUE_SERVICE.setProfileServiceScope(tx, requireVenueCfg(deps), id, scope);
         await saveKitchenLists(tx, deps, id, kitchenLists);
         await setProfileAdmission(tx, id, admission);
         return (await withProfileAccess(tx, [updated]))[0];

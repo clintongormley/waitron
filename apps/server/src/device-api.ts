@@ -15,8 +15,8 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import {
   authorizeManager,
-  canUseDeviceProfile,
   endDeviceSessions,
+  profilesAdmitting,
   type Permission,
 } from "@waitron/identity";
 import {
@@ -264,10 +264,12 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
         if (active === undefined) return [];
         const personId = await signedInPersonOn(tx, c, device.deviceId);
         if (personId === null) return [active, ...alternatives];
-        const usable = [active];
-        for (const profile of alternatives)
-          if (await canUseDeviceProfile(tx, profile.id, personId)) usable.push(profile);
-        return usable;
+        const admitted = await profilesAdmitting(
+          tx,
+          personId,
+          alternatives.map((profile) => profile.id),
+        );
+        return [active, ...alternatives.filter((profile) => admitted.includes(profile.id))];
       });
       // Non-secret config only: the reader's credentials never ride this response.
       return c.json({

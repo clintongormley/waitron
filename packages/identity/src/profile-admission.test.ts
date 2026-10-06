@@ -8,6 +8,7 @@ import { AppError } from "@waitron/shared";
 import {
   canUseDeviceProfile,
   listStaffAdmittedTo,
+  profilesAdmitting,
   readProfileAdmissions,
   setProfileAdmission,
   type ProfileAdmission,
@@ -269,6 +270,49 @@ describe("listStaffAdmittedTo", () => {
   it("lists nobody for a profile that does not exist", async () => {
     await seedPerson(suite.db, "admin");
     expect(await run((tx) => listStaffAdmittedTo(tx, crypto.randomUUID()))).toEqual([]);
+  });
+});
+
+describe("profilesAdmitting", () => {
+  function admitted(personId: string, profileIds: readonly string[]): Promise<string[]> {
+    return run((tx) => profilesAdmitting(tx, personId, profileIds));
+  }
+
+  it("answers for every profile and person exactly as canUseDeviceProfile does", async () => {
+    const open = await seedProfile();
+    const managersOnly = await seedProfile();
+    const allowsStaff = await seedProfile();
+    const deniesManager = await seedProfile();
+    await admitRoles(managersOnly, ["manager"]);
+    await admitRoles(allowsStaff, ["manager"]);
+    const staff = await seedPerson(suite.db, "staff");
+    const manager = await seedPerson(suite.db, "manager");
+    const suspended = await seedPerson(suite.db, "admin", "suspended");
+    await setException(allowsStaff, staff, true);
+    await setException(deniesManager, manager, false);
+    await setException(open, suspended, true);
+    const profiles = [open, managersOnly, allowsStaff, deniesManager, crypto.randomUUID()];
+
+    for (const personId of [staff, manager, suspended, crypto.randomUUID()]) {
+      const expected: string[] = [];
+      for (const profileId of profiles)
+        if (await admits(profileId, personId)) expected.push(profileId);
+      expect(await admitted(personId, profiles)).toEqual(expected);
+    }
+    // The matrix is not vacuous: each person's answer differs.
+    expect(await admitted(staff, profiles)).toEqual([open, allowsStaff, deniesManager]);
+    expect(await admitted(manager, profiles)).toEqual([open, managersOnly, allowsStaff]);
+    expect(await admitted(suspended, profiles)).toEqual([]);
+  });
+
+  it("keeps the order the profiles are named in, and answers nothing for no profiles", async () => {
+    const first = await seedProfile();
+    const second = await seedProfile();
+    const personId = await seedPerson(suite.db, "staff");
+
+    expect(await admitted(personId, [second, first])).toEqual([second, first]);
+    expect(await admitted(personId, [first, second])).toEqual([first, second]);
+    expect(await admitted(personId, [])).toEqual([]);
   });
 });
 

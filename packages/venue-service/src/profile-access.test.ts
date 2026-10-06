@@ -628,6 +628,104 @@ describe("a profile's stored scope", () => {
     await expect(outcome(setScope(venue, none))).resolves.toEqual({ resolved: undefined });
   });
 
+  it("keeps each field a save leaves out, and stores an explicit null zone list as every zone", async () => {
+    const venue = await seedVenue();
+    await setScope(venue, {
+      departmentId: venue.restaurant,
+      allowedZoneIds: [venue.dining, venue.terrace],
+      startingZoneId: venue.dining,
+    });
+    await setScope(venue, { startingZoneId: venue.terrace });
+    await expect(scopes([venue.profile])).resolves.toEqual([
+      {
+        profileId: venue.profile,
+        departmentId: venue.restaurant,
+        allowedZoneIds: [venue.terrace, venue.dining],
+        startingZoneId: venue.terrace,
+      },
+    ]);
+    await setScope(venue, { allowedZoneIds: null });
+    await expect(scopes([venue.profile])).resolves.toEqual([
+      {
+        profileId: venue.profile,
+        departmentId: venue.restaurant,
+        allowedZoneIds: null,
+        startingZoneId: venue.terrace,
+      },
+    ]);
+    await setScope(venue, { departmentId: venue.deli, startingZoneId: venue.counter });
+    await expect(scopes([venue.profile])).resolves.toEqual([
+      {
+        profileId: venue.profile,
+        departmentId: venue.deli,
+        allowedZoneIds: null,
+        startingZoneId: venue.counter,
+      },
+    ]);
+  });
+
+  it("checks the stored value a save leaves out, refusing a narrowed list outside a new department", async () => {
+    const venue = await seedVenue();
+    await setScope(venue, {
+      departmentId: venue.restaurant,
+      allowedZoneIds: [venue.dining],
+      startingZoneId: venue.dining,
+    });
+    await expect(
+      outcome(setScope(venue, { departmentId: venue.deli, startingZoneId: venue.counter })),
+    ).resolves.toEqual({
+      code: "device_profile.access_invalid",
+      params: { field: "allowedZoneIds", reason: "outside_department" },
+    });
+    await expect(scopes([venue.profile])).resolves.toMatchObject([
+      { departmentId: venue.restaurant, allowedZoneIds: [venue.dining] },
+    ]);
+  });
+
+  it("leaves a stored scope alone when a save names none of it, even one naming a zone switched off since", async () => {
+    const venue = await seedVenue();
+    await setScope(venue, {
+      departmentId: venue.restaurant,
+      allowedZoneIds: [venue.dining, venue.terrace],
+      startingZoneId: venue.dining,
+    });
+    await scoped((tx) => deactivateServiceZone(tx, venue.cfg, venue.terrace));
+    await expect(outcome(setScope(venue, {}))).resolves.toEqual({ resolved: undefined });
+    await expect(scopes([venue.profile])).resolves.toMatchObject([
+      { allowedZoneIds: [venue.terrace, venue.dining], startingZoneId: venue.dining },
+    ]);
+    await expect(outcome(setScope(venue, { startingZoneId: venue.dining }))).resolves.toEqual({
+      code: "device_profile.access_invalid",
+      params: { field: "allowedZoneIds", reason: "unavailable" },
+    });
+  });
+
+  it("refuses a save naming none of the scope on a profile with no department stored", async () => {
+    const venue = await seedVenue();
+    await expect(outcome(setScope(venue, {}))).resolves.toEqual({
+      code: "device_profile.access_invalid",
+      params: { field: "departmentId", reason: "required" },
+    });
+  });
+
+  it("starts a shared display from no scope, clearing one stored before it became one", async () => {
+    const venue = await seedVenue();
+    await setScope(venue, {
+      departmentId: venue.restaurant,
+      allowedZoneIds: [venue.dining],
+      startingZoneId: venue.dining,
+    });
+    await makeSharedDisplay(venue);
+    await expect(outcome(setScope(venue, { startingZoneId: venue.dining }))).resolves.toEqual({
+      code: "device_profile.access_invalid",
+      params: { field: "startingZoneId", reason: "shared_display" },
+    });
+    await expect(outcome(setScope(venue, {}))).resolves.toEqual({ resolved: undefined });
+    await expect(scopes([venue.profile])).resolves.toEqual([
+      { profileId: venue.profile, departmentId: null, allowedZoneIds: null, startingZoneId: null },
+    ]);
+  });
+
   it("checks a scope as a whole save does, refusing it on a shared display", async () => {
     const venue = await seedVenue();
     await expect(

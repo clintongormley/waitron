@@ -13,7 +13,7 @@ import {
   sameTarget,
 } from "@waitron/db";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
-import { canUseDeviceProfile, sessions } from "@waitron/identity";
+import { canUseDeviceProfile, listStaffAdmittedTo, sessions } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import { getDeviceProfile, kindOfFormFactor, printerChoices } from "@waitron/layouts";
 import type { DeviceKind, FormFactor } from "@waitron/layouts";
@@ -175,11 +175,6 @@ export async function readApprovedProfiles(
   return [current, ...((await readApprovedAlternatives(tx, deviceId)).get(deviceId) ?? [])];
 }
 
-/** The ids {@link readApprovedProfiles} lists, the active profile first. */
-export async function listApprovedProfiles(tx: Transaction, deviceId: string): Promise<string[]> {
-  return (await readApprovedProfiles(tx, deviceId)).map((profile) => profile.id);
-}
-
 /**
  * Make `ids` the device's approved alternatives, replacing those stored. Its active profile stays
  * approved whether or not `ids` names it. Each must be a live profile of the active profile's form
@@ -264,10 +259,11 @@ export async function endSessionsNotAdmitted(
     .select({ id: sessions.id, personId: sessions.personId })
     .from(sessions)
     .where(and(eq(sessions.deviceId, deviceId), isNull(sessions.endedAt)));
-  const ended: string[] = [];
-  for (const session of open) {
-    if (!(await canUseDeviceProfile(tx, profileId, session.personId))) ended.push(session.id);
-  }
+  if (open.length === 0) return;
+  const admitted = new Set(
+    (await listStaffAdmittedTo(tx, profileId)).map((person) => person.personId),
+  );
+  const ended = open.filter((session) => !admitted.has(session.personId)).map((s) => s.id);
   if (ended.length > 0)
     await tx.update(sessions).set({ endedAt: nowIso() }).where(inArray(sessions.id, ended));
 }
@@ -310,7 +306,8 @@ export async function switchActiveProfile(
       paymentSlipPrinterId: device.paymentSlipPrinterId,
     };
   }
-  if (!(await listApprovedProfiles(tx, device.id)).includes(input.profileId))
+  const alternatives = (await readApprovedAlternatives(tx, device.id)).get(device.id) ?? [];
+  if (!alternatives.some((profile) => profile.id === input.profileId))
     throw new AppError("device_profile.not_approved", {});
   if (!(await canUseDeviceProfile(tx, input.profileId, input.personId)))
     throw new AppError("device_profile.not_admitted", {});

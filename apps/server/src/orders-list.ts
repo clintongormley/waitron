@@ -61,7 +61,11 @@ export interface OrderListFilter {
   after?: OrderCursor;
   only?: string;
   collectable?: boolean;
-  /** A further condition on each bill's order id, written as `r.id`. */
+  /**
+   * A further condition on `r.id`, applied to sale rows too, where `r.id` is the sale's id rather
+   * than its order's: it filters by order only with `collectable: true`, which keeps bill rows
+   * alone.
+   */
   orderIn?: (orderId: SQL) => SQL;
   scope: "all" | { today: { from: string; to: string; timeZone: string; dayCutover: string } };
 }

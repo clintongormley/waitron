@@ -196,21 +196,44 @@ export async function setProfileServiceAccess(
   await writeLists(tx, profileId, input);
 }
 
+const NO_SCOPE: ProfileServiceScope = {
+  departmentId: null,
+  allowedZoneIds: null,
+  startingZoneId: null,
+};
+
 /**
  * Replaces the profile's department, zones and starting zone, checked as
  * {@link setProfileServiceAccess} checks them, except that a profile other than a shared display
- * must name a department; its station and watcher lists stay as stored.
+ * must name a department; its station and watcher lists stay as stored. A field `input` leaves out
+ * keeps its stored value, as {@link readProfileServiceScopes} reads it, and an `input` naming none
+ * of them leaves a stored department's scope untouched. A shared display starts from no scope, so
+ * one stored before the profile became one is cleared.
  */
 export async function setProfileServiceScope(
   tx: Transaction,
   cfg: VenueScope,
   profileId: string,
-  input: ProfileServiceScope,
+  input: Partial<ProfileServiceScope>,
 ): Promise<void> {
   const formFactor = await liveFormFactor(tx, profileId);
-  if (formFactor !== SHARED_DISPLAY && input.departmentId === null)
+  const omitted = (Object.keys(NO_SCOPE) as (keyof ProfileServiceScope)[]).filter(
+    (field) => input[field] === undefined,
+  );
+  let base = NO_SCOPE;
+  if (formFactor !== SHARED_DISPLAY && omitted.length > 0) {
+    const [stored] = await readProfileServiceScopes(tx, [profileId]);
+    base = stored!;
+    if (omitted.length === 3 && base.departmentId !== null) return;
+  }
+  const scope: ProfileServiceScope = {
+    departmentId: input.departmentId === undefined ? base.departmentId : input.departmentId,
+    allowedZoneIds: input.allowedZoneIds === undefined ? base.allowedZoneIds : input.allowedZoneIds,
+    startingZoneId: input.startingZoneId === undefined ? base.startingZoneId : input.startingZoneId,
+  };
+  if (formFactor !== SHARED_DISPLAY && scope.departmentId === null)
     refuse("departmentId", "required");
-  await writeScope(tx, profileId, await checkedScope(tx, cfg, formFactor, input));
+  await writeScope(tx, profileId, await checkedScope(tx, cfg, formFactor, scope));
 }
 
 /**

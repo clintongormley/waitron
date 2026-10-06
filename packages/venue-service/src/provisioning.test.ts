@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, catalogues, deviceProfiles, locations } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  catalogues,
+  deviceProfiles,
+  kitchenStations,
+  locations,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -11,8 +17,13 @@ import { readHolidays, readLocalHolidayModel, saveLocalHoliday } from "./holiday
 import { readSpecialDate, readWeekHours, replaceWeekHours, saveSpecialDate } from "./hours.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createServiceZone } from "./operations.js";
-import { readProfileServiceAccess, setProfileServiceAccess } from "./profile-access.js";
+import {
+  readProfileKitchenLists,
+  readProfileServiceAccess,
+  setProfileServiceAccess,
+} from "./profile-access.js";
 import { VENUE_SERVICE_PROVISIONING } from "./provisioning.js";
+import { deviceProfileStations } from "./schema/service.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
@@ -359,6 +370,29 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       }
       expect((await access(profiles.kitchen)).departmentId).toBeNull();
       expect((await access(profiles.pass)).departmentId).toBeNull();
+    });
+
+    it("keeps the kitchen lists of a profile it gives a scope, switched-off entries included", async () => {
+      const { locationId, profiles, runSeed } = await venue();
+      const [grill] = await db
+        .insert(kitchenStations)
+        .values({ locationId, name: `Grill ${randomUUID()}`, active: false })
+        .returning({ id: kitchenStations.id });
+      const [bar] = await db
+        .insert(kitchenStations)
+        .values({ locationId, name: `Bar ${randomUUID()}` })
+        .returning({ id: kitchenStations.id });
+      await db.insert(deviceProfileStations).values([
+        { deviceProfileId: profiles.till, stationId: grill!.id },
+        { deviceProfileId: profiles.till, stationId: bar!.id },
+      ]);
+
+      await runSeed();
+
+      const lists = await db.transaction((tx) => readProfileKitchenLists(tx, { locationId }));
+      expect(lists.find((entry) => entry.profileId === profiles.till)?.stationIds.sort()).toEqual(
+        [grill!.id, bar!.id].sort(),
+      );
     });
 
     it("leaves a profile's scope alone on a re-run", async () => {

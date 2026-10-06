@@ -13,7 +13,7 @@ import {
 import type { BillPaymentAsk, BillPaymentRequest } from "./bill-payments.js";
 import { refundBillPayment, refundProvidersOf, refundTender } from "./bill-refunds.js";
 import type { BillRefundRequest } from "./bill-refunds.js";
-import { assertDeviceCapability, assertProfileAction, assertTakesCash } from "./device-session.js";
+import { assertTakesTender } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import {
   overridePinAttempts,
@@ -221,14 +221,13 @@ export function mountBillPaymentsApi(
       const request = parseRequest(body);
       if (request.entry !== "reader") {
         const saleCfg = sendingCfg(cfg, c, session.device);
-        if (request.method === "cash") assertTakesCash(session.device);
-        else assertProfileAction(session.device, "hand-keyed-card-payment");
+        assertTakesTender(session.device, request.method === "cash" ? "cash" : "hand-keyed-card");
         return c.json(await takeBillPayment(fiscal, saleCfg, id, request, personId));
       }
       // The guards `/api/pay` runs before a reader is asked, in its order. A card outcome is data,
       // answered 200 even for a decline.
       const device = session.device;
-      await assertDeviceCapability(deps, c, "integrated-card-payment", "pay", device);
+      assertTakesTender(device, "reader-card");
       const readerId = parseReaderId(body);
       if (request.simulationOutcome !== undefined && deps.cardProvider?.provider !== "simulator") {
         throw invalid("simulationOutcome");
@@ -274,11 +273,7 @@ export function mountBillPaymentsApi(
       const paymentId = c.req.param("paymentId");
       // The tender the payment was taken with, as a payment of it would need.
       const tender = await refundTender(deps.db, id, paymentId);
-      if (tender === "cash") assertTakesCash(session.device);
-      if (tender === "hand-keyed-card")
-        assertProfileAction(session.device, "hand-keyed-card-payment");
-      if (tender === "reader-card")
-        assertProfileAction(session.device, "integrated-card-payment", "pay");
+      assertTakesTender(session.device, tender);
       const refund = parseRefund(asObject(await readRawJsonBody<unknown>(c)));
       const saleCfg = sendingCfg(cfg, c, session.device);
       return c.json(
@@ -295,6 +290,7 @@ export function mountBillPaymentsApi(
           paymentId,
           refund,
           { personId, sessionId, attempts: overridePinAttempts(pinThrottle, session.deviceId) },
+          tender,
         ),
       );
     }),

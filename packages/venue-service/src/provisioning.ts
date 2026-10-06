@@ -1,7 +1,7 @@
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { deviceProfiles, floorZones, locations } from "@waitron/db";
 import type { ModuleProvisioning } from "@waitron/module";
-import { readProfileServiceAccess, setProfileServiceAccess } from "./profile-access.js";
+import { setProfileServiceScope } from "./profile-access.js";
 import {
   departmentSalePolicies,
   departments,
@@ -137,13 +137,10 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           )
       ).filter(({ capabilities }) => (capabilities as string[]).includes("take-orders"));
       for (const { id } of unscoped) {
-        const kept = await readProfileServiceAccess(tx, node, id);
-        await setProfileServiceAccess(tx, node, id, {
+        await setProfileServiceScope(tx, node, id, {
           departmentId: policy[0]!.departmentId,
           allowedZoneIds: null,
           startingZoneId: zoneId,
-          stationIds: kept.stationIds,
-          watcherIds: kept.watcherIds,
         });
       }
       await tx

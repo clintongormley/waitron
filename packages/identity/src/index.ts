@@ -10,6 +10,7 @@ export { endDeviceSessions, endSession, loginWithPin } from "./login.js";
 export {
   canUseDeviceProfile,
   listStaffAdmittedTo,
+  profilesAdmitting,
   readProfileAdmissions,
   setProfileAdmission,
 } from "./profile-admission.js";

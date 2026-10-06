@@ -47,7 +47,6 @@ import {
   getCanvas,
   getCanvasForFormFactor,
   getDeviceProfile,
-  readProfileStartingScreen,
   kindOfFormFactor,
 } from "@waitron/layouts";
 import type { CanvasDef, CapabilityFlag, NavigationScreen, ProfileAction } from "@waitron/layouts";
@@ -188,10 +187,11 @@ import {
   assertDeviceCapability,
   assertProfileAction,
   assertDeviceStillProven,
-  assertTakesCash,
+  assertTakesTender,
   requireDeviceProof,
   tryReadDevice,
   type DeviceBinding,
+  type TenderKind,
 } from "./device-session.js";
 import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
@@ -949,11 +949,11 @@ function mountCourseVerb(
   );
 }
 
-/** Cash needs the profile's `take-cash`; a card taken here, never on a connected reader, needs its
- * `hand-keyed-card-payment`. */
-function assertTakesTender(device: DeviceBinding, tender: TillTender | undefined): void {
-  if (tender?.method === "cash") assertTakesCash(device);
-  if (tender?.method === "card") assertProfileAction(device, "hand-keyed-card-payment");
+/** A till tender's card is taken here, never on a connected reader. */
+function tillTenderKind(tender: TillTender | undefined): TenderKind | undefined {
+  if (tender?.method === "cash") return "cash";
+  if (tender?.method === "card") return "hand-keyed-card";
+  return undefined;
 }
 
 /** A kitchen display cannot open a shift session. */
@@ -1165,7 +1165,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           const profile = await getDeviceProfile(tx, device.deviceProfileId);
           capabilities = device.capabilities;
           inactivityTimeoutSeconds = profile?.inactivityTimeoutSeconds ?? null;
-          startingScreen = await readProfileStartingScreen(tx, device.deviceProfileId);
+          startingScreen = profile?.startingScreen ?? null;
           let assigned: CanvasDef | undefined;
           if (profile?.canvasId != null) {
             assigned = (await getCanvas(tx, profile.canvasId))?.definition;
@@ -1500,7 +1500,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       }
       // The tender first, so a refused cash payment answers `device.cash_not_allowed` whatever else
       // the profile lacks; both before the zone, so a profile that cannot sell is told so.
-      assertTakesTender(session.device, body.tender);
+      assertTakesTender(session.device, tillTenderKind(body.tender));
       assertProfileAction(session.device, "take-orders");
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
@@ -1530,7 +1530,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const device = session.device;
-      await assertDeviceCapability(deps, c, "integrated-card-payment", "pay", device);
+      assertTakesTender(device, "reader-card");
       assertProfileAction(device, "take-orders");
       const body = await readJsonBody<IntegratedPayRequest>(c);
       // Screened before the provider guard, so a malformed body is a 400 whatever the card config.
@@ -2099,7 +2099,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{ tender: TillTender }>(c);
-      assertTakesTender(session.device, body.tender);
+      assertTakesTender(session.device, tillTenderKind(body.tender));
       const result = await collectOrder(
         { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         cfg,

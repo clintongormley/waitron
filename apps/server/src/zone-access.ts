@@ -46,12 +46,14 @@ export async function assertSubjectZones(
   profileId: string,
   subjects: readonly ZoneSubject[],
 ): Promise<void> {
-  const zones = new Set<string>();
+  const scope = await readZoneScope(tx, cfg, profileId);
+  if (scope === null) return;
   for (const subject of subjects) {
     const zoneId = await subjectZone(tx, cfg, subject);
-    if (zoneId !== null) zones.add(zoneId);
+    // venue-service raises the refusal: it re-reads the profile's zones and refuses this one.
+    if (zoneId !== null && !scope.has(zoneId))
+      await VENUE_SERVICE.assertProfileZone(tx, cfg, profileId, zoneId);
   }
-  for (const zoneId of zones) await VENUE_SERVICE.assertProfileZone(tx, cfg, profileId, zoneId);
 }
 
 /** {@link assertSubjectZones} for the session's profile, first thing in the route's own transaction. */

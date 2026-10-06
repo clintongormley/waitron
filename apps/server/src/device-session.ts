@@ -392,3 +392,21 @@ export function assertTakesCash(device: DeviceBinding | null): void {
     throw new AppError("device.cash_not_allowed", {});
   }
 }
+
+/** How money is taken or given back: cash, a card keyed on a separate terminal, or a card on a
+ * connected reader. */
+export type TenderKind = "cash" | "hand-keyed-card" | "reader-card";
+
+/**
+ * Refuses a tender the device's profile does not take: cash as {@link assertTakesCash}, a hand-keyed
+ * card without `hand-keyed-card-payment`, a reader card without `integrated-card-payment` (refused
+ * as action `pay`). No tender, or no device, passes.
+ */
+export function assertTakesTender(
+  device: DeviceBinding | null,
+  tender: TenderKind | undefined,
+): void {
+  if (tender === "cash") assertTakesCash(device);
+  if (tender === "hand-keyed-card") assertProfileAction(device, "hand-keyed-card-payment");
+  if (tender === "reader-card") assertProfileAction(device, "integrated-card-payment", "pay");
+}

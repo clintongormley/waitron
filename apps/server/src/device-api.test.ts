@@ -23,7 +23,7 @@ import type { TillConfig } from "./till-config.js";
 import { createStation } from "./kitchen.js";
 import { parkOrder, placeOrder } from "./working-order.js";
 import { mountDeviceApi } from "./device-api.js";
-import { listApprovedProfiles, switchActiveProfile } from "./device.js";
+import { readApprovedProfiles, switchActiveProfile } from "./device.js";
 import {
   ENROL_RATE_MAX,
   ENROL_RATE_WINDOW_MS,
@@ -2376,7 +2376,8 @@ describe("a device's approved profiles and switching its active one", () => {
   type Device = { deviceId: string; jar: string; profileId: string };
 
   async function approved(deviceId: string): Promise<string[]> {
-    return withTransaction(suite.db, (tx) => listApprovedProfiles(tx, deviceId));
+    const profiles = await withTransaction(suite.db, (tx) => readApprovedProfiles(tx, deviceId));
+    return profiles.map((profile) => profile.id);
   }
 
   /** The manager's edit, as the dashboard sends it: every stored field plus `changes`. */
