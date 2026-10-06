@@ -6,7 +6,16 @@ import {
   type PublicKeyCredentialCreationOptionsJSON,
 } from "@simplewebauthn/browser";
 import { toDataURL } from "qrcode";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  submitOnEnter,
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
+} from "@waitron/ui";
+import { sameValue } from "../widgets/product-editor-model.js";
 import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -236,6 +245,60 @@ export class ProfileScreen extends LitElement {
   @state() private googleConfigured = false;
   @state() private privacyNoticeUrl = "";
 
+  #operation = 0;
+  #scope?: DraftScope<Record<Field, string>>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    (!this.#scope ||
+      (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded");
+
+  #draftValue(fields = this.fields): Record<Field, string> {
+    const normalized = {
+      ...fields,
+      displayName: fields.displayName.trim(),
+      firstNames: fields.firstNames.trim(),
+      lastNames: fields.lastNames.trim(),
+      telephone: fields.telephone.trim(),
+      email: fields.email.trim(),
+      passkeyName: fields.passkeyName.trim(),
+    };
+    const value = emptyFields();
+    for (const field of this.#shownFields()) value[field] = normalized[field];
+    return value;
+  }
+
+  #registerDraft(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    if (this.mode === "view" || this.mode === "codes") return;
+    this.#leave = leaveCoordinatorFor(this);
+    this.#scope = this.#leave?.register<Record<Field, string>>({
+      id: this,
+      current: () => this.#draftValue(),
+      snapshot: (value) => ({ ...value }),
+      equal: sameValue,
+      restore: (value) => {
+        this.fields = { ...value };
+      },
+    });
+  }
+
+  override disconnectedCallback(): void {
+    this.#operation++;
+    this.busy = false;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    this.fields = emptyFields();
+    this.totpSetup = null;
+    this.totpQr = "";
+    this.recoveryCodes = [];
+    this.mode = "view";
+    super.disconnectedCallback();
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
     // dashboard-app.ts renders this screen's Edit button, so it needs the active tab, the initial one
@@ -304,6 +367,7 @@ export class ProfileScreen extends LitElement {
       this.#showError(codeMessage(codeOf(error)), true);
   }
   #edit(mode: Mode, id = ""): void {
+    if (this.busy) return;
     this.mode = mode;
     this.removingId = id;
     this.attempted = false;
@@ -324,12 +388,23 @@ export class ProfileScreen extends LitElement {
       email: this.profile!.email ?? "",
       locale: this.profile!.locale ?? this.venueLocale,
     };
+    this.#registerDraft();
   }
   // A native <dialog>'s "close" event arrives after the change that caused it. This flag tells the
   // @wt-close handler that close was already applied, so a late one cannot undo a newer #edit().
   #closingModal = false;
-  #closeModal(): void {
+  async #closeModal(): Promise<void> {
+    if (this.busy) return;
+    if (this.#scope) await this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    else {
+      this.#closingModal = true;
+      this.#edit("view");
+    }
+  }
+  #closeSaved(): void {
+    this.shadowRoot!.querySelector("wt-modal")!.closeAfter("saved");
     this.#closingModal = true;
+    this.busy = false;
     this.#edit("view");
   }
   private get needsCredentials(): boolean {
@@ -349,6 +424,7 @@ export class ProfileScreen extends LitElement {
 
   #changeLocale(event: CustomEvent<{ value: string }>): void {
     this.fields = { ...this.fields, locale: event.detail.value };
+    this.#scope?.changed();
     if ("locale" in this.requestRefused) this.requestRefused = {};
   }
   #input(
@@ -363,6 +439,7 @@ export class ProfileScreen extends LitElement {
       name=${field}
       label=${t(label)}
       ?required=${required}
+      ?disabled=${this.busy}
       type=${type === "password" && revealed ? "text" : type}
       autocomplete=${autocomplete}
       .value=${this.fields[field]}
@@ -393,6 +470,7 @@ export class ProfileScreen extends LitElement {
             ),
           };
         }
+        this.#scope?.changed();
       }}
     >
       ${
@@ -508,6 +586,10 @@ export class ProfileScreen extends LitElement {
   async #save(): Promise<void> {
     if (this.busy) return;
     const f = this.fields;
+    const operation = ++this.#operation;
+    const scope = this.#scope;
+    const submitted = this.#draftValue(f);
+    const active = () => this.isConnected && this.#operation === operation && this.#scope === scope;
     this.attempted = true;
     this.refused = {};
     this.requestRefused = {};
@@ -537,28 +619,45 @@ export class ProfileScreen extends LitElement {
       else if (this.mode === "remove") await this.api.removePasskey(this.removingId, credentials);
       else if (this.mode === "totp" && this.totpSetup === null) {
         const setup = await this.api.beginTotp(credentials);
-        this.totpQr = await toDataURL(setup.uri, {
+        if (!active()) return;
+        const qr = await toDataURL(setup.uri, {
           errorCorrectionLevel: "M",
           margin: 1,
           width: 240,
         });
+        if (!active()) return;
+        scope?.commit(submitted);
+        this.totpQr = qr;
         this.totpSetup = setup;
         this.fields = { ...this.fields, currentPassword: "", totp: "" };
+        this.#registerDraft();
         this.attempted = false;
         return;
       } else if (this.mode === "totp") {
         const result = await this.api.finishTotp(this.totpSetup!.enrollmentId, f.setupCode);
+        if (!active()) return;
+        scope?.commit(submitted);
+        this.fields = emptyFields();
         this.recoveryCodes = result.codes;
         this.mode = "codes";
+        this.#registerDraft();
         await this.#load();
         return;
       } else if (this.mode === "recovery") {
         const result = await this.api.regenerateRecoveryCodes(credentials);
+        if (!active()) return;
+        scope?.commit(submitted);
+        this.fields = emptyFields();
         this.recoveryCodes = result.codes;
         this.mode = "codes";
+        this.#registerDraft();
         return;
       } else if (this.mode === "google") {
         const { authorizationUrl } = await this.api.beginGoogleLink(credentials);
+        if (!active()) return;
+        scope?.commit(submitted);
+        if (scope?.isDirty()) return;
+        this.#closeSaved();
         this.navigate(authorizationUrl);
         return;
       } else if (this.mode === "disable-totp") {
@@ -566,17 +665,19 @@ export class ProfileScreen extends LitElement {
       } else if (this.mode === "unlink-google") {
         await this.api.unlinkGoogle(credentials);
       } else if (this.mode === "passkey") {
-        await this.#addPasskey(credentials);
+        await this.#addPasskey(credentials, f.passkeyName.trim(), active);
       } else if (this.mode === "email") {
         await this.api.confirmProfileEmail(f.setupCode);
       }
+      if (!active()) return;
       if (this.mode === "passkey" || this.mode === "remove") void signalAcceptedPasskeys(this.api);
-      if (!this.isConnected) return;
-      this.#closeModal();
+      scope?.commit(submitted);
+      if (!scope?.isDirty()) this.#closeSaved();
       this.saved = true;
       await this.#load();
       this.dispatchEvent(new CustomEvent("profile-updated", { bubbles: true, composed: true }));
     } catch (error) {
+      if (!active()) return;
       // Classified first, so no WebAuthn library `.code` reaches codeOf and degrades to the generic
       // banner.
       if (this.mode === "passkey") {
@@ -630,7 +731,7 @@ export class ProfileScreen extends LitElement {
         this.#focusFirstInvalid();
       } else this.#showError(message);
     } finally {
-      this.busy = false;
+      if (this.#operation === operation) this.busy = false;
     }
   }
   #downloadRecoveryCodes(): void {
@@ -642,15 +743,21 @@ export class ProfileScreen extends LitElement {
     link.click();
     URL.revokeObjectURL(url);
   }
-  async #addPasskey(credentials: { currentPassword?: string; totp?: string }): Promise<void> {
+  async #addPasskey(
+    credentials: { currentPassword?: string; totp?: string },
+    name: string,
+    active: () => boolean,
+  ): Promise<void> {
     const { challengeHandle, options } = await this.api.passkeyRegisterOptions(credentials);
+    if (!active()) return;
     const response = await startRegistration({
       optionsJSON: options as unknown as PublicKeyCredentialCreationOptionsJSON,
     });
+    if (!active()) return;
     await this.api.passkeyRegisterVerify({
       challengeHandle,
       response,
-      name: this.fields.passkeyName.trim(),
+      name,
     });
   }
   #modalHeading(): string {
@@ -927,6 +1034,7 @@ export class ProfileScreen extends LitElement {
                 name="locale"
                 label=${t("profile.language")}
                 required
+                ?disabled=${this.busy}
                 search="auto"
                 searchPlaceholder=${t("categories.combobox_search")}
                 noResultsLabel=${t("categories.combobox_no_results")}
@@ -980,6 +1088,8 @@ export class ProfileScreen extends LitElement {
         size=${this.mode === "details" || this.mode === "totp" ? "standard" : "compact"}
         heading=${this.#modalHeading()}
         .open=${this.mode !== "view"}
+        .dismissible=${!this.busy}
+        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
         @wt-close=${(e: Event) => {
           // wt-close is composed: without this guard a nested modal's close would close this one.
           if (e.target !== e.currentTarget) return;
@@ -998,7 +1108,7 @@ export class ProfileScreen extends LitElement {
             slot="cancel"
             data-test="cancel"
             ?disabled=${this.busy}
-            @click=${() => this.#closeModal()}
+            @click=${() => void this.#closeModal()}
             >${this.mode === "codes" ? t("action.done") : t("action.cancel")}</wt-button
           >
           ${

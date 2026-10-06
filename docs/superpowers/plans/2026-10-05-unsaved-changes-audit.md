@@ -222,4 +222,18 @@ leave that editor's values, baseline and refusal message alone.
 `apps/dashboard/src/screens/staff-edit.unsaved.test.ts` exercise those owners in Chromium.
 Staff reset/suspend confirmations contain no secret-entry fields; the earlier staff-row
 credential-subform classification is superseded by the current source. Profile's credential
-forms, other modal owners and all page/navigation owners remain pending.
+modal forms are wired on the W69 branch as of 2026-10-06. Other modal owners and all
+page/navigation owners remain pending.
+
+### Profile modal implementation checkpoint — 2026-10-06
+
+`profile-screen` registers normalized details and exact credential inputs per editor opening.
+Cancel/native Escape use its scoped decision; changed/reverted fields update unload handling.
+Writes commit the captured submission before refresh. A later delivered detail or passkey-name
+edit stays dirty. The authenticator's proof and code stages commit separately; recovery-code
+output is exempt. Google proof disposes its scope before redirect. Disconnect clears passwords,
+proofs and authenticator/recovery output, and invalidates outstanding write replies and ceremonies.
+
+The real-controller cases are in `apps/dashboard/src/screens/profile-screen.unsaved.test.ts`.
+The existing Profile suite remains unchanged. Outer Profile dismissal and page/history navigation
+remain Task 5 work; this checkpoint covers the inner modal owners only.

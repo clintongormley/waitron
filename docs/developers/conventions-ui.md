@@ -759,4 +759,12 @@ different person do not mark or commit the currently edited person's form in the
 
 The current Staff screen's reset/suspend dialogs contain no credential-entry fields. The audit's
 earlier staff credential-subform description is superseded; Profile owns its password/PIN/TOTP
-inputs. Its forms and the page/navigation rollout remain pending.
+inputs. Its modal forms are wired on W69; the page/navigation rollout remains pending.
+
+Profile registers each detail/credential editor after its defaults. It commits the submitted
+snapshot before refresh and retains later delivered input. Authenticator proof/code stages commit
+independently; recovery-code output needs no scope. A successful Google proof disposes its scope
+before redirect, and disconnect clears sensitive input/output and invalidates in-flight replies.
+Focused command: `pnpm --filter @waitron/dashboard exec vitest run
+src/screens/profile-screen.unsaved.test.ts src/screens/profile-screen.test.ts`. Outer Profile
+navigation remains separate Task 5 work.

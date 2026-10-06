@@ -1502,6 +1502,9 @@ Add/Remove/Reorder actions stay exempt. Layout create/duplicate/rename dialogs c
 names and commit their submitted name before refresh. Include menu writes immediately on selection
 and stays exempt. Add/Edit staff compare their normalized submitted details and role/status.
 Their writes commit before refresh; resending an invitation leaves an edited staff form unsaved.
+Profile detail and credential modals also use the registry. Successful writes commit before
+refresh; independently accepted authenticator steps and the Google redirect clear their own
+scope. Recovery-code output is exempt, and disconnect clears sensitive local values.
 The remaining form owners stay tracked in the W69
 backlog entry. Page navigation is a separate part of that
 rollout. The coordinator's dirty-only unload registration

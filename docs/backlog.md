@@ -1223,9 +1223,14 @@ refresh; newer delivered input remains dirty. Resending an invitation does not c
 an edited staff form. Late successful/refused results for another person leave the current editor
 alone. Focused cases are in `person-edit.unsaved.test.ts` and `staff-edit.unsaved.test.ts` under
 `apps/dashboard/src/`. The staff reset/suspend confirmations contain no credential fields and
-remain command exemptions; credential inputs live on Profile. Profile credentials, other audited
-modal owners and page/navigation protection remain to be wired. Keep automatic saves on their
-existing paths.
+remain command exemptions; credential inputs live on Profile. Profile detail and credential
+modals now protect staged values through Cancel, native Escape and dirty-only unload handling.
+Their successful writes commit before refresh, with newer delivered input retained. Authenticator
+proof/code stages and Google redirect commit independently; recovery-code output stays exempt.
+Disconnect clears sensitive values, and departed replies cannot reopen forms or release a newer
+write. Focused cases are in `apps/dashboard/src/screens/profile-screen.unsaved.test.ts` alongside
+the unchanged Profile suite. Other audited modal owners and page/navigation protection remain
+to be wired. Keep automatic saves on their existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
