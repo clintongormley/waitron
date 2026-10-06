@@ -1,3 +1,5 @@
+import { selectOrderInvoice } from "./invoice-selection.js";
+import { withReceiptListPrices } from "./receipt-lines.js";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   billPaymentLines,
@@ -26,7 +28,7 @@ import {
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
-import { recordSale, refuseOverSimplifiedLimit, settleSale } from "@waitron/core";
+import { recordSale, settleSale } from "@waitron/core";
 import type { SettleSaleTender } from "@waitron/core";
 import { VENUE_SERVICE } from "./modules.js";
 import {
@@ -76,6 +78,7 @@ import {
   priceStoredOrder,
   priceStoredOrderForIssuance,
   readInvoiceNumber,
+  refuseUnavailableFullInvoice,
   refuseOrderPaymentMarked,
   refuseRefundInProgress,
   storedOrderTotal,
@@ -630,7 +633,10 @@ async function issueWhenFullyPaid(
 ): Promise<{ invoice: TillSaleResult | null; total?: Decimal }> {
   const notYet = { invoice: null, total: options.total };
   const [order] = await tx
-    .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+    .select({
+      status: workingOrders.status,
+      partyId: workingOrders.partyId,
+    })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
   if (order?.status !== "open") return notYet;
@@ -670,14 +676,15 @@ async function issueWhenFullyPaid(
   // Deferred, then settled with the bill's tenders in this transaction: the filed record is the one
   // an immediate sale files, and settlement is what writes each tender's bill payment.
   const language = await readReceiptLanguage(tx, cfg.locationId);
+  const selected = await selectOrderInvoice(tx, deps.backend, cfg, workingOrderId, priced.total);
   const { saleId, fiscal } = await recordSale(tx, deps.backend, {
     origin: cfg.origin,
     nodeId: cfg.nodeId,
-    seriesId: cfg.seriesId,
+    ...selected.sale,
     workingOrderId: brandWorkingOrderId(workingOrderId),
     ...language,
     total: priced.total,
-    lines: priced.lines,
+    lines: withReceiptListPrices(priced.lines, stored.identities),
     vatBreakdown: priced.vatBreakdown,
     clock,
     operatorId,
@@ -725,16 +732,18 @@ async function issueWhenFullyPaid(
     );
   }
 
-  const ticket: TillSaleResult = {
+  const ticket = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),
     receiptHeader: (await VENUE_SERVICE.readSaleReceiptHeader(tx, saleId)) ?? undefined,
+    invoiceType: selected.invoiceType,
+    ...(selected.recipient === undefined ? {} : { recipient: selected.recipient }),
     ...receiptOrder,
     locale: language.locale,
     invoiceNumber: await readInvoiceNumber(tx, saleId),
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
     vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-    ...(await receiptLines(tx, workingOrderId, priced, stored.identities)),
+    ...(await receiptLines(tx, workingOrderId, priced, stored.identities, saleId)),
     tender: await readTenderBlock(tx, cfg, saleId, workingOrderId),
     payments: await readBillTenderLines(tx, saleId),
     ...receiptQr(deps.backend, fiscal.verificationUrl),
@@ -987,6 +996,7 @@ export async function findSubmission(
  */
 async function beginBillPayment(
   tx: Transaction,
+  backend: TillSaleDeps["backend"],
   cfg: DeviceRequestConfig,
   workingOrderId: string,
   req: BillPaymentRequest,
@@ -1007,13 +1017,13 @@ async function beginBillPayment(
   }
 
   await requireOpenBill(tx, workingOrderId);
+  await refuseUnavailableFullInvoice(tx, workingOrderId);
   await refuseRefundInProgress(tx, [workingOrderId]);
   await refuseOrderPaymentMarked(tx, [workingOrderId]);
   const held = await readPaymentMoney(tx, [workingOrderId]);
   const { request, items } = await allocationRequestFor(tx, workingOrderId, req, held);
   const total = await storedOrderTotal(tx, workingOrderId);
-  // Before any money is taken: the invoice this bill pays towards could never be issued.
-  refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, total);
+  await selectOrderInvoice(tx, backend, cfg, workingOrderId, total);
   const allocation = confirmAllocation(
     fundsOf(workingOrderId, total, held),
     request,
@@ -1063,6 +1073,7 @@ export async function takeBillPayment(
     const receivedAt = deps.clock.now().instant;
     const begun = await beginBillPayment(
       tx,
+      deps.backend,
       cfg,
       workingOrderId,
       req,
@@ -1208,6 +1219,7 @@ export async function takeReaderBillPayment(
     const begun = await withTransaction(deps.db, async (tx) => {
       const started = await beginBillPayment(
         tx,
+        deps.backend,
         cfg,
         workingOrderId,
         req,

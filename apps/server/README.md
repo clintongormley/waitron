@@ -119,7 +119,7 @@ for the empty-setup, both history controls and the real boot refusal that preser
 ## Provisioning a venue
 
 `waitron-provision venue` creates the business rows a sellable venue needs — the taxpayer row, a
-location, a node, and a standard plus a rectificative invoice series — and runs every enabled module's
+location, a node, and standard, full and rectificative invoice series — and runs every enabled module's
 seed for that node, the fiscal one registering it as a Veri\*Factu SIF, in one transaction. It replaced the retired `apps/server/sql/bootstrap-tenant.sql` (see "What actually
 writes the stamp" above for why that file was removed).
 
@@ -146,11 +146,12 @@ WAITRON_ADMIN_PIN=1234 \
 WAITRON_ADMIN_PASSWORD='choose-a-strong-one' \
   node packages/provisioning/dist/bin.js venue \
     --country ES --tax-id B12345678 --legal-name 'Deli SL' \
+    --taxpayer-domicile 'Calle Fiscal 8, 28013 Madrid' \
     --location-name Mostrador --territory ES-common --locale es-ES \
     --operation-description 'Venta en establecimiento' \
     --address-line1 'Calle Mayor 1' --postal-code 28001 --city Madrid --province Madrid \
     --time-zone Europe/Madrid --day-cutover 06:00 \
-    --series-code A --rectificative-code R \
+    --series-code A --full-series-code FF --rectificative-code R \
     --admin-name 'Owner' --admin-email 'owner@example.com' \
     --yes
 ```

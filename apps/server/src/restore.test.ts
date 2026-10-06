@@ -64,6 +64,7 @@ const suite = useVenueDb({
 const T = {
   locationId: "c0000000-0000-4000-8000-000000000002",
   seriesId: "c0000000-0000-4000-8000-000000000004",
+  fullSeriesId: "c0000000-0000-4000-8000-000000000005",
   nodeId: "c0000000-0000-4000-8000-000000000008",
 };
 const TRADING_ENV = formatEnvFile({
@@ -91,17 +92,20 @@ beforeAll(async () => {
   });
   await db.insert(nodes).values({ id: T.nodeId, locationId: T.locationId, name: "Node 1" });
   await db.insert(invoiceSeries).values({ id: T.seriesId, nodeId: T.nodeId, code: "FA" });
+  await db
+    .insert(invoiceSeries)
+    .values({ id: T.fullSeriesId, nodeId: T.nodeId, code: "FF", purpose: "full" });
 });
 
-/** Re-arm the node's series between tests: FA live, anything a hook opened removed. */
+/** Re-arm the node's standard and full series; remove anything a hook opened. */
 async function resetSeries(): Promise<void> {
   await suite.db.execute(
-    sql`delete from invoice_series where node_id = ${T.nodeId} and id <> ${T.seriesId}`,
+    sql`delete from invoice_series where node_id = ${T.nodeId} and id not in (${T.seriesId}, ${T.fullSeriesId})`,
   );
   await suite.db
     .update(invoiceSeries)
     .set({ retiredAt: null })
-    .where(eq(invoiceSeries.id, T.seriesId));
+    .where(sql`${invoiceSeries.id} in (${T.seriesId}, ${T.fullSeriesId})`);
 }
 
 /** The node's series as the assertions below read them, oldest code first. */
@@ -755,7 +759,7 @@ describe("restore hooks (identity phase)", () => {
   useTempDirs("waitron-hooks-");
   beforeEach(resetSeries);
 
-  it("restores FA standard and FA-1 rectificative through the real fiscal hook", async () => {
+  it("restores standard, full and rectificative series through the real fiscal hook", async () => {
     await withTransaction(suite.db, async (tx) => {
       const sif = await registerSif(tx, {
         ...T,
@@ -778,6 +782,7 @@ describe("restore hooks (identity phase)", () => {
     expect(rows.map(({ code, purpose }) => ({ code, purpose }))).toEqual([
       { code: `FA-${sif.numeroInstalacion}`, purpose: "standard" },
       { code: `FA-1-${sif.numeroInstalacion}`, purpose: "rectificative" },
+      { code: `FF-${sif.numeroInstalacion}`, purpose: "full" },
     ]);
     expect(
       parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8")).WAITRON_TILL_SERIES_ID,
@@ -793,7 +798,10 @@ describe("restore hooks (identity phase)", () => {
       modules: withHooks({
         "fiscal-verifactu": async () => ({
           report: "ok",
-          series: [{ code: "FA-9", purpose: "standard" }],
+          series: [
+            { code: "FA-9", purpose: "standard" },
+            { code: "FF-9", purpose: "full" },
+          ],
         }),
       }),
     });
@@ -955,7 +963,10 @@ describe("restore hooks (identity phase)", () => {
   it("series returned → old retired + new opened in the SAME transaction, trading.env rewritten in exactly one key", async () => {
     const hook: RestoreHook = async () => ({
       report: "ok",
-      series: [{ code: "FA-9", purpose: "standard" }],
+      series: [
+        { code: "FA-9", purpose: "standard" },
+        { code: "FF-9", purpose: "full" },
+      ],
     });
     await restoreFromArtifact(
       makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": hook }) }),
@@ -963,6 +974,8 @@ describe("restore hooks (identity phase)", () => {
     expect(await seriesOfNode()).toEqual([
       { code: "FA", retired: true, next: 1 },
       { code: "FA-9", retired: false, next: 1 },
+      { code: "FF", retired: true, next: 1 },
+      { code: "FF-9", retired: false, next: 1 },
     ]);
     const written = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
     const original = parseEnvFile(TRADING_ENV);
@@ -990,6 +1003,20 @@ describe("restore hooks (identity phase)", () => {
     ).rejects.toMatchObject({
       code: "restore.hook_failed",
       params: { module: "core", code: "series.no_standard_for_node" },
+    });
+    await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("refuses a restored identity with no full invoice series before publishing trading.env", async () => {
+    await suite.db
+      .update(invoiceSeries)
+      .set({ retiredAt: new Date() })
+      .where(eq(invoiceSeries.id, T.fullSeriesId));
+    await expect(
+      restoreFromArtifact(makeRestoreDeps({ modules: withHooks({}) })),
+    ).rejects.toMatchObject({
+      code: "restore.hook_failed",
+      params: { module: "core", code: "series.no_full_for_node" },
     });
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
@@ -1030,7 +1057,10 @@ describe("restore hooks (identity phase)", () => {
     await expect(
       restoreFromArtifact(makeRestoreDeps({ modules: withHooks({ "fiscal-verifactu": hook }) })),
     ).rejects.toThrow(/more than one standard series/);
-    expect(await seriesOfNode()).toEqual([{ code: "FA", retired: false, next: 1 }]);
+    expect(await seriesOfNode()).toEqual([
+      { code: "FA", retired: false, next: 1 },
+      { code: "FF", retired: false, next: 1 },
+    ]);
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -1047,7 +1077,10 @@ describe("restore hooks (identity phase)", () => {
       code: "restore.hook_failed",
       params: { module: "fiscal-verifactu", code: "series.code_collision" },
     });
-    expect(await seriesOfNode()).toEqual([{ code: "FA", retired: false, next: 1 }]);
+    expect(await seriesOfNode()).toEqual([
+      { code: "FA", retired: false, next: 1 },
+      { code: "FF", retired: false, next: 1 },
+    ]);
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
     await expect(stat(join(stateDir, "secrets.env"))).rejects.toMatchObject({ code: "ENOENT" });
   });

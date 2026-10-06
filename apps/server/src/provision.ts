@@ -51,7 +51,7 @@ export interface ProvisionDeps {
 /**
  * Recover the identifiers minted by a matching persisted setup operation. This is deliberately
  * narrower than a general "find venue" query: first boot creates one location and node for a
- * previously empty tenant, and both invoice series must still match the submitted codes. A shape
+ * previously empty tenant, and all invoice series must still match the submitted codes. A shape
  * outside those invariants is refused instead of guessing which fiscal identity to publish.
  */
 export async function recoverProvisionedVenue(
@@ -80,16 +80,24 @@ export async function recoverProvisionedVenue(
   const standard = series.rows.find(
     (item) => item.purpose === "standard" && item.code === req.venue.seriesCode,
   );
+  const full = series.rows.find(
+    (item) => item.purpose === "full" && item.code === (req.venue.fullSeriesCode ?? "FF"),
+  );
   const rectificative = series.rows.find(
     (item) => item.purpose === "rectificative" && item.code === req.venue.rectificativeSeriesCode,
   );
-  if (series.rows.length !== 2 || standard === undefined || rectificative === undefined) {
+  if (
+    series.rows.length !== 3 ||
+    standard === undefined ||
+    full === undefined ||
+    rectificative === undefined
+  ) {
     throw new AppError("setup.already_provisioned", {});
   }
   return {
     locationId: row.locationId,
     nodeId: row.nodeId,
-    seriesIds: [standard.id, rectificative.id],
+    seriesIds: [standard.id, full.id, rectificative.id],
     seeded: [],
   };
 }

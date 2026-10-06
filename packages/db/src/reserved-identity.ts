@@ -33,7 +33,7 @@ export async function insertReservedNodeTx(
 export interface ReservedSeriesInput {
   nodeId: string;
   code: string;
-  purpose: string; // "standard" | "rectificative"
+  purpose: string;
 }
 
 /**
@@ -76,7 +76,7 @@ export function readNodeEndorsement(db: Database, nodeId: string): Promise<Endor
 export async function readLiveSeriesIdTx(
   tx: Transaction,
   nodeId: string,
-  purpose: "standard" | "rectificative",
+  purpose: "standard" | "full" | "rectificative",
 ): Promise<string> {
   const rows = await tx
     .select({ id: invoiceSeries.id })
@@ -93,7 +93,9 @@ export async function readLiveSeriesIdTx(
   if (row === undefined) {
     throw purpose === "standard"
       ? new AppError("series.no_standard_for_node", { nodeId })
-      : new AppError("series.no_rectificative_for_node", { nodeId });
+      : purpose === "full"
+        ? new AppError("series.no_full_for_node", { nodeId })
+        : new AppError("series.no_rectificative_for_node", { nodeId });
   }
   if (extra !== undefined) {
     throw new Error(`invoice_series: node ${nodeId} has more than one ${purpose} series`);

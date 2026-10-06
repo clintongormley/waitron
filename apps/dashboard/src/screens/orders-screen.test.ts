@@ -18,6 +18,7 @@ const ROW: OrderRowDto = {
   counter: false,
   saleId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
   invoiceNumber: "A/12",
+  invoiceType: "F2",
   creditNotes: ["R/2"],
   status: "left_without_paying",
   credited: "in_part",
@@ -125,6 +126,24 @@ describe("dashboard Orders", () => {
     expect(
       [...invoice.querySelectorAll("span[part=mark]")].map((mark) => mark.textContent),
     ).toEqual(["R/2"]);
+  });
+
+  it.each([
+    ["F1", "Full invoice"],
+    ["F2", "Simplified invoice"],
+  ])("labels a filed %s beside its number", async (invoiceType, label) => {
+    const api = stubApi({
+      listOrderPages: vi.fn().mockResolvedValue({
+        ...PAGE,
+        rows: [{ ...ROW, invoiceType }],
+      }),
+    });
+    const { el } = await loaded(api);
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const invoice = table.shadowRoot!.querySelectorAll("tbody tr td")[3]!;
+    expect(invoice.textContent).toContain("A/12");
+    expect(invoice.textContent).toContain(label);
   });
 
   it("keeps dates when choosing Unpaid and writes them into the address", async () => {
@@ -286,7 +305,7 @@ describe("dashboard Orders", () => {
 
   it.each([
     ["an invoice without a bill", { ...ROW, kind: "sale" as const }],
-    ["a bill without an invoice", { ...ROW, invoiceNumber: null }],
+    ["a bill without an invoice", { ...ROW, invoiceNumber: null, invoiceType: null }],
   ])("does not offer reprint for %s", async (_name, row) => {
     const api = stubApi({ listOrderPages: vi.fn().mockResolvedValue({ ...PAGE, rows: [row] }) });
     const { el } = await loaded(api);

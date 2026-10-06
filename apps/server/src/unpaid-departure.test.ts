@@ -37,6 +37,7 @@ import {
   type Answer,
   type BillVenue,
 } from "./testing/bill-venue.js";
+import { readOrderRevision, setOrderInvoiceChoice } from "./working-order.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { mountTillApi } from "./till-api.js";
@@ -240,6 +241,33 @@ function nextInvoiceNumbers(): { id: string; next: number }[] {
 }
 
 describe("recording that a table left without paying", () => {
+  it("does not issue a saved full-invoice choice while original delivery is unavailable", async () => {
+    const party = await seatedWith(venue, "Botella tinto");
+    await setOrderInvoiceChoice(venue.db, venue.backend, venue.cfg, party.tabId, {
+      revision: await inTx(venue, (tx) => readOrderRevision(tx, party.tabId)),
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+    const before = nextInvoiceNumbers();
+
+    const answer = await depart(party.partyId, {
+      expectedPartyRevision: party.revision,
+      reason: REASON,
+    });
+
+    expect(answer).toEqual({
+      status: 409,
+      json: { code: "sale.full_invoice_unavailable", params: {} },
+    });
+    expect(nextInvoiceNumbers()).toEqual(before);
+    await expectNothingWritten(party.partyId, party.tabId);
+  });
+
   it("invoices the open bill in full, leaves it unpaid, records who and why, and frees the table", async () => {
     const party = await seatedWith(venue, "Botella tinto");
 

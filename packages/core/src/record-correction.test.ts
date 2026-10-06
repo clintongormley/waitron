@@ -612,6 +612,37 @@ describe("recordCorrection — a whole-invoice credit copies the invoice's own V
     expect((await backend.recordsFor(nodeId))[1]?.total).toBe("-0.55");
   });
 
+  it("refuses to credit a full invoice before spending a corrective number", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const [fullSeries] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "F", purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    suite.db.run(
+      sql`update tenants set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
+    );
+    const { saleId: originalId } = await sell(backend, {
+      seriesId: brandSeriesId(fullSeries!.id),
+      counterparty: { taxId: "12345678Z", legalName: "Ana García", countryCode: "ES" },
+      recipientAddress: "Calle Mayor 2, 28013 Madrid, España",
+      total: "0.55",
+      lines: [mosto],
+      vatBreakdown: [{ rate: decimal("21.00"), base: decimal("0.45"), tax: decimal("0.10") }],
+      settlement: {
+        kind: "immediate",
+        tenders: [{ method: "cash", amount: "0.55", tipAmount: "0.00", settledAt: BASE }],
+      },
+    });
+    const [reversed] = wholeCredit().lines;
+
+    await expectRefusedUnwritten(
+      backend,
+      originalId,
+      wholeCredit({ lines: [{ ...reversed!, correctsLineId: await soldLineId(originalId) }] }),
+      { code: "sale.correction_unsupported", params: { saleId: originalId } },
+    );
+  });
+
   it("still derives the breakdown from the lines when the whole invoice is not asked for", async () => {
     const backend = new FilesBreakdownsBackend(suite.db);
     const { saleId: originalId } = await sellMosto(backend);

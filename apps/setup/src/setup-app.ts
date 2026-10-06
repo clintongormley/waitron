@@ -41,7 +41,7 @@ import type { ConnectField } from "./screens/connect-screen.js";
 import type { BucketField, RestoredVenue } from "./screens/restore-bucket-screen.js";
 import type { RestoreField } from "./screens/restore-screen.js";
 import type { ResetField, ResetScreenOutcome } from "./screens/reset-screen.js";
-import { SERVER_FIELDS } from "./server-fields.js";
+import { VENUE_SERVER_FIELDS } from "./server-fields.js";
 import { LocaleChangeController } from "./i18n/locale-controller.js";
 import { matchBrowserLocale } from "./i18n/match-browser-locale.js";
 import type { StringKey } from "./i18n/strings.js";
@@ -702,7 +702,7 @@ export class SetupApp extends LitElement {
         const field = typeof error.params?.field === "string" ? error.params.field : undefined;
         // The same list the venue form marks and explains from, so a path can never route back to a
         // form that has nothing to say about it.
-        if (field !== undefined && Object.hasOwn(SERVER_FIELDS, field)) {
+        if (field !== undefined && Object.hasOwn(VENUE_SERVER_FIELDS, field)) {
           this.venueInvalidField = field;
           this.screen = "venue";
           return;

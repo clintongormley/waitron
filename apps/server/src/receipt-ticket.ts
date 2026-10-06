@@ -1,24 +1,7 @@
-/**
- * Formats a filed sale into the customer's ESC/POS receipt. Pure — no database, and no state beyond
- * a formatter cache — so the whole layout is pinned in a unit test.
- *
- * FISCAL SAFETY. It only reads an already-filed `TillSaleResult`: the paper is a re-render of the
- * filed record, never a second source of fiscal truth.
- *
- * THE PAPER IS A LEGAL DOCUMENT: a factura simplificada carrying the same mandated core as the
- * on-screen receipt (`apps/till/src/screens/till-ticket-view.ts`) — RD 1619/2012 art. 7.1, plus,
- * when the sale carries a verification link, its QR first (after any practice warning) with the
- * fiscal backend's own caption above it and legend under it (`FiscalBackend.receiptQrText`). The
- * Veri*Factu sources for that layout are in `docs/compliance/verifactu-findings.md` §14. The
- * owner's non-fiscal trim renders around that core and is never read by it.
- *
- * The receipt is issued in the INVOICE locale, not the operator's UI language: its fixed words come
- * from the country pack's table for that locale (`receiptLabelsFor`), and money, discount
- * percentages and date are formatted in it. Product names are looked up in `namesLocale`, which a
- * copy in another language sets to the language the sale was filed in. The helpers shared with the
- * till screen are copied rather than imported, because `apps/server` must not depend on
- * `apps/till`; keep them in step.
- */
+/** Print filed invoice facts; receipt trim never changes the fiscal record.
+ * Layout sources: docs/compliance/verifactu-findings.md §14.
+ * Keep copied display helpers in step with apps/till/src/screens/till-ticket-view.ts;
+ * the server cannot import the browser application. */
 import {
   QR_QUIET_ZONE,
   chooseQrDots,
@@ -44,14 +27,15 @@ import {
 } from "@waitron/shared";
 
 import { qrModules } from "./qr-matrix.js";
-import { groupByParent } from "./receipt-lines.js";
+import { groupByParent, trimQuantityForDisplay } from "./receipt-lines.js";
 import { formatMoney } from "./receipt-money.js";
-import type { ReceiptAdjustment, TillSaleResult } from "./till-sale.js";
+import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
 
 /** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
 export interface ReceiptIssuer {
   venueName: string;
   nif: string;
+  domicile?: string;
 }
 
 /**
@@ -117,20 +101,25 @@ function adjustmentLabel(
 }
 
 /** The issue timestamp formatted in the invoice locale — the fecha de expedición (art. 7.1.b). */
-function issueDate(iso: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(
-    new Date(iso),
-  );
+function issueDate(iso: string, locale: string, offsetMinutes?: number): string {
+  const instant = new Date(iso);
+  const date =
+    offsetMinutes === undefined ? instant : new Date(instant.getTime() + offsetMinutes * 60_000);
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+    ...(offsetMinutes === undefined ? {} : { timeZone: "UTC" }),
+  }).format(date);
 }
 
 /**
- * Render one filed sale — the customer's factura simplificada. Total: empty `lines`/`vatBreakdown`
+ * Render one filed sale. Empty `lines`/`vatBreakdown`
  * yield a header-and-total ticket, and an empty `result.qr` prints no QR block at all.
  * Every string goes through `prepareText` before it is measured, so no line exceeds the column count.
  */
 export function formatReceipt({
   result,
-  issuer,
+  issuer: currentIssuer,
   receiptHeader,
   receipt,
   venueAddress = [],
@@ -141,6 +130,7 @@ export function formatReceipt({
   simulated = false,
   duplicate = false,
 }: FormatReceiptInput): Uint8Array {
+  const issuer = result.issuer ?? currentIssuer;
   const locale = invoiceLocale;
   const label = receiptLabelsFor(locale);
   const b = esc(printer);
@@ -159,8 +149,21 @@ export function formatReceipt({
       b.line(line);
     }
   };
+  const netFacts = (line: TillSaleLine, unit: string, indent: number): void => {
+    if (result.invoiceType !== "F1" || line.net === undefined) return;
+    row(
+      label.netUnitPrice,
+      `${formatMoney(line.net.unitPrice, locale)} / ${trimQuantityForDisplay(line.net.priceQuantity)}${unit}`,
+      indent,
+    );
+    row(`${label.base} ${line.net.rate}%`, formatMoney(line.net.base, locale), indent);
+    if (line.net.tax !== undefined) {
+      row(`${label.vat} ${line.net.rate}%`, formatMoney(line.net.tax, locale), indent);
+    }
+  };
   const takenOff = (adjustment: ReceiptAdjustment, indent: number): void => {
-    const name = `${" ".repeat(indent)}${adjustmentLabel(adjustment, locale, label)}`;
+    const included = result.invoiceType === "F1" ? ` (${label.vatIncluded})` : "";
+    const name = `${" ".repeat(indent)}${adjustmentLabel(adjustment, locale, label)}${included}`;
     row(name, `-${formatMoney(adjustment.amount, locale)}`, indent);
   };
 
@@ -185,8 +188,8 @@ export function formatReceipt({
     b.line().align("left");
   }
 
-  // Issuer block, centred: the venue name and NIF (art. 7.1.d) among the non-fiscal logo, slogan
-  // and contact lines.
+  if (result.invoiceType === "F1") text(label.fullInvoice);
+
   b.align("center");
   if (logo !== null) b.bitmap(logo);
   const tradingName = receiptHeader?.tradingName?.trim();
@@ -195,19 +198,45 @@ export function formatReceipt({
   }
   text(issuer.venueName);
   if (receipt.headerSubtitle) text(receipt.headerSubtitle);
-  for (const line of venueAddress) text(line);
+  if (result.invoiceType !== "F1" || !issuer.domicile) {
+    for (const line of venueAddress) text(line);
+  }
   if (receipt.phone) text(`${label.phone} ${receipt.phone}`);
   if (receipt.email) text(receipt.email);
   if (duplicate) text(label.duplicate);
   text(`${label.nif}: ${issuer.nif}`);
+  if (result.invoiceType === "F1") {
+    if (issuer.domicile) text(issuer.domicile);
+  }
   b.line().align("left");
 
   text([result.orderLabel, `${label.order} ${result.orderNumber}`].filter(Boolean).join(" · "));
 
   // Metadata — serie+número (7.1.a) and fecha de expedición (7.1.b).
   row(label.invoice, result.invoiceNumber);
-  row(label.date, issueDate(result.issuedAt, locale));
+  row(
+    label.date,
+    issueDate(
+      result.issuedAt,
+      locale,
+      result.invoiceType === "F1" ? result.issuedOffsetMinutes : undefined,
+    ),
+  );
+  if (result.invoiceType === "F1" && result.operationDate !== undefined) {
+    row(
+      label.operationDate,
+      new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
+        new Date(`${result.operationDate}T00:00:00Z`),
+      ),
+    );
+  }
   b.line();
+  if (result.invoiceType === "F1" && result.recipient) {
+    text(result.recipient.legalName);
+    text(`${label.nif}: ${result.recipient.taxId}`);
+    text(result.recipient.address);
+    b.line();
+  }
 
   // Goods identification (7.1.e) — the FILED composition, grouped so each option prints indented beneath
   // its dish at its own delta. A dish name's continuation lines start under the name, not the quantity.
@@ -224,27 +253,48 @@ export function formatReceipt({
     // Cap that at 2 when the prefix is wider than half the paper: past there `wrapText`'s remaining room
     // shrinks to a few columns and the name wraps one glyph per line.
     const nameIndent = quantity.length > columns / 2 ? 2 : quantity.length;
-    row(
-      `${quantity}${lineName(dish.descriptions, namesLocale)}`,
-      formatMoney(dish.listGross ?? dish.gross, locale),
-      nameIndent,
-    );
+    if (result.invoiceType === "F1" && dish.net !== undefined) {
+      text(`${quantity}${lineName(dish.descriptions, namesLocale)}`, nameIndent);
+      netFacts(dish, unit, 2);
+    } else {
+      row(
+        `${quantity}${lineName(dish.descriptions, namesLocale)}`,
+        formatMoney(dish.listGross ?? dish.gross, locale),
+        nameIndent,
+      );
+    }
     // The dish's frozen answers to its options lists, each under the dish it was asked about. An
     // extras pick is NOT here: it is its own priced child line, printed by the loop below.
     for (const answer of customerOptionSnapshotLabels(dish.optionSnapshots ?? [], namesLocale)) {
       text(`  ${answer}`, 2);
     }
     for (const option of options) {
-      // A measured extra shows its filed amount; an Each extra shows the count per dish.
       const name = lineName(option.descriptions, namesLocale);
       let caption: string;
-      if (option.unitName == null || option.soldInEach === true) {
+      if (result.invoiceType === "F1") {
+        const unit =
+          option.unitName == null
+            ? ""
+            : ` ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`;
+        caption = `  ${name} ${option.quantity}${unit}`;
+      } else if (option.unitName == null || option.soldInEach === true) {
         const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
         caption = perDish > 1 ? `  ${name} x${perDish}` : `  ${name}`;
       } else {
         caption = `  ${name} ${option.quantity} ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`;
       }
-      row(caption, formatMoney(option.listGross ?? option.gross, locale), 2);
+      if (result.invoiceType === "F1" && option.net !== undefined) {
+        text(caption, 2);
+        netFacts(
+          option,
+          option.unitName == null
+            ? ""
+            : ` ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`,
+          2,
+        );
+      } else {
+        row(caption, formatMoney(option.listGross ?? option.gross, locale), 2);
+      }
     }
     for (const line of [dish, ...options]) {
       for (const adjustment of line.adjustments ?? []) takenOff(adjustment, 2);

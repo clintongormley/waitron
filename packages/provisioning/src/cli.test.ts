@@ -44,6 +44,8 @@ const VENUE_ARGS = [
   "B12345678",
   "--legal-name",
   "Acme SL",
+  "--taxpayer-domicile",
+  "Calle Fiscal 8, 28013 Madrid",
   "--location-name",
   "Centro",
   "--territory",
@@ -267,6 +269,7 @@ describe("runCli venue", () => {
       "create-node",
       "create-series",
       "create-series",
+      "create-series",
       "seed-module",
     ]);
 
@@ -371,6 +374,65 @@ describe("runCli venue", () => {
       'setup.request_invalid {"field":"rectificativeSeriesCode"}',
     );
     expect(h.applyVenue).not.toHaveBeenCalled();
+  });
+
+  it("passes a chosen full invoice series to the venue plan", async () => {
+    const h = harness({ env: VENUE_ENV, modules: verifactuModules });
+
+    const code = await runCli([...VENUE_ARGS, "--full-series-code", "F1", "--yes"], h.deps);
+
+    expect(code).toBe(0);
+    expect(h.applyVenue.mock.calls[0]?.[0]).toContainEqual({
+      kind: "create-series",
+      code: "F1",
+      purpose: "full",
+    });
+  });
+
+  it.each([
+    [undefined, "FF"],
+    ["", "FF"],
+    ["  \t  ", "FF"],
+    ["  F1  ", "F1"],
+  ])("normalizes full-series flag %s to %s without prompting", async (supplied, expected) => {
+    const h = harness({ env: VENUE_ENV, modules: verifactuModules });
+    const flags = supplied === undefined ? [] : ["--full-series-code", supplied];
+
+    const code = await runCli([...VENUE_ARGS, ...flags, "--yes"], h.deps);
+
+    expect(code).toBe(0);
+    expect(h.applyVenue.mock.calls[0]?.[0]).toContainEqual({
+      kind: "create-series",
+      code: expected,
+      purpose: "full",
+    });
+    expect(h.asked).toEqual([]);
+    expect(h.askedSecretly).toEqual([]);
+  });
+
+  it("keeps the taxpayer domicile separate from the location address", async () => {
+    const h = harness({ env: VENUE_ENV, modules: verifactuModules });
+
+    const code = await runCli([...VENUE_ARGS, "--yes"], h.deps);
+
+    expect(code).toBe(0);
+    const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
+    expect(actions.find((action) => action.kind === "ensure-tenant")).toMatchObject({
+      taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
+    });
+    expect(actions.find((action) => action.kind === "create-location")).toMatchObject({
+      addressLine1: "Calle Mayor 1",
+    });
+  });
+
+  it("refuses an absent taxpayer domicile before opening the venue", async () => {
+    const start = VENUE_ARGS.indexOf("--taxpayer-domicile");
+    const args = [...VENUE_ARGS.slice(0, start), ...VENUE_ARGS.slice(start + 2)];
+    const h = harness({ env: VENUE_ENV, answers: [""] });
+
+    expect(await runCli([...args, "--yes"], h.deps)).toBe(1);
+    expect(h.lines.join("\n")).toContain('setup.request_invalid {"field":"taxpayerDomicile"}');
+    expect(h.openVenue).not.toHaveBeenCalled();
   });
 
   it("provisions normally when the same real seat accepts the fields", async () => {
@@ -869,6 +931,7 @@ describe("runCli venue", () => {
         "ES",
         "B12345678",
         "Acme SL",
+        "Calle Fiscal 8, 28013 Madrid",
         "Centro",
         "ES-common",
         "es-ES", // first invoice locale
@@ -899,6 +962,7 @@ describe("runCli venue", () => {
       "country (ISO-3166 alpha-2, e.g. ES): ",
       "tax id (NIF): ",
       "legal name: ",
+      "taxpayer legal domicile: ",
       "location name: ",
       "fiscal territory (e.g. ES-common): ",
       "invoice locale (e.g. es-ES): ",

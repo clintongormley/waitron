@@ -254,6 +254,9 @@ describe("related bills", () => {
     expect(before).toEqual([
       {
         workingOrderId: tabId,
+        revision: 2,
+        invoiceType: "F2",
+        recipient: null,
         partyId,
         label: null,
         status: "open",
@@ -264,6 +267,9 @@ describe("related bills", () => {
       },
       {
         workingOrderId: checkId,
+        revision: 1,
+        invoiceType: "F2",
+        recipient: null,
         partyId,
         // A split bill is labelled with its party's tables.
         label: "Mesa 4",
@@ -1289,6 +1295,9 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
     const listed = before.find((bill) => bill.workingOrderId === billId)!;
     expect(listed).toEqual({
       workingOrderId: billId,
+      revision: 2,
+      invoiceType: "F2",
+      recipient: null,
       partyId: t.partyId,
       label: null,
       status: "placed",

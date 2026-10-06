@@ -4,9 +4,9 @@ import { recordSale, recordSubstitution } from "@waitron/core";
 import type { RecordSaleLine } from "@waitron/core";
 import type { VatBreakdownLine } from "@waitron/fiscal";
 import { computeHuella } from "@waitron/verifactu";
-import { saleLines, sales, withTransaction } from "@waitron/db";
+import { invoiceSeries, saleLines, sales, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { centsToDecimal, decimal, deviceOrigin } from "@waitron/shared";
+import { centsToDecimal, decimal, deviceOrigin, seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, DeviceId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTenantWithSif } from "../test/fixtures.js";
@@ -27,12 +27,18 @@ let backend: VerifactuBackend;
 let deviceId: DeviceId;
 let nodeId: NodeId;
 let seriesId: SeriesId;
+let fullSeriesId: SeriesId;
 
 beforeEach(async () => {
   // A pinned NIF: it is a huella input, and the controls below pin huella literals.
   ({ deviceId, nodeId, seriesId } = await seedTenantWithSif(suite.db, {
     nif: "20009999E",
   }));
+  const [fullSeries] = await suite.db
+    .insert(invoiceSeries)
+    .values({ nodeId, code: "FF", purpose: "full" })
+    .returning({ id: invoiceSeries.id });
+  fullSeriesId = brandSeriesId(fullSeries!.id);
   backend = new VerifactuBackend({
     deploymentEnvironment: "production",
     clock: steadyClock,
@@ -88,7 +94,7 @@ async function substitute(total: string, lineTotals: string[], vatRate = "21.00"
     recordSubstitution(tx, backend, {
       origin: deviceOrigin(deviceId),
       nodeId,
-      seriesId,
+      seriesId: fullSeriesId,
       substitutedSaleIds: [ticket],
       counterparty: { taxId: "B12345674", legalName: "Acme Corp SL", countryCode: "ES" },
       total,
@@ -222,7 +228,7 @@ describe("a substitution is filed at the cent amounts its rows store", () => {
 
     expect(s.importeTotal).toBe("1.21");
     expect(s.cuotaTotal).toBe("0.21");
-    expect(s.huella).toBe("9543ABD48DF033B023EB35B38D85D83B8064E453317418683A19D6B17C323C90");
+    expect(s.huella).toBe("4F065229C17F6D48B0AD111CD69E688F98C0C22E338582812CF48E83316F80A0");
     expectFiledAsStored(s);
   });
 });

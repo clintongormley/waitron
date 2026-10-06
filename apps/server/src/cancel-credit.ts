@@ -97,6 +97,7 @@ function reversedLines(rows: (typeof saleLines.$inferSelect)[]): RecordSaleLine[
         menuId: row.menuId,
         menuVersionId: row.menuVersionId,
         lineGross: row.lineGross === null ? null : centsToDecimal(-row.lineGross),
+        listGross: row.listGross === null ? null : centsToDecimal(-row.listGross),
         classification: row.classification,
         correctsLineId: row.id,
       }) satisfies Required<RecordSaleLine>,

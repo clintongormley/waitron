@@ -25,6 +25,9 @@ const party: TableParty = {
 
 const bill: PartyBill = {
   workingOrderId: "wo-4",
+  revision: 0,
+  invoiceType: "F2",
+  recipient: null,
   partyId: "v1",
   label: null,
   status: "open",

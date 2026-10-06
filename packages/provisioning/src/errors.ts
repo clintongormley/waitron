@@ -47,10 +47,9 @@ declare module "@waitron/shared" {
      * `locations_invoice_locales_len` CHECK enforces (`packages/db/src/schema/tenants.ts`). `count`
      * IS echoed: operator-typed configuration, never a secret. */
     "provisioning.invalid_locales": { count: number };
-    /** A venue request gave its standard and rectificative series the SAME code. The two share the
-     * key `(node_id, code)`, so `applyVenue`'s `ON CONFLICT DO NOTHING` would silently drop one of
-     * them. `code` IS echoed: operator-typed configuration, never a secret. */
-    "provisioning.duplicate_series_code": { code: string };
+    /** Each series needs a distinct `(node_id, code)` key or applyVenue drops the later one.
+     * The repeated code is operator-typed configuration, never a secret. */
+    "provisioning.duplicate_series_code": { code: string; field: string };
     /** A venue's `fiscal_territory` is not prefixed by the tenant's `country` (`ES-common` requires
      * `ES`), case-insensitively. Checked after `resolveFiscalModules`, so an unimplemented
      * territory fails first with `fiscal.regime_not_implemented`. Both params ARE echoed:

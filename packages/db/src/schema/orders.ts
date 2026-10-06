@@ -45,14 +45,13 @@ export const workingOrderStatus = enumType([
  * What replaces immutability here is a state machine the database enforces
  * (`working_orders_enforce_transition`): an `open` order may change freely or
  * advance to any next state; a `placed` order may be settled or abandoned, or
- * stay placed changing only its `party_id`, `delivery_table_id` and `revision`,
- * or only taking its handover stamp; `settled` and `abandoned` are terminal,
+ * stay placed changing its `party_id`, `delivery_table_id` and `revision`,
+ * or change its invoice choice and recipient with a revision advance before a sale exists,
+ * or only take its handover stamp; `settled` and `abandoned` are terminal,
  * save the handover stamp on a settled order.
  *
- * Each of those three exceptions lists every column of this table it holds
- * unchanged, so a column added here goes into every list too, by a migration
- * that re-creates the trigger from the latest text,
- * `drizzle/0086_working_orders_recreate_triggers.sql`.
+ * Each exception names the columns it holds unchanged; a new column must enter
+ * those lists, or the trigger will permit it to change on a placed order.
  */
 export const workingOrders = table(
   "working_orders",
@@ -84,6 +83,12 @@ export const workingOrders = table(
     /* v8 ignore stop */
     collectedAt: tsString("collected_at"),
     revision: count("revision").notNull().default(0),
+    // The invoice-type insert/update triggers enforce this union.
+    invoiceType: label("invoice_type").$type<"F1" | "F2">().notNull().default("F2"),
+    recipientTaxId: label("recipient_tax_id"),
+    recipientLegalName: label("recipient_legal_name"),
+    recipientAddress: label("recipient_address"),
+    recipientCountryCode: label("recipient_country_code"),
     paymentAttemptAt: tsString("payment_attempt_at"),
     // The seated party this bill belongs to; a counter order has none.
     partyId: id("party_id"),

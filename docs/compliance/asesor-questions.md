@@ -13,6 +13,12 @@ On **2026-10-06**: **Q42 added**, beside Q27–Q29, on a bill paid later by bank
 now and collect later, or a proforma first and the invoice on payment — asked for full and
 simplified invoices alike. The standalone English and Spanish Word copies do not carry it yet.
 
+On **2026-10-05 at 15:35** (A231), the owner provisionally chose **the date the bill was opened**, when the table was seated or the first order was placed, as an F1's operation date. The planned implementation snapshots it at issuance and prints it only when it differs from the issue date. Implementation is still outstanding, and F1 issuance stays disabled. Please confirm this rule for a meal spanning midnight; the owner decision is not an asesor answer. The standalone Word copies have not been updated with this note.
+
+**Implementation update, 2026-10-05:** A231’s branch now snapshots the service-start calendar day at issuance and shows it on paper and the till when it differs from the saved issue day. The [implementation checkpoints](../superpowers/plans/2026-10-03-full-invoices-at-till.md) record the database, renderer and replay tests. F1 issuance remains disabled; physical paper checks and your confirmation of the provisional rule are still outstanding. This dated update supersedes the implementation-status sentence above.
+
+> **A231, fecha de operación:** para una comida que comienza antes de medianoche y cuya factura completa se expide después, ¿es correcto usar la fecha en que se abrió la cuenta, al sentar la mesa o registrar el primer pedido? Proponemos guardar esa fecha al expedir la factura e imprimirla solo si difiere de la fecha de expedición. Es una regla provisional del propietario, pendiente de su confirmación.
+
 On **2026-10-04** (W41s prevention and offline recovery): **Q5(f) and Q33–Q40 revised; Q41
 added** for issued invoices missing from a restored backup. The current formulations below
 replace the 2026-10-03 proposals where they differ. They cover a paper allocation register in
@@ -494,6 +500,9 @@ with one reliable till and one in a dead spot is a realistic configuration.
 > Today every sale files as a simplified invoice (`counterparty: null` in `record-sale.ts`) and no
 > route calls `recordSubstitution`, so no full invoice has shared the series yet. Build item:
 > [backlog A1e](../backlog.md). Do not re-ask (c) as written; ask (d).
+
+> **Update, 2026-10-04:** A231's implementation branch adds a `full` series and guards the F3 core
+> path to it. This paragraph records the 2026-09-29 state; A231 still awaits review and landing.
 
 > **(a) reshaped by server-as-SIF, 2026-08-01 (#33).** The subject of (a) has changed: under
 > `../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md`

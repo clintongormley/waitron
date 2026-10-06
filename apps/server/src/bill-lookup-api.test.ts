@@ -2,10 +2,10 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { withTransaction } from "@waitron/db";
+import { invoiceSeries, withTransaction } from "@waitron/db";
 import { sales } from "@waitron/db";
 import { recordSubstitution } from "@waitron/core";
-import { saleId as brandSaleId } from "@waitron/shared";
+import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { inTx, seatedWith, send } from "./testing/bill-venue.js";
 import {
   collect,
@@ -124,11 +124,19 @@ describe("till bill lookup", () => {
         .from(sales)
         .where(sql`${sales.workingOrderId} = ${party.tabId}`),
     );
+    const [fullSeries] = await inTx(venue, (tx) =>
+      tx
+        .select({ id: invoiceSeries.id })
+        .from(invoiceSeries)
+        .where(
+          sql`${invoiceSeries.nodeId} = ${venue.cfg.nodeId} and ${invoiceSeries.purpose} = 'full'`,
+        ),
+    );
     await inTx(venue, (tx) =>
       recordSubstitution(tx, venue.backend, {
         origin: venue.cfg.origin,
         nodeId: venue.cfg.nodeId,
-        seriesId: venue.cfg.seriesId,
+        seriesId: brandSeriesId(fullSeries!.id),
         substitutedSaleIds: [brandSaleId(issued!.id)],
         counterparty: { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" },
         total: "30.00",

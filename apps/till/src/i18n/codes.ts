@@ -135,6 +135,26 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This order is over the most this till accepts without a full invoice naming the customer, which it cannot issue. Take something off the order",
     es: "Este pedido supera el máximo que admite esta caja sin una factura completa a nombre del cliente, y no puede emitirla. Quita algo del pedido",
   },
+  "sale.full_invoice_unavailable": {
+    en: "Full invoices are not available yet. Ask a manager",
+    es: "Las facturas completas aún no están disponibles. Avisa a un responsable",
+  },
+  "receipt.not_printed": {
+    en: "The original has not finished printing. Check its status before confirming handover",
+    es: "El original aún no ha terminado de imprimirse. Comprueba su estado antes de confirmar la entrega",
+  },
+  "fiscal.taxpayer_domicile_missing": {
+    en: "The venue's legal address is missing. Ask a manager before issuing a full invoice",
+    es: "Falta el domicilio fiscal del local. Avisa a un responsable antes de emitir una factura completa",
+  },
+  "invoice.recipient_invalid": {
+    en: "Check the customer's invoice details and try again",
+    es: "Revisa los datos de facturación del cliente e inténtalo de nuevo",
+  },
+  "invoice.choice_locked": {
+    en: "This bill has received a payment. Its full invoice choice cannot be removed",
+    es: "Esta cuenta ya ha recibido un pago. No se puede quitar la elección de factura completa",
+  },
   "sale.correction_exceeds_total": {
     en: "That correction is more than is left of the invoice after its earlier corrections",
     es: "Esa rectificación supera lo que queda de la factura tras sus rectificaciones anteriores",
@@ -142,6 +162,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "sale.correction_not_whole": {
     en: "This invoice has already been corrected, so it cannot be credited in full",
     es: "Esta factura ya se ha rectificado, así que no se puede abonar por completo",
+  },
+  "sale.correction_unsupported": {
+    en: "A full invoice needs a reviewed manual correction. Ask a manager for help",
+    es: "Una factura completa necesita una rectificación manual revisada. Pide ayuda a un responsable",
   },
   "bill.presented": {
     en: "This bill has been presented, so it cannot be changed",

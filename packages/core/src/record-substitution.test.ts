@@ -35,7 +35,8 @@ import { seedBareSale, seedRectificativeSeries, seedTenant } from "../test/fixtu
 
 let deviceId: DeviceId;
 let nodeId: NodeId;
-let seriesId: SeriesId; // the ordinary (purpose='standard') series — the F3 reuses it (owner decision)
+let seriesId: SeriesId;
+let fullSeriesId: SeriesId;
 // A manager's session authorizes the one precondition void this suite performs.
 let voidSessionId: string;
 
@@ -48,6 +49,11 @@ const suite = useVenueDb({
 
 beforeEach(async () => {
   ({ deviceId, nodeId, seriesId } = await seedTenant(suite.db));
+  const [fullSeries] = await suite.db
+    .insert(invoiceSeries)
+    .values({ nodeId, code: "FF", purpose: "full" })
+    .returning({ id: invoiceSeries.id });
+  fullSeriesId = fullSeries!.id as SeriesId;
   const [person] = await suite.db
     .insert(persons)
     .values({ displayName: "P", pinHash: hashPin("1234"), role: "manager" })
@@ -121,8 +127,7 @@ function saleInput(overrides: Partial<RecordSaleInput> = {}): RecordSaleInput {
   };
 }
 
-/** A full invoice restating the tickets: positive total, naming the recipient, drawn from the
- * same standard series the tickets used. */
+/** A full invoice restating the tickets: positive total, naming the recipient. */
 function substitutionInput(
   substitutedSaleIds: SaleId[],
   overrides: Partial<RecordSubstitutionInput> = {},
@@ -130,7 +135,7 @@ function substitutionInput(
   return {
     origin: deviceOrigin(deviceId),
     nodeId,
-    seriesId,
+    seriesId: fullSeriesId,
     substitutedSaleIds,
     counterparty: RECIPIENT,
     total: "14.41",
@@ -313,6 +318,22 @@ describe("recordSubstitution — error propagation", () => {
 });
 
 describe("recordSubstitution — the series (node-ownership guards)", () => {
+  it("refuses a ticket series before allocating an F3 number", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId } = await sellTicket(backend);
+
+    await expect(substitute(backend, [saleId], { seriesId })).rejects.toMatchObject({
+      code: "sale.series_wrong_purpose",
+      params: { seriesId, expected: "full", actual: "standard" },
+    });
+    const [series] = await suite.db
+      .select({ nextNumber: invoiceSeries.nextNumber })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, seriesId));
+    expect(series?.nextNumber).toBe(2);
+    expect(await countRows("sale_substitutions")).toBe(0);
+  });
+
   it("rejects a series that does not exist", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
@@ -335,13 +356,13 @@ describe("recordSubstitution — the series (node-ownership guards)", () => {
     );
   });
 
-  it("rejects a non-standard series: an F3 draws its number from the standard series", async () => {
+  it("rejects a non-full series: an F3 draws its number from the full series", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
     const rectSeries = await seedRectificativeSeries(suite.db, nodeId);
     await expect(substitute(backend, [saleId], { seriesId: rectSeries })).rejects.toMatchObject({
       code: "sale.series_wrong_purpose",
-      params: { seriesId: rectSeries, expected: "standard", actual: "rectificative" },
+      params: { seriesId: rectSeries, expected: "full", actual: "rectificative" },
     });
     expect(await countRows("sale_substitutions")).toBe(0);
     const records = await backend.recordsFor(nodeId);
@@ -352,17 +373,20 @@ describe("recordSubstitution — the series (node-ownership guards)", () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId } = await sellTicket(backend);
     const retiredAt = new Date("2026-09-06T10:00:00.000Z");
-    await suite.db.update(invoiceSeries).set({ retiredAt }).where(eq(invoiceSeries.id, seriesId));
+    await suite.db
+      .update(invoiceSeries)
+      .set({ retiredAt })
+      .where(eq(invoiceSeries.id, fullSeriesId));
     try {
       await expect(substitute(backend, [saleId])).rejects.toMatchObject({
         code: "sale.series_retired",
-        params: { seriesId, retiredAt: retiredAt.toISOString() },
+        params: { seriesId: fullSeriesId, retiredAt: retiredAt.toISOString() },
       });
     } finally {
       await suite.db
         .update(invoiceSeries)
         .set({ retiredAt: null })
-        .where(eq(invoiceSeries.id, seriesId));
+        .where(eq(invoiceSeries.id, fullSeriesId));
     }
   });
 });
@@ -397,20 +421,25 @@ describe("recordSubstitution — the F3 sale", () => {
     expect(row?.fiscalBackend).toBe(backend.id);
   });
 
-  it("allocates the F3 number from the reused standard series", async () => {
+  it("allocates the F3 number from the full series without advancing the ticket series", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: ticket } = await sellTicket(backend); // takes number 1 from the standard series
 
     const { saleId: f3Id } = await substitute(backend, [ticket]);
 
     const [row] = await suite.db.select().from(sales).where(eq(sales.id, f3Id));
-    expect(row?.seriesId).toBe(seriesId);
-    expect(row?.invoiceNumber).toBe(2); // the next number after the ticket's own
+    expect(row?.seriesId).toBe(fullSeriesId);
+    expect(row?.invoiceNumber).toBe(1);
     const [series] = await suite.db
       .select({ n: invoiceSeries.nextNumber })
       .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, fullSeriesId));
+    expect(series?.n).toBe(2);
+    const [ticketSeries] = await suite.db
+      .select({ n: invoiceSeries.nextNumber })
+      .from(invoiceSeries)
       .where(eq(invoiceSeries.id, seriesId));
-    expect(series?.n).toBe(3);
+    expect(ticketSeries?.n).toBe(2);
   });
 
   it("records the F3's own positive lines", async () => {
@@ -789,6 +818,14 @@ describe("recordSubstitution — the customer is checked where it enters", () =>
     const error = await refusal(backend, { ...RECIPIENT, legalName: "Acme SL" });
     expect((error as AppError).code).toBe("counterparty.invalid");
     expect((error as AppError).params).toEqual({ field: "legalName" });
+  });
+
+  it("refuses a blank legal name on an F3", async () => {
+    const error = await refusal(new FakeFiscalBackend(suite.db), {
+      ...RECIPIENT,
+      legalName: " ",
+    });
+    expect(error).toMatchObject({ code: "counterparty.invalid", params: { field: "legalName" } });
   });
 
   it("caps no legal name for a regime that sets none", async () => {

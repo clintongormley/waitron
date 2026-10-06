@@ -34,6 +34,103 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("TillApi", () => {
+  it("reads a filed F1 ticket with GET and returns its recorded recipient and amounts", async () => {
+    const ticket = {
+      invoiceType: "F1",
+      invoiceNumber: "FF/7",
+      locale: "es-ES",
+      issuedAt: "2026-10-05T13:00:00.000Z",
+      issuer: { venueName: "Deli SL", nif: "B12345674", domicile: "Calle Mayor 1, Madrid" },
+      recipient: {
+        legalName: "Cliente SL",
+        taxId: "B87654321",
+        countryCode: "ES",
+        address: "Calle Mayor 2, Madrid",
+      },
+      orderLabel: null,
+      orderNumber: 7,
+      total: "12.10",
+      vatBreakdown: [{ rate: "21.00", base: "10.00", tax: "2.10" }],
+      lines: [],
+      tender: { method: "cash", change: "7.90" },
+      qr: "https://example.test/verify/7",
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(ticket));
+    expect(await new TillApi("", fetchStub).getFiledTicket("order-7")).toEqual(ticket);
+    expect(fetchStub).toHaveBeenCalledWith("/api/sales/order-7", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it.each([
+    [404, "working_order.not_found"],
+    [401, "session.required"],
+  ])("preserves a filed-ticket read refusal (%s)", async (status, code) => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code, params: {} } }, status));
+    await expect(new TillApi("", fetchStub).getFiledTicket("order-7")).rejects.toMatchObject({
+      code,
+      status,
+    });
+  });
+
+  it("confirms customer handover through an authenticated POST and returns the recorded staff stamp", async () => {
+    const status = {
+      status: "done",
+      jobId: "job-1",
+      canRetry: false,
+      handover: { personId: "staff-1", confirmedAt: "2026-10-05T13:00:00.000Z" },
+    };
+    const fetchStub = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(status)));
+    const api = new TillApi("", fetchStub);
+    expect(await api.confirmReceiptHandover("order-1")).toEqual(status);
+    expect(fetchStub).toHaveBeenCalledWith("/api/sales/order-1/receipt/handover", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(await api.getReceiptPrintStatus("order-1")).toEqual(status);
+  });
+
+  it.each([
+    [409, "receipt.not_printed"],
+    [401, "session.expired"],
+  ])("preserves a handover refusal (%s)", async (status, code) => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code, params: {} } }, status));
+    await expect(
+      new TillApi("", fetchStub).confirmReceiptHandover("order-1"),
+    ).rejects.toMatchObject({ code, status });
+  });
+
+  it("sends an invoice choice under the working order revision", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 4 }));
+    const api = new TillApi("", fetchStub);
+    const choice = {
+      revision: 3,
+      invoiceType: "F1" as const,
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    };
+
+    expect(await api.setOrderInvoiceChoice("order-1", choice)).toEqual({ revision: 4 });
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/order-1/invoice-choice",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify(choice),
+      }),
+    );
+  });
+
   it("reports made-here items from a successful answer and ignores an answer without them", async () => {
     const item = {
       lineId: "line-1",
@@ -96,6 +193,38 @@ describe("TillApi", () => {
     expect(result.invoiceNumber).toBe("A/1");
   });
 
+  it("sends a walk-up full-invoice request with its recipient in the first cash request", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ invoiceNumber: "FF/1" }));
+    const api = new TillApi("", fetchStub);
+    const recipient = {
+      taxId: "B12345674",
+      legalName: "Cliente SL",
+      address: "Calle Mayor 2, 28013 Madrid",
+      countryCode: "ES",
+    };
+
+    await api.recordSale(
+      [{ menuItemId: "mi-cafe", quantity: "2" }],
+      { method: "cash", amount: "5.00" },
+      "wo1",
+      undefined,
+      { invoiceType: "F1", recipient },
+    );
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/sales",
+      expect.objectContaining({
+        body: JSON.stringify({
+          lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
+          tender: { method: "cash", amount: "5.00" },
+          workingOrderId: "wo1",
+          invoiceType: "F1",
+          recipient,
+        }),
+      }),
+    );
+  });
+
   it("pay POSTs id+lines(+tip+allowOffline) to /api/pay and returns the captured outcome with its ticket", async () => {
     const ticket = {
       orderLabel: null,
@@ -133,6 +262,35 @@ describe("TillApi", () => {
       }),
     );
     expect(out).toEqual({ outcome: "captured", ticket });
+  });
+
+  it("sends a walk-up full-invoice request with its recipient in the first card request", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ outcome: "declined" }));
+    const recipient = {
+      taxId: "B12345674",
+      legalName: "Cliente SL",
+      address: "Calle Mayor 2, 28013 Madrid",
+      countryCode: "ES",
+    };
+
+    await new TillApi("", fetchStub).pay({
+      id: "wo-card",
+      lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
+      invoiceType: "F1",
+      recipient,
+    });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/pay",
+      expect.objectContaining({
+        body: JSON.stringify({
+          id: "wo-card",
+          lines: [{ menuItemId: "mi-cafe", quantity: "2" }],
+          invoiceType: "F1",
+          recipient,
+        }),
+      }),
+    );
   });
 
   it("cancels a pending pretend reader payment for the current order", async () => {
@@ -1080,6 +1238,48 @@ describe("TillApi", () => {
 
     await expect(new TillApi("", fetchStub).reprintOrder("wo1")).rejects.toMatchObject({
       code: "working_order.not_found",
+    });
+  });
+
+  it.each([
+    { status: "not_queued" },
+    { status: "queued", jobId: "original-1", canRetry: false },
+    { status: "failed", jobId: "original-2", canRetry: true },
+    { status: "done", jobId: "original-3", canRetry: false },
+  ])("reads the original receipt status without requesting a print: $status", async (status) => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(status));
+    expect(await new TillApi("", fetchStub).getReceiptPrintStatus("wo1")).toEqual(status);
+    expect(fetchStub).toHaveBeenCalledOnce();
+    expect(fetchStub).toHaveBeenCalledWith("/api/sales/wo1/receipt", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("retries an original through its sale and returns the new job id", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ jobId: "retry-1" }));
+    expect(await new TillApi("", fetchStub).retryReceipt("wo1")).toEqual({ jobId: "retry-1" });
+    expect(fetchStub).toHaveBeenCalledWith("/api/sales/wo1/receipt/retry", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+  });
+
+  it("surfaces a failed-original retry refusal so the view can refresh its status", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "print_job.not_resendable", params: { id: "original-1" } } },
+          409,
+        ),
+      );
+    await expect(new TillApi("", fetchStub).retryReceipt("wo1")).rejects.toEqual({
+      code: "print_job.not_resendable",
+      status: 409,
+      id: "original-1",
     });
   });
 
@@ -2687,6 +2887,46 @@ describe("TillApi: a seated party", () => {
       expect.objectContaining({ method: "GET", credentials: "include" }),
     );
     expect(r).toEqual(roster);
+  });
+
+  it("lookUpInvoices encodes the query and returns filed invoice facts with the read signal", async () => {
+    const body = {
+      invoices: [
+        {
+          workingOrderId: "bill-1",
+          invoiceNumber: "FF/12",
+          issuedAt: "2026-10-05T12:00:00Z",
+          customerName: "Cliente SL",
+          total: "3.00",
+        },
+      ],
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(body));
+    const controller = new AbortController();
+    const result = await new TillApi("", fetchStub).lookUpInvoices("FF/12 & O'Brien", {
+      signal: controller.signal,
+    });
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/invoices/lookup?q=FF%2F12%20%26%20O'Brien",
+      expect.objectContaining({ method: "GET", credentials: "include", signal: controller.signal }),
+    );
+    expect(result).toEqual(body);
+  });
+
+  it("lookUpInvoices preserves a refused search", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "management.request_invalid", params: { field: "q" } } },
+          400,
+        ),
+      );
+    await expect(new TillApi("", fetchStub).lookUpInvoices(" ")).rejects.toMatchObject({
+      code: "management.request_invalid",
+      status: 400,
+      field: "q",
+    });
   });
 
   it("lookUpBills encodes the query in the till GET", async () => {

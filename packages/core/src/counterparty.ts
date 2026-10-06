@@ -14,6 +14,9 @@ export function checkedCounterparty(
   backend: FiscalBackend,
   counterparty: Counterparty,
 ): Counterparty {
+  if (counterparty.legalName.trim() === "") {
+    throw new AppError("counterparty.invalid", { field: "legalName" });
+  }
   const checked = getCountryPack(counterparty.countryCode)?.taxIdentifier?.validate(
     counterparty.taxId,
   );
@@ -25,4 +28,10 @@ export function checkedCounterparty(
     throw new AppError("counterparty.invalid", { field: "legalName" });
   }
   return checked === undefined ? counterparty : { ...counterparty, taxId: checked.normalized };
+}
+
+export function requireRecipientAddress(address: string | null | undefined): void {
+  if (!address?.trim()) {
+    throw new AppError("counterparty.invalid", { field: "address" });
+  }
 }

@@ -3,7 +3,15 @@ import { saleLineRows } from "./sale-line-rows.js";
 import "./errors.js";
 import { operationDescriptionFor } from "./sale-location.js";
 import { eq } from "drizzle-orm";
-import { allocateInvoiceNumber, invoiceSeries, saleLines, sales } from "@waitron/db";
+import {
+  allocateInvoiceNumber,
+  invoiceSeries,
+  locations,
+  saleLines,
+  sales,
+  tenants,
+  workingOrders,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   AppError,
@@ -24,6 +32,7 @@ import type {
   WorkingOrderId,
 } from "@waitron/shared";
 import type {
+  Counterparty,
   FiscalBackend,
   FiscalRecordRef,
   TrustedClock,
@@ -34,6 +43,7 @@ import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { settleSale } from "./settle-sale.js";
 import { refuseOverSimplifiedLimit } from "./simplified-limit.js";
+import { checkedCounterparty, requireRecipientAddress } from "./counterparty.js";
 
 export type { RecordSaleLine };
 
@@ -56,6 +66,10 @@ export interface RecordSaleInput {
   /** The node that chains the sale. The named series must belong to it. */
   nodeId: NodeId;
   seriesId: SeriesId;
+  /** A named recipient files a full invoice; absent means a simplified invoice. */
+  counterparty?: Counterparty | null;
+  /** Customer's postal address at issuance, separate from the fiscal counterparty identity. */
+  recipientAddress?: string | null;
   /**
    * The parked working order this sale is filed from, written to `sales.working_order_id`, which
    * is unique (the sale-idempotency key) and a foreign key onto `working_orders`.
@@ -154,6 +168,8 @@ export async function recordSale(
   // Stored and filed at the cent, so the row and the fiscal record cannot hold different amounts.
   const totalCents = stringToCents(input.total);
   const total = centsToDecimal(totalCents);
+  const counterparty =
+    input.counterparty == null ? null : checkedCounterparty(backend, input.counterparty);
 
   // Checked before anything is written: a breakdown that disagrees with the total would chain a
   // record that cannot be repaired. A supplied one is checked as given and again at the cent,
@@ -173,12 +189,12 @@ export async function recordSale(
     assertSumsTo(vatBreakdown, total);
   }
 
-  // An ordinary sale names no customer, so it is a simplified invoice, held to the regime's limit
-  // on the base plus VAT it files. Refused before anything is written, like the breakdown above.
-  refuseOverSimplifiedLimit(
-    backend.simplifiedInvoiceLimit,
-    sumDecimals(vatBreakdown.flatMap((g) => [g.base, g.tax])),
-  );
+  if (counterparty === null) {
+    refuseOverSimplifiedLimit(
+      backend.simplifiedInvoiceLimit,
+      sumDecimals(vatBreakdown.flatMap((g) => [g.base, g.tax])),
+    );
+  }
 
   // Verification must run against exactly the state this transaction is about to extend; one
   // write transaction runs on the venue file at a time (`withTransaction`,
@@ -226,11 +242,11 @@ export async function recordSale(
       actual: input.nodeId,
     });
   }
-  // An ordinary sale never draws from a corrective series (RD 1619/2012 art. 6.1.a).
-  if (series.purpose !== "standard") {
+  const expectedPurpose = counterparty === null ? "standard" : "full";
+  if (series.purpose !== expectedPurpose) {
     throw new AppError("sale.series_wrong_purpose", {
       seriesId: input.seriesId,
-      expected: "standard",
+      expected: expectedPurpose,
       actual: series.purpose,
     });
   }
@@ -241,11 +257,42 @@ export async function recordSale(
     });
   }
 
+  if (counterparty !== null) requireRecipientAddress(input.recipientAddress);
+
+  const [taxpayer] =
+    counterparty === null
+      ? []
+      : await tx.select({ domicile: tenants.taxpayerDomicile }).from(tenants);
+  if (counterparty !== null && !taxpayer?.domicile?.trim()) {
+    throw new AppError("fiscal.taxpayer_domicile_missing", {});
+  }
+
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
   // One clock reading for the whole transaction, so the sale and its fiscal record carry the
   // same timestamp for one event.
   const now = input.clock.now();
+  const [bill] =
+    counterparty !== null && input.workingOrderId !== undefined
+      ? await tx
+          .select({ openedAt: workingOrders.openedAt, timeZone: locations.timeZone })
+          .from(workingOrders)
+          .innerJoin(locations, eq(locations.id, workingOrders.locationId))
+          .where(eq(workingOrders.id, input.workingOrderId))
+      : [];
+  const operationDate =
+    counterparty === null
+      ? null
+      : bill === undefined
+        ? new Date(now.instant.getTime() + now.offsetMinutes * 60_000).toISOString().slice(0, 10)
+        : new Intl.DateTimeFormat("en-CA", {
+            timeZone: bill.timeZone,
+            calendar: "iso8601",
+            numberingSystem: "latn",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+          }).format(new Date(bill.openedAt));
 
   // A degraded clock warns; it never blocks the sale.
   if (now.warning) {
@@ -266,11 +313,17 @@ export async function recordSale(
       invoiceNumber,
       issuedAt: now.instant.toISOString(),
       issuedOffsetMinutes: now.offsetMinutes,
+      operationDate,
       total: totalCents,
       locale: input.locale,
       invoiceLocales: input.invoiceLocales,
       fiscalBackend: backend.id,
       fiscalState: "recorded",
+      counterpartyTaxId: counterparty?.taxId ?? null,
+      counterpartyLegalName: counterparty?.legalName ?? null,
+      counterpartyCountryCode: counterparty?.countryCode ?? null,
+      counterpartyAddress: counterparty === null ? null : (input.recipientAddress ?? null),
+      taxpayerDomicile: taxpayer?.domicile ?? null,
       operatorId: input.operatorId ?? null,
     })
     .returning({ id: sales.id });
@@ -318,8 +371,7 @@ export async function recordSale(
     descriptionOfOperation,
     total,
     vatBreakdown,
-    // A simplified invoice: no recipient.
-    counterparty: null,
+    counterparty,
   });
 
   return { saleId, fiscal };

@@ -135,6 +135,7 @@ describe("FISCAL_SLOT.venueFields", () => {
     const venue = {
       legalName: "Waitron SL",
       seriesCode: "Serie A",
+      fullSeriesCode: "FF",
       rectificativeSeriesCode: "FR",
       operationDescription: "Venta en establecimiento",
     };

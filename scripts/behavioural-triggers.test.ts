@@ -152,6 +152,8 @@ const EXPECTED_TRIGGERS = [
   "working_order_lines_require_open_parent_insert",
   "working_order_lines_require_open_parent_update",
   "working_orders_enforce_transition",
+  "working_orders_invoice_type_insert",
+  "working_orders_invoice_type_update",
   "working_orders_release_main_bill",
   "working_orders_release_main_bill_on_move",
   "parties_clear_table_status",

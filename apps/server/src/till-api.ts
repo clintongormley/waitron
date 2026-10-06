@@ -15,6 +15,7 @@ import {
   newId,
   readNodeMembership,
   readTenant,
+  sales,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -58,6 +59,7 @@ import {
   DEMO_READER_REF,
   SimulatorPaymentProvider,
 } from "@waitron/payments";
+import { resendPrintJob } from "@waitron/printing";
 import { tenantCredentials } from "@waitron/credentials";
 import { routableServers } from "@waitron/membership";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
@@ -78,11 +80,17 @@ import {
   collectOrder,
   payWorkingOrderIntegrated,
   recordTillSale,
+  readSettledTicket,
   reprintSale,
   printSaleReceipt,
 } from "./till-sale.js";
 import type { IntegratedPayRequest, TillSaleRequest, TillTender } from "./till-sale.js";
-import { enqueueManualDrawerOpen, resolveReceiptPrinter } from "./receipt-print.js";
+import {
+  enqueueManualDrawerOpen,
+  confirmReceiptHandover,
+  readOriginalReceiptPrint,
+  resolveReceiptPrinter,
+} from "./receipt-print.js";
 import {
   clearPlacement,
   listServiceStatuses,
@@ -116,6 +124,7 @@ import {
   recallLines,
   sendLines,
   sendToPrep,
+  setOrderInvoiceChoice,
   setLineCourse,
   unmarkServed,
   readOrderRevision,
@@ -186,6 +195,7 @@ import { requestBill } from "./bill-request.js";
 import { mountAdjustmentsApi } from "./adjustments-api.js";
 import { mountUnpaidDepartureApi } from "./unpaid-departure-api.js";
 import { mountBillLookupApi } from "./bill-lookup-api.js";
+import { mountInvoiceLookupApi } from "./invoice-lookup-api.js";
 import { resolveInstalledReceiptLanguageRules } from "@waitron/country-packs";
 import { geographyOf } from "./venue-locale.js";
 import { receiptAddressLines } from "./venue-address.js";
@@ -323,6 +333,9 @@ export async function resolveCardCollector(
 
 /** Every AppError code the till API answers, and its HTTP status; an unlisted code answers 400. */
 const STATUS: Record<string, ContentfulStatusCode> = {
+  "print_job.not_found": 404,
+  "print_job.not_resendable": 409,
+  "receipt.not_printed": 409,
   "pin.invalid": 401,
   // 429, not 401, so the till can tell "wait N seconds" apart from "wrong PIN".
   "pin.throttled": 429,
@@ -365,6 +378,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "working_order.not_placed": 409,
   "series.no_rectificative_for_node": 409,
   "sale.correction_not_whole": 409,
+  "sale.correction_unsupported": 409,
   // A record built from the invoice as stored, or from the server's own pricing, disagrees with
   // itself: nothing the request sent, and permanent for the same invoice or basket.
   "sale.correction_lines_mismatch": 409,
@@ -374,6 +388,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "sale.correction_exceeds_total": 409,
   // Permanent for the same basket or bill until it is made smaller.
   "sale.total_exceeds_simplified_limit": 409,
+  "sale.full_invoice_unavailable": 409,
+  "fiscal.taxpayer_domicile_missing": 409,
+  "invoice.recipient_invalid": 400,
+  "invoice.choice_locked": 409,
   "sale.voided": 409,
   "sale.already_settled": 409,
   "working_order.not_settled": 409,
@@ -979,6 +997,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   mountAdjustmentsApi(app, deps, log, run, pinThrottle);
   mountUnpaidDepartureApi(app, deps, log, run, pinThrottle);
   mountBillLookupApi(app, deps, log, run);
+  mountInvoiceLookupApi(app, deps, log, run);
 
   // Device-gated: the throttle keys on the authenticated device, so dropping the cookie cannot
   // evade it.
@@ -1593,6 +1612,30 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
+  app.put("/api/working-orders/:id/invoice-choice", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c);
+      const cfg = requestCfg(deps.cfg, session);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_open");
+      const body = await readJsonBody<{
+        revision?: unknown;
+        invoiceType: "F1" | "F2";
+        recipient: {
+          taxId: string;
+          legalName: string;
+          address: string;
+          countryCode: string;
+        } | null;
+      }>(c);
+      const revision = await setOrderInvoiceChoice(deps.db, deps.backend, cfg, id, {
+        revision: requireRevision(body.revision),
+        invoiceType: body.invoiceType,
+        recipient: body.recipient,
+      });
+      return c.json({ revision });
+    }),
+  );
+
   app.delete("/api/working-orders/:id", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
@@ -1804,6 +1847,80 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         await reprintOrderTickets(tx, cfg, id);
       });
       return c.body(null, 200);
+    }),
+  );
+
+  app.get("/api/sales/:id", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c);
+      const cfg = requestCfg(deps.cfg, session);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      const ticket = await withTransaction(deps.db, async (tx) => {
+        const [sale] = await tx
+          .select({ id: sales.id })
+          .from(sales)
+          .where(eq(sales.workingOrderId, id));
+        if (sale === undefined)
+          throw new AppError("working_order.not_found", { workingOrderId: id });
+        return readSettledTicket(deps.backend, tx, cfg, id);
+      });
+      return c.json(ticket);
+    }),
+  );
+
+  app.get("/api/sales/:id/receipt", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      const status = await withTransaction(deps.db, async (tx) => {
+        const [sale] = await tx
+          .select({ id: sales.id })
+          .from(sales)
+          .where(eq(sales.workingOrderId, id));
+        if (sale === undefined)
+          throw new AppError("working_order.not_found", { workingOrderId: id });
+        return readOriginalReceiptPrint(tx, sale.id);
+      });
+      return c.json(status);
+    }),
+  );
+
+  app.post("/api/sales/:id/receipt/handover", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      const status = await withTransaction(deps.db, async (tx) => {
+        const [sale] = await tx
+          .select({ id: sales.id })
+          .from(sales)
+          .where(eq(sales.workingOrderId, id));
+        if (sale === undefined)
+          throw new AppError("working_order.not_found", { workingOrderId: id });
+        return confirmReceiptHandover(tx, sale.id, session.personId);
+      });
+      return c.json(status);
+    }),
+  );
+
+  app.post("/api/sales/:id/receipt/retry", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c);
+      await assertDeviceCapability(deps, c, "print-receipt", "receipt_retry", session.device);
+      const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      const result = await withTransaction(deps.db, async (tx) => {
+        const [sale] = await tx
+          .select({ id: sales.id })
+          .from(sales)
+          .where(eq(sales.workingOrderId, id));
+        if (sale === undefined)
+          throw new AppError("working_order.not_found", { workingOrderId: id });
+        const original = await readOriginalReceiptPrint(tx, sale.id);
+        if (original.status === "not_queued") throw new AppError("print_job.not_found", { id });
+        if (!original.canRetry)
+          throw new AppError("print_job.not_resendable", { id: original.jobId });
+        return resendPrintJob(tx, original.jobId);
+      });
+      return c.json(result);
     }),
   );
 

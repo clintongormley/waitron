@@ -102,6 +102,7 @@ describe("configuration export API", () => {
       "a strong passphrase",
     );
     expect(decoded.venue.legalName).toBe("Prepared Export SL");
+    expect(decoded.venue.taxpayerDomicile).toBeNull();
     expect(decoded.tables).not.toHaveProperty("sales");
   });
 

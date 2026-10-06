@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, withTransaction } from "@waitron/db";
+import { seriesId as brandSeriesId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedNodeAndSeries,
@@ -39,6 +40,40 @@ function run(overrides: Partial<DailyCloseInput> = {}): Promise<import("./types.
 }
 
 describe("computeVatSummary", () => {
+  it("includes a full invoice's filed VAT beside a simplified invoice", async () => {
+    const [full] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: venue.nodeId, code: "F", purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    await seedSale(
+      suite.db,
+      { ...venue, seriesId: brandSeriesId(full!.id) },
+      {
+        invoiceNumber: 1,
+        issuedAt: noonUtc,
+        total: "121.00",
+        counterpartyTaxId: "12345678Z",
+        lines: [{ vatRate: "21.00", lineTotal: "100.00" }],
+      },
+    );
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noonUtc,
+      total: "11.00",
+      lines: [{ vatRate: "10.00", lineTotal: "10.00" }],
+    });
+
+    expect(await run()).toMatchObject({
+      byRate: [
+        { rate: "10.00", base: "10.00", tax: "1.00" },
+        { rate: "21.00", base: "100.00", tax: "21.00" },
+      ],
+      baseTotal: "110.00",
+      taxTotal: "22.00",
+      grossTotal: "132.00",
+    });
+  });
+
   it("sums one rate", async () => {
     await seedSale(suite.db, venue, {
       invoiceNumber: 1,

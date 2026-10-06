@@ -14,6 +14,41 @@ const cookedRare: OptionSnapshot = {
 };
 
 describe("saleLineRows", () => {
+  it("stores the undiscounted gross line total in cents without changing its filed net base", () => {
+    const line: RecordSaleLine = {
+      lineNo: 1,
+      name: "Burger",
+      descriptions: { "en-GB": "Burger" },
+      quantity: "1",
+      unitPrice: "8.93",
+      vatRate: "21.00",
+      lineTotal: "8.93",
+      lineGross: "10.80",
+      listGross: "12.00",
+    };
+    expect(saleLineRows("sale-1", [line])[0]).toMatchObject({
+      listGross: 1200,
+      lineGross: 1080,
+      lineTotal: 893,
+    });
+  });
+
+  it("leaves an explicitly absent list total unset on a corrective line", () => {
+    const line = {
+      lineNo: 1,
+      name: "Burger",
+      descriptions: { "en-GB": "Burger" },
+      quantity: "-1",
+      unitPrice: "8.93",
+      vatRate: "21.00",
+      lineTotal: "-8.93",
+      listGross: null,
+    };
+    expect(saleLineRows("credit-1", [line], { corrective: true })[0]).not.toHaveProperty(
+      "listGross",
+    );
+  });
+
   it("stores a priced portion separately from a sale line's physical quantity", () => {
     const [row] = saleLineRows("sale-1", [
       {

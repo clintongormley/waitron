@@ -43,6 +43,7 @@ export function saleLineRows(
     menuId: line.menuId ?? null,
     menuVersionId: line.menuVersionId ?? null,
     lineGross: line.lineGross == null ? null : stringToCents(line.lineGross),
+    ...(line.listGross == null ? {} : { listGross: stringToCents(line.listGross) }),
     classification: line.classification ?? null,
     correctsLineId: corrective ? (line.correctsLineId ?? null) : null,
   }));

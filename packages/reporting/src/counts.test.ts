@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql, type SQL } from "drizzle-orm";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, withTransaction } from "@waitron/db";
+import { seriesId as brandSeriesId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedSale, seedSubstitution, seedVenue, seedVoid } from "../test/fixtures.js";
@@ -32,6 +33,32 @@ function run(overrides: Partial<DailyCloseInput> = {}): Promise<CloseCounts> {
 const line = { vatRate: "21.00", lineTotal: "10.00" };
 
 describe("computeCloseCounts", () => {
+  it("counts a full invoice once beside a simplified invoice", async () => {
+    const [full] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: venue.nodeId, code: "F", purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    await seedSale(
+      suite.db,
+      { ...venue, seriesId: brandSeriesId(full!.id) },
+      {
+        invoiceNumber: 1,
+        issuedAt: noon,
+        total: "12.10",
+        counterpartyTaxId: "12345678Z",
+        lines: [line],
+      },
+    );
+    await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: noon,
+      total: "12.10",
+      lines: [line],
+    });
+
+    expect(await run()).toEqual({ sales: 2, corrections: 0, voids: 0 });
+  });
+
   it("counts sales, corrections and voids", async () => {
     const s1 = await seedSale(suite.db, venue, {
       invoiceNumber: 1,

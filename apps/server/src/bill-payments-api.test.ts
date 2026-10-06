@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { adjustments } from "@waitron/adjustments";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +11,8 @@ import {
   billPayments,
   deviceProfiles,
   drawerOpens,
+  invoiceSeries,
+  nodes,
   parties,
   printJobs,
   products,
@@ -162,6 +165,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
         country: "ES",
         taxId: "61000001E",
         legalName: "Cuentas SL",
+        taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
         location: {
           name: "Sala",
           fiscalTerritory: "ES-common",
@@ -1578,6 +1582,580 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     }
   });
 
+  it.each(["F1", "F2"] as const)(
+    "refuses to change another node's %s invoice choice without changing its bill",
+    async (invoiceType) => {
+      const billId = await tabWith("Chuletón");
+      await inTx(async (tx) => {
+        const [node] = await tx
+          .insert(nodes)
+          .values({ locationId: venue.cfg.locationId, name: "Other issuing node" })
+          .returning({ id: nodes.id });
+        await tx
+          .update(workingOrders)
+          .set({ nodeId: node!.id })
+          .where(eq(workingOrders.id, billId));
+      });
+      const before = await inTx((tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+      );
+      const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+        revision: before[0]!.revision,
+        invoiceType,
+        recipient:
+          invoiceType === "F2"
+            ? null
+            : {
+                taxId: "B12345674",
+                legalName: "Cliente SL",
+                address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+                countryCode: "ES",
+              },
+      });
+      expect(refused).toEqual({
+        status: 409,
+        json: { code: "working_order.not_open", params: { workingOrderId: billId } },
+      });
+      expect(
+        await inTx((tx) => tx.select().from(workingOrders).where(eq(workingOrders.id, billId))),
+      ).toEqual(before);
+      expect(await paymentRows(billId)).toEqual([]);
+    },
+  );
+
+  it("saves a requested F1 recipient on the bill under its revision before payment", async () => {
+    const billId = await tabWith("Chuletón");
+    const [before] = await inTx((tx) =>
+      tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId)),
+    );
+
+    const saved = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: before!.revision,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+
+    expect(saved).toEqual({ status: 200, json: { revision: before!.revision + 1 } });
+    const [after] = await inTx((tx) =>
+      tx
+        .select({
+          revision: workingOrders.revision,
+          invoiceType: workingOrders.invoiceType,
+          taxId: workingOrders.recipientTaxId,
+          legalName: workingOrders.recipientLegalName,
+          address: workingOrders.recipientAddress,
+          countryCode: workingOrders.recipientCountryCode,
+        })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId)),
+    );
+    expect(after).toEqual({
+      revision: before!.revision + 1,
+      invoiceType: "F1",
+      taxId: "B12345674",
+      legalName: "Cliente SL",
+      address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+      countryCode: "ES",
+    });
+    expect(await paymentRows(billId)).toEqual([]);
+  });
+
+  it("lets another till on this node save the bill's invoice choice", async () => {
+    const billId = await tabWith("Chuletón");
+    const saved = await request(
+      "PUT",
+      `/api/working-orders/${billId}/invoice-choice`,
+      {
+        revision: 0,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      },
+      venue.handheldCookie,
+    );
+    expect(saved).toEqual({ status: 200, json: { revision: 1 } });
+    const [after] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    expect(after).toMatchObject({
+      nodeId: venue.cfg.nodeId,
+      revision: 1,
+      invoiceType: "F1",
+      recipientTaxId: "B12345674",
+      recipientLegalName: "Cliente SL",
+      recipientAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+      recipientCountryCode: "ES",
+    });
+    expect(await paymentRows(billId)).toEqual([]);
+  });
+
+  it("saves the validated Spanish tax ID and recipient text in canonical form", async () => {
+    const billId = await tabWith("Chuletón");
+    const saved = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: 0,
+      invoiceType: "F1",
+      recipient: {
+        taxId: " b12345674 ",
+        legalName: " Cliente SL ",
+        address: " Calle Mayor 2, 28013 Madrid, Madrid, España ",
+        countryCode: "es",
+      },
+    });
+
+    expect(saved.status).toBe(200);
+    const [after] = await inTx((tx) =>
+      tx
+        .select({
+          taxId: workingOrders.recipientTaxId,
+          legalName: workingOrders.recipientLegalName,
+          address: workingOrders.recipientAddress,
+          countryCode: workingOrders.recipientCountryCode,
+        })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId)),
+    );
+    expect(after).toEqual({
+      taxId: "B12345674",
+      legalName: "Cliente SL",
+      address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+      countryCode: "ES",
+    });
+  });
+
+  it.each([
+    "Calle Mayor 2",
+    "Calle Mayor 2, 28013 Madrid, España",
+    "Calle Mayor 2, 28013 Madrid, Madrid",
+    "Calle Mayor 2, Madrid, Madrid, España",
+    ", 28013 Madrid, Madrid, España",
+    "Calle Mayor, , 28013 Madrid, Madrid, España",
+  ])("refuses incomplete F1 postal address %s before changing the bill", async (address) => {
+    const billId = await tabWith("Chuletón");
+
+    const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: 0,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address,
+        countryCode: "ES",
+      },
+    });
+
+    expect(refused).toEqual({
+      status: 400,
+      json: { code: "invoice.recipient_invalid", params: { field: "address" } },
+    });
+    const [after] = await inTx((tx) =>
+      tx
+        .select({ revision: workingOrders.revision, invoiceType: workingOrders.invoiceType })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId)),
+    );
+    expect(after).toEqual({ revision: 0, invoiceType: "F2" });
+  });
+
+  it("saves a complete F1 postal address when the street itself contains a comma", async () => {
+    const billId = await tabWith("Chuletón");
+    const address = "Calle San Juan, 2, 28013 Madrid, Madrid, España";
+
+    const saved = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: 0,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address,
+        countryCode: "ES",
+      },
+    });
+
+    expect(saved).toEqual({ status: 200, json: { revision: 1 } });
+    const [after] = await inTx((tx) =>
+      tx
+        .select({ address: workingOrders.recipientAddress })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId)),
+    );
+    expect(after).toEqual({ address });
+  });
+
+  it("shows the saved invoice choice to another till reading the party's bills", async () => {
+    const billId = await tabWith("Chuletón");
+    const [row] = await inTx((tx) =>
+      tx
+        .select({ partyId: workingOrders.partyId, revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId)),
+    );
+    const saved = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: row!.revision,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+    expect(saved.status).toBe(200);
+
+    const copy = await request(
+      "GET",
+      `/api/parties/${row!.partyId}/bills`,
+      undefined,
+      venue.handheldCookie,
+    );
+
+    expect(copy.status).toBe(200);
+    expect(copy.json).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workingOrderId: billId,
+          revision: 1,
+          invoiceType: "F1",
+          recipient: {
+            taxId: "B12345674",
+            legalName: "Cliente SL",
+            address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+            countryCode: "ES",
+          },
+        }),
+      ]),
+    );
+  });
+
+  it("refuses a stale invoice choice without replacing the saved recipient", async () => {
+    const billId = await tabWith("Chuletón");
+    const saved = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: 0,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+    expect(saved).toEqual({ status: 200, json: { revision: 1 } });
+
+    const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: 0,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Otro cliente SL",
+        address: "Calle Nueva 3, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+
+    expect(refused).toEqual({
+      status: 409,
+      json: {
+        code: "working_order.out_of_date",
+        params: { workingOrderId: billId, revision: 1 },
+      },
+    });
+    const [after] = await inTx((tx) =>
+      tx
+        .select({
+          revision: workingOrders.revision,
+          legalName: workingOrders.recipientLegalName,
+          address: workingOrders.recipientAddress,
+        })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId)),
+    );
+    expect(after).toEqual({
+      revision: 1,
+      legalName: "Cliente SL",
+      address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+    });
+  });
+
+  it("refuses an invoice choice while a card payment is pending", async () => {
+    const billId = await tabWith("Chuletón");
+    const paymentId = await insertBillPayment(billId, {
+      method: "card",
+      tendered: null,
+      state: "pending",
+      receivedAt: null,
+    });
+
+    const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: 0,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+
+    expect(refused).toEqual({
+      status: 409,
+      json: { code: "order.payment_in_flight", params: { workingOrderId: billId } },
+    });
+    const [after] = await inTx((tx) =>
+      tx
+        .select({ revision: workingOrders.revision, invoiceType: workingOrders.invoiceType })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId)),
+    );
+    expect(after).toEqual({ revision: 0, invoiceType: "F2" });
+    expect((await paymentRows(billId)).map((row) => ({ id: row.id, state: row.state }))).toEqual([
+      { id: paymentId, state: "pending" },
+    ]);
+  });
+
+  it.each([
+    [
+      "taxId",
+      {
+        taxId: "B12345678",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    ],
+    [
+      "legalName",
+      {
+        taxId: "B12345674",
+        legalName: " ",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    ],
+    ["address", { taxId: "B12345674", legalName: "Cliente SL", address: " ", countryCode: "ES" }],
+  ] as const)("refuses an invalid F1 %s before saving a bill choice", async (field, recipient) => {
+    const billId = await tabWith("Chuletón");
+    const [before] = await inTx((tx) =>
+      tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId)),
+    );
+
+    const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: before!.revision,
+      invoiceType: "F1",
+      recipient,
+    });
+
+    expect(refused).toEqual({
+      status: 400,
+      json: { code: "invoice.recipient_invalid", params: { field } },
+    });
+    const [after] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    expect(after!.revision).toBe(before!.revision);
+    expect(after!.invoiceType).toBe("F2");
+  });
+
+  it("refuses a recipient name beyond the fiscal limit before saving the invoice choice", async () => {
+    const billId = await tabWith("Chuletón");
+    const [before] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: before!.revision,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Á".repeat(121),
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+
+    expect(refused).toEqual({
+      status: 400,
+      json: { code: "invoice.recipient_invalid", params: { field: "legalName" } },
+    });
+    const [after] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    expect(after).toEqual(before);
+    expect(await paymentRows(billId)).toEqual([]);
+  });
+
+  it.each(["Á".repeat(120), "𐐀".repeat(120)])(
+    "saves a recipient name of 120 characters without counting UTF-16 units (%s)",
+    async (legalName) => {
+      const billId = await tabWith("Chuletón");
+      const saved = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+        revision: 0,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: `  ${legalName}  `,
+          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      });
+
+      expect(saved).toEqual({ status: 200, json: { revision: 1 } });
+      const [after] = await inTx((tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+      );
+      expect(after!.recipientLegalName).toBe(legalName);
+      expect(after!.invoiceType).toBe("F1");
+    },
+  );
+
+  it("refuses a foreign F1 recipient without saving personal details", async () => {
+    const billId = await tabWith("Chuletón");
+    const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: 0,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "FR",
+      },
+    });
+
+    expect(refused).toEqual({
+      status: 409,
+      json: { code: "fiscal.foreign_recipient_unsupported", params: { countryCode: "FR" } },
+    });
+    const [after] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    expect(after!.invoiceType).toBe("F2");
+    expect(after!.recipientTaxId).toBeNull();
+  });
+
+  it("refuses an unknown invoice type before changing the bill", async () => {
+    const billId = await tabWith("Chuletón");
+    const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: 0,
+      invoiceType: "R5",
+      recipient: null,
+    });
+
+    expect(refused).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field: "invoiceType" } },
+    });
+    const [after] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    expect(after!.invoiceType).toBe("F2");
+  });
+
+  it("refuses F1 without a recipient as a field error", async () => {
+    const billId = await tabWith("Chuletón");
+    const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: 0,
+      invoiceType: "F1",
+    });
+
+    expect(refused).toEqual({
+      status: 400,
+      json: { code: "invoice.recipient_invalid", params: { field: "taxId" } },
+    });
+    const [after] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    expect(after!.invoiceType).toBe("F2");
+  });
+
+  it("refuses recipient details on a simplified invoice", async () => {
+    const billId = await tabWith("Chuletón");
+    const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: 0,
+      invoiceType: "F2",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+
+    expect(refused).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field: "recipient" } },
+    });
+    const [after] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    expect(after!.recipientTaxId).toBeNull();
+    expect(after!.revision).toBe(0);
+  });
+
+  it("cannot downgrade a chosen F1 after a partial payment", async () => {
+    const billId = await tabWith("Chuletón");
+    expect((await contribute(billId, "5.00")).status).toBe(200);
+    const chosen = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: 0,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+    expect(chosen).toEqual({ status: 200, json: { revision: 1 } });
+
+    const refused = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: 1,
+      invoiceType: "F2",
+      recipient: null,
+    });
+
+    expect(refused).toEqual({ status: 409, json: { code: "invoice.choice_locked", params: {} } });
+    const [after] = await inTx((tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    expect(after!.invoiceType).toBe("F1");
+    expect(after!.revision).toBe(1);
+    expect(await paymentRows(billId)).toHaveLength(1);
+  });
+
+  it("refuses an F1 bill before taking cash while original delivery is unavailable", async () => {
+    const billId = await tabWith("Chuletón");
+    await inTx((tx) =>
+      tx
+        .update(workingOrders)
+        .set({
+          invoiceType: "F1",
+          recipientTaxId: "B12345674",
+          recipientLegalName: "Cliente SL",
+          recipientAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          recipientCountryCode: "ES",
+        })
+        .where(eq(workingOrders.id, billId)),
+    );
+
+    const refused = await contribute(billId, "25.00");
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toEqual({ code: "sale.full_invoice_unavailable", params: {} });
+    expect(await paymentRows(billId)).toEqual([]);
+    expect(await saleOf(billId)).toEqual([]);
+  });
+
   it("files nothing while anything is outstanding, then exactly one record", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
 
@@ -1815,6 +2393,148 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     expect(saved.status).toBe(200);
     await expectInvoicedOnDevice(billId, 2500);
   });
+
+  async function savedF1WithReceivedMoney(route: "void" | "split" | "line edit" | "held edit") {
+    const billId = await tabWith("Chuletón", route === "line edit" ? "Caña" : "Tarta");
+    if (route === "line edit") await raiseLine(billId, 2, "2");
+    const amount = route === "line edit" ? 2800 : 2500;
+    const choice = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
+      revision: await revisionOf(billId),
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+    expect(choice.status).toBe(200);
+    const paymentId = await insertBillPayment(billId, { applied: amount, tendered: amount });
+    return { billId, paymentId, amount };
+  }
+
+  async function reduceToReceivedMoney(
+    billId: string,
+    route: "void" | "split" | "line edit" | "held edit",
+  ) {
+    if (route === "void") {
+      return request(
+        "POST",
+        `/api/working-orders/${billId}/adjustments`,
+        await cancelBody(suite.db, billId, 2),
+      );
+    }
+    if (route === "split") return splitOff(billId, [{ lineNo: 2 }]);
+    if (route === "line edit") {
+      return request("PUT", `/api/working-orders/${billId}/lines/2`, {
+        revision: await revisionOf(billId),
+        quantity: "1",
+      });
+    }
+    const [steak] = await inTx((tx) =>
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.lineNo, 1))),
+    );
+    return request("PUT", `/api/working-orders/${billId}`, {
+      lines: [{ workingOrderLineId: steak!.id, menuItemId: offer("Chuletón"), quantity: "1" }],
+      revision: await revisionOf(billId),
+    });
+  }
+
+  it.each(["void", "split", "line edit", "held edit"] as const)(
+    "files saved F1 received money once when a %s leaves the bill exactly paid",
+    async (route) => {
+      const { billId, paymentId, amount } = await savedF1WithReceivedMoney(route);
+      const before = await paymentRows(billId);
+      const seriesBefore = await inTx((tx) => tx.select().from(invoiceSeries));
+
+      const edited = await reduceToReceivedMoney(billId, route);
+
+      expect(edited, JSON.stringify(edited)).toMatchObject({ status: 200 });
+      await expectInvoicedOnDevice(billId, amount);
+      const [sale] = await saleOf(billId);
+      expect(
+        suite.db.all(
+          sql`select tipo_factura from registros_facturacion where sale_id = ${sale!.id}`,
+        ),
+      ).toEqual([{ tipo_factura: "F1" }]);
+      expect(sale).toMatchObject({
+        taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
+        counterpartyTaxId: "B12345674",
+        counterpartyLegalName: "Cliente SL",
+        counterpartyAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+      });
+      const seriesAfter = await inTx((tx) => tx.select().from(invoiceSeries));
+      const used = seriesAfter.find((series) => series.id === sale!.seriesId)!;
+      expect(used.purpose).toBe("full");
+      expect(used.nextNumber).toBe(
+        seriesBefore.find((series) => series.id === used.id)!.nextNumber + 1,
+      );
+      expect(seriesAfter.filter((series) => series.id !== used.id)).toEqual(
+        seriesBefore.filter((series) => series.id !== used.id),
+      );
+      expect(await paymentRows(billId)).toEqual(before);
+      expect(await tendersOf(sale!.id)).toEqual([
+        { method: "cash", amount, tip: 0, billPaymentId: paymentId },
+      ]);
+      if (route === "split") {
+        const childId = edited.json.billId as string;
+        const child = await inTx((tx) =>
+          tx.select().from(workingOrders).where(eq(workingOrders.id, childId)),
+        );
+        expect(child[0]).toMatchObject({ status: "open", invoiceType: "F2", recipientTaxId: null });
+        expect(await lineTotals(childId)).toEqual(["18.00"]);
+        expect(await saleOf(childId)).toEqual([]);
+      }
+      const replay = await request("GET", `/api/sales/${billId}`);
+      expect(replay.status).toBe(200);
+      expect(replay.json).toMatchObject({
+        invoiceType: "F1",
+        total: route === "line edit" ? "28.00" : "25.00",
+        recipient: { taxId: "B12345674", legalName: "Cliente SL" },
+      });
+      expect(registroCount(billId)).toBe(1);
+      expect(await paymentRows(billId)).toEqual(before);
+      expect(await inTx((tx) => tx.select().from(invoiceSeries))).toEqual(seriesAfter);
+    },
+  );
+
+  it.each(["void", "split", "line edit", "held edit"] as const)(
+    "rolls back a %s completing received F1 money when the saved recipient is invalid",
+    async (route) => {
+      const { billId } = await savedF1WithReceivedMoney(route);
+      await inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({ recipientAddress: "Madrid" })
+          .where(eq(workingOrders.id, billId)),
+      );
+      const snapshot = () =>
+        inTx(async (tx) => ({
+          orders: await tx.select().from(workingOrders),
+          parties: await tx.select().from(parties),
+          adjustments: await tx.select().from(adjustments),
+          lines: await tx.select().from(workingOrderLines),
+          payments: await tx.select().from(billPayments),
+          sales: await tx.select().from(sales),
+          tenders: await tx.select().from(tenders),
+          series: await tx.select().from(invoiceSeries),
+          jobs: await tx.select().from(printJobs),
+        }));
+      const before = await snapshot();
+
+      const refused = await reduceToReceivedMoney(billId, route);
+
+      expect(refused).toEqual({
+        status: 400,
+        json: { code: "invoice.recipient_invalid", params: { field: "address" } },
+      });
+      expect(await snapshot()).toEqual(before);
+      expect(registroCount(billId)).toBe(0);
+    },
+  );
 
   it("refuses cutting part of a line when the rest would be less than the bill has received", async () => {
     const billId = await tabWith("Paella", "Caña");

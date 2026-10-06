@@ -4,6 +4,7 @@ import { validateVenueFiscalFields } from "./venue-fields.js";
 const GOOD = {
   legalName: "Waitron SL",
   seriesCode: "FS",
+  fullSeriesCode: "FF",
   rectificativeSeriesCode: "FR",
   operationDescription: "Venta en establecimiento",
 };
@@ -26,6 +27,15 @@ describe("validateVenueFiscalFields", () => {
     expect(() =>
       validateVenueFiscalFields({ ...GOOD, rectificativeSeriesCode: "Rectificativa A" }),
     ).toThrow(expect.objectContaining({ params: { field: "rectificativeSeriesCode" } }));
+  });
+
+  it("refuses an invalid full invoice series before provisioning, naming its field", () => {
+    expect(() => validateVenueFiscalFields({ ...GOOD, fullSeriesCode: "Full A" })).toThrow(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "fullSeriesCode" },
+      }),
+    );
   });
 
   it("refuses a series code too long to survive a restore's installation suffix", () => {

@@ -669,10 +669,15 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(typeof fiscal.nif).toBe("string");
     expect(fiscal.idSistemaInformatico).toBe("W1");
     expect(r.series.map((s) => s.code).sort()).toEqual(
-      [`FA-${fiscal.numeroInstalacion}`, `RF-${fiscal.numeroInstalacion}`].sort(),
+      [
+        `FA-${fiscal.numeroInstalacion}`,
+        `FF-${fiscal.numeroInstalacion}`,
+        `RF-${fiscal.numeroInstalacion}`,
+      ].sort(),
     );
     const byCode = new Map(r.series.map((s) => [s.code, s.purpose]));
     expect(byCode.get(`FA-${fiscal.numeroInstalacion}`)).toBe("standard");
+    expect(byCode.get(`FF-${fiscal.numeroInstalacion}`)).toBe("full");
     expect(byCode.get(`RF-${fiscal.numeroInstalacion}`)).toBe("rectificative");
     expect(r.endorsement.nodeId).toBe(standby.nodeId);
     expect(r.endorsement.publicKey).toBe(standby.publicKey);

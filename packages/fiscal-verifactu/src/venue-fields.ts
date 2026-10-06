@@ -14,6 +14,7 @@ import { MAX_BASE_CODE_LENGTH } from "./reserved-series.js";
 export interface VenueFiscalFields {
   readonly legalName: string;
   readonly seriesCode: string;
+  readonly fullSeriesCode: string;
   readonly rectificativeSeriesCode: string;
   readonly operationDescription: string;
 }
@@ -47,6 +48,7 @@ const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;
 export const VENUE_FISCAL_FIELD_PATHS = [
   "legalName",
   "seriesCode",
+  "fullSeriesCode",
   "rectificativeSeriesCode",
   "location.operationDescription",
 ] as const;
@@ -64,6 +66,7 @@ function refuse(field: VenueFiscalFieldPath): never {
 export function validateVenueFiscalFields(venue: VenueFiscalFields): void {
   for (const [field, code] of [
     ["seriesCode", venue.seriesCode],
+    ["fullSeriesCode", venue.fullSeriesCode],
     ["rectificativeSeriesCode", venue.rectificativeSeriesCode],
   ] as const) {
     if (!NUMSERIE_CHARSET.test(code)) refuse(field);

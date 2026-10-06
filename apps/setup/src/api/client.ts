@@ -64,8 +64,10 @@ export interface ProvisionBody {
     country: string;
     taxId: string;
     legalName: string;
+    taxpayerDomicile: string | null;
     location: LocationDraft;
     seriesCode: string;
+    fullSeriesCode: string;
     rectificativeSeriesCode: string;
     admin: AdminDraft;
   };

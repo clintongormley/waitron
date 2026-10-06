@@ -42,7 +42,20 @@ function request(overrides: Partial<VenueRequest> = {}): VenueRequest {
 }
 
 describe("planVenue", () => {
-  it("emits ensure-tenant → seed-admin → seed-device-profiles → location → node → two series → module seeds, in order, and no till", () => {
+  it("keeps the taxpayer's domicile separate from the venue location", () => {
+    const actions = planVenue(
+      { ...request(), taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid" },
+      MODULES,
+    );
+    expect(actions.find((action) => action.kind === "ensure-tenant")).toMatchObject({
+      taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
+    });
+    expect(actions.find((action) => action.kind === "create-location")).toMatchObject({
+      addressLine1: "Calle Mayor 1",
+    });
+  });
+
+  it("emits ensure-tenant → seed-admin → seed-device-profiles → location → node → three series → module seeds, in order, and no till", () => {
     const actions = planVenue(request(), MODULES);
     expect(actions.map((a) => a.kind)).toEqual([
       "ensure-tenant",
@@ -50,6 +63,7 @@ describe("planVenue", () => {
       "seed-device-profiles",
       "create-location",
       "create-node",
+      "create-series",
       "create-series",
       "create-series",
       "seed-module",
@@ -208,12 +222,35 @@ describe("planVenue", () => {
     expect(short).toMatchObject({ dayCutover: "06:00:00" });
   });
 
-  it("emits a standard series and a rectificative series with the requested codes", () => {
+  it("emits distinct standard, full and rectificative series with the requested codes", () => {
     const series = planVenue(request(), MODULES).filter((a) => a.kind === "create-series");
     expect(series).toEqual([
       { kind: "create-series", code: "A", purpose: "standard" },
+      { kind: "create-series", code: "FF", purpose: "full" },
       { kind: "create-series", code: "R", purpose: "rectificative" },
     ]);
+  });
+
+  it("plans a separate full invoice series with its requested code", () => {
+    const series = planVenue(request({ fullSeriesCode: "F1" }), MODULES).filter(
+      (action) => action.kind === "create-series",
+    );
+    expect(series).toContainEqual({ kind: "create-series", code: "F1", purpose: "full" });
+  });
+
+  it.each([
+    { overrides: { fullSeriesCode: "A" }, field: "fullSeriesCode", code: "A" },
+    { overrides: { fullSeriesCode: "R" }, field: "rectificativeSeriesCode", code: "R" },
+    { overrides: { seriesCode: "FF" }, field: "fullSeriesCode", code: "FF" },
+    { overrides: { rectificativeSeriesCode: "FF" }, field: "rectificativeSeriesCode", code: "FF" },
+  ])("refuses repeated code $code on $field", ({ overrides, field, code }) => {
+    try {
+      planVenue(request(overrides), MODULES);
+      expect.unreachable("should have refused a repeated series code");
+    } catch (error) {
+      expect(isAppError(error) && error.code).toBe("provisioning.duplicate_series_code");
+      if (isAppError(error)) expect(error.params).toEqual({ code, field });
+    }
   });
 
   it("REFUSES an unimplemented territory (spec D4 input half) before emitting anything", () => {
@@ -319,6 +356,7 @@ describe("planVenue", () => {
       "create-node",
       "create-series",
       "create-series",
+      "create-series",
       "seed-module",
     ]);
   });
@@ -362,6 +400,7 @@ describe("describeVenueAction", () => {
       "create location Mostrador in ES-common (es-ES)",
       "create node Mostrador filing=verifactu tax=vat",
       "create standard series A",
+      "create full series FF",
       "create rectificative series R",
       "seed module probe: seed the probe",
     ]);

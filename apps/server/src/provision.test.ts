@@ -139,7 +139,7 @@ describe("provisionVenue", () => {
       expect(typeof id).toBe("string");
       expect((id as string).length).toBeGreaterThan(0);
     }
-    expect(result.seriesIds).toHaveLength(2);
+    expect(result.seriesIds).toHaveLength(3);
     expect(result.seeded.map((s) => s.module)).toEqual([
       "catalogue",
       "venue-service",
@@ -156,7 +156,7 @@ describe("provisionVenue", () => {
 
     expect(await readDeploymentEnvironment(db)).toBe("preproduction");
 
-    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
+    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 3, nodes: 1, registros: 0 });
 
     const written = await readModuleConfig(stateDir);
     expect(written.overrides.get("fiscal-none")).toBe(false);
@@ -177,8 +177,8 @@ describe("provisionVenue", () => {
       "venue-service",
       "adjustments",
     ]);
-    expect(result.seriesIds).toHaveLength(2);
-    expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 2, nodes: 1, registros: 0 });
+    expect(result.seriesIds).toHaveLength(3);
+    expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 3, nodes: 1, registros: 0 });
 
     const written = await readModuleConfig(stateDir);
     expect(written.overrides.get("fiscal-verifactu")).toBe(false);
@@ -216,7 +216,7 @@ describe("provisionVenue", () => {
       request,
     );
     const afterFirst = await fiscalCounts(db);
-    expect(afterFirst).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
+    expect(afterFirst).toEqual({ sif: 1, series: 3, nodes: 1, registros: 0 });
 
     const error = await provisionVenue(
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
@@ -244,7 +244,25 @@ describe("provisionVenue", () => {
       seriesIds: minted.seriesIds,
       seeded: [],
     });
-    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
+    expect(await fiscalCounts(db)).toEqual({ sif: 1, series: 3, nodes: 1, registros: 0 });
+  });
+
+  it("refuses recovery when the submitted full invoice series differs from the committed one", async () => {
+    const db = ownerDb();
+    const request = { environment: "preproduction" as const, venue: venueRequest(nextNif()) };
+    const minted = await provisionVenue(
+      { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
+      request,
+    );
+
+    expect((await recoverProvisionedVenue(db, request)).seriesIds).toEqual(minted.seriesIds);
+
+    await expect(
+      recoverProvisionedVenue(db, {
+        ...request,
+        venue: { ...request.venue, fullSeriesCode: "OTHER" },
+      }),
+    ).rejects.toMatchObject({ code: "setup.already_provisioned" });
   });
 
   it("refuses a FOREIGN tenant in an occupied database and mints no second tenant (§5)", async () => {
@@ -284,7 +302,7 @@ describe("provisionVenue", () => {
       { environment: env, venue: venueRequest(nif) },
     );
     const afterFirst = await fiscalCounts(db);
-    expect(afterFirst).toEqual({ sif: 1, series: 2, nodes: 1, registros: 0 });
+    expect(afterFirst).toEqual({ sif: 1, series: 3, nodes: 1, registros: 0 });
 
     const nonCanonical = { ...venueRequest(nif), country: "es", taxId: nif.toLowerCase() };
     const error = await provisionVenue(

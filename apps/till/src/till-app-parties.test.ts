@@ -105,6 +105,9 @@ const mesa9 = table({ id: "t9", label: "9" });
 
 const tabBill: PartyBill = {
   workingOrderId: "wo-4",
+  revision: 0,
+  invoiceType: "F2",
+  recipient: null,
   partyId: "v1",
   label: null,
   status: "open",
@@ -115,6 +118,9 @@ const tabBill: PartyBill = {
 };
 const checkBill: PartyBill = {
   workingOrderId: "wo-check",
+  revision: 0,
+  invoiceType: "F2",
+  recipient: null,
   partyId: "v1",
   label: null,
   status: "open",
@@ -3126,6 +3132,107 @@ describe("till-app: every table move sends the party revision it last read", () 
 
     expect(api.transferItems).not.toHaveBeenCalled();
     expect(banner(el)).toBeNull();
+  });
+
+  it("asks before splitting a bill over €3,000 and cancel sends no split", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([{ ...tabBill, total: "3500.00", outstanding: "3500.00" }, checkBill]),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-confirm-different-people]");
+    expect(dialog?.textContent).toContain(t("table.confirm_different_people"));
+    expect(api.splitBill).not.toHaveBeenCalled();
+
+    dialog!.querySelector<HTMLElement>("[data-cancel]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
+    expect(api.splitBill).not.toHaveBeenCalled();
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+  });
+
+  it("splits a large bill after staff confirm different people", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([{ ...tabBill, total: "3500.00", outstanding: "3500.00" }, checkBill]),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+    expect(api.splitBill).not.toHaveBeenCalled();
+
+    el.shadowRoot!.querySelector<HTMLElement>(
+      "[data-confirm-different-people] [data-confirm]",
+    )!.click();
+    await flush(el);
+
+    expect(api.splitBill).toHaveBeenCalledWith("wo-4", [{ lineNo: 1 }], {
+      expectedPartyRevision: 3,
+      partyId: "v1",
+    });
+    expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
+  });
+
+  it("splits a bill at €3,000 without asking for different people", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([{ ...tabBill, total: "3000.00", outstanding: "3000.00" }, checkBill]),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
+    expect(api.splitBill).toHaveBeenCalledWith("wo-4", [{ lineNo: 1 }], {
+      expectedPartyRevision: 3,
+      partyId: "v1",
+    });
+  });
+
+  it("does not split when the bill total could not be read", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockRejectedValue(new Error("offline")),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+
+    expect(api.splitBill).not.toHaveBeenCalled();
+    expect(banner(el)?.textContent).toContain(t("table.reread_failed"));
+  });
+
+  it("sends a large-bill line transfer only after staff confirm different people", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([{ ...tabBill, total: "3500.00", outstanding: "3500.00" }, checkBill]),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "transfer-lines", { toBillId: "wo-check", transfers: [{ lineNo: 1 }] });
+    await flush(el);
+
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-confirm-different-people]");
+    expect(dialog).not.toBeNull();
+    expect(api.transferItems).not.toHaveBeenCalled();
+
+    dialog!.querySelector<HTMLElement>("[data-confirm]")!.click();
+    await flush(el);
+    expect(api.transferItems).toHaveBeenCalledWith("wo-4", "wo-check", [{ lineNo: 1 }], {
+      expectedPartyRevision: 3,
+      partyId: "v1",
+    });
+    expect(el.shadowRoot!.querySelector("[data-confirm-different-people]")).toBeNull();
   });
 
   it("leaves an unpaid split-off bill listed when the waiter leaves it and comes back, and merges nothing (decision 8)", async () => {
@@ -6168,6 +6275,9 @@ describe("till-app: recording an unpaid departure", () => {
   /** A presented bill of 18.00 whose invoice owes `amountDue` once its credit notes are counted. */
   const creditedBill = (workingOrderId: string, amountDue: string): PartyBill => ({
     workingOrderId,
+    revision: 0,
+    invoiceType: "F2",
+    recipient: null,
     partyId: "v1",
     label: null,
     status: "placed",

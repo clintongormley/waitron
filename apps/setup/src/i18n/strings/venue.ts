@@ -14,6 +14,7 @@ export const venueEn = {
   "venue.label.country": "Country",
   "venue.label.tax_id": "Tax ID",
   "venue.label.legal_name": "Legal name",
+  "venue.label.taxpayer_domicile": "Registered business address",
   "venue.label.location_name": "Location name",
   "venue.label.invoice_locales": "Receipt language",
   "venue.label.operation_description": "Invoice operation description",
@@ -25,6 +26,7 @@ export const venueEn = {
   "venue.label.province_region": "Province / region",
   "venue.label.day_cutover": "Business day cutover",
   "venue.label.series_code": "Invoice series code",
+  "venue.label.full_series_code": "Full invoice series code",
   "venue.label.rectificative_series_code": "Rectificative series code",
 
   "venue.select_province": "Select province",
@@ -41,6 +43,7 @@ export const venueEn = {
   "venue.field.country": "country",
   "venue.field.tax_id": "tax ID",
   "venue.field.legal_name": "legal name",
+  "venue.field.taxpayer_domicile": "registered business address",
   "venue.field.name": "location name",
   "venue.field.operation_description": "invoice operation description",
   "venue.field.address_line1": "street address",
@@ -50,6 +53,7 @@ export const venueEn = {
   "venue.field.province": "province",
   "venue.field.day_cutover": "business day cutover",
   "venue.field.series_code": "invoice series code",
+  "venue.field.full_series_code": "full invoice series code",
   "venue.field.rectificative_series_code": "correction series code",
   "venue.enter_field": "Enter the {field}.",
   "venue.check_field": "Check the {field}.",
@@ -59,6 +63,7 @@ export const venueEn = {
     "Choose the country where your business is registered. It determines the available address and tax settings.",
   "venue.hint.tax_id": "Of the business that issues the invoices",
   "venue.hint.legal_name": "As on the business's tax documents",
+  "venue.hint.taxpayer_domicile": "Full street address, postcode, city and province",
   "venue.hint.name": "The name you use for this location",
   "venue.help.name":
     "The name you use for this location. You can keep the suggested name or change it.",
@@ -74,6 +79,8 @@ export const venueEn = {
     "Sales before this time belong to the previous business day. Keep 04:00 if you finish trading after midnight.",
   "venue.help.series_code":
     "This prefix identifies ordinary invoices, for example FS/1. Use letters, numbers, / _ . or -, up to 38 characters. Keep FS unless you need another series.",
+  "venue.help.full_series_code":
+    "This prefix identifies full invoices, for example FF/1. Use a different prefix from the other invoice series.",
   "venue.help.rectificative_series_code":
     "This prefix identifies correction invoices, for example FR/1. Use a different prefix from ordinary invoices. Keep FR unless you need another series.",
 
@@ -82,7 +89,7 @@ export const venueEn = {
   "venue.error.postal_code": "Enter a valid postal code that matches the province.",
   "venue.error.territory_unsupported": "Setup is not available for this fiscal territory yet.",
   "venue.error.province": "Choose the province that matches the postal code.",
-  "venue.error.series_codes": "Use different codes for ordinary and correction invoices.",
+  "venue.error.series_codes": "Use a different code for each invoice series.",
   "venue.fix_fields": "Correct the highlighted fields to continue.",
 
   "venue.locale.es_es": "Spanish (España)",
@@ -100,12 +107,14 @@ export const venueEn = {
   "review.country": "Country",
   "review.tax_id": "Tax ID",
   "review.legal_name": "Legal name",
+  "review.taxpayer_domicile": "Registered business address",
   "review.location": "Location",
   "review.address": "Address",
   "review.invoice_locales": "Receipt language",
   "review.operation_description": "Invoice operation description",
   "review.day_cutover": "Business day cutover",
   "review.series": "Invoice series",
+  "review.full_series": "Full invoice series",
   "review.rectificative_series": "Corrections series",
   "review.group.business": "Business",
   "review.group.location": "Location",
@@ -199,6 +208,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.label.country": "País",
   "venue.label.tax_id": "Número de identificación fiscal",
   "venue.label.legal_name": "Razón social",
+  "venue.label.taxpayer_domicile": "Domicilio fiscal del negocio",
   "venue.label.location_name": "Nombre del local",
   "venue.label.invoice_locales": "Idioma del recibo",
   "venue.label.operation_description": "Descripción de la operación en la factura",
@@ -210,6 +220,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.label.province_region": "Provincia / región",
   "venue.label.day_cutover": "Cambio de día comercial",
   "venue.label.series_code": "Código de la serie de facturas",
+  "venue.label.full_series_code": "Código de la serie de facturas completas",
   "venue.label.rectificative_series_code": "Código de la serie rectificativa",
 
   "venue.select_province": "Elige la provincia",
@@ -224,6 +235,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.field.country": "el país",
   "venue.field.tax_id": "el número de identificación fiscal",
   "venue.field.legal_name": "la razón social",
+  "venue.field.taxpayer_domicile": "el domicilio fiscal del negocio",
   "venue.field.name": "el nombre del local",
   "venue.field.operation_description": "la descripción de la operación en la factura",
   "venue.field.address_line1": "la calle y el número",
@@ -233,6 +245,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.field.province": "la provincia",
   "venue.field.day_cutover": "la hora de cambio de día comercial",
   "venue.field.series_code": "el código de la serie de facturas",
+  "venue.field.full_series_code": "el código de la serie de facturas completas",
   "venue.field.rectificative_series_code": "el código de la serie rectificativa",
   "venue.enter_field": "Introduce {field}.",
   "venue.check_field": "Revisa {field}.",
@@ -242,6 +255,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
     "Elige el país donde está registrado tu negocio. Determina los ajustes de dirección e impuestos disponibles.",
   "venue.hint.tax_id": "Del negocio que emite las facturas",
   "venue.hint.legal_name": "Como en sus documentos fiscales",
+  "venue.hint.taxpayer_domicile": "Calle, número, código postal, localidad y provincia",
   "venue.hint.name": "El nombre que usas para este local",
   "venue.help.name":
     "El nombre que usas para este local. Puedes mantener el nombre propuesto o cambiarlo.",
@@ -257,6 +271,8 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
     "Las ventas anteriores a esta hora pertenecen al día comercial anterior. Deja las 04:00 si cierras después de medianoche.",
   "venue.help.series_code":
     "Este prefijo identifica las facturas ordinarias, por ejemplo FS/1. Usa letras, números, / _ . o -, hasta 38 caracteres. Deja FS salvo que necesites otra serie.",
+  "venue.help.full_series_code":
+    "Este prefijo identifica las facturas completas, por ejemplo FF/1. Usa un prefijo distinto al de las demás series.",
   "venue.help.rectificative_series_code":
     "Este prefijo identifica las facturas rectificativas, por ejemplo FR/1. Usa un prefijo distinto al de las facturas ordinarias. Deja FR salvo que necesites otra serie.",
 
@@ -266,8 +282,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.error.territory_unsupported":
     "La configuración aún no está disponible para este territorio fiscal.",
   "venue.error.province": "Elige la provincia que corresponde al código postal.",
-  "venue.error.series_codes":
-    "Usa códigos distintos para las facturas ordinarias y las rectificativas.",
+  "venue.error.series_codes": "Usa un código distinto para cada serie de facturas.",
   "venue.fix_fields": "Corrige los campos marcados para continuar.",
 
   "venue.locale.es_es": "Español (España)",
@@ -285,12 +300,14 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "review.country": "País",
   "review.tax_id": "Número de identificación fiscal",
   "review.legal_name": "Razón social",
+  "review.taxpayer_domicile": "Domicilio fiscal del negocio",
   "review.location": "Local",
   "review.address": "Dirección",
   "review.invoice_locales": "Idioma del recibo",
   "review.operation_description": "Descripción de la operación en la factura",
   "review.day_cutover": "Cambio de día comercial",
   "review.series": "Serie de facturas",
+  "review.full_series": "Serie de facturas completas",
   "review.rectificative_series": "Serie de correcciones",
   "review.group.business": "Negocio",
   "review.group.location": "Local",

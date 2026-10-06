@@ -84,6 +84,7 @@ async function seedFiscalRegistro(db: Database): Promise<void> {
     .insert(invoiceSeries)
     .values({ id: F.seriesId, nodeId: F.nodeId, code: "FA", purpose: "standard", nextNumber: 5 });
   await db.insert(invoiceSeries).values({ nodeId: F.nodeId, code: "RE", purpose: "rectificative" });
+  await db.insert(invoiceSeries).values({ nodeId: F.nodeId, code: "FF", purpose: "full" });
   await db.insert(contadoresInstalacion).values({
     nif: "89890001K",
     idSistemaInformatico: "W1",
@@ -356,6 +357,8 @@ describe("fiscal restore, end to end", () => {
       expect(await seriesOfNode(db)).toEqual([
         { code: "FA", retired: true, next: 5 },
         { code: `FA-${n}`, retired: false, next: 1 },
+        { code: "FF", retired: true, next: 1 },
+        { code: `FF-${n}`, retired: false, next: 1 },
         { code: "RE", retired: true, next: 1 },
         { code: `RE-${n}`, retired: false, next: 1 },
       ]);
@@ -429,7 +432,7 @@ describe("fiscal restore, end to end", () => {
           ]),
         ),
       );
-      expect(await retiredSeriesCount(store.venue)).toBe(2);
+      expect(await retiredSeriesCount(store.venue)).toBe(3);
     } finally {
       await store.close();
     }

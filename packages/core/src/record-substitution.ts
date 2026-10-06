@@ -31,10 +31,7 @@ export interface RecordSubstitutionInput {
    * (`FacturasSustituidas`). The same open question as `RecordCorrectionInput.nodeId` applies.
    */
   nodeId: NodeId;
-  /**
-   * An F3 draws its own number from an ordinary `standard` series (owner decision: there is no
-   * separate substitution purpose), guarded exactly as `recordSale`'s series is.
-   */
+  /** An F3 draws its own number from the node's full-invoice series. */
   seriesId: SeriesId;
   /**
    * The simplified (F2) tickets this one full invoice replaces: non-empty and free of duplicates,
@@ -143,10 +140,10 @@ export async function recordSubstitution(
       actual: input.nodeId,
     });
   }
-  if (series.purpose !== "standard") {
+  if (series.purpose !== "full") {
     throw new AppError("sale.series_wrong_purpose", {
       seriesId: input.seriesId,
-      expected: "standard",
+      expected: "full",
       actual: series.purpose,
     });
   }

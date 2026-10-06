@@ -601,6 +601,56 @@ describe("receipt grouping after table changes", () => {
   );
 });
 
+describe("receipt original and copy tracking", () => {
+  it("distinguishes the F2 original, manual copy and drawer job without changing the sale", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { printerId });
+    const workingOrderId = randomUUID();
+    await recordTillSale(
+      deps(),
+      cfg,
+      {
+        workingOrderId,
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "cash", amount: "2.00" },
+      },
+      OPERATOR,
+    );
+    const before = await withTransaction(suite.db, (tx) =>
+      tx.select().from(sales).where(eq(sales.workingOrderId, workingOrderId)),
+    );
+    await reprintSale({ db: suite.db, backend }, cfg, workingOrderId);
+    const jobs = await withTransaction(suite.db, (tx) => tx.select().from(printJobs));
+    const originals = jobs.filter((job) => job.kind === "document" && job.receiptCopy === false);
+    const copies = jobs.filter((job) => job.kind === "document" && job.receiptCopy === true);
+    const drawers = jobs.filter((job) => job.kind === "drawer");
+    expect(originals).toHaveLength(1);
+    expect(copies).toHaveLength(1);
+    expect(drawers).toHaveLength(1);
+    expect(drawers[0]!.receiptCopy).toBeNull();
+    expect(decodeTicket(new Uint8Array(originals[0]!.payload))).not.toContain("DUPLICADO");
+    expect(decodeTicket(new Uint8Array(copies[0]!.payload))).toContain("DUPLICADO");
+    for (const job of [...originals, ...copies]) {
+      expect(job.saleId).toBe(before[0]!.id);
+      expect(opensDrawer(new Uint8Array(job.payload))).toBe(false);
+    }
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        tx.select().from(sales).where(eq(sales.workingOrderId, workingOrderId)),
+      ),
+    ).toEqual(before);
+    await printSaleReceipt({ db: suite.db, backend }, cfg, workingOrderId, false);
+    await printSaleReceipt({ db: suite.db, backend }, cfg, workingOrderId, false);
+    const repeated = await withTransaction(suite.db, (tx) => tx.select().from(printJobs));
+    expect(repeated.filter((job) => job.receiptCopy === false)).toHaveLength(3);
+    expect(repeated.filter((job) => job.receiptCopy === true)).toHaveLength(1);
+    expect(repeated.filter((job) => job.kind === "drawer")).toHaveLength(1);
+    expect(await registroCount(cfg)).toBe(1);
+  });
+});
+
 describe("cash payment drawer separation", () => {
   it("prints a cash receipt without a drawer command or audit when its printer has no drawer", async () => {
     const { cfg, each, zoneId } = await setupVenue();

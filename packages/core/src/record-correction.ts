@@ -26,6 +26,7 @@ import { authorize, type AuthzInput } from "@waitron/identity";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { assertSumsTo, atCents, deriveVatBreakdown } from "./record-sale.js";
+import { requireSupportedCorrection } from "./correction-eligibility.js";
 import type { RecordSaleLine } from "./record-sale.js";
 
 const ZERO = decimal("0");
@@ -107,6 +108,7 @@ export async function recordCorrection(
       locale: sales.locale,
       invoiceLocales: sales.invoiceLocales,
       total: sales.total,
+      counterpartyTaxId: sales.counterpartyTaxId,
       vatBreakdown: sales.vatBreakdown,
       corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0) as text)`,
       correctionCount: sql<number>`(select count(*) from sales c where c.corrects_sale_id = ${sales}.id)`,
@@ -169,6 +171,8 @@ export async function recordCorrection(
     permission: "sale.rectify",
     override: input.authz.override,
   });
+
+  requireSupportedCorrection(original.counterpartyTaxId, input.correctsSaleId);
 
   // After the gate, so a session that may not correct is not told what is left on the invoice.
   // Compared, stored and filed at the cent amount the row stores, not the unrounded input.

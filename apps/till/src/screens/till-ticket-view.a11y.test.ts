@@ -2,7 +2,7 @@ import { afterEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-ticket-view.js";
 import type { TicketIssuer, TillTicketView } from "./till-ticket-view.js";
-import type { TillSaleResult } from "../api/client.js";
+import type { OriginalReceiptPrint, TillSaleResult } from "../api/client.js";
 
 const result: TillSaleResult = {
   orderLabel: "Mesa 6",
@@ -29,6 +29,137 @@ const issuer: TicketIssuer = { venueName: "Deli Delicioso SL", nif: "B12345678" 
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (theme) => {
+  it.each(["en-GB", "es-ES"])(
+    "has no violations with the saved F1 operation date in %s",
+    async (locale) => {
+      const { host } = await mountWidget<TillTicketView>(
+        "till-ticket-view",
+        {
+          issuer,
+          result: { ...result, locale, invoiceType: "F1", operationDate: "2026-08-04" },
+        },
+        theme,
+      );
+      await expectNoA11yViolations(host);
+    },
+  );
+
+  it.each([
+    undefined,
+    { status: "not_queued" },
+    { status: "queued", jobId: "original", canRetry: false },
+    { status: "printing", jobId: "original", canRetry: false },
+    { status: "failed", jobId: "original", canRetry: false },
+    { status: "failed", jobId: "original", canRetry: true },
+    { status: "done", jobId: "original", canRetry: false },
+  ] as const)("has no violations with F1 original status %j", async (print) => {
+    const { host } = await mountWidget<TillTicketView>(
+      "till-ticket-view",
+      {
+        issuer,
+        result: { ...result, invoiceType: "F1" },
+        originalReceiptPrint: print as OriginalReceiptPrint | undefined,
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([false, true])(
+    "has no violations with F1 handover confirmed=%s and no printing capability",
+    async (confirmed) => {
+      const { host } = await mountWidget<TillTicketView>(
+        "till-ticket-view",
+        {
+          issuer,
+          result: { ...result, invoiceType: "F1" },
+          canPrintReceipt: false,
+          originalReceiptPrint: {
+            status: "done",
+            jobId: "original",
+            canRetry: false,
+            ...(confirmed
+              ? { handover: { personId: "staff", confirmedAt: "2026-08-05T12:40:00.000Z" } }
+              : {}),
+          },
+        },
+        theme,
+      );
+      await expectNoA11yViolations(host);
+    },
+  );
+
+  it("has no violations with F1 weighted and extra net-price rows", async () => {
+    const { host } = await mountWidget<TillTicketView>(
+      "till-ticket-view",
+      {
+        issuer,
+        result: {
+          ...result,
+          invoiceType: "F1",
+          lines: [
+            {
+              descriptions: { "es-ES": "Ham" },
+              quantity: "0.32",
+              gross: "6.40",
+              listGross: "7.40",
+              adjustments: [{ kind: "discount", amount: "1.00" }],
+              unitName: { es: "kg" },
+              net: {
+                unitPrice: "1.82",
+                priceQuantity: "0.100",
+                base: "5.82",
+                rate: "10.00",
+                tax: "0.58",
+              },
+            },
+            {
+              descriptions: { "es-ES": "Extra" },
+              quantity: "2",
+              gross: "3.00",
+              parentLineNo: 1,
+              net: {
+                unitPrice: "1.24",
+                priceQuantity: "1.000",
+                base: "2.48",
+                rate: "21.00",
+                tax: "0.52",
+              },
+            },
+          ],
+        },
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with the filed F1 issuer domicile and recipient", async () => {
+    const { host } = await mountWidget<TillTicketView>(
+      "till-ticket-view",
+      {
+        issuer,
+        result: {
+          ...result,
+          invoiceType: "F1",
+          issuer: {
+            venueName: "Filed Venue SL",
+            nif: "B87654321",
+            domicile: "Calle fiscal original 27, Madrid",
+          },
+          recipient: {
+            legalName: "Filed Customer SL",
+            taxId: "B11223344",
+            address: "Avenida original 123, Madrid",
+            countryCode: "ES",
+          },
+        },
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations on the filed ticket with a QR", async () => {
     const { host } = await mountWidget<TillTicketView>(
       "till-ticket-view",

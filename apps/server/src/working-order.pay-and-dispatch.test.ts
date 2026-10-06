@@ -1625,6 +1625,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     // PLACE → the deferred invoice issues HERE (A/1); the order freezes at `placed`, unsettled.
     const placed = await placeOrder({ db: suite.db, backend, clock }, cfg, id, OPERATOR);
     expect(placed.status).toBe("placed");
+    expect(placed.invoiceType).toBe("F2");
     expect(placed.invoiceNumber).toBe("A/1"); // the deferred invoice, issued at placing
     expect(placed.total).toBe("3.50"); // 1.50 café + 2.00 agua
     expect(placed.qr).not.toBe(""); // a genuine chained filing carries the AEAT QR

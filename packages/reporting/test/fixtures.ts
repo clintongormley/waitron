@@ -155,6 +155,7 @@ export async function seedSale(
       classification?: SaleLineClassification;
     }>;
     correctsSaleId?: SaleId;
+    counterpartyTaxId?: string;
     /** Overrides the breakdown derived from `lines`, for a test that needs a specific desglose. */
     vatBreakdown?: { rate: string; base: string; tax: string }[];
     /**
@@ -176,6 +177,7 @@ export async function seedSale(
       issuedAt: opts.issuedAt,
       issuedOffsetMinutes: opts.issuedOffsetMinutes ?? 0,
       total: stringToCents(opts.total),
+      counterpartyTaxId: opts.counterpartyTaxId ?? null,
       vatBreakdown: opts.vatBreakdown ?? breakdownFromLines(opts.lines),
       locale: "es-ES",
       invoiceLocales: ["es-ES"],

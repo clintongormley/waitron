@@ -18,9 +18,12 @@ export async function enqueuePrintJob(
   printerId: string,
   payload: Uint8Array,
   kind: "document" | "drawer" = "document",
-  { saleId = null }: { saleId?: string | null } = {},
+  {
+    saleId = null,
+    receiptCopy = null,
+  }: { saleId?: string | null; receiptCopy?: boolean | null } = {},
 ): Promise<{ jobId: string }> {
-  return insertPrintJob(tx, cfg, printerId, payload, kind, { resendOf: null, saleId });
+  return insertPrintJob(tx, cfg, printerId, payload, kind, { resendOf: null, saleId, receiptCopy });
 }
 
 async function insertPrintJob(
@@ -29,7 +32,15 @@ async function insertPrintJob(
   printerId: string,
   payload: Uint8Array,
   kind: "document" | "drawer",
-  { resendOf, saleId }: { resendOf: string | null; saleId: string | null },
+  {
+    resendOf,
+    saleId,
+    receiptCopy,
+  }: {
+    resendOf: string | null;
+    saleId: string | null;
+    receiptCopy: boolean | null;
+  },
 ): Promise<{ jobId: string }> {
   // A deactivated printer is reported as `printer.not_found`, not a code of its own.
   const [printer] = await tx
@@ -47,6 +58,7 @@ async function insertPrintJob(
       kind,
       resendOf,
       saleId,
+      receiptCopy,
     })
     .returning({ id: printJobs.id });
   return { jobId: job!.id };
@@ -79,6 +91,6 @@ export async function resendPrintJob(tx: Transaction, jobId: string): Promise<{ 
     job.printerId,
     job.payload,
     "document",
-    { resendOf: job.resendOf ?? job.id, saleId: job.saleId },
+    { resendOf: job.resendOf ?? job.id, saleId: job.saleId, receiptCopy: job.receiptCopy },
   );
 }

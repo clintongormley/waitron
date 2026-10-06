@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillTicketView } from "./till-ticket-view.js";
 import type { TicketIssuer } from "./till-ticket-view.js";
-import type { TillSaleResult } from "../api/client.js";
+import type { OriginalReceiptPrint, TillSaleResult } from "../api/client.js";
 import type { ReceiptConfig } from "../layout.js";
 
 // es-ES currency formatting separates the amount and € with a non-breaking space (U+00A0, or a
@@ -57,6 +58,548 @@ afterEach(() => {
 });
 
 describe("till-ticket-view", () => {
+  it("retains F2 date rendering even when the payload carries an issue offset", async () => {
+    const baseline = await mount({ invoiceType: "F2" });
+    const want = baseline.el.shadowRoot!.querySelectorAll(".meta-row")[1]!.textContent;
+    const { el } = await mount({ invoiceType: "F2", issuedOffsetMinutes: 60 });
+    expect(el.shadowRoot!.querySelectorAll(".meta-row")[1]!.textContent).toBe(want);
+  });
+  it.each([
+    [60, "1 mar 2026, 0:05"],
+    [0, "28 feb 2026, 23:05"],
+    [-480, "28 feb 2026, 15:05"],
+  ])("shows saved F1 issue offset %s independently of the browser", async (offset, want) => {
+    const { el } = await mount({
+      invoiceType: "F1",
+      issuedAt: "2026-02-28T23:05:00.000Z",
+      issuedOffsetMinutes: offset,
+    });
+    expect(el.shadowRoot!.querySelectorAll(".meta-row")[1]!.textContent).toContain(want);
+  });
+
+  it.each([
+    ["es-ES", "Fecha de operación", "28 feb 2026"],
+    ["ca-ES", "Data de l'operació", "28 de febr. 2026"],
+    ["gl-ES", "Data da operación", "28 feb 2026"],
+    ["eu-ES", "Eragiketaren data", "28 feb 2026"],
+    ["en-GB", "Fecha de operación", "28 Feb 2026"],
+  ])("shows the saved operation day in the filed language %s", async (locale, label, date) => {
+    setLocale(locale === "es-ES" ? "en-GB" : "es-ES");
+    const { el } = await mount({
+      invoiceType: "F1",
+      locale,
+      issuedAt: "2026-03-01T00:05:00.000+01:00",
+      operationDate: "2026-02-28",
+    });
+    const row = el.shadowRoot!.querySelector("[data-test=operation-date]");
+    expect(row).not.toBeNull();
+    expect(row!.textContent).toContain(label);
+    expect(row!.textContent).toContain(date);
+    expect(el.shadowRoot!.querySelector(".invoice-number")!.textContent).toBe("A/1");
+  });
+
+  it.each([undefined, "F1", "F2"] as const)(
+    "omits the operation-date row for %s without a distinct saved day",
+    async (invoiceType) => {
+      const { el } = await mount({ invoiceType });
+      expect(el.shadowRoot!.querySelector("[data-test=operation-date]")).toBeNull();
+      expect(text(el)).toContain("Fecha");
+    },
+  );
+
+  it("does not show a saved operation day on an F2", async () => {
+    const { el } = await mount({ invoiceType: "F2", operationDate: "2026-02-28" });
+    expect(el.shadowRoot!.querySelector("[data-test=operation-date]")).toBeNull();
+    expect(text(el)).not.toContain("28 feb 2026");
+  });
+
+  it.each([
+    [undefined, "Checking the original print status…", null],
+    [{ status: "not_queued" }, "The original has not been sent to a printer.", "print-receipt"],
+    [
+      { status: "queued", jobId: "original", canRetry: false },
+      "The original is waiting to print.",
+      null,
+    ],
+    [{ status: "printing", jobId: "original", canRetry: false }, "The original is printing.", null],
+    [
+      { status: "failed", jobId: "original", canRetry: false },
+      "Printing failed. Automatic retry is pending.",
+      null,
+    ],
+    [
+      { status: "failed", jobId: "original", canRetry: true },
+      "Printing failed. Retry the original.",
+      "retry-receipt",
+    ],
+    [
+      { status: "done", jobId: "original", canRetry: false },
+      "Printing completed. Hand the original to the customer.",
+      "reprint",
+    ],
+  ] as const)("keeps F1 undelivered with original status %j", async (print, message, action) => {
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      issuer,
+      result: { ...result, invoiceType: "F1" },
+      originalReceiptPrint: print as OriginalReceiptPrint | undefined,
+      originalReceiptAvailable: true,
+    });
+    const warning = el.shadowRoot!.querySelector("[data-test=original-delivery]");
+    expect(warning?.textContent).toContain("Full invoice not delivered");
+    expect(warning?.textContent).toContain(message);
+    for (const name of ["print-receipt", "retry-receipt", "reprint"]) {
+      expect(el.shadowRoot!.querySelector(`[data-test=${name}]`) !== null).toBe(name === action);
+    }
+    expect(el.shadowRoot!.querySelector("[data-test=refresh-receipt]")).not.toBeNull();
+    expect(el.result.invoiceNumber).toBe("A/1");
+  });
+
+  it.each(["en-GB", "es-ES"])(
+    "confirms F1 customer handover independently of printing capability in %s",
+    async (locale) => {
+      setLocale(locale);
+      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+        issuer,
+        result: { ...result, invoiceType: "F1" },
+        originalReceiptPrint: { status: "done", jobId: "original", canRetry: false },
+        canPrintReceipt: false,
+      });
+      const button = el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-handover]");
+      expect(button).not.toBeNull();
+      expect(button!.textContent).toContain(
+        locale === "en-GB"
+          ? "I handed the original to the customer"
+          : "He entregado el original al cliente",
+      );
+      let event: Event | undefined;
+      el.addEventListener("confirm-handover", (e) => {
+        event = e;
+      });
+      button!.click();
+      expect(event?.bubbles).toBe(true);
+      expect(event?.composed).toBe(true);
+      el.originalReceiptBusy = true;
+      await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector("[data-test=confirm-handover]")?.hasAttribute("disabled"),
+      ).toBe(true);
+      el.originalReceiptBusy = false;
+      el.originalReceiptPrint = {
+        status: "done",
+        jobId: "original",
+        canRetry: false,
+        handover: { personId: "staff", confirmedAt: "2026-08-05T12:40:00.000Z" },
+      };
+      await el.updateComplete;
+      const status = el.shadowRoot!.querySelector("[data-test=original-delivery]")!.textContent!;
+      expect(status).toContain(
+        locale === "en-GB" ? "Customer handover confirmed" : "Entrega al cliente confirmada",
+      );
+      expect(status).not.toContain(
+        locale === "en-GB" ? "Full invoice not delivered" : "Factura completa no entregada",
+      );
+      expect(status).not.toContain(
+        locale === "en-GB" ? "Hand the original" : "Entrega el original",
+      );
+      expect(el.shadowRoot!.querySelector("[data-test=confirm-handover]")).toBeNull();
+      expect(el.result.invoiceNumber).toBe("A/1");
+    },
+  );
+
+  it.each([
+    { status: "not_queued" },
+    { status: "queued", jobId: "original", canRetry: false },
+    { status: "printing", jobId: "original", canRetry: false },
+    { status: "failed", jobId: "original", canRetry: true },
+  ] as const)(
+    "does not offer customer handover before an original completes: %j",
+    async (print) => {
+      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+        issuer,
+        result: { ...result, invoiceType: "F1" },
+        originalReceiptPrint: print,
+      });
+      expect(el.shadowRoot!.querySelector("[data-test=confirm-handover]")).toBeNull();
+    },
+  );
+
+  it("keeps F1 status visible without device printing capability and exposes only the status check", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      issuer,
+      result: { ...result, invoiceType: "F1" },
+      originalReceiptPrint: { status: "not_queued" },
+      canPrintReceipt: false,
+    });
+    expect(el.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent).toContain(
+      "Factura completa no entregada",
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=original-delivery]")?.textContent).toContain(
+      "El original no se ha enviado a una impresora.",
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=print-receipt]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=retry-receipt]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=refresh-receipt]")).not.toBeNull();
+  });
+
+  it("emits original retry and status check events while preserving the filed result", async () => {
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      issuer,
+      result: { ...result, invoiceType: "F1" },
+      originalReceiptPrint: { status: "failed", jobId: "original", canRetry: true },
+    });
+    for (const name of ["retry-receipt", "refresh-receipt"]) {
+      let event: Event | undefined;
+      el.addEventListener(name, (e) => {
+        event = e;
+      });
+      el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`)!.click();
+      expect(event?.bubbles).toBe(true);
+      expect(event?.composed).toBe(true);
+    }
+    el.originalReceiptBusy = true;
+    await el.updateComplete;
+    expect(
+      el.shadowRoot!.querySelector("[data-test=retry-receipt]")?.hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      el.shadowRoot!.querySelector("[data-test=refresh-receipt]")?.hasAttribute("disabled"),
+    ).toBe(true);
+    expect(el.result.invoiceNumber).toBe("A/1");
+  });
+
+  it("does not show an F1 delivery warning or retry action for F2", async () => {
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      issuer,
+      result: { ...result, invoiceType: "F2" },
+      originalReceiptPrint: { status: "failed", jobId: "original", canRetry: true },
+      originalReceiptAvailable: true,
+    });
+    expect(el.shadowRoot!.querySelector("[data-test=original-delivery]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=retry-receipt]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
+  });
+
+  it.each([
+    ["es-ES", "IVA incluido"],
+    ["ca-ES", "IVA inclòs"],
+    ["gl-ES", "IVE incluído"],
+    ["eu-ES", "BEZa barne"],
+    ["en-GB", "IVA incluido"],
+  ])("identifies VAT-inclusive F1 reductions in %s", async (locale, included) => {
+    const invoice = {
+      ...result,
+      total: "10.30",
+      vatBreakdown: [{ rate: "21.00", base: "8.51", tax: "1.79" }],
+      lines: [
+        {
+          descriptions: { "es-ES": "Plato", en: "Dish" },
+          quantity: "1",
+          gross: "10.30",
+          listGross: "12.00",
+          net: {
+            unitPrice: "8.51",
+            priceQuantity: "1.000",
+            base: "8.51",
+            rate: "21.00",
+            tax: "1.79",
+          },
+          adjustments: [{ kind: "discount" as const, percentBp: 1000, amount: "1.20" }],
+        },
+        {
+          descriptions: { "es-ES": "Extra", en: "Extra" },
+          quantity: "1",
+          gross: "0.00",
+          listGross: "1.10",
+          parentLineNo: 1,
+          net: {
+            unitPrice: "0.00",
+            priceQuantity: "1.000",
+            base: "0.00",
+            rate: "10.00",
+            tax: "0.00",
+          },
+          adjustments: [{ kind: "comp" as const, amount: "1.10" }],
+        },
+      ],
+      billAdjustments: [{ kind: "discount" as const, amount: "0.50" }],
+    };
+    const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+      issuer,
+      invoiceLocale: locale,
+      result: { ...invoice, invoiceType: "F1" },
+    });
+    const reductions = [...el.shadowRoot!.querySelectorAll(".adjustment, .bill-adjustment")];
+    expect(reductions).toHaveLength(3);
+    for (const row of reductions) expect(row.textContent).toContain(`(${included})`);
+    const expected =
+      locale === "en-GB" ? ["-€1.20", "-€1.10", "-€0.50"] : ["-1,20 €", "-1,10 €", "-0,50 €"];
+    expect(reductions.map((row) => norm(row.querySelector(".line-gross")!.textContent!))).toEqual(
+      expected,
+    );
+    el.result = { ...invoice, invoiceType: "F2" };
+    await el.updateComplete;
+    expect(text(el)).not.toContain(`(${included})`);
+  });
+
+  it("shows saved VAT in each F1 dish and extra row", async () => {
+    const { el } = await mount({
+      invoiceType: "F1",
+      lines: [
+        {
+          ...result.lines[0]!,
+          net: {
+            unitPrice: "1.24",
+            priceQuantity: "1.000",
+            base: "2.48",
+            rate: "21.00",
+            tax: "0.52",
+          },
+        },
+        {
+          ...result.lines[1]!,
+          parentLineNo: 1,
+          net: {
+            unitPrice: "18.18",
+            priceQuantity: "1.000",
+            base: "5.82",
+            rate: "10.00",
+            tax: "0.58",
+          },
+        },
+      ],
+    });
+    const facts = [...el.shadowRoot!.querySelectorAll(".invoice-facts")].map((node) =>
+      norm([...node.querySelectorAll("span")].map((span) => span.textContent).join(" "))
+        .replace(/\s+/g, " ")
+        .trim(),
+    );
+    expect(facts[0]).toContain("IVA 21.00% 0,52 €");
+    expect(facts[1]).toContain("IVA 10.00% 0,58 €");
+  });
+
+  it("keeps the F2 gross layout even when net facts are present", async () => {
+    const { el } = await mount({
+      invoiceType: "F2",
+      lines: [
+        {
+          ...result.lines[0]!,
+          net: { unitPrice: "1.24", priceQuantity: "1.000", base: "2.48", rate: "21.00" },
+        },
+      ],
+    });
+    expect(text(el)).not.toContain("Factura completa");
+    expect(el.shadowRoot!.querySelector(".invoice-facts")).toBeNull();
+    expect(norm(el.shadowRoot!.querySelector(".line-gross")!.textContent!)).toBe("3,00 €");
+  });
+
+  it.each(["ca-ES", "gl-ES", "eu-ES"])(
+    "shows F1 labels and a sub-unit price quantity in %s",
+    async (locale) => {
+      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+        issuer,
+        invoiceLocale: locale,
+        result: {
+          ...result,
+          invoiceType: "F1",
+          lines: [
+            {
+              descriptions: { [locale]: "Ham" },
+              quantity: "0.32",
+              gross: "6.40",
+              unitName: { es: "kg" },
+              net: { unitPrice: "1.82", priceQuantity: "0.100", base: "5.82", rate: "10.00" },
+            },
+          ],
+        },
+      });
+      const priceLabels = {
+        "ca-ES": "Preu sense IVA",
+        "gl-ES": "Prezo sen IVE",
+        "eu-ES": "BEZik gabeko prezioa",
+      };
+      expect(text(el)).toContain(priceLabels[locale as keyof typeof priceLabels]);
+      expect(
+        norm(el.shadowRoot!.querySelector(".invoice-facts span:last-child")!.textContent!)
+          .replace(/\s+/g, " ")
+          .trim(),
+      ).toBe("1,82 € / 0.1 kg");
+    },
+  );
+
+  it("shows the filed combined quantity for an F1 extra", async () => {
+    const { el } = await mount({
+      invoiceType: "F1",
+      lines: [
+        {
+          descriptions: { "es-ES": "Plato" },
+          quantity: "2",
+          gross: "3.00",
+          net: { unitPrice: "1.24", priceQuantity: "1.000", base: "2.48", rate: "21.00" },
+        },
+        {
+          descriptions: { "es-ES": "Extra" },
+          quantity: "4",
+          parentLineNo: 1,
+          gross: "6.40",
+          net: { unitPrice: "1.45", priceQuantity: "1.000", base: "5.82", rate: "10.00" },
+        },
+      ],
+    });
+    expect(el.shadowRoot!.querySelector(".line.option")!.textContent).toContain("Extra 4");
+    expect(el.shadowRoot!.querySelector(".line.option")!.textContent).not.toContain("x2");
+  });
+
+  it.each(["es-ES", "en-GB"])(
+    "shows filed F1 net prices and price quantities (%s)",
+    async (locale) => {
+      const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+        issuer,
+        invoiceLocale: locale,
+        result: {
+          ...result,
+          invoiceType: "F1",
+          lines: [
+            {
+              descriptions: { "es-ES": "Jamón", "en-GB": "Ham" },
+              quantity: "0.32",
+              unitName: { es: "kg" },
+              gross: "6.40",
+              net: { unitPrice: "18.18", priceQuantity: "1.000", base: "5.82", rate: "10.00" },
+            },
+            {
+              descriptions: { "es-ES": "Extra", "en-GB": "Extra" },
+              quantity: "2",
+              parentLineNo: 1,
+              gross: "3.00",
+              net: { unitPrice: "1.24", priceQuantity: "1.000", base: "2.48", rate: "21.00" },
+            },
+          ],
+        },
+      });
+      expect(text(el)).toContain("Factura completa");
+      const facts = [...el.shadowRoot!.querySelectorAll(".invoice-facts")].map((node) =>
+        norm([...node.querySelectorAll("span")].map((span) => span.textContent).join(" "))
+          .replace(/\s+/g, " ")
+          .trim(),
+      );
+      expect(facts).toHaveLength(2);
+      expect(facts[0]).toContain(
+        `Precio sin IVA ${locale === "es-ES" ? "18,18 €" : "€18.18"} / 1 kg`,
+      );
+      expect(facts[0]).toContain(`Base 10.00% ${locale === "es-ES" ? "5,82 €" : "€5.82"}`);
+      expect(facts[1]).toContain(`Base 21.00% ${locale === "es-ES" ? "2,48 €" : "€2.48"}`);
+      expect(el.shadowRoot!.querySelector(".lines")!.textContent).not.toContain(
+        locale === "es-ES" ? "6,40" : "6.40",
+      );
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "wraps long F1 identity text on a phone (%s)",
+    async (theme) => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      await page.viewport(390, 844);
+      try {
+        const { el } = await mountWidget<TillTicketView>(
+          "till-ticket-view",
+          {
+            issuer,
+            result: {
+              ...result,
+              invoiceType: "F1",
+              issuer: {
+                venueName: "Filed Venue SL",
+                nif: "B87654321",
+                domicile: "Calle fiscal original 27, Madrid",
+              },
+              recipient: {
+                legalName: "Customer".repeat(12),
+                taxId: "B11223344",
+                address: "Avenida del cliente original 123, Madrid",
+                countryCode: "ES",
+              },
+            },
+          },
+          theme,
+        );
+        const recipient = el.shadowRoot!.querySelector<HTMLElement>(".recipient")!;
+        expect(recipient.textContent).toContain("Customer".repeat(12));
+        expect(recipient.scrollWidth).toBeLessThanOrEqual(recipient.clientWidth);
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+      } finally {
+        await page.viewport(width, height);
+      }
+    },
+  );
+
+  it.each([
+    { invoiceType: "F1", domicile: "Calle Fiscal 27", showLocation: false },
+    { invoiceType: "F1", domicile: undefined, showLocation: true },
+    { invoiceType: "F2", domicile: "Calle Fiscal 27", showLocation: true },
+    { invoiceType: "F2", domicile: undefined, showLocation: true },
+  ] as const)(
+    "uses the taxpayer domicile instead of the location address on $invoiceType with domicile=$domicile",
+    async ({ invoiceType, domicile, showLocation }) => {
+      for (const locale of ["es-ES", "en-GB"]) {
+        const { el } = await mountWidget<TillTicketView>("till-ticket-view", {
+          result: {
+            ...result,
+            locale,
+            invoiceType,
+            issuer: { ...issuer, ...(domicile === undefined ? {} : { domicile }) },
+          },
+          issuer,
+          invoiceLocale: locale,
+          venueAddress: ["Location Street 45", "28001 Madrid"],
+          receipt: { phone: "910000000", email: "venue@example.com" },
+        });
+        const header = norm(el.shadowRoot!.querySelector(".issuer")!.textContent ?? "");
+        expect(header.includes("Location Street 45")).toBe(showLocation);
+        expect(header.includes("28001 Madrid")).toBe(showLocation);
+        expect(header.includes("Calle Fiscal 27")).toBe(
+          invoiceType === "F1" && domicile !== undefined,
+        );
+        expect(header).toContain("910000000");
+        expect(header).toContain("venue@example.com");
+      }
+    },
+  );
+
+  it("shows the filed F1 domicile and recipient instead of the current issuer", async () => {
+    const { el } = await mount({
+      invoiceType: "F1",
+      issuer: {
+        venueName: "Filed Venue SL",
+        nif: "B87654321",
+        domicile: "Calle fiscal original 27, Madrid",
+      },
+      recipient: {
+        legalName: "Filed Customer SL",
+        taxId: "B11223344",
+        address: "Avenida original 123, Madrid",
+        countryCode: "ES",
+      },
+    });
+    const content = text(el);
+    expect(content).toContain("Filed Venue SL");
+    expect(content).toContain("Calle fiscal original 27, Madrid");
+    expect(content).toContain("Filed Customer SL");
+    expect(content).toContain("NIF: B11223344");
+    expect(content).toContain("Avenida original 123, Madrid");
+    expect(content).not.toContain("Deli Delicioso SL");
+    const article = el.shadowRoot!.querySelector("article")!;
+    expect(article.querySelectorAll(".qr")).toHaveLength(1);
+    const sections = [...article.children];
+    expect(sections.indexOf(article.querySelector(".qr-block")!)).toBeLessThan(
+      sections.indexOf(article.querySelector(".issuer")!),
+    );
+    expect(sections.indexOf(article.querySelector(".meta")!)).toBeLessThan(
+      sections.indexOf(article.querySelector(".recipient")!),
+    );
+  });
+
   it("registers as a custom element", () => {
     expect(customElements.get("till-ticket-view")).toBe(TillTicketView);
   });

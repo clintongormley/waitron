@@ -33,6 +33,9 @@ import "./errors.js";
 /** One bill of a party, as the table screen lists it. */
 export interface PartyBill {
   workingOrderId: string;
+  revision: number;
+  invoiceType: "F1" | "F2";
+  recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
   /** The party the bill is recorded on; for a bill a merged party kept, not the one asked about. */
   partyId: string;
   label: string | null;
@@ -402,6 +405,27 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
     throw new AppError("party.not_open", { partyId });
   }
   const bills = (await readBillsOfParties(tx, [partyId])).get(partyId)!;
+  const choices =
+    bills.length === 0
+      ? []
+      : await tx
+          .select({
+            id: workingOrders.id,
+            revision: workingOrders.revision,
+            invoiceType: workingOrders.invoiceType,
+            taxId: workingOrders.recipientTaxId,
+            legalName: workingOrders.recipientLegalName,
+            address: workingOrders.recipientAddress,
+            countryCode: workingOrders.recipientCountryCode,
+          })
+          .from(workingOrders)
+          .where(
+            inArray(
+              workingOrders.id,
+              bills.map((bill) => bill.workingOrderId),
+            ),
+          );
+  const choiceByBill = new Map(choices.map((choice) => [choice.id, choice]));
   const filedSales = await tx
     .select({
       id: sales.id,
@@ -429,8 +453,23 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
   );
   return bills.map((bill) => {
     const sale = filed.get(bill.workingOrderId);
+    const choice = choiceByBill.get(bill.workingOrderId)!;
     return {
       workingOrderId: bill.workingOrderId,
+      revision: choice.revision,
+      invoiceType: choice.invoiceType,
+      recipient:
+        choice.taxId !== null &&
+        choice.legalName !== null &&
+        choice.address !== null &&
+        choice.countryCode !== null
+          ? {
+              taxId: choice.taxId,
+              legalName: choice.legalName,
+              address: choice.address,
+              countryCode: choice.countryCode,
+            }
+          : null,
       partyId: bill.partyId,
       label: bill.label,
       status: bill.status,
@@ -453,7 +492,13 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
 /** A bill as {@link readBillsOfParties} reads it, with how many lines it holds. */
 export type FamilyBill = Omit<
   PartyBill,
-  "receiptAvailable" | "invoiceNumber" | "creditNotes" | "amountDue"
+  | "receiptAvailable"
+  | "invoiceNumber"
+  | "creditNotes"
+  | "amountDue"
+  | "revision"
+  | "invoiceType"
+  | "recipient"
 > & {
   lines: number;
 };

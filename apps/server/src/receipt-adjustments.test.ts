@@ -3,7 +3,15 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
+import {
+  billPayments,
+  sales,
+  saleLines,
+  tenants,
+  workingOrderLines,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
 import type { AdjustmentAction } from "@waitron/adjustments";
 import { decimal } from "@waitron/shared";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
@@ -19,8 +27,9 @@ import {
   type AdjustmentVenue,
   type RoundLine,
 } from "./testing/adjustment-venue.js";
-import { payWorkingOrder } from "./till-sale.js";
-import { readStoredOrder } from "./working-order.js";
+import { payWorkingOrder, readSettledTicket } from "./till-sale.js";
+import { readStoredOrder, setOrderInvoiceChoice } from "./working-order.js";
+import { completeBillPayment } from "./bill-payments.js";
 import "./errors.js";
 
 // What a receipt prints beneath a comped or discounted dish, and after the goods for a discount on
@@ -87,6 +96,217 @@ function shown(receipt: Awaited<ReturnType<typeof receiptOf>>) {
 }
 
 describe("receiptLines", () => {
+  it("keeps filed net figures with discounted and weighted F1 lines in either display order", async () => {
+    const billId = await bill([{ name: "Burger" }, { name: "Ham", quantity: "0.250" }]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 1000,
+    });
+    const [taxpayer] = await inTx(venue, (tx) => tx.select().from(tenants));
+    try {
+      await inTx(venue, (tx) =>
+        tx
+          .update(tenants)
+          .set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" })
+          .where(eq(tenants.id, 1)),
+      );
+      const [order] = await inTx(venue, (tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+      );
+      await setOrderInvoiceChoice(venue.db, venue.backend, venue.cfg, billId, {
+        revision: order!.revision,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      });
+      const receipt = await inTx(venue, async (tx) => {
+        const [payment] = await tx
+          .insert(billPayments)
+          .values({
+            workingOrderId: billId,
+            submissionId: randomUUID(),
+            fingerprint: "receipt-f1-net",
+            kind: "contribution",
+            method: "card",
+            applied: 1680,
+            state: "pending",
+            requestedBy: venue.supervisorId,
+            source: venue.cfg.origin.source,
+            deviceId: venue.cfg.origin.deviceId,
+          })
+          .returning();
+        return (await completeBillPayment(tx, venue, venue.cfg, payment!.id, new Date())).invoice!;
+      });
+      const replay = await inTx(venue, (tx) =>
+        readSettledTicket(venue.backend, tx, venue.cfg, billId),
+      );
+      const expected = [
+        {
+          quantity: "1",
+          gross: "10.80",
+          listGross: "12.00",
+          net: { unitPrice: "8.93", priceQuantity: "1.000", base: "8.93", rate: "21.00" },
+          adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.20" }],
+        },
+        {
+          quantity: "0.25",
+          gross: "6.00",
+          net: { unitPrice: "21.82", priceQuantity: "1.000", base: "5.45", rate: "10.00" },
+        },
+      ];
+      expect(receipt.lines).toMatchObject(expected);
+      expect(replay.lines).toMatchObject(expected);
+      expect(replay.vatBreakdown).toEqual([
+        { rate: "21.00", base: "8.93", tax: "1.87" },
+        { rate: "10.00", base: "5.45", tax: "0.55" },
+      ]);
+      expect(replay.total).toBe("16.80");
+      const reordered = await inTx(venue, async (tx) => {
+        const stored = await readStoredOrder(tx, billId);
+        const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
+        return receiptLines(
+          tx,
+          billId,
+          { lines: [...stored.gross.lines].reverse() },
+          [...stored.identities].reverse(),
+          sale!.id,
+        );
+      });
+      expect(reordered.lines).toMatchObject([...expected].reverse());
+      expect(receipt.lines).toMatchObject([{ net: { tax: "1.87" } }, { net: { tax: "0.55" } }]);
+      expect(replay.lines).toMatchObject([{ net: { tax: "1.87" } }, { net: { tax: "0.55" } }]);
+      const changedDisplay = await inTx(venue, async (tx) => {
+        const stored = await readStoredOrder(tx, billId);
+        const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
+        return receiptLines(
+          tx,
+          billId,
+          {
+            lines: stored.gross.lines.map((line) => ({ ...line, lineGross: decimal("99.99") })),
+          },
+          stored.identities,
+          sale!.id,
+        );
+      });
+      expect(changedDisplay.lines).toMatchObject([
+        { gross: "99.99", net: { base: "8.93", tax: "1.87" } },
+        { gross: "99.99", net: { base: "5.45", tax: "0.55" } },
+      ]);
+    } finally {
+      await inTx(venue, (tx) =>
+        tx
+          .update(tenants)
+          .set({ taxpayerDomicile: taxpayer!.taxpayerDomicile })
+          .where(eq(tenants.id, 1)),
+      );
+    }
+  });
+
+  it("replays an F1 discount from the filed list price rather than the display identity", async () => {
+    const billId = await bill([{ name: "Burger" }, { name: "Ham", quantity: "0.250" }]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 1000,
+    });
+    const [taxpayer] = await inTx(venue, (tx) => tx.select().from(tenants));
+    try {
+      await inTx(venue, (tx) =>
+        tx
+          .update(tenants)
+          .set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" })
+          .where(eq(tenants.id, 1)),
+      );
+      const [order] = await inTx(venue, (tx) =>
+        tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+      );
+      await setOrderInvoiceChoice(venue.db, venue.backend, venue.cfg, billId, {
+        revision: order!.revision,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      });
+      const original = await inTx(venue, async (tx) => {
+        const [payment] = await tx
+          .insert(billPayments)
+          .values({
+            workingOrderId: billId,
+            submissionId: randomUUID(),
+            fingerprint: "receipt-f1-list-snapshot",
+            kind: "contribution",
+            method: "card",
+            applied: 1680,
+            state: "pending",
+            requestedBy: venue.supervisorId,
+            source: venue.cfg.origin.source,
+            deviceId: venue.cfg.origin.deviceId,
+          })
+          .returning();
+        return (await completeBillPayment(tx, venue, venue.cfg, payment!.id, new Date())).invoice!;
+      });
+      const changedIdentity = await inTx(venue, async (tx) => {
+        const stored = await readStoredOrder(tx, billId);
+        const [sale] = await tx.select().from(sales).where(eq(sales.workingOrderId, billId));
+        const saved = await tx
+          .select({ listGross: saleLines.listGross })
+          .from(saleLines)
+          .where(eq(saleLines.saleId, sale!.id))
+          .orderBy(saleLines.lineNo);
+        expect(saved).toEqual([{ listGross: 1200 }, { listGross: null }]);
+        const identities = stored.identities.map((identity) => ({
+          ...identity,
+          listUnitGross: decimal("99.00"),
+        }));
+        const preview = await receiptLines(tx, billId, stored.gross, identities);
+        expect(preview.lines[0]!.listGross).toBe("99.00");
+        return receiptLines(
+          tx,
+          billId,
+          { lines: stored.gross.lines.map((line) => ({ ...line, lineGross: decimal("99.99") })) },
+          identities,
+          sale!.id,
+        );
+      });
+      for (const receipt of [original, changedIdentity]) {
+        expect(receipt.lines[0]).toMatchObject({
+          listGross: "12.00",
+          adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.20" }],
+          net: { base: "8.93", tax: "1.87" },
+        });
+        expect(receipt.lines[1]).not.toHaveProperty("listGross");
+        expect(receipt.lines[1]).not.toHaveProperty("adjustments");
+      }
+      const [sale] = await inTx(venue, (tx) =>
+        tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
+      );
+      await expect(
+        inTx(venue, (tx) =>
+          tx.update(saleLines).set({ listGross: 9900 }).where(eq(saleLines.saleId, sale!.id)),
+        ),
+      ).rejects.toThrow("sale_lines is append-only");
+      const replay = await inTx(venue, (tx) =>
+        readSettledTicket(venue.backend, tx, venue.cfg, billId),
+      );
+      expect(replay.lines[0]!.listGross).toBe("12.00");
+    } finally {
+      await inTx(venue, (tx) =>
+        tx
+          .update(tenants)
+          .set({ taxpayerDomicile: taxpayer!.taxpayerDomicile })
+          .where(eq(tenants.id, 1)),
+      );
+    }
+  });
+
   it("carries an Each context flag to the filed extra's display line", async () => {
     const billId = await bill([{ name: "Pizza", olives: 1 }]);
     const childId = await lineIdOf(venue, billId, 2);

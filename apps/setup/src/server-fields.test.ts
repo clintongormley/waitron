@@ -17,3 +17,13 @@ it("tells the operator about a refused field in the wizard's language, read when
     /^Usa 500 caracteres como máximo/,
   );
 });
+
+it("explains a setup-only domicile refusal without changing the fiscal field map", async () => {
+  const { VENUE_SERVER_FIELDS } = await import("./server-fields.js");
+  expect(VENUE_SERVER_FIELDS?.taxpayerDomicile?.key).toBe("taxpayerDomicile");
+  expect(VENUE_SERVER_FIELDS?.taxpayerDomicile?.message).toMatch(/.+/);
+  const english = VENUE_SERVER_FIELDS?.taxpayerDomicile?.message;
+  setLocale("es-ES");
+  expect(VENUE_SERVER_FIELDS?.taxpayerDomicile?.message).not.toBe(english);
+  expect(VENUE_SERVER_FIELDS?.fullSeriesCode?.message).toBe(SERVER_FIELDS.fullSeriesCode?.message);
+});

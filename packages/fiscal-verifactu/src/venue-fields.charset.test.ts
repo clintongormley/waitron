@@ -42,6 +42,7 @@ function recordFor(fields: { numSerie?: string; nombre?: string; descripcion?: s
 const GOOD = {
   legalName: "Waitron SL",
   seriesCode: "FS",
+  fullSeriesCode: "FF",
   rectificativeSeriesCode: "FR",
   operationDescription: "Venta en establecimiento",
 };

@@ -97,6 +97,9 @@ function mesa(partyOver: Partial<TableParty> = {}): TableState {
 function billOf(over: Partial<PartyBill> = {}): PartyBill {
   return {
     workingOrderId: "wo-4",
+    revision: 0,
+    invoiceType: "F2",
+    recipient: null,
     partyId: "v1",
     label: null,
     status: "open",
@@ -400,6 +403,161 @@ beforeEach(() => {
 afterEach(cleanupWidgets);
 
 describe("till-app: the three ways to pay part of a bill", () => {
+  it("saves a full-invoice recipient on a partly paid bill and shows the saved choice", async () => {
+    const recipient = {
+      taxId: "12345678Z",
+      legalName: "Ana García",
+      address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+      countryCode: "ES",
+    };
+    let chosen = false;
+    const getPartyBills = vi.fn().mockImplementation(async () => [
+      billOf({
+        revision: chosen ? 8 : 7,
+        outstanding: "80.00",
+        hasPayments: true,
+        invoiceType: chosen ? "F1" : "F2",
+        recipient: chosen ? recipient : null,
+      }),
+    ]);
+    const setOrderInvoiceChoice = vi.fn().mockImplementation(async () => {
+      chosen = true;
+      return { revision: 8 };
+    });
+    const { el } = await mountApp({ getPartyBills, setOrderInvoiceChoice });
+    const order = await openTable(el);
+
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("till-invoice-recipient-dialog");
+    expect(dialog).not.toBeNull();
+    emit(dialog!, "invoice-recipient-confirm", { invoiceType: "F1", recipient });
+    await flush(el);
+
+    expect(setOrderInvoiceChoice).toHaveBeenCalledWith("wo-4", {
+      revision: 7,
+      invoiceType: "F1",
+      recipient,
+    });
+    expect(text(order.shadowRoot!.querySelector("[data-invoice-choice]"))).toContain("Ana García");
+  });
+
+  it("reports a bill refresh failure after saving a full-invoice recipient", async () => {
+    const getPartyBills = vi
+      .fn()
+      .mockResolvedValueOnce([billOf({ revision: 7, outstanding: "80.00", hasPayments: true })])
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const setOrderInvoiceChoice = vi.fn().mockResolvedValue({ revision: 8 });
+    const { el } = await mountApp({ getPartyBills, setOrderInvoiceChoice });
+    const order = await openTable(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    await flush(el);
+
+    emit(
+      el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+      "invoice-recipient-confirm",
+      {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "Ana García",
+          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      },
+    );
+    await flush(el);
+
+    expect(setOrderInvoiceChoice).toHaveBeenCalledTimes(1);
+    expect(getPartyBills).toHaveBeenCalledTimes(2);
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+    expect(text(el.shadowRoot!.querySelector('[role="alert"]'))).toContain(
+      t("table.reread_failed"),
+    );
+  });
+
+  it("keeps the bill recipient dialog retryable after a save refusal", async () => {
+    const setOrderInvoiceChoice = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("network unavailable"))
+      .mockResolvedValueOnce({ revision: 1 });
+    const { el } = await mountApp({ setOrderInvoiceChoice });
+    const order = await openTable(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    await flush(el);
+    const recipient = {
+      taxId: "12345678Z",
+      legalName: "Ana García",
+      address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+      countryCode: "ES",
+    };
+    emit(
+      el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+      "invoice-recipient-confirm",
+      {
+        invoiceType: "F1",
+        recipient,
+      },
+    );
+    await flush(el);
+
+    const dialog = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    expect(dialog).not.toBeNull();
+    expect(
+      dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
+    ).toBe(codeMessage("server.internal"));
+    expect(
+      dialog.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-invoice-save]")!
+        .disabled,
+    ).toBe(false);
+    emit(dialog, "invoice-recipient-confirm", { invoiceType: "F1", recipient });
+    await flush(el);
+    expect(setOrderInvoiceChoice).toHaveBeenCalledTimes(2);
+    expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).toBeNull();
+  });
+
+  it("marks the recipient field named by a server refusal and clears it after correction", async () => {
+    const setOrderInvoiceChoice = vi.fn().mockRejectedValueOnce({
+      code: "invoice.recipient_invalid",
+      field: "address",
+    });
+    const { el } = await mountApp({ setOrderInvoiceChoice });
+    const order = await openTable(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-choose-bill-invoice]")!.click();
+    await flush(el);
+
+    emit(
+      el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!,
+      "invoice-recipient-confirm",
+      {
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "Ana García",
+          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          countryCode: "ES",
+        },
+      },
+    );
+    await flush(el);
+
+    const dialog = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
+    expect(
+      dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-input[name=address]")!
+        .error,
+    ).toBe(codeMessage("invoice.recipient_invalid"));
+    expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+
+    const street = dialog.shadowRoot!.querySelector<HTMLElement>("wt-input[name=address]")!;
+    emit(street, "wt-change", { value: "Calle Nueva 3" });
+    await flush(el);
+    expect(
+      dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-input[name=address]")!
+        .error,
+    ).toBe("");
+    expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+  });
+
   it("asks where to make a bill dish before previewing a payment", async () => {
     const askOrderDeadEnds = vi.fn().mockResolvedValue({
       sends: true,

@@ -33,12 +33,13 @@ import {
 import { dispatchSetupAdvance, dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { VenueDefaults, ProvisionBody } from "../api/client.js";
-import { SERVER_FIELDS, type ServerField } from "../server-fields.js";
+import { VENUE_SERVER_FIELDS, type ServerField } from "../server-fields.js";
 
 type TextField =
   | "country"
   | "taxId"
   | "legalName"
+  | "taxpayerDomicile"
   | "name"
   | "operationDescription"
   | "addressLine1"
@@ -48,6 +49,7 @@ type TextField =
   | "province"
   | "dayCutover"
   | "seriesCode"
+  | "fullSeriesCode"
   | "rectificativeSeriesCode";
 
 /**
@@ -58,6 +60,7 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   country: "off",
   taxId: "off",
   legalName: "off",
+  taxpayerDomicile: "off",
   name: "off",
   operationDescription: "off",
   addressLine1: "off",
@@ -67,6 +70,7 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   province: "off",
   dayCutover: "off",
   seriesCode: "off",
+  fullSeriesCode: "off",
   rectificativeSeriesCode: "off",
 };
 
@@ -76,10 +80,12 @@ type FieldKey = TextField | "invoiceLocales";
 const DEMO_HIDDEN: ReadonlySet<FieldKey> = new Set<FieldKey>([
   "taxId",
   "legalName",
+  "taxpayerDomicile",
   "operationDescription",
   "invoiceLocales",
   "dayCutover",
   "seriesCode",
+  "fullSeriesCode",
   "rectificativeSeriesCode",
 ]);
 
@@ -87,6 +93,7 @@ const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
   "country",
   "taxId",
   "legalName",
+  "taxpayerDomicile",
   "name",
   "operationDescription",
   "addressLine1",
@@ -95,11 +102,19 @@ const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
   "province",
   "dayCutover",
   "seriesCode",
+  "fullSeriesCode",
   "rectificativeSeriesCode",
 ];
 
 type HintedField =
-  "taxId" | "legalName" | "name" | "addressLine1" | "addressLine2" | "postalCode" | "city";
+  | "taxId"
+  | "legalName"
+  | "taxpayerDomicile"
+  | "name"
+  | "addressLine1"
+  | "addressLine2"
+  | "postalCode"
+  | "city";
 /** Demo starts the location name filled in, so there it takes a "?" rather than its hint. */
 type HelpedField = Exclude<TextField, HintedField> | "name";
 
@@ -107,6 +122,7 @@ type HelpedField = Exclude<TextField, HintedField> | "name";
 const FIELD_HINT: Record<HintedField, StringKey> = {
   taxId: "venue.hint.tax_id",
   legalName: "venue.hint.legal_name",
+  taxpayerDomicile: "venue.hint.taxpayer_domicile",
   name: "venue.hint.name",
   addressLine1: "venue.hint.address_line1",
   addressLine2: "venue.hint.address_line2",
@@ -122,6 +138,7 @@ const FIELD_HELP: Record<HelpedField, StringKey> = {
   province: "venue.help.province",
   dayCutover: "venue.help.day_cutover",
   seriesCode: "venue.help.series_code",
+  fullSeriesCode: "venue.help.full_series_code",
   rectificativeSeriesCode: "venue.help.rectificative_series_code",
 };
 
@@ -130,6 +147,7 @@ const FIELD_NOUNS: Record<TextField, StringKey> = {
   country: "venue.field.country",
   taxId: "venue.field.tax_id",
   legalName: "venue.field.legal_name",
+  taxpayerDomicile: "venue.field.taxpayer_domicile",
   name: "venue.field.name",
   operationDescription: "venue.field.operation_description",
   addressLine1: "venue.field.address_line1",
@@ -139,6 +157,7 @@ const FIELD_NOUNS: Record<TextField, StringKey> = {
   province: "venue.field.province",
   dayCutover: "venue.field.day_cutover",
   seriesCode: "venue.field.series_code",
+  fullSeriesCode: "venue.field.full_series_code",
   rectificativeSeriesCode: "venue.field.rectificative_series_code",
 };
 
@@ -240,6 +259,7 @@ export class SetupVenueScreen extends LitElement {
     country: "ES",
     taxId: "",
     legalName: "",
+    taxpayerDomicile: "",
     name: "",
     operationDescription: "",
     addressLine1: "",
@@ -249,6 +269,7 @@ export class SetupVenueScreen extends LitElement {
     province: "",
     dayCutover: "04:00",
     seriesCode: "FS",
+    fullSeriesCode: "FF",
     rectificativeSeriesCode: "FR",
   };
 
@@ -284,7 +305,7 @@ export class SetupVenueScreen extends LitElement {
     // the operator has already cleared by editing the field.
     if (changed.has("invalidField")) {
       const refusal =
-        this.invalidField === undefined ? undefined : SERVER_FIELDS[this.invalidField];
+        this.invalidField === undefined ? undefined : VENUE_SERVER_FIELDS[this.invalidField];
       this.serverInvalid = refusal === undefined ? undefined : { key: refusal.key, refusal };
     }
     if (changed.has("errorMessage")) this.refusalDismissed = false;
@@ -317,6 +338,7 @@ export class SetupVenueScreen extends LitElement {
       country: venue.country ?? this.values.country,
       taxId: venue.taxId ?? this.values.taxId,
       legalName: venue.legalName ?? this.values.legalName,
+      taxpayerDomicile: venue.taxpayerDomicile ?? this.values.taxpayerDomicile,
       name: loc.name ?? this.values.name,
       operationDescription: loc.operationDescription ?? this.values.operationDescription,
       addressLine1: loc.addressLine1 ?? this.values.addressLine1,
@@ -326,6 +348,7 @@ export class SetupVenueScreen extends LitElement {
       province: loc.province ?? this.values.province,
       dayCutover: loc.dayCutover ?? this.values.dayCutover,
       seriesCode: venue.seriesCode ?? this.values.seriesCode,
+      fullSeriesCode: venue.fullSeriesCode ?? this.values.fullSeriesCode,
       rectificativeSeriesCode: venue.rectificativeSeriesCode ?? this.values.rectificativeSeriesCode,
     };
     const pack = this.#pack();
@@ -422,6 +445,7 @@ export class SetupVenueScreen extends LitElement {
   #invalidFields(): Set<FieldKey> {
     const invalid = new Set<FieldKey>();
     for (const key of REQUIRED_TEXT_FIELDS) {
+      if (this.#demo && key === "taxpayerDomicile") continue;
       if (this.values[key].trim() === "") invalid.add(key);
     }
     const pack = this.#pack();
@@ -458,12 +482,15 @@ export class SetupVenueScreen extends LitElement {
     if (languages.length !== 1 || !receipt?.choices.includes(languages[0]!)) {
       invalid.add("invoiceLocales");
     }
-    if (
-      this.values.seriesCode.trim() !== "" &&
-      this.values.seriesCode === this.values.rectificativeSeriesCode
-    ) {
-      invalid.add("seriesCode");
-      invalid.add("rectificativeSeriesCode");
+    for (const [first, second] of [
+      ["seriesCode", "fullSeriesCode"],
+      ["seriesCode", "rectificativeSeriesCode"],
+      ["fullSeriesCode", "rectificativeSeriesCode"],
+    ] as const) {
+      if (this.values[first].trim() !== "" && this.values[first] === this.values[second]) {
+        invalid.add(first);
+        invalid.add(second);
+      }
     }
     return invalid;
   }
@@ -516,6 +543,7 @@ export class SetupVenueScreen extends LitElement {
         country: selectedPack.countryCode,
         taxId: normalizedTaxId,
         legalName: this.values.legalName,
+        taxpayerDomicile: this.#demo ? null : this.values.taxpayerDomicile,
         location: {
           name: this.values.name,
           fiscalTerritory: selectedJurisdiction.id,
@@ -530,6 +558,7 @@ export class SetupVenueScreen extends LitElement {
           dayCutover: this.values.dayCutover,
         },
         seriesCode: this.values.seriesCode,
+        fullSeriesCode: this.values.fullSeriesCode,
         rectificativeSeriesCode: this.values.rectificativeSeriesCode,
       },
     };
@@ -553,7 +582,7 @@ export class SetupVenueScreen extends LitElement {
       return this.#jurisdiction()?.supported === false
         ? t("venue.error.territory_unsupported")
         : t("venue.error.province");
-    if (key === "seriesCode" || key === "rectificativeSeriesCode")
+    if (key === "seriesCode" || key === "fullSeriesCode" || key === "rectificativeSeriesCode")
       return t("venue.error.series_codes");
     return format("venue.check_field", { field: t(FIELD_NOUNS[key]) });
   }
@@ -649,7 +678,7 @@ export class SetupVenueScreen extends LitElement {
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onCountry(event)}
         >${this.#help("country")}</wt-combobox
       >
-      ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? t("venue.label.tax_id"), "taxId")}${this.#field(t("venue.label.legal_name"), "legalName")}`}
+      ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? t("venue.label.tax_id"), "taxId")}${this.#field(t("venue.label.legal_name"), "legalName")}${this.#field(t("venue.label.taxpayer_domicile"), "taxpayerDomicile")}`}
       ${this.#demo ? nothing : html`<h2>${t("venue.section.location")}</h2>`}
       ${this.#field(t("venue.label.location_name"), "name")}
       ${
@@ -747,6 +776,7 @@ export class SetupVenueScreen extends LitElement {
 
               <h2>${t("venue.section.invoicing")}</h2>
               ${this.#field(t("venue.label.series_code"), "seriesCode")}
+              ${this.#field(t("venue.label.full_series_code"), "fullSeriesCode")}
               ${this.#field(t("venue.label.rectificative_series_code"), "rectificativeSeriesCode")}`
       }
       <wt-form-actions .error=${bottom}>

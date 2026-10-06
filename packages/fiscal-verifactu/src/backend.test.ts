@@ -339,7 +339,6 @@ describe("recordCorrection — refusals", () => {
   });
 
   it("refuses to correct a non-simplified invoice, since only F2 → R5 is supported (R1 deferred)", async () => {
-    // A real F1 alta, built directly: core only ever issues F2.
     const original = brandSaleId("44444444-4444-4444-8444-444444444444");
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(sales).values({
@@ -427,8 +426,7 @@ describe("recordSubstitution — refusals", () => {
   });
 
   it("refuses to substitute a non-simplified invoice, since only an F2 ticket may be exchanged", async () => {
-    // A real F1 alta, built directly: core only ever issues F2. A distinct sale id from the
-    // correction case above, since `sales` is keyed by `id` alone.
+    // A distinct sale id from the correction case above, since `sales` is keyed by `id` alone.
     const original = brandSaleId("66666666-6666-4666-8666-666666666666");
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(sales).values({
@@ -512,8 +510,6 @@ describe("recordSubstitution — refusals", () => {
 
 describe("recordSale — invoice type selection", () => {
   it("uses F1 (factura completa) once a real counterparty is supplied", async () => {
-    // Called on the backend directly: `packages/core`'s `recordSale` always passes
-    // `counterparty: null`.
     const freshSaleId = brandSaleId("22222222-2222-4222-8222-222222222222");
     await withTransaction(suite.db, async (tx) => {
       // The sales row's own total is irrelevant here: only the registro's is asserted.

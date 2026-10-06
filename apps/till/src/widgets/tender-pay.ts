@@ -566,6 +566,19 @@ export class TillTenderPay extends LitElement {
     `;
   }
 
+  #renderInvoiceButton(disabled: boolean) {
+    return html`<wt-button
+      data-full-invoice
+      variant="secondary"
+      ?disabled=${disabled}
+      @click=${(event: Event) => {
+        event.stopPropagation();
+        this.dispatchEvent(new CustomEvent("choose-invoice", { bubbles: true, composed: true }));
+      }}
+      >${t("invoice.full")}</wt-button
+    >`;
+  }
+
   /** No Hold: a placed order is not parked again. */
   #renderIdleCollect(disabled: boolean) {
     return html`
@@ -579,7 +592,7 @@ export class TillTenderPay extends LitElement {
     return html`
       ${this.#renderCardExtras()}
       <div class="actions">
-        ${this.#renderTenderButtons(disabled)}
+        ${this.#renderTenderButtons(disabled)} ${this.#renderInvoiceButton(disabled)}
         ${
           withPlace
             ? html`<wt-button

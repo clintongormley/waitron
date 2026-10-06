@@ -77,6 +77,7 @@ function venue(country: string, overrides: Record<string, unknown> = {}) {
     country,
     taxId: "GB 123 456 789",
     legalName: "Readiness Ltd",
+    taxpayerDomicile: "1 Fiscal Quay, SW1A 1AA London",
     location: {
       name: "Front of house",
       fiscalTerritory: country.toUpperCase() === "ZZ" ? "ZZ-vat" : "GB-vat",
@@ -92,6 +93,7 @@ function venue(country: string, overrides: Record<string, unknown> = {}) {
       ...overrides,
     },
     seriesCode: "A",
+    fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
     admin: {
       displayName: "Admin",

@@ -78,6 +78,10 @@ export class OrdersScreen extends LitElement {
         display: block;
         color: var(--wt-color-text-muted);
       }
+      wt-data-table::part(invoice-type) {
+        display: block;
+        color: var(--wt-color-text-muted);
+      }
     `,
   ];
 
@@ -207,7 +211,7 @@ export class OrdersScreen extends LitElement {
         key: "invoice",
         label: t("orders.col.invoice"),
         cell: (row) =>
-          html`${row.invoiceNumber ?? ""}${row.creditNotes.map(
+          html`${row.invoiceNumber ?? ""}${row.invoiceType === null ? nothing : html`<span part="invoice-type">${t(row.invoiceType === "F1" ? "orders.invoice_full" : "orders.invoice_simplified")}</span>`}${row.creditNotes.map(
             (number) => html`<span part="mark">${number}</span>`,
           )}`,
       },

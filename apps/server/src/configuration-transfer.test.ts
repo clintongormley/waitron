@@ -112,6 +112,7 @@ function venue(taxId: string): VenueRequest {
     country: "ES",
     taxId,
     legalName: "Prepared SL",
+    taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
     location: {
       name: "Prepared",
       invoiceLocales: ["es-ES"],
@@ -126,6 +127,7 @@ function venue(taxId: string): VenueRequest {
       dayCutover: "06:00",
     },
     seriesCode: "F",
+    fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
     admin: {
       displayName: "Admin",
@@ -144,6 +146,7 @@ const bundle: ConfigurationBundle = {
     country: "ES",
     taxId: "B12345678",
     legalName: "Prepared SL",
+    taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
     location: {
       id: "location",
       name: "Prepared",
@@ -164,6 +167,7 @@ const bundle: ConfigurationBundle = {
       catalogueId: null,
     },
     seriesCode: "F",
+    fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
   },
   modules: { core: 1 },
@@ -201,6 +205,19 @@ describe("configuration transfer archive", () => {
         "a strong passphrase",
       ),
     ).toEqual(bundle);
+  });
+
+  it("refuses a prepared bundle without its full invoice series", () => {
+    const missing = { ...bundle, venue: { ...bundle.venue } };
+    delete (missing.venue as Partial<typeof missing.venue>).fullSeriesCode;
+    expect(() =>
+      decodeConfigurationBundle(
+        encodeConfigurationBundle(missing, "a strong passphrase"),
+        "a strong passphrase",
+      ),
+    ).toThrowError(
+      expect.objectContaining({ code: "setup.request_invalid", params: { field: "artifact" } }),
+    );
   });
 
   it("accepts a bundle that still carries a tillName, as it checks only the venue fields it names", () => {
@@ -444,6 +461,8 @@ describe("configuration transfer database path", () => {
       new Date("2026-09-09T00:00:00.000Z"),
       versions,
     );
+    expect(transferred.venue.fullSeriesCode).toBe("FF");
+    expect(transferred.venue.taxpayerDomicile).toBe("Calle Fiscal 8, 28001 Madrid");
     expect(transferred.venue).not.toHaveProperty("tillName");
     expect(transferred.venue.location).not.toHaveProperty("orderFlow");
     for (const person of transferred.tables.persons ?? []) {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, tenders, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, tenders, withTransaction } from "@waitron/db";
+import { seriesId as brandSeriesId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedBillPayment,
@@ -54,6 +55,64 @@ async function saleWithTenders(
 }
 
 describe("computeCashUp", () => {
+  it("counts each payment for a full invoice on the day money moved", async () => {
+    const [fullSeries] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: venue.nodeId, code: "FF", purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    const bill = await seedOpenOrder(suite.db, venue, 1);
+    const cashPayment = await seedBillPayment(
+      suite.db,
+      { workingOrderId: bill.orderId, deviceId: venue.deviceId },
+      { method: "cash", applied: "50.00", state: "received", at: "2026-08-04T10:00:00Z" },
+    );
+    const cardPayment = await seedBillPayment(
+      suite.db,
+      { workingOrderId: bill.orderId, deviceId: venue.deviceId },
+      { method: "card", applied: "70.00", state: "received", at: "2026-08-05T10:00:00Z" },
+    );
+    const invoice = await seedSale(
+      suite.db,
+      { ...venue, seriesId: brandSeriesId(fullSeries!.id) },
+      {
+        invoiceNumber: 1,
+        issuedAt: "2026-08-05T10:00:00Z",
+        total: "120.00",
+        counterpartyTaxId: "B12345674",
+        lines: [{ vatRate: "10.00", lineTotal: "109.09" }],
+      },
+    );
+    await seedTender(
+      suite.db,
+      { saleId: invoice },
+      {
+        method: "cash",
+        amount: "50.00",
+        settledAt: "2026-08-04T10:00:00Z",
+        billPaymentId: cashPayment,
+      },
+    );
+    await seedTender(
+      suite.db,
+      { saleId: invoice },
+      {
+        method: "card",
+        amount: "70.00",
+        settledAt: "2026-08-05T10:00:00Z",
+        billPaymentId: cardPayment,
+      },
+    );
+
+    expect(await run({ businessDay: "2026-08-04" })).toMatchObject({
+      byOrigin: [{ byMethod: [{ method: "cash", amount: "50.00" }] }],
+      tenderTotal: "50.00",
+    });
+    expect(await run({ businessDay: "2026-08-05" })).toMatchObject({
+      byOrigin: [{ byMethod: [{ method: "card", amount: "70.00" }] }],
+      tenderTotal: "70.00",
+    });
+  });
+
   it("cashTakings counts only cash-method amounts, incl. cash tips", async () => {
     await saleWithTenders(1, [
       { method: "cash", amount: "50.00", tipAmount: "5.00", settledAt: settledNoon },

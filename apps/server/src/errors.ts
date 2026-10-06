@@ -261,6 +261,9 @@ declare module "@waitron/shared" {
      * caller reloads the order and edits again.
      */
     "working_order.out_of_date": { workingOrderId: string; revision: number };
+    "sale.full_invoice_unavailable": Record<string, never>;
+    "invoice.recipient_invalid": { field: "taxId" | "legalName" | "address" };
+    "invoice.choice_locked": Record<string, never>;
     /**
      * A write reached an OPEN order a card payment is in flight on: an integrated payment between
      * pricing and filing (`working_orders.payment_attempt_at` is set), or a pending card payment
@@ -725,6 +728,7 @@ declare module "@waitron/shared" {
     "receipt.language_fixed": { field: "receiptLanguage"; language: string };
     /** A receipt-language change refused because `count` open orders at the location hold a line. */
     "receipt.language_orders_open": { field: "receiptLanguage"; count: number };
+    "receipt.not_printed": Record<string, never>;
     /**
      * A request named a printer the device may not use (`chooseDevicePrinter`, `@waitron/layouts`).
      * `field` carries the FIELD NAME only, never the id value.

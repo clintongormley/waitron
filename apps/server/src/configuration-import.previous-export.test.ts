@@ -7,6 +7,8 @@ import { afterEach, expect, it } from "vitest";
 import { loadKeyRing } from "@waitron/credentials";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { decryptArtifact } from "./artifact-cipher.js";
+import { unpackArchive } from "./backup-archive.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { stageConfigurationImport } from "./configuration-import.js";
 import {
@@ -26,7 +28,16 @@ it("refuses the real pre-A261-2 export through setup without writing database ro
   const artifact = await readFile(
     new URL("./testing/fixtures/pre-a261-2-configuration.enc", import.meta.url),
   );
-  const bundle = decodeConfigurationBundle(artifact, "a strong passphrase");
+  const entries = unpackArchive(decryptArtifact(artifact, "a strong passphrase"));
+  expect(entries).toHaveLength(1);
+  expect(entries[0]?.name).toBe("configuration.json");
+  const bundle = JSON.parse(Buffer.from(entries[0]!.bytes).toString("utf8"));
+  expect(() => decodeConfigurationBundle(artifact, "a strong passphrase")).toThrow(
+    expect.objectContaining({
+      code: "setup.request_invalid",
+      params: { field: "artifact" },
+    }),
+  );
   expect(bundle.venue.legalName).toBe("Prepared Export SL");
   expect(bundle.modules.core).toBe(99);
   expect(bundle.tables).not.toHaveProperty("department_sale_policies");
@@ -70,7 +81,7 @@ it("refuses the real pre-A261-2 export through setup without writing database ro
   });
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({
-    error: { code: "setup.request_invalid", params: { field: "module:core" } },
+    error: { code: "setup.request_invalid", params: { field: "artifact" } },
   });
   expect(await snapshot()).toEqual(before);
   expect(await readdir(stateDir)).toEqual([]);

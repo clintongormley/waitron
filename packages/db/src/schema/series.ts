@@ -40,10 +40,7 @@ export const invoiceSeries = table(
       foreignColumns: [nodes.id],
       name: "invoice_series_node_fk",
     }),
-    // A hand-written CHECK rather than the `enumType`/`enumCheck` pair, deliberately: the permitted
-    // set depends on asesor Q5(b), which is unverified, and a set still being decided is not a
-    // vocabulary.
-    check("invoice_series_purpose_ck", sql`${t.purpose} in ('standard', 'rectificative')`),
+    check("invoice_series_purpose_ck", sql`${t.purpose} in ('standard', 'full', 'rectificative')`),
     check("invoice_series_next_number_ck", sql`${t.nextNumber} >= 1`),
     check("invoice_series_code_ck", sql`${t.code} <> ''`),
   ],

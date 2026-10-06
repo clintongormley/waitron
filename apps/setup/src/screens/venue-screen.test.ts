@@ -79,6 +79,7 @@ const VALID: Record<string, string> = {
   country: "ES",
   taxId: "b 1234567 4",
   legalName: "Deli del Sol SL",
+  taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
   name: "Calle Mayor",
   operationDescription: "Delicatessen",
   addressLine1: "Calle Mayor 1",
@@ -87,6 +88,7 @@ const VALID: Record<string, string> = {
   province: "28",
   dayCutover: "06:00",
   seriesCode: "FA",
+  fullSeriesCode: "FF",
   rectificativeSeriesCode: "RF",
 };
 
@@ -117,8 +119,10 @@ const EXPECTED_VENUE = {
   country: "ES",
   taxId: "B12345674",
   legalName: "Deli del Sol SL",
+  taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
   location: EXPECTED_LOCATION,
   seriesCode: "FA",
+  fullSeriesCode: "FF",
   rectificativeSeriesCode: "RF",
 };
 
@@ -375,6 +379,20 @@ describe("setup-venue-screen", () => {
     expect(q(el, "[data-test=rectificativeSeriesCode]")!.hasAttribute("invalid")).toBe(true);
   });
 
+  it("blocks Next when the full invoice series repeats the ticket series", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    const events = collect(host);
+    expect(q(el, "[data-test=fullSeriesCode]")).not.toBeNull();
+    await fillValid(el, { seriesCode: "FA", fullSeriesCode: "FA" });
+
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+
+    expect(events).toEqual([]);
+    expect(q(el, "[data-test=seriesCode]")!.hasAttribute("invalid")).toBe(true);
+    expect(q(el, "[data-test=fullSeriesCode]")!.hasAttribute("invalid")).toBe(true);
+  });
+
   it("blocks Next and marks the blank field invalid when a required field is empty", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);
@@ -551,6 +569,15 @@ describe("setup-venue-screen", () => {
     const said = input.shadowRoot!.querySelector("[data-error]")!.textContent!;
     expect(said).toContain("120 characters");
     expect(said).toContain("hidden characters");
+  });
+
+  it("shows a server refusal beside the taxpayer domicile field", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      invalidField: "taxpayerDomicile",
+    });
+    const input = q(el, "[data-test=taxpayerDomicile]")!;
+    await (input as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    expect(input.hasAttribute("invalid")).toBe(true);
   });
 
   it("maps the server's nested field path onto this form's own field", async () => {
@@ -777,6 +804,21 @@ describe("setup-venue-screen form errors", () => {
 
 describe("A2 shop form", () => {
   const defaults = { verifactu: { operationDescription: "Venta en establecimiento" } };
+  it("asks for the taxpayer domicile separately from the location address in Prepare", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "prepare" },
+      defaults,
+    });
+    const events = collect(host);
+    await fillValid(el);
+    await type(el, "taxpayerDomicile", "Calle Fiscal 8, 28013 Madrid");
+
+    q(el, "[data-test=next]")!.click();
+    const venue = (events[0]!.detail as { patch: ProvisionBody }).patch.venue;
+    expect(venue.taxpayerDomicile).toBe("Calle Fiscal 8, 28013 Madrid");
+    expect(venue.location.addressLine1).toBe("Calle Mayor 1");
+  });
+
   it("asks for no till name, in any mode", async () => {
     for (const mode of ["demo", "prepare", "live"] as const) {
       const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
@@ -792,6 +834,7 @@ describe("A2 shop form", () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { defaults });
     for (const [field, value] of Object.entries({
       seriesCode: "FS",
+      fullSeriesCode: "FF",
       rectificativeSeriesCode: "FR",
       dayCutover: "04:00",
       operationDescription: "Venta en establecimiento",
@@ -811,6 +854,7 @@ describe("A2 shop form", () => {
       "operationDescription",
       "dayCutover",
       "seriesCode",
+      "fullSeriesCode",
       "rectificativeSeriesCode",
       "locale-es-ES",
     ])
@@ -829,6 +873,7 @@ describe("A2 shop form", () => {
     expect(venue.legalName).toBe("Waitron Demo S.L.");
     expect(venue.location.name).toBe("Calle Mayor");
     expect(venue.seriesCode).toBe("FS");
+    expect(venue.fullSeriesCode).toBe("FF");
     expect(venue.rectificativeSeriesCode).toBe("FR");
     expect(venue.location.operationDescription).toBe("Venta en establecimiento");
     const validation = getVenueSetupCountryPack("ES")!.taxIdentifier!.validate(venue.taxId);
@@ -1221,6 +1266,7 @@ it("emits a country pack with no provinces or validators as the operator typed i
     for (const [field, value] of Object.entries({
       taxId: " zz 42 ",
       legalName: "Zed Foods",
+      taxpayerDomicile: "1 Fiscal Quay, zz-9 Port",
       name: "Harbour",
       operationDescription: "Groceries",
       addressLine1: "1 Quay",
@@ -1229,6 +1275,7 @@ it("emits a country pack with no provinces or validators as the operator typed i
       province: "North Riding",
       dayCutover: "05:00",
       seriesCode: "A",
+      fullSeriesCode: "FF",
       rectificativeSeriesCode: "B",
     }))
       await type(el, field, value);
@@ -1243,6 +1290,7 @@ it("emits a country pack with no provinces or validators as the operator typed i
               country: "ZZ",
               taxId: " zz 42 ",
               legalName: "Zed Foods",
+              taxpayerDomicile: "1 Fiscal Quay, zz-9 Port",
               location: {
                 name: "Harbour",
                 fiscalTerritory: "ZZ-main",
@@ -1257,6 +1305,7 @@ it("emits a country pack with no provinces or validators as the operator typed i
                 dayCutover: "05:00",
               },
               seriesCode: "A",
+              fullSeriesCode: "FF",
               rectificativeSeriesCode: "B",
             },
           },

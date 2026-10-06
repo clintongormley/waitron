@@ -131,6 +131,17 @@ The difference between the two lists is the subject's own tables. A set with no 
 over an empty list and takes its first reading of an unmigrated database, which is the same code
 path rather than a special case.
 
+**A trigger-backed vocabulary is not a CHECK constraint.** On 2026-10-05, A231's
+`pnpm --filter @waitron/db exec vitest run src/schema/schema-conformance.test.ts` failed
+`working_orders.invoice_type`: its `enumType` declaration advertised a CHECK-backed vocabulary,
+while `0101_bill_invoice_choice_transition.sql` enforced the values through insert and update
+triggers. The declaration now uses a typed `label`, as the trigger-backed product ordering does.
+`pnpm --filter @waitron/db db:generate --name invoice_choice_trigger_type` reported no schema
+changes. `packages/db/src/schema/orders.transition.test.ts` tries both valid insert values and a
+third value, and keeps its invalid-update assertion. In an installed disposable candidate,
+removing either invoice-type trigger made its corresponding refusal assertion fail. The factory's
+vocabulary case checks CHECK constraints; these write tests check the triggers instead.
+
 **Finding a module's prerequisites: read them off the set's own SQL, do not guess.** They are the
 other sets whose tables the set's own `drizzle/*.sql` names — a foreign key's `REFERENCES`, the
 table a `CREATE TRIGGER … ON` names, or a trigger body — and only those, in runtime order. A passing

@@ -19,13 +19,6 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import "./errors.js";
 
-// The simplified-invoice limit is the fiscal regime's (`FiscalBackend.simplifiedInvoiceLimit`,
-// 3,010.00 under Veri*Factu). Every till path that enters, grows or pays an order refuses one that
-// would go over it, before anything commits or money moves; an edit that does not raise an order's
-// total is not refused, even with the order still over the limit. Driven over HTTP against a venue
-// that files real Veri*Factu records. `limited` is the till API with the regime's limit, as boot
-// mounts it; the fixture's own `venue.app` carries none, and stands in for an order that grew
-// before the limit existed, so there is something over the limit to refuse or to shrink.
 let venue: BillVenue;
 let limited: Hono;
 let counter: ZoneOffers;
@@ -207,6 +200,152 @@ describe("a counter sale", () => {
     expect(answer.json.total).toBe("3010.00");
   });
 
+  it("does not file an explicit walk-up F1 request as F2", async () => {
+    const before = written();
+    const id = randomUUID();
+    const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
+      workingOrderId: id,
+      lines: linesOf(counter, { Mitad: 1 }),
+      zoneId: counter.zoneId,
+      tender: { method: "cash", amount: "1600.00" },
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+
+    expect(answer).toEqual({
+      status: 409,
+      json: { code: "sale.full_invoice_unavailable", params: {} },
+    });
+    expect(written()).toEqual(before);
+    expect(orderRow(id)).toBeUndefined();
+  });
+
+  it.each([
+    ["/api/sales", false],
+    ["/api/sales", true],
+    ["/api/pay", false],
+    ["/api/pay", true],
+  ] as const)(
+    "refuses zero-total F1 at %s with stored choice %s without filing or charging",
+    async (path, stored) => {
+      venue.db.run(
+        sql`update tenants set taxpayer_domicile = 'Calle Mayor 1, 28013 Madrid, Madrid, España'`,
+      );
+      const id = stored ? await parked(venue.app, counter, { Gratis: 1 }) : randomUUID();
+      const recipient = {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      };
+      if (stored) {
+        venue.db.run(sql`update working_orders set invoice_type = 'F1',
+          recipient_tax_id = ${recipient.taxId}, recipient_legal_name = ${recipient.legalName},
+          recipient_address = ${recipient.address}, recipient_country_code = ${recipient.countryCode}
+          where id = ${id}`);
+      }
+      const before = written();
+      const beforeOrder = venue.db.all(sql`select * from working_orders where id = ${id}`);
+      const beforeSeries = venue.db.all(sql`select * from invoice_series order by id`);
+      const beforeFiscal = venue.db.all(sql`select * from registros_facturacion order by id`);
+      const beforeJobs = venue.db.all(sql`select * from print_jobs order by id`);
+
+      const answer = await send(limited, venue.cookie, "POST", path, {
+        ...(path === "/api/sales"
+          ? { workingOrderId: id, tender: { method: "cash", amount: "0.00" } }
+          : { id }),
+        lines: stored ? [] : linesOf(counter, { Gratis: 1 }),
+        zoneId: counter.zoneId,
+        ...(stored ? {} : { invoiceType: "F1", recipient }),
+      });
+
+      expect(answer).toEqual({
+        status: 409,
+        json: { code: "sale.full_invoice_unavailable", params: {} },
+      });
+      expect(written()).toEqual(before);
+      expect(venue.db.all(sql`select * from working_orders where id = ${id}`)).toEqual(beforeOrder);
+      expect(venue.db.all(sql`select * from invoice_series order by id`)).toEqual(beforeSeries);
+      expect(venue.db.all(sql`select * from registros_facturacion order by id`)).toEqual(
+        beforeFiscal,
+      );
+      expect(venue.db.all(sql`select * from print_jobs order by id`)).toEqual(beforeJobs);
+    },
+  );
+
+  it("replays a settled cash sale despite a later F1 request", async () => {
+    const id = randomUUID();
+    const first = await cashSale({ Mitad: 1 }, id);
+    expect(first.status).toBe(200);
+    const before = written();
+
+    const replay = await send(limited, venue.cookie, "POST", "/api/sales", {
+      workingOrderId: id,
+      lines: [],
+      tender: { method: "cash", amount: "0.00" },
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+
+    expect(replay).toEqual(first);
+    expect(written()).toEqual(before);
+    expect(orderRow(id)!.status).toBe("settled");
+  });
+
+  it("refuses a non-scalar walk-up invoice type before filing", async () => {
+    const before = written();
+    const id = randomUUID();
+    const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
+      workingOrderId: id,
+      lines: linesOf(counter, { Mitad: 1 }),
+      zoneId: counter.zoneId,
+      tender: { method: "cash", amount: "1600.00" },
+      invoiceType: ["F2"],
+    });
+
+    expect(answer).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field: "invoiceType" } },
+    });
+    expect(written()).toEqual(before);
+    expect(orderRow(id)).toBeUndefined();
+  });
+
+  it("refuses a recipient on an explicit F2 walk-up sale", async () => {
+    const before = written();
+    const id = randomUUID();
+    const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
+      workingOrderId: id,
+      lines: linesOf(counter, { Mitad: 1 }),
+      zoneId: counter.zoneId,
+      tender: { method: "cash", amount: "1600.00" },
+      invoiceType: "F2",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+
+    expect(answer).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field: "recipient" } },
+    });
+    expect(written()).toEqual(before);
+    expect(orderRow(id)).toBeUndefined();
+  });
+
   it("is refused a cent over the limit, with no sale and no order written", async () => {
     const before = written();
     const id = randomUUID();
@@ -232,9 +371,97 @@ describe("a counter sale", () => {
     expect(written()).toEqual(before);
     expect(orderRow(id)!.status).toBe("open");
   });
+
+  it("does not charge a stored F1 order as an F2 cash sale", async () => {
+    const id = await parked(venue.app, counter, { Mitad: 1 });
+    venue.db.run(sql`update working_orders set invoice_type = 'F1',
+      recipient_tax_id = 'B12345674', recipient_legal_name = 'Cliente SL',
+      recipient_address = 'Calle Mayor 2, 28013 Madrid', recipient_country_code = 'ES'
+      where id = ${id}`);
+    const before = written();
+
+    const answer = await send(limited, venue.cookie, "POST", "/api/sales", {
+      workingOrderId: id,
+      lines: [],
+      tender: { method: "cash", amount: "1600.00" },
+    });
+
+    expect(answer).toEqual({
+      status: 409,
+      json: { code: "sale.full_invoice_unavailable", params: {} },
+    });
+    expect(written()).toEqual(before);
+    expect(orderRow(id)!.status).toBe("open");
+  });
 });
 
 describe("a card on the integrated reader", () => {
+  it("does not charge an existing open order that explicitly requests F1", async () => {
+    const id = await parked(venue.app, counter, { Mitad: 1 });
+    const before = written();
+
+    const answer = await send(limited, venue.cookie, "POST", "/api/pay", {
+      id,
+      lines: [],
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+
+    expect(answer).toEqual({
+      status: 409,
+      json: { code: "sale.full_invoice_unavailable", params: {} },
+    });
+    expect(written()).toEqual(before);
+    expect(orderRow(id)!.payment_attempt_at).toBeNull();
+  });
+
+  it("does not ask the reader to file an explicit walk-up F1 request as F2", async () => {
+    const before = written();
+    const id = randomUUID();
+    const answer = await send(limited, venue.cookie, "POST", "/api/pay", {
+      id,
+      lines: linesOf(counter, { Mitad: 1 }),
+      zoneId: counter.zoneId,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+
+    expect(answer).toEqual({
+      status: 409,
+      json: { code: "sale.full_invoice_unavailable", params: {} },
+    });
+    expect(written()).toEqual(before);
+    expect(orderRow(id)).toBeUndefined();
+  });
+
+  it("does not ask the reader for a stored F1 order while original delivery is unavailable", async () => {
+    const id = await parked(venue.app, counter, { Mitad: 1 });
+    venue.db.run(sql`update working_orders set invoice_type = 'F1',
+      recipient_tax_id = 'B12345674', recipient_legal_name = 'Cliente SL',
+      recipient_address = 'Calle Mayor 2, 28013 Madrid', recipient_country_code = 'ES'
+      where id = ${id}`);
+    const before = written();
+
+    const answer = await send(limited, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+
+    expect(answer).toEqual({
+      status: 409,
+      json: { code: "sale.full_invoice_unavailable", params: {} },
+    });
+    expect(written()).toEqual(before);
+    expect(orderRow(id)!.payment_attempt_at).toBeNull();
+  });
+
   it("is refused for a walk-up basket over the limit before the reader is asked", async () => {
     const before = written();
     const id = randomUUID();
@@ -309,6 +536,22 @@ describe("a bill payment", () => {
 });
 
 describe("placing a counter order that is invoiced when placed", () => {
+  it("does not file a saved F1 choice while original delivery is unavailable", async () => {
+    const id = await parked(venue.app, invoiceFirst, { Mitad: 1 });
+    venue.db.run(sql`update working_orders set invoice_type = 'F1',
+      recipient_tax_id = 'B12345674', recipient_legal_name = 'Cliente SL',
+      recipient_address = 'Calle Mayor 2, 28013 Madrid', recipient_country_code = 'ES'
+      where id = ${id}`);
+    const before = written();
+
+    const answer = await send(limited, venue.cookie, "POST", `/api/working-orders/${id}/place`, {});
+
+    expect(answer.status).toBe(409);
+    expect(answer.json).toEqual({ code: "sale.full_invoice_unavailable", params: {} });
+    expect(written()).toEqual(before);
+    expect(orderRow(id)!.status).toBe("open");
+  });
+
   it("is refused over the limit, filing no invoice and leaving the order open", async () => {
     const id = await parked(venue.app, invoiceFirst, { Lote: 1, Céntimo: 1 });
     const before = written();
@@ -445,6 +688,194 @@ describe("an edit that grows an order", () => {
     expect(answer.json.code).toBe(REFUSED.code);
     expect(storedLines(mainBill)).toEqual(["1:1000"]);
     expect(storedLines(secondBill)).toEqual(["1:2000"]);
+  });
+});
+
+describe("growing a bill with a saved full-invoice choice", () => {
+  const recipient = {
+    taxId: "B12345674",
+    legalName: "Cliente SL",
+    address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+    countryCode: "ES",
+  };
+
+  async function chooseFull(id: string) {
+    const saved = await send(
+      limited,
+      venue.cookie,
+      "PUT",
+      `/api/working-orders/${id}/invoice-choice`,
+      {
+        revision: orderRow(id)!.revision,
+        invoiceType: "F1",
+        recipient,
+      },
+    );
+    expect(saved.status).toBe(200);
+  }
+
+  function savedChoice(id: string) {
+    return venue.db.all(sql`select invoice_type, recipient_tax_id, recipient_legal_name,
+      recipient_address, recipient_country_code from working_orders where id = ${id}`)[0];
+  }
+
+  it("saves a held F1 basket above the simplified ceiling without issuing it", async () => {
+    const id = await parked(limited, counter, { Mitad: 1 });
+    await chooseFull(id);
+    const before = written();
+    const choice = savedChoice(id);
+    const revision = orderRow(id)!.revision;
+
+    const updated = await send(limited, venue.cookie, "PUT", `/api/working-orders/${id}`, {
+      lines: linesOf(counter, { Mitad: 2 }),
+      revision,
+    });
+
+    expect(updated.json.code).toBeUndefined();
+    expect(updated.status).toBe(200);
+    expect(storedLines(id)).toEqual(["2:2000"]);
+    expect(orderRow(id)!.revision).toBe(revision + 1);
+    expect(savedChoice(id)).toEqual(choice);
+    expect(written()).toEqual(before);
+
+    const paid = await send(limited, venue.cookie, "POST", "/api/sales", {
+      workingOrderId: id,
+      lines: [],
+      tender: { method: "cash", amount: "3200.00" },
+    });
+    expect(paid).toEqual({
+      status: 409,
+      json: { code: "sale.full_invoice_unavailable", params: {} },
+    });
+    const card = await send(limited, venue.cookie, "POST", "/api/pay", { id, lines: [] });
+    expect(card).toEqual({
+      status: 409,
+      json: { code: "sale.full_invoice_unavailable", params: {} },
+    });
+    expect(written()).toEqual(before);
+    expect(orderRow(id)!.status).toBe("open");
+  });
+
+  it("raises a saved F1 table line above the simplified ceiling without taking money", async () => {
+    const { tabId } = await seated(limited, { Mitad: 1 });
+    await chooseFull(tabId);
+    const before = written();
+    const choice = savedChoice(tabId);
+
+    const updated = await send(
+      limited,
+      venue.cookie,
+      "PUT",
+      `/api/working-orders/${tabId}/lines/1`,
+      {
+        quantity: "2",
+        revision: orderRow(tabId)!.revision,
+      },
+    );
+
+    expect(updated.json.code).toBeUndefined();
+    expect(updated.status).toBe(200);
+    const quantities = venue.db.all<{
+      quantity: number;
+    }>(sql`select quantity from working_order_lines
+      where working_order_id = ${tabId}`);
+    expect(quantities.reduce((sum, row) => sum + row.quantity, 0)).toBe(2000);
+    expect(savedChoice(tabId)).toEqual(choice);
+    expect(written()).toEqual(before);
+  });
+
+  it("adds a table round above the simplified ceiling to its saved F1 bill", async () => {
+    const { partyId, tabId } = await seated(limited, { Lote: 1 });
+    await chooseFull(tabId);
+    const before = written();
+    const choice = savedChoice(tabId);
+
+    const added = await send(limited, venue.cookie, "POST", `/api/parties/${partyId}/groups`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: partyRevision(partyId),
+      groups: [{ lines: linesOf(tables, { Céntimo: 1 }), release: "fire" }],
+    });
+
+    expect(added.json.code).toBeUndefined();
+    expect(added.status).toBe(200);
+    expect(storedLines(tabId)).toEqual(["1:1000", "2:1000"]);
+    expect(savedChoice(tabId)).toEqual(choice);
+    expect(written()).toEqual(before);
+  });
+
+  it("merges into the destination's saved F1 choice above the simplified ceiling", async () => {
+    const { partyId, mainBill, secondBill } = await twoBills({ Mitad: 1 }, { Lote: 1 });
+    await chooseFull(mainBill);
+    const before = written();
+    const choice = savedChoice(mainBill);
+
+    const merged = await send(limited, venue.cookie, "POST", `/api/bills/${mainBill}/merge`, {
+      fromBillId: secondBill,
+      expectedPartyRevision: partyRevision(partyId),
+    });
+
+    expect(merged.json.code).toBeUndefined();
+    expect(merged.status).toBe(204);
+    expect(storedLines(mainBill)).toEqual(["1:1000", "2:1000"]);
+    expect(storedLines(secondBill)).toEqual([]);
+    expect(savedChoice(mainBill)).toEqual(choice);
+    expect(written()).toEqual(before);
+  });
+
+  it.each([undefined, "1"])(
+    "transfers a line quantity %s into a saved F1 destination above the ceiling",
+    async (quantity) => {
+      const { partyId, mainBill, secondBill } = await twoBills(
+        { Céntimo: 1 },
+        { Lote: quantity === undefined ? 1 : 2 },
+      );
+      await chooseFull(mainBill);
+      const before = written();
+      const choice = savedChoice(mainBill);
+
+      const transferred = await send(
+        limited,
+        venue.cookie,
+        "POST",
+        `/api/bills/${secondBill}/transfer`,
+        {
+          toBillId: mainBill,
+          transfers: [{ lineNo: 1, ...(quantity === undefined ? {} : { quantity }) }],
+          expectedPartyRevision: partyRevision(partyId),
+        },
+      );
+
+      expect(transferred.json.code).toBeUndefined();
+      expect(transferred.status).toBe(204);
+      expect(storedLines(mainBill)).toEqual(["1:1000", "2:1000"]);
+      expect(storedLines(secondBill)).toEqual(quantity === undefined ? [] : ["1:1000"]);
+      expect(savedChoice(mainBill)).toEqual(choice);
+      expect(written()).toEqual(before);
+    },
+  );
+  it("keeps the F2 destination ceiling when the source selected F1", async () => {
+    const { partyId, mainBill, secondBill } = await twoBills({ Céntimo: 1 }, { Lote: 1 });
+    await chooseFull(secondBill);
+    const before = written();
+    const choice = savedChoice(secondBill);
+    const transferred = await send(
+      limited,
+      venue.cookie,
+      "POST",
+      `/api/bills/${secondBill}/transfer`,
+      {
+        toBillId: mainBill,
+        transfers: [{ lineNo: 1 }],
+        expectedPartyRevision: partyRevision(partyId),
+      },
+    );
+
+    expect(transferred.status).toBe(409);
+    expect(transferred.json.code).toBe(REFUSED.code);
+    expect(storedLines(mainBill)).toEqual(["1:1000"]);
+    expect(storedLines(secondBill)).toEqual(["1:1000"]);
+    expect(savedChoice(secondBill)).toEqual(choice);
+    expect(written()).toEqual(before);
   });
 });
 

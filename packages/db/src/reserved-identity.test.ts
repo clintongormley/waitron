@@ -203,6 +203,34 @@ describe("reserved-identity accessors", () => {
     expect(row?.code).toBe("R-7");
   });
 
+  it("readLiveSeriesIdTx reads a full invoice series separately from the ticket series", async () => {
+    const node = await seedNode(suite.db, locationId);
+    await withTransaction(suite.db, (tx) =>
+      insertReservedSeriesTx(tx, [
+        { nodeId: node, code: "FS-7", purpose: "standard" },
+        { nodeId: node, code: "FF-7", purpose: "full" },
+      ]),
+    );
+    const id = await withTransaction(suite.db, (tx) => readLiveSeriesIdTx(tx, node, "full"));
+    const [row] = await suite.db
+      .select({ code: invoiceSeries.code, purpose: invoiceSeries.purpose })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, id));
+    expect(row).toEqual({ code: "FF-7", purpose: "full" });
+  });
+
+  it("readLiveSeriesIdTx refuses a missing full series by its own domain code", async () => {
+    const node = await seedNode(suite.db, locationId);
+    await withTransaction(suite.db, (tx) =>
+      insertReservedSeriesTx(tx, [{ nodeId: node, code: "FS-8", purpose: "standard" }]),
+    );
+    const err = await captureError(() =>
+      withTransaction(suite.db, (tx) => readLiveSeriesIdTx(tx, node, "full")),
+    );
+    expect(isAppError(err) && err.code).toBe("series.no_full_for_node");
+    expect(isAppError(err) && err.params).toEqual({ nodeId: node });
+  });
+
   it("readLiveSeriesIdTx throws series.no_rectificative_for_node when the node has no live one", async () => {
     const node = await seedNode(suite.db, locationId);
     await withTransaction(suite.db, (tx) =>

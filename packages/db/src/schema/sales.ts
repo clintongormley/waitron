@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, index, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   count,
+  day,
   enumCheck,
   enumType,
   id,
@@ -82,6 +83,7 @@ export const sales = table(
     // something formats it in local time. The offset travels in its own column.
     issuedAt: tsString("issued_at").notNull(),
     issuedOffsetMinutes: count("issued_offset_minutes").notNull(),
+    operationDate: day("operation_date"),
     total: money("total").notNull(),
     // The filed per-rate VAT breakdown — the SAME value handed to the fiscal record, stored here
     // queryably so reporting never re-derives a breakdown that could disagree with what was filed.
@@ -99,6 +101,8 @@ export const sales = table(
     counterpartyTaxId: label("counterparty_tax_id"),
     counterpartyLegalName: label("counterparty_legal_name"),
     counterpartyCountryCode: label("counterparty_country_code"),
+    counterpartyAddress: label("counterparty_address"),
+    taxpayerDomicile: label("taxpayer_domicile"),
     // The person who AUTHORISED this row's creation, recorded on privileged writes and NULL on an
     // ordinary sale. Plain uuid, no FK: `persons` is in @waitron/identity's migration set, not the
     // core one.
@@ -197,6 +201,7 @@ export const saleLines = table(
     menuVersionId: id("menu_version_id"),
     // The line's VAT-inclusive total, beside `line_total`'s net base.
     lineGross: money("line_gross"),
+    listGross: money("list_gross"),
     classification: json<SaleLineClassification>("classification"),
     // On a corrective invoice's line, the line of the corrected invoice it reverses or adjusts;
     // null on an ordinary sale's or a substitution's line, and on a partial correction's line that

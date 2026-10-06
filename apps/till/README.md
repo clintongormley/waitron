@@ -55,6 +55,9 @@ for a server using its persisted self-signed leaf (`vite.config.ts`).
    three columns and one row — the rectificative series is filtered out by `purpose`. The control, a
    column the schema does not have, fails to prepare.
 
+   A231 adds a `full` series to a newly provisioned venue. The query still selects the `standard`
+   series for the till; it does not select the new `full` series.
+
    A cold restore rewrites `trading.env` with your new live series id automatically.
 
 3. **Boot the server** with those ids as the `WAITRON_TILL_*` env. This is the normal server boot

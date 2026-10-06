@@ -209,6 +209,7 @@ export class WorkingOrderStore {
   #loadGeneration = 0;
   #lastAdded?: OrderLine;
   #limit: Decimal | null = null;
+  #fullInvoiceOrderId?: string;
 
   /**
    * The largest total this regime records for a sale with no named customer (the server's
@@ -220,10 +221,19 @@ export class WorkingOrderStore {
     this.#limit = limit === null ? null : decimal(limit);
   }
 
+  allowFullInvoiceFor(orderId: string): void {
+    if (orderId === this.#id) this.#fullInvoiceOrderId = orderId;
+  }
+
   /** Whether replacing `before`'s gross with `after`'s would take the total past the limit, said
    * with a `"refused"` event when it would. */
   #passesLimit(before: Decimal, after: Decimal): boolean {
-    if (this.#limit === null || compareDecimal(after, before) <= 0) return false;
+    if (
+      this.#limit === null ||
+      this.#fullInvoiceOrderId === this.#id ||
+      compareDecimal(after, before) <= 0
+    )
+      return false;
     const next = addDecimal(subtractDecimal(this.total, before), after);
     if (compareDecimal(next, this.#limit) <= 0) return false;
     const refusal: BasketRefusal = {
@@ -560,6 +570,7 @@ export class WorkingOrderStore {
     this.#editLock = null;
     this.#lines.length = 0;
     this.#id = crypto.randomUUID();
+    this.#fullInvoiceOrderId = undefined;
     this.#label = undefined;
     this.#invalidatePricing();
     this.#persisted = false;
@@ -576,6 +587,7 @@ export class WorkingOrderStore {
     const last = id === this.#id ? this.lastAdded : undefined;
     this.#lastAdded = last === undefined ? undefined : mergingWith(lines, last);
     this.#id = id;
+    this.#fullInvoiceOrderId = undefined;
     this.#revision = revision;
     this.#lines.length = 0;
     this.#lines.push(...lines);

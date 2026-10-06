@@ -404,6 +404,8 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
     country: country.countryCode,
     taxId: taxId?.valid === true ? taxId.normalized : taxIdInput,
     legalName: asString(v.legalName, "legalName"),
+    taxpayerDomicile:
+      v.taxpayerDomicile === undefined ? null : asString(v.taxpayerDomicile, "taxpayerDomicile"),
     location: {
       name: asString(loc.name, "location.name"),
       fiscalTerritory: jurisdiction.id,
@@ -418,6 +420,7 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
       dayCutover: asString(loc.dayCutover, "location.dayCutover"),
     },
     seriesCode: asString(v.seriesCode, "seriesCode"),
+    fullSeriesCode: asString(v.fullSeriesCode, "fullSeriesCode"),
     rectificativeSeriesCode: asString(v.rectificativeSeriesCode, "rectificativeSeriesCode"),
     admin: {
       displayName: asString(admin.displayName, "admin.displayName"),
@@ -465,6 +468,9 @@ function parseProvisionPayload(
   if (body.configurationImport === true && mode !== "live") invalidRequest("configurationImport");
 
   const venue = parseVenue(body.venue, acceptLanguage);
+  if (mode !== "demo" && !venue.taxpayerDomicile?.trim()) {
+    invalidRequest("taxpayerDomicile");
+  }
   const environment: DeploymentEnvironment =
     mode === "live" && !devMode ? "production" : "preproduction";
   const selection = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
@@ -475,6 +481,7 @@ function parseProvisionPayload(
   contribution.venueFields?.validate({
     legalName: venue.legalName,
     seriesCode: venue.seriesCode,
+    fullSeriesCode: venue.fullSeriesCode ?? "FF",
     rectificativeSeriesCode: venue.rectificativeSeriesCode,
     operationDescription: venue.location.operationDescription,
   });

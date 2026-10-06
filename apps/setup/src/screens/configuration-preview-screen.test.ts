@@ -11,6 +11,7 @@ const preview: ConfigurationPreview = {
     country: "ES",
     taxId: "B12345678",
     legalName: "Prepared SL",
+    taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
     location: {
       id: "source-location",
       name: "Prepared",
@@ -26,6 +27,7 @@ const preview: ConfigurationPreview = {
       dayCutover: "06:00",
     },
     seriesCode: "F",
+    fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
   },
   counts: { products: 4, persons: 3 },

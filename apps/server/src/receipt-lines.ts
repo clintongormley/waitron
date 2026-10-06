@@ -20,6 +20,7 @@ export function trimQuantityForDisplay(quantity: string): string {
 /** What a receipt line prints; a filed line and a stored gross line both carry it. */
 export type ReceiptSource = Pick<
   GrossLine,
+  | "lineNo"
   | "descriptions"
   | "variantDescriptions"
   | "variantName"
@@ -61,6 +62,13 @@ export function ticketLinesFrom(
     ...listGrossOf(line, identities[i]!.listUnitGross),
     parentLineNo: line.parentLineNo ?? null,
   }));
+}
+
+export function withReceiptListPrices<T extends ReceiptSource>(
+  lines: readonly T[],
+  identities: readonly Pick<OrderLineIdentity, "listUnitGross">[],
+): (T & { listGross?: string })[] {
+  return lines.map((line, i) => ({ ...line, ...listGrossOf(line, identities[i]!.listUnitGross) }));
 }
 
 /** The line's total at its list price, rounded as a line total is (`grossRows`), when it differs. */

@@ -66,10 +66,11 @@ const USAGE = [
   "",
   "  keyring                                            generate the credential key ring",
   "  venue    [--venue-dir <path>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]",
+  "           [--taxpayer-domicile <address>]",
   "           [--location-name <name>] [--territory <t>] [--locale <l>]...",
   "           [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]",
   "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
-  "           [--day-cutover <HH:MM>] [--series-code <code>]",
+  "           [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]",
   "           [--rectificative-code <code>] [--admin-name <name>] [--admin-email <email>]",
   "           [--admin-first-names <names>] [--admin-last-names <names>] [--yes]",
   "",
@@ -138,6 +139,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       country: { type: "string" },
       "tax-id": { type: "string" },
       "legal-name": { type: "string" },
+      "taxpayer-domicile": { type: "string" },
       "location-name": { type: "string" },
       territory: { type: "string" },
       locale: { type: "string", multiple: true },
@@ -150,6 +152,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       "time-zone": { type: "string" },
       "day-cutover": { type: "string" },
       "series-code": { type: "string" },
+      "full-series-code": { type: "string" },
       "rectificative-code": { type: "string" },
       "admin-name": { type: "string" },
       "admin-first-names": { type: "string" },
@@ -169,6 +172,14 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     );
     const taxId = await resolveOption(values["tax-id"], "tax id (NIF): ", deps);
     const legalName = await resolveOption(values["legal-name"], "legal name: ", deps);
+    const taxpayerDomicile = await resolveOption(
+      values["taxpayer-domicile"],
+      "taxpayer legal domicile: ",
+      deps,
+    );
+    if (taxpayerDomicile === "") {
+      throw new AppError("setup.request_invalid", { field: "taxpayerDomicile" });
+    }
     const locationName = await resolveOption(values["location-name"], "location name: ", deps);
     const fiscalTerritory = await resolveOption(
       values.territory,
@@ -198,6 +209,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     );
     const dayCutover = await resolveOption(values["day-cutover"], "day cutover (HH:MM): ", deps);
     const seriesCode = await resolveOption(values["series-code"], "series code: ", deps);
+    const fullSeriesCode = resolveWithoutPrompt(values["full-series-code"]) ?? "FF";
     const rectificativeSeriesCode = await resolveOption(
       values["rectificative-code"],
       "rectificative series code: ",
@@ -220,6 +232,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       country,
       taxId,
       legalName,
+      taxpayerDomicile,
       location: {
         name: locationName,
         fiscalTerritory,
@@ -234,6 +247,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
         dayCutover,
       },
       seriesCode,
+      fullSeriesCode,
       rectificativeSeriesCode,
       admin: {
         displayName: adminName,
@@ -253,6 +267,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     selection.contribution?.venueFields?.validate({
       legalName: request.legalName,
       seriesCode: request.seriesCode,
+      fullSeriesCode: request.fullSeriesCode ?? "FF",
       rectificativeSeriesCode: request.rectificativeSeriesCode,
       operationDescription: request.location.operationDescription,
     });

@@ -245,6 +245,17 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       .fn()
       .mockResolvedValue([{ id: "z1", name: "Comedor", displayOrder: 0, active: true }]),
     listStatuses: vi.fn().mockResolvedValue([]),
+    getBillBalance: vi.fn(async (workingOrderId: string) => ({
+      workingOrderId,
+      status: "open",
+      total: "3.00",
+      received: "0.00",
+      reserved: "0.00",
+      outstanding: "3.00",
+      tips: "0.00",
+      payments: [],
+      paidLines: [],
+    })),
     getPartyBills: vi.fn().mockResolvedValue([]),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0, editSentLines: true }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),

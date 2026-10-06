@@ -95,6 +95,484 @@ const TRIM: ReceiptTrim = {
   footerMessage: "¡Gracias por su visita!",
 };
 
+describe("saved F1 issue offset", () => {
+  it("retains F2 date rendering even when the payload carries an issue offset", () => {
+    const input = {
+      result: { ...FILED_SALE, invoiceType: "F2" as const },
+      issuer: ISSUER,
+      receipt: {},
+      invoiceLocale: "es-ES",
+      printer: PRINTER_80,
+    };
+    expect(
+      formatReceipt({ ...input, result: { ...input.result, issuedOffsetMinutes: 60 } }),
+    ).toEqual(formatReceipt(input));
+  });
+
+  it.each(
+    [PRINTER_58, PRINTER_80].flatMap((printer) =>
+      [false, true].flatMap((duplicate) =>
+        [
+          { offset: 60, want: "1 mar 2026, 0:05" },
+          { offset: 0, want: "28 feb 2026, 23:05" },
+          { offset: -480, want: "28 feb 2026, 15:05" },
+        ].map((clock) => ({ printer, duplicate, ...clock })),
+      ),
+    ),
+  )(
+    "prints saved issue offset $offset on $printer.paperWidth, duplicate=$duplicate",
+    ({ printer, duplicate, offset, want }) => {
+      const lines = drawn(
+        formatReceipt({
+          result: {
+            ...FILED_SALE,
+            invoiceType: "F1",
+            issuedAt: "2026-02-28T23:05:00.000Z",
+            issuedOffsetMinutes: offset,
+          },
+          issuer: ISSUER,
+          receipt: {},
+          invoiceLocale: "es-ES",
+          printer,
+          duplicate,
+        }),
+      );
+      const at = lines.findIndex((line) => line.startsWith("Fecha "));
+      expect(at).toBeGreaterThanOrEqual(0);
+      expect(lines.slice(at, at + 2).join(" ")).toContain(want);
+    },
+  );
+});
+
+describe("saved F1 operation date", () => {
+  it.each(
+    [PRINTER_58, PRINTER_80].flatMap((printer) =>
+      [false, true].flatMap((duplicate) =>
+        [
+          ["es-ES", "Fecha de operación", "28 feb 2026"],
+          ["ca-ES", "Data de l'operació", "28 de febr. 2026"],
+          ["gl-ES", "Data da operación", "28 de feb. de 2026"],
+          ["eu-ES", "Eragiketaren data", "2026(e)ko ots. 28(a)"],
+          ["en-GB", "Fecha de operación", "28 Feb 2026"],
+        ].map(([locale, label, date]) => ({
+          printer,
+          duplicate,
+          locale: locale!,
+          label: label!,
+          date: date!,
+        })),
+      ),
+    ),
+  )(
+    "prints the saved operation day in $locale on $printer.paperWidth, duplicate=$duplicate",
+    ({ printer, duplicate, locale, label, date }) => {
+      const lines = drawn(
+        formatReceipt({
+          result: {
+            ...FILED_SALE,
+            invoiceType: "F1",
+            issuedAt: "2026-03-01T00:05:00.000+01:00",
+            operationDate: "2026-02-28",
+          },
+          issuer: ISSUER,
+          receipt: {},
+          invoiceLocale: locale,
+          printer,
+          duplicate,
+        }),
+      );
+      const operation = lines.filter((line) => line.startsWith(label));
+      expect(operation).toHaveLength(1);
+      expect(
+        lines.slice(lines.indexOf(operation[0]!), lines.indexOf(operation[0]!) + 2).join(" "),
+      ).toContain(date);
+      expect(lines.join("\n")).toContain("A/1");
+      expect(lines.every((line) => line.length <= columnsFor(printer.paperWidth))).toBe(true);
+    },
+  );
+
+  it.each([undefined, "F1", "F2"] as const)(
+    "omits a separate operation-date row for %s without a distinct saved day",
+    (invoiceType) => {
+      const lines = drawn(
+        formatReceipt({
+          result: { ...FILED_SALE, invoiceType },
+          issuer: ISSUER,
+          receipt: {},
+          invoiceLocale: "es-ES",
+          printer: PRINTER_58,
+        }),
+      );
+      expect(lines.join("\n")).not.toContain("Fecha de operación");
+      expect(lines.some((line) => line.startsWith("Fecha "))).toBe(true);
+    },
+  );
+
+  it("does not print an operation date on an F2 even if the payload carries one", () => {
+    const lines = drawn(
+      formatReceipt({
+        result: { ...FILED_SALE, invoiceType: "F2", operationDate: "2026-02-28" },
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    );
+    expect(lines.join("\n")).not.toContain("Fecha de operación");
+    expect(lines.join("\n")).not.toContain("28 feb 2026");
+  });
+});
+
+it.each(
+  [PRINTER_58, PRINTER_80].flatMap((printer) =>
+    [
+      ["es-ES", "IVA incluido"],
+      ["ca-ES", "IVA inclòs"],
+      ["gl-ES", "IVE incluído"],
+      ["eu-ES", "BEZa barne"],
+      ["en-GB", "IVA incluido"],
+    ].map(([locale, included]) => ({ printer, locale: locale!, included: included! })),
+  ),
+)(
+  "identifies VAT-inclusive F1 reductions on $printer.paperWidth in $locale",
+  ({ printer, locale, included }) => {
+    const invoice = {
+      ...FILED_SALE,
+      total: "10.30",
+      vatBreakdown: [{ rate: "21.00", base: "8.51", tax: "1.79" }],
+      lines: [
+        {
+          descriptions: { "es-ES": "Plato", en: "Dish" },
+          quantity: "1",
+          gross: "10.30",
+          listGross: "12.00",
+          net: {
+            unitPrice: "8.51",
+            priceQuantity: "1.000",
+            base: "8.51",
+            rate: "21.00",
+            tax: "1.79",
+          },
+          adjustments: [{ kind: "discount" as const, percentBp: 1000, amount: "1.20" }],
+        },
+        {
+          descriptions: { "es-ES": "Extra", en: "Extra" },
+          quantity: "1",
+          gross: "0.00",
+          listGross: "1.10",
+          parentLineNo: 1,
+          net: {
+            unitPrice: "0.00",
+            priceQuantity: "1.000",
+            base: "0.00",
+            rate: "10.00",
+            tax: "0.00",
+          },
+          adjustments: [{ kind: "comp" as const, amount: "1.10" }],
+        },
+      ],
+      billAdjustments: [{ kind: "discount" as const, amount: "0.50" }],
+    };
+    const render = (invoiceType: "F1" | "F2") =>
+      drawn(
+        formatReceipt({
+          result: { ...invoice, invoiceType },
+          issuer: ISSUER,
+          receipt: {},
+          invoiceLocale: locale,
+          printer,
+        }),
+      )
+        .join(" ")
+        .replace(/\s+/g, " ");
+    const full = render("F1");
+    expect(full.split(`(${included})`)).toHaveLength(4);
+    expect(full).toMatch(/10[,.]?0?%/);
+    const fallbackLocale = locale === "en-GB" ? "en-GB" : locale;
+    const money = new Intl.NumberFormat(fallbackLocale, { style: "currency", currency: "EUR" });
+    for (const amount of [1.2, 1.1, 0.5]) {
+      expect(full).toContain(`-${money.format(amount).replace(/\s+/g, " ")}`);
+    }
+    expect(render("F2")).not.toContain(`(${included})`);
+  },
+);
+
+it.each([PRINTER_58, PRINTER_80])(
+  "prints VAT beside each F1 dish and extra on $paperWidth",
+  (printer) => {
+    const content = drawn(
+      formatReceipt({
+        result: {
+          ...FILED_SALE,
+          invoiceType: "F1",
+          lines: [
+            {
+              descriptions: { "es-ES": "Plato" },
+              quantity: "1",
+              gross: "12.10",
+              net: {
+                unitPrice: "10.00",
+                priceQuantity: "1.000",
+                base: "10.00",
+                rate: "21.00",
+                tax: "2.10",
+              },
+            },
+            {
+              descriptions: { "es-ES": "Extra" },
+              quantity: "2",
+              gross: "8.80",
+              parentLineNo: 1,
+              net: {
+                unitPrice: "4.00",
+                priceQuantity: "1.000",
+                base: "8.00",
+                rate: "10.00",
+                tax: "0.80",
+              },
+            },
+          ],
+        },
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer,
+      }),
+    )
+      .join(" ")
+      .replace(/\s+/g, " ");
+    const dish = content.slice(content.indexOf("Plato"), content.indexOf("Extra"));
+    const extra = content.slice(content.indexOf("Extra"), content.indexOf("Base 21%"));
+    expect(dish).toContain("IVA 21.00% 2,10 €");
+    expect(extra).toContain("IVA 10.00% 0,80 €");
+  },
+);
+
+it("keeps the F2 gross layout even when net facts are present", () => {
+  const lines = drawn(
+    formatReceipt({
+      result: {
+        ...FILED_SALE,
+        invoiceType: "F2",
+        lines: [
+          {
+            ...FILED_SALE.lines[0]!,
+            net: { unitPrice: "10.00", priceQuantity: "1.000", base: "10.00", rate: "21.00" },
+          },
+        ],
+      },
+      issuer: ISSUER,
+      receipt: {},
+      invoiceLocale: "es-ES",
+      printer: PRINTER_58,
+    }),
+  ).join(" ");
+  expect(lines).toContain("12,10");
+  expect(lines).not.toContain("Factura completa");
+  expect(lines).not.toContain("Precio sin IVA");
+});
+
+it.each([
+  ["es-ES", "Factura completa", "Precio sin IVA"],
+  ["ca-ES", "Factura completa", "Preu sense IVA"],
+  ["gl-ES", "Factura completa", "Prezo sen IVE"],
+  ["eu-ES", "Faktura osoa", "BEZik gabeko prezioa"],
+])(
+  "labels F1 net lines in %s without changing a sub-unit price quantity",
+  (locale, title, priceLabel) => {
+    const lines = drawn(
+      formatReceipt({
+        result: {
+          ...FILED_SALE,
+          invoiceType: "F1",
+          lines: [
+            {
+              descriptions: { [locale]: "Jamón" },
+              quantity: "0.32",
+              gross: "8.80",
+              unitName: { es: "kg" },
+              net: { unitPrice: "2.50", priceQuantity: "0.100", base: "8.00", rate: "10.00" },
+            },
+          ],
+        },
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: locale,
+        printer: PRINTER_58,
+      }),
+    )
+      .join(" ")
+      .replace(/\s+/g, " ");
+    expect(lines).toContain(title);
+    expect(lines).toContain(priceLabel);
+    expect(lines).toContain("2,50 € / 0.1 kg");
+    expect(lines).toContain("8,00");
+  },
+);
+
+it("prints the filed combined quantity for an F1 extra rather than its per-dish count", () => {
+  const lines = drawn(
+    formatReceipt({
+      result: {
+        ...FILED_SALE,
+        invoiceType: "F1",
+        lines: [
+          {
+            descriptions: { "es-ES": "Plato" },
+            quantity: "2",
+            gross: "12.10",
+            net: { unitPrice: "5.00", priceQuantity: "1.000", base: "10.00", rate: "21.00" },
+          },
+          {
+            descriptions: { "es-ES": "Extra" },
+            quantity: "4",
+            gross: "8.80",
+            parentLineNo: 1,
+            net: { unitPrice: "2.00", priceQuantity: "1.000", base: "8.00", rate: "10.00" },
+          },
+        ],
+      },
+      issuer: ISSUER,
+      receipt: {},
+      invoiceLocale: "es-ES",
+      printer: PRINTER_58,
+    }),
+  )
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+  expect(lines).toContain("Extra 4");
+  expect(lines).toContain("Precio sin IVA 2,00 € / 1");
+  expect(lines).not.toContain("Extra x2");
+});
+
+it.each([PRINTER_58, PRINTER_80])(
+  "prints distinct F1 net prices and weighted price quantities on $paperWidth",
+  (printer) => {
+    const result: TillSaleResult = {
+      ...FILED_SALE,
+      invoiceType: "F1",
+      lines: [
+        {
+          descriptions: { "es-ES": "Plato", "en-GB": "Dish" },
+          quantity: "1",
+          gross: "12.10",
+          net: { unitPrice: "10.00", priceQuantity: "1.000", base: "10.00", rate: "21.00" },
+        },
+        {
+          descriptions: { "es-ES": "Jamón", "en-GB": "Ham" },
+          quantity: "0.32",
+          unitName: { es: "kg" },
+          gross: "8.80",
+          net: { unitPrice: "25.00", priceQuantity: "1.000", base: "8.00", rate: "10.00" },
+        },
+      ],
+    };
+    for (const invoiceLocale of ["es-ES", "en-GB"]) {
+      const lines = drawn(
+        formatReceipt({ result, issuer: ISSUER, receipt: {}, invoiceLocale, printer }),
+      );
+      const content = lines.join(" ").replace(/\s+/g, " ").trim();
+      expect(content).toContain("Factura completa");
+      const price = invoiceLocale === "es-ES" ? "25,00 €" : "€25.00";
+      expect(content).toContain(`Precio sin IVA ${price} / 1 kg`);
+      expect(content).toContain(`Base 10.00% ${invoiceLocale === "es-ES" ? "8,00 €" : "€8.00"}`);
+      expect(content).not.toContain(invoiceLocale === "es-ES" ? "8,80" : "8.80");
+      expect(lines.every((line) => line.length <= columnsFor(printer.paperWidth))).toBe(true);
+    }
+  },
+);
+
+it.each([PRINTER_58, PRINTER_80])(
+  "uses the taxpayer domicile instead of the location address only on F1 with a domicile on $paperWidth",
+  (printer) => {
+    for (const invoiceLocale of ["es-ES", "en-GB"]) {
+      for (const duplicate of [false, true]) {
+        for (const { invoiceType, domicile, showLocation } of [
+          { invoiceType: "F1", domicile: "Calle Fiscal 27", showLocation: false },
+          { invoiceType: "F1", domicile: undefined, showLocation: true },
+          { invoiceType: "F2", domicile: "Calle Fiscal 27", showLocation: true },
+          { invoiceType: "F2", domicile: undefined, showLocation: true },
+        ] as const) {
+          const printed = drawn(
+            formatReceipt({
+              result: {
+                ...FILED_SALE,
+                invoiceType,
+                issuer: { ...ISSUER, ...(domicile === undefined ? {} : { domicile }) },
+              },
+              issuer: { ...ISSUER, domicile: "Current Fiscal 99" },
+              venueAddress: ["Location Street 45", "28001 Madrid"],
+              receipt: { phone: "910000000", email: "venue@example.com" },
+              invoiceLocale,
+              printer,
+              duplicate,
+            }),
+          ).join(" ");
+          expect(printed.includes("Location Street 45")).toBe(showLocation);
+          expect(printed.includes("28001 Madrid")).toBe(showLocation);
+          expect(printed.includes("Calle Fiscal 27")).toBe(
+            invoiceType === "F1" && domicile !== undefined,
+          );
+          expect(printed).not.toContain("Current Fiscal 99");
+          expect(printed).toContain("910000000");
+          expect(printed).toContain("venue@example.com");
+        }
+      }
+    }
+  },
+);
+
+it.each([PRINTER_58, PRINTER_80])(
+  "prints the filed F1 issuer domicile and recipient on $paperWidth with Spanish and English formats",
+  (printer) => {
+    const result: TillSaleResult = {
+      ...FILED_SALE,
+      invoiceType: "F1",
+      invoiceNumber: "FF/1",
+      issuer: {
+        venueName: "Filed Issuer SL",
+        nif: "B87654321",
+        domicile: "Calle del domicilio fiscal original 27, Madrid",
+      },
+      recipient: {
+        legalName: "Original Customer SL",
+        taxId: "B11223344",
+        address: "Avenida del cliente original 123, Madrid",
+        countryCode: "ES",
+      },
+    };
+    for (const invoiceLocale of ["es-ES", "en-GB"]) {
+      const bytes = formatReceipt({
+        result,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale,
+        printer,
+        duplicate: true,
+      });
+      const lines = drawn(bytes);
+      const printed = lines.join(" ").replace(/\s+/g, " ");
+      expect(printed).toContain("Filed Issuer SL");
+      expect(printed).toContain("NIF: B87654321");
+      expect(printed).toContain("Calle del domicilio fiscal original 27, Madrid");
+      expect(printed).toContain("Original Customer SL");
+      expect(printed).toContain("NIF: B11223344");
+      expect(printed).toContain("Avenida del cliente original 123, Madrid");
+      expect(printed).toContain("FF/1");
+      expect(printed.indexOf("FF/1")).toBeLessThan(printed.indexOf("Original Customer SL"));
+      expect(printed).toContain("DUPLICADO");
+      expect(printed).not.toContain(ISSUER.venueName);
+      expect(lines.every((line) => line.length <= columnsFor(printer.paperWidth))).toBe(true);
+      const commands = printedCommands(bytes);
+      expect(commands.filter((c) => c.name === "GS v 0" && c.text === undefined)).toHaveLength(1);
+      expect(commands.findIndex((c) => c.name === "GS v 0" && c.text === undefined)).toBeLessThan(
+        commands.findIndex((c) => c.text?.includes("Filed Issuer SL")),
+      );
+    }
+  },
+);
+
 it.each([PRINTER_58, PRINTER_80])(
   "prints a distinct enabled department trading name above the legal issuer on $paperWidth",
   (printer) => {

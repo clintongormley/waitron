@@ -48,6 +48,8 @@ export interface RecordSaleLine {
   menuVersionId?: string | null;
   /** The line's VAT-inclusive total as a decimal string, e.g. "12.10". */
   lineGross?: string | null;
+  /** VAT-inclusive line total before discounts, frozen for receipt replay. */
+  listGross?: string | null;
   /** The product's reporting chain, as the line recorded it when it was added. */
   classification?: SaleLineClassification | null;
   /** The original invoice line this corrective line reverses or adjusts. Only `recordCorrection`

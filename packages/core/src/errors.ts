@@ -35,6 +35,9 @@ declare module "@waitron/shared" {
     /** The series is retired: a restore retired it and opened a replacement, so numbering from it
      * would re-issue an invoice identity the tax agency may already hold. */
     "sale.series_retired": { seriesId: string; retiredAt: string };
+    "fiscal.taxpayer_domicile_missing": Record<string, never>;
+    /** The current corrective path files R5, which applies only to a simplified original. */
+    "sale.correction_unsupported": { saleId: string };
     /** Thrown by `recordCorrection` when a negative correction would take the invoice below zero:
      * `remaining` is the invoice's total net of the corrections already recorded against it, and
      * `correction` is the amount the row would store, rounded to the cent. A correction down to
@@ -112,11 +115,9 @@ declare module "@waitron/shared" {
      * commits or money moves: by `recordSale`, on the base plus VAT it files, and by the till's paths
      * where a basket or bill is entered, grown or paid. Both amounts are decimal strings. */
     "sale.total_exceeds_simplified_limit": { total: string; limit: string };
-    /** A full invoice's customer the record could not carry: `taxId` fails its country's tax ID
-     * check (for example, a wrong control character), or `legalName` is longer than the fiscal regime's
-     * `recipientNameMaxLength`. Thrown by `recordSubstitution` before anything is read or
-     * written. The value itself is not carried: it is a customer's personal data. */
-    "counterparty.invalid": { field: "taxId" | "legalName" };
+    /** A full invoice's customer the record could not carry: a tax ID rejected by its country,
+     * a blank or overlong legal name, or a missing postal address. No personal value is carried. */
+    "counterparty.invalid": { field: "taxId" | "legalName" | "address" };
     /** A VAT breakdown's bases and taxes, summed and compared by value, do not equal the total; a
      * chained record that disagrees with its own total cannot be repaired. Thrown before anything
      * is written: by `recordSale` for a supplied breakdown, compared as given and at the cent; and
