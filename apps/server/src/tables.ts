@@ -11,6 +11,8 @@ import {
   floorZones,
   isStatusColor,
   isUniqueViolation,
+  refusalOn,
+  UNIQUE_VIOLATION,
   tableServiceStatuses,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -222,7 +224,6 @@ export interface FloorZone {
   active: boolean;
 }
 
-/** A duplicate `(location, name)` is `zone.name_taken`, from `floor_zones_name_key`. */
 export async function createZone(
   tx: Transaction,
   cfg: TillConfig,
@@ -239,7 +240,12 @@ export async function createZone(
       .returning({ id: floorZones.id });
     return { id: row!.id };
   } catch (error) {
-    if (isUniqueViolation(error)) {
+    if (
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "floor_zones",
+        columns: ["location_id", "name"],
+      })
+    ) {
       throw new AppError("zone.name_taken", { name: input.name });
     }
     throw error;
@@ -295,9 +301,14 @@ export async function updateZone(
       .where(eq(floorZones.id, id))
       .returning({ id: floorZones.id });
   } catch (error) {
-    if (isUniqueViolation(error)) {
-      // Only `name` participates in the unique, so it was necessarily supplied when this fires.
-      throw new AppError("zone.name_taken", { name: patch.name! });
+    if (
+      patch.name !== undefined &&
+      refusalOn(error, UNIQUE_VIOLATION, {
+        table: "floor_zones",
+        columns: ["location_id", "name"],
+      })
+    ) {
+      throw new AppError("zone.name_taken", { name: patch.name });
     }
     throw error;
   }
