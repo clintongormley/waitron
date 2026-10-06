@@ -403,6 +403,10 @@ export class PrepStationsScreen extends LitElement {
   #renameIdentity?: object;
   #watcherRenameScope?: DraftScope<{ name: string }>;
   #watcherRenameIdentity?: object;
+  #watcherCellScope?: DraftScope<string[]>;
+  #watcherCellIdentity?: object;
+  #watcherPrinterScope?: DraftScope<string[]>;
+  #watcherPrinterIdentity?: object;
   #leave?: LeaveCoordinator;
 
   #syncStationDrafts(): void {
@@ -490,6 +494,114 @@ export class PrepStationsScreen extends LitElement {
     }
   }
 
+  #syncWatcherInlineDrafts(): void {
+    for (const printers of [false, true]) {
+      const editor = printers ? this.watcherPrinterEditor : this.watcherCellEditor;
+      const scope = printers ? this.#watcherPrinterScope : this.#watcherCellScope;
+      const identity = printers ? this.#watcherPrinterIdentity : this.#watcherCellIdentity;
+      if (!editor) {
+        scope?.dispose();
+        if (printers) {
+          this.#watcherPrinterScope = undefined;
+          this.#watcherPrinterIdentity = undefined;
+        } else {
+          this.#watcherCellScope = undefined;
+          this.#watcherCellIdentity = undefined;
+        }
+      } else if (!identity) {
+        const id = {};
+        this.#leave ??= leaveCoordinatorFor(this);
+        const registered = this.#leave?.register({
+          id,
+          current: () =>
+            printers ? this.watcherPrinterEditor!.ids : this.watcherCellEditor!.values,
+          snapshot: (ids) => [...ids],
+          equal: (a, b) => a.length === b.length && a.every((value) => b.includes(value)),
+          restore: (values) => {
+            if (printers && this.watcherPrinterEditor)
+              this.watcherPrinterEditor = { ...this.watcherPrinterEditor, ids: [...values] };
+            else if (!printers && this.watcherCellEditor)
+              this.watcherCellEditor = { ...this.watcherCellEditor, values: [...values] };
+          },
+        });
+        if (printers) {
+          this.#watcherPrinterIdentity = id;
+          this.#watcherPrinterScope = registered;
+        } else {
+          this.#watcherCellIdentity = id;
+          this.#watcherCellScope = registered;
+        }
+      }
+    }
+  }
+  #watcherInlineCurrent(printers: boolean, identity: object | undefined): boolean {
+    return (
+      this.isConnected &&
+      identity === (printers ? this.#watcherPrinterIdentity : this.#watcherCellIdentity)
+    );
+  }
+  #leaveWatcherInline(
+    printers: boolean,
+    reason: LeaveReason,
+    identity: object | undefined,
+    proceed: () => void,
+  ): void {
+    if (
+      !this.#watcherInlineCurrent(printers, identity) ||
+      (printers ? this.watcherPrinterBusy : this.watcherCellBusy)
+    )
+      return;
+    const scope = printers ? this.#watcherPrinterScope : this.#watcherCellScope;
+    if (!scope) {
+      proceed();
+      return;
+    }
+    void this.#leave!.request({
+      scopes: [scope.id],
+      reason,
+      proceed: () => {
+        if (this.#watcherInlineCurrent(printers, identity)) proceed();
+      },
+    });
+  }
+  #openWatcherCell(watcher: WatcherView, field: WatcherCell): void {
+    this.#leaveWatcherInline(false, "navigation", this.#watcherCellIdentity, () => {
+      this.#watcherCellScope?.dispose();
+      this.#watcherCellScope = undefined;
+      this.#watcherCellIdentity = undefined;
+      this.watcherCellEditor = {
+        watcherId: watcher.id,
+        field,
+        attempted: false,
+        fieldError: "",
+        error: "",
+        values:
+          field === "pass"
+            ? [watcher.runsPass ? "yes" : "no"]
+            : field === "follows"
+              ? watcher.everyStation
+                ? [EVERY_MEMBER]
+                : [...watcher.stationIds]
+              : watcher.everyZone
+                ? [EVERY_MEMBER]
+                : [...watcher.zoneIds],
+      };
+    });
+  }
+  #openWatcherPrinters(watcher: WatcherView): void {
+    this.#leaveWatcherInline(true, "navigation", this.#watcherPrinterIdentity, () => {
+      this.#watcherPrinterScope?.dispose();
+      this.#watcherPrinterScope = undefined;
+      this.#watcherPrinterIdentity = undefined;
+      this.watcherPrinterEditor = {
+        watcherId: watcher.id,
+        ids: [...watcher.printerIds],
+        fieldError: "",
+        error: "",
+      };
+    });
+  }
+
   async #beforeStationClose(
     reason: LeaveReason,
     rename: boolean,
@@ -530,6 +642,7 @@ export class PrepStationsScreen extends LitElement {
   }
   protected override willUpdate(changed: PropertyValues<this>) {
     this.#syncStationDrafts();
+    this.#syncWatcherInlineDrafts();
     if (changed.has("readOnly") && this.readOnly) {
       this.tab = "stations";
       this.testProduct = "";
@@ -558,6 +671,16 @@ export class PrepStationsScreen extends LitElement {
     )
       this.busy = false;
     this.watcherEditor = undefined;
+    this.watcherCellEditor = undefined;
+    this.watcherPrinterEditor = undefined;
+    this.watcherCellBusy = false;
+    this.watcherPrinterBusy = false;
+    this.#watcherCellScope?.dispose();
+    this.#watcherPrinterScope?.dispose();
+    this.#watcherCellScope = undefined;
+    this.#watcherPrinterScope = undefined;
+    this.#watcherCellIdentity = undefined;
+    this.#watcherPrinterIdentity = undefined;
     this.watcherRename = undefined;
     this.#watcherRenameScope?.dispose();
     this.#watcherRenameScope = undefined;
@@ -1901,15 +2024,19 @@ export class PrepStationsScreen extends LitElement {
       rowKey="id"
     ></wt-data-table>`;
   }
-  async #saveWatcherPrinters() {
+  async #saveWatcherPrinters(identity: object | undefined) {
     const editor = this.watcherPrinterEditor;
-    if (!editor || this.watcherPrinterBusy) return;
+    if (!editor || this.watcherPrinterBusy || !this.#watcherInlineCurrent(true, identity)) return;
+    const scope = this.#watcherPrinterScope;
+    const submitted = [...editor.ids];
     this.watcherPrinterBusy = true;
     this.watcherPrinterEditor = { ...editor, fieldError: "", error: "" };
     this.#showError("");
     try {
-      await this.api.setWatcherPrinters(editor.watcherId, editor.ids);
+      await this.api.setWatcherPrinters(editor.watcherId, submitted);
+      scope?.commit(submitted);
     } catch (error) {
+      if (!this.#watcherInlineCurrent(true, identity)) return;
       const code = codeOf(error);
       const field = (error as { params?: { field?: string } })?.params?.field;
       const fieldRefusal =
@@ -1917,7 +2044,7 @@ export class PrepStationsScreen extends LitElement {
         code === "printer.makes_and_watches" ||
         (code === "management.request_invalid" && field === "printerIds");
       this.watcherPrinterEditor = {
-        ...editor,
+        ...this.watcherPrinterEditor!,
         fieldError: fieldRefusal ? t("watchers.printer_refused") : "",
         conflictPrinterId:
           code === "printer.makes_and_watches"
@@ -1930,7 +2057,8 @@ export class PrepStationsScreen extends LitElement {
       this.watcherPrinterBusy = false;
       return;
     }
-    this.watcherPrinterEditor = undefined;
+    if (!this.#watcherInlineCurrent(true, identity)) return;
+    if (!scope?.isDirty()) this.watcherPrinterEditor = undefined;
     this.watcherPrinterBusy = false;
     await this.#load();
   }
@@ -1952,16 +2080,10 @@ export class PrepStationsScreen extends LitElement {
         data-test=${`edit-watcher-printers-${watcher.id}`}
         aria-label=${`${watcher.name}: ${t("watchers.printers")}`}
         ?disabled=${this.watcherPrinterBusy}
-        @click=${() => {
-          this.watcherPrinterEditor = {
-            watcherId: watcher.id,
-            ids: [...watcher.printerIds],
-            fieldError: "",
-            error: "",
-          };
-        }}
+        @click=${() => this.#openWatcherPrinters(watcher)}
         >${names}</wt-button
       >`;
+    const identity = this.#watcherPrinterIdentity;
     const options = view.printers.map((printer) => {
       const stations = view.stationPrinters
         .filter((mapping) => mapping.printerId === printer.id)
@@ -2001,6 +2123,7 @@ export class PrepStationsScreen extends LitElement {
         .countLabel=${(count: number) => format("prep.tickets.printer_count", { count: String(count) })}
         @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
           event.stopPropagation();
+          if (!this.#watcherInlineCurrent(true, identity)) return;
           this.watcherPrinterEditor = {
             ...editor,
             ids: event.detail.values,
@@ -2008,11 +2131,15 @@ export class PrepStationsScreen extends LitElement {
             fieldError: "",
             error: "",
           };
+          this.#watcherPrinterScope?.changed();
         }}
         @keydown=${(event: KeyboardEvent) => {
           if (event.key === "Escape" && !this.watcherPrinterBusy) {
+            event.preventDefault();
             event.stopPropagation();
-            this.watcherPrinterEditor = undefined;
+            this.#leaveWatcherInline(true, "escape", identity, () => {
+              this.watcherPrinterEditor = undefined;
+            });
           }
         }}
       ></wt-combobox>
@@ -2026,14 +2153,16 @@ export class PrepStationsScreen extends LitElement {
           data-test=${`cancel-watcher-printers-${watcher.id}`}
           ?disabled=${this.watcherPrinterBusy}
           @click=${() => {
-            this.watcherPrinterEditor = undefined;
+            this.#leaveWatcherInline(true, "cancel", identity, () => {
+              this.watcherPrinterEditor = undefined;
+            });
           }}
           >${t("venue.cancel")}</wt-button
         >
         <wt-button
           data-test=${`save-watcher-printers-${watcher.id}`}
           ?disabled=${this.watcherPrinterBusy}
-          @click=${() => void this.#saveWatcherPrinters()}
+          @click=${() => void this.#saveWatcherPrinters(identity)}
           >${t("venue.save")}</wt-button
         >
       </wt-form-actions>
@@ -2068,9 +2197,11 @@ export class PrepStationsScreen extends LitElement {
         ? errors.zoneIds
         : "";
   }
-  async #saveWatcherCell() {
+  async #saveWatcherCell(identity: object | undefined) {
     const editor = this.watcherCellEditor;
-    if (!editor || this.watcherCellBusy) return;
+    if (!editor || this.watcherCellBusy || !this.#watcherInlineCurrent(false, identity)) return;
+    const scope = this.#watcherCellScope;
+    const submitted = [...editor.values];
     const watcher = this.view!.watchers.find((row) => row.id === editor.watcherId);
     if (!watcher) return;
     this.watcherCellEditor = { ...editor, attempted: true, fieldError: "", error: "" };
@@ -2081,11 +2212,14 @@ export class PrepStationsScreen extends LitElement {
         ?.focus();
       return;
     }
+    const input = this.#watcherInput(watcher);
     this.watcherCellBusy = true;
     this.#showError("");
     try {
-      await this.api.updateWatcher(watcher.id, this.#watcherInput(watcher));
+      await this.api.updateWatcher(watcher.id, input);
+      scope?.commit(submitted);
     } catch (error) {
+      if (!this.#watcherInlineCurrent(false, identity)) return;
       const code = codeOf(error);
       const field = (error as { params?: { field?: string } })?.params?.field;
       const fieldError =
@@ -2099,7 +2233,7 @@ export class PrepStationsScreen extends LitElement {
             ? t("watchers.need_zone")
             : "";
       this.watcherCellEditor = {
-        ...editor,
+        ...this.watcherCellEditor!,
         attempted: true,
         fieldError,
         error: fieldError
@@ -2109,7 +2243,8 @@ export class PrepStationsScreen extends LitElement {
       this.watcherCellBusy = false;
       return;
     }
-    this.watcherCellEditor = undefined;
+    if (!this.#watcherInlineCurrent(false, identity)) return;
+    if (!scope?.isDirty()) this.watcherCellEditor = undefined;
     this.watcherCellBusy = false;
     await this.#load();
   }
@@ -2154,27 +2289,10 @@ export class PrepStationsScreen extends LitElement {
         data-test=${`edit-watcher-${field}-${watcher.id}`}
         aria-label=${`${watcher.name}: ${label}`}
         ?disabled=${this.watcherCellBusy}
-        @click=${() => {
-          this.watcherCellEditor = {
-            watcherId: watcher.id,
-            field,
-            attempted: false,
-            fieldError: "",
-            error: "",
-            values:
-              field === "pass"
-                ? [watcher.runsPass ? "yes" : "no"]
-                : field === "follows"
-                  ? watcher.everyStation
-                    ? [EVERY_MEMBER]
-                    : [...watcher.stationIds]
-                  : watcher.everyZone
-                    ? [EVERY_MEMBER]
-                    : [...watcher.zoneIds],
-          };
-        }}
+        @click=${() => this.#openWatcherCell(watcher, field)}
         >${text || t("prep.none")}</wt-button
       >`;
+    const identity = this.#watcherCellIdentity;
     const options =
       field === "pass"
         ? [
@@ -2213,17 +2331,27 @@ export class PrepStationsScreen extends LitElement {
         .noResultsLabel=${t("venue.combobox_no_results")}
         @wt-change=${(event: CustomEvent<{ values: string[]; value: string }>) => {
           event.stopPropagation();
+          if (!this.#watcherInlineCurrent(false, identity)) return;
           let values = field === "pass" ? [event.detail.value] : event.detail.values;
           if (values.includes(EVERY_MEMBER) && values.length > 1)
             values = editor.values.includes(EVERY_MEMBER)
               ? values.filter((id) => id !== EVERY_MEMBER)
               : [EVERY_MEMBER];
-          this.watcherCellEditor = { ...editor, values, fieldError: "", error: "" };
+          this.watcherCellEditor = {
+            ...this.watcherCellEditor!,
+            values,
+            fieldError: "",
+            error: "",
+          };
+          this.#watcherCellScope?.changed();
         }}
         @keydown=${(event: KeyboardEvent) => {
           if (event.key === "Escape" && !this.watcherCellBusy) {
+            event.preventDefault();
             event.stopPropagation();
-            this.watcherCellEditor = undefined;
+            this.#leaveWatcherInline(false, "escape", identity, () => {
+              this.watcherCellEditor = undefined;
+            });
           }
         }}
       ></wt-combobox
@@ -2236,14 +2364,16 @@ export class PrepStationsScreen extends LitElement {
           data-test="cancel-watcher-cell"
           ?disabled=${this.watcherCellBusy}
           @click=${() => {
-            this.watcherCellEditor = undefined;
+            this.#leaveWatcherInline(false, "cancel", identity, () => {
+              this.watcherCellEditor = undefined;
+            });
           }}
           >${t("venue.cancel")}</wt-button
         >
         <wt-button
           data-test="save-watcher-cell"
           ?disabled=${this.watcherCellBusy || !!invalid}
-          @click=${() => void this.#saveWatcherCell()}
+          @click=${() => void this.#saveWatcherCell(identity)}
           >${t("venue.save")}</wt-button
         >
       </wt-form-actions>

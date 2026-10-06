@@ -1363,8 +1363,13 @@ snapshot across refreshed rows. Focused cases are in
 modal now protects its trimmed name through Cancel/native Escape, commits the submitted name
 before refresh, and retains newer input across accepted or refused writes. Disconnect aborts the
 question; departed controls and replies cannot submit or release a replacement editor's write.
-Its focused cases share the watcher unsaved suite. Staged inline watcher selections,
-department/zone forms, other station-action drafts and
+Its focused cases share the watcher unsaved suite. Inline Watcher station, zone, pass and printer
+selections now register independent drafts. Cancel, native Escape and replacement by another cell
+ask before dropping edited choices; unchanged and reverted memberships close directly. Each write
+commits only its submitted selection before refresh, retaining newer input and other edited cells.
+Disconnect aborts pending questions, and departed selection and Save controls leave a replacement
+opening alone. The watcher unsaved suite checks these paths with the shared renderer.
+Department/zone forms, other station-action drafts and
 the remaining dashboard/till modal owners still need Task 4 work; page/history/native reload remain
 Tasks 5–6. The existing station keyboard-reorder focus check failed in a filtered run and in the preceding checkpoint's installed measurement checkout.
 The 2026-10-06 follow-up reproduced it with Routing selected: the Today fixture inherited the

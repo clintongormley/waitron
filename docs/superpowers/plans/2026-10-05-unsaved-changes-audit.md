@@ -685,3 +685,45 @@ through `invoice-recipient-cancel`. Cover that form and its till host before PR 
 submission and fiscal behavior. This entry is a source inventory, not a runtime test of that owner.
 The venue-details page added on main also needs Task 6 reconciliation. Watcher inline selections,
 other modal owners and page/history/navigation coverage remain open.
+
+
+## 2026-10-06 follow-up: staged Watcher cells
+
+You now get the shared warning before Cancel, native Escape or replacement drops an edited
+Watcher station, zone, pass or printer selection on the branch. Choice cells and printer cells
+own independent scopes, so saving one does not commit the other. Each scope compares selected
+membership, captures its opening once, and commits the submitted selection before refreshing.
+An accepted or refused write retains newer input. Disconnect clears these local editors and
+aborts their questions; removed selection and Save controls cannot submit a replacement.
+
+The first inline selection run failed 14 new cases and passed eight controls. After the initial
+implementation, four native Escape cases still failed: the keyboard event reached the selector,
+but its newly opened warning was closed. Preventing Escape's default action passed all 22 cases.
+Six additional membership, independent-refresh, invalidated-answer and printer-replacement cases
+then passed with those cases, giving 28 focused passes. No existing expected value changed.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/watcher-form.unsaved.test.ts -t 'Watcher inline'
+```
+
+In a separately installed disposable checkout, removing the leave gate failed edited Cancel,
+removing the submitted commit failed the newer-input baseline check, removing Escape's default
+prevention failed native Escape, and removing Save's opening check submitted a replacement draft.
+Each control failed one selected case; restoring the code passed all 57 watcher draft cases.
+The candidate and its parent directory were removed after those runs.
+
+A temporary Chromium probe passed eight EN/ES, light/dark, 390/1280 flows with 16 axe scans.
+Its 16 captures show the retained cell and warning; Keep returned focus to the native selector
+trigger. Synthetic unload cases check cancellation only; native reload remains Task 5. Probe
+source, logs and captures live in Lane E's local `receipts/w69-inline-20261006` directory.
+Department/zone forms, station-action drafts and remaining modal owners still need Task 4 work;
+page and history integration remain Tasks 5–6. This checkpoint completes only the staged Watcher
+cell family, not either proposed W69 PR.
+
+The final Watcher host/form selection passed 154 tests across three suites; 246 cases outside
+its name selection were skipped. Venue-service types, changed-file ESLint, Prettier and
+`git diff --check` passed. The documentation paths are Prettier-ignored and were read directly.
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/watcher-form.unsaved.test.ts src/dashboard/watcher-form.test.ts src/dashboard/prep-stations-screen.test.ts -t 'watcher|Watcher'
+```
