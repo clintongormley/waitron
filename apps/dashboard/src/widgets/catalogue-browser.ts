@@ -259,7 +259,9 @@ export class CatalogueBrowser extends LitElement {
       );
       if (
         !selection.productIds.length &&
-        this.summaries.every((summary) => summary.folders === 0 && summary.products === 0)
+        this.summaries.every(
+          (summary) => summary.folders === 0 && summary.products === 0 && summary.routes === 0,
+        )
       ) {
         this.summaryLoading = false;
         await this.#confirm("delete");
@@ -296,7 +298,7 @@ export class CatalogueBrowser extends LitElement {
         try {
           await this.api.deleteCatalogueItems(
             this.operationSelection,
-            this.contents,
+            this.#contentsChoice(),
             this.summaries.map(({ id, folders, products, activeProducts, routes, ownRoutes }) => ({
               id,
               folders,
@@ -345,18 +347,20 @@ export class CatalogueBrowser extends LitElement {
     return fresh as FolderSummary[];
   }
   /** When the subcategories, switched-on products or routing rules the dialog showed have changed,
-   * shows the new counts instead. When they have not, the delete sends this read's counts: a change
-   * in disabled products alone is not asked about again, because they are switched off already,
-   * and the server still refuses one made after this read. */
+   * shows the new counts instead; so does any change in products when the dialog asked nothing
+   * about contents. Otherwise the delete sends this read's counts: a dialog that asked about
+   * contents does not ask again for a change in disabled products alone. */
   async #unchanged(): Promise<boolean> {
     const fresh = await this.#readAgain();
     if (!fresh) return false;
+    const asked = this.#asksContents();
     const same = fresh.every((summary, index) => {
       const shown = this.summaries[index];
       return (
         shown !== undefined &&
         summary.folders === shown.folders &&
         summary.activeProducts === shown.activeProducts &&
+        (asked || summary.products === shown.products) &&
         summary.routes === shown.routes &&
         summary.ownRoutes === shown.ownRoutes
       );
@@ -365,6 +369,12 @@ export class CatalogueBrowser extends LitElement {
     if (same) return true;
     this.operationError = t("folders.summary_changed");
     return false;
+  }
+  #asksContents(): boolean {
+    return this.summaries.some((summary) => summary.folders > 0 || summary.products > 0);
+  }
+  #contentsChoice(): FolderContents {
+    return this.#asksContents() ? this.contents : "move_up";
   }
   #plural(key: Parameters<typeof t>[0], count: number): string {
     return t(count === 1 ? (`${key}_one` as Parameters<typeof t>[0]) : key).replace(
@@ -447,13 +457,14 @@ export class CatalogueBrowser extends LitElement {
       }),
       { folders: 0, products: 0, disabled: 0, routes: 0 },
     );
+    const contents = this.#contentsChoice();
     // Moving contents up removes only the selected categories themselves, each with its own rules.
     const routesRemoved =
-      this.contents === "move_up"
+      contents === "move_up"
         ? this.summaries.reduce((sum, summary) => sum + summary.ownRoutes, 0)
         : totals.routes;
     const routesWarning =
-      this.contents === "move_up" ? "folders.routes_warning" : "folders.routes_warning_subtree";
+      contents === "move_up" ? "folders.routes_warning" : "folders.routes_warning_subtree";
     const heading = this.#plural(
       this.operation === "move"
         ? "folders.move_heading"
@@ -507,30 +518,34 @@ export class CatalogueBrowser extends LitElement {
                 ${this.summaryLoading ? html`<wt-spinner></wt-spinner>` : nothing}
                 ${
                   selection.categoryIds.length && !this.summaryLoading && !this.summaryFailed
-                    ? html`<fieldset .disabled=${this.operationBusy}>
-                          <legend>${t("folders.contents_question")} *</legend>
-                          <label class="radio"
-                            ><input
-                              type="radio"
-                              name="contents"
-                              required
-                              value="move_up"
-                              .checked=${this.contents === "move_up"}
-                              @change=${() => (this.contents = "move_up")}
-                            />${t("folders.contents_move_up")}</label
-                          >
-                          <label class="radio"
-                            ><input
-                              type="radio"
-                              name="contents"
-                              required
-                              value="delete"
-                              .checked=${this.contents === "delete"}
-                              @change=${() => (this.contents = "delete")}
-                            />${t("folders.contents_delete").replace("{categories}", this.#plural("folders.count", totals.folders)).replace("{products}", this.#productCount(totals.products, totals.disabled))}</label
-                          >
-                        </fieldset>
-                        ${routesRemoved ? html`<p>${this.#plural(routesWarning, routesRemoved)}</p>` : nothing}`
+                    ? html`${
+                        this.#asksContents()
+                          ? html`<fieldset .disabled=${this.operationBusy}>
+                              <legend>${t("folders.contents_question")} *</legend>
+                              <label class="radio"
+                                ><input
+                                  type="radio"
+                                  name="contents"
+                                  required
+                                  value="move_up"
+                                  .checked=${this.contents === "move_up"}
+                                  @change=${() => (this.contents = "move_up")}
+                                />${t("folders.contents_move_up")}</label
+                              >
+                              <label class="radio"
+                                ><input
+                                  type="radio"
+                                  name="contents"
+                                  required
+                                  value="delete"
+                                  .checked=${this.contents === "delete"}
+                                  @change=${() => (this.contents = "delete")}
+                                />${t("folders.contents_delete").replace("{categories}", this.#plural("folders.count", totals.folders)).replace("{products}", this.#productCount(totals.products, totals.disabled))}</label
+                              >
+                            </fieldset>`
+                          : nothing
+                      }
+                      ${routesRemoved ? html`<p>${this.#plural(routesWarning, routesRemoved)}</p>` : nothing}`
                     : nothing
                 }
               `
