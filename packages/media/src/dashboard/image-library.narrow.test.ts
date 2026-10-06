@@ -461,7 +461,7 @@ for (const theme of ["light", "dark"] as const) {
     ["portrait", { width: 600, height: 800 }],
     ["landscape", { width: 900, height: 400 }],
   ] as const) {
-    it(`puts a ${shape} photo beside its list of uses exactly where the preview has room for both bases and the gap between them, at two window heights (${theme})`, async () => {
+    it(`puts a ${shape} photo beside its list of uses exactly where the preview is 12 tap widths plus the gap wide, at two window heights (${theme})`, async () => {
       await page.viewport(1280, 800);
       const { library } = await openPreview(theme, uses, size);
       const viewer = library.shadowRoot!.querySelector<HTMLElement>(".viewer")!;
@@ -478,8 +478,15 @@ for (const theme of ["light", "dark"] as const) {
         let list = measured(usesList);
         expect(photo.right, `${height}px high: beside`).toBeLessThanOrEqual(list.left);
         expect(list.top, `${height}px high: beside`).toBeLessThan(photo.bottom);
-        const capped = Math.min(height * 0.6, photo.width * (size.height / size.width));
-        expect(Math.abs(photo.height - capped), `${height}px high: photo height`).toBeLessThan(1);
+        const ratio = size.width / size.height;
+        const expectedWidth = Math.min(height * 0.6 * ratio, tapMin * 7);
+        expect(Math.abs(photo.width - expectedWidth), `${height}px high: photo width`).toBeLessThan(
+          1,
+        );
+        expect(
+          Math.abs(photo.height - expectedWidth / ratio),
+          `${height}px high: photo height`,
+        ).toBeLessThan(1);
         expect(Math.abs(photo.width / photo.height - size.width / size.height)).toBeLessThan(0.01);
         expect(Math.abs(list.left - (photo.right + gap)), `${height}px high: band`).toBeLessThan(1);
         expect(Math.abs(measured(viewer).right - list.right)).toBeLessThan(1);

@@ -152,15 +152,15 @@ export class ImageLibrary extends LitElement {
         background: var(--wt-color-primary);
         color: var(--wt-color-on-primary);
       }
-      /* Side by side wherever the dialog has room for both bases; one above the other where it
-         has not. Driven by the dialog's width, not the viewport's. */
+      /* Side by side wherever the dialog has room for 12 × --wt-tap-min plus the gap; one above
+         the other where it has not. Driven by the dialog's width, not the viewport's. */
       .viewer {
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-4);
         align-items: flex-start;
-        /* The photo's width at the height cap. Unset before the photo loads and after it fails
-           to load, where each reader below takes its fallback. */
+        /* The photo's width at the height cap. Invalid while --photo-ratio is absent (before the
+           photo loads, after it fails), so each reader below takes its fallback. */
         --photo-cap: calc(60dvh * var(--photo-ratio));
       }
       .viewer img {
@@ -173,8 +173,10 @@ export class ImageLibrary extends LitElement {
         background: var(--wt-color-surface);
         border-radius: var(--wt-radius-md);
       }
-      /* Flex wraps on each item's basis clamped by its max-width, so the list's basis takes on what
-         the photo's cap takes off its own, keeping the wrap point where the two bases put it. */
+      /* Flex wraps on each item's basis clamped by its max-width (pinned by the wrap-point tests in
+         image-library.narrow.test.ts), so the list's basis takes on what the photo's cap takes off
+         its own, keeping the wrap point where the photo's and the list's original bases
+         (12 × --wt-tap-min) put it. */
       .uses {
         flex: 2 1
           calc(
