@@ -468,6 +468,7 @@ export class MenuPreviewPanel extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
+    if (this.failed) this.confirmingHash = null;
     if (changed.has("preview")) {
       this.confirmingHash = null;
       this.navigationUnavailable = false;
@@ -682,7 +683,8 @@ export class MenuPreviewPanel extends LitElement {
 
   #publish(event: Event, confirmed = false): void {
     event.stopPropagation();
-    if (this.publishing || this.preview === null || this.preview.clashes.length > 0) return;
+    if (this.failed || this.publishing || this.preview === null || this.preview.clashes.length > 0)
+      return;
     if (this.preview.warnings.length && !confirmed) {
       this.confirmingHash = this.preview.hash;
       return;

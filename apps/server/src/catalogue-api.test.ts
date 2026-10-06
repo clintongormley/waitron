@@ -4555,6 +4555,115 @@ describe("publishing a menu", () => {
     expect(await status(app, menuId)).toMatchObject({ state: "current", clashes: 0, version: 2 });
   });
 
+  it.each([false, true])(
+    "keeps preview targets and live facts together after a shared edit (included %s)",
+    async (included) => {
+      const app = mountApp();
+      const menuId = await createCatalogueVia(app, `Preview parent ${crypto.randomUUID()}`);
+      const ownerId = included
+        ? await createCatalogueVia(app, `Preview child ${crypto.randomUUID()}`)
+        : menuId;
+      const productId = await createNamedProductVia(app, `Frozen dish ${crypto.randomUUID()}`);
+      await offerVia(app, ownerId, productId);
+      const sectionIds: string[] = [];
+      if (included) {
+        const childRoot = await menuRootVia(app, ownerId);
+        sectionIds.push(childRoot);
+        expect(
+          (
+            await send(
+              app,
+              "POST",
+              `/management-api/sections/${await menuRootVia(app, menuId)}/members`,
+              {
+                body: { ref: { kind: "section", sectionId: childRoot } },
+              },
+            )
+          ).status,
+        ).toBe(201);
+      }
+      const priceResponse = await send(app, "GET", `/management-api/catalogues/${menuId}/prices`);
+      expect(priceResponse.status).toBe(200);
+      const priceRows = (await priceResponse.json()) as { menuItemId: string; productId: string }[];
+      const itemId = priceRows.find((row) => row.productId === productId)!.menuItemId;
+      const initial = await preview(app, menuId);
+      const published = await send(app, "POST", `/management-api/catalogues/${menuId}/publish`, {
+        body: { expectedHash: initial.hash },
+      });
+      expect(published.status).toBe(200);
+      const version = (await published.json()) as { versionId: string; number: number };
+      const current = await preview(app, menuId);
+      expect(current.live).toEqual({ versionId: version.versionId, document: initial.document });
+      expect(
+        (
+          await send(app, "PATCH", `/management-api/products/${productId}`, {
+            body: { unitPrice: "3.75" },
+          })
+        ).status,
+      ).toBe(204);
+      const updated = await preview(app, menuId);
+      expect(updated.live).toEqual(current.live);
+      expect(updated.hash).not.toBe(current.hash);
+      expect(updated.document.offers[itemId]!.unitPrice).toBe("3.75");
+      expect(updated.changes).toEqual([
+        expect.objectContaining({
+          id: expect.any(String),
+          kind: "price_changed",
+          productId,
+          from: "1.00",
+          to: "3.75",
+          targets: {
+            before: [
+              {
+                kind: "product",
+                sectionIds,
+                menuItemId: itemId,
+                productId,
+                field: { kind: "price" },
+              },
+            ],
+            after: [
+              {
+                kind: "product",
+                sectionIds,
+                menuItemId: itemId,
+                productId,
+                field: { kind: "price" },
+              },
+            ],
+          },
+        }),
+      ]);
+      const versions = await versionsOf(menuId);
+      const pointer = await suite.db
+        .select()
+        .from(menuPublications)
+        .where(eq(menuPublications.menuId, menuId));
+      const refused = await send(app, "POST", `/management-api/catalogues/${menuId}/publish`, {
+        body: { expectedHash: current.hash },
+      });
+      expect(refused.status).toBe(409);
+      expect(await refused.json()).toEqual({
+        error: { code: "menu.changed_since_preview", params: { menuId } },
+      });
+      expect(await versionsOf(menuId)).toEqual(versions);
+      expect(
+        await suite.db.select().from(menuPublications).where(eq(menuPublications.menuId, menuId)),
+      ).toEqual(pointer);
+      expect((await preview(app, menuId)).changes.map((change) => change.id)).toEqual(
+        updated.changes.map((change) => change.id),
+      );
+      expect(
+        (
+          await send(app, "POST", `/management-api/catalogues/${menuId}/publish`, {
+            body: { expectedHash: updated.hash },
+          })
+        ).status,
+      ).toBe(200);
+      expect((await versionsOf(menuId)).map((row) => row.number)).toEqual([1, 2]);
+    },
+  );
+
   it("refuses a hash from before the latest edit and writes nothing", async () => {
     const app = mountApp();
     const { menuId, itemId } = await menuWithProduct(app);

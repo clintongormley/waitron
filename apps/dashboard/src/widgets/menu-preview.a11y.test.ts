@@ -1,4 +1,6 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
+import { setLocale } from "../i18n/t.js";
 import type { MenuPreview, MenuStatus } from "../api/client.js";
 import {
   cleanupWidgets,
@@ -100,3 +102,82 @@ describe.each(["light", "dark"] as const)("menu preview (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 });
+
+it.each(
+  (["en", "es-ES"] as const).flatMap((locale) =>
+    (["light", "dark"] as const).flatMap((theme) =>
+      [390, 1280].map((width) => ({ locale, theme, width })),
+    ),
+  ),
+)(
+  "keeps Preview publication states accessible at $locale $theme $width",
+  async ({ locale, theme, width }) => {
+    const previousWidth = window.innerWidth;
+    const previousHeight = window.innerHeight;
+    try {
+      await page.viewport(width, 844);
+      expect(window.innerWidth).toBe(width);
+      setLocale(locale);
+      for (const state of [
+        "loading",
+        "failed",
+        "nothing to publish",
+        "unpublished",
+        "clash",
+        "confirmation",
+      ]) {
+        const clash = {
+          ...changes,
+          clashes: [
+            {
+              productId: "p-burger",
+              variantId: null,
+              field: "price" as const,
+              candidates: [
+                {
+                  place: { kind: "own_sections" as const },
+                  value: "12.00" as never,
+                  source: { kind: "product" as const },
+                },
+                {
+                  place: { kind: "menu" as const, menuId: "drinks", menuName: "Drinks" },
+                  value: "14.00" as never,
+                  source: { kind: "own" as const },
+                },
+              ],
+            },
+          ],
+        };
+        const props =
+          state === "clash"
+            ? { preview: clash }
+            : state === "confirmation"
+              ? { preview: changes }
+              : states[state]!;
+        const { el, host } = await mountWidget<MenuPreviewPanel>(
+          "dashboard-menu-preview",
+          { menuName: "Evening", status: live, ...props },
+          theme,
+        );
+        if (state === "confirmation") {
+          el.shadowRoot!.querySelector<HTMLElement>('[data-test="publish"]')!.click();
+          await el.updateComplete;
+          await el.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
+        }
+        if (state === "clash")
+          expect(
+            el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+              '[data-test="publish"]',
+            )!.disabled,
+          ).toBe(true);
+        if (state === "failed" || state === "loading")
+          expect(el.shadowRoot!.querySelector('[data-test="publish"]')).toBeNull();
+        await expectNoA11yViolations(host);
+        cleanupWidgets();
+      }
+    } finally {
+      setLocale("es-ES");
+      await page.viewport(previousWidth, previousHeight);
+    }
+  },
+);

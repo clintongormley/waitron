@@ -363,34 +363,34 @@ Source receipts: screen `:980`, `:1210`, `:2144`; routes `catalogue-api.ts:930`,
 route assertions `catalogue-api.test.ts:4519`, `:4555`; existing screen stale/concurrent
 checks `menus-screen.test.ts:5194`, `:5264`, `:5275`, `:5395`, `:5457`.
 
-- [ ] Re-export T1/T2 types in `api/client.ts` as needed; do not alter HTTP URLs/body.
+- [x] Re-export T1/T2 types in `api/client.ts` as needed; do not alter HTTP URLs/body.
       Add red route checks that Preview supplies the exact previous live version/document
       and resolvable stable targets. Full-envelope assertion at `catalogue-api.test.ts:4519`
       gains `live`; retain every existing status, changes, document and hash assertion.
       Add a second-preview request after a real included/shared edit, asserting old expected
       hash receives exact 409 domain body and writes no version/pointer/image-reference row.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/catalogue-api.test.ts -t 'preview|publish|format-2'`.
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/catalogue-api.test.ts -t 'preview|publish|format-2'`.
       Expected red: new envelope keys/targets absent before T1, or the new concurrency setup
       exposes a mismatch. If T1 already makes the route assertion green, retain it as a
       contract regression and reproduce the UI missing behaviour with the next tests; do
       not fabricate a failing server bug. Existing hash/format refusals remain unchanged.
-- [ ] Add screen red tests for content view selection independent of interface locale;
+- [x] Add screen red tests for content view selection independent of interface locale;
       navigating, switching languages/before/Home and changing local choices cause zero
       extra preview calls and zero writes. Publish from Before sends proposed hash. Simulate
       a live update while detail/confirmation is open and then an out-of-order previous-menu
       response. Assert complete-envelope replacement, cleared local choices/confirmation,
       no foreign-menu text, and no focus theft. Selected row is kept only if its ID resolves.
-- [ ] Implement state reset keyed to menu ID and preview snapshot/hash replacement. Attach
+- [x] Implement state reset keyed to menu ID and preview snapshot/hash replacement. Attach
       content/locale controllers in the host; use the shared query watch, passive reads and
       existing dependencies. Do not turn navigation into another API loader. Keep preview/
       action failure provenance separate. On hash refusal, reread and hide old publish while
       loading; on publish success followed by failed read, keep success plus load failure.
-- [ ] Assert the preview document is byte-for-byte unchanged after interactions, local
+- [x] Assert the preview document is byte-for-byte unchanged after interactions, local
       settings are never sent, one outstanding publish emits one request, stale retry uses
       refreshed hash, unsupported format says reset and never renders a fake empty menu.
       Keep existing post-save refresh, `alsoOn`, warning confirmation and independent-menu
       publication tests. Leave fiscal/guard checks unedited.
-- [ ] Run
+- [x] Run
       `pnpm --filter @waitron/dashboard exec vitest run src/screens/menus-screen.test.ts -t 'publishing|preview|Preview|Home page tab'`
       and the server command above. Run any newly added screen case not matched by that name
       filter explicitly. Also run

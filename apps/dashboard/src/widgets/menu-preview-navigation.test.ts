@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
+import { afterEach, beforeEach, expect, it, onTestFinished } from "vitest";
+import { commands, userEvent } from "vitest/browser";
 import { setContentLanguages } from "@waitron/ui";
 import type { WtCombobox } from "@waitron/ui/src/components/wt-combobox.js";
 import type {
@@ -1019,3 +1019,30 @@ it("reveals the chosen extras list's occurrence and price when two lists contain
   expect(destination(view, firstTarget).hasAttribute("data-highlighted")).toBe(false);
   expect(destination(view, secondTarget).hasAttribute("data-highlighted")).toBe(true);
 });
+
+it.each(["reduce", "no-preference"] as const)(
+  "paints the focused changed value from its token and reveals it with motion %s",
+  async (motion) => {
+    await commands.emulateReducedMotion(motion);
+    onTestFinished(() => commands.emulateReducedMotion(null));
+    const el = await mount([change()]);
+    el.style.setProperty("--wt-color-primary", "rgb(123, 45, 67)");
+    const row = q<HTMLButtonElement>(el, 'button[data-change-id="stable-row"]')!;
+    row.focus();
+    await userEvent.keyboard("{Enter}");
+    const view = await renderer(el);
+    await expect
+      .poll(() => view.shadowRoot!.activeElement?.getAttribute("data-change-target"))
+      .toBe(menuTargetKey(target));
+    const node = destination(view, target);
+    expect(node.textContent).toContain("Changed");
+    expect(getComputedStyle(node).outlineColor).toBe("rgb(123, 45, 67)");
+    expect(getComputedStyle(node).outlineStyle).toBe("solid");
+    const pane = q(el, '[data-test="document-pane"]')!.getBoundingClientRect();
+    expect(node.getBoundingClientRect().top).toBeGreaterThanOrEqual(pane.top);
+    expect(node.getBoundingClientRect().bottom).toBeLessThanOrEqual(pane.bottom);
+    q<HTMLButtonElement>(el, '[data-test="return-change"]')!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.activeElement).toBe(row);
+  },
+);

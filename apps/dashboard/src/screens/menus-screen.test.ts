@@ -6,6 +6,7 @@ import {
   cleanupWidgets,
   documentProduct,
   documentSection,
+  expectNoA11yViolations,
   menuDocument,
   mountWidget,
 } from "../widgets/test-helpers.js";
@@ -33,6 +34,8 @@ import type {
 import type { MenuPricesTable } from "../widgets/menu-prices-table.js";
 import type { CustomerMenu } from "../widgets/customer-menu.js";
 import type { SectionAddProducts } from "../widgets/section-add-products.js";
+import { registerIcons } from "@waitron/ui";
+import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -550,9 +553,9 @@ function writeCalls(client: Api): string[] {
   );
 }
 
-async function mount(client: Api = api(), path = "/manage/menus") {
+async function mount(client: Api = api(), path = "/manage/menus", theme?: "light" | "dark") {
   history.replaceState(null, "", path);
-  const { el } = await mountWidget<MenusScreen>("dashboard-menus-screen", { api: client });
+  const { el } = await mountWidget<MenusScreen>("dashboard-menus-screen", { api: client }, theme);
   await vi.waitFor(() => {
     if (el.shadowRoot!.querySelector('[data-test="loading"]')) throw new Error("loading");
   });
@@ -4998,6 +5001,457 @@ describe("publishing", () => {
     inPanel(el, "publish-confirm")?.click();
     await el.updateComplete;
   }
+
+  function navigablePreview(): MenuPreview {
+    const snapshot = lunchPreview();
+    const live = lunchDocument();
+    snapshot.live = { versionId: "live-lunch-2", document: live };
+    const offer = snapshot.document.offers["mi-lemonade"]!;
+    offer.description = { en: "Proposed fresh lemon", es: "Limón propuesto" };
+    const variant = {
+      kitchenName: offer.kitchenName,
+      image: offer.image,
+      menuPrice: null,
+      pricingUnit: "each" as const,
+      unit: offer.unit,
+      vatClass: offer.vatClass,
+      allergens: offer.allergens,
+      diet: offer.diet,
+      dietDerivation: offer.dietDerivation,
+      dietOverride: offer.dietOverride,
+      dietaryDeclarations: offer.dietaryDeclarations,
+    };
+    offer.variants = [
+      {
+        ...variant,
+        id: "v-small",
+        name: "Counter small",
+        customerName: { en: "Small glass", es: "Vaso pequeño" },
+        unitPrice: "2.00",
+      },
+      {
+        ...variant,
+        id: "v-large",
+        name: "Counter large",
+        customerName: { en: "Large glass", es: "Vaso grande" },
+        unitPrice: "4.00",
+      },
+    ];
+    const target = {
+      kind: "product" as const,
+      sectionIds: ["s-drinks"],
+      menuItemId: "mi-lemonade",
+      productId: "p-lemonade",
+      field: { kind: "description" as const, language: "en" },
+    };
+    snapshot.changes = [
+      {
+        id: "lemon-description",
+        kind: "product_changed",
+        productId: "p-lemonade",
+        name: "Counter Lemonade",
+        fields: ["description"],
+        source: "shared_product",
+        targets: { before: [target], after: [target] },
+      },
+      {
+        id: "removed-burger",
+        kind: "product_removed",
+        productId: "p-burger",
+        name: "Old Burger",
+        under: [],
+        source: "this_menu",
+        targets: {
+          before: [
+            {
+              kind: "product",
+              sectionIds: [],
+              menuItemId: "mi-burger",
+              productId: "p-burger",
+              field: { kind: "summary" },
+            },
+          ],
+          after: [],
+        },
+      },
+      {
+        id: "home-columns",
+        kind: "home_display_changed",
+        device: "handheld",
+        source: "this_menu",
+        targets: {
+          before: [{ kind: "home", device: "handheld", field: "columns" }],
+          after: [{ kind: "home", device: "handheld", field: "columns" }],
+        },
+      },
+    ];
+    snapshot.document.root.members = snapshot.document.root.members.filter(
+      (m) => m.kind !== "product",
+    );
+    delete snapshot.document.offers["mi-burger"];
+    return snapshot;
+  }
+
+  async function content(el: MenusScreen): Promise<CustomerMenu> {
+    const renderer = panel(el).shadowRoot!.querySelector<CustomerMenu>("dashboard-customer-menu")!;
+    await renderer.updateComplete;
+    return renderer;
+  }
+
+  async function followChange(el: MenusScreen, id: string): Promise<void> {
+    panel(el)
+      .shadowRoot!.querySelector<HTMLButtonElement>(`button[data-change-id="${id}"]`)!
+      .click();
+    await panel(el).updateComplete;
+    await vi.waitFor(async () => {
+      const renderer = await content(el);
+      if (id === "home-columns") expect(inPanel(el, "home-target")).not.toBeNull();
+      else expect(renderer.shadowRoot!.querySelector("[data-detail]")).not.toBeNull();
+    });
+  }
+
+  it("inspects preview languages, variants, Before and Home without another read or write", async () => {
+    const snapshot = navigablePreview();
+    const original = JSON.stringify(snapshot);
+    const client = api({ getMenuPreview: vi.fn().mockResolvedValue(snapshot) });
+    const el = await mountPreview(client);
+    await followChange(el, "lemon-description");
+    const renderer = await content(el);
+    expect(renderer.view).toEqual({ kind: "customer", language: "en" });
+    expect(renderer.shadowRoot!.textContent).toContain("Proposed fresh lemon");
+    const reads = client.getMenuPreview.mock.calls.length;
+    renderer.shadowRoot!.querySelector<HTMLButtonElement>('[data-variant="v-large"]')!.click();
+    await renderer.updateComplete;
+    expect(
+      renderer.shadowRoot!.querySelector('[data-variant="v-large"]')!.getAttribute("aria-pressed"),
+    ).toBe("true");
+    setLocale("es-ES");
+    await panel(el).updateComplete;
+    await renderer.updateComplete;
+    expect(renderer.view).toEqual({ kind: "customer", language: "en" });
+    expect(renderer.shadowRoot!.textContent).toContain("Proposed fresh lemon");
+    const selector = panel(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      'wt-combobox[name="menu-preview-view"]',
+    )!;
+    await chooseOption(selector, "internal");
+    await renderer.updateComplete;
+    expect(renderer.view).toEqual({ kind: "internal" });
+    expect(renderer.shadowRoot!.textContent).toContain("Lemonade");
+    await chooseOption(selector, "es");
+    await renderer.updateComplete;
+    expect(renderer.view).toEqual({ kind: "customer", language: "es" });
+    expect(renderer.shadowRoot!.textContent).toContain("Limón propuesto");
+    await followChange(el, "removed-burger");
+    expect((await content(el)).shadowRoot!.textContent).toContain("Burger para clientes");
+    await followChange(el, "home-columns");
+    expect(inPanel(el, "home-target")!.textContent).toContain("Columnas");
+    expect(client.getMenuPreview.mock.calls.length).toBe(reads);
+    expect(writeCalls(client)).toEqual([]);
+    expect(JSON.stringify(snapshot)).toBe(original);
+  });
+
+  it("publishes the proposed preview hash while inspecting the removed live dish", async () => {
+    const snapshot = navigablePreview();
+    const client = api({ getMenuPreview: vi.fn().mockResolvedValue(snapshot) });
+    const el = await mountPreview(client);
+    await followChange(el, "removed-burger");
+    expect((await content(el)).document).toBe(snapshot.live!.document);
+    await publish(el);
+    expect(client.publishMenu.mock.calls).toEqual([["menu-lunch", LUNCH_HASH]]);
+    expect(writeCalls(client)).toEqual(["publishMenu"]);
+  });
+
+  it("replaces the whole preview envelope without stealing focus or retaining local variant picks", async () => {
+    const live = new LiveData();
+    const initial = navigablePreview();
+    const refreshed = navigablePreview();
+    refreshed.hash = "f".repeat(64);
+    refreshed.document.offers["mi-lemonade"]!.description = { en: "New frozen description" };
+    refreshed.live!.versionId = "new-live-version";
+    refreshed.live!.document.offers["mi-burger"]!.name = "New frozen before name";
+    const client = api({ liveData: live, getMenuPreview: vi.fn().mockResolvedValue(initial) });
+    const el = await mountPreview(client);
+    await followChange(el, "lemon-description");
+    const renderer = await content(el);
+    renderer.shadowRoot!.querySelector<HTMLButtonElement>('[data-variant="v-large"]')!.click();
+    await renderer.updateComplete;
+    const back = q<HTMLElement>(el, '[data-test="back"]')!;
+    back.focus();
+    expect(el.shadowRoot!.activeElement).toBe(back);
+    client.getMenuPreview.mockResolvedValue(refreshed);
+    live.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(panel(el).preview).toBe(refreshed));
+    await vi.waitFor(() =>
+      expect(renderer.shadowRoot!.textContent).toContain("New frozen description"),
+    );
+    expect(inPanel(el, "publish-confirmation")).toBeNull();
+    expect(el.shadowRoot!.activeElement).toBe(back);
+    expect(
+      renderer.shadowRoot!.querySelector('[data-variant="v-small"]')!.getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      renderer.shadowRoot!.querySelector('[data-variant="v-large"]')!.getAttribute("aria-pressed"),
+    ).toBe("false");
+    expect(
+      panel(el)
+        .shadowRoot!.querySelector('[data-change-id="lemon-description"]')!
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    await followChange(el, "removed-burger");
+    expect((await content(el)).document).toBe(refreshed.live!.document);
+    expect(writeCalls(client)).toEqual([]);
+  });
+
+  it("retires the previous preview warning approval when a new envelope arrives", async () => {
+    const live = new LiveData();
+    const initial = navigablePreview();
+    const next = navigablePreview();
+    next.hash = "f".repeat(64);
+    const client = api({ liveData: live, getMenuPreview: vi.fn().mockResolvedValue(initial) });
+    const el = await mountPreview(client);
+    inPanel(el, "publish")!.click();
+    await panel(el).updateComplete;
+    const retired = inPanel(el, "publish-confirm")!;
+    expect(inPanel(el, "publish-confirmation")).not.toBeNull();
+    client.getMenuPreview.mockResolvedValue(next);
+    live.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(panel(el).preview).toBe(next));
+    expect(inPanel(el, "publish-confirmation")).toBeNull();
+    retired.click();
+    await el.updateComplete;
+    expect(writeCalls(client)).toEqual([]);
+    await publish(el);
+    expect(client.publishMenu.mock.calls).toEqual([["menu-lunch", "f".repeat(64)]]);
+  });
+
+  it("hides an out-of-date preview until its replacement arrives and retries with the new hash", async () => {
+    const replacement = deferred<MenuPreview>();
+    const initial = navigablePreview();
+    const next = navigablePreview();
+    next.hash = "e".repeat(64);
+    const client = api({
+      getMenuPreview: vi.fn().mockResolvedValueOnce(initial).mockReturnValue(replacement.promise),
+      publishMenu: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "menu.changed_since_preview" })
+        .mockResolvedValue({ versionId: "v3", number: 3 }),
+    });
+    const el = await mountPreview(client);
+    await publish(el);
+    await vi.waitFor(() => expect(inPanel(el, "preview-loading")).not.toBeNull());
+    expect(inPanel(el, "publish")).toBeNull();
+    expect(inPanel(el, "document")).toBeNull();
+    replacement.resolve(next);
+    await vi.waitFor(() => expect(panel(el).preview).toBe(next));
+    await publish(el);
+    expect(client.publishMenu.mock.calls).toEqual([
+      ["menu-lunch", LUNCH_HASH],
+      ["menu-lunch", "e".repeat(64)],
+    ]);
+  });
+
+  it.each(["success", "refusal"])(
+    "ignores a previous menu's late preview %s after navigation",
+    async (answer) => {
+      const live = new LiveData();
+      const oldRead = deferred<MenuPreview>();
+      const initial = navigablePreview();
+      const dinner = dinnerPreview();
+      dinner.document.menuId = "menu-dinner";
+      dinner.document.menuName = "Frozen dinner title";
+      let lunchReads = 0;
+      const client = api({
+        liveData: live,
+        getMenuPreview: vi.fn((id: string) => {
+          if (id === "menu-dinner") return Promise.resolve(dinner);
+          return ++lunchReads === 1 ? Promise.resolve(initial) : oldRead.promise;
+        }),
+      });
+      const el = await mountPreview(client);
+      await followChange(el, "lemon-description");
+      live.invalidate([{ type: "products" }]);
+      await vi.waitFor(() => expect(lunchReads).toBe(2));
+      history.pushState(null, "", "/manage/menus/menu/menu-dinner/view/preview");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+      await vi.waitFor(() => expect(panel(el).preview).toBe(dinner));
+      if (answer === "success") oldRead.resolve(initial);
+      else oldRead.reject({ code: "menu.reset_required" });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await el.updateComplete;
+      const renderer = await content(el);
+      expect(panel(el).preview).toBe(dinner);
+      expect(renderer.document!.menuId).toBe("menu-dinner");
+      expect(renderer.view).toEqual({ kind: "customer", language: "es" });
+      expect(renderer.shadowRoot!.textContent).toContain("Frozen dinner title");
+      expect(renderer.shadowRoot!.textContent).not.toContain("Proposed fresh lemon");
+      expect(inPanel(el, "preview-error")).toBeNull();
+      expect(inPanel(el, "return-change")).toBeNull();
+      expect(writeCalls(client)).toEqual([]);
+    },
+  );
+
+  it.each(
+    (["en", "es-ES"] as const).flatMap((locale) =>
+      (["light", "dark"] as const).flatMap((theme) =>
+        [390, 1280].map((width) => ({ locale, theme, width })),
+      ),
+    ),
+  )(
+    "keeps dense Preview accessible and within the full screen at $locale $theme $width",
+    async ({ locale, theme, width }) => {
+      registerIcons(DASHBOARD_ICONS);
+      setLocale(locale);
+      await page.viewport(width, 844);
+      expect(window.innerWidth).toBe(width);
+      const snapshot = navigablePreview();
+      const name = "VeryLongUnbrokenMenuTitle".repeat(8);
+      snapshot.document.menuName = name;
+      snapshot.document.offers["mi-lemonade"]!.customerName = { en: "GuestLemonade".repeat(15) };
+      const section = snapshot.document.root.members[0]!;
+      if (section.kind !== "section") throw new Error("section fixture");
+      section.names = { en: "LongUnbrokenSectionName".repeat(10) };
+      section.members.push(
+        ...Array.from({ length: 12 }, (_, n) =>
+          documentSection(`empty-${n}`, `Empty section ${n}`, []),
+        ),
+      );
+      snapshot.live!.document.root.members.push(
+        documentSection("removed-empty", "RemovedEmptySection".repeat(10), []),
+      );
+      snapshot.changes.push({
+        id: "removed-empty",
+        kind: "section_removed",
+        sectionId: "removed-empty",
+        parentSectionIds: [],
+        name: "RemovedEmptySection".repeat(10),
+        under: [],
+        source: "this_menu",
+        targets: {
+          before: [{ kind: "section", sectionIds: ["removed-empty"], field: { kind: "summary" } }],
+          after: [],
+        },
+      });
+      const client = api({
+        listCatalogues: vi.fn().mockResolvedValue([{ ...menus[0]!, name }]),
+        getMenuPreview: vi.fn().mockResolvedValue(snapshot),
+      });
+      const el = await mount(client, PREVIEW_PATH, theme);
+      await vi.waitFor(() => expect(inPanel(el, "changes")).not.toBeNull());
+      const panes = () => [
+        inPanel(el, "document-pane")!.getBoundingClientRect(),
+        inPanel(el, "changes-pane")!.getBoundingClientRect(),
+      ];
+      const checkWidth = () => {
+        expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+        expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
+        for (const id of ["document-pane", "changes-pane"])
+          expect(inPanel(el, id)!.scrollWidth).toBeLessThanOrEqual(inPanel(el, id)!.clientWidth);
+      };
+      checkWidth();
+      const [left, right] = panes();
+      if (width === 1280) {
+        expect(right!.left).toBeGreaterThanOrEqual(left!.right);
+        expect(Math.abs(right!.top - left!.top)).toBeLessThan(1);
+      } else expect(right!.top).toBeGreaterThanOrEqual(left!.bottom);
+      expect(inPanel(el, "publish")!.getBoundingClientRect().bottom).toBeLessThanOrEqual(left!.top);
+      const selector = panel(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+        'wt-combobox[name="menu-preview-view"]',
+      )!;
+      for (const view of ["es", "en", "internal"]) {
+        await chooseOption(selector, view);
+        await (
+          await content(el)
+        ).updateComplete;
+        checkWidth();
+        await expectNoA11yViolations(el.parentElement!);
+      }
+      await chooseOption(selector, locale === "en" ? "internal" : "es");
+      await (
+        await content(el)
+      ).updateComplete;
+      await page.screenshot({
+        element: inPanel(el, "document-pane")!,
+        path: `.superpowers/w95-final-screen/${locale}-${theme}-${width}-hierarchy.png`,
+      });
+      await followChange(el, "lemon-description");
+      checkWidth();
+      await expectNoA11yViolations(el.parentElement!);
+      await page.screenshot({
+        element: inPanel(el, "document-pane")!,
+        path: `.superpowers/w95-final-screen/${locale}-${theme}-${width}-detail.png`,
+      });
+      const returnButton = inPanel(el, "return-change")!;
+      const menuPane = inPanel(el, "document-pane")!;
+      menuPane.scrollTop = menuPane.scrollHeight;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(returnButton.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        menuPane.getBoundingClientRect().top,
+      );
+      expect(returnButton.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        menuPane.getBoundingClientRect().bottom,
+      );
+      returnButton.click();
+      await panel(el).updateComplete;
+      expect(panel(el).shadowRoot!.activeElement?.getAttribute("data-change-id")).toBe(
+        "lemon-description",
+      );
+      panel(el)
+        .shadowRoot!.querySelector<HTMLButtonElement>('button[data-change-id="removed-empty"]')!
+        .click();
+      await vi.waitFor(() => expect(inPanel(el, "before")).not.toBeNull());
+      checkWidth();
+      await expectNoA11yViolations(el.parentElement!);
+      await page.screenshot({
+        element: inPanel(el, "document-pane")!,
+        path: `.superpowers/w95-final-screen/${locale}-${theme}-${width}-removed.png`,
+      });
+      await followChange(el, "home-columns");
+      checkWidth();
+      await expectNoA11yViolations(el.parentElement!);
+      await page.screenshot({
+        element: inPanel(el, "document-pane")!,
+        path: `.superpowers/w95-final-screen/${locale}-${theme}-${width}-home.png`,
+      });
+      expect(client.getMenuPreview).toHaveBeenCalledTimes(1);
+      expect(writeCalls(client)).toEqual([]);
+    },
+  );
+
+  it.each(["server.internal", "menu.reset_required"])(
+    "retires an open preview confirmation when the live read fails with %s",
+    async (code) => {
+      const live = new LiveData();
+      const client = api({ liveData: live });
+      const el = await mountPreview(client);
+      inPanel(el, "publish")!.click();
+      await panel(el).updateComplete;
+      const retired = inPanel(el, "publish-confirm")!;
+      expect(retired).not.toBeNull();
+      client.getMenuPreview.mockRejectedValue({ code });
+      live.invalidate([{ type: "products" }]);
+      await vi.waitFor(() => expect(inPanel(el, "preview-error")).not.toBeNull());
+      expect(inPanel(el, "publish-confirmation")).toBeNull();
+      retired.click();
+      await el.updateComplete;
+      expect(writeCalls(client)).toEqual([]);
+      expect(inPanel(el, "publish")).toBeNull();
+      expect(inPanel(el, "document")).toBeNull();
+    },
+  );
+
+  it("refuses a retired preview publish control after a background read failure", async () => {
+    const live = new LiveData();
+    const snapshot = { ...lunchPreview(), warnings: [] };
+    const client = api({ liveData: live, getMenuPreview: vi.fn().mockResolvedValue(snapshot) });
+    const el = await mountPreview(client);
+    const retired = inPanel(el, "publish")!;
+    client.getMenuPreview.mockRejectedValue({ code: "server.internal" });
+    live.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(inPanel(el, "preview-error")).not.toBeNull());
+    retired.click();
+    await el.updateComplete;
+    expect(writeCalls(client)).toEqual([]);
+  });
 
   it("shows each menu's publication state in the list, from one read for every menu", async () => {
     const client = api({

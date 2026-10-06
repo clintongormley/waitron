@@ -8,6 +8,7 @@ import {
   createProduct,
   createSectionIn,
   menuVersionImages,
+  menuPublications,
   menuVersions,
   previewMenu,
   publishMenu,
@@ -272,6 +273,30 @@ describe("an image a live menu version names", () => {
       publishMenu(tx, menuId, (await previewMenu(tx, menuId)).hash, "person-1"),
     );
   }
+
+  it("a stale preview publish changes no versions, live pointer or frozen image references", async () => {
+    const { menuId, productId } = await publishedOnly();
+    const old = await withTransaction(suite.db, (tx) => previewMenu(tx, menuId));
+    await suite.db.insert(mediaImages).values({ filename: ABSENT, names: { en: "New toast" } });
+    await withTransaction(suite.db, (tx) => updateProduct(tx, productId, { image: ABSENT }));
+    const next = await withTransaction(suite.db, (tx) => previewMenu(tx, menuId));
+    expect(next.hash).not.toBe(old.hash);
+    expect(next.live).toEqual(old.live);
+    const beforeVersions = await suite.db.select().from(menuVersions);
+    const beforePointers = await suite.db.select().from(menuPublications);
+    const beforeImages = await suite.db.select().from(menuVersionImages);
+    await expect(
+      withTransaction(suite.db, (tx) => publishMenu(tx, menuId, old.hash, "person-1")),
+    ).rejects.toMatchObject({ code: "menu.changed_since_preview" });
+    expect(await suite.db.select().from(menuVersions)).toEqual(beforeVersions);
+    expect(await suite.db.select().from(menuPublications)).toEqual(beforePointers);
+    expect(await suite.db.select().from(menuVersionImages)).toEqual(beforeImages);
+    await withTransaction(suite.db, (tx) => publishMenu(tx, menuId, next.hash, "person-1"));
+    expect(await suite.db.select().from(menuVersions)).toHaveLength(beforeVersions.length + 1);
+    expect((await suite.db.select().from(menuVersionImages)).map((row) => row.filename)).toEqual(
+      expect.arrayContaining([PRESENT, ABSENT]),
+    );
+  });
 
   it("cannot be deleted while the live version names it, and can once another version is live", async () => {
     const { menuId } = await publishedOnly();
