@@ -17,7 +17,10 @@ with its proposed treatment; the AEAT test-service observations appear as one pl
 they bear on a question, without run numbers). Corrected for #1285 (A261-2c, no invoice when an
 order is placed): 1.1 (Q21's aside about the counter), 2.2 (Q26) and 3.5 (Q32). Section 1.6 (Q22)
 now says the printing choice is made per department. The notes below saying the Word copies are
-out of date are superseded by this one. No enquiry has been sent.
+out of date are superseded by this one. No enquiry has been sent. Later the same day, at the owner's
+request, Q21 gained parts (d) and (e): may or must the invoice be issued before payment, at the
+counter as well as the table. The Word copies carry them as 1.1(d) and (e); 1.1 is retitled to
+match, and section 1 is now "at the table and the counter".
 
 On **2026-10-06**: **Q42 added**, beside Q27–Q29, on a bill paid later by bank transfer — invoice
 now and collect later, or a proforma first and the invoice on payment — asked for full and
@@ -726,6 +729,21 @@ Ask it beside Q14: the answer to one decides how much the other matters.
 >
 > **(c)** A la inversa, si expedimos la factura al presentar la cuenta y el cliente finalmente paga
 > menos, o consume algo más, ¿procede siempre una factura rectificativa o una nueva factura?
+
+**(d) and (e), added 2026-10-06 (owner).** The owner wants the general question asked as well:
+whether we may, or should, issue the invoice before payment at all, at the counter as much as at the
+table. #1285 retired issuing it at placement without an adviser answer, so that removal is a product
+decision and does not settle the question.
+
+> **(d)** Con carácter general, ¿puede un restaurante expedir la factura simplificada antes de que
+> el cliente pague, por ejemplo al registrar el pedido, al servirlo o al presentar la cuenta? ¿O
+> debe esperar al cobro? ¿Hay algún caso en que expedirla antes del cobro sea obligatorio y no sólo
+> admisible?
+>
+> **(e)** En barra, cuando el cliente pide, se prepara el pedido y paga al recogerlo: ¿puede
+> expedirse la factura al registrar el pedido, antes del cobro, o debe expedirse al cobrar? Y cuando
+> el cliente paga antes de que se prepare el pedido, ¿es correcto expedir la factura en ese cobro,
+> aunque el servicio todavía no se haya prestado?
 
 ---
 
