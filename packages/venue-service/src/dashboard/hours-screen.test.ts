@@ -1122,17 +1122,26 @@ describe("Hours: special dates", () => {
     expect(editors.some((editor) => editor.disabled)).toBe(false);
   });
 
-  it("saves a whole-venue closure past a half-filled locked cell, sending the stored cells as they were", async () => {
+  const switchClosure = async (el: HoursScreen, checked: boolean) => {
+    field(el, "closeWholeVenue")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked }, bubbles: true, composed: true }),
+    );
+    await settle(el);
+  };
+
+  it("resets each half-filled cell to its stored hours when the closure is switched on, so Save is not held", async () => {
     const { api, calls } = server();
     const el = await mount(api);
     await selectTab(el, "dates");
     await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
     await choose(el, "station.bar.mode", "periods");
     await setField(el, "station.bar.periods.0.opensAt", "18:00");
-    field(el, "closeWholeVenue")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
-    );
-    await settle(el);
+    await setField(el, "department.restaurant.periods.0.closesAt", "");
+    await switchClosure(el, true);
+    expect(field(el, "station.bar.mode")!.value).toBe("");
+    expect(field(el, "station.bar.periods.0.opensAt")).toBeNull();
+    expect(field(el, "department.restaurant.periods.0.closesAt")!.value).toBe("23:00");
+    expect(saveButton(el).disabled).toBe(false);
     await click(el, saveButton(el));
     expect(calls("PUT")).toEqual([
       [
@@ -1147,6 +1156,81 @@ describe("Hours: special dates", () => {
       ],
     ]);
     expect(modal(el)).toBeNull();
+  });
+
+  it("saves a valid edit made before the closure is switched on, as the locked cell shows it", async () => {
+    const { api, calls } = server();
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await menuAction(el, rowOf(el, "Fiesta"), "edit-date");
+    await choose(el, "station.bar.mode", "periods");
+    await setField(el, "station.bar.periods.0.opensAt", "18:00");
+    await setField(el, "station.bar.periods.0.closesAt", "22:00");
+    await switchClosure(el, true);
+    expect(field(el, "station.bar.periods.0.closesAt")!.value).toBe("22:00");
+    await click(el, saveButton(el));
+    const [stored] = model().specialCells;
+    expect(calls("PUT")).toEqual([
+      [
+        "/management-api/venue-service/special-dates/fiesta",
+        {
+          date: "2026-10-12",
+          name: "Fiesta Nacional",
+          colour: "red",
+          closeWholeVenue: true,
+          cells: [
+            stored!.cells[0],
+            stored!.cells[1],
+            {
+              subject: { kind: "station", id: "bar" },
+              cell: {
+                mode: "periods",
+                periods: [
+                  {
+                    id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+                    opensAt: "18:00",
+                    closesAt: "22:00",
+                  },
+                ],
+              },
+            },
+            stored!.cells[2],
+          ],
+        },
+      ],
+    ]);
+  });
+
+  it("saves the hours entered on a new date before the closure is switched on", async () => {
+    const { api, calls } = server();
+    const el = await mount(api);
+    await selectTab(el, "dates");
+    await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
+    await setField(el, "date", "2026-12-24");
+    await setField(el, "name", "Christmas Eve");
+    await choose(el, "colour", "green");
+    await choose(el, "department.restaurant.mode", "all_day");
+    await choose(el, "station.bar.mode", "closed");
+    await switchClosure(el, true);
+    await click(el, saveButton(el));
+    expect(calls("POST")).toEqual([
+      [
+        "/management-api/venue-service/special-dates",
+        {
+          date: "2026-12-24",
+          name: "Christmas Eve",
+          colour: "green",
+          closeWholeVenue: true,
+          cells: [
+            {
+              subject: { kind: "department", id: "restaurant" },
+              cell: { mode: "all_day", periods: [] },
+            },
+            { subject: { kind: "station", id: "bar" }, cell: { mode: "closed", periods: [] } },
+          ],
+        },
+      ],
+    ]);
   });
 
   it("lists, edits and deletes a date saved beyond the calendar's year", async () => {

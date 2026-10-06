@@ -567,10 +567,7 @@ export class HoursScreen extends LitElement {
             subject: { kind: subject.kind, id: subject.id },
             cell: wire(cell),
           }));
-        // Locked by the closure, the cells are sent as they were stored, never as edited.
-        this.#sentCells = (
-          draft.closeWholeVenue ? editor.stored : [...shown, ...editor.hidden]
-        ) as DateHoursCell[];
+        this.#sentCells = [...shown, ...editor.hidden] as DateHoursCell[];
         return this.api.saveDate(editor.id, {
           date: draft.date,
           name: draft.name.trim(),
@@ -738,6 +735,23 @@ export class HoursScreen extends LitElement {
     }
   }
 
+  /**
+   * Switching the closure on locks the cells, so a cell its own checks refuse goes back to its
+   * stored hours, where it can be seen; a cell they accept keeps the edit.
+   */
+  #setClosure(checked: boolean): void {
+    const editor = this.editor as Extract<Editor, { kind: "date" }>;
+    const cells = editor.draft.cells.map((entry) => {
+      if (!checked || Object.keys(cellChecks(entry.prefix, entry.cell)).length === 0) return entry;
+      const stored = editor.stored.find(({ subject }) => keyOf(subject) === keyOf(entry.subject));
+      return {
+        ...entry,
+        cell: stored ? draftOf(stored.cell) : ({ mode: "inherit", periods: [] } as CellDraft),
+      };
+    });
+    this.#setDate({ closeWholeVenue: checked, cells }, "closeWholeVenue");
+  }
+
   #setDate(patch: Partial<DateDraft>, name: string): void {
     const editor = this.editor as Extract<Editor, { kind: "date" }>;
     this.#changed(name, { ...editor, draft: { ...editor.draft, ...patch } });
@@ -895,7 +909,7 @@ export class HoursScreen extends LitElement {
         ?checked=${draft.closeWholeVenue}
         ?disabled=${this.busy}
         @wt-change=${(event: CustomEvent<{ checked: boolean }>) =>
-          this.#setDate({ closeWholeVenue: event.detail.checked }, "closeWholeVenue")}
+          this.#setClosure(event.detail.checked)}
       ></wt-switch>
       ${
         draft.closeWholeVenue

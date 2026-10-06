@@ -766,9 +766,8 @@ export async function duplicateSpecialDate(
   if (occupied !== undefined) throw new AppError("special_date.date_taken", { date: occupied });
 
   const cells = await readDateCells(tx, sourceId);
-  // A copied cell is checked only for its subject, so a default station's dormant cell is copied
-  // as it is.
-  await requireSubjects(
+  // A default station's dormant cell is copied as it is: it is checked only for its subject.
+  const defaults = await requireSubjects(
     tx,
     cfg,
     cells.map((entry, index) => ({
@@ -777,12 +776,15 @@ export async function duplicateSpecialDate(
       writing: false,
     })),
   );
+  const applied = cells.filter(
+    ({ subject }) => !(subject.kind === "station" && defaults.has(subject.id)),
+  );
   const zone = await readableZone(tx, cfg);
   if (zone !== null)
     for (const [index, date] of targets.entries()) {
-      const skipped = skippedEndpoint(date, cells, zone);
+      const skipped = skippedEndpoint(date, applied, zone);
       if (skipped !== null)
-        invalidHours(`dates.${index}`, { date, subjectId: cells[skipped.index]!.subject.id });
+        invalidHours(`dates.${index}`, { date, subjectId: applied[skipped.index]!.subject.id });
     }
   const state = dateState(source.closeWholeVenue, cells);
   await assertDatesBesideNeighbours(

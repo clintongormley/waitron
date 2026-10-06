@@ -1675,6 +1675,32 @@ describe("duplicating a special date", () => {
     }
   });
 
+  it("copies the cell of a station that has since become the default onto a day whose clock skips one of its times", async () => {
+    const f = await fixture();
+    const source = await saveDate(
+      f,
+      null,
+      specialInput({
+        date: "2027-02-10",
+        cells: [{ subject: f.bar, cell: { mode: "periods", periods: [period(skipped, "12:00")] } }],
+      }),
+    );
+    await makeDefault(f, f.bar);
+    const [copy] = await duplicate(f, source.id, [forward.date]);
+    expect(copy!.date).toBe(forward.date);
+    expect((await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, copy!.id))).cells).toEqual(
+      [
+        {
+          subject: f.bar,
+          cell: {
+            mode: "periods",
+            periods: [{ id: expect.any(String), opensAt: skipped, closesAt: "12:00" }],
+          },
+        },
+      ],
+    );
+  });
+
   it("copies a period onto a clock-change day while the venue's clock cannot be read", async () => {
     const f = await fixture();
     const source = await saveDate(
