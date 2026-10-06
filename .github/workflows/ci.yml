@@ -109,7 +109,6 @@ jobs:
   # `--filter "...<pkg>"` arguments built below.
   changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 1
     outputs:
       code: ${{ steps.classify.outputs.code }}
       scope: ${{ steps.classify.outputs.scope }}
@@ -132,7 +131,6 @@ jobs:
       light_b: ${{ steps.gates.outputs.light_b }}
       shared: ${{ steps.gates.outputs.shared }}
     steps:
-      - run: sleep 150
       # fetch-depth: 0 is load-bearing. The default is 1, which leaves no merge base to diff
       # against and no history for pnpm's own change detection — both would then silently report
       # "nothing changed" and skip the entire suite.
@@ -318,9 +316,8 @@ jobs:
   # is. Established by malforming a file in each location — `prettier --check` reports an ignored
   # path and a clean path identically, so the obvious probe proves nothing.
   lint:
-    runs-on: ubuntu-latest
+    runs-on: a276-no-such-runner
     steps:
-      - run: exit 1
       - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v6
