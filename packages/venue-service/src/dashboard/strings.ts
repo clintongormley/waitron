@@ -244,6 +244,12 @@ const en = {
   "hours.date_taken": "{date} already has special hours.",
   "hours.date_not_found": "This special date no longer exists.",
   "hours.always_open": "The default station is always open, so its hours cannot change.",
+  "holiday.invalid": "Check the highlighted local holiday.",
+  "holiday.not_found": "This local holiday no longer exists.",
+  "holiday.date_taken": "{date} already has a local holiday.",
+  "holiday.local_limit": "You can enter at most {limit} local holidays for {year}.",
+  "holiday.geography_current":
+    "These local holidays are for the venue's current address, so they cannot be removed together.",
   "venue.department_last_active": "You cannot disable the last active department.",
   "venue.table_in_use": "Table {table} has an open tab. Close it before disabling this department.",
   "venue.active_tables": "{count} active tables",
@@ -755,6 +761,12 @@ const es: Record<keyof typeof en, string> = {
   "hours.date_not_found": "Esta fecha especial ya no existe.",
   "hours.always_open":
     "La estación predeterminada siempre está abierta; su horario no se puede cambiar.",
+  "holiday.invalid": "Revisa el festivo local marcado.",
+  "holiday.not_found": "Este festivo local ya no existe.",
+  "holiday.date_taken": "El {date} ya tiene un festivo local.",
+  "holiday.local_limit": "Puedes introducir como máximo {limit} festivos locales en {year}.",
+  "holiday.geography_current":
+    "Estos festivos locales son de la dirección actual del local, así que no se pueden eliminar juntos.",
   "venue.department_last_active": "No puedes deshabilitar el último departamento activo.",
   "venue.table_in_use":
     "La mesa {table} tiene una cuenta abierta. Ciérrala antes de deshabilitar este departamento.",

@@ -25,6 +25,8 @@ export const VENUE_SERVICE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("special_dates", "state", STATE),
   classify("special_date_hours", "state", STATE),
   classify("special_date_hours_periods", "state", STATE),
+  classify("holiday_geographies", "state", STATE),
+  classify("local_holidays", "state", STATE),
 ];
 
 export const VENUE_SERVICE_CHANGE_SOURCES: readonly ChangeSource[] =

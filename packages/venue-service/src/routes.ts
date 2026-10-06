@@ -99,6 +99,11 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "special_date.not_found": 404,
   "special_date.date_taken": 409,
   "station.always_open": 409,
+  "holiday.invalid": 400,
+  "holiday.not_found": 404,
+  "holiday.date_taken": 409,
+  "holiday.local_limit": 409,
+  "holiday.geography_current": 409,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
 const MODES = new Set<ServiceMode>(["table_tab", "prepay", "ticket_then_pay"]);

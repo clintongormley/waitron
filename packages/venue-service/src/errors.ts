@@ -32,6 +32,12 @@ declare module "@waitron/shared" {
     "special_date.not_found": { specialDateId: string };
     "special_date.date_taken": { date: string };
     "station.always_open": { stationId: string };
+    "holiday.invalid": { field: string };
+    "holiday.not_found": { id: string };
+    "holiday.date_taken": { date: string };
+    /** `limit` is the country's allowance of local holidays per address and civil year. */
+    "holiday.local_limit": { limit: number; year: number };
+    "holiday.geography_current": { geographyId: string };
     /** A configuration import's hours row holds a value a save would refuse; `field` is the table
      * or `<table>.<column>`. */
     "setup.request_invalid": { field: string };
