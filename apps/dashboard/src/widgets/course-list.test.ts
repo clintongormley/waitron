@@ -1105,6 +1105,37 @@ describe("disabled courses", () => {
     await vi.waitFor(() => expect(rowIds(el)).toEqual(["c1", "c2", "c3", "d1", "d2"]));
     expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(2);
   });
+
+  it("offers no Delete or Disable on a row the read-only read left, until the full read arrives", async () => {
+    let answer!: (courses: Course[]) => void;
+    const api = stubApi(
+      {
+        listCourses: vi.fn().mockResolvedValue(
+          COURSES.map(({ id, name, displayOrder, active }) => ({
+            id,
+            name,
+            displayOrder,
+            active,
+          })),
+        ),
+        listCoursesWithDisabled: vi.fn(
+          () => new Promise<Course[]>((resolve) => (answer = resolve)),
+        ),
+      },
+      ALL,
+    );
+    const { el } = await mountWidget<CourseList>("dashboard-course-list", { api, readOnly: true });
+    await vi.waitFor(() => expect(listed(el)).toEqual(["c1", "c2", "c3"]));
+    el.readOnly = false;
+    await vi.waitFor(() => expect(api.listCoursesWithDisabled).toHaveBeenCalledTimes(1));
+    await el.updateComplete;
+    expect(rowIds(el)).toEqual(["c1", "c2", "c3"]);
+    for (const id of ["c1", "c2", "c3"]) expect(menuLabels(el, id)).toEqual([]);
+    answer(copy(ALL));
+    await vi.waitFor(() => expect(rowIds(el)).toEqual(["c1", "c2", "c3", "d1", "d2"]));
+    expect(menuLabels(el, "c1")).toEqual([t("action.delete")]);
+    expect(menuLabels(el, "c2")).toEqual([t("action.disable")]);
+  });
 });
 
 describe("reordering", () => {

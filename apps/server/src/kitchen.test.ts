@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   catalogues,
+  kitchenCourses,
   kitchenTimingDefaults,
   locations,
   products,
@@ -417,6 +418,22 @@ describe("kitchen-course config", () => {
       code: "course.not_found",
       params: { courseId: missing },
     });
+  });
+
+  it("refuses to edit another venue's course with course.not_found, changing nothing", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) =>
+      createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
+    );
+    await asApp(cfg, (tx) => updateCourse(tx, cfg, id, { active: false }));
+    const other = await setupVenue();
+    const foreignCfg: TillConfig = { ...cfg, locationId: other.locationId };
+    await expect(
+      asApp(cfg, (tx) => updateCourse(tx, foreignCfg, id, { active: true, name: "Taken over" })),
+    ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: id } });
+    expect(
+      await asApp(cfg, (tx) => tx.select().from(kitchenCourses).where(eq(kitchenCourses.id, id))),
+    ).toMatchObject([{ id, name: "Postres", active: false }]);
   });
 
   it("createCourse rethrows a NON-unique DB error raw, not as course.name_taken", async () => {

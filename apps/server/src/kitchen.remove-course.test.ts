@@ -149,24 +149,6 @@ describe("removing a course", () => {
     expect(await courseRow(v, id)).toMatchObject([{ id, active: false }]);
   });
 
-  it("refuses to edit another venue's course with course.not_found, changing nothing", async () => {
-    const v = await setupPartyVenue(suite.db);
-    const id = await course(v);
-    await inTx(v, (tx) => updateCourse(tx, v.cfg, id, { active: false }));
-    const otherLocation = await inTx(v, async (tx) => {
-      const [location] = await tx
-        .insert(locations)
-        .values({ name: "Elsewhere", invoiceLocales: ["es-ES"], operationDescription: "Bar" })
-        .returning({ id: locations.id });
-      return location!.id;
-    });
-    const foreignCfg = { ...v.cfg, locationId: otherLocation as typeof v.cfg.locationId };
-    await expect(
-      inTx(v, (tx) => updateCourse(tx, foreignCfg, id, { active: true, name: "Taken over" })),
-    ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: id } });
-    expect(await courseRow(v, id)).toMatchObject([{ id, name: "Postres", active: false }]);
-  });
-
   it("stops reading references once every course asked about is found, counting a repeated id once", async () => {
     const v = await setupPartyVenue(suite.db);
     const used = await course(v, "Used");

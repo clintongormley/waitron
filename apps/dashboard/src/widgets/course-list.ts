@@ -466,11 +466,15 @@ export class CourseList extends LitElement {
   }
 
   #actions(course: Course): TemplateResult {
-    const remove = course.inUse
-      ? course.active
-        ? this.#action(course, "remove", t("action.disable"))
-        : nothing
-      : this.#action(course, "remove", t("action.delete"));
+    // A row from the read-only read does not say whether it is in use, so it offers neither.
+    const remove =
+      course.inUse === undefined
+        ? nothing
+        : course.inUse
+          ? course.active
+            ? this.#action(course, "remove", t("action.disable"))
+            : nothing
+          : this.#action(course, "remove", t("action.delete"));
     return html`<td class="actions-cell">
       <wt-row-actions align="end" label=${`${t("kitchen.course_actions")}: ${course.name}`}
         >${course.active ? nothing : this.#action(course, "enable", t("action.enable"))}${remove}</wt-row-actions
