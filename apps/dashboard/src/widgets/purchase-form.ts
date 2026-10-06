@@ -1,6 +1,8 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
+import { sameValue } from "./product-editor-model.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -32,6 +34,45 @@ interface LineDraft {
   base: string;
   tax: string;
   kind: PurchaseVatKind;
+}
+
+interface PurchaseDraft {
+  supplierTaxId: string;
+  supplierName: string;
+  supplierInvoiceNumber: string;
+  issuedOn: string;
+  receivedOn: string;
+  total: string;
+  regime: PurchaseRegime;
+  deductibleProportion: string;
+  note: string;
+  lines: LineDraft[];
+}
+
+function snapshot(value: PurchaseDraft): PurchaseDraft {
+  return { ...value, lines: value.lines.map((line) => ({ ...line })) };
+}
+
+function numericValue(raw: string): string {
+  if (!DECIMAL.test(raw)) return raw;
+  const [whole, fraction = ""] = raw.split(".");
+  const significant = fraction.replace(/0+$/, "");
+  return significant ? `${whole}.${significant}` : whole!;
+}
+
+function comparable(value: PurchaseDraft) {
+  return {
+    ...value,
+    total: numericValue(value.total),
+    deductibleProportion: numericValue(value.deductibleProportion),
+    note: value.note.trim() === "" ? null : value.note,
+    lines: value.lines.map((line) => ({
+      ...line,
+      rate: numericValue(line.rate),
+      base: numericValue(line.base),
+      tax: numericValue(line.tax),
+    })),
+  };
 }
 
 function blankLine(): LineDraft {
@@ -170,24 +211,105 @@ export class PurchaseForm extends LitElement {
   /** Refusal keys the operator has since changed the field of, or submitted past. */
   @state() private dismissed = new Set<string>();
 
+  #identity: string | null | undefined;
+  #opening = {};
+  #submitted?: PurchaseDraft;
+  #scope?: DraftScope<PurchaseDraft>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override disconnectedCallback(): void {
+    this.#disposeDraft();
+    this.#identity = undefined;
+    super.disconnectedCallback();
+  }
+
+  #disposeDraft(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+  }
+
+  #value(): PurchaseDraft {
+    return {
+      supplierTaxId: this.supplierTaxId,
+      supplierName: this.supplierName,
+      supplierInvoiceNumber: this.supplierInvoiceNumber,
+      issuedOn: this.issuedOn,
+      receivedOn: this.receivedOn,
+      total: this.total,
+      regime: this.regime,
+      deductibleProportion: this.deductibleProportion,
+      note: this.note,
+      lines: this.lines,
+    };
+  }
+
+  writeCompletion(): () => boolean {
+    const opening = this.#opening;
+    const scope = this.#scope;
+    const submitted = this.#submitted;
+    return () => {
+      if (!this.isConnected || !this.open || opening !== this.#opening) return false;
+      if (submitted) {
+        scope?.commit(submitted);
+        if (scope?.isDirty()) return false;
+      }
+      this.#disposeDraft();
+      this.shadowRoot!.querySelector("wt-dialog")!.closeAfter("saved");
+      this.open = false;
+      return true;
+    };
+  }
+
   override willUpdate(changed: PropertyValues): void {
-    const reopened = changed.has("invoice") || (changed.has("open") && this.open);
+    const identity = this.invoice?.id ?? null;
+    const reopened = identity !== this.#identity || (changed.has("open") && this.open);
     if (changed.has("fieldErrors") || reopened) this.dismissed = new Set();
-    if (!reopened) return;
-    const inv = this.invoice;
-    this.supplierTaxId = inv?.supplierTaxId ?? "";
-    this.supplierName = inv?.supplierName ?? "";
-    this.supplierInvoiceNumber = inv?.supplierInvoiceNumber ?? "";
-    this.issuedOn = inv?.issuedOn ?? "";
-    this.receivedOn = inv?.receivedOn ?? "";
-    this.total = inv?.total ?? "";
-    this.regime = inv?.regime ?? "general";
-    this.deductibleProportion = inv?.deductibleProportion ?? "100.00";
-    this.note = inv?.note ?? "";
-    this.lines = inv
-      ? inv.lines.map((l) => ({ rate: l.rate, base: l.base, tax: l.tax, kind: l.kind }))
-      : [blankLine()];
-    this.attempted = false;
+    if (reopened) {
+      this.#disposeDraft();
+      this.#identity = identity;
+      this.#opening = {};
+      this.#submitted = undefined;
+      const inv = this.invoice;
+      this.supplierTaxId = inv?.supplierTaxId ?? "";
+      this.supplierName = inv?.supplierName ?? "";
+      this.supplierInvoiceNumber = inv?.supplierInvoiceNumber ?? "";
+      this.issuedOn = inv?.issuedOn ?? "";
+      this.receivedOn = inv?.receivedOn ?? "";
+      this.total = inv?.total ?? "";
+      this.regime = inv?.regime ?? "general";
+      this.deductibleProportion = inv?.deductibleProportion ?? "100.00";
+      this.note = inv?.note ?? "";
+      this.lines = inv
+        ? inv.lines.map((l) => ({ rate: l.rate, base: l.base, tax: l.tax, kind: l.kind }))
+        : [blankLine()];
+      this.attempted = false;
+    }
+    if (!this.open) this.#disposeDraft();
+    else if (!this.#scope) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#scope = this.#leave?.register<PurchaseDraft>({
+        id: this,
+        current: () => this.#value(),
+        snapshot,
+        equal: (a, b) => sameValue(comparable(a), comparable(b)),
+        restore: (value) => {
+          this.supplierTaxId = value.supplierTaxId;
+          this.supplierName = value.supplierName;
+          this.supplierInvoiceNumber = value.supplierInvoiceNumber;
+          this.issuedOn = value.issuedOn;
+          this.receivedOn = value.receivedOn;
+          this.total = value.total;
+          this.regime = value.regime;
+          this.deductibleProportion = value.deductibleProportion;
+          this.note = value.note;
+          this.lines = value.lines;
+        },
+      });
+    }
   }
 
   protected override updated(changed: PropertyValues): void {
@@ -201,13 +323,17 @@ export class PurchaseForm extends LitElement {
 
   #onFieldChange(event: CustomEvent<{ value: string }>, field: HeaderField): void {
     event.stopPropagation();
+    if (this.busy) return;
     this[field] = event.detail.value;
     this.#dismiss(HEADER_KEYS[field]);
+    this.#scope?.changed();
   }
 
   #onRegimeChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
+    if (this.busy) return;
     this.regime = event.detail.value as PurchaseRegime;
+    this.#scope?.changed();
   }
 
   #onLineFieldChange(
@@ -216,24 +342,32 @@ export class PurchaseForm extends LitElement {
     field: "rate" | "base" | "tax",
   ): void {
     event.stopPropagation();
+    if (this.busy) return;
     this.lines = this.lines.map((line, i) =>
       i === index ? { ...line, [field]: event.detail.value } : line,
     );
+    this.#scope?.changed();
   }
 
   #onLineKindChange(event: CustomEvent<{ value: string }>, index: number): void {
     event.stopPropagation();
+    if (this.busy) return;
     const kind = event.detail.value as PurchaseVatKind;
     this.lines = this.lines.map((line, i) => (i === index ? { ...line, kind } : line));
+    this.#scope?.changed();
   }
 
   #addLine(): void {
+    if (this.busy) return;
     this.lines = [...this.lines, blankLine()];
     this.#dismiss("lines");
+    this.#scope?.changed();
   }
 
   #removeLine(index: number): void {
+    if (this.busy) return;
     this.lines = this.lines.filter((_, i) => i !== index);
+    this.#scope?.changed();
   }
 
   /** Every invalid field's message, keyed by the field's `data-test`; `lines` is the breakdown. */
@@ -287,6 +421,7 @@ export class PurchaseForm extends LitElement {
       return;
     }
 
+    this.#submitted = snapshot(this.#value());
     const header = {
       supplierTaxId: this.supplierTaxId,
       supplierName: this.supplierName,
@@ -327,6 +462,7 @@ export class PurchaseForm extends LitElement {
   /** Deliberately does not `stopPropagation`: the composed `wt-close` must bubble on to the screen
    * (the owner of the open state). */
   #onClose(): void {
+    this.#disposeDraft();
     this.open = false;
   }
 
@@ -334,6 +470,7 @@ export class PurchaseForm extends LitElement {
     return html`<div class="line" data-test=${`line-${index}`}>
       <wt-input
         class="line-field"
+        ?disabled=${this.busy}
         name=${`line-${index}-rate`}
         data-test=${`line-rate-${index}`}
         label=${t("purchase.line_rate")}
@@ -344,6 +481,7 @@ export class PurchaseForm extends LitElement {
       ></wt-input>
       <wt-price-input
         class="line-field"
+        ?disabled=${this.busy}
         fixed-unit
         locale=${currentLocale()}
         name=${`line-${index}-base`}
@@ -356,6 +494,7 @@ export class PurchaseForm extends LitElement {
       ></wt-price-input>
       <wt-price-input
         class="line-field"
+        ?disabled=${this.busy}
         fixed-unit
         locale=${currentLocale()}
         name=${`line-${index}-tax`}
@@ -368,6 +507,7 @@ export class PurchaseForm extends LitElement {
       ></wt-price-input>
       <wt-combobox
         class="line-field"
+        ?disabled=${this.busy}
         name=${`line-${index}-kind`}
         data-test=${`line-kind-${index}`}
         label=${t("purchase.line_kind")}
@@ -382,6 +522,7 @@ export class PurchaseForm extends LitElement {
         size="sm"
         variant="danger"
         data-test=${`remove-line-${index}`}
+        ?disabled=${this.busy}
         aria-label=${`${t("purchase.remove_line")} ${index + 1}`}
         @click=${() => this.#removeLine(index)}
         >${t("purchase.remove_line")}</wt-button
@@ -401,10 +542,13 @@ export class PurchaseForm extends LitElement {
         @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]"))}
         heading=${this.invoice ? t("purchase.edit") : t("purchase.new")}
         .open=${this.open}
+        .dismissible=${!this.busy}
+        .beforeClose=${this.#scope ? this.#beforeClose : undefined}
         @wt-close=${() => this.#onClose()}
       >
         <wt-input
           class="field"
+          ?disabled=${this.busy}
           name="supplier-tax-id"
           data-test="supplier-tax-id"
           required
@@ -416,6 +560,7 @@ export class PurchaseForm extends LitElement {
         ></wt-input>
         <wt-input
           class="field"
+          ?disabled=${this.busy}
           name="supplier-name"
           data-test="supplier-name"
           required
@@ -426,6 +571,7 @@ export class PurchaseForm extends LitElement {
         ></wt-input>
         <wt-input
           class="field"
+          ?disabled=${this.busy}
           name="supplier-invoice-number"
           data-test="supplier-invoice-number"
           required
@@ -437,6 +583,7 @@ export class PurchaseForm extends LitElement {
         ></wt-input>
         <wt-input
           class="field"
+          ?disabled=${this.busy}
           type="date"
           name="issued-on"
           data-test="issued-on"
@@ -448,6 +595,7 @@ export class PurchaseForm extends LitElement {
         ></wt-input>
         <wt-input
           class="field"
+          ?disabled=${this.busy}
           type="date"
           name="received-on"
           data-test="received-on"
@@ -459,6 +607,7 @@ export class PurchaseForm extends LitElement {
         ></wt-input>
         <wt-price-input
           class="field"
+          ?disabled=${this.busy}
           fixed-unit
           locale=${currentLocale()}
           name="total"
@@ -471,6 +620,7 @@ export class PurchaseForm extends LitElement {
         ></wt-price-input>
         <wt-combobox
           class="field"
+          ?disabled=${this.busy}
           name="regime"
           data-test="regime"
           label=${t("purchase.regime")}
@@ -483,6 +633,7 @@ export class PurchaseForm extends LitElement {
         ></wt-combobox>
         <wt-input
           class="field"
+          ?disabled=${this.busy}
           name="deductible-proportion"
           data-test="deductible-proportion"
           required
@@ -494,6 +645,7 @@ export class PurchaseForm extends LitElement {
         ></wt-input>
         <wt-input
           class="field"
+          ?disabled=${this.busy}
           name="note"
           data-test="note"
           error=${errors["note"] ?? ""}
@@ -513,6 +665,7 @@ export class PurchaseForm extends LitElement {
           size="sm"
           variant="secondary"
           data-test="add-line"
+          ?disabled=${this.busy}
           @click=${() => this.#addLine()}
           >${t("purchase.add_line")}</wt-button
         >

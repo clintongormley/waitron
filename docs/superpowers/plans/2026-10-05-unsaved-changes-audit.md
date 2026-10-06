@@ -237,3 +237,17 @@ proofs and authenticator/recovery output, and invalidates outstanding write repl
 The real-controller cases are in `apps/dashboard/src/screens/profile-screen.unsaved.test.ts`.
 The existing Profile suite remains unchanged. Outer Profile dismissal and page/history navigation
 remain Task 5 work; this checkpoint covers the inner modal owners only.
+
+
+### Purchase modal checkpoint (2026-10-06)
+
+Add/Edit purchase uses the shared registry for its header and ordered VAT lines. Comparison removes
+only insignificant trailing decimal zeroes and applies the existing empty-note-to-null rule;
+request amounts and validation are unchanged. Native Escape is its existing dismissal route.
+Successful writes commit the submitted snapshot before refresh. A same-invoice read preserves
+input, a replacement identity invalidates its question, and a late write cannot close or mark
+a replacement editor. Busy fields and dismissal are disabled.
+
+`purchase-form.unsaved.test.ts` and `purchases-screen.unsaved.test.ts` under `apps/dashboard/src/`
+exercise these cases alongside the existing form, screen and accessibility suites. Purchase modal
+protection is implemented; dashboard navigation and page protection remain Task 5/6 work.

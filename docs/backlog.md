@@ -1236,6 +1236,12 @@ a late write cannot close a replacement editor. In-flight writes disable the fie
 Successful Add/Edit commits the values captured at submission, and Add/Edit/Remove clear the warning
 before roster refresh. A refusal retains the draft. Focused cases are in the shift-dialog and
 roster-screen `*.unsaved.test.ts` suites under `apps/dashboard/src/`.
+Add/Edit purchase now protects supplier, invoice, date, regime, amount, note and ordered VAT-line
+inputs through native Escape and dirty-only unload handling. Equivalent decimal spellings compare
+equal without rounding; invalid input stays distinct. Successful writes commit before list refresh,
+and a late successful/refused reply leaves a replacement editor alone. Busy fields and dismissal
+are disabled. Focused cases are in the purchase-form and purchases-screen `*.unsaved.test.ts`
+suites under `apps/dashboard/src/`.
 Other audited modal owners and page/navigation protection remain
 to be wired. Keep automatic saves on their existing paths.
 
