@@ -427,11 +427,8 @@ function refuseRetiredFields(body: Record<string, unknown>): void {
       throw new AppError("management.request_invalid", { field: retired });
 }
 
-/**
- * `mountCatalogueApi`'s `gated`: one transaction, with the caller's session checked first.
- * `personId` is the manager the session belongs to.
- */
 type GatedWork = <T>(
+  c: Context,
   sessionId: string,
   fn: (tx: Transaction, personId: string) => Promise<T>,
 ) => Promise<T>;
@@ -471,7 +468,7 @@ function mountListSurface<TList, TDependants>(
   const one = `${collection}/:id` as const;
   app.get(collection, (c) =>
     run(c, log, async () => {
-      const lists = await gated(requireManagementSession(c), (tx) => surface.list(tx));
+      const lists = await gated(c, requireManagementSession(c), (tx) => surface.list(tx));
       return c.json({ [surface.collectionKey]: lists });
     }),
   );
@@ -480,14 +477,14 @@ function mountListSurface<TList, TDependants>(
       // Session before body: an unauthenticated request is refused without its payload being read.
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody(c);
-      const created = await gated(sessionId, (tx) => surface.create(tx, body));
+      const created = await gated(c, sessionId, (tx) => surface.create(tx, body));
       return c.json({ [surface.itemKey]: created }, 201);
     }),
   );
   app.get(one, (c) =>
     run(c, log, async () => {
       const id = requireUuidParam(c.req.param("id"), surface.idKind);
-      const list = await gated(requireManagementSession(c), (tx) => surface.read(tx, id));
+      const list = await gated(c, requireManagementSession(c), (tx) => surface.read(tx, id));
       return c.json({ [surface.itemKey]: list });
     }),
   );
@@ -496,14 +493,14 @@ function mountListSurface<TList, TDependants>(
       const id = requireUuidParam(c.req.param("id"), surface.idKind);
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody(c);
-      const updated = await gated(sessionId, (tx) => surface.update(tx, id, body));
+      const updated = await gated(c, sessionId, (tx) => surface.update(tx, id, body));
       return c.json({ [surface.itemKey]: updated });
     }),
   );
   app.delete(one, (c) =>
     run(c, log, async () => {
       const id = requireUuidParam(c.req.param("id"), surface.idKind);
-      await gated(requireManagementSession(c), (tx) => surface.remove(tx, id));
+      await gated(c, requireManagementSession(c), (tx) => surface.remove(tx, id));
       return c.json({ ok: true });
     }),
   );
@@ -512,7 +509,7 @@ function mountListSurface<TList, TDependants>(
   app.get(`${one}/dependants`, (c) =>
     run(c, log, async () => {
       const id = requireUuidParam(c.req.param("id"), surface.idKind);
-      const dependants = await gated(requireManagementSession(c), (tx) =>
+      const dependants = await gated(c, requireManagementSession(c), (tx) =>
         surface.dependants(tx, id),
       );
       return c.json({ dependants });
@@ -536,7 +533,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
       const input = sectionInput(body, true);
       const position =
         body.position === undefined ? undefined : numberField(body.position, "position");
-      const created = await gated(session, (tx) =>
+      const created = await gated(c, session, (tx) =>
         createSectionIn(tx, sectionId(c), input, position, venueLocale),
       );
       return c.json({ id: created.id }, 201);
@@ -546,7 +543,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const id = sectionId(c);
-      return c.json(await gated(session, (tx) => readSection(tx, id)));
+      return c.json(await gated(c, session, (tx) => readSection(tx, id)));
     }),
   );
   app.patch(one, (c) =>
@@ -554,14 +551,14 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
       const session = requireManagementSession(c);
       const id = sectionId(c);
       const patch = sectionInput(await readJsonBody<Record<string, unknown>>(c), false);
-      return c.json(await gated(session, (tx) => updateSection(tx, id, patch, venueLocale)));
+      return c.json(await gated(c, session, (tx) => updateSection(tx, id, patch, venueLocale)));
     }),
   );
   app.delete(one, (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const id = sectionId(c);
-      await gated(session, (tx) => deleteSection(tx, id));
+      await gated(c, session, (tx) => deleteSection(tx, id));
       return c.body(null, 204);
     }),
   );
@@ -569,7 +566,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const id = sectionId(c);
-      return c.json(await gated(session, (tx) => listMembers(tx, id)));
+      return c.json(await gated(c, session, (tx) => listMembers(tx, id)));
     }),
   );
   app.post(members, (c) =>
@@ -580,7 +577,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
       const ref = memberRef(body.ref);
       const position =
         body.position === undefined ? undefined : numberField(body.position, "position");
-      return c.json(await gated(session, (tx) => addMember(tx, id, ref, position)), 201);
+      return c.json(await gated(c, session, (tx) => addMember(tx, id, ref, position)), 201);
     }),
   );
   app.post(`${members}/products`, (c) =>
@@ -589,7 +586,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
       const id = sectionId(c);
       const body = await readJsonBody<{ productIds?: unknown }>(c);
       const productIds = idList(body.productIds, "productIds", "ProductId");
-      return c.json(await gated(session, (tx) => addProducts(tx, id, productIds)));
+      return c.json(await gated(c, session, (tx) => addProducts(tx, id, productIds)));
     }),
   );
   app.delete(member, (c) =>
@@ -597,7 +594,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
       const session = requireManagementSession(c);
       const id = sectionId(c);
       const held = memberId(c);
-      await gated(session, (tx) => removeMember(tx, id, held));
+      await gated(c, session, (tx) => removeMember(tx, id, held));
       return c.body(null, 204);
     }),
   );
@@ -608,7 +605,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
       const held = memberId(c);
       const body = await readJsonBody<{ to?: unknown }>(c);
       const to = numberField(body.to, "to");
-      return c.json(await gated(session, (tx) => moveMember(tx, id, held, to)));
+      return c.json(await gated(c, session, (tx) => moveMember(tx, id, held, to)));
     }),
   );
   app.post(`${member}/replace`, (c) =>
@@ -617,7 +614,7 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
       const id = sectionId(c);
       const held = memberId(c);
       const ref = memberRef((await readJsonBody<{ ref?: unknown }>(c)).ref);
-      return c.json(await gated(session, (tx) => replaceMember(tx, id, held, ref)));
+      return c.json(await gated(c, session, (tx) => replaceMember(tx, id, held, ref)));
     }),
   );
 }
@@ -635,7 +632,7 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const menu = menuId(c);
-      return c.json(await gated(session, (tx) => readMenuHome(tx, menu)));
+      return c.json(await gated(c, session, (tx) => readMenuHome(tx, menu)));
     }),
   );
   app.patch("/management-api/catalogues/:id/home-display", (c) =>
@@ -650,7 +647,7 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
       }>(c);
       const device = requireEnum(body.device, "device", HOME_DEVICES);
       const { columns, tiles, order } = body;
-      await gated(session, (tx) => setHomeDisplay(tx, menu, device, { columns, tiles, order }));
+      await gated(c, session, (tx) => setHomeDisplay(tx, menu, device, { columns, tiles, order }));
       return c.body(null, 204);
     }),
   );
@@ -662,7 +659,7 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
       const ref = memberRef(body.ref);
       const position =
         body.position === undefined ? undefined : numberField(body.position, "position");
-      return c.json(await gated(session, (tx) => addShortcut(tx, menu, ref, position)), 201);
+      return c.json(await gated(c, session, (tx) => addShortcut(tx, menu, ref, position)), 201);
     }),
   );
   app.post(`${shortcut}/replace`, (c) =>
@@ -671,7 +668,7 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
       const menu = menuId(c);
       const held = memberId(c);
       const ref = memberRef((await readJsonBody<{ ref?: unknown }>(c)).ref);
-      return c.json(await gated(session, (tx) => replaceShortcut(tx, menu, held, ref)));
+      return c.json(await gated(c, session, (tx) => replaceShortcut(tx, menu, held, ref)));
     }),
   );
   app.delete(shortcut, (c) =>
@@ -679,7 +676,7 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
       const session = requireManagementSession(c);
       const menu = menuId(c);
       const held = memberId(c);
-      await gated(session, (tx) => removeShortcut(tx, menu, held));
+      await gated(c, session, (tx) => removeShortcut(tx, menu, held));
       return c.body(null, 204);
     }),
   );
@@ -689,21 +686,24 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
       const menu = menuId(c);
       const held = memberId(c);
       const to = numberField((await readJsonBody<{ to?: unknown }>(c)).to, "to");
-      return c.json(await gated(session, (tx) => moveShortcut(tx, menu, held, to)));
+      return c.json(await gated(c, session, (tx) => moveShortcut(tx, menu, held, to)));
     }),
   );
 }
 
 export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger): void {
-  // Every `/management-api` route's DB work goes through here, so the gate is applied in exactly
-  // one place.
-  const gated: GatedWork = (sessionId, fn) =>
+  const epoch = crypto.randomUUID();
+  let sequence = 0;
+  const gated: GatedWork = (c, sessionId, fn) =>
     withTransaction(deps.db, async (tx) => {
       const { authorizedBy } = await authorizeManager(tx, {
         managementSessionId: sessionId,
         permission: CATALOGUE_WRITE_PERMISSION,
       });
-      return fn(tx, authorizedBy);
+      const result = await fn(tx, authorizedBy);
+      if (c.req.method !== "GET") sequence++;
+      c.header("x-waitron-menu-revision", JSON.stringify({ epoch, sequence }));
+      return result;
     });
 
   /** Screen the editor body's optional course; null clears it. */
@@ -775,7 +775,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       return c.json(
-        await gated(sessionId, (tx) =>
+        await gated(c, sessionId, (tx) =>
           readContentLanguages(tx, deps.venueLocale ?? FALLBACK_LOCALE),
         ),
       );
@@ -786,7 +786,11 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       return c.json(
-        await gated(sessionId, async () => deps.contentLanguageRules ?? NO_CONTENT_LANGUAGE_RULES),
+        await gated(
+          c,
+          sessionId,
+          async () => deps.contentLanguageRules ?? NO_CONTENT_LANGUAGE_RULES,
+        ),
       );
     }),
   );
@@ -795,7 +799,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       return c.json(
-        await gated(sessionId, async (tx) =>
+        await gated(c, sessionId, async (tx) =>
           listTranslationGapReport(
             tx,
             await readContentLanguages(tx, deps.venueLocale ?? FALLBACK_LOCALE),
@@ -830,7 +834,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         defaultLanguage: body.defaultLanguage,
         languages: body.languages as string[],
       };
-      await gated(sessionId, (tx) =>
+      await gated(c, sessionId, (tx) =>
         writeContentLanguages(
           tx,
           config,
@@ -846,7 +850,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.get("/management-api/catalogues", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) => listCatalogues(tx));
+      const rows = await gated(c, sessionId, (tx) => listCatalogues(tx));
       return c.json(rows);
     }),
   );
@@ -855,7 +859,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.get("/management-api/catalogues/status", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const status = await gated(sessionId, (tx) => menuStatus(tx));
+      const status = await gated(c, sessionId, (tx) => menuStatus(tx));
       return c.json(Object.fromEntries(status));
     }),
   );
@@ -867,7 +871,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const name = requireString(body.name, "name");
       if (name.trim() === "") throw new AppError("management.request_invalid", { field: "name" });
       const presentation = sectionInput({ ...body, internalName: name }, true);
-      const created = await gated(sessionId, (tx) =>
+      const created = await gated(c, sessionId, (tx) =>
         createCatalogue(tx, {
           name,
           names: presentation.names,
@@ -887,7 +891,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const presentation = sectionInput({ ...body, internalName: body.name }, false);
       if (presentation.internalName !== undefined && presentation.internalName.trim() === "")
         throw new AppError("management.request_invalid", { field: "name" });
-      await gated(sessionId, (tx) =>
+      await gated(c, sessionId, (tx) =>
         updateMenuDetails(tx, catalogueId, {
           name: presentation.internalName,
           names: presentation.names,
@@ -899,11 +903,42 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     }),
   );
 
+  app.get("/management-api/catalogues/:id/read", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const parts = c.req.queries("part") ?? [];
+      if (
+        parts.length === 0 ||
+        new Set(parts).size !== parts.length ||
+        parts.some((part) => !["structure", "home", "status", "preview"].includes(part))
+      )
+        throw new AppError("management.request_invalid", { field: "part" });
+      const result = await gated(c, sessionId, async (tx) => {
+        const responses: Record<string, { status: number; body: unknown }> = {};
+        for (const part of parts) {
+          const response = await run(c, log, async () => {
+            if (part === "structure") return c.json(await readMenuStructure(tx, menuId));
+            if (part === "home") return c.json(await readMenuHome(tx, menuId));
+            if (part === "preview") return c.json(await previewMenu(tx, menuId));
+            const status = (await menuStatus(tx, [menuId])).get(menuId);
+            if (status === undefined)
+              throw new AppError("catalogue.not_found", { catalogueId: menuId });
+            return c.json(status);
+          });
+          responses[part] = { status: response.status, body: await response.json() };
+        }
+        return { ...responses, revision: { epoch, sequence } };
+      });
+      return c.json(result);
+    }),
+  );
+
   app.get("/management-api/catalogues/:id/structure", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      return c.json(await gated(sessionId, (tx) => readMenuStructure(tx, menuId)));
+      return c.json(await gated(c, sessionId, (tx) => readMenuStructure(tx, menuId)));
     }),
   );
 
@@ -911,7 +946,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      return c.json(await gated(sessionId, (tx) => menuPrices(tx, menuId)));
+      return c.json(await gated(c, sessionId, (tx) => menuPrices(tx, menuId)));
     }),
   );
 
@@ -919,7 +954,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      const status = await gated(sessionId, async (tx) =>
+      const status = await gated(c, sessionId, async (tx) =>
         (await menuStatus(tx, [menuId])).get(menuId),
       );
       if (status === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
@@ -931,7 +966,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      return c.json(await gated(sessionId, (tx) => previewMenu(tx, menuId)));
+      return c.json(await gated(c, sessionId, (tx) => previewMenu(tx, menuId)));
     }),
   );
 
@@ -942,7 +977,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const body = await readJsonBody<{ expectedHash?: unknown }>(c);
       const expectedHash = requireString(body.expectedHash, "expectedHash");
       return c.json(
-        await gated(sessionId, (tx, personId) => publishMenu(tx, menuId, expectedHash, personId)),
+        await gated(c, sessionId, (tx, personId) =>
+          publishMenu(tx, menuId, expectedHash, personId),
+        ),
       );
     }),
   );
@@ -964,7 +1001,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
           throw new AppError("management.request_invalid", { field: retired });
         }
       }
-      await gated(sessionId, (tx) =>
+      await gated(c, sessionId, (tx) =>
         updateMenuItem(tx, menuId, menuItemId, {
           ...(body.grossPrice === undefined
             ? {}
@@ -980,7 +1017,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
       const menuItemId = requireUuidParam(c.req.param("itemId"), "MenuItemId");
-      return c.json(await gated(sessionId, (tx) => listMenuVariants(tx, menuItemId, menuId)));
+      return c.json(await gated(c, sessionId, (tx) => listMenuVariants(tx, menuItemId, menuId)));
     }),
   );
 
@@ -992,7 +1029,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const body = await readJsonBody<Record<string, unknown>>(c);
       const variants = parseMenuVariants(body.variants);
       return c.json(
-        await gated(sessionId, (tx) => setMenuVariants(tx, menuItemId, variants, menuId)),
+        await gated(c, sessionId, (tx) => setMenuVariants(tx, menuItemId, variants, menuId)),
       );
     }),
   );
@@ -1009,7 +1046,9 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (!Object.hasOwn(body, "price") || (body.price !== null && typeof body.price !== "string"))
         throw new AppError("management.request_invalid", { field: "price" });
       const price = body.price as string | null;
-      await gated(sessionId, (tx) => setMenuVariantPrice(tx, menuItemId, variantId, price, menuId));
+      await gated(c, sessionId, (tx) =>
+        setMenuVariantPrice(tx, menuItemId, variantId, price, menuId),
+      );
       return c.body(null, 204);
     }),
   );
@@ -1021,7 +1060,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
-      const rows = await gated(sessionId, (tx) => listCataloguesForLocation(tx, locationId));
+      const rows = await gated(c, sessionId, (tx) => listCataloguesForLocation(tx, locationId));
       return c.json(rows);
     }),
   );
@@ -1031,7 +1070,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
       const catalogueId = await requireCatalogueIdBody(c);
-      await gated(sessionId, async (tx) => {
+      await gated(c, sessionId, async (tx) => {
         await assertCatalogueVisible(tx, catalogueId);
         await addCatalogueToLocation(tx, locationId, catalogueId);
       });
@@ -1044,7 +1083,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
       const catalogueId = requireUuidParam(c.req.param("catalogueId"), "CatalogueId");
-      await gated(sessionId, (tx) => removeCatalogueFromLocation(tx, locationId, catalogueId));
+      await gated(c, sessionId, (tx) => removeCatalogueFromLocation(tx, locationId, catalogueId));
       return c.body(null, 204);
     }),
   );
@@ -1054,7 +1093,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const locationId = requireUuidParam(c.req.param("locationId"), "LocationId");
       const catalogueId = await requireCatalogueIdBody(c);
-      await gated(sessionId, async (tx) => {
+      await gated(c, sessionId, async (tx) => {
         await assertCatalogueVisible(tx, catalogueId);
         await setLocationDefaultCatalogue(tx, locationId, catalogueId);
       });
@@ -1065,7 +1104,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   app.get("/management-api/categories", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) => listCategories(tx));
+      const rows = await gated(c, sessionId, (tx) => listCategories(tx));
       return c.json(rows);
     }),
   );
@@ -1075,7 +1114,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const input = categoryInput(body, true) as CategoryInput;
-      const created = await gated(sessionId, (tx) => createCategory(tx, input));
+      const created = await gated(c, sessionId, (tx) => createCategory(tx, input));
       return c.json(created, 201);
     }),
   );
@@ -1086,7 +1125,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const body = await readJsonBody<Record<string, unknown>>(c);
       const selection = selectionBody(body);
       const to = nullOrUuid(body.to, "to");
-      await gated(session, (tx) => moveCatalogueItems(tx, selection, to));
+      await gated(c, session, (tx) => moveCatalogueItems(tx, selection, to));
       return c.body(null, 204);
     }),
   );
@@ -1101,7 +1140,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const shown = selection.categoryIds.length
         ? shownBody(body.shown, selection.categoryIds)
         : undefined;
-      await gated(session, (tx) => deleteCatalogueItems(tx, selection, contents, shown));
+      await gated(c, session, (tx) => deleteCatalogueItems(tx, selection, contents, shown));
       return c.body(null, 204);
     }),
   );
@@ -1109,7 +1148,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     runFolder(c, log, async () => {
       const session = requireManagementSession(c);
       const ids = (c.req.queries("id") ?? []).map((id) => requireUuidParam(id, "CategoryId"));
-      return c.json(await gated(session, (tx) => summariseFolders(tx, ids)));
+      return c.json(await gated(c, session, (tx) => summariseFolders(tx, ids)));
     }),
   );
 
@@ -1117,7 +1156,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "CategoryId");
-      return c.json(await gated(session, (tx) => readCategory(tx, id)));
+      return c.json(await gated(c, session, (tx) => readCategory(tx, id)));
     }),
   );
   app.patch("/management-api/categories/:id", (c) =>
@@ -1125,20 +1164,20 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const session = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "CategoryId");
       const input = categoryInput(await readJsonBody<Record<string, unknown>>(c), false);
-      return c.json(await gated(session, (tx) => updateCategory(tx, id, input)));
+      return c.json(await gated(c, session, (tx) => updateCategory(tx, id, input)));
     }),
   );
   app.get("/management-api/products", (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
-      return c.json(await gated(session, (tx) => listProducts(tx)));
+      return c.json(await gated(c, session, (tx) => listProducts(tx)));
     }),
   );
   app.get("/management-api/products/made-at", (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
       return c.json(
-        await gated(session, async (tx) => {
+        await gated(c, session, async (tx) => {
           const makers = await VENUE_SERVICE.describeMakers(tx, requireVenueCfg(deps));
           const stationIds = [
             ...new Set(
@@ -1187,7 +1226,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const catalogueId = requireUuidParam(c.req.param("id"), "CatalogueId");
-      const rows = await gated(sessionId, (tx) => listProducts(tx, catalogueId));
+      const rows = await gated(c, sessionId, (tx) => listProducts(tx, catalogueId));
       return c.json(rows);
     }),
   );
@@ -1198,7 +1237,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const catalogueId = requireUuidParam(c.req.param("id"), "CatalogueId");
       const body = await readJsonBody<Record<string, unknown>>(c);
       const routing = screenRouting(body);
-      const saved = await gated(sessionId, async (tx) => {
+      const saved = await gated(c, sessionId, async (tx) => {
         const product = await saveProductEditor(
           tx,
           null,
@@ -1216,7 +1255,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const productId = requireUuidParam(c.req.param("id"), "ProductId");
-      return c.json(await gated(sessionId, (tx) => readProductEditor(tx, productId)));
+      return c.json(await gated(c, sessionId, (tx) => readProductEditor(tx, productId)));
     }),
   );
 
@@ -1225,7 +1264,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const productId = requireUuidParam(c.req.param("id"), "ProductId");
       return c.json(
-        await gated(sessionId, async (tx) => {
+        await gated(c, sessionId, async (tx) => {
           await readProductEditor(tx, productId);
           return extraOfferUsageForUnitChange(tx, productId);
         }),
@@ -1240,7 +1279,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const body = await readJsonBody<Record<string, unknown>>(c);
       const routing = screenRouting(body);
       return c.json(
-        await gated(sessionId, async (tx) => {
+        await gated(c, sessionId, async (tx) => {
           const product = await saveProductEditor(
             tx,
             productId,
@@ -1340,7 +1379,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(body.available === undefined ? {} : { available: body.available }),
         ...(body.ordering === undefined ? {} : { ordering: body.ordering }),
       };
-      const created = await gated(sessionId, async (tx) => {
+      const created = await gated(c, sessionId, async (tx) => {
         if (customerName !== null) {
           await validateContentTranslations(tx, customerName, deps.venueLocale ?? FALLBACK_LOCALE);
         }
@@ -1463,7 +1502,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       // always bumps `updatedAt`, so its `.set()` is never empty.
       refuseRetiredFields(body);
       const modifiers = parseProductModifiers(body.modifiers);
-      await gated(sessionId, async (tx) => {
+      await gated(c, sessionId, async (tx) => {
         await assertOwned(tx, productId);
         // A customer-facing name is optional: absent or wholly blank, the staff name is what a
         // receipt shows, so there is nothing to hold to the venue's default content language. One

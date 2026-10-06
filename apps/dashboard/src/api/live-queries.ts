@@ -1,5 +1,5 @@
 import type { ResourceQuery } from "@waitron/dashboard-kit";
-import type { DashboardApi } from "./client.js";
+import type { DashboardApi, MenuReadPart } from "./client.js";
 
 const MENU_PUBLICATION_READS = [
   "catalogues",
@@ -184,6 +184,7 @@ export const QUERY_DEPENDENCIES = {
   ],
   // The tables `menuStatus` and `previewMenu` read (packages/catalogue/src/menu-publication.ts); a
   // category's colour is part of each offer's colour.
+  getMenuRead: MENU_PUBLICATION_READS,
   getMenuStatuses: MENU_PUBLICATION_READS,
   getMenuStatus: MENU_PUBLICATION_READS,
   getMenuPreview: MENU_PUBLICATION_READS,
@@ -284,6 +285,16 @@ function dependenciesOf<N extends DashboardQueryName>(
   name: N,
   args: Arguments<N>,
 ): readonly string[] {
+  if (name === "getMenuRead") {
+    const parts = (args as Parameters<DashboardApi["getMenuRead"]>)[1];
+    const reads = {
+      structure: QUERY_DEPENDENCIES.getMenuStructure,
+      home: QUERY_DEPENDENCIES.getMenuHome,
+      status: QUERY_DEPENDENCIES.getMenuStatus,
+      preview: QUERY_DEPENDENCIES.getMenuPreview,
+    } satisfies Record<MenuReadPart, readonly string[]>;
+    return [...new Set(parts.flatMap((part) => [...reads[part]]))];
+  }
   // At time of sale names each line's category from the snapshot the line recorded
   // (`computeCategorySales`, packages/reporting/src/category-sales.ts), so no catalogue edit moves
   // it. A subset of the declared list, so `scripts/live-subscriptions.test.ts` still covers it.
