@@ -648,6 +648,13 @@ export class CatalogueBrowser extends LitElement {
       ? t("folders.new_color_heading")
       : t("folders.color_heading").replace("{name}", name);
   }
+  /** Done removes itself, so focus goes back to the mode's toggle rather than to the page. */
+  async #leaveSelection(): Promise<void> {
+    this.selected = [];
+    this.selecting = false;
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
+  }
   override render() {
     const renamed = this.#renamed(this.nameDraft);
     const selection = this.#selection(this.selected);
@@ -659,6 +666,7 @@ export class CatalogueBrowser extends LitElement {
         }}
         .stickyHeader=${this.stickyHeader}
         .selecting=${this.selecting}
+        .reordering=${this.selecting}
         .selected=${this.selected}
         @wt-selection-change=${(event: CustomEvent<{ selected: string[] }>) => {
           event.stopPropagation();
@@ -789,11 +797,8 @@ export class CatalogueBrowser extends LitElement {
                         <wt-button
                           data-test="cancel-selection"
                           variant="secondary"
-                          @click=${() => {
-                            this.selected = [];
-                            this.selecting = false;
-                          }}
-                          >${t("folders.cancel_selection")}</wt-button
+                          @click=${() => void this.#leaveSelection()}
+                          >${t("action.done")}</wt-button
                         >`
                     : nothing
                 }

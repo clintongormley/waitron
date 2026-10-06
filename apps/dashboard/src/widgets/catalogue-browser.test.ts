@@ -372,8 +372,83 @@ function capturedTouch(from: Element, type: string, over: Element) {
   );
 }
 
+/** A mouse drag of `from` onto `to`'s row activator, then the click its release makes. */
+async function dragAndClick(el: CatalogueBrowser, from: string, to: string) {
+  const table = await tableOf(el);
+  const target = table.shadowRoot!.querySelector<HTMLElement>(
+    `tr[data-row-key="${to}"] .row-activate`,
+  )!;
+  pointerEvent(await nameCell(el, from), "pointerdown");
+  pointerEvent(target, "pointermove");
+  pointerEvent(target, "pointerup");
+  target.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+  );
+  await table.updateComplete;
+}
+const grips = async (el: CatalogueBrowser) =>
+  (await tableOf(el)).shadowRoot!.querySelectorAll('.drag-grip, [part~="grip-space"]');
+const checkboxes = async (el: CatalogueBrowser) =>
+  (await tableOf(el)).shadowRoot!.querySelectorAll('tr[data-row-key] input[type="checkbox"]');
+
+it("draws no grip on mount, and a drag there moves nothing while its release opens the category as a click", async () => {
+  const el = await mountBrowser();
+  expect((await tableOf(el)).shadowRoot!.querySelectorAll("tr[data-row-key]").length).toBe(4);
+  expect((await grips(el)).length).toBe(0);
+  await dragAndClick(el, "bread", "folder:f");
+  expect(await rowKeys(el)).toEqual(["folder:d", "folder:f", "burger", "bread"]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+});
+it("Select and move shows a grip and a checkbox on every category and product row, and a drag then moves", async () => {
+  const el = await mountBrowser();
+  await press(el, "select");
+  const root = (await tableOf(el)).shadowRoot!;
+  for (const key of ["folder:d", "folder:f", "bread"]) {
+    expect(root.querySelector(`tr[data-row-key="${key}"] .drag-grip`), key).not.toBeNull();
+    expect(
+      root.querySelector(`tr[data-row-key="${key}"] input[type="checkbox"]`),
+      key,
+    ).not.toBeNull();
+  }
+  drag(await nameCell(el, "bread"), await nameCell(el, "folder:f"));
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledExactlyOnceWith(
+      { productIds: ["bread"], categoryIds: [] },
+      "f",
+    ),
+  );
+});
+it("Done hides the grips and checkboxes, a drag moves nothing again, and focus returns to Select and move", async () => {
+  const el = await mountBrowser();
+  await press(el, "select");
+  expect((await grips(el)).length).toBeGreaterThan(0);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel-selection"]')!.focus();
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector('[data-test="cancel-selection"]')).toBeNull();
+  expect((await grips(el)).length).toBe(0);
+  expect((await checkboxes(el)).length).toBe(0);
+  const select = el.shadowRoot!.querySelector('[data-test="select"]')!;
+  expect(el.shadowRoot!.activeElement).toBe(select);
+  await dragAndClick(el, "bread", "folder:f");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(el.api.moveCatalogueItems).not.toHaveBeenCalled();
+});
+it.each([
+  ["en-GB", "Done"],
+  ["es", "Listo"],
+])("the selection bar's leave button reads Done (%s)", async (locale, words) => {
+  setLocale(locale);
+  const el = await mountBrowser();
+  await press(el, "select");
+  expect(el.shadowRoot!.querySelector('[data-test="cancel-selection"]')!.textContent!.trim()).toBe(
+    words,
+  );
+});
 it("a dragged product stays in place, faded, under a lifted copy, and moves on the drop", async () => {
   const el = await mountBrowser();
+  await press(el, "select");
   const table = await tableOf(el);
   const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
   const from = table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="bread"]')!;
@@ -405,6 +480,7 @@ it("a dragged product stays in place, faded, under a lifted copy, and moves on t
 });
 it("real pointer drag moves a product into a folder", async () => {
   const el = await mountBrowser();
+  await press(el, "select");
   // The table turns narrow a frame after its resize observer first reports, in the 414 px test
   // window, and the rows move; a drag started before then often lost its press.
   const table = await tableOf(el);
@@ -423,6 +499,7 @@ it("real pointer drag moves a product into a folder", async () => {
 });
 it("finds a folder under a captured touch pointer", async () => {
   const el = await mountBrowser();
+  await press(el, "select");
   const from = await nameCell(el, "bread");
   const grip = from.querySelector(".drag-grip")!;
   const to = await nameCell(el, "folder:f");
@@ -439,6 +516,7 @@ it("finds a folder under a captured touch pointer", async () => {
 });
 it("a click on a category's row opens it in place without starting a drag", async () => {
   const el = await mountBrowser();
+  await press(el, "select");
   const table = await tableOf(el);
   const activator = table.shadowRoot!.querySelector<HTMLElement>(
     'tr[data-row-key="folder:d"] .row-activate',
@@ -452,6 +530,7 @@ it("a click on a category's row opens it in place without starting a drag", asyn
 });
 it("a small pointer movement stays a click rather than lifting the row", async () => {
   const el = await mountBrowser();
+  await press(el, "select");
   const cell = await nameCell(el, "bread");
   const box = cell.getBoundingClientRect();
   pointerEvent(cell, "pointerdown");
@@ -470,6 +549,7 @@ it("a small pointer movement stays a click rather than lifting the row", async (
 });
 it("a cancelled pointer over a valid folder does not move the product", async () => {
   const el = await mountBrowser();
+  await press(el, "select");
   const from = await nameCell(el, "bread");
   const to = await nameCell(el, "folder:f");
   pointerEvent(from, "pointerdown");
@@ -480,6 +560,7 @@ it("a cancelled pointer over a valid folder does not move the product", async ()
 });
 it("a drag that ends on a category's row does not also open it", async () => {
   const el = await mountBrowser();
+  await press(el, "select");
   const table = await tableOf(el);
   const activator = table.shadowRoot!.querySelector<HTMLElement>(
     'tr[data-row-key="folder:d"] .row-activate',
@@ -514,6 +595,7 @@ it("drags the whole selected group and clears selection after moving", async () 
 });
 it("refuses a folder over itself or its descendants but highlights a sibling", async () => {
   const el = await mountBrowser({ categories: [...CATEGORIES, folder("s", "Soft drinks", null)] });
+  await press(el, "select");
   await typeSearch(el, "drinks");
   const from = await nameCell(el, "folder:d");
   pointerEvent(from, "pointerdown");
@@ -534,6 +616,7 @@ it("refuses a folder over itself or its descendants but highlights a sibling", a
 });
 it("moves a product to the top level by dropping it on All products", async () => {
   const el = await mountBrowser();
+  await press(el, "select");
   await toggleCategory(el, "d");
   const root = (await tableOf(el)).shadowRoot!;
   drag(
@@ -564,6 +647,7 @@ it("shows a refused drop at the bottom and keeps the selection for correction", 
 });
 it("marks a dragged row inactive only while it is dragged, as its faded text is not read", async () => {
   const el = await mountBrowser();
+  await press(el, "select");
   const table = await tableOf(el);
   const cell = await nameCell(el, "bread");
   const row = cell.closest("tr")!;
@@ -580,6 +664,7 @@ it("opens a closed category after the hover delay, not before, and shows the gap
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
     const el = await mountBrowser();
+    await press(el, "select");
     const table = await tableOf(el);
     const cell = await nameCell(el, "bread");
     pointerEvent(cell, "pointerdown");
@@ -606,6 +691,7 @@ it("leaves a closed category closed when a drag crosses it without stopping", as
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
     const el = await mountBrowser();
+    await press(el, "select");
     const table = await tableOf(el);
     const cell = await nameCell(el, "bread");
     pointerEvent(cell, "pointerdown");
@@ -627,6 +713,7 @@ it("leaves a closed category closed when a drag crosses it without stopping", as
 
 it("dropping on a product files the dragged row into that product's category", async () => {
   const el = await mountBrowser();
+  await press(el, "select");
   await toggleCategory(el, "d");
   drag(await nameCell(el, "bread"), await nameCell(el, "cola"));
   await vi.waitFor(() =>
@@ -639,6 +726,7 @@ it("dropping on a product files the dragged row into that product's category", a
 
 it("shows the gap after the last row when the dragged row would land last", async () => {
   const el = await mountBrowser();
+  await press(el, "select");
   await toggleCategory(el, "d");
   const table = await tableOf(el);
   const cell = await nameCell(el, "cola");
@@ -655,6 +743,7 @@ it("shows the gap after the last row when the dragged row would land last", asyn
 
 it("Esc cancels a drag with nothing moved, and the click that ends it opens nothing", async () => {
   const el = await mountBrowser();
+  await press(el, "select");
   const table = await tableOf(el);
   const target = table.shadowRoot!.querySelector<HTMLElement>(
     'tr[data-row-key="folder:f"] .row-activate',
@@ -680,6 +769,7 @@ it("Esc cancels a drag with nothing moved, and the click that ends it opens noth
 
 it("a drop where the drag started moves nothing and is never marked", async () => {
   const el = await mountBrowser();
+  await press(el, "select");
   const table = await tableOf(el);
   const cell = await nameCell(el, "bread");
   pointerEvent(cell, "pointerdown");
@@ -692,6 +782,7 @@ it("a drop where the drag started moves nothing and is never marked", async () =
 
 it("a drop on the category the dragged row is already in moves nothing and is never marked", async () => {
   const el = await mountBrowser();
+  await press(el, "select");
   await toggleCategory(el, "d");
   const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
   const drops = vi.fn();
@@ -1017,6 +1108,7 @@ it("renames a top-level category in place without adopting the addressed one", a
 });
 it("a rename sends the name only, so renaming a category just dragged elsewhere keeps the move", async () => {
   const el = await mountBrowser();
+  await press(el, "select");
   await toggleCategory(el, "d");
   const target = await nameCell(el, "folder:f");
   drag(await nameCell(el, "folder:b"), target);
@@ -2989,12 +3081,12 @@ it("Select is an icon button named Select, with a tooltip, pressed while selecti
   expect(select.localName).toBe("button");
   expect(select.getAttribute("type")).toBe("button");
   expect(select.getAttribute("slot")).toBe("toolbar-start");
-  expect(select.getAttribute("aria-label")).toBe("Select");
+  expect(select.getAttribute("aria-label")).toBe("Select and move");
   const icon = select.querySelector<HTMLElement>('wt-icon[name="select-rows"]')!;
   await (icon as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(icon.shadowRoot!.querySelector("path")).not.toBeNull();
   const tooltip = select.querySelector<HTMLElement>(".icon-tooltip")!;
-  expect(tooltip.textContent!.trim()).toBe("Select");
+  expect(tooltip.textContent!.trim()).toBe("Select and move");
   expect(tooltip.getAttribute("aria-hidden")).toBe("true");
   expect(getComputedStyle(tooltip).display).toBe("none");
   await userEvent.hover(select);
