@@ -198,53 +198,17 @@ describe("drawer_opens schema (cash-drawer audit — columns, defaults, CHECK, F
     expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
   });
 
-  it("locations.receipt_print_mode defaults to 'auto' and is settable", async () => {
-    const [before] = await inTx((tx) =>
-      tx
-        .select({ mode: locations.receiptPrintMode })
-        .from(locations)
-        .where(eq(locations.id, LOCATION_A)),
-    );
-    expect(before!.mode).toBe("auto");
-    await inTx((tx) =>
-      tx
-        .update(locations)
-        .set({ receiptPrintMode: "on_request" })
-        .where(eq(locations.id, LOCATION_A)),
-    );
-    const [after] = await inTx((tx) =>
-      tx
-        .select({ mode: locations.receiptPrintMode })
-        .from(locations)
-        .where(eq(locations.id, LOCATION_A)),
-    );
-    expect(after!.mode).toBe("on_request");
-    await inTx((tx) =>
-      tx.update(locations).set({ receiptPrintMode: "auto" }).where(eq(locations.id, LOCATION_A)),
-    );
-  });
-
-  it("locations.drawer_open_policy defaults to 'gated' (the SECURE default) and is settable", async () => {
-    // An unconfigured venue gets cash accountability, not an open drawer.
-    const [before] = await inTx((tx) =>
-      tx
-        .select({ policy: locations.drawerOpenPolicy })
-        .from(locations)
-        .where(eq(locations.id, LOCATION_A)),
-    );
-    expect(before!.policy).toBe("gated");
-    await inTx((tx) =>
-      tx.update(locations).set({ drawerOpenPolicy: "open" }).where(eq(locations.id, LOCATION_A)),
-    );
-    const [after] = await inTx((tx) =>
-      tx
-        .select({ policy: locations.drawerOpenPolicy })
-        .from(locations)
-        .where(eq(locations.id, LOCATION_A)),
-    );
-    expect(after!.policy).toBe("open");
-    await inTx((tx) =>
-      tx.update(locations).set({ drawerOpenPolicy: "gated" }).where(eq(locations.id, LOCATION_A)),
-    );
-  });
+  it.each(["receipt_print_mode", "drawer_open_policy"])(
+    "retires location %s and its CHECK",
+    async (column) => {
+      const columns = suite.db.all<{ name: string }>(
+        sql`select name from pragma_table_info('locations')`,
+      );
+      expect(columns.map((row) => row.name)).not.toContain(column);
+      const [definition] = suite.db.all<{ sql: string }>(
+        sql`select sql from sqlite_schema where type = 'table' and name = 'locations'`,
+      );
+      expect(definition!.sql).not.toContain(column);
+    },
+  );
 });

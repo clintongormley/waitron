@@ -811,6 +811,7 @@ declare module "@waitron/shared" {
      * editing routes translate it to their own request error. `field` carries only the field name,
      * never its value, because certificate fields can contain credentials. */
     "setup.request_invalid": { field: string };
+    "setup.configuration_outdated": Record<string, never>;
     /**
      * A provision of an environment for which the fiscal regime demands its provisioning secret
      * (`provisioningSecret.required(environment)`) arrived without it; refused before

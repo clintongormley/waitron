@@ -159,10 +159,6 @@ async function venueWith(
         hasCashDrawer: false,
       },
     );
-    await tx
-      .update(locations)
-      .set({ receiptPrintMode: "auto" })
-      .where(eq(locations.id, cfg.locationId));
     const [profile] = await tx
       .insert(deviceProfiles)
       .values({

@@ -6,7 +6,6 @@ import {
   deviceProfiles,
   devices,
   drawerOpens,
-  locations,
   printJobs,
   sales,
   saleLines,
@@ -263,10 +262,6 @@ async function configureReceipt(
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
     if (opts.mode !== undefined) {
-      await tx
-        .update(locations)
-        .set({ receiptPrintMode: opts.mode })
-        .where(eq(locations.id, cfg.locationId));
       const scopedDepartments = await tx
         .select({ id: departments.id })
         .from(departments)
@@ -337,16 +332,6 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
         viaOverride: drawerOpens.viaOverride,
       })
       .from(drawerOpens);
-  });
-}
-
-/** The column defaults to 'gated', so a test wanting the gate need not call this. */
-async function setDrawerPolicy(cfg: TillConfig, policy: "gated" | "open"): Promise<void> {
-  await withTransaction(suite.db, async (tx) => {
-    await tx
-      .update(locations)
-      .set({ drawerOpenPolicy: policy })
-      .where(eq(locations.id, cfg.locationId));
   });
 }
 
@@ -1149,7 +1134,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
   it("refuses an operator session whose device has been revoked with device.unauthorized, writing nothing", async () => {
     const { cfg, operatorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
-    await setDrawerPolicy(cfg, "open");
+
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const deviceCookie = await enrolConfiguredTillCookie(cfg);
@@ -1282,7 +1267,7 @@ describe("POST /api/drawer/open — legacy open policy cannot bypass authorizati
   ] as const)("refuses %s without a drawer command or audit", async (_, kind, status, code) => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
-    await setDrawerPolicy(cfg, "open");
+
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await loginAtTill(app, cfg, operatorId);
@@ -1322,7 +1307,7 @@ describe("POST /api/drawer/open — legacy open policy cannot bypass authorizati
       const { cfg, operatorId, supervisorId } = await setupVenue();
       const printerId = await makePrinter(cfg);
       await configureReceipt(cfg, { printerId });
-      await setDrawerPolicy(cfg, "open");
+
       const app = new Hono();
       mountTillApi(app, apiDeps(cfg), noopLog);
       const personId = viaOverride ? operatorId : supervisorId;
@@ -2237,7 +2222,7 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
 
   it("checks a staff override outside the write lock even while the legacy policy is open", async () => {
     const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill();
-    await setDrawerPolicy(cfg, "open");
+
     watchDerivations("0000", anotherWriter);
 
     const res = await openWithOverride(app, cookie, { personId: supervisorId, pin: "0000" });
@@ -2518,7 +2503,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
 
   it("refuses the drawer by hand from a profile that does not allow it", async () => {
     const { cfg, app, signIn } = await venueWithPrinters();
-    await setDrawerPolicy(cfg, "open");
+
     const drawer = await makePrinter(cfg);
     const handheld = await enrolPrintingDevice(cfg, {
       formFactor: "phone-portrait",

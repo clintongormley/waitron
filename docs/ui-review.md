@@ -96,7 +96,7 @@ needs CLAUDE.md §3's classification line and nothing else.
 | 17 | Bookings — reservations day-list | dashboard | ⬜ | |
 | 18 | Diagnostics & logs viewer | dashboard | ⬜ | |
 | 19 | Device management — enrol / disable | dashboard | ⬜ | |
-| 20 | Locations / venue config — invoice locales, printing, cash-drawer policy | dashboard | ⬜ | |
+| 20 | Departments and zones — invoice locales and receipt choices; Prep stations — printer assignments | dashboard | ⬜ | |
 
 ## Corrections log
 

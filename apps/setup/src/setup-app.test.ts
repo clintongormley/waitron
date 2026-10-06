@@ -2654,6 +2654,35 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   );
 
   it.each([
+    [
+      "en-GB",
+      "This configuration export is from an older format. Export it again from a current box.",
+    ],
+    [
+      "es-ES",
+      "Esta exportación de configuración usa un formato anterior. Vuelve a exportarla desde un equipo actualizado.",
+    ],
+  ] as const)("explains the retired configuration format (%s)", async (locale, sentence) => {
+    try {
+      const el = await mountSetupApp(
+        stubApi({
+          stageConfiguration: vi
+            .fn()
+            .mockRejectedValue({ code: "setup.configuration_outdated", params: {}, status: 400 }),
+        }),
+      );
+      setLocale(locale);
+      configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
+      await flush(el);
+      expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
+      expect(readDraft(el).configurationImport).toBeUndefined();
+      expect(el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]")).toBeNull();
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
+  it.each([
     ["setup.request_invalid", "artifact"],
     ["setup.request_invalid", "module:"],
     ["setup.request_invalid", 12],

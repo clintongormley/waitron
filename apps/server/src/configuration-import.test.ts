@@ -1,7 +1,10 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { Hono } from "hono";
+import { mountSetup } from "./setup-api.js";
 import type { WaitronModule } from "@waitron/module";
 import { loadKeyRing } from "@waitron/credentials";
 import {
@@ -24,7 +27,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 1,
+  version: 2,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -47,8 +50,6 @@ const bundle: ConfigurationBundle = {
       dayCutover: "06:00:00",
       bumpMode: "line",
       fireControl: "waiter",
-      receiptPrintMode: "auto",
-      drawerOpenPolicy: "gated",
       catalogueId: null,
     },
     seriesCode: "F",
@@ -74,6 +75,96 @@ const validate = (candidate: ConfigurationBundle): Promise<void> => {
 };
 
 describe("staged configuration import", () => {
+  it.each([
+    [
+      "real pre-retirement export",
+      JSON.parse(
+        readFileSync(
+          new URL(
+            "./testing/fixtures/configuration-v1-before-printing-retirement.json",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      ) as Record<string, unknown>,
+    ],
+    ["old version", { version: 1 }],
+    ["future version", { version: 3 }],
+    [
+      "retired drawer value",
+      {
+        venue: {
+          ...bundle.venue,
+          location: { ...bundle.venue.location, drawerOpenPolicy: "open" },
+        },
+      },
+    ],
+    [
+      "retired drawer null",
+      {
+        venue: { ...bundle.venue, location: { ...bundle.venue.location, drawerOpenPolicy: null } },
+      },
+    ],
+    [
+      "retired receipt value",
+      {
+        venue: {
+          ...bundle.venue,
+          location: { ...bundle.venue.location, receiptPrintMode: "never" },
+        },
+      },
+    ],
+    [
+      "retired receipt null",
+      {
+        venue: { ...bundle.venue, location: { ...bundle.venue.location, receiptPrintMode: null } },
+      },
+    ],
+  ])("refuses %s through setup before replacing staged files", async (_label, change) => {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
+    dirs.push(stateDir);
+    for (const name of [
+      "configuration-import.artifact",
+      "configuration-import.key",
+      "configuration-import.json",
+    ]) {
+      await writeFile(join(stateDir, name), `retained ${name}`);
+    }
+    const app = new Hono();
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        stageConfiguration: (artifact, passphrase) =>
+          stageConfigurationImport(stateDir, ring, artifact, passphrase, validate),
+      },
+      () => {},
+    );
+    const artifact = encodeConfigurationBundle(
+      { ...bundle, ...change } as unknown as ConfigurationBundle,
+      "a strong passphrase",
+    );
+    const response = await app.request("/setup-api/configuration", {
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-waitron-export-passphrase": "a strong passphrase",
+      },
+      body: new Uint8Array(artifact).buffer,
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.configuration_outdated", params: {} },
+    });
+    expect((await readdir(stateDir)).sort()).toEqual([
+      "configuration-import.artifact",
+      "configuration-import.json",
+      "configuration-import.key",
+    ]);
+    for (const name of await readdir(stateDir))
+      expect(await readFile(join(stateDir, name), "utf8")).toBe(`retained ${name}`);
+  });
+
   it("validates before staging and retains owner-only payloads until explicit cleanup", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-config-import-"));
     dirs.push(stateDir);

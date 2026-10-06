@@ -3555,7 +3555,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 - **The rest of the Printing rules screen (A242) — SETTLED by A261 (owner, 2026-10-03).** The page
   is deleted: kitchen ticket printers move to Prep stations, the receipt print mode to Departments
   and zones, and the cash drawer policy is deleted (opening the drawer by hand always needs
-  `cash.drawer`). Build step 8 of A261, after A238 lands.
+  `cash.drawer`). Implemented by A261 step 8: the old bookmark replaces itself with Prep stations Tickets when permitted; the retired write routes answer 404.
 
 - **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
   what the section is for and what is in it, opened by the section's header. It was the answer to
@@ -4192,12 +4192,19 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Departments and zones; other screens still await their own one-department survey. Tab billing and
   the shared calendar remain open.
 - **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — SPEC
-  APPROVED; steps 1–3 and 7 implemented, later steps open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
+  APPROVED; steps 1–3, 7 and 8 implemented, steps 4–6 open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
   The sidebar's Venue operations group; Venue settings with one tab per group
   (Receipts moves there); Departments and zones as one table edited in place; Prep stations as one
   tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
   special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.
   Eight build steps, each its own queue item.
+  Step 8 retires Printing rules, its drawer-policy API/client and both legacy location receipt/drawer
+  columns. Manual opening always requires `cash.drawer` or a permitted supervisor PIN; device/profile
+  gates, automatic payment opens, separate audit jobs and calibration permissions are retained.
+  Configuration format 2 omits both keys and refuses older versions or either retired key before
+  staging, with English/Spanish instructions to export again. The populated core column rebuild
+  refuses at `DROP TABLE locations`; this pre-live release requires a venue reset (owner, 2026-10-06).
+  Fresh schema and populated-refusal checks cover that selected release path; no converter is added.
   [Step 1, PR #1166](https://github.com/clintongormley/waitron/pull/1166) gathers Receipts,
   Tables and Kitchen settings into tabs; supervisors can read Tables and Kitchen, while writes
   remain manager-only (owner amendment, 2026-10-04).
@@ -4217,8 +4224,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   its transfer declaration. Reachability with the installed module list is unverified;
   distinguish that local build defect from an incompatible artifact if it can reach setup.
   [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) — DONE
-  ([PR #1269](https://github.com/clintongormley/waitron/pull/1269)). Printing rules' drawer
-  controls remain for step 8. The old
+  ([PR #1269](https://github.com/clintongormley/waitron/pull/1269)). Step 8 retires Printing rules'
+  drawer controls. The old
   numeric columns carry a retirement note. Review notes retained for future cleanup: the overview
   API object still exposes write methods (server routes remain the permission boundary), and
   station reordering repeats an active filter after an active-only read.
@@ -4254,11 +4261,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   history removal use a separately approved setup/reset instead. Later
   Hours/holidays/menu builds retain their own compatibility tests.
   [Step 8 Printing rules and drawer policy retirement plan](superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
-  was approved by the owner on 2026-10-05; its build is parked for a reset decision. Manual drawer
-  authorization and backend policy-write/boot retirement are implemented in the unlanded branch;
-  page, client, export and column retirement remain open. The generated column rebuild refused
-  two populated product archives at `DROP TABLE locations` with `FOREIGN KEY constraint failed`
-  on 2026-10-06. The plan requires explicit reset approval or a redesigned migration before release.
+  was approved by the owner on 2026-10-05; its build remains open.
   It removes the redundant
   page and legacy location receipt/drawer settings, makes manual drawer authorization unconditional,
   and preserves device/profile/printer gates, automatic drawer jobs and receipt/replay safeguards.

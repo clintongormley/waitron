@@ -302,6 +302,7 @@ const CONFIGURATION_NAME_MESSAGES: Record<string, StringKey> = {
 
 function describeConfigurationRefusal(error: unknown): Message {
   const { code, params } = (error ?? {}) as ApiError;
+  if (code === "setup.configuration_outdated") return say("shell.configuration.outdated");
   if (
     code === "setup.request_invalid" &&
     typeof params?.field === "string" &&
