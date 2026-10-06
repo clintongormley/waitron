@@ -163,6 +163,7 @@ export class TillCardGrid extends LitElement {
 
   readonly #browserProducts = memoVisibleProducts();
   readonly #searchProducts = memoVisibleProducts();
+  readonly #unfilteredProducts = memoVisibleProducts();
 
   override render(): TemplateResult | typeof nothing {
     const tab = this.tab;
@@ -236,6 +237,7 @@ export class TillCardGrid extends LitElement {
         return html`<till-menu-browser
           .menu=${menu}
           .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
+          .unfilteredProducts=${this.#unfilteredProducts(this.products, menu?.id ?? "", null)}
           .menus=${this.menus}
           .servedProducts=${this.#searchProducts(this.products, "", this.selectedDiet)}
           .store=${this.store}

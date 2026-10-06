@@ -285,6 +285,10 @@ export class TillMenuBrowser extends LitElement {
   /** This menu's offers as till products. */
   @property({ attribute: false }) products: TillProduct[] = [];
 
+  /** This menu's offers before the diet filter. A section it holds and `products` does not is drawn
+   * greyed in its place; unset, such a section is left out. */
+  @property({ attribute: false }) unfilteredProducts?: TillProduct[];
+
   /** Every menu the device is served in its zone, in the zone's order, the shown one included. */
   @property({ attribute: false }) menus: readonly TillZoneMenu[] = [];
 
@@ -315,6 +319,8 @@ export class TillMenuBrowser extends LitElement {
 
   #indexed?: { menu: TillZoneMenu; products: TillProduct[]; index: MenuIndex };
 
+  #unfilteredIndexed?: { menu: TillZoneMenu; products: TillProduct[]; index: MenuIndex };
+
   #otherIndexes = new WeakMap<TillZoneMenu, { products: TillProduct[]; index: MenuIndex }>();
 
   #trailShown: SectionNode[] = [];
@@ -328,6 +334,16 @@ export class TillMenuBrowser extends LitElement {
     if (cached?.menu === menu && cached.products === this.products) return cached.index;
     const index = indexMenu(menu, this.products);
     this.#indexed = { menu, products: this.products, index };
+    return index;
+  }
+
+  #unfilteredIndex(menu: TillZoneMenu): MenuIndex {
+    const products = this.unfilteredProducts;
+    if (products === undefined || products === this.products) return this.#index(menu);
+    const cached = this.#unfilteredIndexed;
+    if (cached?.menu === menu && cached.products === products) return cached.index;
+    const index = indexMenu(menu, products);
+    this.#unfilteredIndexed = { menu, products, index };
     return index;
   }
 
@@ -440,26 +456,30 @@ export class TillMenuBrowser extends LitElement {
     </wt-button>`;
   }
 
-  #sectionButton(section: SectionNode, mode: HomeTileMode, onTap: () => void): TemplateResult {
+  /** Without `onTap`, the section is one the diet filter emptied: greyed and not openable. */
+  #sectionButton(section: SectionNode, mode: HomeTileMode, onTap?: () => void): TemplateResult {
     const fill = tileFill(mode, section.image, section.color);
     const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
+    const filtered = onTap === undefined;
     return html`<wt-button
       class="tile"
       data-kind="section"
       style=${paint ?? nothing}
       ?data-painted=${paint !== undefined}
-      @click=${onTap}
+      ?data-filtered=${filtered}
+      ?disabled=${filtered}
+      @click=${onTap ?? nothing}
     >
       <span class="label">
         ${fill.kind === "image" ? thumb(fill.image) : html`<wt-icon name="menu-section"></wt-icon>`}
         <span class="name">${this.#sectionName(section)}</span>
-        <span class="kind">${t("menu.section")}</span>
+        <span class="kind">${t(filtered ? "menu.filtered_out" : "menu.section")}</span>
       </span>
     </wt-button>`;
   }
 
-  /** The button for a section or product the index holds, else nothing; `path` is where a section
-   * opens beneath. */
+  /** The button for a section or product the index holds, a greyed one for a section only the
+   * unfiltered index holds, else nothing; `path` is where a section opens beneath. */
   #tile(
     ref: DocumentTile,
     path: string[],
@@ -469,9 +489,10 @@ export class TillMenuBrowser extends LitElement {
     if (ref.kind === "empty") return nothing;
     if (ref.kind === "section") {
       const section = index.sections.get(ref.sectionId);
-      return section === undefined
-        ? nothing
-        : this.#sectionButton(section, mode, () => this.#open([...path, ref.sectionId]));
+      if (section !== undefined)
+        return this.#sectionButton(section, mode, () => this.#open([...path, ref.sectionId]));
+      const filteredOut = this.#unfilteredIndex(this.menu!).sections.get(ref.sectionId);
+      return filteredOut === undefined ? nothing : this.#sectionButton(filteredOut, mode);
     }
     const product = index.products.get(ref.productId);
     return product === undefined

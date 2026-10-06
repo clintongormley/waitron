@@ -241,7 +241,8 @@ painted or not, is filled `--wt-color-surface-sunken` with `--wt-color-text` lab
 `wt-button`'s disabled fade, and a painted one keeps its colour only on its left edge, as an inset
 stripe `--wt-space-1` wide edged on the tile's side by a one-pixel `--wt-color-text` line, which
 reaches 3:1 against both the fill and the stripe wherever the stripe alone does not
-([products.md](products.md), _Colour_, has the measurements). Reach for the filled-background idiom only for a colour that is itself the data,
+([products.md](products.md), _Colour_, has the measurements). A section tile a diet filter
+emptied keeps `wt-button`'s disabled fade instead. Reach for the filled-background idiom only for a colour that is itself the data,
 never as a shortcut around a `--wt-color-*` token.
 
 **A menu's Device Home Page, on the till and in the dashboard's preview.** Both draw it from one
@@ -257,8 +258,9 @@ fewer where a tile would be narrower than twice `--wt-tap-min` plus `--wt-space-
 (`HOME_GRID_COLUMNS`), so a narrow screen shows fewer columns in the same reading order. In Colours
 mode a tile is painted as above. In Thumbnails mode a tile with an image shows it above its name,
 4:3 with `--wt-radius-sm` corners, and is not painted; a tile with no image is painted as in
-Colours mode, or neutral. A section tile always keeps its "Section" word under its name, so a
-section and a product differ without colour; its image, when shown, takes the folder icon's place.
+Colours mode, or neutral. A section tile always has a second line under its name — "Section", or
+on the till "Nothing matches the filter" for one a diet filter emptied — so a section and a product
+differ without colour; its image, when shown, takes the folder icon's place.
 
 **Menu wording.** Spanish restaurant menus are "cartas"; an account menu remains "menú".
 The Structure tree and shortcut picker label an included menu "Menu: <name>" / "Carta: <name>",

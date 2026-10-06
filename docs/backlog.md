@@ -482,15 +482,14 @@ derivation (one 401, seven 429), because `passwordThrottle.begin` refuses a seco
 flight. **Next action:** give the till sign-in the same turn-taking (`inTurn`,
 `apps/server/src/attempt-turns.ts`) or an in-flight refusal.
 
-**A section with nothing to order in it disappears from the till, and the tiles after it move.** The
-menu browser leaves a section out of the structure, and draws an empty slot in its place as a
-shortcut, when no product beneath it is among the offers it is given (`indexMenu`, `apps/till/src/widgets/menu-browser.ts`): when every
-product in it was Inactive when the menu was published, while a diet filter is on and every product
-in it fails the filter (`apps/till/src/widgets/card-grid.ts`), and when every product in it is
-published as not sold separately. A section whose products are all sold out keeps its place, and its
-tile is not greyed; the products inside it are. Spec §5 wants buttons in predictable positions
-during service. **Next action:** the owner decides whether either kind of empty section should keep
-its place, for example greyed.
+**A section a diet filter empties keeps its place on the till (A297, owner 2026-10-06) — DONE.**
+**Decided (owner, 2026-10-06):** such a section stays, faded and not openable, in the structure, as
+a shortcut and inside an open section; if it is the section that is open, the till still says "Not
+found" and shows home. A section left with nothing because every product in it was Inactive when
+the menu was published or is published as not sold separately still leaves the structure, and a
+shortcut to it draws an empty slot (`indexMenu`, `apps/till/src/widgets/menu-browser.ts`). A section
+whose products are all sold out keeps its place, and its tile is not greyed; the products inside it
+are.
 
 **A joined tab of no party can have kitchen slips naming a table its ticket did not print.**
 Correction and MOVED slips name such a tab's lowest-id table (`orderTableLabels`,

@@ -4198,6 +4198,29 @@ describe("till-table-order-screen", () => {
       expect(grid(el).handheld).toBe(true);
     });
 
+    it("hands the browser the selected menu's products before the diet lens as well as after", async () => {
+      const veganCerveza: TillProduct = {
+        ...cerveza,
+        diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+      };
+      const croqueta: TillProduct = {
+        ...cerveza,
+        id: "croqueta",
+        menuItemId: "menu-item-croqueta",
+        name: "Croqueta",
+        diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+      };
+      const { el } = await mount({
+        menus: [foodMenu, servedMenu("cat-drinks", "Bebidas", false, [veganCerveza, croqueta])],
+        products: [bocadillo, veganCerveza, croqueta],
+        selectedMenuId: "cat-drinks",
+        selectedDiet: "vegan",
+      });
+      await grid(el).updateComplete;
+      expect(grid(el).products).toEqual([veganCerveza]);
+      expect(grid(el).unfilteredProducts).toEqual([veganCerveza, croqueta]);
+    });
+
     it("resolves a tab line's NAME from the full product set even when its menu is not the one shown", async () => {
       // A cerveza (drinks menu) line on the tab while the FOOD menu is selected: the round grid hides
       // cerveza, but the drawer must still name the line — name resolution reads the full products.
