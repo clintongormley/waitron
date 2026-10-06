@@ -466,3 +466,24 @@ editor alone. Read-only deactivation remains exempt. The sibling
 alongside the unchanged reason and report suites. The independent explicit-save discount-limit
 page owner remains Task 6 work; other contributed modal owners remain pending. Synthetic unload
 checks establish listener cancellation only, not a native reload prompt.
+
+## 2026-10-06 Booking Add/Edit checkpoint
+
+When you edit booking date, time, party size, contact details, notes or table choice, native Escape
+asks before discarding those values. Keep preserves the editor; Discard closes it once. The form
+also guards its scoped close API; it has no explicit Cancel button or backdrop close to intercept.
+Clean/reverted values close directly. Party size compares its existing numeric submission; blank
+phone and notes compare as null, while nonblank contact text retains its submitted spelling.
+
+An accepted Add/Edit commits its captured values before list refresh; a rejected write retains the
+draft. Newer delivered input remains visible and dirty against the submitted snapshot. Pending
+writes block dismissal. A same-id booking refresh cannot replace the opening baseline, and departed
+inputs, submits, native reports and write replies leave a replacement editor alone. Disconnect
+unregisters the scope and cancels its question.
+
+`packages/bookings/src/dashboard/booking-form.unsaved.test.ts` exercises these boundaries through
+the real BookingApi and rendered screen, alongside the unchanged Booking dashboard suites.
+The EN/ES, light/dark, 390/1280 matrix covers Add/Edit and the shared confirmation. Calendar filters
+and immediate seat/no-show/cancel/complete commands also have explicit exemption cases. Inline
+seating choices remain page work, as do actual navigation and native reload; synthetic unload checks establish cancellation
+of the listener only. Other contributed and till modal owners remain Task 4 work.

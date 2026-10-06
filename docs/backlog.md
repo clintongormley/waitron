@@ -1324,6 +1324,14 @@ writes keep the draft. Disconnect invalidates pending questions, and departed co
 leave a replacement editor alone. Read-only deactivation stays exempt. Focused cases are in
 `packages/adjustments/src/dashboard/reasons-screen.unsaved.test.ts`. The separate discount-limit
 page owner, other modal owners, actual page navigation and native reload remain Tasks 4–6.
+Booking Add/Edit now protects date, time, party size, contact details, notes and table choice
+through native Escape and the scoped close API. Clean/reverted values close directly; rejected
+writes retain the draft. Accepted writes commit their captured values before list refresh, and
+newer input remains visible and dirty. Same-id reads preserve the opening baseline; departed
+controls, close reports and write replies leave a replacement editor alone. Focused cases are in
+`packages/bookings/src/dashboard/booking-form.unsaved.test.ts`, alongside the unchanged Booking
+suites. Calendar filters and immediate booking status actions retain their existing paths. Inline
+seating choices and other page/navigation owners remain Tasks 5–6 work.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**

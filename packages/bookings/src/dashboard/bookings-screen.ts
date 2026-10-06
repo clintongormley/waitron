@@ -215,17 +215,18 @@ export class BookingsScreen extends LitElement {
   async #onCreate(event: CustomEvent<BookingInput>): Promise<void> {
     event.stopPropagation();
     if (this.busy) return;
+    const write = this.shadowRoot!.querySelector("dashboard-booking-form")!.writeCompletion();
     this.busy = true;
     this.#showError(null);
     let written = false;
     try {
       await this.api.createBooking(event.detail);
       written = true;
-      this.formOpen = false;
+      if (write.succeeded()) this.formOpen = false;
       await this.#reload();
     } catch (error) {
       if (written) this.#showReadError(error);
-      else this.#showError(codeOf(error));
+      else if (write.isCurrent()) this.#showError(codeOf(error));
     } finally {
       this.busy = false;
     }
@@ -234,17 +235,18 @@ export class BookingsScreen extends LitElement {
   async #onUpdate(event: CustomEvent<UpdateBookingDetail>): Promise<void> {
     event.stopPropagation();
     if (this.busy) return;
+    const write = this.shadowRoot!.querySelector("dashboard-booking-form")!.writeCompletion();
     this.busy = true;
     this.#showError(null);
     let written = false;
     try {
       await this.api.updateBooking(event.detail.id, event.detail.patch);
       written = true;
-      this.formOpen = false;
+      if (write.succeeded()) this.formOpen = false;
       await this.#reload();
     } catch (error) {
       if (written) this.#showReadError(error);
-      else this.#showError(codeOf(error));
+      else if (write.isCurrent()) this.#showError(codeOf(error));
     } finally {
       this.busy = false;
     }
