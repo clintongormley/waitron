@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, isNotNull, lte, ne, or, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, lte, ne, or, type SQL } from "drizzle-orm";
 import { kitchenStations, newId, type Transaction } from "@waitron/db";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
@@ -17,18 +17,21 @@ import {
   weekdayOf,
   type Interval,
 } from "./hours-rules.js";
-import type {
-  CalendarTone,
-  DateCell,
-  DateHoursCell,
-  HourPeriod,
-  HoursSubject,
-  LocalDate,
-  ResolvedHours,
-  SpecialDate,
-  SpecialDateInput,
-  WeekCell,
-  WeekDay,
+import {
+  HOURS_RANGE_MAX_DAYS,
+  type CalendarDay,
+  type DateCell,
+  type DateHoursCell,
+  type HourPeriod,
+  type HoursModel,
+  type HoursModelSubject,
+  type HoursSubject,
+  type LocalDate,
+  type ResolvedHours,
+  type SpecialDate,
+  type SpecialDateInput,
+  type WeekCell,
+  type WeekDay,
 } from "./hours-types.js";
 import { storedTime, type VenueScope } from "./operations.js";
 import type { DayPeriod, WeeklyInterval } from "./routing.js";
@@ -49,6 +52,9 @@ type CellTable = typeof hoursWeekCells | typeof specialDateHours;
 type PeriodTable = typeof hoursWeekPeriods | typeof specialDateHoursPeriods;
 
 const keyOf = (subject: HoursSubject) => `${subject.kind}:${subject.id}`;
+
+const bySubjectId = (a: DateHoursCell, b: DateHoursCell) =>
+  Number(a.subject.id > b.subject.id) - Number(a.subject.id < b.subject.id);
 
 function ownerOf(cells: CellTable, subject: HoursSubject): SQL {
   return subject.kind === "department"
@@ -407,7 +413,7 @@ async function readDateCells(tx: Transaction, id: string): Promise<DateHoursCell
       subject: subjectOfRow(cell),
       cell: cellOf(cell.mode, periods.get(cell.id) ?? []),
     }))
-    .sort((a, b) => Number(a.subject.id > b.subject.id) - Number(a.subject.id < b.subject.id));
+    .sort(bySubjectId);
 }
 
 export async function readSpecialDate(
@@ -920,28 +926,195 @@ export async function resolveOpeningDateHours(
   return (await resolveSubjects(tx, cfg, [parsed], defaults, openingDate)).resolved[0]!;
 }
 
-/** How the calendar colours one date, from the active departments' hours that date. */
-export async function readCalendarTone(
+/** Every date from `from` to `to`, both included: real dates, in order, at most a leap year. */
+function rangeDates(from: unknown, to: unknown): LocalDate[] {
+  if (!isLocalDate(from)) invalidHours("from");
+  if (!isLocalDate(to) || to < from) invalidHours("to");
+  const dates: LocalDate[] = [];
+  for (let date = from; date <= to; date = addDays(date, 1)) {
+    if (dates.length === HOURS_RANGE_MAX_DAYS) invalidHours("to");
+    dates.push(date);
+  }
+  return dates;
+}
+
+/**
+ * The venue's subjects, their standard weeks and the special dates in `dates` with their cells,
+ * in a fixed number of reads however many dates, subjects and special dates there are.
+ */
+async function readRange(tx: Transaction, cfg: VenueScope, dates: readonly LocalDate[]) {
+  const departmentRows = await tx
+    .select({
+      id: departments.id,
+      name: departments.name,
+      active: departments.active,
+      isDefault: departments.isDefault,
+    })
+    .from(departments)
+    .where(eq(departments.locationId, cfg.locationId))
+    .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
+  const stationRows = await tx
+    .select({
+      id: kitchenStations.id,
+      name: kitchenStations.name,
+      active: kitchenStations.active,
+      isDefault: kitchenStations.isDefault,
+    })
+    .from(kitchenStations)
+    .where(eq(kitchenStations.locationId, cfg.locationId))
+    .orderBy(asc(kitchenStations.displayOrder), asc(kitchenStations.name), asc(kitchenStations.id));
+  const subjects: HoursModelSubject[] = [
+    ...departmentRows.map((row) => ({ kind: "department" as const, ...row })),
+    ...stationRows.map((row) => ({ kind: "station" as const, ...row })),
+  ];
+  const weekCells = await tx
+    .select()
+    .from(hoursWeekCells)
+    .where(
+      or(
+        and(
+          isNotNull(hoursWeekCells.departmentId),
+          inArray(
+            hoursWeekCells.departmentId,
+            departmentRows.map((row) => row.id),
+          ),
+        ),
+        and(
+          isNotNull(hoursWeekCells.stationId),
+          inArray(
+            hoursWeekCells.stationId,
+            stationRows.map((row) => row.id),
+          ),
+        ),
+      ),
+    );
+  const weekPeriods = await periodsByCell(
+    tx,
+    hoursWeekPeriods,
+    weekCells.map((cell) => cell.id),
+  );
+  const weeks = new Map<string, (WeekCell | undefined)[]>();
+  for (const cell of weekCells) {
+    const key = keyOf(subjectOfRow(cell));
+    const week = weeks.get(key) ?? [];
+    week[cell.weekday] = cellOf(cell.mode, weekPeriods.get(cell.id) ?? []);
+    weeks.set(key, week);
+  }
+  const specials = await tx
+    .select({
+      id: specialDates.id,
+      date: specialDates.date,
+      name: specialDates.name,
+      colour: specialDates.colour,
+      closeWholeVenue: specialDates.closeWholeVenue,
+    })
+    .from(specialDates)
+    .where(
+      and(
+        eq(specialDates.locationId, cfg.locationId),
+        gte(specialDates.date, dates[0]!),
+        lte(specialDates.date, dates[dates.length - 1]!),
+      ),
+    )
+    .orderBy(asc(specialDates.date));
+  const dateCells =
+    specials.length === 0
+      ? []
+      : await tx
+          .select()
+          .from(specialDateHours)
+          .where(
+            inArray(
+              specialDateHours.specialDateId,
+              specials.map((special) => special.id),
+            ),
+          );
+  const datePeriods = await periodsByCell(
+    tx,
+    specialDateHoursPeriods,
+    dateCells.map((cell) => cell.id),
+  );
+  const cellsByDate = new Map<string, DateHoursCell[]>(specials.map((s) => [s.id, []]));
+  for (const cell of dateCells)
+    cellsByDate.get(cell.specialDateId)!.push({
+      subject: subjectOfRow(cell),
+      cell: cellOf(cell.mode, datePeriods.get(cell.id) ?? []),
+    });
+  for (const cells of cellsByDate.values()) cells.sort(bySubjectId);
+  return { subjects, weeks, specials, cellsByDate };
+}
+
+/**
+ * Each date of the range with its special date and calendar colour. The colour is Closed only
+ * when every active department is Closed that date, by its week, the date's cell or a whole-venue
+ * closure.
+ */
+function calendarDays(
+  dates: readonly LocalDate[],
+  range: Awaited<ReturnType<typeof readRange>>,
+): CalendarDay[] {
+  const specialOn = new Map(range.specials.map((special) => [special.date, special]));
+  const active = range.subjects.filter((s) => s.kind === "department" && s.active);
+  return dates.map((date) => {
+    const special = specialOn.get(date) ?? null;
+    const cells = special === null ? [] : range.cellsByDate.get(special.id)!;
+    const modes = active.map((department) => {
+      if (special?.closeWholeVenue) return "closed";
+      const own = cells.find((entry) => entry.subject.id === department.id);
+      if (own !== undefined) return own.cell.mode;
+      return range.weeks.get(keyOf(department))?.[weekdayOf(date)]?.mode ?? "not_set";
+    });
+    return {
+      date,
+      specialDate: special,
+      holidays: [],
+      tone: calendarTone(special?.colour ?? null, modes as ResolvedHours["cell"]["mode"][]),
+    };
+  });
+}
+
+/** The calendar from `from` to `to`, both included. */
+export async function readCalendarDays(
   tx: Transaction,
   cfg: VenueScope,
-  date: LocalDate,
-): Promise<CalendarTone> {
-  if (!isLocalDate(date)) invalidHours("date");
-  const active = await tx
-    .select({ id: departments.id })
-    .from(departments)
-    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)));
-  const { special, resolved } = await resolveSubjects(
-    tx,
-    cfg,
-    active.map((row) => ({ kind: "department" as const, id: row.id })),
-    new Set(),
-    date,
-  );
-  return calendarTone(
-    special?.colour ?? null,
-    resolved.map((entry) => entry.cell.mode),
-  );
+  from: LocalDate,
+  to: LocalDate,
+): Promise<CalendarDay[]> {
+  const dates = rangeDates(from, to);
+  return calendarDays(dates, await readRange(tx, cfg, dates));
+}
+
+/** Everything the Hours page shows for one range of dates, with the venue's date at `at`. */
+export async function readHoursModel(
+  tx: Transaction,
+  cfg: VenueScope,
+  from: LocalDate,
+  to: LocalDate,
+  at: Date,
+): Promise<HoursModel> {
+  const dates = rangeDates(from, to);
+  const clock = await readLocationClock(tx, cfg.locationId);
+  const range = await readRange(tx, cfg, dates);
+  const civilDate = venueLocalMoment(at, clock)?.civilDate ?? null;
+  return {
+    timeZone: clock.timeZone,
+    dayCutover: clock.dayCutover,
+    civilDate,
+    clockReadable: civilDate !== null,
+    subjects: range.subjects,
+    week: range.subjects.map(({ kind, id }) => ({
+      subject: { kind, id },
+      days: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        cell: range.weeks.get(keyOf({ kind, id }))?.[weekday] ?? { mode: "not_set", periods: [] },
+      })),
+    })),
+    days: calendarDays(dates, range),
+    specialCells: range.specials.map((special) => ({
+      specialDateId: special.id,
+      cells: range.cellsByDate.get(special.id)!,
+    })),
+  };
 }
 
 /** A station's opening schedule as routing reads it. */

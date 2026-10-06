@@ -64,6 +64,15 @@ import {
 } from "./routing-store.js";
 import type { ExceptionInput, RouteTarget } from "./routing.js";
 import { isLocalDate, weekdayOf } from "./hours-rules.js";
+import { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
+import {
+  deleteSpecialDate,
+  duplicateSpecialDate,
+  readHoursModel,
+  replaceWeekHours,
+  saveSpecialDate,
+} from "./hours.js";
+import type { HoursSubject, LocalDate, SpecialDateInput, WeekDay } from "./hours-types.js";
 import type { RoutingChange } from "./routing-types.js";
 import { replaceStationHours, setStationFallback, setStationToday } from "./station-times.js";
 import "./errors.js";
@@ -269,6 +278,98 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         });
         return fn(tx);
       });
+
+    const viewed = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
+      withTransaction(ctx.db, async (tx) => {
+        await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.view" });
+        return fn(tx);
+      });
+
+    app.get("/management-api/venue-service/hours", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const at = new Date();
+        const from = c.req.query("from") ?? "";
+        const to = c.req.query("to") ?? "";
+        return c.json(await viewed(sessionId, (tx) => readHoursModel(tx, ctx.cfg, from, to, at)));
+      }),
+    );
+
+    app.put("/management-api/venue-service/hours/week", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const at = new Date();
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        await gated(sessionId, (tx) =>
+          replaceWeekHours(
+            tx,
+            ctx.cfg,
+            body.subject as HoursSubject,
+            body.days as readonly WeekDay[],
+            at,
+          ),
+        );
+        return c.body(null, 204);
+      }),
+    );
+
+    app.post("/management-api/venue-service/special-dates", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const at = new Date();
+        const body = await readJsonBody<SpecialDateInput>(c);
+        return c.json(
+          await gated(sessionId, (tx) => saveSpecialDate(tx, ctx.cfg, null, body, at)),
+          201,
+        );
+      }),
+    );
+
+    app.put("/management-api/venue-service/special-dates/:id", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const at = new Date();
+        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
+        const body = await readJsonBody<SpecialDateInput>(c);
+        return c.json(await gated(sessionId, (tx) => saveSpecialDate(tx, ctx.cfg, id, body, at)));
+      }),
+    );
+
+    // A copy takes everything but its date from the source, so the request carries dates only.
+    app.post("/management-api/venue-service/special-dates/:id/duplicate", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const at = new Date();
+        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const copies = await gated(sessionId, (tx) => {
+          const extra = Object.keys(body).find((key) => key !== "dates");
+          if (extra !== undefined)
+            throw new AppError("management.request_invalid", { field: extra });
+          return duplicateSpecialDate(
+            tx,
+            ctx.cfg,
+            id,
+            body.dates as readonly LocalDate[],
+            at,
+            VENUE_SERVICE_CALENDAR_PARTICIPANTS,
+          );
+        });
+        return c.json(copies, 201);
+      }),
+    );
+
+    app.delete("/management-api/venue-service/special-dates/:id", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const at = new Date();
+        const id = requireUuidParam(c.req.param("id"), "SpecialDateId");
+        await gated(sessionId, (tx) =>
+          deleteSpecialDate(tx, ctx.cfg, id, at, VENUE_SERVICE_CALENDAR_PARTICIPANTS),
+        );
+        return c.body(null, 204);
+      }),
+    );
 
     app.get("/management-api/venue-service/stations/overview", (c) =>
       run(c, log, async () => {

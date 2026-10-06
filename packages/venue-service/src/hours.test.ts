@@ -16,7 +16,7 @@ import {
   cellIntervals,
   deleteSpecialDate,
   duplicateSpecialDate,
-  readCalendarTone,
+  readCalendarDays,
   readSpecialDate,
   readWeekHours,
   replaceWeekHours,
@@ -1023,7 +1023,7 @@ const resolve = (f: Fixture, subject: HoursSubject, date: LocalDate) =>
   withTransaction(db, (tx) => resolveOpeningDateHours(tx, f.cfg, subject, date));
 
 const tone = (f: Fixture, date: LocalDate) =>
-  withTransaction(db, (tx) => readCalendarTone(tx, f.cfg, date));
+  withTransaction(db, async (tx) => (await readCalendarDays(tx, f.cfg, date, date))[0]!.tone);
 
 const duplicate = (
   f: Fixture,
@@ -1214,7 +1214,7 @@ describe("one subject's hours on one opening date", () => {
     });
     await expect(tone(f, "2026-02-30")).rejects.toMatchObject({
       code: "hours.invalid",
-      params: { field: "date" },
+      params: { field: "from" },
     });
   });
 });

@@ -19,7 +19,8 @@ export {
   cellIntervals,
   deleteSpecialDate,
   duplicateSpecialDate,
-  readCalendarTone,
+  readCalendarDays,
+  readHoursModel,
   readSpecialDate,
   readWeekHours,
   replaceWeekHours,
@@ -30,4 +31,4 @@ export {
 export { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
 export { venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
 export type * from "./hours-types.js";
-export { CALENDAR_COLOURS, WEEK_DISPLAY_ORDER } from "./hours-types.js";
+export { CALENDAR_COLOURS, HOURS_RANGE_MAX_DAYS, WEEK_DISPLAY_ORDER } from "./hours-types.js";

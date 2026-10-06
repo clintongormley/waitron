@@ -1,0 +1,114 @@
+import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
+import type {
+  HoursModel,
+  HoursSubject,
+  LocalDate,
+  SpecialDate,
+  SpecialDateInput,
+  WeekDay,
+} from "../hours-types.js";
+import { QUERY_DEPENDENCIES } from "./live-queries.js";
+
+const BASE = "/management-api/venue-service";
+
+/** Re-read with no row written, so today's date and the labels that follow it move on. */
+const REFRESH_MS = 60_000;
+
+export class HoursApi {
+  constructor(
+    private readonly request: DashboardRequest,
+    readonly liveData?: LiveData,
+  ) {}
+
+  #read(from: LocalDate, to: LocalDate, passive: boolean): Promise<HoursModel> {
+    const query = new URLSearchParams({ from, to });
+    return this.request<HoursModel>(`${BASE}/hours?${query}`, "GET", undefined, { passive });
+  }
+
+  load(from: LocalDate, to: LocalDate): Promise<HoursModel> {
+    return this.#read(from, to, false);
+  }
+
+  /**
+   * Keeps `apply` fed with the range's model: on any change to what it reads, and on a timer.
+   * Every read is passive. `failed` hears each failed read and `recovered` the first good one
+   * after a failure. The returned function detaches, after which nothing more is read.
+   */
+  watchHours(
+    from: LocalDate,
+    to: LocalDate,
+    apply: (model: HoursModel) => void,
+    failed: (error: unknown) => void,
+    recovered: () => void,
+  ): () => void {
+    let failing = false;
+    let attached = true;
+    const settle = (read: Promise<HoursModel>) =>
+      read.then(
+        (model) => {
+          if (!attached) return;
+          apply(model);
+          if (failing) {
+            failing = false;
+            recovered();
+          }
+        },
+        (error: unknown) => {
+          if (!attached) return;
+          failing = true;
+          failed(error);
+        },
+      );
+    if (this.liveData === undefined) {
+      const read = () => void settle(this.#read(from, to, true));
+      read();
+      const timer = setInterval(read, REFRESH_MS);
+      return () => {
+        attached = false;
+        clearInterval(timer);
+      };
+    }
+    const observed = this.liveData.observe(
+      {
+        key: `venue-service:hours:${from}:${to}`,
+        dependencies: QUERY_DEPENDENCIES.hours.map((type) => ({ type })),
+        refreshMs: REFRESH_MS,
+        read: () => this.#read(from, to, true),
+      },
+      () => {
+        const snapshot = observed.snapshot;
+        if (snapshot.loading || snapshot.status === "pending") return;
+        void settle(
+          snapshot.status === "error"
+            ? Promise.reject(snapshot.error)
+            : Promise.resolve(snapshot.value as HoursModel),
+        );
+      },
+    );
+    return () => {
+      attached = false;
+      observed.unsubscribe();
+    };
+  }
+
+  saveWeek(subject: HoursSubject, days: readonly WeekDay[]): Promise<void> {
+    return this.request(`${BASE}/hours/week`, "PUT", { subject, days });
+  }
+
+  /** Creates a special date when `id` is null, otherwise edits it in place. */
+  saveDate(id: string | null, input: SpecialDateInput): Promise<SpecialDate> {
+    return id === null
+      ? this.request(`${BASE}/special-dates`, "POST", input)
+      : this.request(`${BASE}/special-dates/${encodeURIComponent(id)}`, "PUT", input);
+  }
+
+  duplicateDate(id: string, dates: readonly LocalDate[]): Promise<SpecialDate[]> {
+    return this.request(`${BASE}/special-dates/${encodeURIComponent(id)}/duplicate`, "POST", {
+      dates,
+    });
+  }
+
+  deleteDate(id: string): Promise<void> {
+    return this.request(`${BASE}/special-dates/${encodeURIComponent(id)}`, "DELETE");
+  }
+}
