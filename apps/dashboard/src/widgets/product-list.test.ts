@@ -227,6 +227,45 @@ describe("product-list", () => {
     expect(cell.textContent).toContain("Cocktail bar · varies by service zone");
     expect(cell.querySelector("a")?.getAttribute("href")).toBe("/manage/prep-stations/test/mojito");
   });
+  it("leaves a product's cell blank, without a link, when the made-at read has no entry for it", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "lager" }), product({ id: "ale", active: false })],
+      madeAt: {
+        lager: {
+          stationId: "bar",
+          stationName: "Bar",
+          noPreparation: false,
+          noReplacement: false,
+          variesByZone: false,
+        },
+      },
+    });
+    const root = await tableRoot(el);
+    await choose(el, "active", "");
+    const cell = cellUnder(root, "ale", "Made at");
+    expect(cell.textContent!.trim()).toBe("");
+    expect(cell.querySelector("a")).toBeNull();
+  });
+  it("says nowhere, with the tester link, for a product the made-at read routes to no station", async () => {
+    setLocale("en");
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: [product({ id: "bread" })],
+      madeAt: {
+        bread: {
+          stationId: null,
+          stationName: null,
+          noPreparation: false,
+          noReplacement: false,
+          variesByZone: false,
+        },
+      },
+    });
+    const root = await tableRoot(el);
+    const cell = cellUnder(root, "bread", "Made at");
+    expect(cell.textContent!.trim()).toBe("Nowhere");
+    expect(cell.querySelector("a")?.getAttribute("href")).toBe("/manage/prep-stations/test/bread");
+  });
   it("renders one shared-table row per product", async () => {
     const products = [product({ id: "a" }), product({ id: "b" }), product({ id: "c" })];
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
@@ -3305,7 +3344,14 @@ describe("a product's variants in the list", () => {
 
   it("shows only a variant's price, status and menu, leaving its other cells empty", async () => {
     setLocale("en");
-    const { table, root } = await mountDeli();
+    const route = {
+      stationId: "deli",
+      stationName: "Deli counter",
+      noPreparation: false,
+      noReplacement: false,
+      variesByZone: false,
+    };
+    const { table, root } = await mountDeli({ madeAt: { thin: route, cecina: route } });
     await openVariants(root, table, "cecina");
     for (const header of [
       t("product.made_at"),
