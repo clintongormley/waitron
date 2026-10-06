@@ -586,6 +586,84 @@ describe("heldRecords", () => {
       { registroId: behind.registroId, caseId: originalCase.id },
     ]);
   });
+
+  it("names the case of the rejected record immediately before a held record that nothing earlier holds, and the records held behind it the same case", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 4 });
+    const [earlierRefusal, lastRefusal, held, behind] = seeded.registroIds as [
+      string,
+      string,
+      string,
+      string,
+    ];
+    await setEstado(earlierRefusal, "rechazado");
+    await setEstado(lastRefusal, "rechazado");
+    await setEstado(held, "detenido");
+    await setEstado(behind, "detenido");
+    const lastRefusalCase = await inTx(async (tx) => {
+      await openFilingCase(tx, {
+        registroId: earlierRefusal,
+        cause: "fiscal.registro_rechazado",
+        evidence: EVIDENCE,
+        now: OPENED_AT,
+      });
+      return openFilingCase(tx, {
+        registroId: lastRefusal,
+        cause: "fiscal.registro_rechazado",
+        evidence: EVIDENCE,
+        now: LATER,
+      });
+    });
+
+    const listed = await inTx((tx) => heldRecords(tx));
+
+    expect(listed).toEqual([
+      { registroId: held, caseId: lastRefusalCase.id },
+      { registroId: behind, caseId: lastRefusalCase.id },
+    ]);
+  });
+
+  it("names no case for a held record whose immediate predecessor was accepted, though a rejected record sits before that", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+    const [rejected, accepted, held] = seeded.registroIds as [string, string, string];
+    await setEstado(rejected, "rechazado");
+    await setEstado(accepted, "aceptado");
+    await setEstado(held, "detenido");
+    await inTx((tx) =>
+      openFilingCase(tx, {
+        registroId: rejected,
+        cause: "fiscal.registro_rechazado",
+        evidence: EVIDENCE,
+        now: OPENED_AT,
+      }),
+    );
+
+    const listed = await inTx((tx) => heldRecords(tx));
+
+    expect(listed).toEqual([{ registroId: held, caseId: null }]);
+  });
+
+  it("names what an earlier held record names, even when the record immediately before is a rejected one", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+    const [heldFirst, rejected, heldLater] = seeded.registroIds as [string, string, string];
+    await setEstado(heldFirst, "detenido");
+    await setEstado(rejected, "rechazado");
+    await setEstado(heldLater, "detenido");
+    await inTx((tx) =>
+      openFilingCase(tx, {
+        registroId: rejected,
+        cause: "fiscal.registro_rechazado",
+        evidence: EVIDENCE,
+        now: OPENED_AT,
+      }),
+    );
+
+    const listed = await inTx((tx) => heldRecords(tx));
+
+    expect(listed).toEqual([
+      { registroId: heldFirst, caseId: null },
+      { registroId: heldLater, caseId: null },
+    ]);
+  });
 });
 
 describe("the cause column", () => {

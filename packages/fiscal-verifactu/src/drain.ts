@@ -47,6 +47,10 @@ export const RECUPERACION_ENVIANDO_MS = 5 * 60_000;
 export const DEFAULT_SKIP_RETRY_MS = 5 * 60 * 1000;
 const MAX_CONSULTA_PAGES = 10;
 
+/** How many refusals in a row with one code on a chain hold its next record
+ * (`haltOpenChainClaims`). */
+export const SAME_CODE_REFUSAL_LIMIT = 3;
+
 /** The first retry's wait, and the per-attempt doubling unit `backoffMs` scales from. */
 export const BACKOFF_BASE_MS = 60_000;
 /** The retry ceiling: a batch that keeps failing retries hourly, as art. 16.4 requires. */
@@ -499,17 +503,27 @@ async function claimBatch(
 
 /**
  * Holds a row `claimBatch` just claimed, in the claim's own transaction so it never reaches
- * `client.submit`, when an earlier row of its chain is `detenido`, or when it is a cancellation
- * whose original (same chain, same invoice identity) is `rechazado`. A held row becomes
- * `detenido` with `incidencia`, so every later claimed row of its chain is held with it.
+ * `client.submit`, when an earlier row of its chain is `detenido`, when it is a cancellation
+ * whose original (same chain, same invoice identity) is `rechazado`, or when this is its first
+ * claim and the `SAME_CODE_REFUSAL_LIMIT` rows immediately before it on its chain are all
+ * `rechazado` with one and the same code. A held row becomes `detenido` with `incidencia`, so
+ * every later claimed row of its chain is held with it.
  *
  * A cancellation whose original, on the same chain, is `detenido` is held by the first rule: that
  * original is an earlier row of the chain. For a record of a conflict's own envío, see
  * `haltSuccessors`.
  *
- * A `rechazado` row holds nothing behind it (design §7.1,
+ * Short of such a run, a `rechazado` row holds nothing behind it (design §7.1,
  * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md). A cancellation of a
  * rejected original is held because nothing in this repository sets `SinRegistroPrevio`.
+ *
+ * The run rule spares a row already sent, or its outcome at AEAT would stay unknown: `claimBatch`
+ * has incremented `intentos` in this transaction, so a first claim reads 1 here. `secuencia` is
+ * unique per node (`registros_tenant_node_secuencia_uq`), not per chain, so "immediately before"
+ * is the highest positions below this row's on its chain. A chain's rows are all on its node
+ * (`appendToChain`, ./chain.ts), and naming the node lets `registros_node_secuencia_idx` serve
+ * that walk: without it, `explain query plan` on the migrated schema showed a scan of every
+ * record and a sort per claimed row.
  *
  * No incident and no case of its own: `heldRecords` (./filing-cases.ts) lists each held record
  * beside the case that holds it. A `halted` ack is written per held id, because this
@@ -540,6 +554,21 @@ async function haltOpenChainClaims(
           and original.num_serie_factura = r.num_serie_factura
           and original.fecha_expedicion_factura = r.fecha_expedicion_factura
           and original_envio.estado = 'rechazado'
+      )) or (exists (
+        select 1 from envios own where own.registro_id = r.id and own.intentos = 1
+      ) and (
+        select count(run.codigo_error) = ${SAME_CODE_REFUSAL_LIMIT}
+          and count(distinct run.codigo_error) = 1
+          and min(run.estado) = 'rechazado' and max(run.estado) = 'rechazado'
+        from (
+          select preceding_envio.estado, preceding_envio.codigo_error
+          from registros_facturacion preceding
+          left join envios preceding_envio on preceding_envio.registro_id = preceding.id
+          where preceding.node_id = r.node_id and preceding.sif_id = r.sif_id
+            and preceding.secuencia < r.secuencia
+          order by preceding.secuencia desc
+          limit ${SAME_CODE_REFUSAL_LIMIT}
+        ) run
       )))
   `);
   if (blocked.rows.length === 0) return claimed;
@@ -977,8 +1006,7 @@ async function routeB(client: VerifactuClient, row: DueRow): Promise<boolean | n
  * record unknown, as missing evidence does.
  *
  * A conflict opens a case and holds this chain's records not yet sent (`haltSuccessors`): no probe
- * has sent a successor after one (design §5, "Implemented, 2026-10-06"). Why a rejection holds
- * nothing: design §7.1. Design:
+ * has sent a successor after one (design §5, "Implemented, 2026-10-06"). Design:
  * docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md.
  */
 async function handleDuplicate(

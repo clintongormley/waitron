@@ -12,6 +12,7 @@ import {
   seedIndependentChain,
   seedPendingEnvios,
   seedSecondChain,
+  type SeededDrain,
 } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import {
@@ -175,6 +176,285 @@ describe("drain — a rejection is kept and does not hold its chain", () => {
     });
     expect(result.recordsAccepted).toBe(1);
     expect(result.recordsHalted).toBe(0);
+  });
+});
+
+describe("drain — a run of refusals with one code stops its chain", () => {
+  const minutesAfterFirst = (minutes: number) => new Date(FIRST.getTime() + minutes * 60_000);
+  const REFUSED = "fiscal.registro_rechazado";
+
+  /** Seeds one record per entry and files them in one envío: a number is the code AEAT refuses
+   * that record with, `null` lets it be accepted. */
+  async function fileOneEnvio(
+    aeat: ReturnType<typeof fakeAeat>,
+    codes: (number | null)[],
+    client: VerifactuClient = aeat.client(),
+  ) {
+    const seeded = await seedPendingEnvios(suite.db, { count: codes.length });
+    codes.forEach((code, index) => {
+      if (code !== null) aeat.reject(seeded.facturaKeys[index]!, code, `Rechazo ${code}`);
+    });
+    await drain(deps(client), FIRST);
+    return seeded;
+  }
+
+  async function estados(ids: string[]): Promise<string[]> {
+    return Promise.all(ids.map(async (id) => (await envioOf(id)).estado));
+  }
+
+  it("holds the next record, unsent, after three refusals with one code in one envío", async () => {
+    const aeat = fakeAeat();
+    const seeded = await fileOneEnvio(aeat, [1100, 1100, 1100]);
+    expect(await estados(seeded.registroIds)).toEqual(["rechazado", "rechazado", "rechazado"]);
+    const next = await appendPendingAlta(suite.db, seeded, 4);
+    const wire = recording(aeat.client());
+
+    const result = await drain(deps(wire.client), SECOND);
+
+    expect(wire.sent).toEqual([]);
+    expect(aeat.stored().some((s) => s.refExterna === next.registroId)).toBe(false);
+    expect(await envioOf(next.registroId)).toMatchObject({
+      estado: "detenido",
+      csv: null,
+      incidencia: true,
+    });
+    expect(await ackOf(next.registroId)).toBe("halted");
+    expect(result.recordsHalted).toBe(1);
+    expect(result.recordsSubmitted).toBe(0);
+    expect(await cases()).toHaveLength(3);
+    expect(await incidentCodes()).toEqual([REFUSED, REFUSED, REFUSED]);
+  });
+
+  it("holds the next record after three same-code refusals made one per envío", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    aeat.reject(seeded.facturaKeys[0]!, 1100, "Rechazo 1100");
+    await drain(deps(aeat.client()), FIRST);
+    const wire = recording(aeat.client());
+    const second = await appendPendingAlta(suite.db, seeded, 2);
+    aeat.reject(second.facturaKey, 1100, "Rechazo 1100");
+    await drain(deps(wire.client), minutesAfterFirst(1));
+    const third = await appendPendingAlta(suite.db, seeded, 3);
+    aeat.reject(third.facturaKey, 1100, "Rechazo 1100");
+    await drain(deps(wire.client), minutesAfterFirst(2));
+    expect(wire.sent).toEqual([[second.registroId], [third.registroId]]);
+    const fourth = await appendPendingAlta(suite.db, seeded, 4);
+
+    const result = await drain(deps(wire.client), minutesAfterFirst(3));
+
+    expect(wire.sent).toHaveLength(2);
+    expect(await envioOf(fourth.registroId)).toMatchObject({
+      estado: "detenido",
+      incidencia: true,
+    });
+    expect(result.recordsHalted).toBe(1);
+  });
+
+  it("holds two records appended after the run in one pass, sending neither", async () => {
+    const aeat = fakeAeat();
+    const seeded = await fileOneEnvio(aeat, [1100, 1100, 1100]);
+    const fourth = await appendPendingAlta(suite.db, seeded, 4);
+    const fifth = await appendPendingAlta(suite.db, seeded, 5);
+    const wire = recording(aeat.client());
+
+    const result = await drain(deps(wire.client), SECOND);
+
+    expect(wire.sent).toEqual([]);
+    expect(await estados([fourth.registroId, fifth.registroId])).toEqual(["detenido", "detenido"]);
+    expect(await ackOf(fifth.registroId)).toBe("halted");
+    expect(result.recordsHalted).toBe(2);
+    expect(await cases()).toHaveLength(3);
+  });
+
+  it("names the case of the run's last refusal for the record the run holds and the one held behind it", async () => {
+    const aeat = fakeAeat();
+    const seeded = await fileOneEnvio(aeat, [1100, 1100, 1100]);
+    const fourth = await appendPendingAlta(suite.db, seeded, 4);
+    const fifth = await appendPendingAlta(suite.db, seeded, 5);
+    await drain(deps(aeat.client()), SECOND);
+    const lastRefusal = (await cases()).find((c) => c.registroId === seeded.registroIds[2]);
+
+    const held = await withTransaction(suite.db, (tx) => heldRecords(tx));
+
+    expect(held).toEqual([
+      { registroId: fourth.registroId, caseId: lastRefusal!.id },
+      { registroId: fifth.registroId, caseId: lastRefusal!.id },
+    ]);
+  });
+
+  it("holds the next record after a same-code run whose positions on the chain have gaps", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const fifth = await appendPendingAlta(suite.db, seeded, 5);
+    const ninth = await appendPendingAlta(suite.db, seeded, 9);
+    for (const key of [seeded.facturaKeys[0]!, fifth.facturaKey, ninth.facturaKey]) {
+      aeat.reject(key, 1100, "Rechazo 1100");
+    }
+    await drain(deps(aeat.client()), FIRST);
+    expect(await estados([seeded.registroIds[0]!, fifth.registroId, ninth.registroId])).toEqual([
+      "rechazado",
+      "rechazado",
+      "rechazado",
+    ]);
+    const next = await appendPendingAlta(suite.db, seeded, 13);
+    const wire = recording(aeat.client());
+
+    await drain(deps(wire.client), SECOND);
+
+    expect(wire.sent).toEqual([]);
+    expect((await envioOf(next.registroId)).estado).toBe("detenido");
+  });
+
+  it("keeps another chain sending, even at a later position, while one chain is held", async () => {
+    const aeat = fakeAeat();
+    const seeded = await fileOneEnvio(aeat, [1100, 1100, 1100]);
+    // Between the run's positions and the held record's: read across both chains, the three
+    // positions below this record are the run's.
+    const other = await seedSecondChain(suite.db, seeded, 100);
+    const held = await appendPendingAlta(suite.db, seeded, 200);
+    const wire = recording(aeat.client());
+
+    await drain(deps(wire.client), SECOND);
+
+    expect(wire.sent).toEqual([[other.registroId]]);
+    expect((await envioOf(other.registroId)).estado).toBe("aceptado");
+    expect((await envioOf(held.registroId)).estado).toBe("detenido");
+  });
+
+  it("sends the first record of a new chain on the same node after the old chain's run", async () => {
+    const aeat = fakeAeat();
+    const seeded = await fileOneEnvio(aeat, [1100, 1100, 1100]);
+    const newChain = await seedPendingEnvios(suite.db, {
+      count: 1,
+      identity: { locationId: seeded.locationId, nodeId: seeded.nodeId, nif: seeded.nif },
+    });
+    expect(newChain.sifId).not.toBe(seeded.sifId);
+    const wire = recording(aeat.client());
+
+    await drain(deps(wire.client), SECOND);
+
+    expect(wire.sent).toEqual([newChain.registroIds]);
+  });
+
+  it("lets every record of the run's own envío keep its own outcome, and an accept there lets the next record go", async () => {
+    const aeat = fakeAeat();
+    const seeded = await fileOneEnvio(aeat, [1100, 1100, 1100, null]);
+    const accepted = seeded.registroIds[3]!;
+    expect(await envioOf(accepted)).toMatchObject({ estado: "aceptado", csv: expect.any(String) });
+    const next = await appendPendingAlta(suite.db, seeded, 5);
+    const wire = recording(aeat.client());
+
+    await drain(deps(wire.client), SECOND);
+
+    expect(wire.sent).toEqual([[next.registroId]]);
+  });
+
+  describe("controls: the next record is sent", () => {
+    async function sendsNext(seeded: SeededDrain, aeat: ReturnType<typeof fakeAeat>) {
+      const next = await appendPendingAlta(suite.db, seeded, seeded.registroIds.length + 1);
+      const wire = recording(aeat.client());
+      const result = await drain(deps(wire.client), SECOND);
+      expect(wire.sent).toEqual([[next.registroId]]);
+      expect(result.recordsHalted).toBe(0);
+    }
+
+    it("after a run of two refusals with one code", async () => {
+      const aeat = fakeAeat();
+      const seeded = await fileOneEnvio(aeat, [1100, 1100]);
+      await sendsNext(seeded, aeat);
+    });
+
+    it("after three refusals whose oldest carries a different code", async () => {
+      const aeat = fakeAeat();
+      const seeded = await fileOneEnvio(aeat, [1101, 1100, 1100]);
+      await sendsNext(seeded, aeat);
+    });
+
+    it("after three same-code refusals with an accept among the last three records", async () => {
+      const aeat = fakeAeat();
+      const seeded = await fileOneEnvio(aeat, [1100, 1100, null, 1100]);
+      expect(await estados(seeded.registroIds)).toEqual([
+        "rechazado",
+        "rechazado",
+        "aceptado",
+        "rechazado",
+      ]);
+      await sendsNext(seeded, aeat);
+    });
+
+    it("after three refusals whose lines carry no code", async () => {
+      const aeat = fakeAeat();
+      const noCode = rewritingLines(aeat.client(), (linea) => ({
+        ...linea,
+        CodigoErrorRegistro: undefined,
+      }));
+      const seeded = await fileOneEnvio(aeat, [1100, 1100, 1100], noCode);
+      expect(await estados(seeded.registroIds)).toEqual(["rechazado", "rechazado", "rechazado"]);
+      await sendsNext(seeded, aeat);
+    });
+
+    it("after three same-code refusals, one of whose lines carries no code", async () => {
+      const aeat = fakeAeat();
+      let lines = 0;
+      const middleWithoutCode = rewritingLines(aeat.client(), (linea) =>
+        (lines += 1) === 2 ? { ...linea, CodigoErrorRegistro: undefined } : linea,
+      );
+      const seeded = await fileOneEnvio(aeat, [1100, 1100, 1100], middleWithoutCode);
+      expect(await estados(seeded.registroIds)).toEqual(["rechazado", "rechazado", "rechazado"]);
+      const { rows } = await suite.db.execute<{ codigo_error: string | null }>(sql`
+        select e.codigo_error from envios e join registros_facturacion r on r.id = e.registro_id
+        order by r.secuencia
+      `);
+      expect(rows.map((row) => row.codigo_error)).toEqual(["1100", null, "1100"]);
+      await sendsNext(seeded, aeat);
+    });
+  });
+
+  describe("a record already sent to AEAT is never held by the run", () => {
+    it("sends again, at its retry, a record whose line in the run's envío was unreadable", async () => {
+      const aeat = fakeAeat();
+      const seeded = await seedPendingEnvios(suite.db, { count: 5 });
+      for (const key of seeded.facturaKeys.slice(0, 3)) aeat.reject(key, 1100, "Rechazo 1100");
+      const unreadable = seeded.registroIds[3]!;
+      const real = aeat.client();
+      await drain(
+        deps(
+          rewritingLines(real, (linea) =>
+            linea.RefExterna === unreadable ? { ...linea, EstadoRegistro: undefined } : linea,
+          ),
+        ),
+        FIRST,
+      );
+      expect(await estados(seeded.registroIds)).toEqual([
+        "rechazado",
+        "rechazado",
+        "rechazado",
+        "pendiente",
+        "aceptado",
+      ]);
+      const wire = recording(real);
+
+      await drain(deps(wire.client), new Date(FIRST.getTime() + backoffMs(1)));
+
+      expect(wire.sent).toEqual([[unreadable]]);
+      expect((await envioOf(unreadable)).estado).not.toBe("detenido");
+    });
+
+    it("sends again, once its claim is recovered, a record the run's reply had no line for", async () => {
+      const aeat = fakeAeat();
+      const seeded = await seedPendingEnvios(suite.db, { count: 4 });
+      for (const key of seeded.facturaKeys.slice(0, 3)) aeat.reject(key, 1100, "Rechazo 1100");
+      const unanswered = seeded.registroIds[3]!;
+      const real = aeat.client();
+      await drain(deps(misnaming(real, unanswered)), FIRST);
+      expect((await envioOf(unanswered)).estado).toBe("enviando");
+      const wire = recording(real);
+
+      await drain(deps(wire.client), new Date(FIRST.getTime() + RECUPERACION_ENVIANDO_MS + 1));
+
+      expect(wire.sent).toEqual([[unanswered]]);
+      expect((await envioOf(unanswered)).estado).not.toBe("detenido");
+    });
   });
 });
 
