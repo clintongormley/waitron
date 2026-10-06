@@ -305,18 +305,6 @@ export class HoursCalendar extends LitElement {
     this.#detach = undefined;
   }
 
-  /** Reads the shown month again, after the page has written a change. */
-  async reload(): Promise<void> {
-    const month = this.month;
-    const dates = monthGrid(month);
-    try {
-      const model = await this.api.load(dates[0]!, dates.at(-1)!);
-      if (month === this.month) this.#apply(model);
-    } catch {
-      if (month === this.month) this.readError = t("hours.load_error");
-    }
-  }
-
   #watch(): void {
     this.#detach?.();
     const dates = monthGrid(this.month);

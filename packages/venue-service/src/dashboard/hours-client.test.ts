@@ -33,11 +33,9 @@ describe("HoursApi writes", () => {
     const request = vi.fn(async (path: string, method: string) =>
       method === "POST" && path.endsWith("/duplicate")
         ? [saved]
-        : method === "GET"
-          ? model("2030-10-01")
-          : method === "DELETE" || path.endsWith("/week")
-            ? undefined
-            : saved,
+        : method === "DELETE" || path.endsWith("/week")
+          ? undefined
+          : saved,
     );
     const api = new HoursApi(request as DashboardRequest);
     const subject = { kind: "department" as const, id: "dept" };
@@ -49,14 +47,12 @@ describe("HoursApi writes", () => {
       closeWholeVenue: false,
       cells: [],
     };
-    expect(await api.load("2030-10-01", "2030-10-31")).toEqual(model("2030-10-01"));
     expect(await api.saveWeek(subject, days)).toBeUndefined();
     expect(await api.saveDate(null, input)).toEqual(saved);
     expect(await api.saveDate("d1", input)).toEqual(saved);
     expect(await api.duplicateDate("d1", ["2030-10-22"])).toEqual([saved]);
     expect(await api.deleteDate("d1")).toBeUndefined();
     expect(request.mock.calls).toEqual([
-      [HOURS_PATH, "GET", undefined, { passive: false }],
       ["/management-api/venue-service/hours/week", "PUT", { subject, days }],
       ["/management-api/venue-service/special-dates", "POST", input],
       ["/management-api/venue-service/special-dates/d1", "PUT", input],
@@ -73,7 +69,7 @@ describe("HoursApi writes", () => {
     const request = vi.fn<(path: string) => Promise<undefined>>(async () => undefined);
     const api = new HoursApi(request as DashboardRequest);
     await api.deleteDate("a/b");
-    await api.load("2030-10-01&x=1", "2030-10-31");
+    api.watchHours("2030-10-01&x=1", "2030-10-31", vi.fn(), vi.fn(), vi.fn())();
     expect(request.mock.calls.map((call) => call[0])).toEqual([
       "/management-api/venue-service/special-dates/a%2Fb",
       "/management-api/venue-service/hours?from=2030-10-01%26x%3D1&to=2030-10-31",
@@ -258,10 +254,31 @@ describe("HoursApi.watchHours", () => {
     expect(failed).not.toHaveBeenCalled();
     detach();
   });
+  it("without live data still applies reads that each take longer than the timer, oldest first", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const answers: ((value: HoursModel) => void)[] = [];
+    const request = vi.fn(() => new Promise<HoursModel>((resolve) => answers.push(resolve)));
+    const apply = vi.fn();
+    const detach = new HoursApi(request as DashboardRequest).watchHours(
+      "2030-10-01",
+      "2030-10-31",
+      apply,
+      vi.fn(),
+      vi.fn(),
+    );
+    vi.advanceTimersByTime(60_000);
+    answers[0]!(model("2030-10-06"));
+    await settled();
+    vi.advanceTimersByTime(60_000);
+    answers[1]!(model("2030-10-07"));
+    await settled();
+    expect(apply.mock.calls).toEqual([[model("2030-10-06")], [model("2030-10-07")]]);
+    detach();
+  });
 });
 
 describe("HoursApi.rereadWatches", () => {
-  it("has every Hours watch read once more through live data, and says when there is none", async () => {
+  it("has every Hours watch read once more through live data, and reads nothing with neither live data nor a watch", async () => {
     const liveData = new LiveData();
     const request = vi.fn(async (path: string) =>
       model(path.includes("2030-11") ? "2030-11-06" : "2030-10-06"),
@@ -272,7 +289,7 @@ describe("HoursApi.rereadWatches", () => {
     const detachOctober = api.watchHours("2030-10-01", "2030-10-31", october, vi.fn(), vi.fn());
     const detachNovember = api.watchHours("2030-11-01", "2030-11-30", november, vi.fn(), vi.fn());
     await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
-    expect(api.rereadWatches()).toBe(true);
+    api.rereadWatches();
     await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(4));
     await vi.waitFor(() =>
       expect([october.mock.calls.length, november.mock.calls.length]).toEqual([2, 2]),
@@ -287,8 +304,32 @@ describe("HoursApi.rereadWatches", () => {
     detachNovember();
 
     const alone = vi.fn(async () => model("2030-10-06"));
-    expect(new HoursApi(alone as DashboardRequest).rereadWatches()).toBe(false);
+    new HoursApi(alone as DashboardRequest).rereadWatches();
     await settled();
     expect(alone).not.toHaveBeenCalled();
+  });
+
+  it("without live data has each attached watch read again, in order with its timer reads", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const answers: ((value: HoursModel) => void)[] = [];
+    const request = vi.fn(() => new Promise<HoursModel>((resolve) => answers.push(resolve)));
+    const api = new HoursApi(request as DashboardRequest);
+    const apply = vi.fn();
+    const detach = api.watchHours("2030-10-01", "2030-10-31", apply, vi.fn(), vi.fn());
+    answers[0]!(model("2030-10-06"));
+    await settled();
+    // A timer read starts, then a write's reread starts and answers first.
+    vi.advanceTimersByTime(60_000);
+    api.rereadWatches();
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(request.mock.calls[2]).toEqual([HOURS_PATH, "GET", undefined, { passive: true }]);
+    answers[2]!(model("2030-10-08"));
+    await settled();
+    answers[1]!(model("2030-10-07"));
+    await settled();
+    expect(apply.mock.calls).toEqual([[model("2030-10-06")], [model("2030-10-08")]]);
+    detach();
+    api.rereadWatches();
+    expect(request).toHaveBeenCalledTimes(3);
   });
 });

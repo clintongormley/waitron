@@ -436,16 +436,16 @@ describe("Hours calendar: the month", () => {
     expect(shownDates(el)).toEqual(monthGrid("2026-10"));
   });
 
-  it("reads the shown month again when asked, and says when that read fails", async () => {
+  it("reads the shown month again when the page rereads its watches, and says when that read fails", async () => {
     const options: { fail?: boolean } = {};
     const { api, reads } = server(options);
     const el = await mount(api);
     options.fail = true;
-    await el.reload();
+    api.rereadWatches();
     await settle(el);
     expect(text(el.shadowRoot!.querySelector('[role="alert"]'))).toBe("Hours could not be loaded.");
     options.fail = false;
-    await el.reload();
+    api.rereadWatches();
     await settle(el);
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
     expect(reads()).toEqual([
@@ -455,30 +455,28 @@ describe("Hours calendar: the month", () => {
     ]);
   });
 
-  it("drops a reload that settles after the calendar has moved to another month", async () => {
+  it("drops a reread that settles after the calendar has moved to another month", async () => {
     let release!: () => void;
     const options: { fail?: boolean; hold?: Promise<unknown> } = {};
     const { api } = server(options);
     const el = await mount(api);
     options.hold = new Promise((resolve) => (release = () => resolve(undefined)));
-    const late = el.reload();
+    api.rereadWatches();
     options.hold = undefined;
     await press(el, "next-month");
     expect(heading(el)).toBe("November 2026");
     expect(text(dayButton(el, "2026-11-20"))).toBe("20 Late autumn");
     release();
-    await late;
     await settle(el);
     // October's late answer, which has no 20 November, has not replaced November's.
     expect(text(dayButton(el, "2026-11-20"))).toBe("20 Late autumn");
     options.hold = new Promise((resolve) => (release = () => resolve(undefined)));
     options.fail = true;
-    const failing = el.reload();
+    api.rereadWatches();
     options.hold = undefined;
     options.fail = false;
     await press(el, "previous-month");
     release();
-    await failing;
     await settle(el);
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });

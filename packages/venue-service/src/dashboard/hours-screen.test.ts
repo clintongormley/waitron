@@ -769,6 +769,29 @@ describe("Hours: the standard week", () => {
     expect(saveButton(el).disabled).toBe(false);
   });
 
+  it("without live updates, keeps a save's hours when a timer read started before it answers after the save's read", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const { api, state } = server();
+      const el = await mount(api);
+      expect(text(cell(el, restaurant, 2))).not.toContain("Open all day");
+      const slow = deferred();
+      state.reads.push(slow.promise);
+      vi.advanceTimersByTime(60_000);
+      const saved = model();
+      saved.week[0]!.days = week((d) => (d === 2 ? ALL_DAY : restaurantWeek[d]!.cell));
+      state.model = saved;
+      await click(el, cellButton(el, restaurant, 2));
+      await click(el, saveButton(el));
+      await vi.waitFor(() => expect(text(cell(el, restaurant, 2))).toContain("Open all day"));
+      slow.resolve(model());
+      await settle(el);
+      expect(text(cell(el, restaurant, 2))).toContain("Open all day");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   const cancelButton = (el: HoursScreen) =>
     el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
       '[data-test="cancel-editor"]',

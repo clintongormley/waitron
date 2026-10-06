@@ -304,16 +304,6 @@ export class HoursScreen extends LitElement {
     void this.#focusLinked();
   }
 
-  async #reload(): Promise<void> {
-    if (this.api.rereadWatches()) return;
-    void this.renderRoot.querySelector("hours-calendar")?.reload();
-    try {
-      this.#apply(await this.api.load(this.#from, this.#to));
-    } catch {
-      this.readError = t("hours.load_error");
-    }
-  }
-
   async #focusLinked(): Promise<void> {
     if (this.#linked === undefined || this.model === undefined) return;
     const key = this.#linked;
@@ -561,7 +551,7 @@ export class HoursScreen extends LitElement {
       return;
     }
     this.#close();
-    await this.#reload();
+    this.api.rereadWatches();
   }
 
   #refuse(editor: Editor, error: unknown): void {

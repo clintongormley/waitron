@@ -51,7 +51,9 @@ probe on the Hours page reproduced it: the old data stayed, with no error shown,
 (`invalidate`) the types the screen's reads depend on. Hours, in `HoursApi.rereadWatches`
 (`packages/venue-service/src/dashboard/hours-client.ts`), invalidates every type its read depends
 on (`QUERY_DEPENDENCIES.hours`), not only the types the save wrote: every watched query depending
-on them reads again through the shared cache. The feed's own update
+on them reads again through the shared cache. Without live data it has each attached Hours watch
+read again itself, so that read is ordered with the watch's timer reads: a timer read that started
+before it and answers after it is not applied. The feed's own update
 can still arrive and read again; on Hours with the calendar open that measured two passive reads
 per save with the feed silent and four with it delivering (2026-10-06).
 
