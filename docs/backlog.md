@@ -6691,7 +6691,11 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Owner decision, 2026-10-05: retire the legacy `invoice_first` collection-ticket path
   in A261-2c alongside the column, with a venue reset accepted. That implementation has not
   landed; the owner approved the exact populated-upgrade reset fixture on 2026-10-06;
-  remaining dispatch retirement and validation are in progress.
+  placement no longer files a deferred invoice, and waiting-order collection no longer selects
+  the retired mode. Issued-bill fixtures explicitly use the existing issuance primitives so
+  correction, collection, permissions and cash-drawer checks retain their assertions. The exact
+  populated-upgrade reset fixture passes locally; API/type/selector retirement, remaining consumer
+  and prose audits, whole-branch review and CI are still pending.
   The Numbered collection choice applies to `prepay` and `ticket_then_pay` quick sales.
   A261-2f explains the quick-sale-only scope in English and Spanish on the department and
   zone Order number cells and editors. Filled choices use the shared help button; table-tab

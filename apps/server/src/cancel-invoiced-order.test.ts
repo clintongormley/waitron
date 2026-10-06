@@ -1,3 +1,5 @@
+import { deviceId as brandDeviceId } from "@waitron/shared";
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, isNull, sql } from "drizzle-orm";
@@ -195,10 +197,11 @@ useVenueDb({
   },
 });
 
-/** An order parked in `zoneId` with these lines and placed, both through the till's routes. */
+/** Park and place through the routes, optionally seeding an issued invoice between them. */
 async function placed(
   lines: { name: string; quantity: string; extras?: unknown[] }[],
   zoneId = invoiceFirstZone,
+  issued = true,
 ): Promise<string> {
   const id = randomUUID();
   const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
@@ -207,6 +210,14 @@ async function placed(
     lines: lines.map(({ name, ...line }) => ({ menuItemId: offerOf(name), ...line })),
   });
   expect(parked.status).toBe(200);
+  if (issued) {
+    await issueOrderInvoice(
+      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      { ...venue.cfg, origin: { source: "device", deviceId: brandDeviceId(venue.deviceId) } },
+      id,
+      venue.operatorId,
+    );
+  }
   const place = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/place`);
   expect(place.status).toBe(200);
   return id;
@@ -1234,7 +1245,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     const wrong = cancelWith({ personId: supervisorId, pin: "0000" }, venue.cookie, app);
 
     for (let i = 0; i < 5; i += 1) {
-      const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId);
+      const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId, false);
       expect((await wrong(id)).status).toBe(200);
       expect(await statusOf(venue, id)).toBe("abandoned");
     }
@@ -1245,7 +1256,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
 
   it("refuses an override that is not an object even on an order with no invoice, writing nothing", async () => {
     const ticketFirst = await noInvoiceZone("Barra sin factura, mal formada");
-    const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId);
+    const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId, false);
     const before = fiscalSnapshot();
 
     const answer = await cancelWith(SUPERVISOR_PIN)(id);
@@ -1326,7 +1337,7 @@ describe("cancelling an invoiced order on a supervisor's PIN derives its key out
         serviceMode: "ticket_then_pay",
       });
     });
-    const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId);
+    const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId, false);
     watchDerivations(SUPERVISOR_PIN, anotherWriter);
 
     const answer = await cancelWithSupervisor(id);
@@ -1578,7 +1589,7 @@ describe("cancelling a placed order with no invoice", () => {
         serviceMode: "ticket_then_pay",
       });
     });
-    const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId);
+    const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId, false);
     const before = fiscalSnapshot() as Record<string, unknown>;
 
     expect((await cancel(id, venue.cookie)).status).toBe(200);
@@ -1602,7 +1613,7 @@ describe("cancelling a placed order with no invoice", () => {
         serviceMode: "ticket_then_pay",
       });
     });
-    const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId);
+    const id = await placed([{ name: "Caña", quantity: "1" }], ticketFirst.zoneId, false);
     const calls = venue.card.collectCalls.length;
     const release = venue.card.holdNextCollect();
     const paying = send(venue.app, venue.cookie, "POST", "/api/pay", { id, lines: [] });
@@ -1740,7 +1751,7 @@ describe("cancelling an invoiced counter order from the counter's waiting list",
     const original = await invoiceOf(id);
     expect(await waitingRow(id)).toMatchObject({
       status: "placed",
-      serviceMode: "invoice_first",
+      serviceMode: "prepay",
       invoiceNumber: await formattedNumberOf(original),
     });
 

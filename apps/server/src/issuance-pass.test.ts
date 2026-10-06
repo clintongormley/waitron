@@ -575,7 +575,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
     expect(await reportingOf(checkId)).toEqual([underAlcoholic(v)]);
   });
 
-  it("invoice-first: an order placed before the move keeps it when collected after; one parked before and placed after keeps it too; one parked after records the move", async () => {
+  it("ticket then pay: an order placed before the move keeps it when collected after; one parked before and placed after keeps it too; one parked after records the move", async () => {
     const v = await setupVenue("invoice_first");
     const before = randomUUID();
     const parkedBefore = randomUUID();
@@ -599,6 +599,13 @@ describe("the snapshot is taken when the line is added, on every till filing pat
     });
     await placeOrder(deps(), v.cfg, parkedBefore, OPERATOR);
     await placeOrder(deps(), v.cfg, parkedAfter, OPERATOR);
+    for (const id of [parkedBefore, parkedAfter]) {
+      await collectOrder(deps(), v.cfg, {
+        id,
+        lines: [],
+        tender: { method: "cash", amount: "9.00" },
+      });
+    }
 
     expect(await reportingOf(before)).toEqual([underAlcoholic(v)]);
     expect(await reportingOf(parkedBefore)).toEqual([underAlcoholic(v)]);

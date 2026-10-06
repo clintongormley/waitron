@@ -1,3 +1,4 @@
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -420,7 +421,7 @@ describe("a receipt-language change while orders are open", () => {
     }
   });
 
-  it("accepts a change while an invoice-first order is placed, and collecting it keeps the language it was filed in", async () => {
+  it("accepts a change while an already-issued order is placed, and collecting it keeps the language it was filed in", async () => {
     reset();
     const placing = await withTransaction(venue.db, (tx) =>
       offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
@@ -440,6 +441,12 @@ describe("a receipt-language change while orders are open", () => {
         lines: [{ menuItemId: placing.offerFor(productId("Paella")), quantity: "1" }],
       });
       expect(parked.status).toBe(200);
+      await issueOrderInvoice(
+        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        venue.cfg,
+        id,
+        venue.operatorId,
+      );
       const placed = await till("POST", `/api/working-orders/${id}/place`);
       expect(placed.status).toBe(200);
       expect(statusOf(id)).toBe("placed");

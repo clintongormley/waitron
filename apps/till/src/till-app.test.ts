@@ -3716,7 +3716,7 @@ describe("till-app", () => {
     },
   );
 
-  it("invoice-first collection offers a duplicate because the original printed at placement", async () => {
+  it("collection offers the original receipt after payment, then a duplicate after printing", async () => {
     const { el } = await mountApp({
       zonePolicy: { serviceMode: "invoice_first", receiptPrintMode: "on_request" },
       getTill: vi.fn().mockResolvedValue({
@@ -3733,6 +3733,10 @@ describe("till-app", () => {
     emit(c, "collect-order", { method: "cash", amount: "5" });
     await flush(el);
 
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
+    expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).toBeNull();
+    emit(ticket(el)!, "print-receipt");
+    await flush(el);
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).toBeNull();
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=reprint]")).not.toBeNull();
   });
@@ -12833,7 +12837,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
       });
       pressPay(el, "wo-sent");
       await flush(el);
-      expect(tenderPay(el).mode).toBe(orderMode);
+      expect(tenderPay(el).mode).toBe("ticket_then_pay");
       expect(tenderPay(el).stage).toBe("collect");
 
       emit(c, "retrieve-order", { id: "wo-1" });
@@ -12848,10 +12852,10 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
   it.each([
     ["ticket_then_pay", "invoice_first", "cash", true],
     ["ticket_then_pay", "invoice_first", "card", true],
-    ["invoice_first", "ticket_then_pay", "cash", false],
-    ["invoice_first", "ticket_then_pay", "card", false],
+    ["invoice_first", "ticket_then_pay", "cash", true],
+    ["invoice_first", "ticket_then_pay", "card", true],
   ] as const)(
-    "a %s order collected on a till whose zone is %s, by %s, offers the original receipt by the order's mode",
+    "a %s order collected on a till whose zone is %s, by %s, offers the receipt issued by payment",
     async (orderMode, tillMode, method, original) => {
       const { el } = await counterWaiting({
         zonePolicy: { serviceMode: tillMode, receiptPrintMode: "on_request" },
@@ -12864,7 +12868,7 @@ describe("the counter's waiting orders (sent and not paid, or paid and not hande
 
       pressPay(el, "wo-sent");
       await flush(el);
-      expect(tenderPay(el).mode).toBe(orderMode);
+      expect(tenderPay(el).mode).toBe("ticket_then_pay");
       if (method === "cash") emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
       else emit(counter(el)!, "collect-card", {});
       await flush(el);

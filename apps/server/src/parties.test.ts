@@ -1260,7 +1260,7 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
       offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
     );
     const s = await seatedWith(venue);
-    const billId = await placedCounterBillMovedTo(venue, invoiceFirst.zoneId, s);
+    const billId = await placedCounterBillMovedTo(venue, invoiceFirst.zoneId, s, true);
     const filed = await inTx(suite, (tx) =>
       tx
         .select({ id: sales.id, settledAt: saleSettlements.settledAt })
