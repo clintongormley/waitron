@@ -82,6 +82,7 @@ import {
   refusalField,
   type AdjustKind,
   type AdjustmentChoice,
+  type TillAdjustmentDialog,
   type AdjustTarget,
 } from "./widgets/adjustment-dialog.js";
 import "./widgets/bill-pay-dialog.js";
@@ -5726,7 +5727,12 @@ export class TillApp extends LitElement {
         () => session === this.#operatorSession,
       );
       this.#noteBillParty(answer.party);
-      if (this.#adjustingNow(open.id) !== null) this.#closeAdjust();
+      if (this.#adjustingNow(open.id) !== null) {
+        this.shadowRoot!.querySelector<TillAdjustmentDialog>(
+          "till-adjustment-dialog",
+        )?.closeSaved();
+        this.#closeAdjust();
+      }
       if (this.errorKey === open.offer) this.errorKey = undefined;
       if (this.#hasLeftAdjusted(open)) return;
       await this.#rereadAdjusted(open);

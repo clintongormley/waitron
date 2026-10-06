@@ -1654,3 +1654,89 @@ it("station-choice Keep and Discard leave the counter basket and server writes a
   expect(store.lines).toEqual(before);
   expect(moveDishStation.mock.calls.length).toBe(movesBefore);
 });
+
+describe("till-app: unsaved adjustment inputs", () => {
+  function unload() {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+  async function question(el: TillApp) {
+    await flush(el);
+    const q = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await q.updateComplete;
+    return q;
+  }
+  it("Cancel preserves the stored counter basket and pending reason until Discard", async () => {
+    const el = await retrieved();
+    await press(el, inBasket(el, '[data-comp-line="1"]')!);
+    await chooseReason(el, "Complaint");
+    await press(el, inDialog(el, "[data-adjust-close]"));
+    const q = await question(el);
+    expect(q.open).toBe(true);
+    expect(dialog(el)).not.toBeNull();
+    expect(counter(el).store.lines.map((line) => line.workingOrderLineId)).toEqual(["l-1", "l-2"]);
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => q.open).toBe(false);
+    expect(
+      dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[name="reason"]')!.checked,
+    ).toBe(true);
+    await press(el, inDialog(el, "[data-adjust-close]"));
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => dialog(el)).toBeNull();
+    expect(counter(el).store.lines.map((line) => line.workingOrderLineId)).toEqual(["l-1", "l-2"]);
+    expect(counter(el).store.total).toBe("8.50");
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    expect(api.retrieveWorkingOrder).toHaveBeenCalledOnce();
+  });
+  it("an accepted adjustment retires its input scope before the first basket refresh", async () => {
+    const el = await retrieved();
+    await previewComp(el);
+    expect(unload()).toBe(true);
+    const observations: boolean[] = [];
+    vi.mocked(api.retrieveWorkingOrder).mockImplementation(async () => {
+      observations.push(unload());
+      return heldOrder(5, "0.00");
+    });
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(observations).toEqual([false]);
+    expect(dialog(el)).toBeNull();
+    expect(counter(el).store.total).toBe("6.00");
+    expect(applied()[0]).toEqual({
+      orderId: "wo-9",
+      command: { ...ask, submissionId: expect.any(String) },
+    });
+    expect((await question(el)).open).toBe(false);
+  });
+  it("discarding nested approval leaves the adjustment reason intact and applies nothing", async () => {
+    const el = await retrieved({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+    });
+    await previewComp(el);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    const proof = approval(el)!;
+    proof.shadowRoot!.querySelector<HTMLElement>('[data-person="m-1"]')!.click();
+    await proof.updateComplete;
+    proof
+      .shadowRoot!.querySelector("till-numeric-pad")!
+      .shadowRoot!.querySelector<HTMLElement>('[data-key="0"]')!
+      .click();
+    await proof.updateComplete;
+    proof.shadowRoot!.querySelector<HTMLElement>(".back")!.click();
+    const q = await question(el);
+    expect(q.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => q.open).toBe(false);
+    await proof.updateComplete;
+    proof.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+    await expect.poll(() => approval(el)).toBeNull();
+    expect(dialog(el)).not.toBeNull();
+    await press(el, inDialog(el, "[data-adjust-back]"));
+    expect(
+      dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[name="reason"]')!.checked,
+    ).toBe(true);
+    expect(unload()).toBe(true);
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+});

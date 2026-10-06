@@ -377,7 +377,19 @@ describe("till-app: giving away a dish", () => {
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-back]"));
     await press(el, inDialog(el, "[data-adjust-close]"));
-    expect(dialog(el)).toBeNull();
+    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await question.updateComplete;
+    expect(question.open).toBe(true);
+    expect(dialog(el)).not.toBeNull();
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => question.open).toBe(false);
+    expect(
+      dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[name="reason"]')!.checked,
+    ).toBe(true);
+    await press(el, inDialog(el, "[data-adjust-close]"));
+    question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => dialog(el)).toBeNull();
     expect(api.applyAdjustment).not.toHaveBeenCalled();
   });
 
@@ -505,7 +517,7 @@ describe("till-app: an adjustment someone must approve", () => {
     await previewComp(el, order);
     await press(el, inDialog(el, "[data-adjust-confirm]"));
     await press(el, approval(el)!.shadowRoot!.querySelector<HTMLElement>(".cancel")!);
-    expect(approval(el)).toBeNull();
+    await expect.poll(() => approval(el)).toBeNull();
     expect(inDialog(el, "[data-adjust-confirm]")).not.toBeNull();
     expect(api.applyAdjustment).not.toHaveBeenCalled();
   });
@@ -1090,7 +1102,8 @@ describe("till-app: cancelling a dish", () => {
     const order = await openMesa4(el);
     await press(el, cancelButton(order, 1));
     await press(el, inDialog(el, "[data-adjust-close]"));
-    expect(dialog(el)).toBeNull();
+    await expect.poll(() => dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     expect(api.previewAdjustment).not.toHaveBeenCalled();
     expect(api.applyAdjustment).not.toHaveBeenCalled();
   });

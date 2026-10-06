@@ -1180,3 +1180,43 @@ case, now retains the edited refund on Cancel, checks Keep preserves its reason,
 explicit Discard removes only the refund dialog. Its original parent-dialog and no-approved-refund
 assertions remain. W69's approved design, “Closing a dialog,” requires that change.
 This remains a Task 4 milestone; all-modal PR 1 and page/navigation PR 2 are not complete.
+
+## 2026-10-06 adjustment-input checkpoint
+
+`TW adjustment-dialog` now registers its quantity, reason, note, discount kind and typed value.
+Cancel and native Escape retain the editor until Keep or Discard; Keep restores focus, and Discard
+resets local fields and closes once without applying an adjustment. Whitespace-only notes and
+reverted default choices remain clean. Invalid values remain protected after validation.
+
+Preview and Confirm emit their existing exact choices without a discard question. A refusal or
+preview keeps the local input scope, and the accepted adjustment calls `closeSaved()` before the
+counter/table refresh. Disconnect aborts a question and unregisters its scope; reconnect retains
+the opening baseline. Departed controls cannot alter that draft or submit. Nested approval Discard
+retains the parent adjustment, checked through the real counter shell.
+
+Verification at this checkpoint:
+
+- `pnpm --filter @waitron/till exec vitest run src/widgets/adjustment-dialog.unsaved.test.ts
+  src/widgets/adjustment-dialog.test.ts src/widgets/adjustment-dialog.a11y.test.ts
+  src/till-app-counter-adjustments.test.ts src/till-app-adjustments.test.ts
+  src/screens/till-table-order-screen.adjustments.test.ts`: 204 passed in Chromium.
+- Initial new widget run after correcting an invalid leading-zero fixture: eight expected
+  assertion failures. The shell success case failed with unload still dirty at its first
+  basket refresh, then passed after the synchronous scope retirement.
+- Seven separate deletions in an installed disposable candidate failed their intended assertion
+  while the clean no-reasons close control passed: native close gate, edit notification, local
+  note restore, disconnect disposal, retained reconnect baseline, departed input guard and
+  accepted-write retirement. Restoration passed the selected cases. Receipts stay outside git
+  in Lane E's `receipts/w69-adjustment-20261006`.
+- Temporary visual harness: eight EN/ES, light/dark, 390/1280 flows, sixteen axe scans and sixteen
+  inspected editor/warning screenshots. The harness and images are archived outside source.
+- Unedited fiscal golden write-path and inmutabilidad suites: twenty passed.
+
+Changed existing checks in `till-app-adjustments.test.ts`: the edited Give away close case now
+asserts Keep retains the reason and Discard closes without applying anything (design, Closing a
+dialog). The clean cancellation and empty approval close cases now poll their original absence
+assertion for the delayed native close report; the clean cancellation also asserts no warning.
+All original no-write and confirm-step assertions remain. No fiscal or payment amounts changed.
+
+Task 4 remains partial. Tender, bill payment, collection and remaining modal owners still need
+coverage before PR 1; page/history/native reload work remains Tasks 5–6.

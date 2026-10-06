@@ -1,6 +1,8 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
+import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
@@ -51,6 +53,13 @@ export interface AdjustmentChoice {
 }
 
 type DiscountKind = "percent" | "amount";
+interface AdjustmentDraft {
+  quantity: "1" | "all";
+  discountKind: DiscountKind;
+  reasonId: string;
+  note: string;
+  value: string;
+}
 type Field = "reason" | "note" | "value" | "quantity";
 
 /** The field of the form a refusal is about, or null when it is about none the form shows. */
@@ -219,13 +228,108 @@ export class TillAdjustmentDialog extends LitElement {
   /** The refusal still shown: it goes when the field it names changes, or at the next submission. */
   @state() private shownRefusal: string | null = null;
 
+  @state() private active = true;
+  #baseline?: AdjustmentDraft;
+  #scope?: DraftScope<AdjustmentDraft>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  #draft(): AdjustmentDraft {
+    return {
+      quantity: this.quantity,
+      discountKind: this.discountKind,
+      reasonId: this.reasonId,
+      note: this.note,
+      value: this.value,
+    };
+  }
+
+  #comparable(draft: AdjustmentDraft): string {
+    const typed = draft.value.trim();
+    const number = typed.replace(",", ".");
+    const percent = Number(number);
+    const value =
+      this.kind !== "discount"
+        ? null
+        : draft.discountKind === "percent" &&
+            TYPED_AMOUNT.test(typed) &&
+            percent > 0 &&
+            percent <= 100
+          ? Math.round(percent * 100)
+          : draft.discountKind === "amount" && /^(0|[1-9]\d*)(\.\d{1,2})?$/.test(number)
+            ? number.replace(/\.0+$|(?<=\.[0-9])0$/, "")
+            : typed;
+    return JSON.stringify({
+      action: this.kind === "discount" ? draft.discountKind : this.kind,
+      quantity: this.#partial() ? draft.quantity : null,
+      reasonId: draft.reasonId,
+      note: draft.note.trim() || null,
+      value,
+    });
+  }
+
+  closeSaved(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.active = false;
+    this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.closeAfter("saved");
+  }
+
+  #cancel(): void {
+    if (!this.isConnected || !this.active || this.busy) return;
+    if (this.#scope) {
+      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+    } else this.#emit("adjust-close");
+  }
+
+  #closed(event: Event): void {
+    event.stopPropagation();
+    if (event.target !== event.currentTarget || !this.isConnected || !this.active) return;
+    this.active = false;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#emit("adjust-close");
+  }
+
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("refusal")) this.shownRefusal = this.refusal;
     if (changed.has("reasons") || changed.has("kind")) {
       const kinds = this.#discountKinds();
-      if (!kinds.includes(this.discountKind) && kinds[0] !== undefined)
+      if (!kinds.includes(this.discountKind) && kinds[0] !== undefined) {
         this.discountKind = kinds[0];
+        this.#scope?.changed();
+      }
     }
+    if (!this.isConnected || !this.active || this.target === null || this.#scope) return;
+    this.#baseline ??= this.#draft();
+    this.#leave = leaveCoordinatorFor(this);
+    this.#scope = this.#leave?.register<AdjustmentDraft>({
+      id: this,
+      current: () => this.#draft(),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) => this.#comparable(a) === this.#comparable(b),
+      restore: (value) => {
+        this.quantity = value.quantity;
+        this.discountKind = value.discountKind;
+        this.reasonId = value.reasonId;
+        this.note = value.note;
+        this.value = value.value;
+      },
+    });
+    this.#scope?.commit(this.#baseline);
   }
 
   #action(): AdjustmentAction {
@@ -321,6 +425,7 @@ export class TillAdjustmentDialog extends LitElement {
   }
 
   #changed(field: Field): void {
+    this.#scope?.changed();
     if (this.#refusalField() === field) this.shownRefusal = null;
   }
 
@@ -343,6 +448,7 @@ export class TillAdjustmentDialog extends LitElement {
   }
 
   async #continue(): Promise<void> {
+    if (!this.isConnected || !this.active || this.busy) return;
     this.attempted = true;
     this.shownRefusal = null;
     if (this.#ownErrors().size > 0) {
@@ -354,6 +460,7 @@ export class TillAdjustmentDialog extends LitElement {
   }
 
   #confirm(choice: AdjustmentChoice): void {
+    if (!this.isConnected || !this.active || this.busy) return;
     this.shownRefusal = null;
     this.#emit("adjust-confirm", choice);
   }
@@ -369,13 +476,14 @@ export class TillAdjustmentDialog extends LitElement {
       this.kind === "discount" ? this.#discountKinds().length === 0 : this.#offered().length === 0;
     return html`<wt-dialog
       ${trackDialog()}
-      .open=${true}
+      .open=${this.active}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       .heading=${title}
       .dismissible=${!this.busy}
-      @wt-close=${() => this.#emit("adjust-close")}
+      @wt-close=${(event: Event) => this.#closed(event)}
     >
       <div class="body">
-        <p class="scope" data-adjust-scope>${this.#scope(target)}</p>
+        <p class="scope" data-adjust-scope>${this.#scopeTitle(target)}</p>
         ${
           noReasons
             ? this.#noReasons()
@@ -387,7 +495,7 @@ export class TillAdjustmentDialog extends LitElement {
     </wt-dialog>`;
   }
 
-  #scope(target: AdjustTarget): string {
+  #scopeTitle(target: AdjustTarget): string {
     const quantity = target.quantity === null ? "" : ` ×${target.quantity}`;
     return `${target.name}${quantity} · ${this.#money(target.total)}`;
   }
@@ -398,7 +506,7 @@ export class TillAdjustmentDialog extends LitElement {
       variant="secondary"
       data-adjust-close
       .disabled=${this.busy}
-      @click=${() => this.#emit("adjust-close")}
+      @click=${() => this.#cancel()}
     >
       ${t("adjust.close")}
     </wt-button>`;
@@ -428,6 +536,7 @@ export class TillAdjustmentDialog extends LitElement {
         aria-describedby=${opts.errorId ?? nothing}
         @change=${(event: Event) => {
           event.stopPropagation();
+          if (!this.isConnected || !this.active || this.busy) return;
           pick();
         }}
       />
@@ -462,10 +571,12 @@ export class TillAdjustmentDialog extends LitElement {
         .disabled=${this.busy}
         .maxlength=${500}
         .label=${t("adjust.note")}
-        .value=${this.note}
+        .value=${live(this.note)}
         .required=${reason?.noteRequired === true}
         .error=${errors.get("note") ?? ""}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          if (!this.isConnected || !this.active || this.busy) return;
           this.note = event.detail.value;
           this.#changed("note");
         }}
@@ -570,9 +681,11 @@ export class TillAdjustmentDialog extends LitElement {
         .disabled=${this.busy}
         required
         .label=${t(this.discountKind === "percent" ? "adjust.percent" : "adjust.amount")}
-        .value=${this.value}
+        .value=${live(this.value)}
         .error=${error ?? ""}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          if (!this.isConnected || !this.active || this.busy) return;
           this.value = event.detail.value;
           this.#changed("value");
         }}
@@ -658,7 +771,9 @@ export class TillAdjustmentDialog extends LitElement {
           variant="secondary"
           data-adjust-back
           .disabled=${this.busy}
-          @click=${() => this.#emit("adjust-edit")}
+          @click=${() => {
+            if (this.isConnected && this.active && !this.busy) this.#emit("adjust-edit");
+          }}
         >
           ${t("action.back")}
         </wt-button>

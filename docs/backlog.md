@@ -1178,8 +1178,19 @@ retain the raw fields until Discard; reverts and untouched suggested amounts rem
 Discard resets only local inputs, and a successful refund releases its draft before the first
 following table read. Terminal confirmation still submits directly; refusal retains protection.
 The focused refund widget and real bill-payment owner suites cover those boundaries, reconnect,
-busy input and stale answers. Tender, bill payment, adjustment, collection and remaining modal
-owners, followed by page/history/navigation work, still keep W69 incomplete.
+busy input and stale answers. Adjustment forms now protect quantity, reason, note and discount
+inputs through Cancel/native Escape. Keep retains the form; Discard restores only local inputs.
+Accepted adjustments retire that scope before the basket refresh, and nested approval Discard
+retains the adjustment. Preview, refusal and busy phases keep their existing requests. Focused
+adjustment widget and actual counter/table suites cover these routes and direct submission.
+Tender, bill payment, collection and remaining modal owners, followed by page/history/navigation
+work, still keep W69 incomplete.
+
+A separate finding remains: entering `05,50` for an amount discount and pressing Continue raises
+`shared.invalid_decimal` from the existing amount check. The W69 adjustment checkpoint reproduced
+it before implementation (`red.log`, campaign receipts `w69-adjustment-20261006`);
+`git show 26b67286a:apps/till/src/widgets/adjustment-dialog.ts` lines 287–289 shows the same call.
+W69 leaves the amount validation and request conversion unchanged.
 
 The [design](superpowers/specs/2026-10-05-unsaved-changes-warning-design.md),
 [owner audit](superpowers/plans/2026-10-05-unsaved-changes-audit.md) and
