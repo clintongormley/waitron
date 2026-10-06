@@ -2218,3 +2218,46 @@ Task 6 still needs the remaining setup children, receipt/login and other page ow
 still needs till integration, child screen/tab/context interception and activated native reload.
 Tasks 1/4 need final classification of advancing modal owners. W69 remains in progress and
 neither proposed PR is ready for finish-branch.
+
+
+## 2026-10-06: setup venue child checkpoint
+
+On the W69 branch, the venue form registers its submitted text and language values after
+seeding. Back selects the child, so Keep retains its controls and Discard restores the child
+before returning to Administrator. The accepted wizard draft remains separate. Valid Next
+commits the child before emitting Advance and transfers the unchanged normalized body into
+the root; invalid Next leaves the authored values protected. Reconnect keeps the original
+baseline, and replacement or an affected field change invalidates an unanswered Back.
+
+The comparison retains invalid tax/postcode text, applies the submitter's existing tax ID and
+postcode normalization, resolves province names and treats a whitespace-only optional address
+as null. The seeded Demo case stays clean until a shown field changes.
+A description default arriving after mounting joins only its untouched baseline field; it
+cannot clear another edited field. No validation or request body was changed.
+
+The focused command is `pnpm --filter @waitron/setup exec vitest run
+src/setup-app-venue.unsaved-changes.test.ts`. The first run failed 20 cases because the owner had
+no scope. After correcting two new fixtures (the default's module key is `verifactu`, and only
+Spain is currently offered), the late-default test failed on a false dirty reading. The new
+Next test originally checked after disposal and missed a deleted commit. It now checks the
+scope when the actual Advance event is emitted; deleting the commit fails that assertion.
+No existing assertion changed.
+
+Receipts live in the lane's local `receipts/w69-setup-venue-20261006/`: initial and corrected
+red runs, focused family, source checks, two unedited fiscal suites, installed deletion probes
+with a same-step navigation control, and eight real-shell EN/ES/theme/width visual flows.
+Those flows use native Back, warning Escape and Keep, with full-host axe scans and retained
+form captures. API reads are stubbed and the venue is seeded; live onboarding, deployment
+canvas and an activated native reload are unverified. The body screenshots include capture
+space above the scrolled warning; the modal and retained form are visible. This checkpoint
+completes only the venue child stage. Certificate/connect/reset/restore children, final modal
+classification, remaining page and till routes, and native reload remain open. Tasks 1/4/5/6
+are partial, and neither proposed W69 PR is ready for finish-branch.
+
+Final checkpoint checks: the eight-suite setup command in `family-final.log` passed 602 tests;
+`pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts
+src/inmutabilidad.test.ts` passed 20 unedited tests. Seven installed guard deletions each failed
+the intended assertion beside a passing same-step control. After restoring the source, the
+final candidate passed 29 cases, and both changed source/test files were byte-compared with
+the feature worktree before its owned candidate directory was removed. The visual flows
+passed 16 axe scans; their 16 captures were inspected in four sheets and one original.

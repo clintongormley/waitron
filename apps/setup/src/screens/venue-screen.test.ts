@@ -303,7 +303,7 @@ describe("setup-venue-screen", () => {
     expect(events.some((e) => e.kind === "goto")).toBe(false);
   });
 
-  it("seeds the editable fields from the draft so Back-then-forward is non-destructive", async () => {
+  it("seeds the editable fields from the accepted draft", async () => {
     const draft: DeepPartial<ProvisionBody> = {
       mode: "prepare",
       venue: {

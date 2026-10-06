@@ -1199,7 +1199,12 @@ retain the selected export and passphrase; Discard restores the affected baselin
 Accepted imports commit the submitted child values before leaving, while newer input still
 asks and the staged root remains dirty. A departed import's success or refusal cannot replace
 the new step. Reconnect retains the child's original baseline, including File identity, and
-restoration updates the native file selection. The remaining setup forms still need work.
+restoration updates the native file selection. The venue step now protects its shown text,
+country, province and receipt-language inputs before Back. It compares normalized tax IDs,
+postcodes and optional addresses, retains invalid values, and commits only the child before
+Next advances. Late description defaults update that untouched field's baseline without
+clearing another field's edits. Reconnect keeps the original baseline; replacement cancels
+an unanswered leave. Certificate, connect, reset and restore setup forms still need work.
 See the dated setup entries in the W69 audit for commands and limits; activated native reload
 has not been verified.
 Dashboard voluntary logout and a language change also request the shared warning before their
