@@ -3,11 +3,13 @@ import { AppError, isUuid } from "@waitron/shared";
 import {
   CALENDAR_COLOURS,
   type CalendarColour,
+  type CalendarTone,
   type DateCell,
   type DateHoursCell,
   type HourPeriod,
   type HoursSubject,
   type LocalDate,
+  type ResolvedHours,
   type SpecialDateInput,
   type WeekCell,
 } from "./hours-types.js";
@@ -202,4 +204,28 @@ export function parseSpecialDateInput(value: unknown): SpecialDateInput {
     closeWholeVenue,
     cells: parsed,
   };
+}
+
+/** The target dates of a duplication: a non-empty list of real dates, none of them twice. */
+export function parseDuplicateDates(value: unknown): LocalDate[] {
+  if (!Array.isArray(value) || value.length === 0) invalidHours("dates");
+  const seen = new Set<LocalDate>();
+  return value.map((date: unknown, index) => {
+    if (!isLocalDate(date) || seen.has(date)) invalidHours(`dates.${index}`);
+    seen.add(date);
+    return date;
+  });
+}
+
+/**
+ * Closed only when the venue has active departments and every one of them is Closed that date;
+ * stations play no part, and a department with no hours set is not Closed.
+ */
+export function calendarTone(
+  colour: CalendarColour | null,
+  activeDepartments: readonly ResolvedHours["cell"]["mode"][],
+): CalendarTone {
+  if (activeDepartments.length > 0 && activeDepartments.every((mode) => mode === "closed"))
+    return "closed";
+  return colour ?? "standard";
 }

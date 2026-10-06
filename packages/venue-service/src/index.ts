@@ -17,11 +17,17 @@ export * from "./routing-store.js";
 export * from "./station-times.js";
 export {
   cellIntervals,
+  deleteSpecialDate,
+  duplicateSpecialDate,
+  readCalendarTone,
   readSpecialDate,
   readWeekHours,
   replaceWeekHours,
+  resolveOpeningDateHours,
   saveSpecialDate,
+  type SpecialDateParticipant,
 } from "./hours.js";
+export { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
 export { venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
 export type * from "./hours-types.js";
 export { CALENDAR_COLOURS, WEEK_DISPLAY_ORDER } from "./hours-types.js";

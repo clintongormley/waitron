@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
@@ -14,19 +14,27 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import {
   cellIntervals,
+  deleteSpecialDate,
+  duplicateSpecialDate,
+  readCalendarTone,
   readSpecialDate,
   readWeekHours,
   replaceWeekHours,
+  resolveOpeningDateHours,
   saveSpecialDate,
+  type SpecialDateParticipant,
 } from "./hours.js";
 import {
   WEEK_DISPLAY_ORDER,
+  type DateHoursCell,
   type HourPeriod,
   type HoursSubject,
+  type LocalDate,
   type SpecialDateInput,
   type WeekCell,
   type WeekDay,
 } from "./hours-types.js";
+import { VENUE_SERVICE_CALENDAR_PARTICIPANTS } from "./calendar-participants.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import type { VenueScope } from "./operations.js";
 import {
@@ -1009,4 +1017,889 @@ it("refuses a week clashing with yesterday's special tail and leaves every row a
   expect(await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, monday.id))).toEqual(
     dateBefore,
   );
+});
+
+const resolve = (f: Fixture, subject: HoursSubject, date: LocalDate) =>
+  withTransaction(db, (tx) => resolveOpeningDateHours(tx, f.cfg, subject, date));
+
+const tone = (f: Fixture, date: LocalDate) =>
+  withTransaction(db, (tx) => readCalendarTone(tx, f.cfg, date));
+
+const duplicate = (
+  f: Fixture,
+  id: string,
+  dates: unknown,
+  participants?: readonly SpecialDateParticipant[],
+) =>
+  withTransaction(db, (tx) =>
+    duplicateSpecialDate(tx, f.cfg, id, dates as LocalDate[], AT, participants),
+  );
+
+const remove = (f: Fixture, id: string, participants?: readonly SpecialDateParticipant[]) =>
+  withTransaction(db, (tx) => deleteSpecialDate(tx, f.cfg, id, participants));
+
+/** Every special date the venue holds, with its cells and periods, in date order. */
+const storedDates = (f: Fixture) =>
+  withTransaction(db, async (tx) => {
+    const rows = await tx
+      .select({ id: specialDates.id })
+      .from(specialDates)
+      .where(eq(specialDates.locationId, f.cfg.locationId))
+      .orderBy(asc(specialDates.date));
+    const dates = [];
+    for (const row of rows) dates.push(await readSpecialDate(tx, f.cfg, row.id));
+    return dates;
+  });
+
+/** Every stored cell and period row behind one special date, by id. */
+const dateRows = (id: string) =>
+  withTransaction(db, async (tx) => {
+    const cells = await tx
+      .select()
+      .from(specialDateHours)
+      .where(eq(specialDateHours.specialDateId, id));
+    const periods = await tx
+      .select()
+      .from(specialDateHoursPeriods)
+      .where(
+        inArray(
+          specialDateHoursPeriods.cellId,
+          cells.map((cell) => cell.id),
+        ),
+      );
+    return { cells, periods };
+  });
+
+const makeDefault = (f: Fixture, station: HoursSubject) =>
+  withTransaction(db, async (tx) => {
+    await tx
+      .update(kitchenStations)
+      .set({ isDefault: false })
+      .where(eq(kitchenStations.id, f.kitchen.id));
+    await tx
+      .update(kitchenStations)
+      .set({ isDefault: true })
+      .where(eq(kitchenStations.id, station.id));
+  });
+
+const setDepartmentActive = (department: HoursSubject, active: boolean) =>
+  withTransaction(db, (tx) =>
+    tx.update(departments).set({ active }).where(eq(departments.id, department.id)),
+  );
+
+async function addSubjects(f: Fixture) {
+  return withTransaction(db, async (tx) => {
+    const [terrace] = await tx
+      .insert(departments)
+      .values({
+        locationId: f.cfg.locationId,
+        name: `Terrace ${randomUUID()}`,
+        tradingName: "Terrace",
+        defaultServiceMode: "table_tab",
+      })
+      .returning();
+    const [grill] = await tx
+      .insert(kitchenStations)
+      .values({ locationId: f.cfg.locationId, name: `Grill ${randomUUID()}` })
+      .returning();
+    return {
+      terrace: { kind: "department", id: terrace!.id } as HoursSubject,
+      grill: { kind: "station", id: grill!.id } as HoursSubject,
+    };
+  });
+}
+
+describe("one subject's hours on one opening date", () => {
+  it("reads an inherited cell as the standard week, Closed as Closed, and periods for that subject only", async () => {
+    const f = await fixture();
+    const restaurantMonday = period("09:00", "17:00");
+    const deliMonday = period("10:00", "14:00");
+    await save(f, f.restaurant, week({ 1: periods(restaurantMonday) }));
+    await save(f, f.deli, week({ 1: periods(deliMonday) }));
+    const lunch = period("12:00", "15:00");
+    // Monday 12 October.
+    const monday = await saveDate(
+      f,
+      null,
+      specialInput({
+        date: "2026-10-12",
+        cells: [
+          { subject: f.restaurant, cell: { mode: "inherit", periods: [] } },
+          { subject: f.deli, cell: { mode: "closed", periods: [] } },
+          { subject: f.bar, cell: { mode: "periods", periods: [lunch] } },
+        ],
+      }),
+    );
+
+    expect(await resolve(f, f.restaurant, "2026-10-12")).toEqual({
+      subject: f.restaurant,
+      openingDate: "2026-10-12",
+      specialDateId: monday.id,
+      source: "standard",
+      cell: { mode: "periods", periods: [restaurantMonday] },
+    });
+    expect(await resolve(f, f.deli, "2026-10-12")).toEqual({
+      subject: f.deli,
+      openingDate: "2026-10-12",
+      specialDateId: monday.id,
+      source: "special",
+      cell: { mode: "closed", periods: [] },
+    });
+    expect(await resolve(f, f.bar, "2026-10-12")).toEqual({
+      subject: f.bar,
+      openingDate: "2026-10-12",
+      specialDateId: monday.id,
+      source: "special",
+      cell: { mode: "periods", periods: [lunch] },
+    });
+    const rows = await dateRows(monday.id);
+    expect(
+      rows.cells.map((cell) => [cell.departmentId ?? cell.stationId, cell.mode]).sort(),
+    ).toEqual(
+      [
+        [f.bar.id, "periods"],
+        [f.deli.id, "closed"],
+      ].sort(),
+    );
+    expect(rows.periods.map((row) => row.id)).toEqual([lunch.id]);
+
+    // The next Monday is ordinary: the deli's standard Monday is untouched.
+    expect(await resolve(f, f.deli, "2026-10-19")).toEqual({
+      subject: f.deli,
+      openingDate: "2026-10-19",
+      specialDateId: null,
+      source: "standard",
+      cell: { mode: "periods", periods: [deliMonday] },
+    });
+    expect((await resolve(f, f.bar, "2026-10-19")).cell).toEqual({ mode: "not_set", periods: [] });
+    expect(await resolve(f, f.kitchen, "2026-10-19")).toEqual({
+      subject: f.kitchen,
+      openingDate: "2026-10-19",
+      specialDateId: null,
+      source: "default_station",
+      cell: { mode: "always_open", periods: [] },
+    });
+  });
+
+  it("keeps a date's id and its cells when its name, colour and date change", async () => {
+    const f = await fixture();
+    const closedDeli: DateHoursCell = { subject: f.deli, cell: { mode: "closed", periods: [] } };
+    const first = await saveDate(f, null, specialInput({ cells: [closedDeli] }));
+    const moved = await saveDate(
+      f,
+      first.id,
+      specialInput({ date: "2026-10-13", name: "Moved", colour: "blue", cells: [closedDeli] }),
+    );
+    expect(moved.id).toBe(first.id);
+    expect(await resolve(f, f.deli, "2026-10-13")).toMatchObject({
+      specialDateId: first.id,
+      source: "special",
+      cell: { mode: "closed", periods: [] },
+    });
+    expect(await resolve(f, f.deli, "2026-10-09")).toMatchObject({
+      specialDateId: null,
+      source: "standard",
+    });
+  });
+
+  it("refuses a subject from another venue, and a date that does not exist", async () => {
+    const f = await fixture();
+    await expect(resolve(f, f.otherDepartment, "2026-10-12")).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "subject" },
+    });
+    await expect(resolve(f, f.deli, "2026-02-30")).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "openingDate" },
+    });
+    await expect(tone(f, "2026-02-30")).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "date" },
+    });
+  });
+});
+
+describe("closing the whole venue on a date", () => {
+  it("closes every department and non-default station, new ones included, and keeps the default open", async () => {
+    const f = await fixture();
+    await save(f, f.deli, week({ 5: periods(period("10:00", "14:00")) }));
+    const evening = period("18:00", "22:00");
+    const cells = [
+      { subject: f.deli, cell: { mode: "periods", periods: [evening] } },
+      { subject: f.bar, cell: { mode: "all_day", periods: [] } },
+    ] as SpecialDateInput["cells"];
+    const friday = await saveDate(f, null, specialInput({ closeWholeVenue: true, cells }));
+    const added = await addSubjects(f);
+
+    for (const subject of [f.restaurant, f.deli, f.bar, added.terrace, added.grill])
+      expect(await resolve(f, subject, "2026-10-09")).toEqual({
+        subject,
+        openingDate: "2026-10-09",
+        specialDateId: friday.id,
+        source: "whole_venue",
+        cell: { mode: "closed", periods: [] },
+      });
+    expect(await resolve(f, f.kitchen, "2026-10-09")).toEqual({
+      subject: f.kitchen,
+      openingDate: "2026-10-09",
+      specialDateId: friday.id,
+      source: "default_station",
+      cell: { mode: "always_open", periods: [] },
+    });
+
+    // The cells the closure hides are kept, and reopening the date shows them again.
+    const kept = await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, friday.id));
+    expect(kept.cells).toEqual([...cells].sort((a, b) => (a.subject.id < b.subject.id ? -1 : 1)));
+    await saveDate(f, friday.id, specialInput({ closeWholeVenue: false, cells: kept.cells }));
+    expect(await resolve(f, f.deli, "2026-10-09")).toMatchObject({
+      source: "special",
+      cell: { mode: "periods", periods: [evening] },
+    });
+    expect(await resolve(f, f.bar, "2026-10-09")).toMatchObject({
+      source: "special",
+      cell: { mode: "all_day", periods: [] },
+    });
+    expect(await resolve(f, added.terrace, "2026-10-09")).toMatchObject({
+      source: "standard",
+      cell: { mode: "not_set", periods: [] },
+    });
+  });
+});
+
+describe("the calendar's Closed colour", () => {
+  it("is Closed only when every active department is Closed, whatever the stations do", async () => {
+    const f = await fixture();
+    await save(f, f.restaurant, week({ 1: periods(period("09:00", "17:00")) }));
+
+    // Monday 19 October: the restaurant is open and the deli has no hours.
+    expect(await tone(f, "2026-10-19")).toBe("standard");
+    // Tuesday 20 October: the restaurant is Closed, but no hours set is not Closed.
+    expect(await tone(f, "2026-10-20")).toBe("standard");
+
+    const closedDeli: DateHoursCell = { subject: f.deli, cell: { mode: "closed", periods: [] } };
+    // Wednesday 21 October: both departments Closed (the restaurant by its week), the bar open.
+    await saveDate(
+      f,
+      null,
+      specialInput({
+        date: "2026-10-21",
+        colour: "green",
+        cells: [closedDeli, { subject: f.bar, cell: { mode: "all_day", periods: [] } }],
+      }),
+    );
+    expect(await tone(f, "2026-10-21")).toBe("closed");
+    // Thursday 22 October: only the restaurant is Closed, so the date keeps its own colour.
+    await saveDate(
+      f,
+      null,
+      specialInput({
+        date: "2026-10-22",
+        colour: "purple",
+        cells: [
+          { subject: f.deli, cell: { mode: "periods", periods: [period("10:00", "14:00")] } },
+        ],
+      }),
+    );
+    expect(await tone(f, "2026-10-22")).toBe("purple");
+    // Friday 23 October: every station Closed and the deli open.
+    await save(f, f.bar, week());
+    await saveDate(
+      f,
+      null,
+      specialInput({
+        date: "2026-10-23",
+        colour: "red",
+        cells: [{ subject: f.deli, cell: { mode: "all_day", periods: [] } }],
+      }),
+    );
+    expect(await tone(f, "2026-10-23")).toBe("red");
+
+    // A new department with no hours stops Wednesday being Closed until it is switched off.
+    const { terrace } = await addSubjects(f);
+    expect(await tone(f, "2026-10-21")).toBe("green");
+    await setDepartmentActive(terrace, false);
+    expect(await tone(f, "2026-10-21")).toBe("closed");
+
+    await saveDate(
+      f,
+      null,
+      specialInput({ date: "2026-10-26", colour: "blue", closeWholeVenue: true }),
+    );
+    expect(await tone(f, "2026-10-26")).toBe("closed");
+
+    // An ordinary date is Closed once every active department's week is Closed that day.
+    await save(f, f.deli, week());
+    expect(await tone(f, "2026-10-20")).toBe("closed");
+  });
+});
+
+describe("duplicating a special date", () => {
+  it("copies the name, colour and every cell to each target under new ids, an inactive department's included", async () => {
+    const f = await fixture();
+    const lunch = period("12:00", "15:00");
+    const dinner = period("19:00", "23:00");
+    const source = await saveDate(
+      f,
+      null,
+      specialInput({
+        colour: "purple",
+        cells: [
+          { subject: f.restaurant, cell: { mode: "periods", periods: [lunch, dinner] } },
+          { subject: f.deli, cell: { mode: "closed", periods: [] } },
+          { subject: f.bar, cell: { mode: "all_day", periods: [] } },
+        ],
+      }),
+    );
+    await setDepartmentActive(f.deli, false);
+    const sourceBefore = await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, source.id));
+
+    const copies = await duplicate(f, source.id, ["2026-10-23", "2026-10-30"]);
+    expect(copies).toEqual([
+      { ...source, id: expect.any(String), date: "2026-10-23" },
+      { ...source, id: expect.any(String), date: "2026-10-30" },
+    ]);
+    const ids = new Set([source.id, ...copies.map((copy) => copy.id)]);
+    expect(ids.size).toBe(3);
+
+    const periodIds = new Set([lunch.id, dinner.id]);
+    for (const copy of copies) {
+      const read = await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, copy.id));
+      const withoutIds = (cells: typeof read.cells) =>
+        cells.map(({ subject, cell }) => ({
+          subject,
+          cell: {
+            ...cell,
+            periods: cell.periods.map(({ opensAt, closesAt }) => ({ opensAt, closesAt })),
+          },
+        }));
+      expect({ ...read, cells: withoutIds(read.cells) }).toEqual({
+        ...copy,
+        cells: withoutIds(sourceBefore.cells),
+      });
+      for (const { cell } of read.cells)
+        for (const { id } of cell.periods) {
+          expect(periodIds.has(id)).toBe(false);
+          periodIds.add(id);
+        }
+      const rows = await dateRows(copy.id);
+      expect(rows.cells.some((cell) => cell.departmentId === f.deli.id)).toBe(true);
+    }
+    expect(await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, source.id))).toEqual(
+      sourceBefore,
+    );
+  });
+
+  it("copies a whole-venue closure and the cells it hides", async () => {
+    const f = await fixture();
+    const cells = [
+      { subject: f.bar, cell: { mode: "all_day", periods: [] } },
+    ] as SpecialDateInput["cells"];
+    const source = await saveDate(f, null, specialInput({ closeWholeVenue: true, cells }));
+    const [copy] = await duplicate(f, source.id, ["2026-10-16"]);
+    expect(await withTransaction(db, (tx) => readSpecialDate(tx, f.cfg, copy!.id))).toEqual({
+      ...source,
+      id: copy!.id,
+      date: "2026-10-16",
+      cells,
+    });
+    expect(await resolve(f, f.bar, "2026-10-16")).toMatchObject({ source: "whole_venue" });
+  });
+
+  it("leaves an inherited cell inheriting, so a Monday copied to a Sunday reads Sunday's week", async () => {
+    const f = await fixture();
+    const sunday = period("12:00", "16:00");
+    await save(f, f.restaurant, week({ 1: periods(period("09:00", "17:00")), 0: periods(sunday) }));
+    const monday = await saveDate(
+      f,
+      null,
+      specialInput({
+        date: "2026-10-12",
+        cells: [
+          { subject: f.restaurant, cell: { mode: "inherit", periods: [] } },
+          { subject: f.deli, cell: { mode: "closed", periods: [] } },
+        ],
+      }),
+    );
+    const [copy] = await duplicate(f, monday.id, ["2026-10-18"]);
+    expect(await resolve(f, f.restaurant, "2026-10-18")).toEqual({
+      subject: f.restaurant,
+      openingDate: "2026-10-18",
+      specialDateId: copy!.id,
+      source: "standard",
+      cell: { mode: "periods", periods: [sunday] },
+    });
+    expect((await dateRows(copy!.id)).cells.map((cell) => cell.departmentId)).toEqual([f.deli.id]);
+  });
+
+  const zone = "Europe/Madrid";
+  const forward = clockChangeAfter(zone, "2027-01-01T00:00:00Z", "forward");
+  const skipped = minutesAfter(forward.before, 1);
+
+  const refusals: [
+    string,
+    (f: Fixture) => Promise<{ sourceId: string; dates: unknown }>,
+    { code: string; params: Record<string, unknown> },
+  ][] = [
+    [
+      "a target repeated within the batch",
+      async (f) => ({
+        sourceId: (await saveDate(f, null, specialInput())).id,
+        dates: ["2026-10-20", "2026-10-21", "2026-10-20"],
+      }),
+      { code: "hours.invalid", params: { field: "dates.2" } },
+    ],
+    [
+      "a target another special date holds",
+      async (f) => {
+        await saveDate(f, null, specialInput({ date: "2026-10-21" }));
+        return {
+          sourceId: (await saveDate(f, null, specialInput())).id,
+          dates: ["2026-10-20", "2026-10-21"],
+        };
+      },
+      { code: "special_date.date_taken", params: { date: "2026-10-21" } },
+    ],
+    [
+      "a date that does not exist",
+      async (f) => ({
+        sourceId: (await saveDate(f, null, specialInput())).id,
+        dates: ["2026-10-20", "2026-02-30"],
+      }),
+      { code: "hours.invalid", params: { field: "dates.1" } },
+    ],
+    [
+      "the source's own date",
+      async (f) => ({
+        sourceId: (await saveDate(f, null, specialInput())).id,
+        dates: ["2026-10-20", "2026-10-09"],
+      }),
+      { code: "special_date.date_taken", params: { date: "2026-10-09" } },
+    ],
+    [
+      "no targets at all",
+      async (f) => ({ sourceId: (await saveDate(f, null, specialInput())).id, dates: [] }),
+      { code: "hours.invalid", params: { field: "dates" } },
+    ],
+    [
+      "targets that are not a list",
+      async (f) => ({
+        sourceId: (await saveDate(f, null, specialInput())).id,
+        dates: "2026-10-20",
+      }),
+      { code: "hours.invalid", params: { field: "dates" } },
+    ],
+    [
+      "a copied cell for a station that has since become the default",
+      async (f) => {
+        const source = await saveDate(
+          f,
+          null,
+          specialInput({ cells: [{ subject: f.bar, cell: { mode: "closed", periods: [] } }] }),
+        );
+        await makeDefault(f, f.bar);
+        return { sourceId: source.id, dates: ["2026-10-20", "2026-10-21"] };
+      },
+      { code: "station.always_open", params: { stationId: "bar" } },
+    ],
+    [
+      "a copied period that opens at a minute the clock skips on a target",
+      async (f) => ({
+        sourceId: (
+          await saveDate(
+            f,
+            null,
+            specialInput({
+              date: "2027-02-10",
+              cells: [
+                { subject: f.bar, cell: { mode: "periods", periods: [period(skipped, "12:00")] } },
+              ],
+            }),
+          )
+        ).id,
+        dates: ["2027-02-17", forward.date],
+      }),
+      { code: "hours.invalid", params: { field: "dates.1", date: forward.date, subjectId: "bar" } },
+    ],
+    [
+      "a target whose copied tail runs into the next day's standard opening",
+      async (f) => {
+        await save(f, f.restaurant, week({ 6: periods(period("01:00", "05:00")) }));
+        // Wednesday 7 October; the copy on Friday 16 October runs into Saturday 17 October.
+        const source = await saveDate(
+          f,
+          null,
+          specialInput({
+            date: "2026-10-07",
+            cells: [
+              {
+                subject: f.restaurant,
+                cell: { mode: "periods", periods: [period("22:00", "03:00")] },
+              },
+            ],
+          }),
+        );
+        return { sourceId: source.id, dates: ["2026-10-14", "2026-10-16"] };
+      },
+      {
+        code: "hours.invalid",
+        params: { field: "dates.1", date: "2026-10-17", subjectId: "restaurant" },
+      },
+    ],
+    [
+      "two adjacent targets whose copies overlap each other",
+      async (f) => ({
+        sourceId: (
+          await saveDate(
+            f,
+            null,
+            specialInput({
+              date: "2026-10-07",
+              cells: [
+                {
+                  subject: f.bar,
+                  cell: {
+                    mode: "periods",
+                    periods: [period("01:00", "05:00"), period("22:00", "03:00")],
+                  },
+                },
+              ],
+            }),
+          )
+        ).id,
+        dates: ["2026-10-20", "2026-10-21"],
+      }),
+      { code: "hours.invalid", params: { field: "dates.0", date: "2026-10-21", subjectId: "bar" } },
+    ],
+  ];
+
+  it.each(refusals)("refuses %s and creates no target at all", async (_, make, expected) => {
+    const f = await fixture();
+    const { sourceId, dates } = await make(f);
+    const before = await storedDates(f);
+    const named = (value: unknown) =>
+      value === "bar" ? f.bar.id : value === "restaurant" ? f.restaurant.id : value;
+    await expect(duplicate(f, sourceId, dates)).rejects.toMatchObject({
+      code: expected.code,
+      params: Object.fromEntries(
+        Object.entries(expected.params).map(([key, value]) => [key, named(value)]),
+      ),
+    });
+    expect(await storedDates(f)).toEqual(before);
+  });
+
+  it("copies a period onto a clock-change day while the venue's clock cannot be read", async () => {
+    const f = await fixture();
+    const source = await saveDate(
+      f,
+      null,
+      specialInput({
+        date: "2027-02-10",
+        cells: [{ subject: f.bar, cell: { mode: "periods", periods: [period(skipped, "12:00")] } }],
+      }),
+    );
+    await withTransaction(db, (tx) =>
+      tx.update(locations).set({ timeZone: "Mars/Base" }).where(eq(locations.id, f.cfg.locationId)),
+    );
+    const [copy] = await duplicate(f, source.id, [forward.date]);
+    expect(copy!.date).toBe(forward.date);
+  });
+
+  it("saves each of two overlapping copies once they are not adjacent", async () => {
+    const f = await fixture();
+    const source = await saveDate(
+      f,
+      null,
+      specialInput({
+        date: "2026-10-07",
+        cells: [
+          {
+            subject: f.bar,
+            cell: {
+              mode: "periods",
+              periods: [period("01:00", "05:00"), period("22:00", "03:00")],
+            },
+          },
+        ],
+      }),
+    );
+    const copies = await duplicate(f, source.id, ["2026-10-20", "2026-10-22"]);
+    expect(copies.map((copy) => copy.date)).toEqual(["2026-10-20", "2026-10-22"]);
+  });
+});
+
+describe("deleting a special date", () => {
+  it("removes the date, its cells and periods, and its subjects read their standard week again", async () => {
+    const f = await fixture();
+    const friday = period("12:00", "16:00");
+    await save(f, f.restaurant, week({ 5: periods(friday) }));
+    const date = await saveDate(
+      f,
+      null,
+      specialInput({
+        cells: [
+          { subject: f.restaurant, cell: { mode: "closed", periods: [] } },
+          { subject: f.bar, cell: { mode: "periods", periods: [period("10:00", "14:00")] } },
+        ],
+      }),
+    );
+    const rows = await dateRows(date.id);
+    expect(rows.cells).toHaveLength(2);
+    expect(rows.periods).toHaveLength(1);
+
+    await remove(f, date.id);
+
+    expect(await storedDates(f)).toEqual([]);
+    const cellIds = rows.cells.map((cell) => cell.id);
+    expect(
+      await withTransaction(db, (tx) =>
+        tx.select().from(specialDateHours).where(inArray(specialDateHours.id, cellIds)),
+      ),
+    ).toEqual([]);
+    expect(
+      await withTransaction(db, (tx) =>
+        tx
+          .select()
+          .from(specialDateHoursPeriods)
+          .where(inArray(specialDateHoursPeriods.cellId, cellIds)),
+      ),
+    ).toEqual([]);
+    expect(await resolve(f, f.restaurant, "2026-10-09")).toEqual({
+      subject: f.restaurant,
+      openingDate: "2026-10-09",
+      specialDateId: null,
+      source: "standard",
+      cell: { mode: "periods", periods: [friday] },
+    });
+    expect((await resolve(f, f.bar, "2026-10-09")).cell).toEqual({ mode: "not_set", periods: [] });
+    await expect(remove(f, date.id)).rejects.toMatchObject({
+      code: "special_date.not_found",
+      params: { specialDateId: date.id },
+    });
+  });
+
+  it("refuses another venue reading, changing, copying or deleting the date", async () => {
+    const f = await fixture();
+    const other = await fixture();
+    const date = await saveDate(
+      f,
+      null,
+      specialInput({ cells: [{ subject: f.deli, cell: { mode: "closed", periods: [] } }] }),
+    );
+    const before = await storedDates(f);
+    const notFound = { code: "special_date.not_found", params: { specialDateId: date.id } };
+
+    await expect(
+      withTransaction(db, (tx) => readSpecialDate(tx, other.cfg, date.id)),
+    ).rejects.toMatchObject(notFound);
+    await expect(
+      saveDate(other, date.id, specialInput({ date: "2026-10-20" })),
+    ).rejects.toMatchObject(notFound);
+    await expect(duplicate(other, date.id, ["2026-10-20"])).rejects.toMatchObject(notFound);
+    await expect(remove(other, date.id)).rejects.toMatchObject(notFound);
+
+    expect(await storedDates(f)).toEqual(before);
+    expect(await storedDates(other)).toEqual([]);
+  });
+});
+
+describe("calendar participants", () => {
+  it("has none of its own in step 5", () => {
+    expect(VENUE_SERVICE_CALENDAR_PARTICIPANTS).toEqual([]);
+  });
+
+  // A stand-in for a module's own date-linked rows, such as a menu timetable's overrides.
+  beforeAll(async () => {
+    await withTransaction(db, (tx) =>
+      tx.run(
+        sql`create table if not exists participant_copies (participant text not null, source_id text not null, target_id text not null)`,
+      ),
+    );
+  });
+
+  const participantRows = (targetIds: string[]) =>
+    withTransaction(db, (tx) =>
+      tx.all<{ participant: string; source_id: string; target_id: string }>(
+        sql`select participant, source_id, target_id from participant_copies where target_id in (${sql.join(
+          targetIds.map((id) => sql`${id}`),
+          sql`, `,
+        )}) order by participant, target_id`,
+      ),
+    );
+
+  interface Call {
+    tx: Transaction;
+    kind: "copy" | "beforeDelete";
+    sourceId?: string;
+    targetId?: string;
+    id?: string;
+    targetExists?: boolean;
+    targetCells?: number;
+  }
+
+  function recorder(name: string, failOn: { copy?: number; beforeDelete?: boolean } = {}) {
+    const calls: Call[] = [];
+    const participant: SpecialDateParticipant = {
+      async copy(tx, cfg, sourceId, targetId) {
+        const [target] = await tx
+          .select()
+          .from(specialDates)
+          .where(and(eq(specialDates.id, targetId), eq(specialDates.locationId, cfg.locationId)));
+        const cells = await tx
+          .select()
+          .from(specialDateHours)
+          .where(eq(specialDateHours.specialDateId, targetId));
+        calls.push({
+          tx,
+          kind: "copy",
+          sourceId,
+          targetId,
+          targetExists: target !== undefined,
+          targetCells: cells.length,
+        });
+        await tx.run(
+          sql`insert into participant_copies (participant, source_id, target_id) values (${name}, ${sourceId}, ${targetId})`,
+        );
+        if (calls.filter((call) => call.kind === "copy").length === failOn.copy)
+          throw new Error(`${name} refused target ${failOn.copy}`);
+      },
+      async beforeDelete(tx, _cfg, id) {
+        calls.push({ tx, kind: "beforeDelete", id });
+        if (failOn.beforeDelete) throw new Error(`${name} refused the delete`);
+      },
+    };
+    return { participant, calls };
+  }
+
+  it("hands every target, with its hours written, to every participant inside the same transaction", async () => {
+    const f = await fixture();
+    const source = await saveDate(
+      f,
+      null,
+      specialInput({
+        cells: [
+          { subject: f.bar, cell: { mode: "closed", periods: [] } },
+          { subject: f.deli, cell: { mode: "all_day", periods: [] } },
+        ],
+      }),
+    );
+    const menus = recorder("menus");
+    const wages = recorder("wages");
+    let outer: Transaction | undefined;
+    const copies = await withTransaction(db, (tx) => {
+      outer = tx;
+      return duplicateSpecialDate(
+        tx,
+        f.cfg,
+        source.id,
+        ["2026-10-20", "2026-10-21", "2026-10-22"],
+        AT,
+        [menus.participant, wages.participant],
+      );
+    });
+    const targetIds = copies.map((copy) => copy.id);
+    for (const { calls } of [menus, wages]) {
+      expect(
+        calls.map(({ kind, sourceId, targetId, targetExists, targetCells }) => ({
+          kind,
+          sourceId,
+          targetId,
+          targetExists,
+          targetCells,
+        })),
+      ).toEqual(
+        targetIds.map((targetId) => ({
+          kind: "copy",
+          sourceId: source.id,
+          targetId,
+          targetExists: true,
+          targetCells: 2,
+        })),
+      );
+      for (const call of calls) expect(call.tx).toBe(outer);
+    }
+    expect(await participantRows(targetIds)).toEqual(
+      ["menus", "wages"].flatMap((participant) =>
+        [...targetIds].sort().map((target_id) => ({
+          participant,
+          source_id: source.id,
+          target_id,
+        })),
+      ),
+    );
+  });
+
+  it("creates no target, cell or participant row when a participant fails on the second target", async () => {
+    const f = await fixture();
+    const source = await saveDate(
+      f,
+      null,
+      specialInput({
+        cells: [{ subject: f.bar, cell: { mode: "periods", periods: [period("12:00", "15:00")] } }],
+      }),
+    );
+    const before = await storedDates(f);
+    const cellsBefore = await withTransaction(db, (tx) => tx.select().from(specialDateHours));
+    const periodsBefore = await withTransaction(db, (tx) =>
+      tx.select().from(specialDateHoursPeriods),
+    );
+    const menus = recorder("menus", { copy: 2 });
+
+    await expect(
+      duplicate(f, source.id, ["2026-10-20", "2026-10-21", "2026-10-22"], [menus.participant]),
+    ).rejects.toThrow("menus refused target 2");
+
+    const targetIds = menus.calls.map((call) => call.targetId!);
+    expect(targetIds).toHaveLength(2);
+    expect(await storedDates(f)).toEqual(before);
+    expect(await withTransaction(db, (tx) => tx.select().from(specialDateHours))).toEqual(
+      cellsBefore,
+    );
+    expect(await withTransaction(db, (tx) => tx.select().from(specialDateHoursPeriods))).toEqual(
+      periodsBefore,
+    );
+    expect(await participantRows(targetIds)).toEqual([]);
+  });
+
+  it("asks every participant before deleting, inside the deleting transaction", async () => {
+    const f = await fixture();
+    const date = await saveDate(f, null, specialInput());
+    const menus = recorder("menus");
+    const wages = recorder("wages");
+    let outer: Transaction | undefined;
+    await withTransaction(db, (tx) => {
+      outer = tx;
+      return deleteSpecialDate(tx, f.cfg, date.id, [menus.participant, wages.participant]);
+    });
+    for (const { calls } of [menus, wages]) {
+      expect(calls.map(({ kind, id }) => ({ kind, id }))).toEqual([
+        { kind: "beforeDelete", id: date.id },
+      ]);
+      expect(calls[0]!.tx).toBe(outer);
+    }
+    expect(await storedDates(f)).toEqual([]);
+  });
+
+  it("keeps the date and every cell when a participant refuses the delete", async () => {
+    const f = await fixture();
+    const date = await saveDate(
+      f,
+      null,
+      specialInput({
+        cells: [
+          { subject: f.bar, cell: { mode: "periods", periods: [period("12:00", "15:00")] } },
+          { subject: f.deli, cell: { mode: "closed", periods: [] } },
+        ],
+      }),
+    );
+    const before = await storedDates(f);
+    const rowsBefore = await dateRows(date.id);
+    const menus = recorder("menus", { beforeDelete: true });
+
+    await expect(remove(f, date.id, [menus.participant])).rejects.toThrow(
+      "menus refused the delete",
+    );
+
+    expect(await storedDates(f)).toEqual(before);
+    expect(await dateRows(date.id)).toEqual(rowsBefore);
+  });
 });

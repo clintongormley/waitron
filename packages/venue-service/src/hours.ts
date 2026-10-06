@@ -5,8 +5,11 @@ import { AppError } from "@waitron/shared";
 import { isReadableClock, localTimeOccurrences, venueLocalMoment } from "./hours-clock.js";
 import {
   addDays,
+  calendarTone,
   cellIntervals,
   invalidHours,
+  isLocalDate,
+  parseDuplicateDates,
   parseSpecialDateInput,
   parseSubject,
   parseWeek,
@@ -15,11 +18,13 @@ import {
   type Interval,
 } from "./hours-rules.js";
 import type {
+  CalendarTone,
   DateCell,
   DateHoursCell,
   HourPeriod,
   HoursSubject,
   LocalDate,
+  ResolvedHours,
   SpecialDate,
   SpecialDateInput,
   WeekCell,
@@ -384,12 +389,8 @@ async function requireSpecialDate(tx: Transaction, cfg: VenueScope, id: string) 
   return row;
 }
 
-export async function readSpecialDate(
-  tx: Transaction,
-  cfg: VenueScope,
-  id: string,
-): Promise<SpecialDate & { cells: DateHoursCell[] }> {
-  const row = await requireSpecialDate(tx, cfg, id);
+/** A special date's stored cells, sorted by subject id. */
+async function readDateCells(tx: Transaction, id: string): Promise<DateHoursCell[]> {
   const cells = await tx
     .select()
     .from(specialDateHours)
@@ -399,18 +400,27 @@ export async function readSpecialDate(
     specialDateHoursPeriods,
     cells.map((cell) => cell.id),
   );
+  return cells
+    .map((cell) => ({
+      subject: subjectOfRow(cell),
+      cell: cellOf(cell.mode, periods.get(cell.id) ?? []),
+    }))
+    .sort((a, b) => Number(a.subject.id > b.subject.id) - Number(a.subject.id < b.subject.id));
+}
+
+export async function readSpecialDate(
+  tx: Transaction,
+  cfg: VenueScope,
+  id: string,
+): Promise<SpecialDate & { cells: DateHoursCell[] }> {
+  const row = await requireSpecialDate(tx, cfg, id);
   return {
     id: row.id,
     date: row.date,
     name: row.name,
     colour: row.colour,
     closeWholeVenue: row.closeWholeVenue,
-    cells: cells
-      .map((cell) => ({
-        subject: subjectOfRow(cell),
-        cell: cellOf(cell.mode, periods.get(cell.id) ?? []),
-      }))
-      .sort((a, b) => Number(a.subject.id > b.subject.id) - Number(a.subject.id < b.subject.id)),
+    cells: await readDateCells(tx, id),
   };
 }
 
@@ -466,6 +476,62 @@ async function weekIntervalsBySubject(
   return weeks;
 }
 
+function dateState(closeWholeVenue: boolean, cells: readonly DateHoursCell[]): DateState {
+  return {
+    closeWholeVenue,
+    cells: new Map(
+      cells
+        .filter((entry) => entry.cell.mode !== "inherit")
+        .map((entry) => [keyOf(entry.subject), cellIntervals(entry.cell)]),
+    ),
+  };
+}
+
+/**
+ * Refuses proposed special dates whose hours clash with the dates either side of each `touched`
+ * date. `proposed` replaces whatever is stored on its dates; a touched date it leaves out reads as
+ * an ordinary day. `clash` names the refusal from the touched date and the other date of the pair.
+ */
+async function assertDatesBesideNeighbours(
+  tx: Transaction,
+  cfg: VenueScope,
+  at: Date,
+  proposed: Map<LocalDate, DateState>,
+  touched: readonly LocalDate[],
+  exceptId: string | null,
+  clash: (date: LocalDate, other: LocalDate, subject: HoursSubject) => never,
+): Promise<void> {
+  const now = await today(tx, cfg, at);
+  const neighbours = touched.flatMap((date) => [addDays(date, -1), addDays(date, 1)]);
+  const dates = await readDateStates(
+    tx,
+    cfg,
+    inArray(specialDates.date, neighbours),
+    null,
+    exceptId,
+  );
+  for (const date of touched) dates.delete(date);
+  for (const [date, state] of proposed) dates.set(date, state);
+  const subjects = await scheduledSubjects(tx, cfg);
+  const weeks = await weekIntervalsBySubject(tx, subjects);
+  for (const subject of subjects) {
+    const key = keyOf(subject);
+    const week = (weekday: number) => weeks.get(key)?.[weekday] ?? null;
+    for (const date of touched)
+      for (const earlier of [addDays(date, -1), date]) {
+        if (!pairMatters(earlier, now)) continue;
+        const later = addDays(earlier, 1);
+        if (
+          tailOverlaps(
+            effective(earlier, key, dates, week).intervals,
+            effective(later, key, dates, week).intervals,
+          )
+        )
+          clash(date, earlier === date ? later : earlier, subject);
+      }
+  }
+}
+
 /**
  * Refuses a special date whose hours clash with the dates either side of it, and, for a moved
  * date, with the hours either side of the date it leaves.
@@ -478,53 +544,53 @@ async function assertSpecialDateBesideNeighbours(
   exceptId: string | null,
   at: Date,
 ): Promise<void> {
-  const now = await today(tx, cfg, at);
   const touched =
     previous === null || previous === input.date ? [input.date] : [input.date, previous];
-  const neighbours = touched.flatMap((date) => [addDays(date, -1), addDays(date, 1)]);
-  const dates = await readDateStates(
+  const cellIndex = new Map(input.cells.map((entry, index) => [keyOf(entry.subject), index]));
+  await assertDatesBesideNeighbours(
     tx,
     cfg,
-    inArray(specialDates.date, neighbours),
-    null,
+    at,
+    new Map([[input.date, dateState(input.closeWholeVenue, input.cells)]]),
+    touched,
     exceptId,
+    (date, other, subject) => {
+      if (date !== input.date) invalidHours("date", { date, subjectId: subject.id });
+      const index = cellIndex.get(keyOf(subject));
+      const ownCell = index !== undefined && input.cells[index]!.cell.mode !== "inherit";
+      invalidHours(ownCell ? `cells.${index}.cell` : "cells", {
+        date: other,
+        subjectId: subject.id,
+      });
+    },
   );
-  dates.delete(input.date);
-  if (previous !== null) dates.delete(previous);
-  const cellIndex = new Map(input.cells.map((entry, index) => [keyOf(entry.subject), index]));
-  dates.set(input.date, {
-    closeWholeVenue: input.closeWholeVenue,
-    cells: new Map(
-      input.cells
-        .filter((entry) => entry.cell.mode !== "inherit")
-        .map((entry) => [keyOf(entry.subject), cellIntervals(entry.cell)]),
-    ),
-  });
-  const subjects = await scheduledSubjects(tx, cfg);
-  const weeks = await weekIntervalsBySubject(tx, subjects);
-  for (const subject of subjects) {
-    const key = keyOf(subject);
-    const week = (weekday: number) => weeks.get(key)?.[weekday] ?? null;
-    for (const date of touched)
-      for (const earlier of [addDays(date, -1), date]) {
-        if (!pairMatters(earlier, now)) continue;
-        const later = addDays(earlier, 1);
-        if (
-          !tailOverlaps(
-            effective(earlier, key, dates, week).intervals,
-            effective(later, key, dates, week).intervals,
-          )
-        )
-          continue;
-        if (date !== input.date) invalidHours("date", { date, subjectId: subject.id });
-        const index = cellIndex.get(key);
-        const ownCell = index !== undefined && input.cells[index]!.cell.mode !== "inherit";
-        invalidHours(ownCell ? `cells.${index}.cell` : "cells", {
-          date: earlier === date ? later : earlier,
-          subjectId: subject.id,
-        });
-      }
-  }
+}
+
+/** The venue's time zone, or null when its clock cannot be read. */
+async function readableZone(tx: Transaction, cfg: VenueScope): Promise<string | null> {
+  const clock = await readLocationClock(tx, cfg.locationId);
+  return isReadableClock(clock) ? clock.timeZone : null;
+}
+
+/**
+ * The first period, as its cell's index and its own field, that opens or closes at a minute the
+ * clock skips on `date`; a closing after midnight is checked on the next date.
+ */
+function skippedEndpoint(
+  date: LocalDate,
+  cells: readonly DateHoursCell[],
+  timeZone: string,
+): { index: number; field: string } | null {
+  for (const [index, { cell }] of cells.entries())
+    for (const [position, period] of cell.periods.entries()) {
+      const field = `cells.${index}.cell.periods.${position}`;
+      const closingDate = period.closesAt > period.opensAt ? date : addDays(date, 1);
+      if (localTimeOccurrences(date, period.opensAt, timeZone).length === 0)
+        return { index, field: `${field}.opensAt` };
+      if (localTimeOccurrences(closingDate, period.closesAt, timeZone).length === 0)
+        return { index, field: `${field}.closesAt` };
+    }
+  return null;
 }
 
 /**
@@ -536,18 +602,10 @@ async function assertEndpointsOccur(
   cfg: VenueScope,
   input: SpecialDateInput,
 ): Promise<void> {
-  const clock = await readLocationClock(tx, cfg.locationId);
-  if (!isReadableClock(clock)) return;
-  input.cells.forEach(({ cell }, index) =>
-    cell.periods.forEach((period, position) => {
-      const field = `cells.${index}.cell.periods.${position}`;
-      const closingDate = period.closesAt > period.opensAt ? input.date : addDays(input.date, 1);
-      if (localTimeOccurrences(input.date, period.opensAt, clock.timeZone).length === 0)
-        invalidHours(`${field}.opensAt`);
-      if (localTimeOccurrences(closingDate, period.closesAt, clock.timeZone).length === 0)
-        invalidHours(`${field}.closesAt`);
-    }),
-  );
+  const zone = await readableZone(tx, cfg);
+  if (zone === null) return;
+  const skipped = skippedEndpoint(input.date, input.cells, zone);
+  if (skipped !== null) invalidHours(skipped.field);
 }
 
 /**
@@ -641,6 +699,249 @@ export async function saveSpecialDate(
   if (dropped.length > 0)
     await tx.delete(specialDateHours).where(inArray(specialDateHours.id, dropped));
   return { id: specialDateId, ...values };
+}
+
+/**
+ * A module that keeps its own rows per special date, such as a menu timetable's overrides. It
+ * works inside the caller's transaction and never opens its own. `copy` runs after the target date
+ * and its hours are written; `beforeDelete` may only refuse, since the date's own foreign keys
+ * remove what hangs from it.
+ */
+export interface SpecialDateParticipant {
+  copy(tx: Transaction, cfg: VenueScope, sourceId: string, targetId: string): Promise<void>;
+  beforeDelete(tx: Transaction, cfg: VenueScope, id: string): Promise<void>;
+}
+
+/**
+ * Copies a special date's name, colour, closure and every cell to each target date under new ids,
+ * then hands each copy to every participant. The whole batch is checked before anything is
+ * written, so one refusal creates no target at all.
+ */
+export async function duplicateSpecialDate(
+  tx: Transaction,
+  cfg: VenueScope,
+  sourceId: string,
+  dates: readonly LocalDate[],
+  at: Date,
+  participants: readonly SpecialDateParticipant[] = [],
+): Promise<SpecialDate[]> {
+  const targets = parseDuplicateDates(dates);
+  const source = await requireSpecialDate(tx, cfg, sourceId);
+  const taken = new Set(
+    (
+      await tx
+        .select({ date: specialDates.date })
+        .from(specialDates)
+        .where(
+          and(eq(specialDates.locationId, cfg.locationId), inArray(specialDates.date, targets)),
+        )
+    ).map((row) => row.date),
+  );
+  const occupied = targets.find((date) => taken.has(date));
+  if (occupied !== undefined) throw new AppError("special_date.date_taken", { date: occupied });
+
+  const cells = await readDateCells(tx, sourceId);
+  await requireSubjects(
+    tx,
+    cfg,
+    cells.map((entry, index) => ({
+      subject: entry.subject,
+      field: `cells.${index}.subject`,
+      writing: true,
+    })),
+  );
+  const zone = await readableZone(tx, cfg);
+  if (zone !== null)
+    for (const [index, date] of targets.entries()) {
+      const skipped = skippedEndpoint(date, cells, zone);
+      if (skipped !== null)
+        invalidHours(`dates.${index}`, { date, subjectId: cells[skipped.index]!.subject.id });
+    }
+  const state = dateState(source.closeWholeVenue, cells);
+  await assertDatesBesideNeighbours(
+    tx,
+    cfg,
+    at,
+    new Map(targets.map((date) => [date, state])),
+    targets,
+    null,
+    (date, other, subject) =>
+      invalidHours(`dates.${targets.indexOf(date)}`, { date: other, subjectId: subject.id }),
+  );
+
+  const values = {
+    name: source.name,
+    colour: source.colour,
+    closeWholeVenue: source.closeWholeVenue,
+  };
+  const copies: SpecialDate[] = [];
+  for (const date of targets) {
+    const [row] = await tx
+      .insert(specialDates)
+      .values({ ...values, date, locationId: cfg.locationId })
+      .returning({ id: specialDates.id });
+    const targetId = row!.id;
+    for (const { subject, cell } of cells)
+      await writeCell(
+        tx,
+        { cells: specialDateHours, periods: specialDateHoursPeriods },
+        undefined,
+        {
+          specialDateId: targetId,
+          ...(subject.kind === "department"
+            ? { departmentId: subject.id }
+            : { stationId: subject.id }),
+        },
+        {
+          mode: cell.mode as StoredMode,
+          periods: cell.periods.map((period) => ({ ...period, id: newId() })),
+        },
+      );
+    for (const participant of participants) await participant.copy(tx, cfg, sourceId, targetId);
+    copies.push({ id: targetId, date, ...values });
+  }
+  return copies;
+}
+
+/**
+ * Deletes a special date once every participant has agreed; its cells and periods go with it, so
+ * its subjects read their standard week again.
+ */
+export async function deleteSpecialDate(
+  tx: Transaction,
+  cfg: VenueScope,
+  id: string,
+  participants: readonly SpecialDateParticipant[] = [],
+): Promise<void> {
+  await requireSpecialDate(tx, cfg, id);
+  for (const participant of participants) await participant.beforeDelete(tx, cfg, id);
+  await tx.delete(specialDates).where(eq(specialDates.id, id));
+}
+
+/**
+ * Each subject's hours on one opening date, in a fixed number of reads however many subjects,
+ * with the date's special date if it has one. The subjects must already be this venue's.
+ */
+async function resolveSubjects(
+  tx: Transaction,
+  cfg: VenueScope,
+  subjects: readonly HoursSubject[],
+  date: LocalDate,
+): Promise<{ special: SpecialDate | null; resolved: ResolvedHours[] }> {
+  const departmentIds = subjects.filter((s) => s.kind === "department").map((s) => s.id);
+  const stationIds = subjects.filter((s) => s.kind === "station").map((s) => s.id);
+  const owners = (cells: CellTable) =>
+    or(
+      and(isNotNull(cells.departmentId), inArray(cells.departmentId, departmentIds)),
+      and(isNotNull(cells.stationId), inArray(cells.stationId, stationIds)),
+    );
+  const defaults = new Set(
+    stationIds.length === 0
+      ? []
+      : (
+          await tx
+            .select({ id: kitchenStations.id })
+            .from(kitchenStations)
+            .where(
+              and(inArray(kitchenStations.id, stationIds), eq(kitchenStations.isDefault, true)),
+            )
+        ).map((row) => row.id),
+  );
+  const [special] = await tx
+    .select({
+      id: specialDates.id,
+      date: specialDates.date,
+      name: specialDates.name,
+      colour: specialDates.colour,
+      closeWholeVenue: specialDates.closeWholeVenue,
+    })
+    .from(specialDates)
+    .where(and(eq(specialDates.locationId, cfg.locationId), eq(specialDates.date, date)));
+  const dateCells =
+    special === undefined
+      ? []
+      : await tx
+          .select()
+          .from(specialDateHours)
+          .where(and(eq(specialDateHours.specialDateId, special.id), owners(specialDateHours)));
+  const weekCells = await tx
+    .select()
+    .from(hoursWeekCells)
+    .where(and(eq(hoursWeekCells.weekday, weekdayOf(date)), owners(hoursWeekCells)));
+  const datePeriods = await periodsByCell(
+    tx,
+    specialDateHoursPeriods,
+    dateCells.map((cell) => cell.id),
+  );
+  const weekPeriods = await periodsByCell(
+    tx,
+    hoursWeekPeriods,
+    weekCells.map((cell) => cell.id),
+  );
+  const resolved = subjects.map((subject): ResolvedHours => {
+    const base = { subject, openingDate: date, specialDateId: special?.id ?? null };
+    if (subject.kind === "station" && defaults.has(subject.id))
+      return { ...base, source: "default_station", cell: { mode: "always_open", periods: [] } };
+    if (special?.closeWholeVenue)
+      return { ...base, source: "whole_venue", cell: { mode: "closed", periods: [] } };
+    const key = keyOf(subject);
+    const own = dateCells.find((cell) => keyOf(subjectOfRow(cell)) === key);
+    if (own !== undefined)
+      return {
+        ...base,
+        source: "special",
+        cell: cellOf(own.mode, datePeriods.get(own.id) ?? []),
+      };
+    const standard = weekCells.find((cell) => keyOf(subjectOfRow(cell)) === key);
+    return {
+      ...base,
+      source: "standard",
+      cell:
+        standard === undefined
+          ? { mode: "not_set", periods: [] }
+          : cellOf(standard.mode, weekPeriods.get(standard.id) ?? []),
+    };
+  });
+  return { special: special ?? null, resolved };
+}
+
+/**
+ * One subject's hours on one opening date: the default station is always open, a whole-venue
+ * closure closes everything else, then the date's own cell, then the standard week.
+ */
+export async function resolveOpeningDateHours(
+  tx: Transaction,
+  cfg: VenueScope,
+  subject: HoursSubject,
+  openingDate: LocalDate,
+): Promise<ResolvedHours> {
+  const parsed = parseSubject(subject, "subject");
+  if (!isLocalDate(openingDate)) invalidHours("openingDate");
+  await requireSubjects(tx, cfg, [{ subject: parsed, field: "subject", writing: false }]);
+  return (await resolveSubjects(tx, cfg, [parsed], openingDate)).resolved[0]!;
+}
+
+/** How the calendar colours one date, from the active departments' hours that date. */
+export async function readCalendarTone(
+  tx: Transaction,
+  cfg: VenueScope,
+  date: LocalDate,
+): Promise<CalendarTone> {
+  if (!isLocalDate(date)) invalidHours("date");
+  const active = await tx
+    .select({ id: departments.id })
+    .from(departments)
+    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)));
+  const { special, resolved } = await resolveSubjects(
+    tx,
+    cfg,
+    active.map((row) => ({ kind: "department" as const, id: row.id })),
+    date,
+  );
+  return calendarTone(
+    special?.colour ?? null,
+    resolved.map((entry) => entry.cell.mode),
+  );
 }
 
 /** A station's opening schedule as routing reads it. */
