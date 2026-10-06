@@ -319,3 +319,23 @@ proof or delay successful proof cleanup.
 `apps/dashboard/src/screens/printer-pair.unsaved.test.ts` covers these paths alongside the unchanged
 printer suites. Synthetic unload checks test listener cancellation; the native reload prompt remains
 Task 5. Printer detail name/connection, calibration and the remaining modal/page owners are pending.
+
+### Printer calibration checkpoint (2026-10-06)
+
+Your changed paper width, resolution and attached-drawer settings now ask before Cancel or native
+Escape closes the calibration modal. Keep retains the settings, wizard step and focus; Discard
+closes once. Changing the settings back clears unload protection. A ruler answer that changes the
+paper width is an edit; a ruler answer matching the saved width, wizard steps and hardware output
+alone are exempt.
+
+Successful calibration commits the captured settings before list refresh. Newer delivered input
+stays open, and a second save sends only the settings still changed from the accepted write.
+A refused write retains its draft. Submitted saves and ruler/sample/drawer commands keep their
+existing direct dismissal. Replacing or disconnecting the editor disposes its scope and pending
+question; a departed write cannot close or mark the replacement, and delayed native close reports
+cannot discard a reopened editor.
+
+`apps/dashboard/src/screens/printer-calibration.unsaved.test.ts` exercises these routes alongside
+the unchanged printer behavior/accessibility suites. Its synthetic unload checks establish listener
+cancellation, not the browser's native reload prompt. Printer detail name and connection editors
+are page forms and remain with Tasks 5/6; the other modal and page owners remain pending.

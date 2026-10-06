@@ -149,6 +149,8 @@ interface EditablePrinter {
   active: boolean;
 }
 
+type CalibrationSettings = Pick<EditablePrinter, "paperWidth" | "resolution" | "hasCashDrawer">;
+
 /** Discovery reports arrive on later agent polls, so a scan listens beyond its initial read. */
 export const SCAN_LISTEN_MS = 30_000;
 export const AGENT_SCAN_LISTEN_MS = 10_000;
@@ -488,6 +490,7 @@ export class PrintersScreen extends LitElement {
       if (printerId !== this.selectedPrinterId) {
         const editing = this.editingPrinter;
         if (editing && editing.id !== printerId) {
+          this.#disposeCalibrationDraft();
           this.editingPrinter = null;
           this.#closeTest();
           if (this.#readdingId === editing.id) {
@@ -640,6 +643,44 @@ export class PrintersScreen extends LitElement {
   #calibrationShownEpoch = 0;
   @state() private testError: string | null = null;
   @state() private editingPrinter: EditablePrinter | null = null;
+  #calibrationScope?: DraftScope<CalibrationSettings>;
+  #calibrationLeave?: LeaveCoordinator;
+  #calibrationOpening = 0;
+  readonly #beforeCalibrationClose = async (reason: LeaveReason): Promise<boolean> =>
+    this.submitting ||
+    this.printingTest ||
+    this.printingSample ||
+    this.testingDrawer ||
+    !this.#calibrationScope ||
+    (await this.#calibrationLeave!.request({
+      scopes: [this.#calibrationScope.id],
+      reason,
+      proceed() {},
+    })) === "proceeded";
+
+  #calibrationValues(): CalibrationSettings {
+    const { paperWidth, resolution, hasCashDrawer } = this.editingPrinter!;
+    return { paperWidth, resolution, hasCashDrawer };
+  }
+
+  #disposeCalibrationDraft(): void {
+    this.#calibrationOpening++;
+    this.#calibrationScope?.dispose();
+    this.#calibrationScope = undefined;
+    this.#calibrationLeave = undefined;
+  }
+
+  #finishCalibration(opening: number, id: string): void {
+    if (opening !== this.#calibrationOpening) return;
+    this.#disposeCalibrationDraft();
+    this.editingPrinter = null;
+    this.#closeTest();
+    this.#restoreEditFocus();
+    if (this.#readdingId === id) {
+      this.#readdingId = undefined;
+      void this.#deactivatePrinter(id);
+    }
+  }
   @state() private editingAgent: PrintAgentRow | null = null;
   #agentScope?: DraftScope<string>;
   #agentLeave?: LeaveCoordinator;
@@ -830,6 +871,8 @@ export class PrintersScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#disposeCalibrationDraft();
+    this.editingPrinter = null;
     this.#disposeAgentDraft();
     this.#disposePrinterNameDraft();
     this.#disposeAddressDraft();
@@ -901,17 +944,6 @@ export class PrintersScreen extends LitElement {
       await this.#load();
     } catch (error) {
       this.errorKey = codeOf(error);
-    }
-  }
-
-  /** Form submissions share a gate; immediate printer actions keep their own dispatch. */
-  async #submit(action: () => Promise<unknown>): Promise<void> {
-    if (this.submitting) return;
-    this.submitting = true;
-    try {
-      await this.#mutate(action);
-    } finally {
-      this.submitting = false;
     }
   }
 
@@ -1648,32 +1680,56 @@ export class PrintersScreen extends LitElement {
   }
 
   #editPrinter(id: string, patch: Partial<EditablePrinter>): void {
-    if (this.editingPrinter?.id === id) this.editingPrinter = { ...this.editingPrinter, ...patch };
+    if (this.editingPrinter?.id === id) {
+      this.editingPrinter = { ...this.editingPrinter, ...patch };
+      this.#calibrationScope?.changed();
+    }
   }
 
   /** Calibration only writes settings changed during this wizard. */
   async #savePrinter(id: string): Promise<void> {
+    if (this.submitting) return;
     this.errorKey = null;
     const row = this.editingPrinter;
-    if (row?.id !== id) return;
-    if (!this.#validatePrinter(row)) return;
+    if (row?.id !== id || !this.#validatePrinter(row)) return;
+    const opening = this.#calibrationOpening;
+    const scope = this.#calibrationScope;
+    const submitted = this.#calibrationValues();
+    const active = () => opening === this.#calibrationOpening && this.isConnected;
     const patch: PrinterPatch = {};
     if (row.paperWidth !== row.saved.paperWidth) patch.paperWidth = row.paperWidth;
     if (row.resolution !== row.saved.resolution) patch.resolution = row.resolution;
     if (row.hasCashDrawer !== row.saved.hasCashDrawer) patch.hasCashDrawer = row.hasCashDrawer;
-    await this.#submit(async () => {
-      // Cleared before the request, so leaving the screen while it is in flight does not switch
-      // off a printer being saved; a failed save puts it back for the wizard's close.
-      const readding = this.#readdingId === id;
-      if (readding) this.#readdingId = undefined;
+    const readding = this.#readdingId === id;
+    // An in-flight save owns reactivation; closing its wizard must not disable the printer.
+    if (readding) this.#readdingId = undefined;
+    this.submitting = true;
+    try {
       try {
         if (Object.keys(patch).length) await this.api.updatePrinter(id, patch);
       } catch (error) {
-        if (readding) this.#readdingId = id;
-        throw error;
+        if (active()) {
+          if (readding) this.#readdingId = id;
+          this.errorKey = codeOf(error);
+        }
+        return;
       }
-      await this.#closeModal("edit-printer-modal");
-    });
+      if (active()) {
+        scope?.commit(submitted);
+        this.editingPrinter = { ...this.editingPrinter!, saved: submitted };
+        if (!scope?.isDirty()) {
+          const modal = this.renderRoot.querySelector<WtModal>("[data-test=edit-printer-modal]");
+          if (modal) {
+            modal.closeAfter("saved");
+            await modal.updateComplete;
+          }
+          this.#finishCalibration(opening, id);
+        }
+      }
+      if (this.isConnected) await this.#load();
+    } finally {
+      this.submitting = false;
+    }
   }
 
   async #deactivatePrinter(id: string): Promise<void> {
@@ -2159,6 +2215,7 @@ export class PrintersScreen extends LitElement {
   }
 
   #openPrinter(p: Printer, event?: Event): void {
+    this.#disposeCalibrationDraft();
     if (event) this.#rememberEditTrigger(event);
     this.#closeTest();
     this.calibrationStep = 1;
@@ -2185,6 +2242,21 @@ export class PrintersScreen extends LitElement {
         hasCashDrawer: p.hasCashDrawer,
       },
     };
+    const modal = this.renderRoot.querySelector<WtModal>("[data-test=edit-printer-modal]");
+    if (modal) modal.open = true;
+    this.#calibrationLeave = leaveCoordinatorFor(this);
+    this.#calibrationScope = this.#calibrationLeave?.register<CalibrationSettings>({
+      id: {},
+      current: () => this.#calibrationValues(),
+      snapshot: (value) => ({ ...value }),
+      equal: (a, b) =>
+        a.paperWidth === b.paperWidth &&
+        a.resolution === b.resolution &&
+        a.hasCashDrawer === b.hasCashDrawer,
+      restore: (value) => {
+        this.editingPrinter = { ...this.editingPrinter!, ...value };
+      },
+    });
   }
 
   #renderTestPageSent(): TemplateResult | typeof nothing {
@@ -3028,6 +3100,10 @@ export class PrintersScreen extends LitElement {
       await modal.requestClose("cancel");
       return;
     }
+    if (id === "edit-printer-modal" && this.#calibrationScope) {
+      await modal.requestClose("cancel");
+      return;
+    }
     if (id === "new-printer-modal") this.#endScan();
     // Native close restores focus before wt-close removes the draft and modal from the template.
     const closed = new Promise<void>((resolve) =>
@@ -3085,6 +3161,7 @@ export class PrintersScreen extends LitElement {
   #renderEditPrinter(): TemplateResult | typeof nothing {
     const p = this.editingPrinter;
     if (!p) return nothing;
+    const opening = this.#calibrationOpening;
     const errors = this.formAttempted ? this.#printerErrors(p) : {};
     const settingDots = textGrid(p.paperWidth, p.resolution).widthDots;
     const bottom = bottomMessage(
@@ -3098,14 +3175,9 @@ export class PrintersScreen extends LitElement {
       heading=${`${t("printers.calibrate")}: ${p.name}`}
       .open=${true}
       .opener=${this.#tabAction("open-add-printer")}
+      .beforeClose=${this.#calibrationScope ? this.#beforeCalibrationClose : undefined}
       @wt-close=${() => {
-        this.editingPrinter = null;
-        this.#closeTest();
-        this.#restoreEditFocus();
-        if (this.#readdingId === p.id) {
-          this.#readdingId = undefined;
-          void this.#deactivatePrinter(p.id);
-        }
+        this.#finishCalibration(opening, p.id);
       }}
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep < 3 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
     >

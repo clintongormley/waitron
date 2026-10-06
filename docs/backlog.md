@@ -1265,8 +1265,14 @@ Discarding the proof leaves an independently edited address intact. Submitted re
 their existing direct dismissal and command result; a successful request commits only its captured
 proof, with newer delivered input still dirty. Replaced proofs and delayed close reports cannot
 clear the current proof. Focused cases are in `apps/dashboard/src/screens/printer-pair.unsaved.test.ts`.
-Printer detail/calibration forms, the other audited modal owners and page/navigation protection
-remain to be wired. Keep automatic saves on their existing paths.
+Calibration now protects your paper width, resolution and attached-drawer settings through Cancel
+and native Escape. Wizard steps and hardware test results do not establish a new saved baseline.
+A successful save commits the submitted settings before refresh; newer delivered input stays open,
+and a second save sends only the remaining changes. Submitted saves and hardware commands retain
+their existing immediate dismissal. Replacement, disconnect and delayed native close cases are in
+`apps/dashboard/src/screens/printer-calibration.unsaved.test.ts` alongside the unchanged printer suites.
+Printer detail name/connection are page owners for the remaining page/navigation work. Other audited
+modal owners also remain to be wired. Keep automatic saves on their existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
