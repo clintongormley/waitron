@@ -1,4 +1,3 @@
-/// <reference types="node" />
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { findAdministrativeArea } from "@waitron/country";
