@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./routing": "./src/routing.ts",
+    "./hours-types": "./src/hours-types.ts",
     "./dashboard": "./src/dashboard/index.ts"
   },
   "scripts": {

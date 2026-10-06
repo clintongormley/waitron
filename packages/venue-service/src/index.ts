@@ -15,3 +15,13 @@ export { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 export * from "./routing.js";
 export * from "./routing-store.js";
 export * from "./station-times.js";
+export {
+  cellIntervals,
+  readSpecialDate,
+  readWeekHours,
+  replaceWeekHours,
+  saveSpecialDate,
+} from "./hours.js";
+export { venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
+export type * from "./hours-types.js";
+export { CALENDAR_COLOURS, WEEK_DISPLAY_ORDER } from "./hours-types.js";

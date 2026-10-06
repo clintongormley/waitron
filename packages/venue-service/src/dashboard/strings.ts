@@ -236,6 +236,12 @@ const en = {
   "prep.test_error": "The route could not be checked.",
   "prep.exception_condition": "Choose a category or product, a service zone, or both",
   "prep.exception_target_required": "Choose where this is made.",
+  "hours.invalid":
+    "Check the highlighted hours: periods must not overlap, including past midnight.",
+  "hours.invalid_clash": "These hours overlap the hours on {date}.",
+  "hours.date_taken": "{date} already has special hours.",
+  "hours.date_not_found": "This special date no longer exists.",
+  "hours.always_open": "The default station is always open, so its hours cannot change.",
   "venue.department_last_active": "You cannot disable the last active department.",
   "venue.table_in_use": "Table {table} has an open tab. Close it before disabling this department.",
   "venue.active_tables": "{count} active tables",
@@ -616,6 +622,13 @@ const es: Record<keyof typeof en, string> = {
   "prep.test_error": "No se pudo comprobar la ruta.",
   "prep.exception_condition": "Elige una categoría o producto, una zona de servicio, o ambos",
   "prep.exception_target_required": "Elige dónde se prepara.",
+  "hours.invalid":
+    "Revisa los horarios marcados: los periodos no pueden solaparse, tampoco pasada la medianoche.",
+  "hours.invalid_clash": "Este horario se solapa con el del {date}.",
+  "hours.date_taken": "El {date} ya tiene un horario especial.",
+  "hours.date_not_found": "Esta fecha especial ya no existe.",
+  "hours.always_open":
+    "La estación predeterminada siempre está abierta; su horario no se puede cambiar.",
   "venue.department_last_active": "No puedes deshabilitar el último departamento activo.",
   "venue.table_in_use":
     "La mesa {table} tiene una cuenta abierta. Ciérrala antes de deshabilitar este departamento.",

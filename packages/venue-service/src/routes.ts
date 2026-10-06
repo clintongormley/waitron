@@ -86,6 +86,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "station.not_found": 404,
   "station.fallback_loop": 409,
   "time_zone.unreadable": 409,
+  "hours.invalid": 400,
+  "special_date.not_found": 404,
+  "special_date.date_taken": 409,
+  "station.always_open": 409,
 };
 const run = createErrorBoundary(STATUS, "venue_service.failed");
 const MODES = new Set<ServiceMode>(["table_tab", "prepay", "ticket_then_pay"]);

@@ -22,6 +22,11 @@ export const VENUE_SERVICE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("working_line_contexts", "state", STATE),
   classify("service_settings", "state", STATE),
   classify("kitchen_notices", "state", STATE),
+  classify("hours_week_cells", "state", STATE),
+  classify("hours_week_periods", "state", STATE),
+  classify("special_dates", "state", STATE),
+  classify("special_date_hours", "state", STATE),
+  classify("special_date_hours_periods", "state", STATE),
 ];
 
 export const VENUE_SERVICE_CHANGE_SOURCES: readonly ChangeSource[] =

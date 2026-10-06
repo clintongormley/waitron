@@ -24,6 +24,14 @@ declare module "@waitron/shared" {
     "order.service_context_missing": { workingOrderId: string };
     "kitchen_notice.not_found": { noticeId: string };
     "kitchen_notice.invalid": { field: "direction" | "cancelledExtra" | "reroutedTo" };
+    /**
+     * `field` is the request path of the refused value, such as `days.2.cell.periods.0.opensAt`.
+     * A clash with the hours either side also names the other date and the subject.
+     */
+    "hours.invalid": { field: string; date?: string; subjectId?: string };
+    "special_date.not_found": { specialDateId: string };
+    "special_date.date_taken": { date: string };
+    "station.always_open": { stationId: string };
     // `working_order.not_found` and `station.not_found` are declared in @waitron/db's errors.ts.
   }
 }
