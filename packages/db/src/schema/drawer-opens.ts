@@ -44,7 +44,7 @@ export const drawerOpens = table(
     /* v8 ignore start */
     billPaymentId: id("bill_payment_id").references(() => billPayments.id),
     /* v8 ignore stop */
-    // Who authorized the open under the location's `drawer_open_policy`; NULL for a
+    // Who authorized the manual open; NULL for a
     // `cash_sale`, `bill_payment` or `card_slip` open.
     authorizedBy: id("authorized_by"),
     // A person holding cash.drawer authorized the open on behalf of an operator who does not.

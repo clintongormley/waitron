@@ -33,23 +33,6 @@ export const bumpMode = enumType(["line", "ticket"]);
 export const fireControlMode = enumType(["waiter", "kitchen", "expo"]);
 
 /**
- * The per-venue RECEIPT PRINT MODE. `auto` (default): after a sale is filed, the server
- * auto-enqueues the customer receipt to the calling device's current receipt printer. `on_request` and
- * `never`: no auto-print. Governs ONLY the post-filing auto-enqueue; it touches no fiscal record,
- * and a manual reprint works in every mode.
- */
-export const receiptPrintMode = enumType(["auto", "on_request", "never"]);
-
-/**
- * The per-venue CASH-DRAWER OPEN POLICY. `gated` (default): the drawer route requires the
- * `cash.drawer` permission, and the `drawer_opens` audit row records who authorized it and whether
- * an override was used. `open`: no authorization is consulted. Unlike the other mode columns, the
- * DEFAULT is the SECURE value: a venue that has not chosen a policy gets cash accountability, not an
- * open drawer.
- */
-export const drawerOpenPolicy = enumType(["gated", "open"]);
-
-/**
  * One taxpayer per database. Fiscal identity is country + tax_id, regime-agnostic: for a Spanish
  * tenant `tax_id` IS the NIF (a NIF cannot be asked for before the country is known).
  */
@@ -102,8 +85,6 @@ export const locations = table(
     dayCutover: timeOfDay("day_cutover").notNull().default("06:00:00"),
     bumpMode: bumpMode("bump_mode").notNull().default("line"),
     fireControl: fireControlMode("fire_control").notNull().default("waiter"),
-    receiptPrintMode: receiptPrintMode("receipt_print_mode").notNull().default("auto"),
-    drawerOpenPolicy: drawerOpenPolicy("drawer_open_policy").notNull().default("gated"),
     // This location's DEFAULT catalogue (menu); a venue may exist before a menu is assigned.
     // `location_catalogues` may add further catalogues, resolved by
     // `resolveAccessibleCatalogueIds` (`packages/catalogue/src/operations.ts`).
@@ -118,7 +99,5 @@ export const locations = table(
     ),
     check("locations_bump_mode_ck", enumCheck(t.bumpMode)),
     check("locations_fire_control_ck", enumCheck(t.fireControl)),
-    check("locations_receipt_print_mode_ck", enumCheck(t.receiptPrintMode)),
-    check("locations_drawer_open_policy_ck", enumCheck(t.drawerOpenPolicy)),
   ],
 );

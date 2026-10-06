@@ -178,6 +178,7 @@ export const MAX_CONFIGURATION_UPLOAD_BYTES = 64 * 1024 * 1024;
  * their error boundaries. A code not listed gets the boundary's default 400.
  */
 const PROVISION_STATUS: Record<string, ContentfulStatusCode> = {
+  "setup.configuration_outdated": 400,
   "setup.request_invalid": 400,
   "setup.provisioning_secret_required": 400,
   "setup.fiscal_test_required": 409,

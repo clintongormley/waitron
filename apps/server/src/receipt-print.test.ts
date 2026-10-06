@@ -7,7 +7,6 @@ import {
   devices,
   diningTables,
   drawerOpens,
-  locations,
   nowIso,
   partyTables,
   printJobs,
@@ -257,10 +256,6 @@ async function configureReceipt(
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
     if (opts.mode !== undefined) {
-      await tx
-        .update(locations)
-        .set({ receiptPrintMode: opts.mode })
-        .where(eq(locations.id, cfg.locationId));
       const scopedDepartments = await tx
         .select({ id: departments.id })
         .from(departments)
@@ -708,7 +703,7 @@ describe("cash payment drawer separation", () => {
 });
 
 describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbox)", () => {
-  it("uses the zone's automatic receipt policy when the retired location setting is never", async () => {
+  it("uses the zone's automatic receipt policy when the department setting is never", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "never", printerId });

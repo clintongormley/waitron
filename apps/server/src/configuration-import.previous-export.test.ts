@@ -34,8 +34,8 @@ it("refuses the real pre-A261-2 export through setup without writing database ro
   const bundle = JSON.parse(Buffer.from(entries[0]!.bytes).toString("utf8"));
   expect(() => decodeConfigurationBundle(artifact, "a strong passphrase")).toThrow(
     expect.objectContaining({
-      code: "setup.request_invalid",
-      params: { field: "artifact" },
+      code: "setup.configuration_outdated",
+      params: {},
     }),
   );
   expect(bundle.venue.legalName).toBe("Prepared Export SL");
@@ -81,7 +81,7 @@ it("refuses the real pre-A261-2 export through setup without writing database ro
   });
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({
-    error: { code: "setup.request_invalid", params: { field: "artifact" } },
+    error: { code: "setup.configuration_outdated", params: {} },
   });
   expect(await snapshot()).toEqual(before);
   expect(await readdir(stateDir)).toEqual([]);

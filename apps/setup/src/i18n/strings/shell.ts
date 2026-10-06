@@ -116,6 +116,8 @@ export const shellEn = {
   "shell.cloud.request_invalid":
     "The server rejected the details. Check your entries, then try again.",
 
+  "shell.configuration.outdated":
+    "This configuration export is from an older format. Export it again from a current box.",
   "shell.configuration.incompatible_version":
     "This export is not compatible with this Waitron version. Export it again from a box running the current version, then load the new export.",
   "shell.configuration.could_not_open":
@@ -247,6 +249,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.cloud.request_invalid":
     "El servidor ha rechazado los datos. Revisa lo que has introducido e inténtalo de nuevo.",
 
+  "shell.configuration.outdated":
+    "Esta exportación de configuración usa un formato anterior. Vuelve a exportarla desde un equipo actualizado.",
   "shell.configuration.incompatible_version":
     "Esta exportación no es compatible con esta versión de Waitron. Vuelve a exportar desde un equipo con la versión actual y carga la nueva exportación.",
   "shell.configuration.could_not_open":

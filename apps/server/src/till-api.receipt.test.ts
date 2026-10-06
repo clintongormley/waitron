@@ -6,7 +6,6 @@ import {
   deviceProfiles,
   devices,
   drawerOpens,
-  locations,
   printJobs,
   sales,
   saleLines,
@@ -263,10 +262,6 @@ async function configureReceipt(
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
     if (opts.mode !== undefined) {
-      await tx
-        .update(locations)
-        .set({ receiptPrintMode: opts.mode })
-        .where(eq(locations.id, cfg.locationId));
       const scopedDepartments = await tx
         .select({ id: departments.id })
         .from(departments)
@@ -337,16 +332,6 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
         viaOverride: drawerOpens.viaOverride,
       })
       .from(drawerOpens);
-  });
-}
-
-/** The column defaults to 'gated', so a test wanting the gate need not call this. */
-async function setDrawerPolicy(cfg: TillConfig, policy: "gated" | "open"): Promise<void> {
-  await withTransaction(suite.db, async (tx) => {
-    await tx
-      .update(locations)
-      .set({ drawerOpenPolicy: policy })
-      .where(eq(locations.id, cfg.locationId));
   });
 }
 
@@ -1073,15 +1058,13 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
 
 describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", () => {
   it("enqueues a KICK-ONLY job to the device's printer and records drawer_opens('manual')", async () => {
-    const { cfg, operatorId } = await setupVenue();
+    const { cfg, supervisorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { printerId });
-    // 'open' policy: any logged-in operator opens directly, still audited (no permission consulted).
-    await setDrawerPolicy(cfg, "open");
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await loginAtTill(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, supervisorId);
 
     const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(200);
@@ -1095,29 +1078,24 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
     expect([...payload]).toEqual([...DRAWER_KICK]);
     expect(decodeTicket(payload)).not.toContain("VERI*FACTU"); // no receipt, just the kick
 
-    // The manual open is audited: who, which device, no sale. Under 'open' the operator self-authorizes,
-    // so authorized_by is the operator and via_override is false.
     const opens = await drawerOpensFor(cfg);
     expect(opens).toHaveLength(1);
     expect(opens[0]).toMatchObject({
       reason: "manual",
-      personId: operatorId,
+      personId: supervisorId,
       deviceId: deviceIn(cookie),
       printerId,
-      authorizedBy: operatorId,
+      authorizedBy: supervisorId,
       viaOverride: false,
     });
     expect(opens[0]!.saleId).toBeNull();
   });
 
   it("throws drawer.no_printer (400) and writes nothing when the device has no receipt printer", async () => {
-    const { cfg, operatorId } = await setupVenue();
-    // No printer on the device. 'open' policy so the (unpermitted) staff operator PASSES authorization
-    // and reaches the printer resolution — this test is about the no-printer refusal, not the gate.
-    await setDrawerPolicy(cfg, "open");
+    const { cfg, supervisorId } = await setupVenue();
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await loginAtTill(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, supervisorId);
 
     const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(400);
@@ -1130,13 +1108,12 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
   });
 
   it("refuses an unattached cash drawer without writing a command or audit", async () => {
-    const { cfg, operatorId } = await setupVenue();
+    const { cfg, supervisorId } = await setupVenue();
     const printerId = await makePrinter(cfg, false);
     await configureReceipt(cfg, { printerId });
-    await setDrawerPolicy(cfg, "open");
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = await loginAtTill(app, cfg, operatorId);
+    const cookie = await loginAtTill(app, cfg, supervisorId);
     const res = await app.request("/api/drawer/open", { method: "POST", headers: { cookie } });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
@@ -1157,7 +1134,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
   it("refuses an operator session whose device has been revoked with device.unauthorized, writing nothing", async () => {
     const { cfg, operatorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
-    await setDrawerPolicy(cfg, "open");
+
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const deviceCookie = await enrolConfiguredTillCookie(cfg);
@@ -1205,14 +1182,13 @@ describe("POST /api/drawer/open from a device opens its own receipt printer's dr
       .where(eq(devices.id, deviceId));
   }
 
-  async function venueWithOpenPolicy() {
+  async function venueWithAuthorizedOperator() {
     const venue = await setupVenue();
-    await setDrawerPolicy(venue.cfg, "open");
     const app = new Hono();
     mountTillApi(app, apiDeps(venue.cfg), noopLog);
     // The operator signed in on the pressing device.
     const press = async (deviceCookie: string) => {
-      const session = (await loginOnDevice(app, deviceCookie, venue.operatorId)).split(";")[0]!;
+      const session = (await loginOnDevice(app, deviceCookie, venue.supervisorId)).split(";")[0]!;
       return app.request("/api/drawer/open", {
         method: "POST",
         headers: { cookie: `${session}; ${deviceCookie}` },
@@ -1222,7 +1198,7 @@ describe("POST /api/drawer/open from a device opens its own receipt printer's dr
   }
 
   it("opens the drawer of the pressing device's own receipt printer, and the row names that device", async () => {
-    const { cfg, operatorId, press } = await venueWithOpenPolicy();
+    const { cfg, supervisorId, press } = await venueWithAuthorizedOperator();
     const till = await enrolDrawerTill(cfg);
     const printerId = await makePrinter(cfg);
     await setDevicePrinter(till.deviceId, printerId);
@@ -1238,17 +1214,17 @@ describe("POST /api/drawer/open from a device opens its own receipt printer's dr
       {
         reason: "manual",
         saleId: null,
-        personId: operatorId,
+        personId: supervisorId,
         deviceId: till.deviceId,
         printerId,
-        authorizedBy: operatorId,
+        authorizedBy: supervisorId,
         viaOverride: false,
       },
     ]);
   });
 
   it("a device with its own drawer printer opens its own drawer, not the one the venue's other devices use", async () => {
-    const { cfg, press } = await venueWithOpenPolicy();
+    const { cfg, press } = await venueWithAuthorizedOperator();
     const boxPrinter = await makePrinter(cfg);
     await configureReceipt(cfg, { printerId: boxPrinter });
     const till = await enrolDrawerTill(cfg);
@@ -1265,7 +1241,7 @@ describe("POST /api/drawer/open from a device opens its own receipt printer's dr
   });
 
   it("two devices sharing one drawer printer: each opens it, naming itself", async () => {
-    const { cfg, press } = await venueWithOpenPolicy();
+    const { cfg, press } = await venueWithAuthorizedOperator();
     const first = await enrolDrawerTill(cfg);
     const second = await enrolDrawerTill(cfg);
     const printerId = await makePrinter(cfg);
@@ -1281,7 +1257,125 @@ describe("POST /api/drawer/open from a device opens its own receipt printer's dr
   });
 });
 
-describe("POST /api/drawer/open — gated policy: authorize() + supervisor override", () => {
+describe("POST /api/drawer/open — manual opens always require authorization", () => {
+  it.each([
+    ["no override", "absent", 403, "authorization.not_permitted"],
+    ["valid staff PIN", "staff", 403, "authorization.not_permitted"],
+    ["wrong supervisor PIN", "wrong", 401, "pin.invalid"],
+    ["unknown supervisor", "unknown", 401, "pin.invalid"],
+    ["suspended supervisor", "suspended", 401, "pin.invalid"],
+  ] as const)("refuses %s without a drawer command or audit", async (_, kind, status, code) => {
+    const { cfg, operatorId, supervisorId } = await setupVenue();
+    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await loginAtTill(app, cfg, operatorId);
+    if (kind === "suspended") {
+      await suite.db
+        .update(persons)
+        .set({ status: "suspended" })
+        .where(eq(persons.id, supervisorId));
+    }
+    const override =
+      kind === "absent"
+        ? undefined
+        : {
+            personId:
+              kind === "staff" ? operatorId : kind === "unknown" ? randomUUID() : supervisorId,
+            pin: kind === "wrong" ? "0000" : "5555",
+          };
+    const res = await app.request("/api/drawer/open", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ override }),
+    });
+    expect(res.status).toBe(status);
+    expect(await res.json()).toEqual({
+      error: {
+        code,
+        params: code === "authorization.not_permitted" ? { permission: "cash.drawer" } : {},
+      },
+    });
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await printJobsFor(cfg)).toEqual([]);
+  });
+
+  it.each([false, true])(
+    "records only drawer facts when supervisor override is %s",
+    async (viaOverride) => {
+      const { cfg, operatorId, supervisorId } = await setupVenue();
+      const printerId = await makePrinter(cfg);
+      await configureReceipt(cfg, { printerId });
+
+      const app = new Hono();
+      mountTillApi(app, apiDeps(cfg), noopLog);
+      const personId = viaOverride ? operatorId : supervisorId;
+      const cookie = await loginAtTill(app, cfg, personId);
+      const res = await app.request("/api/drawer/open", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify(
+          viaOverride ? { override: { personId: supervisorId, pin: "5555" } } : {},
+        ),
+      });
+      expect(res.status).toBe(200);
+      expect(await drawerOpensFor(cfg)).toEqual([
+        {
+          reason: "manual",
+          saleId: null,
+          personId,
+          deviceId: deviceIn(cookie),
+          printerId,
+          authorizedBy: supervisorId,
+          viaOverride,
+        },
+      ]);
+      const jobs = await suite.db.select().from(printJobs);
+      const audits = await suite.db.select().from(drawerOpens);
+      expect(jobs).toHaveLength(1);
+      expect(jobs[0]!.kind).toBe("drawer");
+      expect([...jobs[0]!.payload]).toEqual([...DRAWER_KICK]);
+      expect(audits).toHaveLength(1);
+      expect(Object.keys(audits[0]!).sort()).toEqual(
+        [
+          "id",
+          "billPaymentId",
+          "printerId",
+          "deviceId",
+          "saleId",
+          "personId",
+          "reason",
+          "authorizedBy",
+          "viaOverride",
+          "openedAt",
+        ].sort(),
+      );
+      expect(Object.keys(jobs[0]!).sort()).toEqual(
+        [
+          "id",
+          "locationId",
+          "printerId",
+          "saleId",
+          "payload",
+          "kind",
+          "receiptCopy",
+          "resendOf",
+          "status",
+          "attempts",
+          "claimedAt",
+          "lastError",
+          "createdAt",
+          "deliveredAt",
+          "claimedBy",
+          "receiptHandover",
+        ].sort(),
+      );
+    },
+  );
+});
+
+describe("POST /api/drawer/open — authorization and supervisor override", () => {
   // The body a supervisor-override open carries. `override.pin` is the AUTHORIZING supervisor's PIN,
   // never the logged-in operator's; it reaches only this authenticated request.
   function withOverride(cookie: string, override: { personId: string; pin: string }) {
@@ -1292,11 +1386,10 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     };
   }
 
-  it("gated: a supervisor opens directly (holds cash.drawer) — via_override false, authorized_by self", async () => {
+  it("a supervisor opens directly (holds cash.drawer) — via_override false, authorized_by self", async () => {
     const { cfg, supervisorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { printerId });
-    // Default policy is 'gated' (setupVenue leaves it), so this exercises the authorize() path.
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1316,7 +1409,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     expect(await printJobsFor(cfg)).toHaveLength(1); // the kick still fires
   });
 
-  it("gated: a staff operator opens with a VALID supervisor override — via_override true, authorized_by the supervisor", async () => {
+  it("a staff operator opens with a VALID supervisor override — via_override true, authorized_by the supervisor", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { printerId });
@@ -1348,7 +1441,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     expect(jobs[0]!.printerId).toBe(printerId);
   });
 
-  it("gated: a staff operator with NO override is refused (403 authorization.not_permitted) and writes nothing", async () => {
+  it("a staff operator with NO override is refused (403 authorization.not_permitted) and writes nothing", async () => {
     const { cfg, operatorId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { printerId });
@@ -1367,7 +1460,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
-  it("gated: the gate runs BEFORE the printer check — a staff operator with no override is 403 even with NO printer", async () => {
+  it("the gate runs BEFORE the printer check — a staff operator with no override is 403 even with NO printer", async () => {
     const { cfg, operatorId } = await setupVenue();
     // No printer configured. If the printer resolution ran first this would be 400 drawer.no_printer.
     const app = new Hono();
@@ -1381,7 +1474,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     });
   });
 
-  it("gated: a WRONG override PIN is 401 pin.invalid (valid supervisor id, bad PIN) and writes nothing", async () => {
+  it("a WRONG override PIN is 401 pin.invalid (valid supervisor id, bad PIN) and writes nothing", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
 
@@ -1403,7 +1496,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
-  it("gated: an override by a VALID staff credential (correct PIN, lacks cash.drawer) is 403 — proves the PERMISSION is checked", async () => {
+  it("an override by a VALID staff credential (correct PIN, lacks cash.drawer) is 403 — proves the PERMISSION is checked", async () => {
     const { cfg, operatorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
 
@@ -1426,7 +1519,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
-  it("gated: a malformed override.personId (not a UUID) is 401 pin.invalid", async () => {
+  it("a malformed override.personId (not a UUID) is 401 pin.invalid", async () => {
     const { cfg, operatorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
 
@@ -1445,7 +1538,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
-  it("gated: an override with a NON-STRING pin is 401 pin.invalid — never reaches verifyPin", async () => {
+  it("an override with a NON-STRING pin is 401 pin.invalid — never reaches verifyPin", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
 
@@ -1467,7 +1560,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
-  it("gated: a well-formed-but-unknown override.personId is 401 pin.invalid", async () => {
+  it("a well-formed-but-unknown override.personId is 401 pin.invalid", async () => {
     const { cfg, operatorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
 
@@ -1486,7 +1579,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
-  it("gated: an override that cannot sign in gets one answer, whether the person is unknown, suspended, malformed or gave a wrong PIN", async () => {
+  it("an override that cannot sign in gets one answer, whether the person is unknown, suspended, malformed or gave a wrong PIN", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
     const [suspended] = await suite.db
@@ -1525,7 +1618,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
-  it("gated: a well-formed body with NO override, sent by staff, is still 403 (an empty body is no override)", async () => {
+  it("a well-formed body with NO override, sent by staff, is still 403 (an empty body is no override)", async () => {
     const { cfg, operatorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
 
@@ -2127,15 +2220,18 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
     expect(await watchedOrder()).toEqual([]);
   });
 
-  it("derives no key for an override while the drawer's policy is open", async () => {
+  it("checks a staff override outside the write lock before refusing the open", async () => {
     const { app, cookie, supervisorId, cfg } = await staffAtDrawerTill();
-    await setDrawerPolicy(cfg, "open");
+
     watchDerivations("0000", anotherWriter);
 
     const res = await openWithOverride(app, cookie, { personId: supervisorId, pin: "0000" });
 
-    expect(res.status).toBe(200);
-    expect(await watchedOrder()).toEqual([]);
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: { code: "pin.invalid", params: {} } });
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await printJobsFor(cfg)).toEqual([]);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
   });
 
   it("counts wrong override PINs sent at once as it counts them sent in turn, deriving as many keys", async () => {
@@ -2383,8 +2479,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
   });
 
   it("opens the drawer by hand from a handheld whose profile allows it", async () => {
-    const { cfg, app, signIn, operatorId } = await venueWithPrinters();
-    await setDrawerPolicy(cfg, "open");
+    const { cfg, app, signIn, operatorId, supervisorId } = await venueWithPrinters();
     const drawer = await makePrinter(cfg);
     const handheld = await enrolPrintingDevice(cfg, {
       formFactor: "phone-portrait",
@@ -2393,7 +2488,11 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       slip: [],
     });
 
-    const res = await post(app, await signIn(handheld.cookie), "/api/drawer/open");
+    const res = await app.request("/api/drawer/open", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: await signIn(handheld.cookie) },
+      body: JSON.stringify({ override: { personId: supervisorId, pin: "5555" } }),
+    });
 
     expect(res.status).toBe(200);
     expect((await jobs()).map((job) => [job.printerId, job.kind])).toEqual([[drawer, "drawer"]]);
@@ -2404,7 +2503,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
 
   it("refuses the drawer by hand from a profile that does not allow it", async () => {
     const { cfg, app, signIn } = await venueWithPrinters();
-    await setDrawerPolicy(cfg, "open");
+
     const drawer = await makePrinter(cfg);
     const handheld = await enrolPrintingDevice(cfg, {
       formFactor: "phone-portrait",
@@ -2424,15 +2523,18 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
   });
 
   it("refuses the drawer by hand from a device with no receipt printer, naming the device", async () => {
-    const { cfg, app, signIn } = await venueWithPrinters();
-    await setDrawerPolicy(cfg, "open");
+    const { cfg, app, signIn, supervisorId } = await venueWithPrinters();
     const device = await enrolPrintingDevice(cfg, {
       capabilities: ["open-cash-drawer"],
       receipt: [],
       slip: [],
     });
 
-    const res = await post(app, await signIn(device.cookie), "/api/drawer/open");
+    const res = await app.request("/api/drawer/open", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: await signIn(device.cookie) },
+      body: JSON.stringify({ override: { personId: supervisorId, pin: "5555" } }),
+    });
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({

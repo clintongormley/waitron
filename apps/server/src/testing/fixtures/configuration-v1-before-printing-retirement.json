@@ -1,0 +1,540 @@
+{
+  "version": 1,
+  "createdAt": "2026-09-09T00:00:00.000Z",
+  "sourceOperatorId": "df67c8e7-c3f7-492c-a225-fc5f7bb1b651",
+  "venue": {
+    "country": "ES",
+    "taxId": "B12345678",
+    "legalName": "Prepared SL",
+    "taxpayerDomicile": "Calle Fiscal 8, 28001 Madrid",
+    "location": {
+      "id": "14b1b81f-e537-43e5-94ac-9ac34ac92ac3",
+      "name": "Prepared",
+      "operationDescription": "Restaurant",
+      "fiscalTerritory": "ES-common",
+      "addressLine1": "Calle 1",
+      "addressLine2": null,
+      "postalCode": "28001",
+      "city": "Madrid",
+      "province": "Madrid",
+      "timeZone": "Europe/Madrid",
+      "dayCutover": "06:00:00",
+      "bumpMode": "line",
+      "fireControl": "waiter",
+      "receiptPrintMode": "auto",
+      "drawerOpenPolicy": "gated",
+      "catalogueId": "1a5e93b0-5666-48c6-939d-b006bdf86d52",
+      "invoiceLocales": ["es-ES"]
+    },
+    "seriesCode": "F",
+    "fullSeriesCode": "FF",
+    "rectificativeSeriesCode": "R"
+  },
+  "modules": {
+    "core": 108,
+    "catalogue": 26,
+    "media": 8,
+    "venue-service": 21,
+    "identity": 7,
+    "workforce": 4,
+    "workforce-es": 1,
+    "payments": 6,
+    "scheduler": 1,
+    "credentials": 1,
+    "fiscal-verifactu": 4,
+    "fiscal-none": 0,
+    "bookings": 1,
+    "adjustments": 4
+  },
+  "tables": {
+    "catalogues": [
+      {
+        "id": "1a5e93b0-5666-48c6-939d-b006bdf86d52",
+        "name": "Menu",
+        "active": 1,
+        "version": 1,
+        "created_at": "2026-10-06T09:09:38.121Z",
+        "updated_at": "2026-10-06T09:09:38.121Z"
+      },
+      {
+        "id": "11111111-aaaa-aaaa-aaaa-111111111111",
+        "name": "Prepared menu",
+        "active": 1,
+        "version": 1,
+        "created_at": "2026-10-06T09:09:38.124Z",
+        "updated_at": "2026-10-06T09:09:38.124Z"
+      }
+    ],
+    "kitchen_stations": [
+      {
+        "id": "8b6b9ebf-cc36-4bc0-8a7e-3748d5a86124",
+        "location_id": "14b1b81f-e537-43e5-94ac-9ac34ac92ac3",
+        "name": "Cocina",
+        "display_order": 0,
+        "is_default": 1,
+        "active": 1,
+        "created_at": "2026-10-06T09:09:38.120Z",
+        "shows_rest_of_order": 0
+      }
+    ],
+    "kitchen_timing_defaults": [
+      {
+        "location_id": "14b1b81f-e537-43e5-94ac-9ac34ac92ac3",
+        "warm_after_minutes": 5,
+        "overdue_after_minutes": 10,
+        "forgotten_after_minutes": 15
+      }
+    ],
+    "kitchen_station_timing": [],
+    "kitchen_courses": [],
+    "categories": [
+      {
+        "id": "23232323-aaaa-aaaa-aaaa-232323232323",
+        "name": "Panadería",
+        "created_at": "2026-10-06T09:09:38.124Z",
+        "updated_at": "2026-10-06T09:09:38.124Z"
+      }
+    ],
+    "media_images": [
+      {
+        "id": "4405839b-5855-4eb9-8aba-8b445bafffc8",
+        "filename": "73326855de85ba9ec05852f865a897ec25b5aae14b74f34c43c2cd12aa63b9d7.webp",
+        "names": "{\"es\":\"Pan\"}",
+        "created_at": "2026-10-06T09:09:38.123Z",
+        "updated_at": "2026-10-06T09:09:38.123Z"
+      }
+    ],
+    "media_image_data": [
+      {
+        "image_id": "4405839b-5855-4eb9-8aba-8b445bafffc8",
+        "bytes": "\\x524946463a00000057454250565038202e000000d001009d012a0800060001402625a00274ba01f80003b000fea4d7ff4d23c691e348f98b7ff38963a9ddda000000"
+      }
+    ],
+    "products": [
+      {
+        "id": "22222222-aaaa-aaaa-aaaa-222222222222",
+        "catalogue_id": "11111111-aaaa-aaaa-aaaa-111111111111",
+        "parent_id": null,
+        "variant_order": 0,
+        "category_id": "23232323-aaaa-aaaa-aaaa-232323232323",
+        "course_id": null,
+        "name": "Café",
+        "customer_name": null,
+        "description": null,
+        "kitchen_name": null,
+        "dietary_declarations": "[]",
+        "pricing_unit": "each",
+        "unit_price": 150,
+        "vat_class": "general",
+        "active": 1,
+        "available": 1,
+        "ordering": "public",
+        "image": "73326855de85ba9ec05852f865a897ec25b5aae14b74f34c43c2cd12aa63b9d7.webp",
+        "allergens": null,
+        "manual_allergens": null,
+        "recipe_derivation": null,
+        "diet_derivation": null,
+        "diet_override": null,
+        "diet": null,
+        "created_at": "2026-10-06T09:09:38.124Z",
+        "updated_at": "2026-10-06T09:09:38.124Z",
+        "color": null
+      }
+    ],
+    "location_catalogues": [
+      {
+        "location_id": "14b1b81f-e537-43e5-94ac-9ac34ac92ac3",
+        "catalogue_id": "1a5e93b0-5666-48c6-939d-b006bdf86d52"
+      }
+    ],
+    "ingredients": [],
+    "recipe_lines": [],
+    "canvases": [],
+    "device_profiles": [
+      {
+        "id": "b3e63a46-5837-43d8-885d-5139cd000a06",
+        "name": "Mostrador",
+        "form_factor": "till",
+        "canvas_id": null,
+        "capabilities": "[\"integrated-card-payment\",\"open-cash-drawer\",\"print-receipt\",\"show-station\",\"show-expo\",\"show-schedule\",\"take-cash\"]",
+        "inactivity_timeout_seconds": 300,
+        "created_at": "2026-10-06T09:09:38.119Z",
+        "updated_at": "2026-10-06T09:09:38.119Z",
+        "retired_at": null
+      },
+      {
+        "id": "762a6980-5b4a-43a7-a013-52027cc9e94b",
+        "name": "Cocina",
+        "form_factor": "kds",
+        "canvas_id": null,
+        "capabilities": "[\"act-as-kds\"]",
+        "inactivity_timeout_seconds": null,
+        "created_at": "2026-10-06T09:09:38.119Z",
+        "updated_at": "2026-10-06T09:09:38.119Z",
+        "retired_at": null
+      },
+      {
+        "id": "886336d2-731d-4004-ba72-ffaab23b71c1",
+        "name": "Móvil",
+        "form_factor": "phone-portrait",
+        "canvas_id": null,
+        "capabilities": "[]",
+        "inactivity_timeout_seconds": 300,
+        "created_at": "2026-10-06T09:09:38.120Z",
+        "updated_at": "2026-10-06T09:09:38.120Z",
+        "retired_at": null
+      }
+    ],
+    "floor_zones": [
+      {
+        "id": "ffb9bd73-6eac-4c2b-96cf-2413a1821554",
+        "location_id": "14b1b81f-e537-43e5-94ac-9ac34ac92ac3",
+        "name": "Counter",
+        "display_order": 0,
+        "active": 1,
+        "created_at": "2026-10-06T09:09:38.121Z"
+      }
+    ],
+    "table_service_statuses": [],
+    "dining_tables": [
+      {
+        "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "location_id": "14b1b81f-e537-43e5-94ac-9ac34ac92ac3",
+        "label": "T1",
+        "zone_id": null,
+        "capacity": null,
+        "active": 1,
+        "created_at": "2026-10-06T09:09:38.124Z",
+        "status_id": null,
+        "pos_x": null,
+        "pos_y": null,
+        "shape": null,
+        "rotation": null
+      }
+    ],
+    "watchers": [],
+    "watcher_stations": [],
+    "watcher_zones": [],
+    "print_agents": [
+      {
+        "id": "44444444-aaaa-aaaa-aaaa-444444444444",
+        "location_id": "14b1b81f-e537-43e5-94ac-9ac34ac92ac3",
+        "name": "Kitchen agent",
+        "active": 1,
+        "enrolled_at": "2026-10-06T09:09:38.124Z"
+      }
+    ],
+    "printers": [
+      {
+        "id": "55555555-aaaa-aaaa-aaaa-555555555555",
+        "location_id": "14b1b81f-e537-43e5-94ac-9ac34ac92ac3",
+        "name": "Kitchen printer",
+        "transport": "usb",
+        "local_key": "B120300001",
+        "host": null,
+        "port": 9100,
+        "poll_id": null,
+        "ticket_scope": "station",
+        "paper_width": "58mm",
+        "resolution": "203dpi",
+        "has_cash_drawer": 0,
+        "active": 1
+      }
+    ],
+    "device_profile_printers": [],
+    "station_printers": [],
+    "watcher_printers": [],
+    "tenant_themes": [],
+    "tenant_receipts": [],
+    "category_details": [
+      {
+        "category_id": "23232323-aaaa-aaaa-aaaa-232323232323",
+        "parent_id": null,
+        "color": null
+      }
+    ],
+    "content_languages": [
+      {
+        "id": 1,
+        "default_language": "es",
+        "languages": "[\"es\",\"ca\",\"en\"]"
+      }
+    ],
+    "unit_seed_states": [
+      {
+        "id": 1
+      }
+    ],
+    "units": [
+      {
+        "id": "475dc4c5-0659-4a6a-91d5-f97d28d19e4e",
+        "seed_key": "g",
+        "name": "{\"en\":\"Gram\",\"es\":\"Gramo\",\"ca\":\"Gram\",\"gl\":\"Gramo\",\"eu\":\"Gramo\"}",
+        "abbreviation": "{\"en\":\"g\",\"es\":\"g\",\"ca\":\"g\",\"gl\":\"g\",\"eu\":\"g\"}",
+        "precision": 0,
+        "hardware_unit": "g"
+      },
+      {
+        "id": "1ccd063e-a304-4e05-8006-30f061c7d1ea",
+        "seed_key": "kg",
+        "name": "{\"en\":\"Kilogram\",\"es\":\"Kilogramo\",\"ca\":\"Quilogram\",\"gl\":\"Quilogramo\",\"eu\":\"Kilogramo\"}",
+        "abbreviation": "{\"en\":\"kg\",\"es\":\"kg\",\"ca\":\"kg\",\"gl\":\"kg\",\"eu\":\"kg\"}",
+        "precision": 3,
+        "hardware_unit": "kg"
+      },
+      {
+        "id": "9d90a961-3507-4d10-93a9-a6f103954f9e",
+        "seed_key": "mg",
+        "name": "{\"en\":\"Milligram\",\"es\":\"Miligramo\",\"ca\":\"Mil·ligram\",\"gl\":\"Miligramo\",\"eu\":\"Miligramo\"}",
+        "abbreviation": "{\"en\":\"mg\",\"es\":\"mg\",\"ca\":\"mg\",\"gl\":\"mg\",\"eu\":\"mg\"}",
+        "precision": 0,
+        "hardware_unit": "mg"
+      },
+      {
+        "id": "00ef4fb0-7d30-47a1-aa12-bb2ef41e6aba",
+        "seed_key": "ml",
+        "name": "{\"en\":\"Millilitre\",\"es\":\"Mililitro\",\"ca\":\"Mil·lilitre\",\"gl\":\"Mililitro\",\"eu\":\"Mililitro\"}",
+        "abbreviation": "{\"en\":\"ml\",\"es\":\"ml\",\"ca\":\"ml\",\"gl\":\"ml\",\"eu\":\"ml\"}",
+        "precision": 0,
+        "hardware_unit": null
+      },
+      {
+        "id": "ef222701-19f9-4c37-8207-6318040c7215",
+        "seed_key": "l",
+        "name": "{\"en\":\"Litre\",\"es\":\"Litro\",\"ca\":\"Litre\",\"gl\":\"Litro\",\"eu\":\"Litro\"}",
+        "abbreviation": "{\"en\":\"l\",\"es\":\"l\",\"ca\":\"l\",\"gl\":\"l\",\"eu\":\"l\"}",
+        "precision": 3,
+        "hardware_unit": null
+      }
+    ],
+    "product_units": [],
+    "menu_items": [],
+    "menu_item_variant_overrides": [],
+    "option_lists": [],
+    "option_labels": [],
+    "extra_lists": [],
+    "extra_list_items": [],
+    "product_modifiers": [],
+    "sections": [
+      {
+        "id": "e93b502a-3f5b-41ec-9fd7-cb044ce1b468",
+        "internal_name": "Menu",
+        "names": "{}",
+        "role": "menu_root",
+        "owner_menu_id": "1a5e93b0-5666-48c6-939d-b006bdf86d52",
+        "image": null,
+        "color": null
+      },
+      {
+        "id": "f1c0d6d1-5d27-4e3f-a110-c541d8e20a53",
+        "internal_name": "Home",
+        "names": "{}",
+        "role": "home_layout",
+        "owner_menu_id": "1a5e93b0-5666-48c6-939d-b006bdf86d52",
+        "image": null,
+        "color": null
+      }
+    ],
+    "section_members": [],
+    "menu_details": [
+      {
+        "menu_id": "1a5e93b0-5666-48c6-939d-b006bdf86d52",
+        "root_section_id": "e93b502a-3f5b-41ec-9fd7-cb044ce1b468",
+        "default_home_layout_id": "f1c0d6d1-5d27-4e3f-a110-c541d8e20a53"
+      }
+    ],
+    "device_profile_home_layouts": [],
+    "departments": [
+      {
+        "id": "a38b4a84-c414-4f14-be9a-683f04adebd4",
+        "location_id": "14b1b81f-e537-43e5-94ac-9ac34ac92ac3",
+        "name": "Prepared",
+        "trading_name": "Prepared",
+        "default_service_mode": "prepay",
+        "is_default": 1,
+        "active": 1,
+        "created_at": "2026-10-06T09:09:38.121Z"
+      }
+    ],
+    "department_sale_policies": [
+      {
+        "department_id": "a38b4a84-c414-4f14-be9a-683f04adebd4",
+        "paid_when": "prepay",
+        "collection_number": "none",
+        "receipt_print_mode": "auto",
+        "print_trading_name": 1
+      }
+    ],
+    "zone_service_policies": [
+      {
+        "location_id": "14b1b81f-e537-43e5-94ac-9ac34ac92ac3",
+        "zone_id": "ffb9bd73-6eac-4c2b-96cf-2413a1821554",
+        "department_id": "a38b4a84-c414-4f14-be9a-683f04adebd4",
+        "service_mode": null,
+        "default_menu_id": "1a5e93b0-5666-48c6-939d-b006bdf86d52",
+        "is_counter_default": 1
+      }
+    ],
+    "zone_sale_policies": [
+      {
+        "zone_id": "ffb9bd73-6eac-4c2b-96cf-2413a1821554",
+        "paid_when": null,
+        "collection_number": null,
+        "receipt_print_mode": null
+      }
+    ],
+    "zone_menus": [
+      {
+        "zone_id": "ffb9bd73-6eac-4c2b-96cf-2413a1821554",
+        "menu_id": "1a5e93b0-5666-48c6-939d-b006bdf86d52",
+        "display_order": 0
+      }
+    ],
+    "station_claims": [],
+    "station_hours": [],
+    "station_fallbacks": [],
+    "route_exceptions": [],
+    "department_hours": [],
+    "service_settings": [
+      {
+        "id": 1,
+        "edit_sent_lines": 1,
+        "clearing_workflow": 0,
+        "kitchen_ticket_grouping": "combined",
+        "print_held_work": 0,
+        "release_reminder_minutes": 10
+      }
+    ],
+    "persons": [
+      {
+        "id": "df67c8e7-c3f7-492c-a225-fc5f7bb1b651",
+        "display_name": "Admin",
+        "first_names": null,
+        "last_names": null,
+        "telephone": null,
+        "locale": null,
+        "email": "b12345678@example.test",
+        "role": "admin",
+        "status": "active",
+        "created_at": "2026-10-06T09:09:38.118Z",
+        "display_name_folded": "admin",
+        "email_folded": "b12345678@example.test"
+      },
+      {
+        "id": "12121212-aaaa-aaaa-aaaa-121212121212",
+        "display_name": "Second admin",
+        "first_names": null,
+        "last_names": null,
+        "telephone": null,
+        "locale": null,
+        "email": "second-admin@example.test",
+        "role": "admin",
+        "status": "active",
+        "created_at": "2026-10-06T09:09:38.124Z",
+        "display_name_folded": null,
+        "email_folded": null
+      },
+      {
+        "id": "33333333-aaaa-aaaa-aaaa-333333333333",
+        "display_name": "Ada",
+        "first_names": null,
+        "last_names": null,
+        "telephone": null,
+        "locale": null,
+        "email": "ada@example.test",
+        "role": "manager",
+        "status": "active",
+        "created_at": "2026-10-06T09:09:38.124Z",
+        "display_name_folded": null,
+        "email_folded": null
+      }
+    ],
+    "employments": [
+      {
+        "id": "66666666-aaaa-aaaa-aaaa-666666666666",
+        "person_id": "33333333-aaaa-aaaa-aaaa-333333333333",
+        "contracted_minutes_per_week": 2400,
+        "contract_type": "permanent",
+        "start_date": "2026-01-01",
+        "end_date": null,
+        "pay_rate": 1250,
+        "created_at": "2026-10-06T09:09:38.124Z"
+      }
+    ],
+    "availability": [
+      {
+        "id": "77777777-aaaa-aaaa-aaaa-777777777777",
+        "person_id": "33333333-aaaa-aaaa-aaaa-333333333333",
+        "weekday": 1,
+        "available_from_minute": 540,
+        "available_to_minute": 1020,
+        "effective_from": "2026-01-01",
+        "effective_to": null,
+        "created_at": "2026-10-06T09:09:38.124Z"
+      }
+    ],
+    "shift_templates": [
+      {
+        "id": "88888888-aaaa-aaaa-aaaa-888888888888",
+        "location_id": "14b1b81f-e537-43e5-94ac-9ac34ac92ac3",
+        "label": "Evening",
+        "weekday": 1,
+        "starts_minute": 1020,
+        "ends_minute": 120,
+        "role": "bar",
+        "created_at": "2026-10-06T09:09:38.124Z"
+      }
+    ],
+    "convenio_config": [
+      {
+        "id": "99999999-aaaa-aaaa-aaaa-999999999999",
+        "location_id": "14b1b81f-e537-43e5-94ac-9ac34ac92ac3",
+        "working_days_per_week": 5,
+        "overtime_model": "daily_accrual",
+        "reference_period_days": null,
+        "compensation_window_days": null,
+        "daily_target_minutes": null,
+        "max_weekly_minutes": 2400,
+        "min_inter_shift_rest_minutes": 720,
+        "max_ordinary_daily_minutes": 540,
+        "break_threshold_minutes": 360,
+        "min_break_minutes": 15,
+        "weekly_rest_minutes": 2160,
+        "annual_overtime_cap_hours": 80,
+        "night_window_start_minute": 1320,
+        "night_window_end_minute": 360,
+        "night_premium_pct": null,
+        "split_shift_premium": null,
+        "breaks_count_as_worked": 0,
+        "created_at": "2026-10-06T09:09:38.124Z"
+      }
+    ],
+    "payment_policy": [
+      {
+        "id": 1,
+        "offline_mode": "cash_only",
+        "offline_amount_cap": 5000,
+        "created_at": "2026-10-06T09:09:38.124Z",
+        "updated_at": "2026-10-06T09:09:38.124Z"
+      }
+    ],
+    "adjustment_reasons": [
+      {
+        "id": "4228b4a3-a6c7-4469-99d1-11b0760ad966",
+        "name": "Error al marcar",
+        "names": "{\"en\":\"Entry error\",\"es\":\"Error al marcar\"}",
+        "actions": "[\"cancel\"]",
+        "max_percent": null,
+        "max_amount": null,
+        "apply_role": "staff",
+        "approver_role": "supervisor",
+        "note_required": 0,
+        "active": 1,
+        "position": 0,
+        "created_at": "2026-10-06T09:09:38.122Z"
+      }
+    ],
+    "adjustment_settings": []
+  },
+  "reconnect": ["print_agents", "printers"]
+}

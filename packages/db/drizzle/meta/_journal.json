@@ -757,6 +757,27 @@
       "when": 1791273701919,
       "tag": "0107_locations_restore_reader_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "6",
+      "when": 1791277850235,
+      "tag": "0108_printing_retirement_drop_readers",
+      "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "6",
+      "when": 1791277851041,
+      "tag": "0109_retire_printing_rules_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "6",
+      "when": 1791277851826,
+      "tag": "0110_printing_retirement_restore_readers",
+      "breakpoints": true
     }
   ]
 }

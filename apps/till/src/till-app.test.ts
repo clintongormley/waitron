@@ -3966,12 +3966,6 @@ describe("till-app", () => {
     },
   );
 
-  // ── Cash-drawer-authorization: the OPTIMISTIC 403 → supervisor-override dialog → retry flow ──
-  // The till carries NO policy or role knowledge: it always TRIES the direct open, and only on the
-  // server's `authorization.not_permitted` (a gated policy + an operator who lacks cash.drawer) does it
-  // fetch the eligible supervisors and open the override dialog. This stays correct if the location's
-  // policy changes mid-shift.
-
   it("a direct open (200 first try) never opens the override dialog and fetches no authorizers", async () => {
     const { el } = await mountApp(); // openDrawer resolves by default
     await toTicket(el);
@@ -3983,7 +3977,7 @@ describe("till-app", () => {
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
   });
 
-  it("a gated 403 fetches the eligible supervisors and opens the override dialog", async () => {
+  it("a permission refusal fetches the eligible supervisors and opens the override dialog", async () => {
     const { el } = await mountApp({
       openDrawer: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
     });

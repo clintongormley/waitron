@@ -48,8 +48,6 @@ export interface PreparedVenue {
     dayCutover: string;
     bumpMode: string;
     fireControl: string;
-    receiptPrintMode: string;
-    drawerOpenPolicy: string;
     catalogueId: string | null;
   };
   seriesCode: string;
@@ -88,8 +86,7 @@ export async function buildConfigurationBundle(
       l.address_line1 as "addressLine1", l.address_line2 as "addressLine2",
       l.postal_code as "postalCode", l.city, l.province, l.time_zone as "timeZone",
       l.day_cutover as "dayCutover", l.bump_mode as "bumpMode",
-      l.fire_control as "fireControl", l.receipt_print_mode as "receiptPrintMode",
-      l.drawer_open_policy as "drawerOpenPolicy", l.catalogue_id as "catalogueId",
+      l.fire_control as "fireControl", l.catalogue_id as "catalogueId",
       max(s.code) filter (where s.purpose = 'standard') as "seriesCode",
       max(s.code) filter (where s.purpose = 'full') as "fullSeriesCode",
       max(s.code) filter (where s.purpose = 'rectificative') as "rectificativeSeriesCode"
@@ -122,7 +119,7 @@ export async function buildConfigurationBundle(
   const location = { ...rest, invoiceLocales: parseLocaleList(invoiceLocales) };
   const transferred = await exportConfigurationTables(db, modules);
   return {
-    version: 1,
+    version: 2,
     createdAt: now.toISOString(),
     sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
@@ -153,15 +150,13 @@ export async function applyPreparedLocation(
       operation_description = ${location.operationDescription},
       bump_mode = ${location.bumpMode},
       fire_control = ${location.fireControl},
-      receipt_print_mode = ${location.receiptPrintMode},
-      drawer_open_policy = ${location.drawerOpenPolicy},
       catalogue_id = ${location.catalogueId}
     where id = ${target.locationId}
   `);
 }
 
 export interface ConfigurationBundle {
-  version: 1;
+  version: 2;
   createdAt: string;
   sourceOperatorId: string;
   venue: PreparedVenue;
@@ -455,11 +450,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseConfigurationBundle(value: unknown): ConfigurationBundle {
-  if (!isRecord(value) || value.version !== 1) {
+  if (!isRecord(value)) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
+  if (typeof value.version === "number" && value.version > 2) {
+    throw new AppError("setup.request_invalid", { field: "version" });
+  }
+  if (value.version !== 2) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
   const location = isRecord(venue) ? venue.location : undefined;
+  if (
+    isRecord(location) &&
+    ["receiptPrintMode", "drawerOpenPolicy"].some((field) => Object.hasOwn(location, field))
+  ) {
+    throw new AppError("setup.configuration_outdated", {});
+  }
   const modules = value.modules;
   const tables = value.tables;
   if (
@@ -493,8 +498,6 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     "dayCutover",
     "bumpMode",
     "fireControl",
-    "receiptPrintMode",
-    "drawerOpenPolicy",
   ];
   if (
     venueStrings.some((field) => typeof venue[field] !== "string") ||

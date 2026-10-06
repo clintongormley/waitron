@@ -1,3 +1,8 @@
+> **2026-10-06, A261 step 8:** Printing rules and the venue drawer policy are retired.
+> Manual opening always requires `cash.drawer` or a permitted supervisor PIN; receipt policy
+> belongs to departments and zones. The legacy location receipt/drawer columns are removed
+> in a pre-live reset-required release; configuration exports now use format 2.
+
 # Venue operations: how the venue is organised and configured
 
 > **2026-10-05 — A261 step 3:** For the replacement station, printer, watcher and timing controls, see the [Prep stations tabs implementation plan](../plans/2026-10-05-prep-stations-tabs.md) and its dated implementation checkpoints. This document retains the earlier screen layout and procedures as historical context.

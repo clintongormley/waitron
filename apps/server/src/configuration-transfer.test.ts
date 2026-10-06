@@ -1,3 +1,4 @@
+import { locationId as brandLocationId } from "@waitron/shared";
 import {
   addMember,
   addShortcut,
@@ -24,6 +25,12 @@ import {
   updateOptionList,
   writeProductModifiers,
 } from "@waitron/catalogue";
+import {
+  createDepartment,
+  createServiceZone,
+  departmentSalePolicies,
+  zoneSalePolicies,
+} from "@waitron/venue-service";
 import { and, eq, sql } from "drizzle-orm";
 import { uploadImage, readImageBytes } from "@waitron/media";
 import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
@@ -136,7 +143,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 1,
+  version: 2,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -159,8 +166,6 @@ const bundle: ConfigurationBundle = {
       dayCutover: "06:00:00",
       bumpMode: "line",
       fireControl: "waiter",
-      receiptPrintMode: "auto",
-      drawerOpenPolicy: "gated",
       catalogueId: null,
     },
     seriesCode: "F",
@@ -2848,4 +2853,77 @@ describe("venue detail edits and configuration boundaries", () => {
       expect(suite.db.all(sql`select * from invoice_series`)).toEqual(beforeSeries);
     },
   );
+});
+
+it("transfers department receipt choices and explicit or inherited zone choices in format 2", async () => {
+  const source = await applyVenue(planVenue(venue("B13572476"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const scope = { locationId: brandLocationId(source.locationId) };
+  await withTransaction(suite.db, async (tx) => {
+    const department = await createDepartment(tx, scope, {
+      name: "Receipt department",
+      defaultServiceMode: "table_tab",
+    });
+    await tx
+      .update(departmentSalePolicies)
+      .set({ receiptPrintMode: "on_request" })
+      .where(eq(departmentSalePolicies.departmentId, department.id));
+    const explicit = await createServiceZone(tx, scope, {
+      name: "Explicit receipts",
+      departmentId: department.id,
+    });
+    const inherited = await createServiceZone(tx, scope, {
+      name: "Inherited receipts",
+      departmentId: department.id,
+    });
+    await tx
+      .update(zoneSalePolicies)
+      .set({ receiptPrintMode: "never" })
+      .where(eq(zoneSalePolicies.zoneId, explicit.id));
+    await tx
+      .update(zoneSalePolicies)
+      .set({ receiptPrintMode: null })
+      .where(eq(zoneSalePolicies.zoneId, inherited.id));
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const exported = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-06T10:00:00Z"),
+    versions,
+  );
+  expect(exported.version).toBe(2);
+  expect(exported.venue.location).not.toHaveProperty("receiptPrintMode");
+  expect(exported.venue.location).not.toHaveProperty("drawerOpenPolicy");
+  const decoded = decodeConfigurationBundle(
+    encodeConfigurationBundle(exported, "a strong passphrase"),
+    "a strong passphrase",
+  );
+  const target = await applyVenue(planVenue(venue("B13572477"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: async (tx, result) =>
+      importConfigurationTables(
+        tx,
+        decoded,
+        { locationId: result.locationId },
+        ALL_MODULES,
+        versions,
+      ),
+  });
+  expect(target.locationId).not.toBe(source.locationId);
+  const modes = await targetSuite.db.execute(sql`
+    select z.name, p.receipt_print_mode as department_mode, q.receipt_print_mode as zone_mode
+    from floor_zones z join zone_service_policies s on s.zone_id=z.id
+    join departments d on d.id=s.department_id
+    join department_sale_policies p on p.department_id=d.id
+    join zone_sale_policies q on q.zone_id=z.id
+    where d.name='Receipt department' order by z.name`);
+  expect(modes.rows).toEqual([
+    { name: "Explicit receipts", department_mode: "on_request", zone_mode: "never" },
+    { name: "Inherited receipts", department_mode: "on_request", zone_mode: null },
+  ]);
 });

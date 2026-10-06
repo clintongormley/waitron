@@ -6,6 +6,14 @@
 > invoice-first placement or preserving that legacy style describe the earlier design.
 
 
+> **2026-10-06 release decision:** The owner approved a pre-live venue reset after the populated
+> column rebuild refused at `DROP TABLE locations`, plus the exact core/0109 upgrade-guard reset
+> entry (the tag alone follows regeneration). Before deploying this release to an existing
+> pre-live box, reset its venue with `waitron.sh --reset install <ref>` and configure it again.
+> The reset discards that venue's recorded sales, fiscal/workforce chains, sessions, pairings and
+> configuration. Format-1 configuration exports are refused; this release accepts format 2.
+> This is the selected reset release, with no successful populated-upgrade claim.
+
 > **For the future implementer:** Execute these checkbox tasks inline, in order, using `superpowers:executing-plans`. Load `superpowers:test-driven-development` before writing implementation or tests. Observe each new behavioral check failing for the intended reason, implement the smallest change, then observe it passing. The driver owns commits, review and landing.
 
 **Review status:** Plan awaiting owner approval, 2026-10-05. A fresh-context Claude `review-branch` seat compared only the frozen draft and three source specs (374 seconds); its findings were triaged and the plan corrected. An independent narrow reader checked the corrections, found one remaining printer-versus-drawer test ambiguity, and reported no remaining issue after that paragraph was corrected and reread. These were document reads, not behavior execution. Source receipts remain UNVERIFIED at runtime; no implementation, behavioral test, migration generation or server was run for this plan.

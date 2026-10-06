@@ -969,7 +969,7 @@ browser test** — most of these rules exist because a test passed while proving
   its own (approved by the owner 2026-10-03, A238). `take-cash` decides whether a device takes cash
   at all: a cash sale, collection or bill payment from a profile without it is refused
   `device.cash_not_allowed` (`assertTakesCash`, `apps/server/src/device-session.ts`). The manual open needs a session on an
-  active device, the profile's `open-cash-drawer`, and under the `gated` drawer policy `cash.drawer`
+  active device, the profile's `open-cash-drawer`, and always `cash.drawer`
   or the PIN of someone holding it. The one exception is the dashboard's "Test open drawer"
   calibration (`POST /management-api/printers/:id/test-drawer`), which opens any active printer's
   drawer for a manager holding `printer.manage` and `cash.drawer`. Drawer jobs cannot be manually

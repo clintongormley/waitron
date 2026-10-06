@@ -236,10 +236,6 @@ export async function enqueueReceiptCopy(
  * The audited manual drawer open: a `drawer_opens('manual')` row with no sale, and a kick-only job.
  * The caller has already resolved the printer.
  *
- * `operatorId` is who PERFORMED the open, always the logged-in operator. `authorizedBy` is who
- * AUTHORIZED it — the operator under an `open` policy or as a self-authorizing supervisor, else the
- * overriding supervisor — and `viaOverride` records whether a supervisor override supplied it. The
- * route computes both.
  */
 export async function enqueueManualDrawerOpen(
   tx: Transaction,

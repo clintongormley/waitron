@@ -326,7 +326,6 @@ const NAV_SCREENS = [
   "venue-settings",
   "devices",
   "printers",
-  "printing-rules",
   "canvas-editor",
   "diagnostics",
   "backup",
@@ -362,7 +361,6 @@ const SCREEN_TAGS = [
   "dashboard-purchases-screen",
   "dashboard-devices-screen",
   "dashboard-printers-screen",
-  "dashboard-printing-rules-screen",
   "dashboard-canvas-editor-screen",
   "dashboard-diagnostics-screen",
   "dashboard-email-screen",
@@ -1838,13 +1836,12 @@ describe("dashboard-app", () => {
     expect(screen.canManageReaders).toBe(false);
   });
 
-  it("navigates to printing rules beside printers", async () => {
-    const api = stubApi({ listStaff: vi.fn().mockResolvedValue([]) });
-    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+  it("retires printing rules from the sidebar and mounted screens", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
     await flush(el);
-    navItem(el, "printing-rules")!.click();
-    await flush(el);
-    expect(mountedScreens(el)).toEqual(["dashboard-printing-rules-screen"]);
+    expect(navItem(el, "printing-rules")).toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-printing-rules-screen")).toBeNull();
+    expect(navItem(el, "printers")).not.toBeNull();
     expect(countH1(el)).toBe(1);
   });
 
@@ -3516,6 +3513,68 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
 });
 
 describe("dashboard URL navigation", () => {
+  it.each([
+    ["manager", ["venue_service.manage"], ["venue-service"], "/manage/prep-stations/view/tickets"],
+    ["supervisor", ["venue.view"], ["venue-service"], "/manage/prep-stations/view/stations"],
+    ["manager", [], [], "/manage/overview"],
+  ] as const)(
+    "replaces a retired printing bookmark with a permitted destination (%s, %s)",
+    async (role, permissions, modules, destination) => {
+      history.replaceState(null, "", "/manage/staff");
+      history.pushState(null, "", "/manage/printing-rules");
+      const length = history.length;
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockResolvedValue({ ...meResponse, role, permissions, modules }),
+        }),
+        request: async (path) => {
+          if (
+            path === "/management-api/venue-service/routing" ||
+            path === "/management-api/venue-service/stations/overview"
+          )
+            return {
+              stations: [],
+              defaultStationId: null,
+              stationTimes: [],
+              todayEnds: { timeOfDay: "06:00", tomorrow: true },
+              clockReadable: true,
+              claims: [],
+              exceptions: [],
+              unassigned: { folders: [], products: [] },
+            } as never;
+          if (path === "/management-api/stations/health")
+            return {
+              capturedAt: "2026-10-06T10:00:00Z",
+              stations: [],
+              outputsDown: { printersDown: [], screensDark: [] },
+            } as never;
+          if (path === "/management-api/stations/outputs-down")
+            return { printersDown: [], screensDark: [] } as never;
+          return [] as never;
+        },
+      });
+      await flush(el);
+      await expect.poll(() => location.pathname).toBe(destination);
+      expect(history.length).toBe(length);
+      expect(navItem(el, "printing-rules")).toBeNull();
+      expect(el.shadowRoot!.querySelector("dashboard-printing-rules-screen")).toBeNull();
+      const back = new Promise<void>((resolve) =>
+        window.addEventListener("popstate", () => resolve(), { once: true }),
+      );
+      history.back();
+      await back;
+      await flush(el);
+      expect(location.pathname).toBe("/manage/staff");
+      const forward = new Promise<void>((resolve) =>
+        window.addEventListener("popstate", () => resolve(), { once: true }),
+      );
+      history.forward();
+      await forward;
+      await flush(el);
+      await expect.poll(() => location.pathname).toBe(destination);
+    },
+  );
+
   it("opens the live Prep overview for venue viewers through a saved configuration-tab link", async () => {
     history.replaceState(null, "", "/manage/prep-stations/view/settings");
     const reads: string[] = [];
@@ -5458,13 +5517,13 @@ describe("the nav search", () => {
       new CustomEvent("wt-change", { detail: { value: "print" }, bubbles: true, composed: true }),
     );
     await flush(el);
-    expect(shownItems(el)).toEqual(["nav-printers", "nav-printing-rules"]);
+    expect(shownItems(el)).toEqual(["nav-printers"]);
   });
 
   it("shows only the pages whose label holds the term, whatever its case", async () => {
     const el = await mountSession(sessionIn("en-GB"));
     await search(el, "PRINT");
-    expect(shownItems(el)).toEqual(["nav-printers", "nav-printing-rules"]);
+    expect(shownItems(el)).toEqual(["nav-printers"]);
     expect(shownHeaders(el)).toEqual(["nav-group-configuration"]);
 
     await search(el, "book");
@@ -5475,8 +5534,8 @@ describe("the nav search", () => {
     const el = await mountSession(sessionIn("es-ES"));
     await search(el, "DIAGNOSTICO");
     expect(shownItems(el)).toEqual(["nav-diagnostics"]);
-    await search(el, "impresion");
-    expect(shownItems(el)).toEqual(["nav-printing-rules"]);
+    await search(el, "impresoras");
+    expect(shownItems(el)).toEqual(["nav-printers"]);
   });
 
   it("shows every page of a group whose name holds the term", async () => {
@@ -5635,9 +5694,9 @@ describe("the nav search", () => {
     const el = await mountSession(sessionIn("en-GB"), 390);
     await openDrawer(el);
     await search(el, "print");
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-printing-rules]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-printers]")!.click();
     await flush(el);
-    expect(el.shadowRoot!.querySelector("dashboard-printing-rules-screen")).toBeTruthy();
+    expect(el.shadowRoot!.querySelector("dashboard-printers-screen")).toBeTruthy();
     expect(layout(el).classList.contains("drawer-open")).toBe(false);
     expect(searchBox(el).value).toBe("");
     expect(shownHeaders(el)).toHaveLength(NAV_GROUP_KEYS.length);
@@ -5647,7 +5706,7 @@ describe("the nav search", () => {
     const el = await mountSession(sessionIn("en-GB"), 390);
     await openDrawer(el);
     await search(el, "print");
-    expect(shownItems(el)).toEqual(["nav-printers", "nav-printing-rules"]);
+    expect(shownItems(el)).toEqual(["nav-printers"]);
 
     await press(el, "Escape");
     expect(searchBox(el).value).toBe("");
@@ -5729,7 +5788,7 @@ describe("the nav search", () => {
       expect(overview(el)).toBeTruthy();
       expect(new URL(location.href).pathname).toBe(path);
       expect(searchBox(el).value).toBe("print");
-      expect(shownItems(el)).toEqual(["nav-printers", "nav-printing-rules"]);
+      expect(shownItems(el)).toEqual(["nav-printers"]);
       expect(layout(el).classList.contains("drawer-open")).toBe(true);
     }
   });

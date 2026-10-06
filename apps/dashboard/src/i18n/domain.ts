@@ -128,11 +128,6 @@ const PRINT_MODE_NAMES: NameTable = {
   never: { en: "Never", es: "Nunca" },
 };
 
-const DRAWER_OPEN_POLICY_NAMES: NameTable = {
-  gated: { en: "Supervisor approval required", es: "Requiere autorización de un responsable" },
-  open: { en: "Any operator", es: "Cualquier operario" },
-};
-
 export function roleName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(ROLE_NAMES, value, locale);
 }
@@ -154,10 +149,6 @@ export function jobStatusName(value: string, locale: string = currentLocale()): 
 
 export function printModeName(value: string, locale: string = currentLocale()): string {
   return resolveNameTable(PRINT_MODE_NAMES, value, locale);
-}
-
-export function drawerPolicyName(value: string, locale: string = currentLocale()): string {
-  return resolveNameTable(DRAWER_OPEN_POLICY_NAMES, value, locale);
 }
 
 export function breachKindName(kind: string, locale: string = currentLocale()): string {

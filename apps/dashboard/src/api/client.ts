@@ -1027,8 +1027,6 @@ export interface StationPrinter {
 
 // ── Receipt-printer + print-mode configuration ───────────────────────────────────────────────────
 
-export type DrawerOpenPolicy = "gated" | "open";
-
 // ── Reporting (sales & takings) types ────────────────────────────────────────────────────────────
 // Every decimal value crosses the wire as a string, never a number.
 
@@ -2890,18 +2888,6 @@ export class DashboardApi {
     return this.#request<void>(
       `/management-api/stations/${stationId}/printers/${printerId}`,
       "DELETE",
-    );
-  }
-
-  // ── Receipt printer + drawer policy ────────────────────────────────────────────────────────────
-
-  setDrawerOpenPolicy(locationId: string, policy: DrawerOpenPolicy): Promise<void> {
-    return this.#request<void>(
-      `/management-api/locations/${locationId}/drawer-open-policy`,
-      "PATCH",
-      {
-        policy,
-      },
     );
   }
 

@@ -64,7 +64,6 @@ import "./screens/planned-actual-screen.js";
 import "./screens/purchases-screen.js";
 import "./screens/devices-screen.js";
 import "./screens/printers-screen.js";
-import "./screens/printing-rules-screen.js";
 import "./screens/canvas-editor-screen.js";
 import "./screens/device-profiles-screen.js";
 import "./screens/diagnostics-screen.js";
@@ -114,7 +113,6 @@ const CORE_SCREENS = [
   "purchases",
   "devices",
   "printers",
-  "printing-rules",
   "canvas-editor",
   "device-profiles",
   "diagnostics",
@@ -232,7 +230,6 @@ const NAV_GROUPS: NavGroup[] = [
       },
       { screen: "devices", labelKey: "nav.devices" },
       { screen: "printers", labelKey: "nav.printers" },
-      { screen: "printing-rules", labelKey: "nav.printing_rules" },
       { screen: "payments", labelKey: "nav.payments", requiresManager: true },
       { screen: "canvas-editor", labelKey: "nav.canvases" },
       { screen: "device-profiles", labelKey: "nav.device_profiles" },
@@ -1574,6 +1571,14 @@ export class DashboardApp extends LitElement {
    * including the one a profile save triggers while the URL still reads "profile". The cost: a module
    * disabled server-side while the modal is open is not re-gated until the next navigation. */
   #applyRequestedScreen(requested: string | null): void {
+    if (requested === "printing-rules") {
+      const destination = this.#permittedScreen("prep-stations");
+      this.#url.write(
+        { dashboard: destination, view: destination === "prep-stations" ? "tickets" : null },
+        true,
+      );
+      requested = destination;
+    }
     this.profileOpen = requested === "profile";
     if (this.profileOpen && this.screen !== "login") return;
     this.screen = this.#permittedScreen(this.profileOpen ? null : requested);
@@ -1872,10 +1877,6 @@ export class DashboardApp extends LitElement {
           .api=${this.api}
           .canManageReaders=${this.#sessionPermissions.includes("payments.manage")}
         ></dashboard-devices-screen>`;
-      case "printing-rules":
-        return html`<dashboard-printing-rules-screen
-          .api=${this.api}
-        ></dashboard-printing-rules-screen>`;
       case "printers":
         return html`<dashboard-printers-screen .api=${this.api}></dashboard-printers-screen>`;
       case "canvas-editor":

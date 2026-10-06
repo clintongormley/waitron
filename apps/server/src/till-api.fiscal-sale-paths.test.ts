@@ -2028,9 +2028,6 @@ describe("handheld sales and device capability gates", () => {
       await tx.execute(
         sql`update devices set receipt_printer_id = ${printer.id} where id = ${deviceIdOf(deviceCookie)}`,
       );
-      await tx.execute(
-        sql`update locations set receipt_print_mode = 'auto' where id = ${cfg.locationId}`,
-      );
     });
 
     // A handheld may settle a cash sale: the fiscal chain is keyed by the submitting node (`nodeId`),
@@ -2564,9 +2561,6 @@ it("files an extras pick and an options answer through cash checkout and reprint
       pollId: `modifiers-${randomUUID()}`,
     });
     await tx.execute(sql`update devices set receipt_printer_id=${printer.id} `);
-    await tx.execute(
-      sql`update locations set receipt_print_mode='never' where id=${cfg.locationId}`,
-    );
     await tx.execute(sql`
       update department_sale_policies set receipt_print_mode='never'
       where department_id in (
@@ -2970,9 +2964,6 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       });
       await tx.execute(
         sql`update devices set receipt_printer_id = ${printer.id} where id = ${deviceIdOf(deviceCookie)}`,
-      );
-      await tx.execute(
-        sql`update locations set receipt_print_mode = 'auto' where id = ${cfg.locationId}`,
       );
       return printer.id;
     });

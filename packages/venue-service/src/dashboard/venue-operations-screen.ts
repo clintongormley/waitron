@@ -1066,6 +1066,8 @@ export class VenueOperationsScreen extends LitElement {
             </button>`;
           return html`<wt-combobox
             name="receiptPrintMode"
+            searchPlaceholder=${t("venue.combobox_search")}
+            noResultsLabel=${t("venue.combobox_no_results")}
             label=${`${row.kind === "department" ? row.department.name : row.zone.name}: ${t("venue.receipt")}`}
             hide-label
             .options=${[

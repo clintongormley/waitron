@@ -185,10 +185,7 @@ async function send(
 
 it("refuses the retired venue-wide receipt mode write without changing the location", async () => {
   const app = mountApp();
-  const before = await suite.db
-    .select({ mode: locations.receiptPrintMode })
-    .from(locations)
-    .where(eq(locations.id, locationId));
+  const before = await suite.db.select().from(locations).where(eq(locations.id, locationId));
 
   const response = await send(
     app,
@@ -198,12 +195,9 @@ it("refuses the retired venue-wide receipt mode write without changing the locat
   );
 
   expect(response.status).toBe(404);
-  expect(
-    await suite.db
-      .select({ mode: locations.receiptPrintMode })
-      .from(locations)
-      .where(eq(locations.id, locationId)),
-  ).toEqual(before);
+  expect(await suite.db.select().from(locations).where(eq(locations.id, locationId))).toEqual(
+    before,
+  );
 });
 
 /** Accepts through the verb; the accept route is `join-api.ts`'s. */

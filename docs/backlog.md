@@ -547,8 +547,9 @@ Still to do, roughly in the order a venue meets them. As each one lands, add the
    hangs over it: the existing zero-rate class is shown as **No tax (0%)**, and asesor Q20 asks
    whether any intended case legally needs N1 or N2 instead — to be answered before the first live
    filing (the #345 entry below).
-3. **Printing** — `printers-screen.ts` with its agent tabs, and `printing-rules-screen.ts`. #319,
-   #327 and #380 reworked these, so read them against the rules before changing anything.
+3. **Printing** — `printers-screen.ts` with its agent tabs, Prep stations Tickets/Watchers,
+   and department/zone Receipt cells. A261 step 8 retired Printing rules; review the surviving
+   screens against the rules before changing them.
 4. **Payments** — `payments-screen.ts` and the provider panels in `packages/payments-stripe` and
    `packages/payments-sumup`. #333 changed only their row menus.
 5. **Devices and displays** — `devices-screen.ts`, `device-profiles-screen.ts`, `floor-screen.ts`,
@@ -2434,9 +2435,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   since W93) and
   `product-editor.ts` also contain both a `<table>` and a row menu (found by grep, not read). None
   has a phone-width case and none was measured.
-- Read-back gaps: the print-mode and
-  `drawer_open_policy` toggles are set-only (the latter gates cash access); the Impresoras editor
-  leaves agent and transport re-binding read-only though the API accepts it.
+- Read-back gap: the Impresoras editor leaves agent and transport re-binding read-only
+  though the API accepts it. A261 step 8 retired the location print-mode and drawer-policy toggles.
 
 ### A4. Till, displays and devices
 
@@ -2869,10 +2869,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
       slip opens no drawer; B30 covers only the machine Waitron does not talk to.
     - From B29's review, not fixed there: a cash sale with automatic receipts reads the device's
       receipt printer twice in one transaction (`enqueueSaleReceipt` and `enqueueSaleDrawer` each
-      call `resolveReceiptPrinter`) — resolve it once; every change on the dashboard's Printing
-      rules screen reloads all its data through `#mutate` → `#load()`
-      (`apps/dashboard/src/screens/printing-rules-screen.ts`), even `#setPrintMode` and
-      `#setDrawerPolicy`, which update their own state in place.
+      call `resolveReceiptPrinter`) — resolve it once. The other B29 reload finding concerned
+      Printing rules, which A261 step 8 retired.
   - **Task 17 (#991, a table that leaves without paying).** Asesor Q28 was decided by the owner
     without the asesor (2026-10-01): the full simplified invoice is issued when the table leaves.
     Open:
@@ -3555,7 +3553,7 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 - **The rest of the Printing rules screen (A242) — SETTLED by A261 (owner, 2026-10-03).** The page
   is deleted: kitchen ticket printers move to Prep stations, the receipt print mode to Departments
   and zones, and the cash drawer policy is deleted (opening the drawer by hand always needs
-  `cash.drawer`). Build step 8 of A261, after A238 lands.
+  `cash.drawer`). Implemented by A261 step 8: the old bookmark replaces itself with Prep stations Tickets when permitted; the retired write routes answer 404.
 
 - **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
   what the section is for and what is in it, opened by the section's header. It was the answer to
@@ -4192,12 +4190,19 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   Departments and zones; other screens still await their own one-department survey. Tab billing and
   the shared calendar remain open.
 - **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — SPEC
-  APPROVED; steps 1–3 and 7 implemented, later steps open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
+  APPROVED; steps 1–3, 7 and 8 implemented, steps 4–6 open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
   The sidebar's Venue operations group; Venue settings with one tab per group
   (Receipts moves there); Departments and zones as one table edited in place; Prep stations as one
   tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
   special dates, a calendar and public holidays; Printing rules and the cash drawer policy deleted.
   Eight build steps, each its own queue item.
+  Step 8 retires Printing rules, its drawer-policy API/client and both legacy location receipt/drawer
+  columns. Manual opening always requires `cash.drawer` or a permitted supervisor PIN; device/profile
+  gates, automatic payment opens, separate audit jobs and calibration permissions are retained.
+  Configuration format 2 omits both keys and refuses older versions or either retired key before
+  staging, with English/Spanish instructions to export again. The populated core column rebuild
+  refuses at `DROP TABLE locations`; this pre-live release requires a venue reset (owner, 2026-10-06).
+  Fresh schema and populated-refusal checks cover that selected release path; no converter is added.
   [Step 1, PR #1166](https://github.com/clintongormley/waitron/pull/1166) gathers Receipts,
   Tables and Kitchen settings into tabs; supervisors can read Tables and Kitchen, while writes
   remain manager-only (owner amendment, 2026-10-04).
@@ -4217,8 +4222,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   its transfer declaration. Reachability with the installed module list is unverified;
   distinguish that local build defect from an incompatible artifact if it can reach setup.
   [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) — DONE
-  ([PR #1269](https://github.com/clintongormley/waitron/pull/1269)). Printing rules' drawer
-  controls remain for step 8. The old
+  ([PR #1269](https://github.com/clintongormley/waitron/pull/1269)). Step 8 retires Printing rules'
+  drawer controls. The old
   numeric columns carry a retirement note. Review notes retained for future cleanup: the overview
   API object still exposes write methods (server routes remain the permission boundary), and
   station reordering repeats an active filter after an active-only read.
@@ -4254,15 +4259,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   history removal use a separately approved setup/reset instead. Later
   Hours/holidays/menu builds retain their own compatibility tests.
   [Step 8 Printing rules and drawer policy retirement plan](superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
-  was approved by the owner on 2026-10-05; its build remains open.
-  It removes the redundant
-  page and legacy location receipt/drawer settings, makes manual drawer authorization unconditional,
-  and preserves device/profile/printer gates, automatic drawer jobs and receipt/replay safeguards.
-  The owner approved the plan on 2026-10-05 at 15:55; its step 3 dependency is now landed,
-  alongside A238 and step 2. Follow the lane queue for the build. Recommendations cover
-  old bookmarks, incompatible export refusal and explicit reset approval if the populated locations
-  upgrade cannot preserve cross-set rows and triggers. Existing guards remain unchanged; useful
-  screen checks move to surviving surfaces before retirement, with any deletion lacking an equally strict replacement requiring approval.
+  is implemented in [PR #1288](https://github.com/clintongormley/waitron/pull/1288).
+  It removes the redundant page and legacy location receipt/drawer settings, makes manual drawer
+  authorization unconditional, and preserves device/profile/printer gates, automatic drawer jobs
+  and receipt/replay safeguards. The owner approved the reset release and the exact core/0109
+  upgrade-test reset entry on 2026-10-06. Old bookmarks use the surviving Tickets destination;
+  older configuration exports are refused before staging. Steps 4–6 remain with their owning lanes.
   [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED;
   profile access and transfers queued in lane D, equipment queued in lane E; not implemented.**
@@ -5679,7 +5681,7 @@ reading unless marked run:
   all would pass; the server always sends one.
 - Guards no test can reach, left uncovered rather than deleted: the canvas editor's "no draft" and
   "no selected card" guards, several `?? []` and `?? null` fallbacks in the printers, payments,
-  kitchen, backup, devices, printing-rules, profile, extra-list and option-list files, and a
+  kitchen, backup, devices, profile, extra-list and option-list files, and a
   handful in `dashboard-app.ts` and `login-screen.ts`. **Next action:** delete them with a
   receipt each, or leave them as defensive code by decision.
 
