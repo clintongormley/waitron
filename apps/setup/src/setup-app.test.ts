@@ -2624,21 +2624,29 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     "explains how to replace an incompatible configuration export (%s)",
     async (locale, sentence) => {
       try {
-        const el = await mountSetupApp(
-          stubApi({
-            stageConfiguration: vi.fn().mockRejectedValue({
-              code: "setup.request_invalid",
-              params: { field: "module:core" },
-              status: 400,
+        for (const field of ["module:core", "modules"]) {
+          const el = await mountSetupApp(
+            stubApi({
+              stageConfiguration: vi.fn().mockRejectedValue({
+                code: "setup.request_invalid",
+                params: { field },
+                status: 400,
+              }),
             }),
-          }),
-        );
-        setLocale(locale);
-        configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
-        await flush(el);
-        expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
-        expect(readDraft(el).configurationImport).toBeUndefined();
-        expect(el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]")).toBeNull();
+          );
+          setLocale(locale);
+          configurationRequest(
+            el,
+            new File(["encrypted"], "prepared.waitron-config"),
+            "passphrase",
+          );
+          await flush(el);
+          expect(await bottomOf(await screenHost(el, "live-source"))).toBe(sentence);
+          expect(readDraft(el).configurationImport).toBeUndefined();
+          expect(
+            el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]"),
+          ).toBeNull();
+        }
       } finally {
         setLocale("en-GB");
       }
@@ -2647,7 +2655,6 @@ describe("restore, configuration and fiscal-test outcomes", () => {
 
   it.each([
     ["setup.request_invalid", "artifact"],
-    ["setup.request_invalid", "modules"],
     ["setup.request_invalid", "module:"],
     ["setup.request_invalid", 12],
     ["setup.request_invalid", undefined],
