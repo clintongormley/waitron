@@ -13,7 +13,7 @@ import type { AckState } from "@waitron/fiscal";
  * estado→AckState mapping lives, so it is never re-expressed in SQL where it could drift.
  */
 
-/** One ack as it crosses to a downstream consumer. Regime-neutral: `state` is the settled
+/** One ack as it crosses to a downstream consumer. Regime-neutral: `state` is the
  * `AckState`, not a raw envío estado. */
 export interface Ack {
   recordId: string;
@@ -39,14 +39,14 @@ export function ackStateOf(estado: string): AckState | null {
     case "detenido":
       return "halted";
     default:
-      return null; // pendiente / enviando — not yet terminal
+      return null; // pendiente / enviando — nothing to acknowledge yet
   }
 }
 
 /**
  * Upserts the ack for `registroId`, derived from the `envios` row THIS transaction just wrote — so
- * the ack and the estado it reflects commit atomically and can never disagree. A no-op when the
- * estado is non-terminal (`ackStateOf` returns null): there is nothing to acknowledge yet.
+ * the ack and the estado it reflects commit atomically and can never disagree. A no-op when
+ * `ackStateOf` returns null (`pendiente`, `enviando`): there is nothing to acknowledge yet.
  *
  * `submitted_at` coalesces `envios.enviado_en` to `now` because the column is NOT NULL and a
  * lost-ack row reconcile corrects may never have been claimed (no `enviado_en`). `csv` rides
@@ -63,7 +63,7 @@ export async function writeAck(tx: Transaction, registroId: string, now: Date): 
   const estado = rows[0]?.estado;
   if (estado === undefined) return; // no envío row — nothing to acknowledge
   const state = ackStateOf(estado);
-  if (state === null) return; // non-terminal estado — no ack yet
+  if (state === null) return; // pendiente / enviando — nothing to acknowledge yet
 
   await tx.execute(sql`
     insert into acks (registro_id, submitted_at, csv, state, delivered_at)
@@ -83,9 +83,10 @@ export async function writeAck(tx: Transaction, registroId: string, now: Date): 
   `);
 }
 
-/** Removes a record's ack row, whenever a record goes back to `pendiente`: `ackStateOf('pendiente')`
- * is null, so the record must carry NO ack, or the committed ack would disagree with the estado
- * (the acks invariant). Idempotent — deleting an absent ack is a no-op. */
+/** Removes a record's ack row when a record that carried one goes back to `pendiente`: an
+ * `aceptado` record reset by reconcile (`noTrace`), or a `detenido` one released from a brake
+ * hold. `ackStateOf('pendiente')` is null, so the record must carry NO ack, or the committed ack
+ * would disagree with the estado (the acks invariant). Idempotent — deleting an absent ack is a no-op. */
 export async function deleteAck(tx: Transaction, registroId: string): Promise<void> {
   await tx.execute(sql`delete from acks where registro_id = ${registroId}`);
 }

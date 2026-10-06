@@ -4,7 +4,7 @@ import { enumCheck, enumType, id, json, label, newId, table, ts } from "@waitron
 import { registrosFacturacion } from "./registros.js";
 
 /**
- * The cause of a case, named by its incident code. Closed here, not in the table: a fixed list in
+ * The cause of a case, written as an incident code. Closed here, not in the table: a fixed list in
  * a CHECK would make each new cause a table rebuild, which fails once events point at the cases.
  */
 export type FilingCaseCause =
