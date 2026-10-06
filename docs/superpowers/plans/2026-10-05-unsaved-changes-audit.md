@@ -1603,3 +1603,46 @@ remain staged page work in Tasks 4/6 even though their markup is not a dialog.
 
 Tasks 1/4 remain partial. Shared history/shell integration and all page/setup owners in Tasks 5/6
 remain open. Neither proposed PR is ready for finish-branch.
+
+
+## Line-edit station-choice checkpoint — 2026-10-06
+
+The till shell's `data-edit-dead-ends` question now registers its selected station separately
+from the party draft. Cancel and native Escape use the shared coordinator. Keep retains the
+station, while Discard restores only the local choice and closes without a retry. Confirm
+retires this scope before dispatching the existing line-edit retry with its original quantity,
+revision and selected `makeAt`. A new refused retry gets a separate opening and empty choice.
+Child close reports and departed controls cannot operate on that replacement. Operator lock
+invalidates an outstanding answer and clears the local question immediately.
+
+Commands run in the feature worktree:
+
+```sh
+pnpm --filter @waitron/till exec vitest run src/till-app-drafts.test.ts src/widgets/dead-ends-dialog.unsaved.test.ts src/widgets/dead-ends-dialog.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+pnpm --filter @waitron/till typecheck
+pnpm exec eslint apps/till/src/till-app.ts apps/till/src/till-app-drafts.test.ts
+```
+
+The first run observed six missing-behavior failures and one passing untouched-close control.
+The initial implementation left two Discard cases failing because rendering replaced the
+callback that `wt-dialog.requestClose` was awaiting. Retaining one callback per opening passed
+all seven cases. The expanded suite's reconnect experiment found that the existing URL controller
+restores a route outside the order (`UrlStateController.hostConnected` calls `restore`); its new
+case now checks retirement and that detached controls issue no retry. It does not claim a
+retained modal after application reconnect. No existing assertion changed. The final three-suite
+family passed 166 tests, including eleven new line-choice cases. The unedited fiscal suites
+passed 20. Till typechecking, scoped lint and diff checks passed.
+
+Four separate guard deletions in an independently installed disposable clone each produced
+one intended failure and one passing untouched-close control: native close interception,
+choice notification, child-close filtering and parent association. Restoring that clone passed
+all eleven line-choice cases. A temporary visual harness passed eight EN/ES, light/dark,
+390/1280 flows and sixteen axe scans. All sixteen warning/kept-editor captures were inspected
+in four contact sheets. The command logs, disposable-copy results and visual artifacts are
+retained locally in `receipts/w69-line-edit-20261006`; the harness and captures are removed
+from product source. Synthetic unload checks establish listener behavior, not a native reload.
+
+Tasks 1/4 remain partial. Next: the dashboard's outer profile Close/Cancel, inline split/transfer
+choices, then Tasks 5/6 page/setup/history/navigation and native reload. Neither proposed W69
+PR is ready for finish-branch; this checkpoint does not complete the item.

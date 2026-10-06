@@ -1,5 +1,5 @@
 import type { AuthorityClockStatus } from "./api/client.js";
-import { LeaveController } from "@waitron/ui";
+import { LeaveController, type WtDialog, type DraftScope, type LeaveReason } from "@waitron/ui";
 import { defaultMenu, type DietPredicate } from "./menu-filter.js";
 import { isTillDestination, type TillDestination, tillPath } from "./navigation.js";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
@@ -1106,6 +1106,7 @@ export class TillApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.#releaseEditDeadEnds();
     this.#invoiceRecipientLifetime = {};
     this.invoiceRecipientSaving = false;
     this.#battery?.stop();
@@ -1460,6 +1461,9 @@ export class TillApp extends LitElement {
     visit: number;
     stationId?: string;
   } | null = null;
+  #editDeadEndsScope?: DraftScope<string | undefined>;
+  #editDeadEndsOwner?: ChangeLineDetail;
+  #editDeadEndsClose?: (reason: LeaveReason) => Promise<boolean>;
   @state() private deadEndsQuestion: { answer: DeadEndAnswer; allowRemove: boolean } | null = null;
   #resolveDeadEnds?: (decision: DeadEndsDecision | null) => void;
   #previewSaveOutcome?: { sent: readonly OrderLine[]; outcome: DraftSaveOutcome };
@@ -1743,6 +1747,7 @@ export class TillApp extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues): void {
+    this.#syncEditDeadEnds();
     if (changed.has("api")) this.api.onMadeHere?.(this.#onMadeHere);
     if (changed.has("canvas") || changed.has("capabilities"))
       this.#affordanceList = this.#affordances();
@@ -5928,14 +5933,70 @@ export class TillApp extends LitElement {
     if (code === "ticket.already_started" && !left()) this.cancelOffer = lineNo;
   }
 
-  /** Leaving an order clears the banner, except a failed change to a line of an order already left,
-   * which has to outlive the switch. */
-  #retryEditDeadEnd(): void {
+  #releaseEditDeadEnds(): void {
+    this.#editDeadEndsScope?.dispose();
+    this.#editDeadEndsScope = undefined;
+    this.#editDeadEndsOwner = undefined;
+    this.#editDeadEndsClose = undefined;
+  }
+
+  #syncEditDeadEnds(): void {
     const pending = this.editDeadEnds;
-    if (pending === null || pending.stationId === undefined) return;
-    this.editDeadEnds = null;
-    if (this.activeTabId !== pending.orderId || this.#hasLeftOrder(pending.orderId, pending.visit))
+    if (
+      pending === null ||
+      this.activeTabId !== pending.orderId ||
+      this.#hasLeftOrder(pending.orderId, pending.visit)
+    ) {
+      this.#releaseEditDeadEnds();
       return;
+    }
+    if (!this.isConnected || this.#editDeadEndsOwner === pending.change) return;
+    this.#releaseEditDeadEnds();
+    this.#editDeadEndsOwner = pending.change;
+    this.#editDeadEndsClose = (reason) => this.#beforeEditDeadEndsClose(pending, reason);
+    this.#editDeadEndsScope = this.leave.coordinator.register<string | undefined>({
+      id: pending.change,
+      parent: this,
+      current: () => this.editDeadEnds?.stationId,
+      snapshot: (value) => value,
+      equal: (left, right) => left === right,
+      restore: (stationId) => {
+        const current = this.editDeadEnds;
+        if (current?.change === pending.change) this.editDeadEnds = { ...current, stationId };
+      },
+    });
+    // A line-edit question starts without a chosen station.
+    this.#editDeadEndsScope.commit(undefined);
+  }
+
+  #editDeadEndsCurrent(pending: NonNullable<TillApp["editDeadEnds"]>): boolean {
+    return (
+      this.isConnected &&
+      this.editDeadEnds?.change === pending.change &&
+      this.activeTabId === pending.orderId &&
+      !this.#hasLeftOrder(pending.orderId, pending.visit)
+    );
+  }
+
+  async #beforeEditDeadEndsClose(
+    pending: NonNullable<TillApp["editDeadEnds"]>,
+    reason: LeaveReason,
+  ): Promise<boolean> {
+    if (!this.#editDeadEndsCurrent(pending)) return false;
+    return (
+      (await this.leave.coordinator.request({
+        scopes: [pending.change],
+        reason,
+        proceed: () => undefined,
+      })) === "proceeded" && this.#editDeadEndsCurrent(pending)
+    );
+  }
+
+  #retryEditDeadEnd(pending: NonNullable<TillApp["editDeadEnds"]>): void {
+    if (!this.#editDeadEndsCurrent(pending) || pending.stationId === undefined) return;
+    this.#editDeadEndsScope?.commit(pending.stationId);
+    this.#releaseEditDeadEnds();
+    this.editDeadEnds = null;
     void this.#onChangeLine(
       new CustomEvent<ChangeLineDetail>("change-line", {
         detail: {
@@ -5954,34 +6015,61 @@ export class TillApp extends LitElement {
       this.#hasLeftOrder(pending.orderId, pending.visit)
     )
       return nothing;
-    return html`<wt-dialog
-      ${trackDialog()}
-      data-edit-dead-ends
-      .open=${true}
-      .heading=${t("table.preview_title")}
-      @wt-close=${() => (this.editDeadEnds = null)}
-    >
-      <till-dead-ends-section
-        .answer=${pending.answer}
-        .choices=${new Map(pending.stationId === undefined ? [] : [["0", pending.stationId]])}
-        .allowRemove=${false}
-        @make-at=${(event: CustomEvent<{ key: string; stationId: string }>) => {
-          this.editDeadEnds = { ...pending, stationId: event.detail.stationId || undefined };
+    return html`${keyed(
+      pending.change,
+      html`<wt-dialog
+        ${trackDialog()}
+        data-edit-dead-ends
+        .open=${true}
+        .heading=${t("table.preview_title")}
+        .beforeClose=${this.#editDeadEndsClose}
+        @wt-close=${(event: Event) => {
+          if (event.target !== event.currentTarget || !this.#editDeadEndsCurrent(pending)) return;
+          this.#releaseEditDeadEnds();
+          this.editDeadEnds = null;
         }}
-      ></till-dead-ends-section>
-      <div slot="footer" class="edit-dead-ends-actions">
-        <wt-button variant="secondary" @click=${() => (this.editDeadEnds = null)}
-          >${t("action.cancel")}</wt-button
-        >
-        <wt-button
-          variant="primary"
-          data-edit-dead-ends-retry
-          ?disabled=${pending.stationId === undefined}
-          @click=${() => this.#retryEditDeadEnd()}
-          >${t("table.preview_confirm")}</wt-button
-        >
-      </div>
-    </wt-dialog>`;
+      >
+        <till-dead-ends-section
+          .answer=${pending.answer}
+          .choices=${new Map(pending.stationId === undefined ? [] : [["0", pending.stationId]])}
+          .allowRemove=${false}
+          @make-at=${(event: CustomEvent<{ key: string; stationId: string }>) => {
+            if (
+              !this.#editDeadEndsCurrent(pending) ||
+              !(event.currentTarget as HTMLElement).isConnected
+            )
+              return;
+            this.editDeadEnds = { ...pending, stationId: event.detail.stationId || undefined };
+            this.#editDeadEndsScope?.changed();
+          }}
+        ></till-dead-ends-section>
+        <div slot="footer" class="edit-dead-ends-actions">
+          <wt-button
+            variant="secondary"
+            @click=${(event: Event) => {
+              if (
+                !this.#editDeadEndsCurrent(pending) ||
+                !(event.currentTarget as HTMLElement).isConnected
+              )
+                return;
+              void (event.currentTarget as HTMLElement)
+                .closest<WtDialog>("wt-dialog")!
+                .requestClose("cancel");
+            }}
+            >${t("action.cancel")}</wt-button
+          >
+          <wt-button
+            variant="primary"
+            data-edit-dead-ends-retry
+            ?disabled=${pending.stationId === undefined}
+            @click=${(event: Event) => {
+              if ((event.currentTarget as HTMLElement).isConnected) this.#retryEditDeadEnd(pending);
+            }}
+            >${t("table.preview_confirm")}</wt-button
+          >
+        </div>
+      </wt-dialog>`,
+    )}`;
   }
 
   #renderDifferentPeopleConfirmation(): TemplateResult | typeof nothing {
@@ -7066,6 +7154,8 @@ export class TillApp extends LitElement {
   #endOperatorSession(): void {
     this.#stopClockStatus();
     this.leave.forceReset();
+    this.#releaseEditDeadEnds();
+    this.editDeadEnds = null;
     this.#dismissStationChoices();
     this.#endReloadLock();
     this.#menuPoll.stop();

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { WtCombobox } from "@waitron/ui";
+import { leaveCoordinatorFor, type WtCombobox } from "@waitron/ui";
+import type { TillDeadEndsSection } from "./widgets/dead-ends-section.js";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { page, userEvent } from "vitest/browser";
 import {
@@ -4416,5 +4417,239 @@ describe("till-app: a draft line that cannot be sold now", () => {
       expect(await pressAndRead(el, "fire-all")).toContain(t("table.nothing_sent"));
       expect(api.submitDraft).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("line-edit unsaved station choice", () => {
+  async function opening() {
+    const updateOrderLine = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "station.no_replacement" })
+      .mockResolvedValue({ revision: 1, party: { id: "v1", revision: 4 } });
+    const askSaleDeadEnds = vi.fn().mockResolvedValue({
+      sends: true,
+      deadEnds: [
+        {
+          key: "0",
+          name: "Beer",
+          quantity: "2",
+          stationId: "bar",
+          stationName: "Bar",
+          why: "closed",
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    });
+    const mounted = await mountApp({ updateOrderLine, askSaleDeadEnds });
+    const { el } = mounted;
+    const order = await openMesa(el);
+    const change = () =>
+      emit(order, "change-line", {
+        lineNo: 1,
+        lineName: "Beer",
+        patch: { quantity: "2" },
+        revision: 0,
+        saleLine: { menuItemId: "offer-beer", quantity: "2" },
+      });
+    change();
+    await flush(el);
+    const dialog =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>("[data-edit-dead-ends]")!;
+    const section = dialog.querySelector<TillDeadEndsSection>("till-dead-ends-section")!;
+    const choose = async (value = "kitchen") => {
+      await section.updateComplete;
+      const field = section.shadowRoot!.querySelector<WtCombobox>("wt-combobox")!;
+      await chooseOption(field, value);
+      await flush(el);
+      return field;
+    };
+    const cancel = () => dialog.querySelector<HTMLElement>("wt-button[variant=secondary]")!.click();
+    return { ...mounted, dialog, section, choose, cancel, change, updateOrderLine };
+  }
+  function unload() {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+  async function question(el: TillApp) {
+    await flush(el);
+    const q =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(
+        "wt-unsaved-changes",
+      )!;
+    await q.updateComplete;
+    return q;
+  }
+  for (const route of ["Cancel", "Escape"]) {
+    it(`${route} retains station choice until explicit discard without retrying`, async () => {
+      const { el, dialog, section, choose, cancel, updateOrderLine } = await opening();
+      const field = await choose();
+      field.focus();
+      if (route === "Cancel") cancel();
+      else await userEvent.keyboard("{Escape}");
+      const q = await question(el);
+      expect(q.open).toBe(true);
+      expect(dialog.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+      expect(section.choices.get("0")).toBe("kitchen");
+      expect(updateOrderLine).toHaveBeenCalledTimes(1);
+      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+      await expect.poll(() => q.open).toBe(false);
+      expect(section.choices.get("0")).toBe("kitchen");
+      expect(unload()).toBe(true);
+      cancel();
+      await question(el);
+      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      await expect.poll(() => el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBeNull();
+      expect(updateOrderLine).toHaveBeenCalledTimes(1);
+      expect(unload()).toBe(false);
+    });
+  }
+  it("untouched and reverted choices close directly without retrying", async () => {
+    const { el, choose, cancel, updateOrderLine } = await opening();
+    await choose();
+    expect(unload()).toBe(true);
+    await choose("");
+    expect(unload()).toBe(false);
+    cancel();
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBeNull();
+    expect((await question(el)).open).toBe(false);
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+  it("untouched choice closes directly", async () => {
+    const { el, cancel, updateOrderLine } = await opening();
+    expect(unload()).toBe(false);
+    cancel();
+    await expect.poll(() => el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBeNull();
+    expect((await question(el)).open).toBe(false);
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+  it("Confirm accepts the existing exact retry and invalidates pending discard", async () => {
+    const { el, dialog, choose, cancel, updateOrderLine } = await opening();
+    await choose();
+    cancel();
+    const q = await question(el);
+    expect(q.open).toBe(true);
+    const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+    dialog.querySelector<HTMLElement>("[data-edit-dead-ends-retry]")!.click();
+    await flush(el);
+    expect(q.open).toBe(false);
+    expect(unload()).toBe(false);
+    expect(updateOrderLine).toHaveBeenCalledTimes(2);
+    expect(updateOrderLine).toHaveBeenLastCalledWith(
+      "wo-4",
+      1,
+      { quantity: "2", makeAt: "kitchen" },
+      0,
+    );
+    oldDiscard.click();
+    await flush(el);
+    expect(updateOrderLine).toHaveBeenCalledTimes(2);
+  });
+  it("a child close report cannot clear the selected station", async () => {
+    const { el, dialog, section, choose, updateOrderLine } = await opening();
+    await choose();
+    section.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBe(dialog);
+    expect(section.choices.get("0")).toBe("kitchen");
+    expect(unload()).toBe(true);
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+  it("disconnect invalidates a pending answer and unregisters unload", async () => {
+    const { el, choose, cancel, updateOrderLine } = await opening();
+    await choose();
+    cancel();
+    const q = await question(el);
+    expect(q.open).toBe(true);
+    const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+    el.remove();
+    await expect.poll(() => q.open).toBe(false);
+    expect(unload()).toBe(false);
+    oldDiscard.click();
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+  it("ancestor leave includes the choice but Keep does not run the continuation", async () => {
+    const { el, section, choose, updateOrderLine } = await opening();
+    await choose();
+    const proceed = vi.fn();
+    const result = leaveCoordinatorFor(el)!.request({
+      scopes: [el],
+      reason: "navigation",
+      proceed,
+    });
+    const q = await question(el);
+    expect(q.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    expect(await result).toBe("kept");
+    expect(proceed).not.toHaveBeenCalled();
+    expect(section.choices.get("0")).toBe("kitchen");
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+  it("replacement entry rejects departed choices, close reports and Confirm", async () => {
+    const { el, dialog, section, choose, cancel, change, updateOrderLine } = await opening();
+    await choose();
+    cancel();
+    const q = await question(el);
+    expect(q.open).toBe(true);
+    const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+    const oldCancel = dialog.querySelector<HTMLElement>("wt-button[variant=secondary]")!;
+    const oldConfirm = dialog.querySelector<HTMLElement>("[data-edit-dead-ends-retry]")!;
+    updateOrderLine.mockRejectedValueOnce({ code: "station.no_replacement" });
+    change();
+    await flush(el);
+    const replacement =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>("[data-edit-dead-ends]")!;
+    expect(replacement).not.toBe(dialog);
+    expect(q.open).toBe(false);
+    expect(unload()).toBe(false);
+    oldDiscard.click();
+    oldCancel.click();
+    oldConfirm.click();
+    section.dispatchEvent(
+      new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }),
+    );
+    dialog.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBe(replacement);
+    expect(
+      replacement.querySelector<TillDeadEndsSection>("till-dead-ends-section")!.choices.size,
+    ).toBe(0);
+    expect(updateOrderLine).toHaveBeenCalledTimes(2);
+    expect(unload()).toBe(false);
+  });
+  it("reconnect retires the choice when history restores a route outside its order", async () => {
+    const { el, host, dialog, section, choose, updateOrderLine } = await opening();
+    await choose();
+    const oldConfirm = dialog.querySelector<HTMLElement>("[data-edit-dead-ends-retry]")!;
+    el.remove();
+    expect(unload()).toBe(false);
+    host.append(el);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBeNull();
+    expect(unload()).toBe(false);
+    section.dispatchEvent(
+      new CustomEvent("make-at", { detail: { key: "0", stationId: "kitchen" } }),
+    );
+    oldConfirm.click();
+    await flush(el);
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+  });
+  it("operator lock cancels the warning and immediately discards only the local station choice", async () => {
+    const { el, choose, cancel, updateOrderLine } = await opening();
+    await choose();
+    cancel();
+    const q = await question(el);
+    expect(q.open).toBe(true);
+    const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
+    emit(shell(el), "logout");
+    await flush(el);
+    expect(q.open).toBe(false);
+    expect(lock(el)).not.toBeNull();
+    expect(unload()).toBe(false);
+    expect(el.shadowRoot!.querySelector("[data-edit-dead-ends]")).toBeNull();
+    oldDiscard.click();
+    await flush(el);
+    expect(updateOrderLine).toHaveBeenCalledTimes(1);
+    expect(api.logout).toHaveBeenCalledOnce();
   });
 });

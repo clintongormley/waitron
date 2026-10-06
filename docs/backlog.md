@@ -1222,8 +1222,11 @@ choice; Discard resets only local entry, leaving the party draft intact. Confirm
 before dispatching the existing request. Focused browser cases cover child reports, reconnect,
 detached controls and delayed clean closes against replacement openings. Station choices and
 line removals already retained by the party draft remain exempt from a second warning. Remaining
-line-edit station choices, inline split/transfer selections, the profile container close and
-page/history/navigation work keep W69 incomplete.
+inline split/transfer selections, the profile container close and page/history/navigation work
+keep W69 incomplete. Line-edit station choices now ask through Cancel/native Escape on the branch.
+Keep retains the chosen station; Discard closes without retrying. Confirm accepts the existing exact
+retry directly and invalidates an older question. Focused browser cases cover clean/reverted entry,
+ancestor leave, replacement controls, child close reports, disconnect and immediate operator lock.
 
 The owner audit now records A261 step 8's retired Printing rules page as historical. Its bookmark
 redirect remains covered by the dashboard shell suite; surviving station/watch forms, venue
