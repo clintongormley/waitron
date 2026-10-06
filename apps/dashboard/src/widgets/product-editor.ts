@@ -1113,6 +1113,7 @@ export class ProductEditor extends LitElement {
     if (!this.api) return html`<div class="group" data-section="name">${name}</div>`;
     return html`<div class="group" data-section="name">
       <dashboard-image-upload
+        .draftParent=${this}
         thumbnail
         .api=${this.api}
         .image=${this.draft.image}

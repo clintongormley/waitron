@@ -1194,7 +1194,11 @@ on its immediate-save path. Extras and options list editors, including the Produ
 list forms and the nested option-label editor, now use the same registry on the branch. Successful
 list writes commit before refresh or attaching a newly created list to the Product; saving a label
 commits only that child. Ordered rows, invalid pick limits, inherited prices and equivalent valid
-price spellings have focused browser checks. Other audited modal owners and page/navigation
+price spellings have focused browser checks. Image Upload/Edit and the enclosing picker now
+protect staged names and file selections, including a same-filename replacement and Product
+ancestry. Discard leaves stored images and the containing Product draft intact. Image writes
+commit their submitted values before refresh; a late refusal cannot mark a replacement editor.
+Other audited modal owners and page/navigation
 protection remain to be wired. Keep automatic saves on their existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)

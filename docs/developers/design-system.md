@@ -1490,7 +1490,9 @@ and preserves the draft. Read-only and automatically saved forms need no draft s
 
 W69 is being rolled out in stages. These shared APIs are available on its implementation branch;
 the application renderers, Product/Variant, Unit, explicit Product colour, extras/options lists
-and nested option-label forms are wired. The remaining form owners stay tracked in the W69
+and nested option-label forms are wired. Image Upload/Edit and enclosing picker owners also use
+the registry: snapshots copy translated names and preserve the selected File by identity, while
+the picker contributes a clean parent scope for its staged child. The remaining form owners stay tracked in the W69
 backlog entry. Page navigation is a separate part of that
 rollout. The coordinator's dirty-only unload registration
 requests the browser's own warning; the [design](../superpowers/specs/2026-10-05-unsaved-changes-warning-design.md)

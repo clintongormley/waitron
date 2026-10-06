@@ -534,3 +534,31 @@ it("equivalent nested Variant prices are clean and invalid raw prices are protec
   child.shadowRoot!.querySelector<HTMLElement>("[data-test=variant-cancel]")!.click();
   expect((await question(app)).open).toBe(true);
 });
+
+it("Product ancestry includes a nested image editor without editing the Product's own fields", async () => {
+  await import("@waitron/dashboard-modules");
+  const { app, editor } = await mount();
+  editor.api = {
+    imageLibraryRequest: vi.fn().mockResolvedValue({ images: [], total: 0 }),
+  } as unknown as DashboardApi;
+  await editor.updateComplete;
+  const upload = editor.shadowRoot!.querySelector("dashboard-image-upload")!;
+  await upload.updateComplete;
+  upload.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!.click();
+  await upload.updateComplete;
+  const picker = upload.shadowRoot!.querySelector("media-image-picker")!;
+  await (picker as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  const library = picker.shadowRoot!.querySelector("dashboard-image-library")!;
+  await library.updateComplete;
+  library.shadowRoot!.querySelector<HTMLElement>("[data-test=upload]")!.click();
+  await library.updateComplete;
+  const field =
+    library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-modal wt-input")!;
+  await field.updateComplete;
+  await userEvent.fill(
+    page.elementLocator(field.shadowRoot!.querySelector("input")!),
+    "Nested photo",
+  );
+  expect(app.leave.coordinator.isDirty([editor])).toBe(true);
+  expect(editor.currentValue.name).toBe("Coffee");
+});

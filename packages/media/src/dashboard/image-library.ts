@@ -6,7 +6,9 @@ import {
   currentContentLanguages,
   focusFirstInvalid,
   submitOnEnter,
+  leaveCoordinatorFor,
 } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import {
   QueryController,
   currentLocale,
@@ -48,6 +50,11 @@ function refusalField(error: unknown): string {
   if (code === "image.translation_required" && typeof language === "string")
     return `name-${language}`;
   return "_form";
+}
+
+interface ImageDraft {
+  names: Record<string, string>;
+  file: File | null;
 }
 
 @customElement("dashboard-image-library")
@@ -257,6 +264,7 @@ export class ImageLibrary extends LitElement {
   ];
   @property({ attribute: false }) api!: ImageApi;
   @property({ type: Boolean }) picker = false;
+  @property({ attribute: false }) draftParent?: object;
   @state() private images: LibraryImage[] = [];
   @state() private total = 0;
   @state() private search = "";
@@ -282,6 +290,12 @@ export class ImageLibrary extends LitElement {
     failed: boolean;
   } | null = null;
   @state() private busy = false;
+  #editorGeneration = 0;
+  #scope?: DraftScope<ImageDraft>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
   #deleteGeneration = 0;
   #viewGeneration = 0;
   #searchTimer?: ReturnType<typeof setTimeout>;
@@ -310,6 +324,10 @@ export class ImageLibrary extends LitElement {
     void this.#load();
   }
   override disconnectedCallback(): void {
+    this.#editorGeneration++;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
     this.#deleteGeneration++;
     this.#viewGeneration++;
     this.viewing = null;
@@ -386,7 +404,19 @@ export class ImageLibrary extends LitElement {
     this.offset = 0;
     void this.#load();
   }
+  #draft(): ImageDraft {
+    return {
+      file: this.editor!.file,
+      names: Object.fromEntries(
+        Object.entries(this.editor!.names)
+          .map(([language, value]) => [language, value.trim()] as const)
+          .filter(([, value]) => value !== ""),
+      ),
+    };
+  }
   #edit(image: LibraryImage | null): void {
+    this.#editorGeneration++;
+    this.#scope?.dispose();
     this.#setPreview(null);
     this.editor = {
       image,
@@ -396,15 +426,35 @@ export class ImageLibrary extends LitElement {
     this.attempted = false;
     this.refusal = null;
     this.duplicateImage = null;
+    this.#leave = leaveCoordinatorFor(this);
+    this.#scope = this.#leave?.register<ImageDraft>({
+      id: this,
+      parent: this.draftParent,
+      current: () => this.#draft(),
+      snapshot: (value) => ({ names: { ...value.names }, file: value.file }),
+      equal: (a, b) =>
+        a.file === b.file &&
+        Object.keys(a.names).length === Object.keys(b.names).length &&
+        Object.entries(a.names).every(([language, value]) => b.names[language] === value),
+      restore: (value) => {
+        if (!this.editor) return;
+        this.editor = { ...this.editor, names: { ...value.names }, file: value.file };
+        this.#setPreview(value.file);
+      },
+    });
   }
   #closeEditor(): void {
     if (this.busy) return;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
     this.#setPreview(null);
     this.editor = null;
   }
   #name(language: string, value: string): void {
     if (this.editor !== null)
       this.editor = { ...this.editor, names: { ...this.editor.names, [language]: value } };
+    this.#scope?.changed();
     this.#dropRefusal(`name-${language}`);
   }
   #dropRefusal(field: string): void {
@@ -446,18 +496,43 @@ export class ImageLibrary extends LitElement {
       return;
     }
     this.busy = true;
+    this.dispatchEvent(
+      new CustomEvent("image-write-state", {
+        detail: { busy: true },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    const generation = this.#editorGeneration;
+    const submitted = this.#draft();
+    const scope = this.#scope;
     const metadata: ImageMetadata = { names: editor.names };
     try {
       if (editor.image === null) {
         const result = await this.api.uploadImage(editor.file!, metadata);
+        if (generation !== this.#editorGeneration) return;
         this.duplicateImage = result.created ? null : result.image;
       } else await this.api.updateImage(editor.image.id, metadata);
+      if (generation !== this.#editorGeneration) return;
+      scope?.commit(submitted);
+      if (this.editor !== editor) return;
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#leave = undefined;
       this.#setPreview(null);
       this.editor = null;
     } catch (error) {
+      if (generation !== this.#editorGeneration) return;
       this.refusal = { field: refusalField(error), code: codeOf(error) };
     } finally {
       this.busy = false;
+      this.dispatchEvent(
+        new CustomEvent("image-write-state", {
+          detail: { busy: false },
+          bubbles: true,
+          composed: true,
+        }),
+      );
     }
     if (this.refusal) void this.#focusFirstInvalid();
     else await this.#load();
@@ -621,6 +696,7 @@ export class ImageLibrary extends LitElement {
       size="standard"
       open
       heading=${t(editor.image ? "image.edit" : "image.upload")}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         this.#closeEditor();
@@ -646,6 +722,7 @@ export class ImageLibrary extends LitElement {
                       const file = (event.target as HTMLInputElement).files?.[0] ?? null;
                       this.#setPreview(file);
                       this.editor = { ...editor, file };
+                      this.#scope?.changed();
                       this.#dropRefusal("file");
                     }} /></label
                 >${fileError ? html`<p id="file-error" class="error">${fileError}</p>` : nothing}`
@@ -684,7 +761,11 @@ export class ImageLibrary extends LitElement {
           slot="cancel"
           variant="secondary"
           ?disabled=${this.busy}
-          @click=${() => this.#closeEditor()}
+          @click=${() => {
+            if (this.#scope)
+              void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+            else this.#closeEditor();
+          }}
           >${t("image.cancel")}</wt-button
         ><wt-button
           data-test="save"

@@ -6,6 +6,7 @@ import "./image-library.js";
 
 @customElement("media-image-picker")
 export class ImagePicker extends LitElement {
+  @property({ attribute: false }) draftParent?: object;
   @property({ attribute: false }) request?: DashboardRequest;
   @property({ attribute: false }) liveData?: LiveData;
   #api?: ImageApi;
@@ -15,7 +16,11 @@ export class ImagePicker extends LitElement {
   }
   override render() {
     return this.#api
-      ? html`<dashboard-image-library .api=${this.#api} picker></dashboard-image-library>`
+      ? html`<dashboard-image-library
+          .api=${this.#api}
+          .draftParent=${this.draftParent}
+          picker
+        ></dashboard-image-library>`
       : nothing;
   }
 }

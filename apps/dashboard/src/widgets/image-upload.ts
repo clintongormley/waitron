@@ -7,7 +7,9 @@ import {
   currentContentLanguages,
   ContentLanguageController,
   uniqueId,
+  leaveCoordinatorFor,
 } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
 import { resolveEnabledContentText } from "@waitron/shared";
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import "@waitron/ui/src/components/wt-button.js";
@@ -94,6 +96,7 @@ export class ImageUpload extends LitElement {
   ];
   @property({ attribute: false }) api!: ImageUploader;
   @property() image: string | null = null;
+  @property({ attribute: false }) draftParent?: object;
   /** The heading above the full control; "Image" when empty. */
   @property() label = "";
   /** The photo a blank `image` falls back to — a variant's parent's — is not stored. */
@@ -105,6 +108,18 @@ export class ImageUpload extends LitElement {
   @property({ type: Boolean, reflect: true }) disabled = false;
   @state() private pickerOpen = false;
   @state() private selectedNames: Record<string, string> = {};
+  #writeBusy = false;
+  #scope?: DraftScope<null>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.#writeBusy &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
   #selectedFilename: string | null = null;
   readonly #captionId = uniqueId("image-upload-caption");
   constructor() {
@@ -116,6 +131,21 @@ export class ImageUpload extends LitElement {
   }
   #setOpen(open: boolean): void {
     if (open && this.disabled) return;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    if (open) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#scope = this.#leave?.register<null>({
+        id: this,
+        parent: this.draftParent,
+        current: () => null,
+        snapshot: () => null,
+        equal: () => true,
+        restore() {},
+      });
+    }
+    this.#writeBusy = false;
     this.pickerOpen = open;
     this.dispatchEvent(
       new CustomEvent("image-picker-state", { detail: { open }, bubbles: true, composed: true }),
@@ -204,6 +234,7 @@ export class ImageUpload extends LitElement {
       size="wide"
       open
       heading=${t("image.choose")}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         this.#setOpen(false);
@@ -211,6 +242,11 @@ export class ImageUpload extends LitElement {
       @keydown=${(event: Event) => event.stopPropagation()}
     >
       <media-image-picker
+        @image-write-state=${(event: CustomEvent<{ busy: boolean }>) => {
+          event.stopPropagation();
+          this.#writeBusy = event.detail.busy;
+        }}
+        .draftParent=${this}
         .request=${this.api?.imageLibraryRequest}
         .liveData=${this.api?.liveData}
         @select-image=${(
@@ -224,7 +260,14 @@ export class ImageUpload extends LitElement {
         }}
       ></media-image-picker>
       <wt-form-actions slot="footer"
-        ><wt-button slot="cancel" variant="secondary" @click=${() => this.#setOpen(false)}
+        ><wt-button
+          slot="cancel"
+          variant="secondary"
+          @click=${() => {
+            if (this.#scope)
+              void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+            else this.#setOpen(false);
+          }}
           >${t("action.cancel")}</wt-button
         >${
           this.thumbnail && this.image
