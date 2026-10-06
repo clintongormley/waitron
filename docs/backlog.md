@@ -1862,18 +1862,32 @@ Left open:
   `docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`) enforces it with a test that
   every pack offered at setup carries one, not with a route refusal, so that test stays as it is.
 
-**Demo languages per region — owner decision pending (W109, owner 2026-10-06: "add to the backlog
-for a later decision").** The demo-data plan builds the demo's content languages from the area's
-required languages in the country pack plus Spanish and English (plan, "Languages follow the area"
-table). Three consequences the owner has not yet ruled on; W109 builds them as stated:
+**Content languages per region, for real venues and the demo — owner DECIDED 2026-10-06 ~17:23
+(W109; was "Demo languages per region — owner decision pending").** As relayed in lane A's queue
+(`~/waitron-campaign/queue.md`, WATCHER NOTE of 17:23 above W109-1) and
+`~/waitron-campaign/questions.md` ("2026-10-06 17:23 — OWNER ANSWERS"):
 
-- _Valencian Community:_ the demo defaults to Catalan, because the pack says the area requires
-  Catalan. Setup itself keeps Spanish as the default there. Alternative: Spanish default with
-  Catalan beside it.
-- _Balearic Islands:_ the demo has no Catalan, because the pack requires no language there, though
-  Catalan is co-official (`docs/compliance/regional-language-rules.md`, Balearic Islands). Alternative: add Catalan, by making the pack require it or by a demo rule.
-- _Madrid and the other single-language areas:_ the demo drops the Catalan that setup switches on
-  for every Spanish venue (`es, ca, en`). Alternative: keep setup's whole list.
+- Required content languages, in Spain's pack, for real venues too: _"every area not named below:
+  **Spanish** required"_ (_"service must be offered in Spanish even where the law does not require
+  Spanish on printed menus"_); Catalonia Catalan and Spanish (unchanged); Valencian Community
+  Catalan and Spanish (unchanged), _"'Valenciano' is Catalan (`ca`) for now"_, foreign-language
+  notice kept;
+  **Balearic Islands Spanish + Catalan**, _"Stricter than the law … the owner's choice"_ (the law
+  asks for one official language, `docs/compliance/regional-language-rules.md`); Galicia Galician +
+  Spanish (unchanged), two-foreign-languages notice kept; Basque Country and Navarre _"no change"_.
+- _"English is switched on (not required) in every region. A NEW venue starts with its region's
+  required languages plus English"_ — no more Catalan in Galicia or Madrid.
+- _"The demo fills exactly those languages."_
+- Default content language (owner "a"): the regional language wherever one is required (Catalan in
+  Catalonia, the Valencian Community and the Balearic Islands; Galician in Galicia), Spanish
+  elsewhere; the venue can still change it.
+
+Planned in `docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`: setup's side and the
+pack as **Task 6** (`feat/content-languages-by-region`, built after Task 1 and before Task 3), the
+demo's side in Tasks 3 and 4. Cases the decisions leave open, built with the plan's default unless
+the owner says otherwise (plan, "Open points"): a Spanish venue with no province requires nothing;
+the Basque Country and Navarre keep no rule; receipts outside Catalonia stay free, Spanish by
+default.
 
 **Cross-app links in the split Vite dev stack — OPEN, unqueued.** The deployed server serves both
 apps on one origin, but the dev stack runs the till on port 5190 and the dashboard on 5191. A
@@ -4324,16 +4338,17 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 ### A9. Product depth — after the primary works
 
 - **Product languages are hard-coded at setup** (owner, 2026-09-13). The hard-code is in
-  `packages/catalogue/src/provisioning.ts` and names this entry. Since C112 (#992) Spain's country
-  pack names, per region, the content languages Waitron keeps enabled for the region
-  ([regional-language-rules.md](compliance/regional-language-rules.md)), and the server refuses a
-  save that leaves one out (`content.language_required`). Still open: the Spain-wide starting list
-  `["es", "ca", "en"]` is unchanged, so a venue in Galicia also gets Catalan; and two writers skip
-  the check — the Prepare-to-Live configuration copy
-  (`packages/catalogue/src/configuration-transfer.ts`), which copies the saved row as it is, and the
-  demo seed (`apps/server/scripts/demo-seed/seed-catalogue.ts`). The proper fix drives the list from
-  the venue's region and the languages it chose, which probably means setup asking; do it when there
-  is a second region or country to be wrong about.
+  `packages/catalogue/src/provisioning.ts` and names this entry: every Spanish venue starts with
+  `["es", "ca", "en"]` plus its region's required languages, so a venue in Galicia also gets
+  Catalan. **Fix decided by the owner 2026-10-06 (~17:23): a new venue starts with its region's
+  required languages plus English, the regional language the default where one is required**
+  (entry "Content languages per region", A2). Planned as Task 6 of
+  `docs/superpowers/plans/2026-10-06-demo-data-from-country-pack.md`
+  (`feat/content-languages-by-region`); this entry closes when it lands, except the two writers
+  that skip the required-language check (`content.language_required`): the demo seed
+  (`apps/server/scripts/demo-seed/seed-catalogue.ts`), fixed by that plan's Task 4, and the
+  Prepare-to-Live configuration copy (`packages/catalogue/src/configuration-transfer.ts`), which
+  copies the saved row as it is and stays open.
 - **A visible list of missing translations (C122, owner 2026-10-01) — DONE (#1006).** The
   Content languages page's **Missing translations** section lists, per enabled language, what has
   no customer-facing name in it.
