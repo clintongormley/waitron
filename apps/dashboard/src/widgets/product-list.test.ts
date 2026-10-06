@@ -4358,3 +4358,55 @@ describe("a category row's leading slot", () => {
     },
   );
 });
+
+describe("a category whose name wraps", () => {
+  it.each(
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      [true, false].map((reordering) => ({ locale, reordering })),
+    ),
+  )(
+    "keeps its grip and swatch beside the name's first line at 390 px ($locale, reordering: $reordering)",
+    async ({ locale, reordering }) => {
+      const restore = {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        locale: currentLocale(),
+      };
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        const { root } = await mountTree({
+          categories: [
+            {
+              id: "long",
+              name: "Charcuterie y quesos ibéricos de bellota",
+              parentId: null,
+              color: "#b12525",
+            },
+          ],
+          products: [],
+          reordering,
+        });
+        for (let frame = 0; frame < 3; frame++) await new Promise(requestAnimationFrame);
+        const row = root.querySelector('tr[data-row-key="folder:long"]')!;
+        const text = document.createRange();
+        text.selectNodeContents(row.querySelector("strong")!);
+        const lines = [...text.getClientRects()];
+        const first = lines[0]!;
+        const firstMiddle = first.top + first.height / 2;
+        const whole = text.getBoundingClientRect();
+        const wholeMiddle = whole.top + whole.height / 2;
+        expect(new Set(lines.map(({ bottom }) => Math.round(bottom))).size).toBeGreaterThan(1);
+        for (const part of [...(reordering ? [".drag-grip"] : []), '[data-test="color-long"]']) {
+          const box = row.querySelector(part)!.getBoundingClientRect();
+          const middle = box.top + box.height / 2;
+          expect(Math.abs(middle - firstMiddle), part).toBeLessThanOrEqual(3);
+          expect(wholeMiddle - middle, part).toBeGreaterThan(first.height / 3);
+        }
+      } finally {
+        setLocale(restore.locale);
+        await page.viewport(restore.width, restore.height);
+      }
+    },
+  );
+});

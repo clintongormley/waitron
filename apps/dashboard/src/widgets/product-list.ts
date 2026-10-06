@@ -120,13 +120,20 @@ export class ProductList extends LitElement {
       }
       /* Cell templates are rendered in wt-data-table's shadow root, so ::part is the one boundary
          crossing used for their presentation. */
+      /* Laid out as a product's cell is, so a wrapped name keeps its grip and swatch beside its
+         first line. */
       wt-data-table::part(folder-cell) {
+        display: block;
+      }
+      /* The name box's room is a flex basis; the phone's grid rule below still wins. */
+      wt-data-table::part(naming) {
         display: flex;
         align-items: center;
       }
       wt-data-table::part(folder-frame) {
         display: inline-flex;
         flex: none;
+        vertical-align: middle;
         justify-content: center;
         width: var(--wt-tap-min);
         margin-inline-end: var(--wt-space-3);
@@ -170,7 +177,9 @@ export class ProductList extends LitElement {
       }
       /* All products and a category being added cannot be dragged, but keep the grip's space. */
       wt-data-table::part(grip-space) {
+        display: inline-block;
         flex: none;
+        vertical-align: middle;
         width: var(--wt-tap-min);
       }
       wt-data-table::part(thumb-frame),
@@ -220,6 +229,7 @@ export class ProductList extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
       /* A column flex box takes its first item's baseline, so the row still lines up by the name. */
+      wt-data-table::part(folder-name),
       wt-data-table::part(name-stack) {
         display: inline-flex;
         flex-direction: column;
@@ -1197,8 +1207,10 @@ export class ProductList extends LitElement {
           if (column.key === "name")
             return html`<span part="folder-cell"
               >${this.#gripSpace()}${folderFrame()}<span part="folder-name"
-                ><strong>${t("folders.all_products")}</strong
-                ><span part="count" data-test="count-root">${this.#contents(null)}</span></span
+                ><span
+                  ><strong>${t("folders.all_products")}</strong
+                  ><span part="count" data-test="count-root">${this.#contents(null)}</span></span
+                ></span
               ></span
             >`;
           if (column.key === "actions")
@@ -1243,7 +1255,9 @@ export class ProductList extends LitElement {
                       >
                         ${swatchChip(folder.color)}
                       </button>`,
-                    )}<span part="folder-name"><strong>${folder.name}</strong>${after}</span>`
+                    )}<span part="folder-name"
+                      ><span><strong>${folder.name}</strong>${after}</span></span
+                    >`
             }</span
           >`;
         }
