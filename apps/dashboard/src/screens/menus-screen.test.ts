@@ -6167,6 +6167,27 @@ describe("the Home page tab", () => {
     expect(shadow.querySelector<HTMLInputElement>('input[type="range"]')!.value).toBe("3");
   });
 
+  it("writes a refusal under a group of choices as the slider writes its own", async () => {
+    const client = api();
+    const el = await mountHome(client);
+    for (const field of ["columns", "tiles"])
+      client.setHomeDisplay.mockRejectedValueOnce({
+        code: "menu.home_display_invalid",
+        params: { device: "handheld", field },
+      });
+    await slide(el, 6);
+    await vi.waitFor(() => expect(slider(el).error).not.toBe(""));
+    await choose(el, "home-tiles", "thumbnails");
+    await vi.waitFor(() => expect(q(el, '[data-test="home-tiles-error"]')).not.toBeNull());
+    await slider(el).updateComplete;
+    const sliderError = getComputedStyle(slider(el).shadowRoot!.querySelector(".error")!);
+    const choiceError = getComputedStyle(q(el, '[data-test="home-tiles-error"]')!);
+    for (const property of ["font-size", "font-weight", "color", "margin"] as const)
+      expect(choiceError.getPropertyValue(property), property).toBe(
+        sliderError.getPropertyValue(property),
+      );
+  });
+
   it("shows the saved column count again after a refused change", async () => {
     const client = api();
     const el = await mountHome(client);

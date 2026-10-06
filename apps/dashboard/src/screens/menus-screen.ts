@@ -350,6 +350,10 @@ export class MenusScreen extends LitElement {
         padding: 0;
         border: 0;
       }
+      .home fieldset > .field-error {
+        margin: 0;
+        font-size: var(--wt-font-size-sm);
+      }
       .home legend {
         padding: 0;
         margin-bottom: var(--wt-space-1);
