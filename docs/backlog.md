@@ -1454,8 +1454,12 @@ its old station-hours protection and component tests no longer apply. The replac
 weekday editor now protects Cancel/native Escape and replacement openings, commits the exact
 submitted cell before refresh, retains newer input, and rejects departed replies after reconnect.
 Focused checks are in `packages/venue-service/src/dashboard/hours-screen.unsaved.test.ts`.
-Configure hours, special-date Add/Edit and Duplicate still need shared dirty scopes, close
-interception and accepted-write handling. Clear/Delete confirmations
+Configure hours now protects its seven-day draft through Cancel/native Escape and replacement
+openings. Its confirmation's Back retains the draft without asking. Starting the explicit write
+invalidates an unanswered discard question; an accepted write commits before refresh. Refused
+writes, background reads and reconnect retain the draft against its opening defaults.
+Special-date Add/Edit and Duplicate still need shared dirty scopes, close interception and
+accepted-write handling. Clear/Delete confirmations
 have no editable payload and remain exempt. Source: `packages/venue-service/src/dashboard/hours-screen.ts`.
 Disable station now protects a changed replacement-station selection through Cancel, native Escape
 and another station-action opening. Keep retains the selection; Discard closes without a station

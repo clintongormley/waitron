@@ -40,14 +40,18 @@ class HoursLeaveApp extends LitElement {
 customElements.define("hours-leave-test-app", HoursLeaveApp);
 let app: HoursLeaveApp;
 afterEach(() => app?.remove());
-async function mount(write: () => Promise<void> = async () => {}, refreshFails = false) {
+async function mount(
+  write: () => Promise<void> = async () => {},
+  refreshFails = false,
+  initialModel = model,
+) {
   setLocale("en");
   const writes: unknown[] = [];
   let reads = 0;
   const request = async (path: string, method: string, body?: unknown) => {
     if (method === "GET") {
       if (++reads > 1 && refreshFails) throw { code: "connection.failed" };
-      return structuredClone(model);
+      return structuredClone(initialModel);
     }
     writes.push([path, body]);
     await write();
@@ -75,7 +79,9 @@ async function open(screen: HoursScreen) {
   return { modal, cell };
 }
 async function change(screen: HoursScreen, value: string) {
-  const cell = screen.shadowRoot!.querySelector("hours-cell-editor")!;
+  const cell = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["hours-cell-editor"]>(
+    'hours-cell-editor[field-prefix="sunday"]',
+  )!;
   const input = cell.shadowRoot!.querySelector<WtInput>('[name="sunday.periods.0.opensAt"]')!;
   input.value = value;
   input.dispatchEvent(
@@ -86,7 +92,7 @@ async function change(screen: HoursScreen, value: string) {
 }
 function value(screen: HoursScreen) {
   return screen
-    .shadowRoot!.querySelector("hours-cell-editor")!
+    .shadowRoot!.querySelector('hours-cell-editor[field-prefix="sunday"]')!
     .shadowRoot!.querySelector<WtInput>('[name="sunday.periods.0.opensAt"]')!.value;
 }
 function unload() {
@@ -326,4 +332,263 @@ it("opening another weekday asks before replacing an edited Hours draft", async 
   expect(value(screen)).toBe("09:00");
   expect(writes).toEqual([]);
   expect(unload()).toBe(false);
+});
+
+const unconfigured: HoursModel = {
+  ...model,
+  week: [
+    {
+      subject: { kind: "department", id: "d1" },
+      days: days.map(({ weekday }) => ({
+        weekday,
+        cell: { mode: "not_set", periods: [] },
+      })),
+    },
+  ],
+};
+async function configure(write?: () => Promise<void>, refreshFails = false) {
+  const mounted = await mount(write, refreshFails, unconfigured);
+  const { modal } = await open(mounted.screen);
+  return { ...mounted, modal };
+}
+async function mode(screen: HoursScreen, prefix: string, value: string) {
+  const cell = [...screen.shadowRoot!.querySelectorAll("hours-cell-editor")].find(
+    (entry) => entry.fieldPrefix === prefix,
+  )!;
+  await cell.updateComplete;
+  const input = cell.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    `[name="${prefix}.mode"]`,
+  )!;
+  input.value = value;
+  input.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await screen.updateComplete;
+  await cell.updateComplete;
+}
+function configureMode(screen: HoursScreen, prefix: string) {
+  return [...screen.shadowRoot!.querySelectorAll("hours-cell-editor")].find(
+    (entry) => entry.fieldPrefix === prefix,
+  )!.cell.mode;
+}
+function action(modal: HTMLElement, kind: "save" | "cancel") {
+  modal.querySelector<HTMLElement>(`[data-test=${kind}-editor]`)!.click();
+}
+const configuredBody = [
+  "/management-api/venue-service/hours/week",
+  {
+    subject: { kind: "department", id: "d1" },
+    days: [
+      { weekday: 0, cell: { mode: "closed", periods: [] } },
+      { weekday: 1, cell: { mode: "all_day", periods: [] } },
+      { weekday: 2, cell: { mode: "closed", periods: [] } },
+      { weekday: 3, cell: { mode: "closed", periods: [] } },
+      { weekday: 4, cell: { mode: "closed", periods: [] } },
+      { weekday: 5, cell: { mode: "closed", periods: [] } },
+      { weekday: 6, cell: { mode: "closed", periods: [] } },
+    ],
+  },
+];
+it("Configure hours keeps all seven-day values through Cancel and native Escape, then discards without a write", async () => {
+  const { screen, modal, writes } = await configure();
+  await mode(screen, "monday", "all_day");
+  expect(unload()).toBe(true);
+  action(modal, "cancel");
+  await choose("keep");
+  expect(configureMode(screen, "monday")).toBe("all_day");
+  await userEvent.keyboard("{Escape}");
+  expect((await question()).open).toBe(true);
+  expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  await choose("discard");
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect(writes).toEqual([]);
+  expect(unload()).toBe(false);
+});
+it("Configure hours clean and reverted values close without warning", async () => {
+  const { screen, modal, writes } = await configure();
+  await mode(screen, "monday", "all_day");
+  await mode(screen, "monday", "closed");
+  expect(unload()).toBe(false);
+  action(modal, "cancel");
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect((await question()).open).toBe(false);
+  const clean = await open(screen);
+  action(clean.modal, "cancel");
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect(writes).toEqual([]);
+});
+it("Configure hours confirmation Back retains the draft; Escape still protects it", async () => {
+  const { screen, modal, writes } = await configure();
+  await mode(screen, "monday", "all_day");
+  action(modal, "save");
+  await screen.updateComplete;
+  expect(modal.querySelector("[data-test=confirm-text]")).not.toBeNull();
+  action(modal, "cancel");
+  await screen.updateComplete;
+  expect((await question()).open).toBe(false);
+  expect(configureMode(screen, "monday")).toBe("all_day");
+  expect(unload()).toBe(true);
+  action(modal, "save");
+  await screen.updateComplete;
+  await userEvent.keyboard("{Escape}");
+  await choose("keep");
+  expect(modal.querySelector("[data-test=confirm-text]")).not.toBeNull();
+  expect(writes).toEqual([]);
+});
+it("Configure hours commits the accepted seven-day body before a failed refresh", async () => {
+  const { screen, modal, writes } = await configure(undefined, true);
+  await mode(screen, "monday", "all_day");
+  action(modal, "save");
+  await screen.updateComplete;
+  action(modal, "save");
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect(writes).toEqual([configuredBody]);
+  expect(unload()).toBe(false);
+  expect((await question()).open).toBe(false);
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=page-alert]"))
+    .not.toBeNull();
+});
+it("Configure hours refused writes retain the draft and warning", async () => {
+  const { screen, modal, writes } = await configure(async () => {
+    throw { code: "connection.failed" };
+  });
+  await mode(screen, "monday", "all_day");
+  action(modal, "save");
+  await screen.updateComplete;
+  action(modal, "save");
+  await expect
+    .poll(
+      () =>
+        modal.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=cancel-editor]")!
+          .disabled,
+    )
+    .toBe(false);
+  await userEvent.keyboard("{Escape}");
+  await choose("keep");
+  action(modal, "cancel");
+  await screen.updateComplete;
+  expect(configureMode(screen, "monday")).toBe("all_day");
+  expect(writes).toEqual([configuredBody]);
+  expect(unload()).toBe(true);
+});
+it("Configure hours reconnect preserves the original defaults and invalidates a pending answer", async () => {
+  const { screen, modal } = await configure();
+  await mode(screen, "monday", "all_day");
+  action(modal, "cancel");
+  expect((await question()).open).toBe(true);
+  screen.remove();
+  expect((await question()).open).toBe(false);
+  expect(unload()).toBe(false);
+  app.shadowRoot!.append(screen);
+  await screen.updateComplete;
+  expect(configureMode(screen, "monday")).toBe("all_day");
+  expect(unload()).toBe(true);
+  await mode(screen, "monday", "closed");
+  expect(unload()).toBe(false);
+});
+
+it("Configure hours starting its explicit write invalidates an unanswered discard", async () => {
+  const write = heldWrite();
+  const { screen, modal, writes } = await configure(() => write.promise);
+  await mode(screen, "monday", "all_day");
+  action(modal, "cancel");
+  expect((await question()).open).toBe(true);
+  action(modal, "save");
+  await screen.updateComplete;
+  action(modal, "save");
+  await expect.poll(() => writes.length).toBe(1);
+  expect((await question()).open).toBe(false);
+  expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect((await question()).open).toBe(false);
+  expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  write.resolve();
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect(writes).toEqual([configuredBody]);
+  expect(unload()).toBe(false);
+});
+it("Configure hours old write completion cannot close a replacement opening", async () => {
+  const write = heldWrite();
+  const { screen, modal, writes } = await configure(() => write.promise);
+  await mode(screen, "monday", "all_day");
+  action(modal, "save");
+  await screen.updateComplete;
+  action(modal, "save");
+  await expect.poll(() => writes.length).toBe(1);
+  screen.remove();
+  app.shadowRoot!.append(screen);
+  await screen.updateComplete;
+  action(screen.shadowRoot!.querySelector("wt-modal")!, "cancel");
+  await screen.updateComplete;
+  await mode(screen, "monday", "closed");
+  const replacement = await open(screen);
+  await mode(screen, "tuesday", "all_day");
+  write.resolve();
+  await new Promise((done) => setTimeout(done, 0));
+  await screen.updateComplete;
+  expect(replacement.modal.isConnected).toBe(true);
+  expect(configureMode(screen, "tuesday")).toBe("all_day");
+  expect(unload()).toBe(true);
+});
+it("Configure hours asks before a second Configure opening replaces its draft", async () => {
+  const { screen, modal, writes } = await configure();
+  await mode(screen, "monday", "all_day");
+  const trigger = screen.shadowRoot!.querySelector<HTMLButtonElement>(
+    'td[data-subject="department:d1"][data-weekday="0"] button',
+  )!;
+  trigger.click();
+  await choose("keep");
+  expect(modal.isConnected).toBe(true);
+  expect(configureMode(screen, "monday")).toBe("all_day");
+  trigger.click();
+  await choose("discard");
+  await screen.updateComplete;
+  expect(modal.isConnected).toBe(false);
+  expect(configureMode(screen, "monday")).toBe("closed");
+  expect(writes).toEqual([]);
+  expect(unload()).toBe(false);
+});
+
+it.each(["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"])(
+  "Configure hours tracks %s independently and clears a reverted day",
+  async (day) => {
+    const { screen, modal, writes } = await configure();
+    await mode(screen, day, "all_day");
+    expect(unload()).toBe(true);
+    await mode(screen, day, "closed");
+    expect(unload()).toBe(false);
+    action(modal, "cancel");
+    await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+    expect(writes).toEqual([]);
+    expect((await question()).open).toBe(false);
+  },
+);
+it("Configure hours retains invalid period input and ignores it only when the submitted mode excludes it", async () => {
+  const { screen, modal, writes } = await configure();
+  await mode(screen, "sunday", "periods");
+  await change(screen, "");
+  expect(value(screen)).toBe("");
+  expect(unload()).toBe(true);
+  action(modal, "cancel");
+  await choose("keep");
+  expect(value(screen)).toBe("");
+  await mode(screen, "sunday", "closed");
+  expect(unload()).toBe(false);
+  action(modal, "cancel");
+  await expect.poll(() => screen.shadowRoot!.querySelector("wt-modal")).toBeNull();
+  expect(writes).toEqual([]);
+});
+it("Configure hours background refresh leaves the edited seven-day draft protected", async () => {
+  const { screen, modal, writes } = await configure();
+  await mode(screen, "monday", "all_day");
+  screen.api.rereadWatches();
+  await new Promise((done) => setTimeout(done, 0));
+  await screen.updateComplete;
+  expect(configureMode(screen, "monday")).toBe("all_day");
+  expect(unload()).toBe(true);
+  action(modal, "cancel");
+  await choose("keep");
+  expect(configureMode(screen, "monday")).toBe("all_day");
+  expect(writes).toEqual([]);
 });

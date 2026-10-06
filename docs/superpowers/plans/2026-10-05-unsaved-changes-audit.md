@@ -1922,3 +1922,41 @@ scoped adapter/controller checks passed 41, and unedited fiscal checks passed 20
 fixture checks passed 43 (35 route cases plus eight visual flows), with 16 scoped axe scans and
 16 inspected final captures before the encoded-link extension. These dated counts are receipts
 for the named stages, not a full-branch completion claim.
+
+
+## Configure hours checkpoint — 2026-10-06
+
+The Hours page's Configure editor now registers its seven-day draft with the shared coordinator.
+Cancel and native Escape ask before closing edited values, including from the compact Save hours
+confirmation. That confirmation's Back returns to the retained draft without a warning. Opening
+another editor asks before replacing the draft. Compare each day's submitted mode and ordered
+period values; periods excluded by the chosen mode do not make that day's payload dirty.
+
+`hours-screen.unsaved.test.ts` exercises all seven days, clean/reverted values, invalid period
+input, exact accepted/refused bodies, failed following refresh, background refresh, reconnect,
+replacement openings and departed write completion. Starting a weekday or Configure write
+invalidates an unanswered question while retaining the dirty draft until acceptance. The initial
+Configure run failed four missing-warning assertions; the lifecycle extension failed its
+unanswered-question assertion before the write-start invalidation was added.
+
+Receipt directory: `~/waitron-campaign-e/receipts/w69-configure-hours-20261006`. The final five-suite
+Hours browser run passed 175 tests; unedited fiscal checks passed 20. Six independent deletions
+in a frozen-installed disposable checkout each failed the intended assertion while the
+clean/reverted control passed. Restoring the source passed all 29 unsaved cases. That candidate's
+three changed source/test files byte-matched the feature checkout before it was removed.
+
+Eight Configure visual flows passed 24 scoped axe scans and captured the question, retained
+seven-day editor and compact save confirmation in EN/ES, light/dark and 390/1280 widths. All 24
+captures were inspected in four contact sheets. This is a component host with shell Spanish copy,
+not a full-dashboard navigation test. Typechecking, scoped lint and formatting checks passed.
+
+The older weekday Cancel/focus case still asserts the same absence, returned focus, original
+value on reopening and zero writes. Its first absence check now polls for the native close report.
+The immediate assertion failed in the preceding signed-off checkpoint `1eee5b10c` too, measured
+in a separately installed checkout (`baseline-close.log`). Copy this timing change into the
+eventual PR's Changed test checks section. No other existing assertion changed in this checkpoint.
+
+Tasks 1/4 still need the special-date/calendar/duplicate owners and final advancing-main audit.
+Tasks 5/6 still need direct receipt/login history consumers, all screen/tab/context interception,
+till/setup shells, the remaining page/setup owners and activated native reload. Tasks 2/3 remain
+complete. Neither proposed W69 PR is ready for finish-branch.

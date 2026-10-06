@@ -277,8 +277,8 @@ export class HoursScreen extends LitElement {
   #sentCells: DateHoursCell[] = [];
   /** The subject a link asked for, focused once the hours are read. */
   #linked?: string;
-  #cellScope?: DraftScope<CellDraft>;
-  #cellBaseline?: CellDraft;
+  #weekScope?: DraftScope<CellDraft[]>;
+  #weekBaseline?: CellDraft[];
   #leave?: LeaveCoordinator;
   #editorBeforeClose?: (reason: LeaveReason) => Promise<boolean>;
 
@@ -307,7 +307,7 @@ export class HoursScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.#registerCellScope();
+    this.#registerWeekScope();
     this.requestUpdate();
     this.#detach = this.api.watchHours(
       this.#from,
@@ -324,10 +324,10 @@ export class HoursScreen extends LitElement {
 
   override disconnectedCallback(): void {
     this.#generation++;
-    this.#cellScope?.dispose();
-    this.#cellScope = undefined;
+    this.#weekScope?.dispose();
+    this.#weekScope = undefined;
     this.#leave = undefined;
-    if (this.editor?.kind === "cell") this.busy = false;
+    if (this.editor?.kind === "cell" || this.editor?.kind === "configure") this.busy = false;
     super.disconnectedCallback();
     this.#detach?.();
   }
@@ -378,8 +378,8 @@ export class HoursScreen extends LitElement {
       if (!this.isConnected || generation !== this.#generation || this.busy) return;
       this.#acceptEditor(editor, returnTo);
     };
-    if (!this.#cellScope) proceed();
-    else void this.#leave!.request({ scopes: [this.#cellScope.id], reason: "navigation", proceed });
+    if (!this.#weekScope) proceed();
+    else void this.#leave!.request({ scopes: [this.#weekScope.id], reason: "navigation", proceed });
   }
 
   #acceptEditor(editor: Editor, returnTo: () => HTMLElement | null | undefined): void {
@@ -390,59 +390,69 @@ export class HoursScreen extends LitElement {
     this.refused = {};
     this.bottomRefusal = "";
     this.busy = false;
-    this.#cellScope?.dispose();
-    this.#cellScope = undefined;
-    this.#cellBaseline = editor.kind === "cell" ? structuredClone(editor.draft) : undefined;
-    this.#registerCellScope();
+    this.#weekScope?.dispose();
+    this.#weekScope = undefined;
+    this.#weekBaseline =
+      editor.kind === "cell"
+        ? [structuredClone(editor.draft)]
+        : editor.kind === "configure"
+          ? structuredClone(editor.drafts)
+          : undefined;
+    this.#registerWeekScope();
   }
 
-  #registerCellScope(): void {
+  #registerWeekScope(): void {
     const generation = this.#generation;
     this.#editorBeforeClose = (reason) => this.#beforeClose(reason, generation);
     const editor = this.editor;
-    if (!editor || this.#cellScope) return;
-    if (editor.kind === "cell") {
+    if (!editor || this.#weekScope) return;
+    if (editor.kind === "cell" || editor.kind === "configure") {
       this.#leave = leaveCoordinatorFor(this);
       let registering = true;
-      this.#cellScope = this.#leave?.register({
+      this.#weekScope = this.#leave?.register({
         id: {},
         parent: this,
         current: () =>
           registering
-            ? this.#cellBaseline!
+            ? this.#weekBaseline!
             : this.editor?.kind === "cell"
-              ? this.editor.draft
-              : editor.draft,
+              ? [this.editor.draft]
+              : this.editor?.kind === "configure"
+                ? this.editor.drafts
+                : this.#weekBaseline!,
         snapshot: (value) => structuredClone(value),
-        equal: (a, b) => {
-          const first = wire(a),
-            second = wire(b);
-          return (
-            first.mode === second.mode &&
-            first.periods.length === second.periods.length &&
-            first.periods.every((period, index) => {
-              const other = second.periods[index]!;
-              return (
-                period.id === other.id &&
-                period.opensAt === other.opensAt &&
-                period.closesAt === other.closesAt
-              );
-            })
-          );
-        },
-        restore: (draft) => {
-          if (this.editor?.kind === "cell") this.editor = { ...this.editor, draft };
+        equal: (a, b) =>
+          a.length === b.length &&
+          a.every((cell, weekday) => {
+            const first = wire(cell),
+              second = wire(b[weekday]!);
+            return (
+              first.mode === second.mode &&
+              first.periods.length === second.periods.length &&
+              first.periods.every((period, index) => {
+                const other = second.periods[index]!;
+                return (
+                  period.id === other.id &&
+                  period.opensAt === other.opensAt &&
+                  period.closesAt === other.closesAt
+                );
+              })
+            );
+          }),
+        restore: (drafts) => {
+          if (this.editor?.kind === "cell") this.editor = { ...this.editor, draft: drafts[0]! };
+          else if (this.editor?.kind === "configure") this.editor = { ...this.editor, drafts };
         },
       });
       registering = false;
-      this.#cellScope?.changed();
+      this.#weekScope?.changed();
     }
   }
 
   #close(): void {
-    this.#cellScope?.dispose();
-    this.#cellScope = undefined;
-    this.#cellBaseline = undefined;
+    this.#weekScope?.dispose();
+    this.#weekScope = undefined;
+    this.#weekBaseline = undefined;
     this.#generation++;
     this.editor = undefined;
     this.attempted = false;
@@ -455,9 +465,9 @@ export class HoursScreen extends LitElement {
 
   async #beforeClose(reason: LeaveReason, generation: number): Promise<boolean> {
     if (!this.isConnected || generation !== this.#generation || this.busy) return false;
-    if (!this.#cellScope) return true;
+    if (!this.#weekScope) return true;
     return (
-      (await this.#leave!.request({ scopes: [this.#cellScope.id], reason, proceed: () => {} })) ===
+      (await this.#leave!.request({ scopes: [this.#weekScope.id], reason, proceed: () => {} })) ===
       "proceeded"
     );
   }
@@ -677,9 +687,15 @@ export class HoursScreen extends LitElement {
   async #write(editor: Editor): Promise<void> {
     const generation = this.#generation;
     const current = () => this.isConnected && generation === this.#generation;
-    const scope = this.#cellScope;
-    const submitted = editor.kind === "cell" ? structuredClone(editor.draft) : undefined;
+    const scope = this.#weekScope;
+    const submitted =
+      editor.kind === "cell"
+        ? [structuredClone(editor.draft)]
+        : editor.kind === "configure"
+          ? structuredClone(editor.drafts)
+          : undefined;
     this.busy = true;
+    if (scope) scope.commit(this.#weekBaseline!);
     try {
       await this.#send(editor);
     } catch (error) {
@@ -691,7 +707,7 @@ export class HoursScreen extends LitElement {
     if (!current()) return;
     if (scope && submitted) {
       scope.commit(submitted);
-      this.#cellBaseline = submitted;
+      this.#weekBaseline = submitted;
     }
     this.busy = false;
     if (!scope?.isDirty()) this.#close();
@@ -809,7 +825,7 @@ export class HoursScreen extends LitElement {
     );
     if (Object.keys(refused).length !== Object.keys(this.refused).length) this.refused = refused;
     this.editor = editor;
-    this.#cellScope?.changed();
+    this.#weekScope?.changed();
   }
 
   #cellChanged(event: CustomEvent<{ cell: CellDraft }>): void {

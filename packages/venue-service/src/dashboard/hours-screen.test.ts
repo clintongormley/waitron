@@ -502,7 +502,7 @@ describe("Hours: the standard week", () => {
     await click(el, cellButton(el, bar, 3));
     await setField(el, "wednesday.periods.0.opensAt", "16:00");
     await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
-    expect(modal(el)).toBeNull();
+    await expect.poll(() => modal(el)).toBeNull();
     await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(cellButton(el, bar, 3)));
     await click(el, cellButton(el, bar, 3));
     expect(field(el, "wednesday.periods.0.opensAt")!.value).toBe("17:00");
