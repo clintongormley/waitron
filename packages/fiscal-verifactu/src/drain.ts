@@ -678,6 +678,10 @@ function sentIdentityOf(registro: EnvioRegistro): IDFactura {
   };
 }
 
+function facturaKey(id: IDFactura): string {
+  return JSON.stringify([id.IDEmisorFactura, id.NumSerieFactura, id.FechaExpedicionFactura]);
+}
+
 function sameFactura(a: IDFactura, b: IDFactura): boolean {
   return (
     a.IDEmisorFactura === b.IDEmisorFactura &&
@@ -700,13 +704,28 @@ async function resolveLines(
   registros: EnvioRegistro[],
   respuesta: Awaited<ReturnType<VerifactuClient["submit"]>>,
 ): Promise<ResolvedReply> {
+  const reply = respuesta.RespuestaLinea;
+  const byRef = new Map<string, number[]>();
+  const byFactura = new Map<string, number[]>();
+  const push = (map: Map<string, number[]>, key: string, at: number) => {
+    const list = map.get(key);
+    if (list === undefined) map.set(key, [at]);
+    else list.push(at);
+  };
+  reply.forEach((linea, at) => {
+    if (linea.RefExterna !== undefined) push(byRef, linea.RefExterna, at);
+    push(byFactura, facturaKey(linea.IDFactura), at);
+  });
+
   const matchedRow = new Map<RespuestaLinea, DueRow>();
   const unmatched: UnmatchedRow[] = [];
   batch.forEach((row, i) => {
     const identidadEnviada = sentIdentityOf(registros[i]!);
-    const candidates = respuesta.RespuestaLinea.filter(
-      (linea) => linea.RefExterna === row.id || sameFactura(linea.IDFactura, identidadEnviada),
-    );
+    const positions = new Set([
+      ...(byRef.get(row.id) ?? []),
+      ...(byFactura.get(facturaKey(identidadEnviada)) ?? []),
+    ]);
+    const candidates = [...positions].sort((a, b) => a - b).map((at) => reply[at]!);
     const [only] = candidates;
     if (
       candidates.length === 1 &&
@@ -720,7 +739,7 @@ async function resolveLines(
   });
 
   const lines: ResolvedLine[] = [];
-  for (const linea of respuesta.RespuestaLinea) {
+  for (const linea of reply) {
     const row = matchedRow.get(linea);
     if (row === undefined) continue;
     const resolved = resolveEstadoEfectivo(linea);
