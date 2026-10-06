@@ -21,6 +21,13 @@ destinations. `apps/dashboard/src/widgets/menu-selections.unsaved.test.ts` and t
 screen suites exercise the close and write boundaries. Replacement, layout and the remaining
 modal/page owners are still pending.
 
+2026-10-06 staff-create checkpoint: Add staff's normalized details and role now register a scope
+on the W69 branch. Cancel/native Escape, Keep/Discard, normalized reverts, pending/refused writes,
+submitted commits before refresh and delivered newer input are exercised in
+`apps/dashboard/src/widgets/person-form.unsaved.test.ts` and
+`apps/dashboard/src/screens/staff-create.unsaved.test.ts`. Edit staff and credential subforms in
+the staff row below remain pending; this checkpoint covers creation only.
+
 ## How to reproduce discovery
 
 Run each command separately and inspect its exit status. The broad search deliberately includes helpers before classifying their owners.

@@ -298,16 +298,20 @@ export class StaffScreen extends LitElement {
     event.stopPropagation();
     if (this.#creating) return;
     this.#creating = true;
+    this.requestUpdate();
     this.#showError(null);
     try {
       const result = await this.api.createPerson(event.detail);
       this.invitationStatus = result.invitationSent ? "sent" : "not_sent";
+      const closed = this.shadowRoot!.querySelector("dashboard-person-form")!.closeSaved(
+        event.detail,
+      );
       const opener = this.#addOpener;
-      this.formOpen = false;
+      if (closed) this.formOpen = false;
       await this.#load();
       await this.updateComplete;
       // The empty table's add button is gone once the person it made is listed.
-      if (opener?.isConnected === false)
+      if (closed && opener?.isConnected === false)
         this.renderRoot.querySelector<HTMLElement>(".header [data-test=add]")?.focus();
     } catch (error) {
       const code = codeOf(error);
@@ -328,6 +332,7 @@ export class StaffScreen extends LitElement {
       }
     } finally {
       this.#creating = false;
+      this.requestUpdate();
     }
   }
 
@@ -464,6 +469,7 @@ export class StaffScreen extends LitElement {
         </wt-form-actions>
       </wt-dialog>
       <dashboard-person-form
+        .busy=${this.#creating}
         .open=${this.formOpen}
         .error=${this.formOpen ? this.errorKey : null}
         .errorField=${this.errorField}

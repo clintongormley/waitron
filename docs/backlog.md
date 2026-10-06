@@ -1213,8 +1213,12 @@ choice until Discard; layout names also use native Escape. Successful writes com
 values, including a late input event retained after a layout write. Include menu remains an
 immediate-write exemption, checked through the real warning controller for success and refusal.
 Focused cases are in `member-replacement.unsaved.test.ts` and `menu-layout.unsaved.test.ts` under
-`apps/dashboard/src/`. Other audited modal
-owners and page/navigation protection remain to be wired. Keep automatic saves on their existing paths.
+`apps/dashboard/src/`. Add staff now protects its normalized details and role with the same
+registry. Cancel/Escape retains those values until Discard; refused writes retain their draft,
+and successful creation commits before list refresh. A delivered newer field event remains dirty
+against that submitted snapshot. The focused staff widget/screen suites include the standalone
+form's delayed close report. Edit staff, its credential subforms, other audited modal owners and
+page/navigation protection remain to be wired. Keep automatic saves on their existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
