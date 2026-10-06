@@ -107,7 +107,7 @@ import { inArray } from "drizzle-orm";
 
 /** Catalogue and content-language routes. One taxpayer per database, so nothing filters by one. */
 export interface CatalogueApiDeps {
-  /** What the venue's region requires of its content languages; none when absent. */
+  /** The content languages the venue must keep; none when absent. */
   contentLanguageRules?: ContentLanguageRules;
   contentTranslationGaps?: (
     tx: Transaction,

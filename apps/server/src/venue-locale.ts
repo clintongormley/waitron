@@ -69,7 +69,7 @@ export async function readVenueLocale(
   });
 }
 
-/** The content languages the venue's region requires, from its country pack. */
+/** The content languages the venue's country pack keeps enabled for its area. */
 export async function readVenueContentLanguageRules(
   db: Database,
   params: { locationId: string },

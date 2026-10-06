@@ -45,7 +45,7 @@ declare module "@waitron/shared" {
     "content.translation_required": { language: string };
     /** Required content needs translating before the default can change. */
     "content.default_missing": { language: string; count: number };
-    /** A content-language save leaves out a language the venue's region requires. */
+    /** A content-language save leaves out a language the venue's country pack keeps enabled for its area. */
     "content.language_required": { language: string };
     /** A key in a product's allergen declaration is not one of the EU-14 codes. */
     "allergen.invalid_code": { code: string };
