@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import type { TabDef } from "../layout.js";
 import { cleanupWidgets, mountWidget, servedMenus } from "./test-helpers.js";
+import { t } from "../i18n/t.js";
 import "./card-grid.js";
 import type { TillCardGrid } from "./card-grid.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
@@ -694,5 +695,57 @@ describe("till-card-grid's product-grid card: the menu browser", () => {
     el.busy = true;
     await el.updateComplete;
     expect(browser().products).toBe(first);
+  });
+
+  describe("search across the served menus", () => {
+    async function search(browser: TillMenuBrowser, text: string): Promise<void> {
+      const input = browser
+        .shadowRoot!.querySelector("wt-input")!
+        .shadowRoot!.querySelector("input")!;
+      input.value = text;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await browser.updateComplete;
+    }
+
+    function groups(browser: TillMenuBrowser) {
+      return [
+        ...browser.shadowRoot!.querySelectorAll<HTMLElement>(
+          '[data-region="results"] section[data-menu]',
+        ),
+      ].map((group) => ({
+        menu: group.dataset.menu,
+        heading: group.querySelector("h3")!.textContent!.trim(),
+        names: [...group.querySelectorAll("wt-button[data-kind] .name")].map((name) =>
+          name.textContent!.trim(),
+        ),
+      }));
+    }
+
+    it("shows another served menu's matches in a group of their own", async () => {
+      const { browser } = await mountBrowser();
+      await search(browser(), "e");
+      expect(groups(browser())).toEqual([
+        {
+          menu: "lunch",
+          heading: t("menu.results_this_menu").replace("{menu}", () => "lunch"),
+          names: ["Steak"],
+        },
+        { menu: "drinks", heading: "drinks", names: ["Wine", "Beer"] },
+      ]);
+    });
+
+    it("leaves a product the diet lens rejects out of another menu's group", async () => {
+      // Drinks shown, so Lunch, which holds the one meat dish, is the other menu.
+      const { el, browser } = await mountBrowser({ selectedMenuId: "drinks" });
+      await search(browser(), "a");
+      expect(groups(browser()).find((group) => group.menu === "lunch")?.names).toEqual([
+        "Salad",
+        "Steak",
+      ]);
+      el.selectedDiet = "vegan";
+      await el.updateComplete;
+      await browser().updateComplete;
+      expect(groups(browser()).find((group) => group.menu === "lunch")?.names).toEqual(["Salad"]);
+    });
   });
 });

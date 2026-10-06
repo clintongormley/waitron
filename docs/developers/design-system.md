@@ -222,6 +222,17 @@ mode a tile is painted as above. In Thumbnails mode a tile with an image shows i
 Colours mode, or neutral. A section tile always keeps its "Section" word under its name, so a
 section and a product differ without colour; its image, when shown, takes the folder icon's place.
 
+**The till's menu search.** The search field sits above both blocks, on home and inside a
+section; typing replaces the view with results, and clearing returns to where it was. Its results
+list the shown menu first, headed "<menu> (this menu)", then each other menu the device's service
+zone serves that has a match, headed with that menu's name, in the zone's order; the group
+headings are `h3`s under the results' "Search results" `h2`, and each tile is that menu's own offer
+at its own price. When the shown menu has no match but another menu has, its group says "No
+products match in this menu"; when no menu has one, there are no groups, only "No products match
+in any menu". A device served one menu sees one list with no group headings. The group sections
+carry no accessible name, because two menus may share one. The dashboard's preview searches its
+one menu only and says so above its search field.
+
 ### Structure
 
 `--wt-space-1` … `--wt-space-6` (4–32px), `--wt-radius-sm|md|lg`, `--wt-font-family`,

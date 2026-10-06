@@ -1145,6 +1145,61 @@ describe("till-app counter menus and service zones", () => {
     expect(banner(el)!.textContent).toContain(t("service_zone.load_error"));
     expect(c.selectedServiceZoneId).toBe("zone-counter");
   });
+
+  it("searches the menus of the zone the counter switches to", async () => {
+    const lunch = { id: "menu-lunch", name: "Lunch", isDefault: true };
+    const tostada = { ...cafe, id: "tostada", name: "Tostada", catalogueId: "menu-lunch" };
+    const lunchOffers = { menus: [lunch], products: [tostada] };
+    const zoneA = zoneOffers(
+      {
+        menus: [...lunchOffers.menus, { id: "menu-drinks", name: "Drinks", isDefault: false }],
+        products: [
+          ...lunchOffers.products,
+          { ...cafe, id: "tinto", name: "Tinto", catalogueId: "menu-drinks" },
+        ],
+      },
+      "zone-a",
+    );
+    zoneA.zones = [zone("zone-a", "prepay"), zone("zone-b", "prepay")];
+    const zoneB = zoneOffers(
+      {
+        menus: [...lunchOffers.menus, { id: "menu-brunch", name: "Brunch", isDefault: false }],
+        products: [
+          ...lunchOffers.products,
+          { ...cafe, id: "tortilla", name: "Tortilla", catalogueId: "menu-brunch" },
+        ],
+      },
+      "zone-b",
+    );
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(zoneA),
+      listZoneOffers: vi.fn().mockResolvedValue(zoneB),
+    });
+    const c = await toCounter(el);
+    const searchedGroups = async () => {
+      const browser = deepFind(el, "till-menu-browser") as HTMLElement & {
+        updateComplete: Promise<unknown>;
+      };
+      const input = browser
+        .shadowRoot!.querySelector("wt-input")!
+        .shadowRoot!.querySelector("input")!;
+      input.value = "t";
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await browser.updateComplete;
+      return [
+        ...browser.shadowRoot!.querySelectorAll<HTMLElement>(
+          '[data-region="results"] section[data-menu]',
+        ),
+      ].map((group) => group.dataset.menu);
+    };
+    expect(await searchedGroups()).toEqual(["menu-lunch", "menu-drinks"]);
+
+    emit(c, "counter-zone-selected", { zoneId: "zone-b" });
+    await flush(el);
+
+    expect(c.selectedServiceZoneId).toBe("zone-b");
+    expect(await searchedGroups()).toEqual(["menu-lunch", "menu-brunch"]);
+  });
 });
 
 /** The first element matching `selector` anywhere under `root`, through shadow roots. */

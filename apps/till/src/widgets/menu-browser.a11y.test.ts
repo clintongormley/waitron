@@ -118,6 +118,59 @@ function button(el: TillMenuBrowser, name: string): HTMLElement {
   return found;
 }
 
+/** A menu served beside Lunch, naming its own offer of each of `offered`. */
+function servedMenu(key: string, name: string, offered: TillProduct[]): TillZoneMenu {
+  return {
+    id: `menu-${key}`,
+    name,
+    isDefault: false,
+    versionId: `v-${key}`,
+    structure: {
+      members: offered.map((each) => ({
+        kind: "product",
+        menuItemId: `mi-${key}-${each.id.slice(2)}`,
+        productId: each.id,
+      })),
+    },
+    home: { ...menu.home, shortcuts: [] },
+  };
+}
+
+function offersOn(key: string, offered: TillProduct[]): TillProduct[] {
+  return offered.map((each) => ({
+    ...each,
+    menuItemId: `mi-${key}-${each.id.slice(2)}`,
+    catalogueId: `menu-${key}`,
+  }));
+}
+
+const drinksOffered = [
+  { ...product("cola", "Cola"), unitPrice: "2.20" },
+  product("coconut", "Coconut water", false),
+];
+const brunchOffered = [product("porridge", "Porridge")];
+
+async function mountServed(theme: Theme, others: TillZoneMenu[], otherProducts: TillProduct[]) {
+  return mount(theme, {
+    columns: 3,
+    menus: [menu, ...others],
+    servedProducts: [...products, ...otherProducts],
+  });
+}
+
+async function search(el: TillMenuBrowser, text: string): Promise<void> {
+  const input = el.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
+  input.value = text;
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+}
+
+function groupHeadings(el: TillMenuBrowser): string[] {
+  return [
+    ...el.shadowRoot!.querySelectorAll('[data-region="results"] section[data-menu] > :first-child'),
+  ].map((heading) => heading.textContent!.trim());
+}
+
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (theme) => {
@@ -257,6 +310,45 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
         .getPropertyValue("--columns")
         .trim(),
     ).toBe("3");
+    await expectNoA11yViolations(host);
+  });
+
+  it("search results grouped by menu, with a sold-out tile in another menu's group, have no violations", async () => {
+    const { el, host } = await mountServed(
+      theme,
+      [servedMenu("drinks", "Drinks", drinksOffered)],
+      offersOn("drinks", drinksOffered),
+    );
+    await search(el, "co");
+    expect(groupHeadings(el)).toEqual(["Lunch (this menu)", "Drinks"]);
+    expect(
+      el.shadowRoot!.querySelector('[data-menu="menu-drinks"] .sold-out')!.textContent!.trim(),
+    ).toBe("Sold out");
+    await expectNoA11yViolations(host);
+  });
+
+  it("no match in this menu, followed by another menu's group, has no violations", async () => {
+    const { el, host } = await mountServed(
+      theme,
+      [servedMenu("brunch", "Brunch", brunchOffered)],
+      offersOn("brunch", brunchOffered),
+    );
+    await search(el, "porridge");
+    expect(groupHeadings(el)).toEqual(["Lunch (this menu)", "Brunch"]);
+    expect(el.shadowRoot!.querySelector('[data-menu="menu-lunch"] .empty')!.textContent).toBe(
+      "No products match in this menu",
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("two other served menus sharing one name have no violations", async () => {
+    const { el, host } = await mountServed(
+      theme,
+      [servedMenu("bar-1", "Bar", drinksOffered), servedMenu("bar-2", "Bar", brunchOffered)],
+      [...offersOn("bar-1", drinksOffered), ...offersOn("bar-2", brunchOffered)],
+    );
+    await search(el, "o");
+    expect(groupHeadings(el)).toEqual(["Lunch (this menu)", "Bar", "Bar"]);
     await expectNoA11yViolations(host);
   });
 

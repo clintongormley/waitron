@@ -451,7 +451,9 @@ Active and Available, including products picked as extras, is read from the curr
 
 Each product placed in a menu's published structure gets a button in the till's menu browser
 (`apps/till/src/widgets/menu-browser.ts`): where the structure places it, in the search results,
-and wherever the menu's Device Home Page places it. The exception is a product whose
+and wherever the menu's Device Home Page places it. Where the device's service zone serves more than one
+menu, the search results also list each other served menu's matching products in a group of their
+own, each at that menu's price; [design-system.md](design-system.md), _The till's menu search_. The exception is a product whose
 standalone ordering the menu published as Not sold separately (`LiveOffer.ordering`): it has no
 button anywhere, and a section left with nothing else goes too (`indexMenu`), though a dish's
 extras list still offers it. Staff only gets a button like Public, because there is no guest

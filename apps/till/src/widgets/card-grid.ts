@@ -162,6 +162,7 @@ export class TillCardGrid extends LitElement {
   @property({ type: Boolean }) canOpenStation = false;
 
   readonly #browserProducts = memoVisibleProducts();
+  readonly #searchProducts = memoVisibleProducts();
 
   override render(): TemplateResult | typeof nothing {
     const tab = this.tab;
@@ -236,6 +237,8 @@ export class TillCardGrid extends LitElement {
         return html`<till-menu-browser
           .menu=${menu}
           .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
+          .menus=${this.menus}
+          .servedProducts=${this.#searchProducts(this.products, "", this.selectedDiet)}
           .store=${this.store}
           .columns=${typeof configured === "number" ? configured : undefined}
           .handheld=${this.handheld}
