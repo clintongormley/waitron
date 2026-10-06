@@ -82,11 +82,13 @@ import {
 import { payments } from "@waitron/payments";
 import { decimal, locationId, nodeId, seriesId, deviceOrigin } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
+import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
 import { drawLogoRasters } from "./receipt-logo.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { systemClock } from "./till-backend.js";
 import {
   buildConfigurationBundle,
+  applyPreparedLocation,
   exportConfigurationTables,
   decodeConfigurationBundle,
   encodeConfigurationBundle,
@@ -2692,4 +2694,119 @@ it.each([
   ).toBe(0);
   expect(await targetSuite.db.select().from(kitchenTimingDefaults)).toEqual([]);
   expect(await targetSuite.db.select().from(kitchenStationTiming)).toEqual([]);
+});
+
+describe("venue detail edits and configuration boundaries", () => {
+  it("exports corrected details while a fresh import keeps its separately created target address and clock", async () => {
+    const source = await applyVenue(planVenue(venue("B77112233"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx, source));
+    const saved = await withTransaction(suite.db, (tx) =>
+      writeVenueDetails(tx, source, {
+        expected: initial.details,
+        changes: {
+          name: "Corrected source",
+          city: "Alcalá de Henares",
+          timeZone: "UTC",
+          dayCutover: "04:30",
+        },
+      }),
+    );
+    expect(saved.changed).toBe(true);
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const exported = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-06T12:00:00Z"),
+      versions,
+    );
+    expect(exported.venue.location).toMatchObject({
+      ...saved.model.details,
+      dayCutover: "04:30:00",
+    });
+    const targetRequest = venue("B33221177");
+    Object.assign(targetRequest.location, {
+      name: "Created target",
+      addressLine1: "Calle target 2",
+      addressLine2: "Upper floor",
+      postalCode: "28014",
+      city: "Madrid",
+      timeZone: "Europe/Madrid",
+      dayCutover: "07:00",
+    });
+    const target = await applyVenue(planVenue(targetRequest, ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, created) =>
+        importConfigurationTables(tx, exported, created, ALL_MODULES, versions),
+    });
+    const model = await withTransaction(targetSuite.db, (tx) => readVenueDetails(tx, target));
+    expect(model.details).toEqual({
+      name: "Created target",
+      addressLine1: "Calle target 2",
+      addressLine2: "Upper floor",
+      postalCode: "28014",
+      city: "Madrid",
+      province: "Madrid",
+      timeZone: "Europe/Madrid",
+      dayCutover: "07:00",
+    });
+    expect(model.issuer).toEqual({ country: "ES", legalName: "Prepared SL", taxId: "B33221177" });
+  });
+  it.each([false, true])(
+    "applying prepared receipt settings keeps all target details with history=%s",
+    async (history) => {
+      const target = await applyVenue(planVenue(venue("B22334455"), ALL_MODULES), {
+        db: suite.db,
+        modules: ALL_MODULES,
+      });
+      if (history)
+        await suite.db.insert(sales).values({
+          source: "demo_seed",
+          seriesId: target.seriesIds[0]!,
+          nodeId: target.nodeId,
+          invoiceNumber: 1,
+          issuedAt: "2026-10-06T12:00:00.000Z",
+          issuedOffsetMinutes: 120,
+          total: 0,
+          vatBreakdown: [],
+          locale: "es-ES",
+          invoiceLocales: ["es-ES"],
+          fiscalBackend: "none",
+          fiscalState: "not_applicable",
+        });
+      const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx, target));
+      const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+      const exported = await buildConfigurationBundle(
+        suite.db,
+        target,
+        ALL_MODULES,
+        new Date("2026-10-06T12:00:00Z"),
+        versions,
+      );
+      const foreignDetails = {
+        ...exported.venue.location,
+        name: "Foreign source name",
+        addressLine1: "Foreign street",
+        addressLine2: "Foreign line two",
+        postalCode: "08001",
+        city: "Barcelona",
+        province: "Barcelona",
+        timeZone: "UTC",
+        dayCutover: "01:30:00",
+      };
+      const beforeSales = suite.db.all(sql`select * from sales`);
+      const beforeSeries = suite.db.all(sql`select * from invoice_series`);
+      await withTransaction(suite.db, (tx) => applyPreparedLocation(tx, target, foreignDetails));
+      const after = await withTransaction(suite.db, (tx) => readVenueDetails(tx, target));
+      expect(after.details).toEqual(initial.details);
+      expect(after.issuer).toEqual(initial.issuer);
+      expect(after.hasSales).toBe(history);
+      expect(suite.db.all(sql`select * from sales`)).toEqual(beforeSales);
+      expect(suite.db.all(sql`select * from invoice_series`)).toEqual(beforeSeries);
+    },
+  );
 });

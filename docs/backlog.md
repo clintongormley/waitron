@@ -6413,8 +6413,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   reader/writer now has focused checks for normalization, field-specific stale drafts, no-op
   retries and province/clock refusals after a sale, order history or daily close. The new
   venue-details GET/PATCH routes use venue-view/configuration permissions and return field
-  refusals. Creation/import controls, live email-clock integration, the dashboard panel and
-  remaining consumer/race controls are still pending. This build changes no schema.
+  refusals. Additional controls exercise retained sale rows, full-row retention, rollback,
+  no-op change-feed silence, and both real-sale/clock-save queue orders. Configuration export
+  includes corrected details; import keeps its separately created target address and clock.
+  Both boot account-email callbacks now read the venue clock on each send; real SMTP checks
+  cover invitations, resets and profile email changes, with the shutdown reset check retained.
+  The dashboard panel and remaining downstream consumer/geography controls are still pending.
+  This build changes no schema.
   [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) was approved on 2026-10-05;
   its build landed as [PR #1269](https://github.com/clintongormley/waitron/pull/1269) on
   2026-10-06 at `924a94b745275627003db2912156dfbb266aa3ae`. Current-head package checks

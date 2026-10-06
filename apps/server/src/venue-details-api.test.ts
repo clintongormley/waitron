@@ -11,6 +11,11 @@ import { ALL_MODULES } from "./modules.js";
 import { mountLocationSettingsApi } from "./location-settings-api.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { readVenueDetails } from "./venue-details.js";
+import { VerifactuBackend } from "@waitron/fiscal-verifactu";
+import type { TrustedClock } from "@waitron/fiscal";
+import { recordTillSale } from "./till-sale.js";
+import { offerProducts } from "./testing/zone-offers.js";
+import { deviceRequestCfg } from "./testing/session-device.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: Venue;
@@ -218,4 +223,56 @@ describe("fresh authorization and history at the HTTP write", () => {
     });
     expect((await initial()).details).toEqual(model.details);
   });
+});
+
+it("rechecks a real sale after GET before accepting any clock patch", async () => {
+  const response = await request("GET", venue.managerCookie);
+  expect(response.status).toBe(200);
+  const model = await initial();
+  expect(await response.json()).toEqual(model);
+  const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
+  const clock: TrustedClock = {
+    now: () => ({
+      instant: new Date("2026-10-06T12:00:00Z"),
+      offsetMinutes: 120,
+      confident: true,
+      confidence: "anchored",
+      anchorAgeSeconds: 0,
+    }),
+    anchor: () => {
+      throw new Error("An anchored clock is supplied");
+    },
+    currentAnchor: () => null,
+  };
+  const backend = new VerifactuBackend({
+    clock,
+    db: suite.db,
+    environment: "preproduction",
+    deploymentEnvironment: "preproduction",
+    resolveClient: () => Promise.reject(new Error("Local sale contacted AEAT")),
+  });
+  const cfg = await deviceRequestCfg(suite.db, venue.cfg);
+  await recordTillSale({ db: suite.db, backend, clock }, cfg, {
+    zoneId: offers.zoneId,
+    lines: [{ menuItemId: offers.offerFor(venue.cafeId), quantity: "1" }],
+    tender: { method: "cash", amount: "1.50" },
+  });
+  const before = suite.db.all(sql`select * from locations`);
+  const refused = await request("PATCH", venue.managerCookie, {
+    expected: model.details,
+    changes: { name: "Not committed", dayCutover: "04:30" },
+  });
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toEqual({
+    error: { code: "venue.detail_locked", params: { field: "dayCutover", reason: "sales" } },
+  });
+  expect(suite.db.all(sql`select * from locations`)).toEqual(before);
+  const repeat = await request("PATCH", venue.managerCookie, {
+    expected: model.details,
+    changes: { province: "28", dayCutover: "05:00:00" },
+  });
+  expect(repeat.status).toBe(200);
+  expect(await repeat.json()).toEqual({ changed: false, model: await initial() });
+  expect(suite.db.all(sql`select * from locations`)).toEqual(before);
+  expect(suite.db.all(sql`select id from sales`)).toHaveLength(1);
 });

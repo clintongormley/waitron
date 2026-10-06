@@ -724,3 +724,54 @@ describe("applyVenue", () => {
     });
   });
 });
+
+it.each([
+  ["name", "Another venue"],
+  ["addressLine1", "Calle nueva 2"],
+  ["addressLine2", "Upper floor"],
+  ["postalCode", "28014"],
+  ["city", "Alcalá de Henares"],
+  ["province", "Barcelona"],
+  ["timeZone", "UTC"],
+  ["dayCutover", "04:30"],
+] as const)(
+  "creation refuses to overwrite an existing venue's %s and retains its identity and series",
+  async (field, value) => {
+    const initialRequest = request("B55664422");
+    const initial = await applyVenue(planVenue(initialRequest, ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const before = Object.fromEntries(
+      [
+        "tenants",
+        "locations",
+        "nodes",
+        "invoice_series",
+        "registro_sif",
+        "contadores_instalacion",
+      ].map((table) => [
+        table,
+        suite.db.all(sql`select * from ${sql.identifier(table)} order by rowid`),
+      ]),
+    );
+    const changed = request("B55664422");
+    Object.assign(changed.location, { [field]: value });
+    await expect(
+      applyVenue(planVenue(changed, ALL_MODULES), { db: suite.db, modules: ALL_MODULES }),
+    ).rejects.toMatchObject({ code: "provisioning.second_venue" });
+    for (const [table, rows] of Object.entries(before))
+      expect(suite.db.all(sql`select * from ${sql.identifier(table)} order by rowid`)).toEqual(
+        rows,
+      );
+    const replay = await applyVenue(planVenue(initialRequest, ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    expect(replay).toEqual({ ...initial, seeded: [] });
+    for (const [table, rows] of Object.entries(before))
+      expect(suite.db.all(sql`select * from ${sql.identifier(table)} order by rowid`)).toEqual(
+        rows,
+      );
+  },
+);
