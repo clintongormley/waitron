@@ -2063,7 +2063,9 @@ fallbacks. Implementation is in progress: the preview envelope now carries the f
 document, the occurrence index preserves repeated nested paths, and section/list changes carry
 ID paths independent of their displayed names. Changes now carry before/after addresses
 for their actual fields, including repeated dishes and nested variants, extras and option labels;
-focused tests check their document destinations. The renderer and linked Preview controls remain pending. It includes W89's obsolete Preview clash label and
+focused tests check their document destinations. Text presentation identifies its requested, default
+or staff fallback and actual language, and effective variant prices have a Decimal-compared range.
+The renderer and linked Preview controls remain pending. It includes W89's obsolete Preview clash label and
 the phone overflow below; neither is marked fixed by the planning work.
 
 **A menu's Preview tab is wider than a phone for a one-word menu name — OPEN (found by W88).** At

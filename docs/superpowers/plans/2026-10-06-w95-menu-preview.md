@@ -184,7 +184,7 @@ Source receipts: `product-presentation.ts:52`, `:77`,
 `packages/shared/src/content-languages.ts:90`, `:114`; prices are already resolved in
 `menu-types.ts:31`, `:64`, `:189`. Produces the text/range functions above.
 
-- [ ] Write failing pure tests for requested/default/staff/missing origins. Use
+- [x] Write failing pure tests for requested/default/staff/missing origins. Use
       staff `Counter burger`, customer EN `House burger`, ES `Hamburguesa de la casa`, kitchen
       `BURGER HOT`; give variants and modifiers distinct names too. Test `{ es: " " }`, `{}`,
       null, partially translated maps, region tags, disabled language, no translated
@@ -235,9 +235,9 @@ Source receipts: `product-presentation.ts:52`, `:77`,
   `config` in this example is `{ defaultLanguage: "en", languages: ["en", "es"] }`.
   Define the offer helper in this suite; no unasserted shared fixture.
 
-- [ ] Run `pnpm --filter @waitron/catalogue exec vitest run src/customer-menu-presentation.test.ts`.
+- [x] Run `pnpm --filter @waitron/catalogue exec vitest run src/customer-menu-presentation.test.ts`.
       Expected red: missing functions, then wrong provenance or lexicographic price bound.
-- [ ] Reuse shared requested/default resolution, then add labelled own-staff fallback in
+- [x] Reuse shared requested/default resolution, then add labelled own-staff fallback in
       this new resolver for names only, including a nonblank map stored solely in another
       language. This is a renderer-specific policy, not behaviour supplied by the shared
       resolver; leave existing shared, till and receipt resolution unchanged.
@@ -248,7 +248,7 @@ Source receipts: `product-presentation.ts:52`, `:77`,
       `missingRequested` is false for an Internal staff name, true for customer text lacking the
       requested translation, including staff fallback. Price range performs no inheritance,
       recomputation of VAT or extras arithmetic.
-- [ ] Rerun the focused suite plus
+- [x] Rerun the focused suite plus
       `pnpm --filter @waitron/catalogue exec vitest run src/product-presentation.test.ts src/customer-menu-presentation.test.ts`.
       Existing receipt/kitchen assertions stay unchanged. Commit signed off.
 
