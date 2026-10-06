@@ -10,6 +10,7 @@ import { clashesOf } from "./menu-combine.js";
 import type { CombinedOffer, MenuClash, ValueSource } from "./menu-combine-types.js";
 import { listMenuOffers } from "./operations.js";
 import { effectiveDefaultLabelId } from "./option-default.js";
+import { homeDisplaysOf } from "./menu-home.js";
 import { menuDetails } from "./schema/menu.js";
 import { optionLabels } from "./schema/options.js";
 import { sections } from "./schema/sections.js";
@@ -233,15 +234,7 @@ export async function buildMenuDocuments(
         menuName: row.menuName,
         root,
         offers: Object.fromEntries([...onMenu.values()].map((offer) => [offer.id, offer])),
-        home: {
-          shortcuts,
-          handheld: {
-            columns: row.handheldColumns,
-            tiles: row.handheldTiles,
-            order: row.handheldOrder,
-          },
-          till: { columns: row.tillColumns, tiles: row.tillTiles, order: row.tillOrder },
-        },
+        home: { shortcuts, ...homeDisplaysOf(row) },
       },
     } satisfies Omit<BuiltMenu, "workingHash">;
     menus.set(row.menuId, { ...built, workingHash: menuDocumentHash(built.document) });

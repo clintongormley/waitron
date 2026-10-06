@@ -38,7 +38,7 @@ import { t } from "../i18n/t.js";
 
 const ROOT_KEY = "root";
 /** The Device Home Page row's key, and the list key its shortcuts' order is kept under. */
-const HOME_KEY = "home";
+export const HOME_KEY = "home";
 
 const folderIcon = html`<span part="folder-frame"
   ><wt-icon name="folder" size="lg"></wt-icon

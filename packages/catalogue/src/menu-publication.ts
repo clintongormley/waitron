@@ -31,7 +31,8 @@ interface LiveVersion {
   number: number;
   publishedAt: Date;
   contentHash: string;
-  /** Read only when asked for. */
+  /** Read only when asked for, and null for a version in another document format: such a version
+   * holds no `home`, so it is compared as no live version while its status still reads `changed`. */
   document: MenuDocument | null;
 }
 
@@ -59,7 +60,12 @@ async function liveVersions(
   else
     for (const batch of batches(menuIds))
       rows.push(...(await read(inArray(menuPublications.menuId, batch))));
-  return new Map(rows.map(({ menuId, ...version }) => [menuId, version]));
+  return new Map(
+    rows.map(({ menuId, document, ...version }) => [
+      menuId,
+      { ...version, document: document?.format === MENU_DOCUMENT_FORMAT ? document : null },
+    ]),
+  );
 }
 
 /** `hash` is the working document's. */
@@ -240,9 +246,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   const mine = menus.get(menuId);
   if (mine === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
   const own = (await liveVersions(tx, [menuId], true)).get(menuId);
-  // A version in another format holds no `home`: it is compared as no live version, while the
-  // status still reads it, so the menu shows `changed`.
-  const ownDocument = own?.document?.format === MENU_DOCUMENT_FORMAT ? own.document : null;
+  const ownDocument = own?.document ?? null;
   const entries = diffEntries(ownDocument, mine.document, mine.combined);
   const removedExtras = removedExtraOnlyProducts(ownDocument, mine.document);
 
@@ -251,7 +255,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   const allLive = async () =>
     (everyLive ??= new Map(
       [...(await liveVersions(tx, undefined, true))].filter(
-        ([, version]) => version.document?.format === MENU_DOCUMENT_FORMAT,
+        ([, { document }]) => document !== null,
       ),
     ));
 

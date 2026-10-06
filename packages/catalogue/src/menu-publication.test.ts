@@ -568,6 +568,23 @@ describe("a live version published before the Device Home Page", () => {
     expect(lemonade).toMatchObject({ kind: "product_changed", fields: ["color"] });
     expect(lemonade).not.toHaveProperty("alsoOn");
   });
+
+  it("names an including menu as also changed only when its live version is in this format", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.drinksMenu);
+    await publish(f.lunch);
+    await liveInFormat2(f.dinner);
+    await app((tx) => updateSection(tx, f.beer, { internalName: "Beers" }));
+    const { changes } = await app((tx) => previewMenu(tx, f.drinksMenu));
+    expect(changes).toContainEqual(
+      expect.objectContaining({
+        kind: "section_changed",
+        sectionId: f.beer,
+        source: "this_menu",
+        alsoOn: ["Lunch Menu"],
+      }),
+    );
+  });
 });
 
 describe("a live version published while its document froze a VAT rate", () => {

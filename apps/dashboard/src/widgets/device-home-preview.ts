@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, unsafeCSS, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { ContentLanguageController, baseStyles, isHexColor, readableTextColor } from "@waitron/ui";
+import { ContentLanguageController, baseStyles, readableTextColor } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -33,12 +33,15 @@ function thumb(image: string): TemplateResult {
   return html`<img class="thumb" src=${`/media/${encodeURIComponent(image)}`} alt="" />`;
 }
 
-/** Custom properties for a tile painted in a stored colour, with black or white ink for contrast;
- * undefined draws the neutral tile. Checked, because the value lands in a style attribute. */
-function tilePaint(color: string): string | undefined {
-  return isHexColor(color)
-    ? `--tile-fill:${color};--tile-ink:${readableTextColor(color)}`
-    : undefined;
+const paints = new Map<string, string>();
+
+/** Custom properties for a tile painted in a colour `tileFill` has checked, with black or white ink
+ * for contrast. Worked out once per colour, not on every render of every tile. */
+function tilePaint(color: string): string {
+  let paint = paints.get(color);
+  if (paint === undefined)
+    paints.set(color, (paint = `--tile-fill:${color};--tile-ink:${readableTextColor(color)}`));
+  return paint;
 }
 
 /**

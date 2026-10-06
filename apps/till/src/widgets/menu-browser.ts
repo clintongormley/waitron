@@ -3,7 +3,6 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   ContentLanguageController,
   baseStyles,
-  isHexColor,
   readableTextColor,
   registerIcons,
 } from "@waitron/ui";
@@ -60,19 +59,15 @@ function thumb(image: string): TemplateResult {
   return html`<img class="thumb" src=${`/media/${encodeURIComponent(image)}`} alt="" />`;
 }
 
-const paints = new Map<string, string | undefined>();
+const paints = new Map<string, string>();
 
-/** Custom properties for a tile painted in a stored colour, with black or white ink for contrast;
- * undefined draws the neutral tile. Checked, because the value lands in a style attribute. Worked
- * out once per colour, not on every render of every tile. */
-function tilePaint(color: string | null | undefined): string | undefined {
-  if (typeof color !== "string") return undefined;
-  if (!paints.has(color))
-    paints.set(
-      color,
-      isHexColor(color) ? `--tile-fill:${color};--tile-ink:${readableTextColor(color)}` : undefined,
-    );
-  return paints.get(color);
+/** Custom properties for a tile painted in a colour `tileFill` has checked, with black or white ink
+ * for contrast. Worked out once per colour, not on every render of every tile. */
+function tilePaint(color: string): string {
+  let paint = paints.get(color);
+  if (paint === undefined)
+    paints.set(color, (paint = `--tile-fill:${color};--tile-ink:${readableTextColor(color)}`));
+  return paint;
 }
 
 /**

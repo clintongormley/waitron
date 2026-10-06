@@ -24,7 +24,7 @@ import "@waitron/ui/src/components/wt-slider.js";
 import { PATH_SEPARATOR } from "../widgets/category-form.js";
 import { memberName } from "../widgets/member-list-editor.js";
 import "../widgets/menu-structure-table.js";
-import type { StructureAddAction } from "../widgets/menu-structure-table.js";
+import { HOME_KEY, type StructureAddAction } from "../widgets/menu-structure-table.js";
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import "../widgets/device-home-preview.js";
@@ -141,9 +141,6 @@ const SHORTCUT_TARGET_REFUSALS = new Set([
 ]);
 
 const HOME_DISPLAY_FIELDS: readonly string[] = ["columns", "tiles", "order"];
-
-/** The structure tree's key for its Device Home Page row. */
-const HOME_ROW = "home";
 
 /** Every product and section the structure holds, at any depth. */
 function reachable(nodes: MenuStructureNode[]): { products: string[]; sections: Set<string> } {
@@ -568,8 +565,6 @@ export class MenusScreen extends LitElement {
   /** Why a display setting was refused, when the refusal names no control on screen. */
   @state() private homeError: string | null = null;
   @state() private homeDevice: HomeDevice = "handheld";
-  /** A display setting's save is out. */
-  @state() private homeSaving = false;
   /** The setting whose save is out, shown over the saved one until the save is answered. */
   @state() private homePending: {
     menuId: string;
@@ -1473,7 +1468,7 @@ export class MenusScreen extends LitElement {
     this.shortcutChoice = "";
     this.shortcutError = "";
     this.shortcutFormError = "";
-    this.#returnFocusTo([HOME_ROW]);
+    this.#returnFocusTo([HOME_KEY]);
   }
 
   /** Adds the chosen target at once. An empty home's row opens once the add is read back, because
@@ -1503,7 +1498,7 @@ export class MenusScreen extends LitElement {
     await this.updateComplete;
     await this.renderRoot
       .querySelector("dashboard-menu-structure-table")
-      ?.setExpanded(HOME_ROW, true);
+      ?.setExpanded(HOME_KEY, true);
   }
 
   #shortcutOrder(): string[] {
@@ -1554,10 +1549,9 @@ export class MenusScreen extends LitElement {
    * still shows when the read that follows fails. */
   async #saveDisplay(patch: Partial<HomeDisplay>): Promise<void> {
     const menuId = this.menuId;
-    if (menuId === null || this.homeSaving) return;
+    if (menuId === null || this.homePending !== null) return;
     const device = this.homeDevice;
     const fields = Object.keys(patch) as (keyof HomeDisplay)[];
-    this.homeSaving = true;
     this.homePending = { menuId, device, patch };
     this.homeError = null;
     this.homeFieldErrors = Object.fromEntries(
@@ -1568,7 +1562,6 @@ export class MenusScreen extends LitElement {
     try {
       await this.api.setHomeDisplay(menuId, device, patch);
     } catch (error) {
-      this.homeSaving = false;
       this.homePending = null;
       if (this.menuId !== menuId) return;
       const code = codeOf(error);
@@ -1585,7 +1578,6 @@ export class MenusScreen extends LitElement {
       else this.homeError = codeMessage(code);
       return;
     }
-    this.homeSaving = false;
     this.homePending = null;
     if (this.menuId === menuId && this.menuHome !== null)
       this.menuHome = { ...this.menuHome, [device]: { ...this.menuHome[device], ...patch } };
@@ -2035,7 +2027,7 @@ export class MenusScreen extends LitElement {
         @wt-shortcut-remove=${(event: CustomEvent<{ memberId: string }>) => {
           event.stopPropagation();
           const { memberId } = event.detail;
-          this.#returnFocusTo([HOME_ROW], true);
+          this.#returnFocusTo([HOME_KEY], true);
           void this.#shortcutWrite(
             (menuId) => this.api.removeHomeShortcut(menuId, memberId),
             (error) => {
@@ -2200,7 +2192,7 @@ export class MenusScreen extends LitElement {
         .min=${range.min}
         .max=${range.max}
         .value=${live(display.columns)}
-        .disabled=${this.homeSaving}
+        .disabled=${this.homePending !== null}
         error=${this.homeFieldErrors.columns ?? ""}
         @wt-change=${(event: CustomEvent<{ value: number }>) => {
           event.stopPropagation();
@@ -2259,7 +2251,7 @@ export class MenusScreen extends LitElement {
                 name=${`home-${field}`}
                 value=${option.value}
                 .checked=${live(option.value === value)}
-                .disabled=${this.homeSaving}
+                .disabled=${this.homePending !== null}
                 aria-invalid=${ifDefined(error ? "true" : undefined)}
                 @change=${() => change(option.value)}
               />${option.label}</label
@@ -2299,21 +2291,24 @@ export class MenusScreen extends LitElement {
       </div>`;
   }
 
-  #renderShortcutPicker() {
-    const kind = this.addingShortcut;
+  #shortcutOptions(kind: "product" | "section"): { value: string; label: string }[] {
     const held = new Set(
       (this.menuHome?.shortcuts ?? []).map(({ ref }) =>
         ref.kind === "product" ? ref.productId : ref.kind === "section" ? ref.sectionId : null,
       ),
     );
-    const options =
-      kind === "section"
-        ? this.#tileSections
-            .filter(({ id }) => !held.has(id))
-            .map(({ id, internalName }) => ({ value: id, label: internalName }))
-        : this.#tileProducts
-            .filter(({ id }) => !held.has(id))
-            .map(({ id, name }) => ({ value: id, label: name }));
+    return kind === "section"
+      ? this.#tileSections
+          .filter(({ id }) => !held.has(id))
+          .map(({ id, internalName }) => ({ value: id, label: internalName }))
+      : this.#tileProducts
+          .filter(({ id }) => !held.has(id))
+          .map(({ id, name }) => ({ value: id, label: name }));
+  }
+
+  #renderShortcutPicker() {
+    const kind = this.addingShortcut;
+    const options = kind === null ? [] : this.#shortcutOptions(kind);
     return this.#formModal({
       test: "add-shortcut",
       open: kind !== null,

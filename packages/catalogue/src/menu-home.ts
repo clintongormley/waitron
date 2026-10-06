@@ -5,7 +5,7 @@ import { batches } from "./batches.js";
 import { homeDisplayProblem } from "./device-home.js";
 import type { HomeDevice, HomeDisplay } from "./menu-document-types.js";
 import { menuDetails } from "./schema/menu.js";
-import { sectionMembers, sections } from "./schema/sections.js";
+import { sectionMembers } from "./schema/sections.js";
 import {
   loadSectionGraph,
   reachableFrom,
@@ -34,6 +34,19 @@ interface HomeRow {
   till: HomeDisplay;
 }
 
+type HomeDisplayColumns = Pick<
+  typeof menuDetails.$inferSelect,
+  "handheldColumns" | "handheldTiles" | "handheldOrder" | "tillColumns" | "tillTiles" | "tillOrder"
+>;
+
+/** A `menu_details` row's display settings, one per device. */
+export function homeDisplaysOf(row: HomeDisplayColumns): Record<HomeDevice, HomeDisplay> {
+  return {
+    handheld: { columns: row.handheldColumns, tiles: row.handheldTiles, order: row.handheldOrder },
+    till: { columns: row.tillColumns, tiles: row.tillTiles, order: row.tillOrder },
+  };
+}
+
 /** The menu's root, its Device Home Page section and both display settings. */
 async function requireMenuHome(tx: Transaction, menuId: string): Promise<HomeRow> {
   const [row] = await tx.select().from(menuDetails).where(eq(menuDetails.menuId, menuId));
@@ -41,8 +54,7 @@ async function requireMenuHome(tx: Transaction, menuId: string): Promise<HomeRow
   return {
     rootSectionId: row.rootSectionId,
     homeSectionId: row.homeSectionId,
-    handheld: { columns: row.handheldColumns, tiles: row.handheldTiles, order: row.handheldOrder },
-    till: { columns: row.tillColumns, tiles: row.tillTiles, order: row.tillOrder },
+    ...homeDisplaysOf(row),
   };
 }
 
@@ -65,14 +77,7 @@ export async function readMenuHome(tx: Transaction, menuId: string): Promise<Men
   const reaches = structuralReach(graph, home.rootSectionId);
   const tiles = graph.tiles(home.homeSectionId);
   const names = new Map<string, string>();
-  const sectionIds = tiles.flatMap(({ ref }) => (ref.kind === "section" ? [ref.sectionId] : []));
   const productIds = tiles.flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : []));
-  for (const batch of batches(sectionIds))
-    for (const row of await tx
-      .select({ id: sections.id, name: sections.internalName })
-      .from(sections)
-      .where(inArray(sections.id, batch)))
-      names.set(row.id, row.name);
   for (const batch of batches(productIds))
     for (const row of await tx
       .select({ id: products.id, name: products.name })
@@ -86,7 +91,9 @@ export async function readMenuHome(tx: Transaction, menuId: string): Promise<Men
       const name =
         ref.kind === "missing"
           ? ref.name
-          : names.get(ref.kind === "product" ? ref.productId : ref.sectionId)!;
+          : ref.kind === "product"
+            ? names.get(ref.productId)!
+            : graph.section(ref.sectionId)!.internalName!;
       return {
         memberId,
         position,

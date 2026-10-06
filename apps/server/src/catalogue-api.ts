@@ -44,7 +44,6 @@ import {
   replaceShortcut,
   removeShortcut,
   moveShortcut,
-  type HomeDevice,
   type MemberRef,
   type SectionInput,
   type SectionPatch,
@@ -96,7 +95,7 @@ import {
 } from "@waitron/catalogue";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "@waitron/server-kit";
-import { readJsonBody, requireString } from "@waitron/server-kit";
+import { readJsonBody, requireEnum, requireString } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import { setProductCourse } from "./kitchen.js";
@@ -647,12 +646,9 @@ function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
         tiles?: unknown;
         order?: unknown;
       }>(c);
-      if (!(HOME_DEVICES as readonly unknown[]).includes(body.device))
-        throw new AppError("management.request_invalid", { field: "device" });
+      const device = requireEnum(body.device, "device", HOME_DEVICES);
       const { columns, tiles, order } = body;
-      await gated(session, (tx) =>
-        setHomeDisplay(tx, menu, body.device as HomeDevice, { columns, tiles, order }),
-      );
+      await gated(session, (tx) => setHomeDisplay(tx, menu, device, { columns, tiles, order }));
       return c.body(null, 204);
     }),
   );
