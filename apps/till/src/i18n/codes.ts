@@ -63,6 +63,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Those tables are in different service areas, so they cannot be joined",
     es: "Esas mesas están en zonas de servicio distintas, así que no se pueden unir",
   },
+  "service_zone.not_allowed": {
+    en: "This device's profile does not work in that area. Choose one of its own areas",
+    es: "El perfil de este dispositivo no trabaja en esa zona. Elige una de sus zonas",
+  },
+  "device_profile.no_service_zone": {
+    en: "This device's profile has no area it can take orders in. Ask a manager to set one up",
+    es: "El perfil de este dispositivo no tiene ninguna zona en la que tomar pedidos. Pide a un responsable que configure una",
+  },
   "service_zone.mode_incompatible": {
     en: "That table is in an area that does not seat guests. Choose another table",
     es: "Esa mesa está en una zona sin servicio de mesa. Elige otra mesa",

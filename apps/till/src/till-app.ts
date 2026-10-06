@@ -1344,8 +1344,12 @@ export class TillApp extends LitElement {
   #operatorSession = 0;
   @state() private counterServiceZones: ServiceZoneSummary[] = [];
   @state() private counterServiceZoneId = "";
+  /** Who browsed the counter last, in which zone, and the menu they chose there by hand (null: the
+   * zone's default). Held in memory only, so a reload starts from the profile's starting zone. */
+  #browsing?: { personId: string; zoneId: string; menuId: string | null };
   #counterOfferRequest = 0;
-  /** The grid's selected menu, reset to the default at login and changed by the switcher. */
+  /** The grid's selected menu: the zone's default after a zone change or another person's login,
+   * and otherwise the switcher's last choice. */
   @state() private selectedCatalogueId = "";
   @state() private selectedDiet: DietPredicate | null = null;
   @state() private operatorName = "";
@@ -1892,9 +1896,28 @@ export class TillApp extends LitElement {
     this.drill = undefined;
     this.#floorLoaded = false;
     let offerLoadFailed = false;
+    // The same person signing in again, with nobody else in between, comes back to the zone they
+    // left and the menu they chose there.
+    const returning = this.#browsing?.personId === personId ? this.#browsing : undefined;
+    let keptMenu: string | null = null;
     try {
-      const catalogue = await this.api.listDefaultZoneOffers();
+      let catalogue = await this.api.listDefaultZoneOffers();
       if (replaced()) return;
+      if (
+        returning !== undefined &&
+        returning.zoneId !== catalogue.context.zoneId &&
+        (catalogue.zones ?? []).some((zone) => zone.id === returning.zoneId)
+      ) {
+        try {
+          catalogue = {
+            ...(await this.api.listZoneOffers(returning.zoneId)),
+            zones: catalogue.zones,
+          };
+        } catch {
+          // The zone left can no longer be read: start from the profile's starting zone.
+        }
+        if (replaced()) return;
+      }
       const { zones, context } = catalogue;
       this.#loadCounterOffers(catalogue);
       this.counterServiceZones = zones ?? [];
@@ -1902,6 +1925,7 @@ export class TillApp extends LitElement {
       this.api.setServiceZone(context.zoneId);
       this.receiptPrintMode = context.receiptPrintMode ?? "auto";
       if (context.serviceMode !== "table_tab") this.orderFlow = context.serviceMode;
+      if (returning?.zoneId === context.zoneId) keptMenu = returning.menuId;
     } catch {
       if (replaced()) return;
       offerLoadFailed = true;
@@ -1909,8 +1933,13 @@ export class TillApp extends LitElement {
       this.counterServiceZones = [];
       this.counterServiceZoneId = "";
     }
-    // A fresh login starts on the zone's default menu, regardless of the previous menu preference.
-    this.#selectMenu(this.#defaultCatalogueId());
+    const kept = keptMenu !== null && this.menus.some((menu) => menu.id === keptMenu);
+    this.#selectMenu(kept ? keptMenu! : this.#defaultCatalogueId());
+    this.#browsing = {
+      personId,
+      zoneId: this.counterServiceZoneId,
+      menuId: kept ? keptMenu : null,
+    };
     this.#selectDiet(null);
     this.operatorName = displayName;
     this.#loginPending = false;
@@ -2179,8 +2208,13 @@ export class TillApp extends LitElement {
 
   /** Menu selection filters the product grid without changing the working order or browser history. */
   #onMenuSelected(event: CustomEvent<{ id: string }>): void {
-    if (this.#tableCatalogueActive()) this.#selectTableMenu(event.detail.id);
-    else this.#selectMenu(event.detail.id);
+    if (this.#tableCatalogueActive()) {
+      this.#selectTableMenu(event.detail.id);
+      return;
+    }
+    this.#selectMenu(event.detail.id);
+    if (this.#browsing !== undefined && this.selectedCatalogueId === event.detail.id)
+      this.#browsing = { ...this.#browsing, menuId: event.detail.id };
   }
 
   #tableCatalogueActive(): boolean {
@@ -2246,6 +2280,7 @@ export class TillApp extends LitElement {
       await this.#refreshStationQueue();
       if (session !== this.#operatorSession) return;
       this.#selectMenu(defaultMenuId ?? this.#defaultCatalogueId(menus));
+      this.#browsing = { personId: this.operatorPersonId, zoneId: context.zoneId, menuId: null };
       this.errorKey = undefined;
     } catch {
       if (request === this.#counterOfferRequest && session === this.#operatorSession)
@@ -3861,6 +3896,7 @@ export class TillApp extends LitElement {
     }
     await this.#readPrinters();
     if (session !== this.#operatorSession) return;
+    this.#browsing = undefined;
     await this.#enterSignedIn({
       personId: this.operatorPersonId,
       displayName: this.operatorName,

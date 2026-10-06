@@ -438,3 +438,18 @@ it("explains that unsupported published menus require a venue reset in both lang
     "Este local tiene una carta en un formato no compatible. Restablece el local antes de usar las cartas.",
   );
 });
+
+it("says a zone the device's profile does not work in, and a profile left with no zone, in both locales", () => {
+  expect(codeMessage("service_zone.not_allowed", "en")).toBe(
+    "This device's profile does not work in that area. Choose one of its own areas",
+  );
+  expect(codeMessage("service_zone.not_allowed", "es")).toBe(
+    "El perfil de este dispositivo no trabaja en esa zona. Elige una de sus zonas",
+  );
+  expect(codeMessage("device_profile.no_service_zone", "en")).toBe(
+    "This device's profile has no area it can take orders in. Ask a manager to set one up",
+  );
+  expect(codeMessage("device_profile.no_service_zone", "es")).toBe(
+    "El perfil de este dispositivo no tiene ninguna zona en la que tomar pedidos. Pide a un responsable que configure una",
+  );
+});
