@@ -2790,7 +2790,7 @@ owner's fiscal sign-off before landing. Asesor Q5(d) remains open for F3 and R5.
 
 ### A231. Full invoices at the till — IMPLEMENTATION IN PROGRESS (2026-10-04)
 
-**2026-10-06 landing approval:** the owner authorised landing [#1256](https://github.com/clintongormley/waitron/pull/1256) after #1264. The rebased candidate retains the country-pack demo identity, venue-detail checks and fiscal-readiness diagnostics; migrations follow main after regeneration. Public F1 stays disabled pending physical 58/80 mm paper/QR checks, A231p and the asesor manual-remedy approval. Current-head validation and landing are the next steps.
+**2026-10-06 landing approval:** the owner authorised landing [#1256](https://github.com/clintongormley/waitron/pull/1256) after #1264. The rebased candidate retains the country-pack demo identity, venue-detail checks and fiscal-readiness diagnostics; migrations follow main after regeneration. Public F1 stays disabled pending physical 58/80 mm paper/QR checks, A231p and the asesor manual-remedy approval. The owner approved historical-export option A at 09:18: the retained encrypted fixture now checks the current artifact refusal while preserving its provenance, HTTP 400 and unchanged database/staging checks. Current-head validation and landing are the next steps.
 
 A231 proposes an F1 path for bills above €3,000 VAT included and for smaller bills on request,
 chosen before invoice issue. The legal basis and dated primary-source excerpts are in the
