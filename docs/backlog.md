@@ -882,17 +882,23 @@ Still open from W74:
 - **The Printers screen's discovered-device rows' `data-test` names use the device alone** (W74d,
   #1242, left as it was): `discovered-row-`, `register-`, `pair-`, `forget-device-` and the rest,
   so a lookup by name finds the first row drawn for that device.
-- **The delete dialog stretches to nearly the full screen height**, with empty space below its
-  text, at 1280 and 390 wide (seen on the demo stack while checking #1220; not caused by it, and
-  not traced further). _2026-10-05: W70a (#1265) changes compact height only; this standard
-  dialog retains its height._
 
 **The category Delete dialog counts disabled products and says how many are disabled (A288, owner
 2026-10-06) — DONE (#1295).** Both when it opens and after A278's `category.contents_changed`
-refusal re-reads; a selection with no disabled products keeps the old sentence.
+refusal re-reads; a selection with no disabled products keeps the old sentence. _2026-10-06:
+A296 (#1301) retired that wording; the dialog no longer mentions disabled products._
 
 **A category holding only routing rules gets the Delete confirmation (A279, owner 2026-10-06) —
 DONE (#1297).** It reverses the 2026-10-01 decision; a category with nothing at all is still deleted at once.
+
+**The category Delete dialog is compact and says what each answer does (A296, owner 2026-10-06) —
+DONE (#1301).** The keep answer reads "1 category and 3 products move to Drinks" and the other
+"Also: deletes 1 category and disables 3 products. They move to Drinks.", counting active products
+only, leaving out zeros, naming **No category** at the top level and "each category's parent" when
+the parents differ; routing rules naming a subcategory join the "Also: deletes …" list. A category
+holding only disabled products is no longer asked what happens to them. Being compact, the dialog
+now fits its content, which closes W74's finding that it stretched to nearly the full screen
+height.
 
 **The Products and Structure trees show drag grips only in a mode, and a category's colour square
 comes before its name (A294, owner 2026-10-06) — DONE (#1300); left open:** Products' selection
@@ -1130,7 +1136,7 @@ Detail: design-system.md, the `wt-modal` entry. W70a — DONE (#1265; owner, 202
 "compact only") — makes compact modals fit their content up to the screen's height, with the body
 scrolling beyond it and footer actions held in view. Standard and wide modals retain their full
 height. The category delete dialog is standard and retains its empty space; W74's height finding
-therefore remains open. Left open: in the wide Extras editor at 1280px wide, the items table scrolls
+therefore remains open. _2026-10-06: A296 (#1301) made that dialog compact, closing the finding._ Left open: in the wide Extras editor at 1280px wide, the items table scrolls
 sideways by 4px (978px of content in a 974px box), with or without the size attribute.
 
 W70a's visual probe copied `catalogue-screen.a11y.test.ts`'s fixture and found that its product
