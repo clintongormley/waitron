@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, count, eq, min, notExists, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
@@ -155,6 +155,28 @@ export async function listFilingCases(tx: Transaction): Promise<FilingCaseReport
       events: own,
     };
   });
+}
+
+/** How many cases have no resolution yet, and when the oldest of them opened; null when none. */
+export async function openFilingCasesSummary(
+  tx: Transaction,
+): Promise<{ count: number; oldestOpenedAt: Date } | null> {
+  const [{ n, oldest }] = await tx
+    .select({ n: count(), oldest: min(filingCases.openedAt) })
+    .from(filingCases)
+    .where(
+      notExists(
+        tx
+          .select({ id: filingCaseEvents.id })
+          .from(filingCaseEvents)
+          .where(
+            and(eq(filingCaseEvents.caseId, filingCases.id), eq(filingCaseEvents.kind, "resolved")),
+          ),
+      ),
+    );
+  // `opened_at` is not null, so the oldest is null exactly when no case is open.
+  if (oldest === null) return null;
+  return { count: n, oldestOpenedAt: new Date(oldest) };
 }
 
 /**

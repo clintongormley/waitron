@@ -1,7 +1,7 @@
-import { and, count, eq, inArray, min, notExists } from "drizzle-orm";
+import { count, eq, inArray, min } from "drizzle-orm";
 import type { AlertSource, OngoingAlert } from "@waitron/module";
 import { envios } from "./schema/envios.js";
-import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
+import { openFilingCasesSummary } from "./filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import "./errors.js";
 
@@ -58,29 +58,14 @@ export const fiscalSubmissionSource: AlertSource = {
       });
     }
 
-    const [open] = await tx
-      .select({ n: count(), oldest: min(filingCases.openedAt) })
-      .from(filingCases)
-      .where(
-        notExists(
-          tx
-            .select({ id: filingCaseEvents.id })
-            .from(filingCaseEvents)
-            .where(
-              and(
-                eq(filingCaseEvents.caseId, filingCases.id),
-                eq(filingCaseEvents.kind, "resolved"),
-              ),
-            ),
-        ),
-      );
-    if (open && Number(open.n) > 0) {
+    const open = await openFilingCasesSummary(tx);
+    if (open !== null) {
       alerts.push({
         key: "fiscal.filing_cases_open",
         code: "fiscal.filing_cases_open",
-        params: { count: Number(open.n) },
+        params: { count: open.count },
         severity: "error",
-        since: new Date(open.oldest!).toISOString(),
+        since: open.oldestOpenedAt.toISOString(),
       });
     }
     return alerts;
