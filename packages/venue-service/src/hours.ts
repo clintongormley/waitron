@@ -15,13 +15,13 @@ import {
   parseSubject,
   pairMatters,
   parseWeek,
+  rangeDates,
   tailOverlaps,
   weekdayOf,
   type DateState,
   type Interval,
 } from "./hours-rules.js";
 import {
-  HOURS_RANGE_MAX_DAYS,
   type CalendarDay,
   type DateCell,
   type DateHoursCell,
@@ -972,18 +972,6 @@ export async function resolveOpeningDateHours(
     { subject: parsed, field: "subject", writing: false },
   ]);
   return (await resolveSubjects(tx, cfg, [parsed], defaults, openingDate)).resolved[0]!;
-}
-
-/** Every date from `from` to `to`, both included: real dates, in order, at most a leap year. */
-function rangeDates(from: unknown, to: unknown): LocalDate[] {
-  if (!isLocalDate(from)) invalidHours("from");
-  if (!isLocalDate(to) || to < from) invalidHours("to");
-  const dates: LocalDate[] = [];
-  for (let date = from; date <= to; date = addDays(date, 1)) {
-    if (dates.length === HOURS_RANGE_MAX_DAYS) invalidHours("to");
-    dates.push(date);
-  }
-  return dates;
 }
 
 /**

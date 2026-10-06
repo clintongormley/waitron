@@ -2,6 +2,7 @@
 import { AppError, isUuid } from "@waitron/shared";
 import {
   CALENDAR_COLOURS,
+  HOURS_RANGE_MAX_DAYS,
   type CalendarColour,
   type CalendarTone,
   type DateCell,
@@ -34,6 +35,18 @@ export function isLocalDate(value: unknown): value is LocalDate {
   const [y, m, d] = value.split("-").map(Number) as [number, number, number];
   const date = new Date(Date.UTC(y, m - 1, d));
   return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+}
+
+/** Every date from `from` to `to`, both included: real dates, in order, at most a leap year. */
+export function rangeDates(from: unknown, to: unknown): LocalDate[] {
+  if (!isLocalDate(from)) invalidHours("from");
+  if (!isLocalDate(to) || to < from) invalidHours("to");
+  const dates: LocalDate[] = [];
+  for (let date = from; date <= to; date = addDays(date, 1)) {
+    if (dates.length === HOURS_RANGE_MAX_DAYS) invalidHours("to");
+    dates.push(date);
+  }
+  return dates;
 }
 
 export function addDays(date: LocalDate, days: number): LocalDate {
