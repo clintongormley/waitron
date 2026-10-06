@@ -2146,17 +2146,18 @@ describe("zone offers from the published menus", () => {
     });
   });
 
-  it("sells nothing from a live version published before its document froze VAT", async () => {
+  it("refuses serving and menu-state reads of an unsupported live document", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
-    await scoped(async (tx) => {
-      await liveInEarlierFormat(tx, venue.dinner, venue.dinnerVersionId);
-      const served = await listZoneOffers(tx, cfg, venue.diningZone);
-      expect(served.menus.map((menu) => menu.id)).toEqual([venue.menuId]);
-      expect(served.offers.map((offer) => offer.id)).toEqual([venue.menuItemId]);
-      expect((await menuState(tx, venue.diningZone)).menus.map(stateVersionOf)).toEqual([
-        { menuId: venue.menuId, versionId: venue.versionId },
-      ]);
+    await scoped((tx) => liveInEarlierFormat(tx, venue.dinner, venue.dinnerVersionId));
+    await expect(
+      scoped((tx) => listZoneOffers(tx, venue.cfg, venue.diningZone)),
+    ).rejects.toMatchObject({
+      code: "menu.reset_required",
+      params: { menuId: venue.dinner },
+    });
+    await expect(scoped((tx) => menuState(tx, venue.diningZone))).rejects.toMatchObject({
+      code: "menu.reset_required",
+      params: { menuId: venue.dinner },
     });
   });
 
@@ -2245,16 +2246,13 @@ describe("zone offers from the published menus", () => {
     });
   });
 
-  it("reports a zone whose only published menu is live in the format before VAT was frozen", async () => {
+  it("refuses readiness when an assigned live menu requires a venue reset", async () => {
     const venue = await seedTwoMenuVenue();
-    const { cfg } = venue;
-    await scoped(async (tx) => {
-      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([]);
-      // The bar sells All day alone; the dining room still has Dinner in the current format.
-      await liveInEarlierFormat(tx, venue.menuId, venue.versionId);
-      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
-        { code: "zone.menu_unpublished", zoneId: venue.barZone, zoneName: "Bar" },
-      ]);
+    await expect(scoped((tx) => listVenueReadiness(tx, venue.cfg))).resolves.toEqual([]);
+    await scoped((tx) => liveInEarlierFormat(tx, venue.menuId, venue.versionId));
+    await expect(scoped((tx) => listVenueReadiness(tx, venue.cfg))).rejects.toMatchObject({
+      code: "menu.reset_required",
+      params: { menuId: venue.menuId },
     });
   });
 

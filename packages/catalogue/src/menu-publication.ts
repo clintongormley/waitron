@@ -31,8 +31,6 @@ interface LiveVersion {
   number: number;
   publishedAt: Date;
   contentHash: string;
-  /** Read only when asked for, and null for a version in another document format: such a version
-   * holds no `home`, so it is compared as no live version while its status still reads `changed`. */
   document: MenuDocument | null;
 }
 
@@ -40,7 +38,7 @@ interface LiveVersion {
 async function liveVersions(
   tx: Transaction,
   menuIds: readonly string[] | undefined,
-  withDocument: boolean,
+  mode: "metadata" | "format" | "document",
 ): Promise<Map<string, LiveVersion>> {
   const read = (where?: SQL) =>
     tx
@@ -50,7 +48,11 @@ async function liveVersions(
         number: menuVersions.number,
         publishedAt: menuVersions.publishedAt,
         contentHash: menuVersions.contentHash,
-        document: withDocument ? menuVersions.document : sql<null>`null`,
+        document: mode === "document" ? menuVersions.document : sql<null>`null`,
+        format:
+          mode === "format"
+            ? sql<unknown>`json_extract(${menuVersions.document}, '$.format')`
+            : sql<null>`null`,
       })
       .from(menuPublications)
       .innerJoin(menuVersions, eq(menuVersions.id, menuPublications.versionId))
@@ -60,12 +62,20 @@ async function liveVersions(
   else
     for (const batch of batches(menuIds))
       rows.push(...(await read(inArray(menuPublications.menuId, batch))));
+  for (const { menuId, document, format } of rows) {
+    if (mode === "document") requireCurrentFormat(menuId, document!.format);
+    else if (mode === "format") requireCurrentFormat(menuId, format);
+  }
   return new Map(
-    rows.map(({ menuId, document, ...version }) => [
+    rows.map(({ menuId, versionId, number, publishedAt, contentHash, document }) => [
       menuId,
-      { ...version, document: document?.format === MENU_DOCUMENT_FORMAT ? document : null },
+      { versionId, number, publishedAt, contentHash, document },
     ]),
   );
+}
+
+function requireCurrentFormat(menuId: string, format: unknown): void {
+  if (format !== MENU_DOCUMENT_FORMAT) throw new AppError("menu.reset_required", { menuId });
 }
 
 /** `hash` is the working document's. */
@@ -93,7 +103,7 @@ export async function menuStatus(
   const status = new Map<string, MenuStatus>();
   if (menuIds?.length === 0) return status;
   const { menus } = await buildMenuDocuments(tx, menuIds);
-  const live = await liveVersions(tx, menuIds, false);
+  const live = await liveVersions(tx, menuIds, "format");
   for (const [menuId, { document, clashes }] of menus)
     status.set(menuId, statusOf(menuDocumentHash(document), live.get(menuId), clashes.length));
   return status;
@@ -118,8 +128,8 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
- * Each published menu's live version and its document. A version in an earlier document format is
- * left out, as a menu with no live version is. A version's row is never changed once written
+ * Each published menu's live version and its document. Unsupported formats require a venue reset.
+ * A version's row is never changed once written
  * (`menu_versions` is `appendOnly()`), so each handle keeps the parsed documents it has read,
  * frozen, and reads a document again only when it is not kept or its row's content hash differs
  * from the kept one.
@@ -128,14 +138,18 @@ export async function readLiveDocuments(
   tx: Transaction,
   menuIds: readonly string[],
 ): Promise<Map<string, { versionId: string; document: MenuDocument }>> {
-  const versions = await liveVersions(tx, menuIds, false);
+  const versions = await liveVersions(tx, menuIds, "metadata");
   let cache = documentCaches.get(tx);
   if (cache === undefined) documentCaches.set(tx, (cache = new Map()));
   const found = new Map<string, MenuDocument>();
   const missing: string[] = [];
+  const menuOfVersion = new Map(
+    [...versions].map(([menuId, { versionId }]) => [versionId, menuId]),
+  );
   for (const { versionId, contentHash } of versions.values()) {
     const kept = cache.get(versionId);
     if (kept?.contentHash === contentHash) {
+      // A cache hit reuses the frozen document validated on its first read.
       cache.delete(versionId);
       cache.set(versionId, kept);
       found.set(versionId, kept.document);
@@ -150,6 +164,7 @@ export async function readLiveDocuments(
       })
       .from(menuVersions)
       .where(inArray(menuVersions.id, batch))) {
+      requireCurrentFormat(menuOfVersion.get(row.id)!, row.document.format);
       const document = deepFreeze(row.document);
       found.set(row.id, document);
       cache.delete(row.id);
@@ -162,7 +177,7 @@ export async function readLiveDocuments(
   const live = new Map<string, { versionId: string; document: MenuDocument }>();
   for (const [menuId, { versionId }] of versions) {
     const document = found.get(versionId)!;
-    if (document.format === MENU_DOCUMENT_FORMAT) live.set(menuId, { versionId, document });
+    live.set(menuId, { versionId, document });
   }
   return live;
 }
@@ -245,19 +260,13 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   const { graph, menus, sectionNames } = await buildMenuDocuments(tx, [menuId]);
   const mine = menus.get(menuId);
   if (mine === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
-  const own = (await liveVersions(tx, [menuId], true)).get(menuId);
+  const own = (await liveVersions(tx, [menuId], "document")).get(menuId);
   const ownDocument = own?.document ?? null;
   const entries = diffEntries(ownDocument, mine.document, mine.combined);
   const removedExtras = removedExtraOnlyProducts(ownDocument, mine.document);
 
-  // Every published menu's live version in this format, read only once a change needs another menu.
   let everyLive: Map<string, LiveVersion> | undefined;
-  const allLive = async () =>
-    (everyLive ??= new Map(
-      [...(await liveVersions(tx, undefined, true))].filter(
-        ([, { document }]) => document !== null,
-      ),
-    ));
+  const allLive = async () => (everyLive ??= await liveVersions(tx, undefined, "document"));
 
   const inactiveOf = async (
     lists: readonly DiffEntry[][],
@@ -434,7 +443,7 @@ export async function publishMenu(
     throw new AppError("menu.clashes_unresolved", { menuId, count: clashes.length });
   const contentHash = menuDocumentHash(document);
   if (contentHash !== expectedHash) throw new AppError("menu.changed_since_preview", { menuId });
-  const current = (await liveVersions(tx, [menuId], false)).get(menuId);
+  const current = (await liveVersions(tx, [menuId], "format")).get(menuId);
   if (current?.contentHash === contentHash)
     return { versionId: current.versionId, number: current.number };
   const [latest] = await tx

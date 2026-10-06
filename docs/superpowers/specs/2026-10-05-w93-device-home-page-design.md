@@ -103,6 +103,10 @@ nothing stores "handheld" or "till".
    runs `drizzle-kit generate` and reads the SQL: it must be the drop and six `ADD` statements and
    no rebuild; if it is not, the build stops there. A save that breaks the range or names another
    value is refused `menu.home_display_invalid` with the `field`.
+> **2026-10-06, A291 supersedes Decision 5's old-format path below:** only format 3 live menu
+> documents are read. Older formats refuse with `menu.reset_required`; reset the venue instead of
+> previewing and republishing them. See [the current menu contract](../../developers/product-categories.md).
+
 5. **The published document carries one `home` block.** `MENU_DOCUMENT_FORMAT` goes from 2 to 3,
    and `homeLayouts` and `defaultHomeLayoutId` are replaced by
    `home: { shortcuts: DocumentTile[]; handheld: HomeDisplay; till: HomeDisplay }`, with

@@ -190,11 +190,12 @@ without writing another. Missing or non-string `expectedHash` answers `managemen
 (400). A malformed menu id answers `shared.invalid_id` (400), an unknown menu
 `catalogue.not_found` (404).
 
-Tills sell from live versions of active menus. A live version in an earlier document format is not
-sold from (`readLiveDocuments`, `packages/catalogue/src/menu-publication.ts`), so a menu last
-published before the Device Home Page (format 2) reaches no till until it is published again. Its
-status still reads `changed`, and its preview compares the working menu with no live version, as a
-first publish does. Availability, course and reporting category are
+Tills sell from live versions of active menus. Reading a live version outside document format 3 refuses
+with `menu.reset_required`. Status reads check their requested menus; preview checks its own menu
+and other menus when comparing shared changes; publishing checks its own menu; serving checks
+the zone's assigned active menus. Reset the venue before using its
+menus; republishing an old document is not an upgrade path (owner, 2026-10-06, A291).
+Availability, course and reporting category are
 applied from current rows when serving that version; its VAT class is frozen, and it holds no VAT
 rate (`applyLiveFields`, `packages/catalogue/src/menu-document.ts`). Menu extras use product-level list attachments and settings, including their active filters;
 there are no per-menu extras publications or overrides.

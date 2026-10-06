@@ -429,3 +429,12 @@ it("says in both languages that a printer cannot be chosen for this device, nami
   expect(codeMessage("device.binding_invalid", "en")).toMatch(/printer/i);
   expect(codeMessage("device.binding_invalid", "es")).toMatch(/impresora/i);
 });
+
+it("explains that unsupported published menus require a venue reset in both languages", () => {
+  expect(codeMessage("menu.reset_required", "en")).toBe(
+    "This venue has a menu in an unsupported format. Reset the venue before using menus.",
+  );
+  expect(codeMessage("menu.reset_required", "es-ES")).toBe(
+    "Este local tiene una carta en un formato no compatible. Restablece el local antes de usar las cartas.",
+  );
+});

@@ -221,6 +221,7 @@ export class MenuPreviewPanel extends LitElement {
   @property({ attribute: false }) preview: MenuPreview | null = null;
   /** The preview could not be read. */
   @property({ type: Boolean }) failed = false;
+  @property() failureReason = "";
   @property({ type: Boolean }) publishing = false;
   @property({ attribute: false }) result: PublishResult | null = null;
 
@@ -458,7 +459,7 @@ export class MenuPreviewPanel extends LitElement {
     let body;
     if (this.failed)
       body = html`<p class="error" role="alert" data-test="preview-error">
-          ${t("menu_preview.error")}
+          ${this.failureReason || t("menu_preview.error")}
         </p>
         <div>
           <wt-button

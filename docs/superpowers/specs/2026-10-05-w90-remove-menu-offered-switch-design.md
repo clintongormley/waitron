@@ -1,5 +1,9 @@
 # W90 — Remove the menu-specific offered switch (design)
 
+> **2026-10-06, A291:** the old-format serving and republish advice in this historical document
+> is superseded. Unsupported live menu documents refuse with `menu.reset_required`; reset the
+> venue. See [the current contract](../../developers/product-categories.md).
+
 Status: design, 2026-10-05. Branch `feat/menus-remove-offered`, off `main` 746f75fae. Its own PR,
 before W89.
 

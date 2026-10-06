@@ -436,3 +436,12 @@ it("says disabled, never deactivated, for a record that is switched off and kept
     "Deshabilita los lectores de tarjetas de este proveedor antes de desconectarlo",
   );
 });
+
+it("explains that unsupported published menus require a venue reset in both languages", () => {
+  expect(codeMessage("menu.reset_required", "en")).toBe(
+    "This venue has a menu in an unsupported format. Reset the venue before using menus.",
+  );
+  expect(codeMessage("menu.reset_required", "es-ES")).toBe(
+    "Este local tiene una carta en un formato no compatible. Restablece el local antes de usar las cartas.",
+  );
+});

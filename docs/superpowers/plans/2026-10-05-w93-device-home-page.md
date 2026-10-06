@@ -1,5 +1,9 @@
 # One Device Home Page per menu, shown two ways (W93) — implementation plan
 
+> **2026-10-06, A291:** the format-2 preview/republication steps and upgrade advice in this
+> historical plan are superseded. Unsupported live documents refuse with `menu.reset_required`;
+> reset the venue. See [the current contract](../../developers/product-categories.md).
+
 **2026-10-06 wording update (A289):** Restaurant menus use "carta" in Spanish, including
 "Carta: {name}" in the Structure tree and shortcut picker. Search fields now say "Search" /
 "Buscar". See [the current wording contract](../../developers/design-system.md#structure).
