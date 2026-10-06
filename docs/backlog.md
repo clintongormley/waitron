@@ -4329,10 +4329,10 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   open, including advisor questions Q21, Q14, Q27 and Q22.
   Its §4 day types and §5 placement are revised by A261. A261 step 2 names the sole department on
   Departments and zones; other screens still await their own one-department survey. Tab billing
-  remains open; the shared calendar is built by A261 step 5 (below), its public holidays left to
+  remains open; the shared calendar is built by A261 step 5 (below), and its public holidays by
   step 6.
 - **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — SPEC
-  APPROVED; steps 1–3, 5, 7 and 8 implemented, steps 4 and 6 open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
+  APPROVED; steps 1–3 and 5–8 implemented, step 4 open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
   The sidebar's Venue operations group; Venue settings with one tab per group
   (Receipts moves there); Departments and zones as one table edited in place; Prep stations as one
   tab per subject, with a live Stations tab and routing as a categories × zones grid; Hours with
@@ -4380,9 +4380,9 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     which is empty. The department-menu plan is to add its menu-timetable participant there and
     give its own rows a cascading foreign key to `special_dates` (Hours plan, "Shared date
     lifecycle").
-  - **Step 6 public holidays.** The `HolidayReader` seam (`packages/venue-service/src/hours.ts`) is
-    ready and no reader is supplied, so no holiday shows yet. "Make this a special date" leaves the
-    name blank until step 6's naming rule fills it.
+  - **Step 6 public holidays** — done on the step 6 branch (below): the Hours page reads holidays
+    through that seam, and "Make this a special date" starts with the day's holiday names or its
+    date.
   - **A9 wages** will read the calendar's holiday facts through its own composition contract;
     nothing in Hours computes pay.
   - **Step 7 time zone and cutover.** #1281 refuses a time zone or cutover change once the venue
@@ -4415,19 +4415,34 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     `prep-stations-overview.a11y.test.ts` in `packages/venue-service/src/dashboard/`) write `look/*.png`
     into that folder on every run, and git shows it as untracked — the same shape as the
     kitchen-screen case recorded under W110b.
-    [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) is approved with
-    the owner's 2026-10-05 13:25 amendments; national/regional data, owner-entered city holidays and
-    holiday-aware special-date naming are not implemented. Its Hours dependency (step 5) is built,
-    with the `HolidayReader` seam it supplies.
-    Local holidays follow the venue address city directly, with no confirmation or reselection.
-    Geography changes retain but hide old entries with `These local holidays were for <old city>`;
-    matching the address again restores them automatically. Two additive venue-service tables hold
-    geography/area identity and local entries, without a settings/selection pointer. The country
-    holiday capability supplies the allowance (Spain 2 from the plan's BOE receipt; no capability
-    permits no local entries, including import), and the UI reads it from the response. Approved
-    incomplete-year notices, full label/naming rules, permissions and all other behavior remain.
-    The consolidated 2027 BOE list was not located by the plan's dated search; recheck it before the
-    build rather than extrapolating dates or treating a regional publication as nationwide coverage.
+    [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) — DONE on branch
+    `feat/venue-public-holidays`. The Hours calendar shows Spain's 2026 national and regional
+    holidays, transcribed from BOE-A-2025-21667 and compared with the archived annex by a test, with
+    each year's coverage and source; venues enter up to two local holidays a year for their address
+    city at the foot of the Special dates tab; "Make this a special date" and Duplicate name a date
+    after its holidays. Local holidays travel in a configuration transfer, checked against the
+    receiving build. How it works, what is and is not verified, and the yearly data update:
+    [public-holidays.md](developers/public-holidays.md). Left open:
+    - **2027 data.** Not shipped; the BOE daily summaries to 2026-10-06 held no 2027 national list.
+      Follow the yearly update once it is published. Andalucía's own 2027 calendar (BOJA, Decreto
+      84/2026) is not national coverage and is not shipped.
+    - **Canary islands.** The island choice is built from the data, but setup refuses the Canary
+      provinces, so no venue reaches it.
+    - **Province edits in Venue details.** `apps/server/src/venue-details.ts` still refuses every
+      province change (`geography_context` before sales). The step 7 plan allowed a change keeping
+      the same derived context, holiday region included, once a sourced province-to-region map
+      existed; step 6 ships that map (`packages/country-es/src/data/regions.ts`). Allowing it is a
+      separate decision; nothing in step 6 changes it.
+    - **Smaller notes from the reviews:** there is no control to clear a chosen area back to "not
+      chosen" (the route accepts it); the area names "Arán" and "Lleida, fuera del territorio de
+      Arán" are Spanish data labels shown untranslated in English; the database does not count local
+      holidays, so only the writer and the import hold the yearly allowance; the local-holidays editor
+      decides "not available" from an allowance of 0 and the calendar from an unsupported country,
+      which differ only for a country shipping an allowance of 0 (none does); `renameSpecialDate`
+      checks the name before the date's id, so a blank name for another venue's date answers
+      `hours.invalid` rather than not found; `packages/country-es/src/holidays.test.ts` switches Node
+      types on for the whole package; and the Local holidays section is not yet described in
+      [design-system.md](developers/design-system.md).
     [Step 4 Routing grid plan](superpowers/plans/2026-10-05-routing-grid.md) was approved on
     2026-10-05; the grid and row-first cell storage are not implemented. Its Prep stations dependency
     is landed; follow the lane queue for the build. Approved decisions cover the No category group,
@@ -4446,7 +4461,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     authorization unconditional, and preserves device/profile/printer gates, automatic drawer jobs
     and receipt/replay safeguards. The owner approved the reset release and the exact core/0109
     upgrade-test reset entry on 2026-10-06. Old bookmarks use the surviving Tickets destination;
-    older configuration exports are refused before staging. Steps 4–6 remain with their owning lanes.
+    older configuration exports are refused before staging. Step 4 remains with its owning lane.
     [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED;
   profile access and transfers queued in lane D, equipment queued in lane E; not implemented.**
