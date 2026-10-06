@@ -160,3 +160,18 @@ This source inventory includes Add/Edit modals, related Product variants/units/e
 Text search cannot establish runtime reachability or native browser timing and may miss dynamically constructed markup. The registry and contributor entry points were inspected to widen the path set beyond app screens. This audit is baseline-specific: repeat discovery and inspect diffs for every advancing owner before implementation and PR finishing, particularly W70a #1265, Lane D prep-station tabs, Lane C device dialog edges, Lane A receipt top block, A231 and W41s-10c. Do not modify their branches. Overlap is owner-waived; the second landing rebases.
 
 The classifications above choose minimal behavior consistent with the owner's exemptions. There is no deferred form inventory or unresolved product decision. Runtime evidence, exact Chromium history/unload behavior, package coverage and combined-neighbor validation remain implementation work. Unknown-history document leaving and platform/process-termination prompt reliability are limited as described in the design, not promised as custom-dialog guarantees.
+
+
+## Section/menu metadata rollout checkpoint (2026-10-06)
+
+On the W69 implementation branch, `section-details-form` owns a submitted-value scope for both
+menu metadata and section metadata. The comparison uses the existing trimmed name/translations,
+image id and colour. Names not shown by the current language settings remain in the submitted
+payload. Cancel/native Escape use the shared decision; a replacement section disposes its prior
+scope. The image picker registers beneath this form, so a scoped ancestor request sees its staged
+image-name edits. Menu and section writes commit their submitted body before close/refresh.
+
+Focused browser cases: `apps/dashboard/src/widgets/section-details-form.unsaved.test.ts` and
+`apps/dashboard/src/screens/menu-details.unsaved.test.ts`. Layout metadata, membership selections,
+member replacement and the remaining modal/page inventory are still pending; this checkpoint does
+not establish page navigation protection.

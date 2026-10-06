@@ -705,3 +705,11 @@ label names its list. List writes commit before a refresh or attaching a new lis
 A label save commits that child before updating the list draft. Focused cases are in
 `apps/dashboard/src/widgets/modifier-forms.unsaved.test.ts` and
 `apps/dashboard/src/screens/modifier-owners.unsaved.test.ts`; other audited owners remain pending.
+
+Menu and section metadata forms use that registry on the W69 branch. Their snapshots contain the
+trimmed internal name and translations, image id and colour. Refusals retain the draft; successful
+menu and section writes commit before closing and refreshing. The Section owns the image picker's
+ancestry so a scoped leave can see staged image-name edits. Focused browser cases:
+`apps/dashboard/src/widgets/section-details-form.unsaved.test.ts` and
+`apps/dashboard/src/screens/menu-details.unsaved.test.ts`. Other modal owners and page navigation
+remain part of the rollout.

@@ -1,7 +1,9 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
+import type { DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
+import { sameValue } from "./product-editor-model.js";
 import type { ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -63,6 +65,7 @@ export class SectionDetailsForm extends LitElement {
     languages: ["en"],
   };
   @property({ attribute: false }) value: SectionDetails | null = null;
+  @property({ attribute: false }) draftParent?: object;
   @property() heading = "";
   @property() nameLabel = "";
   @property() nameRequired = "";
@@ -77,12 +80,28 @@ export class SectionDetailsForm extends LitElement {
   /** Refusal keys the operator has since changed the field of, or submitted past. */
   @state() private dismissed = new Set<string>();
   @state() private pickerOpen = false;
+  #scope?: DraftScope<SectionInput>;
+  #leave?: LeaveCoordinator;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    !this.busy &&
+    !this.pickerOpen &&
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (
       (changes.has("open") && this.open) ||
       (changes.has("value") &&
         this.value?.id !== (changes.get("value") as SectionDetails | null | undefined)?.id)
     ) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
       this.names = { ...this.value?.names };
       this.internalName = this.value?.internalName ?? "";
       for (const locale of this.languages.languages) this.names[locale] ??= "";
@@ -92,6 +111,26 @@ export class SectionDetailsForm extends LitElement {
       this.dismissed = new Set();
     }
     if (changes.has("fieldErrors") || changes.has("refusal")) this.dismissed = new Set();
+    if (!this.open) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+      this.#leave = undefined;
+    } else if (!this.#scope) {
+      this.#leave = leaveCoordinatorFor(this);
+      this.#scope = this.#leave?.register<SectionInput>({
+        id: this,
+        parent: this.draftParent,
+        current: () => this.#submissionValue(),
+        snapshot: (value) => structuredClone(value),
+        equal: sameValue,
+        restore: (value) => {
+          this.internalName = value.internalName;
+          this.names = { ...value.names };
+          this.image = value.image ?? null;
+          this.color = value.color ?? null;
+        },
+      });
+    }
   }
   protected override updated(changes: PropertyValues<this>): void {
     if (changes.has("fieldErrors") && this.#fieldKeys(this.fieldErrors).length > 0)
@@ -147,7 +186,10 @@ export class SectionDetailsForm extends LitElement {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
-    this.#emit(event, "wt-submit", {
+    this.#emit(event, "wt-submit", this.#submissionValue());
+  }
+  #submissionValue(): SectionInput {
+    return {
       internalName: this.internalName.trim(),
       names: Object.fromEntries(
         Object.entries(this.names)
@@ -156,7 +198,21 @@ export class SectionDetailsForm extends LitElement {
       ),
       image: this.image,
       color: this.color,
-    });
+    };
+  }
+  commitSaved(submitted: SectionInput): void {
+    this.#scope?.commit(submitted);
+  }
+  closeSaved(submitted: SectionInput): void {
+    this.commitSaved(submitted);
+    this.open = false;
+    this.shadowRoot!.querySelector("wt-modal")!.closeAfter("saved");
+  }
+  #cancel(event: Event): void {
+    event.stopPropagation();
+    if (this.busy || this.pickerOpen || !this.open) return;
+    if (this.#scope) void this.shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
+    else this.#emit(event, "wt-cancel", {});
   }
   override render() {
     const errors = this.#errors();
@@ -176,6 +232,7 @@ export class SectionDetailsForm extends LitElement {
     return html`<wt-modal
       size="standard"
       .open=${this.open}
+      .beforeClose=${this.#scope ? this.#beforeClose : undefined}
       heading=${this.heading}
       @keydown=${(event: KeyboardEvent) => {
         if (this.busy && event.key === "Escape") event.preventDefault();
@@ -197,6 +254,7 @@ export class SectionDetailsForm extends LitElement {
           this.internalName,
           (value) => {
             this.internalName = value;
+            this.#scope?.changed();
             this.#dismiss("internalName");
           },
           true,
@@ -216,6 +274,7 @@ export class SectionDetailsForm extends LitElement {
                 (language) => names[language] !== this.names[language],
               );
               this.names = names;
+              this.#scope?.changed();
               this.#dismiss("names", ...changed.map((language) => `names-${language}`));
             },
             this.internalName,
@@ -231,10 +290,12 @@ export class SectionDetailsForm extends LitElement {
           errorId: "section-color-error",
           change: (color) => {
             this.color = color;
+            this.#scope?.changed();
             this.#dismiss("color");
           },
         })}
         <dashboard-image-upload
+          .draftParent=${this}
           aria-describedby="section-image-error"
           .api=${this.api}
           .invalid=${Boolean(errors.image)}
@@ -246,6 +307,7 @@ export class SectionDetailsForm extends LitElement {
           @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
             event.stopPropagation();
             this.image = event.detail.image;
+            this.#scope?.changed();
             this.#dismiss("image");
           }}
         ></dashboard-image-upload>
@@ -260,10 +322,7 @@ export class SectionDetailsForm extends LitElement {
           data-test="cancel"
           variant="secondary"
           .disabled=${this.busy}
-          @click=${(event: Event) => {
-            if (!this.busy && !this.pickerOpen) this.#emit(event, "wt-cancel", {});
-            else event.stopPropagation();
-          }}
+          @click=${this.#cancel}
           >${t("action.cancel")}</wt-button
         >
         <wt-button

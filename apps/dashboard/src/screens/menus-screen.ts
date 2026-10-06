@@ -1240,6 +1240,9 @@ export class MenusScreen extends LitElement {
       this.busy = false;
       return;
     }
+    this.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-section-details-form"]>(
+      '[data-test="menu-form"]',
+    )!.closeSaved(input);
     const opener = form.id === null ? this.#addOpener : null;
     this.busy = false;
     this.menuForm = null;
@@ -1431,6 +1434,9 @@ export class MenusScreen extends LitElement {
         this.busy = false;
         return;
       }
+      this.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-section-details-form"]>(
+        '[data-test="section-form"]',
+      )!.closeSaved(input);
       this.creatingSection = null;
       this.editingSection = null;
       await this.#refresh();

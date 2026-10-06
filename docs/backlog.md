@@ -1198,7 +1198,12 @@ price spellings have focused browser checks. Image Upload/Edit and the enclosing
 protect staged names and file selections, including a same-filename replacement and Product
 ancestry. Discard leaves stored images and the containing Product draft intact. Image writes
 commit their submitted values before refresh; a late refusal cannot mark a replacement editor.
-Other audited modal owners and page/navigation
+Menu and section metadata forms now use the registry too, including translations, colour and
+image selection. Cancel and native Escape retain the draft until Discard; reverts close directly.
+Menu and section writes commit their submitted values before closing and refreshing. A section
+leave request also sees edited image names through its picker ancestry. The new focused cases
+are in `section-details-form.unsaved.test.ts` and `menu-details.unsaved.test.ts` under
+`apps/dashboard/src/`. Other audited modal owners and page/navigation
 protection remain to be wired. Keep automatic saves on their existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
