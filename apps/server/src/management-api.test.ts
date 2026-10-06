@@ -300,6 +300,22 @@ describe("/management-api/watchers", () => {
       (await req("/watchers", { method: "POST", body: JSON.stringify(body) }, staffCookie)).status,
     ).toBe(403);
   });
+  it("lets a supervisor list watchers, disabled ones included, while refusing a new one", async () => {
+    for (const path of ["/watchers", "/watchers?includeDisabled=true"]) {
+      const response = await req(path, { method: "GET" }, supervisorCookie);
+      expect(response.status, path).toBe(200);
+      expect(Array.isArray(await response.json()), path).toBe(true);
+    }
+    const refused = await req(
+      "/watchers",
+      { method: "POST", body: JSON.stringify({ ...body, name: unique("Denied") }) },
+      supervisorCookie,
+    );
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
+    });
+  });
   it("returns watcher.not_found for malformed and absent route ids", async () => {
     for (const id of ["bad", randomUUID()]) {
       const res = await req(`/watchers/${id}`, { method: "DELETE" }, managerCookie);
