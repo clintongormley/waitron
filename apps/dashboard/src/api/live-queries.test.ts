@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vitest";
+import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
 import { DashboardApi } from "./client.js";
 import { QUERY_DEPENDENCIES, dashboardQuery } from "./live-queries.js";
 
@@ -267,3 +268,66 @@ it("leaves the category report at time of sale alone when the catalogue is edite
     observed.unsubscribe();
   }
 });
+
+it.each(["locations", "tenants", "sales", "working_orders", "daily_closes"])(
+  "refreshes venue details passively after %s changes, retaining active PATCH activity",
+  async (type) => {
+    const model = venueDetailsFixture();
+    const afterSale = {
+      ...model,
+      hasSales: true,
+      policy: {
+        ...model.policy,
+        province: { decision: "refuse", reasons: ["sales"] },
+        timeZone: { decision: "refuse", reasons: ["sales"] },
+        dayCutover: { decision: "refuse", reasons: ["sales"] },
+      },
+    };
+    let reads = 0;
+    const fetchImpl = vi.fn(async (_path: string, init: RequestInit) => {
+      if (init.method === "PATCH") return new Response(JSON.stringify({ changed: false, model }));
+      reads++;
+      return new Response(JSON.stringify(reads === 1 ? model : afterSale));
+    });
+    const active = vi.fn();
+    const api = new DashboardApi("", fetchImpl, undefined, active);
+    const query = dashboardQuery(api, "getVenueDetails", []);
+    expect(query.dependencies).toEqual([
+      { type: "locations" },
+      { type: "tenants" },
+      { type: "sales" },
+      { type: "working_orders" },
+      { type: "daily_closes" },
+    ]);
+    const observed = api.liveData.observe(query, () => {});
+    try {
+      await vi.waitFor(() => expect(observed.snapshot.status).toBe("ready"));
+      expect(observed.snapshot.value).toEqual(model);
+      api.liveData.invalidate([{ type, id: "another-client" }]);
+      await vi.waitFor(() => expect(observed.snapshot.value).toEqual(afterSale));
+      expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method])).toEqual([
+        ["/management-api/venue-details", "GET"],
+        ["/management-api/venue-details", "GET"],
+      ]);
+      expect(new Headers(fetchImpl.mock.calls[0]![1].headers).has("x-waitron-live")).toBe(false);
+      expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+      expect(active).toHaveBeenCalledTimes(1);
+      expect(
+        await api.background.patchVenueDetails({
+          changes: {},
+          expected: venueDetailsFixture().details,
+        }),
+      ).toEqual({ changed: false, model });
+      expect(new Headers(fetchImpl.mock.calls[2]![1].headers).has("x-waitron-live")).toBe(false);
+      expect(active).toHaveBeenCalledTimes(1);
+      expect(await api.patchVenueDetails({ changes: {}, expected: model.details })).toEqual({
+        changed: false,
+        model,
+      });
+      expect(new Headers(fetchImpl.mock.calls[3]![1].headers).has("x-waitron-live")).toBe(false);
+      expect(active).toHaveBeenCalledTimes(2);
+    } finally {
+      observed.unsubscribe();
+    }
+  },
+);

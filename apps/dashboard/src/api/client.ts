@@ -28,6 +28,43 @@ import type {
 } from "@waitron/catalogue/src/product-types.js";
 import type { ExtraOfferUsage } from "@waitron/catalogue/src/extra-usage.js";
 export type { Product, ProductEditorValue, ProductEditorVariant, ProductEditorInput };
+export interface VenueDetailValues {
+  name: string;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  postalCode: string | null;
+  city: string | null;
+  province: string | null;
+  timeZone: string;
+  dayCutover: string;
+}
+export type VenueDetailField = keyof VenueDetailValues;
+export type VenueDetailPatch = Partial<VenueDetailValues>;
+export type DetailReason =
+  | "sales"
+  | "orders"
+  | "daily_close"
+  | "geography_context"
+  | "current_details_only"
+  | "holiday_geography"
+  | "clock_effects";
+export interface VenueDetailsModel {
+  details: VenueDetailValues;
+  issuer: { country: string; legalName: string; taxId: string };
+  hasSales: boolean;
+  hasOrderHistory: boolean;
+  hasDailyClose: boolean;
+  policy: Record<
+    VenueDetailField,
+    { decision: "allow" | "allow_with_warning" | "refuse"; reasons: DetailReason[] }
+  >;
+  provinces: { code: string; name: string }[];
+}
+export interface VenueDetailWrite {
+  changes: VenueDetailPatch;
+  expected: VenueDetailValues;
+}
+
 export interface MadeAt {
   stationId: string | null;
   stationName: string | null;
@@ -2235,6 +2272,16 @@ export class DashboardApi {
   }
 
   // ── Receipt-trim configuration ────────────────────────────────────────────────────────────────
+
+  getVenueDetails(): Promise<VenueDetailsModel> {
+    return this.#request("/management-api/venue-details", "GET");
+  }
+
+  patchVenueDetails(
+    input: VenueDetailWrite,
+  ): Promise<{ changed: boolean; model: VenueDetailsModel }> {
+    return this.#request("/management-api/venue-details", "PATCH", input);
+  }
 
   getLocationSettings(): Promise<{ name: string; operationDescription: string }> {
     return this.#request("/management-api/location-settings", "GET");

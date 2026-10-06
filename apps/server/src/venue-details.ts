@@ -180,6 +180,7 @@ export async function writeVenueDetails(
       } catch {
         invalid(field, "time_zone");
       }
+      if (/^[+-]/.test(normalized!)) invalid(field, "time_zone");
     }
     if (field === "dayCutover") {
       if (!/^([01]\d|2[0-3]):[0-5]\d(?::00)?$/.test(normalized!)) invalid(field, "cutover");

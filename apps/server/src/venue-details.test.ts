@@ -216,6 +216,8 @@ describe("venue detail edits", () => {
     [{ addressLine1: null }, "addressLine1", "required"],
     [{ unexpected: "not echoed" }, "changes", "unknown_field"],
     [{ timeZone: "not/a-zone" }, "timeZone", "time_zone"],
+    [{ timeZone: "+02:00" }, "timeZone", "time_zone"],
+    [{ timeZone: "-0500" }, "timeZone", "time_zone"],
     [{ dayCutover: "04:00garbage" }, "dayCutover", "cutover"],
     [{ dayCutover: "25:00" }, "dayCutover", "cutover"],
     [{ dayCutover: "04:00:01" }, "dayCutover", "cutover"],
@@ -1387,4 +1389,19 @@ describe("open kitchen work during venue corrections", () => {
     });
     expect(retained()).toEqual(before);
   });
+});
+
+it("accepts a named Etc zone containing a sign and passes it to the reporting clock", async () => {
+  const initial = await read();
+  const saved = await withTransaction(suite.db, (tx) =>
+    writeVenueDetails(tx, venue.cfg, {
+      expected: initial.details,
+      changes: { timeZone: " Etc/GMT+2 " },
+    }),
+  );
+  expect(saved.changed).toBe(true);
+  expect(saved.model.details.timeZone).toBe("Etc/GMT+2");
+  expect(businessDayStart(new Date("2026-10-06T12:00:00Z"), saved.model.details)).toBe(
+    "2026-10-06T07:00:00.000Z",
+  );
 });

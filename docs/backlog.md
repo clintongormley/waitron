@@ -6423,7 +6423,12 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   operational report windows and frozen closes, receipt reprints, and workforce summary/roster
   reads with midnight offsets. Sent kitchen assignments stay equal through allowed corrections.
   W111's current address printing is retained separately from filed identity and trading snapshots.
-  The dashboard panel, warning previews and final whole-branch review are still pending.
+  The dashboard client and passive live-query dependencies now cover venue details and their
+  history restrictions; its patch/validation helper keeps untouched legacy-null fields out.
+  Direct CLI creation controls retain the deployed venue and series on changed details.
+  Numeric-offset clock edits are refused consistently with the reporting validator; named
+  zones such as `Etc/GMT+2` remain accepted. The dashboard panel, warning previews and final
+  whole-branch review are still pending.
   This build changes no schema.
   [Step 3 plan](superpowers/plans/2026-10-05-prep-stations-tabs.md) was approved on 2026-10-05;
   its build landed as [PR #1269](https://github.com/clintongormley/waitron/pull/1269) on
