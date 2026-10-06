@@ -1189,7 +1189,12 @@ wizard draft without asking and cancels any unanswered Back question. The root n
 protection after Next and through configuration preview/review; Back retains accepted values.
 Only successful provisioning commits the captured root body; newer input and refused writes
 stay dirty. Provision/import replies from an earlier connection cannot change the reconnected
-wizard. Destructive mode/start-over interception and the remaining setup forms still need work.
+wizard. Crossing into or out of Demo and choosing Join or recover now ask before changing the
+root draft. Keep retains every root value and the Live acknowledgement stage; Discard restores
+the captured root baseline before the original choice proceeds. Repeating the same mode and
+switching between Prepare and Live retain the draft without asking. Mode-screen replacement,
+disconnect/reconnect and cancelling the Live stage invalidate unanswered choices. Start empty
+and the remaining setup forms still need work.
 See the dated setup entries in the W69 audit for commands and limits; activated native reload
 has not been verified.
 Dashboard voluntary logout and a language change also request the shared warning before their
@@ -1274,6 +1279,17 @@ reproduced it with the profile closed (`baseline-sidebar-contrast.log` in this c
 receipts). W69 leaves the sidebar palette unchanged. Adjust the selected navigation’s token use,
 then check the real desktop sidebar in both themes. The profile warning/editor scans passed when
 restricted to those visible modal surfaces; the whole-shell scan still reports this separate issue.
+
+**Dark modal danger-button hover contrast (found during W69, 2026-10-06) — OPEN.**
+Axe reports the hovered Discard button at 4.49:1 against the required 4.5:1. A separate probe
+with a standard `wt-modal` danger footer reproduced the same reading after replacing its
+dialog implementation with main `880ccd113bdb8f69300228123910061a7b6f3c43`'s version in the
+installed disposable copy. The standalone Live confirmation card's hovered danger button
+passed that probe. Button hover opacity and danger colours were unchanged against main;
+`git blame` attributes them to `0a93f4d355` and `b20c267095`. Check the shared danger-button
+hover against modal surfaces in both themes. Normal-state warning scans pass with the pointer
+over the heading; that result does not cover hover. Receipts: Lane E `w69-setup-mode-20261006`,
+`visual.log`, `baseline-modal-hover.log`, `main-dialog-hover.log` and the blame readouts.
 
 The owner audit now records A261 step 8's retired Printing rules page as historical. Its bookmark
 redirect remains covered by the dashboard shell suite; surviving station/watch forms, venue

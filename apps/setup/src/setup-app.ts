@@ -667,6 +667,42 @@ export class SetupApp extends LitElement {
 
   #pendingGoto?: { owner: HTMLElement; finished: Promise<unknown> };
 
+  #requestModeChoice(
+    mode: "demo" | "prepare" | "live" | undefined,
+    proceed: () => void,
+    signal: AbortSignal,
+  ): void {
+    const owner = this.shadowRoot?.querySelector("setup-mode-screen");
+    if (!this.isConnected || this.screen !== "mode" || !owner) return;
+    const generation = this.#rootGeneration;
+    const abandonsRoot =
+      mode === undefined ||
+      (mode !== this.draft.mode && (mode === "demo" || this.draft.mode === "demo"));
+    if (!this.leave.coordinator.isDirty([this])) {
+      proceed();
+      return;
+    }
+    void this.leave.coordinator
+      .request({
+        scopes: abandonsRoot ? [this] : [],
+        reason: "navigation",
+        signal,
+        proceed: () => {},
+      })
+      .then((outcome) => {
+        if (
+          outcome !== "proceeded" ||
+          signal.aborted ||
+          !this.isConnected ||
+          generation !== this.#rootGeneration ||
+          this.screen !== "mode" ||
+          !owner.isConnected
+        )
+          return;
+        proceed();
+      });
+  }
+
   #onGoto(event: CustomEvent<{ screen: Screen }>): void {
     event.stopPropagation();
     const destination = event.detail.screen;
@@ -1338,6 +1374,11 @@ export class SetupApp extends LitElement {
           data-test="screen-mode"
           .environment=${this.environment}
           .certificateNote=${!this.connectionAnswered}
+          .beforeChoice=${(
+            mode: "demo" | "prepare" | "live" | undefined,
+            proceed: () => void,
+            signal: AbortSignal,
+          ) => this.#requestModeChoice(mode, proceed, signal)}
         ></setup-mode-screen>`;
       case "connect":
         return html`<setup-connect-screen

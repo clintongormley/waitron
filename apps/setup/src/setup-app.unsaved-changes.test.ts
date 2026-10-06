@@ -297,6 +297,283 @@ async function nextEditedAdmin() {
   return mounted;
 }
 
+async function modeDraft(mode: "demo" | "prepare" | "live" = "prepare") {
+  const mounted = await mount();
+  (mounted.el as unknown as State).draft.mode = mode;
+  await edit(mounted.admin, "email", "submitted@example.com");
+  mounted.admin.shadowRoot!.querySelector<HTMLElement>("[data-test=next]")!.click();
+  await expect.poll(() => (mounted.el as unknown as State).screen).toBe("venue");
+  patchRoot(mounted.el, {
+    venue: {
+      legalName: "Casa Alba",
+      taxId: "B12345674",
+      seriesCode: "SALE",
+      rectificativeSeriesCode: "CREDIT",
+      location: {
+        operationDescription: "Restaurant",
+        dayCutover: "04:00",
+        invoiceLocales: ["es-ES", "en-GB"],
+      },
+    },
+  });
+  goto(mounted.el, "mode");
+  await expect.poll(() => (mounted.el as unknown as State).screen).toBe("mode");
+  const modeScreen = mounted.el.shadowRoot!.querySelector("setup-mode-screen")!;
+  await modeScreen.updateComplete;
+  return { ...mounted, modeScreen };
+}
+
+function modeChoice(modeScreen: HTMLElement, choice: string) {
+  modeScreen.shadowRoot!.querySelector<HTMLElement>(`[data-test=${choice}]`)!.click();
+}
+
+function authoredDraft(mode: "demo" | "prepare" | "live"): DeepPartial<ProvisionBody> {
+  return {
+    mode,
+    venue: {
+      admin: { ...initialAdmin, email: "submitted@example.com" },
+      legalName: "Casa Alba",
+      taxId: "B12345674",
+      seriesCode: "SALE",
+      rectificativeSeriesCode: "CREDIT",
+      location: {
+        operationDescription: "Restaurant",
+        dayCutover: "04:00",
+        invoiceLocales: ["es-ES", "en-GB"],
+      },
+    },
+  };
+}
+
+describe("setup mode leaves the root draft", () => {
+  it.each([
+    ["prepare", "demo"],
+    ["demo", "prepare"],
+  ] as const)("asks before %s becomes %s and clears any root values", async (from, to) => {
+    const { el, modeScreen, api } = await modeDraft(from);
+    modeChoice(modeScreen, `choose-${to}`);
+    await expect.poll(() => warning(el).open).toBe(true);
+    expect((el as unknown as State).screen).toBe("mode");
+    expect((el as unknown as State).draft).toEqual(authoredDraft(from));
+    await choose(el, "keep");
+    expect((el as unknown as State).draft).toEqual(authoredDraft(from));
+    expect(modeScreen.isConnected).toBe(true);
+    expect(unload()).toBe(true);
+    modeChoice(modeScreen, `choose-${to}`);
+    await expect.poll(() => warning(el).open).toBe(true);
+    await choose(el, "discard");
+    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+    expect((el as unknown as State).draft).toEqual({
+      mode: to,
+      venue: { admin: initialAdmin, location: {} },
+    });
+    expect(api.provision).not.toHaveBeenCalled();
+  });
+
+  it("Join or recover asks before abandoning a root draft", async () => {
+    const { el, modeScreen, api } = await modeDraft();
+    modeChoice(modeScreen, "choose-existing");
+    await expect.poll(() => warning(el).open).toBe(true);
+    expect((el as unknown as State).screen).toBe("mode");
+    expect((el as unknown as State).draft).toEqual(authoredDraft("prepare"));
+    await choose(el, "keep");
+    expect((el as unknown as State).screen).toBe("mode");
+    expect(unload()).toBe(true);
+    modeChoice(modeScreen, "choose-existing");
+    await expect.poll(() => warning(el).open).toBe(true);
+    await choose(el, "discard");
+    await expect.poll(() => (el as unknown as State).screen).toBe("role");
+    expect((el as unknown as State).draft).toEqual({
+      mode: "prepare",
+      venue: { admin: initialAdmin },
+    });
+    expect(unload()).toBe(false);
+    expect(api.provision).not.toHaveBeenCalled();
+  });
+
+  it("the Live safety confirmation asks before replacing a Demo draft", async () => {
+    const { el, modeScreen } = await modeDraft("demo");
+    modeChoice(modeScreen, "choose-live");
+    await modeScreen.updateComplete;
+    expect(warning(el).open).toBe(false);
+    modeScreen
+      .shadowRoot!.querySelector("[data-test=understand]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+      );
+    await modeScreen.updateComplete;
+    modeChoice(modeScreen, "confirm-live");
+    await expect.poll(() => warning(el).open).toBe(true);
+    expect((el as unknown as State).draft).toEqual(authoredDraft("demo"));
+    await choose(el, "keep");
+    expect(modeScreen.shadowRoot!.querySelector("[data-test=live-warning]")).not.toBeNull();
+    expect((el as unknown as State).draft).toEqual(authoredDraft("demo"));
+    modeChoice(modeScreen, "confirm-live");
+    await expect.poll(() => warning(el).open).toBe(true);
+    await choose(el, "discard");
+    await expect.poll(() => (el as unknown as State).screen).toBe("live-source");
+    expect((el as unknown as State).draft).toEqual({
+      mode: "live",
+      venue: { admin: initialAdmin, location: {} },
+    });
+  });
+
+  it("repeated mode choices cannot replace the pending destination", async () => {
+    const { el, modeScreen } = await modeDraft();
+    modeChoice(modeScreen, "choose-demo");
+    await expect.poll(() => warning(el).open).toBe(true);
+    modeChoice(modeScreen, "choose-existing");
+    modeChoice(modeScreen, "choose-prepare");
+    await el.updateComplete;
+    expect((el as unknown as State).screen).toBe("mode");
+    expect((el as unknown as State).draft).toEqual(authoredDraft("prepare"));
+    await choose(el, "discard");
+    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+    expect((el as unknown as State).draft.mode).toBe("demo");
+  });
+
+  it("unchanged mode and Prepare to Live retain the root without asking", async () => {
+    const { el, modeScreen } = await modeDraft();
+    modeChoice(modeScreen, "choose-prepare");
+    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+    expect((el as unknown as State).draft).toEqual(authoredDraft("prepare"));
+    expect(warning(el).open).toBe(false);
+    goto(el, "mode");
+    await expect.poll(() => (el as unknown as State).screen).toBe("mode");
+    const nextMode = el.shadowRoot!.querySelector("setup-mode-screen")!;
+    await nextMode.updateComplete;
+    modeChoice(nextMode, "choose-live");
+    await nextMode.updateComplete;
+    nextMode
+      .shadowRoot!.querySelector("[data-test=understand]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+      );
+    await nextMode.updateComplete;
+    modeChoice(nextMode, "confirm-live");
+    await expect.poll(() => (el as unknown as State).screen).toBe("live-source");
+    expect((el as unknown as State).draft).toEqual(authoredDraft("live"));
+    expect(warning(el).open).toBe(false);
+    expect(unload()).toBe(true);
+  });
+
+  it("replacing the mode screen invalidates its question before restoring root values", async () => {
+    const { el, modeScreen } = await modeDraft();
+    modeChoice(modeScreen, "choose-demo");
+    await expect.poll(() => warning(el).open).toBe(true);
+    Object.assign(el, { screen: "role" });
+    await el.updateComplete;
+    expect(modeScreen.isConnected).toBe(false);
+    await expect.poll(() => warning(el).open).toBe(false);
+    await choose(el, "discard");
+    expect((el as unknown as State).screen).toBe("role");
+    expect((el as unknown as State).draft).toEqual(authoredDraft("prepare"));
+    expect(unload()).toBe(true);
+  });
+
+  it("cancelling the Live stage invalidates its unanswered mode choice", async () => {
+    const { el, modeScreen } = await modeDraft("demo");
+    modeChoice(modeScreen, "choose-live");
+    await modeScreen.updateComplete;
+    modeScreen
+      .shadowRoot!.querySelector("[data-test=understand]")!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+      );
+    await modeScreen.updateComplete;
+    modeChoice(modeScreen, "confirm-live");
+    await expect.poll(() => warning(el).open).toBe(true);
+    modeChoice(modeScreen, "live-cancel");
+    await expect.poll(() => warning(el).open).toBe(false);
+    await choose(el, "discard");
+    expect((el as unknown as State).screen).toBe("mode");
+    expect((el as unknown as State).draft).toEqual(authoredDraft("demo"));
+    expect(modeScreen.shadowRoot!.querySelector("[data-test=choose-demo]")).not.toBeNull();
+  });
+
+  it("native warning Escape keeps root values and returns focus to the mode choice", async () => {
+    const { el, modeScreen } = await modeDraft();
+    const row = modeScreen.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-demo]")!;
+    const button = row.shadowRoot!.querySelector("button")!;
+    await userEvent.click(button);
+    await expect.poll(() => warning(el).open).toBe(true);
+    const modal = warning(el).shadowRoot!.querySelector("wt-modal")!;
+    await expect.poll(() => modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    await expect.poll(() => warning(el).open).toBe(false);
+    expect((el as unknown as State).draft).toEqual(authoredDraft("prepare"));
+    expect((el as unknown as State).screen).toBe("mode");
+    await expect.poll(() => row.shadowRoot!.activeElement).toBe(button);
+  });
+
+  it("clean mode choices do not ask or invent a draft", async () => {
+    const { el } = await mount();
+    goto(el, "mode");
+    await expect.poll(() => (el as unknown as State).screen).toBe("mode");
+    const modeScreen = el.shadowRoot!.querySelector("setup-mode-screen")!;
+    await modeScreen.updateComplete;
+    modeChoice(modeScreen, "choose-existing");
+    await expect.poll(() => (el as unknown as State).screen).toBe("role");
+    expect(warning(el).open).toBe(false);
+    expect((el as unknown as State).draft).toEqual({
+      mode: "prepare",
+      venue: { admin: initialAdmin },
+    });
+    expect(unload()).toBe(false);
+  });
+
+  it("selecting Demo again retains authored Demo values without asking", async () => {
+    const { el, modeScreen } = await modeDraft("demo");
+    modeChoice(modeScreen, "choose-demo");
+    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+    expect((el as unknown as State).draft).toEqual(authoredDraft("demo"));
+    expect(warning(el).open).toBe(false);
+    expect(unload()).toBe(true);
+  });
+
+  it("Live to Prepare retains authored values without asking", async () => {
+    const { el, modeScreen } = await modeDraft("live");
+    modeChoice(modeScreen, "choose-prepare");
+    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+    expect((el as unknown as State).draft).toEqual(authoredDraft("prepare"));
+    expect(warning(el).open).toBe(false);
+    expect(unload()).toBe(true);
+  });
+
+  it("a changed root invalidates an unanswered mode choice without discarding newer values", async () => {
+    const { el, modeScreen } = await modeDraft();
+    modeChoice(modeScreen, "choose-demo");
+    await expect.poll(() => warning(el).open).toBe(true);
+    patchRoot(el, { venue: { legalName: "Newer restaurant" } });
+    await expect.poll(() => warning(el).open).toBe(false);
+    await choose(el, "discard");
+    expect((el as unknown as State).screen).toBe("mode");
+    expect((el as unknown as State).draft).toEqual({
+      ...authoredDraft("prepare"),
+      venue: { ...authoredDraft("prepare").venue, legalName: "Newer restaurant" },
+    });
+    expect(unload()).toBe(true);
+  });
+
+  it("disconnect and reconnect cannot apply a departed mode answer", async () => {
+    const { el, modeScreen, host } = await modeDraft();
+    modeChoice(modeScreen, "choose-demo");
+    await expect.poll(() => warning(el).open).toBe(true);
+    el.remove();
+    await expect.poll(() => warning(el).open).toBe(false);
+    host.appendChild(el);
+    await el.updateComplete;
+    await choose(el, "discard");
+    expect((el as unknown as State).screen).toBe("mode");
+    expect((el as unknown as State).draft).toEqual(authoredDraft("prepare"));
+    expect(unload()).toBe(true);
+    modeChoice(modeScreen, "choose-demo");
+    await expect.poll(() => warning(el).open).toBe(true);
+    await choose(el, "discard");
+    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+  });
+});
+
 describe("setup root draft unsaved changes", () => {
   it("Next transfers protection to the root, and Back retains the accepted administrator", async () => {
     const { el } = await nextEditedAdmin();

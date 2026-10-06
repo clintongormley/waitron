@@ -75,6 +75,24 @@ export class SetupModeScreen extends LitElement {
 
   @property() environment?: "production" | "preproduction";
 
+  @property({ attribute: false }) beforeChoice?: (
+    mode: "demo" | "prepare" | "live" | undefined,
+    proceed: () => void,
+    signal: AbortSignal,
+  ) => void;
+
+  #choiceAbort = new AbortController();
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.#choiceAbort.signal.aborted) this.#choiceAbort = new AbortController();
+  }
+
+  override disconnectedCallback(): void {
+    this.#choiceAbort.abort();
+    super.disconnectedCallback();
+  }
+
   @state() private confirming = false;
 
   @state() private understood = false;
@@ -85,8 +103,16 @@ export class SetupModeScreen extends LitElement {
   }
 
   #advance(mode: "demo" | "prepare" | "live"): void {
-    dispatchSetupPatch(this, { mode });
-    dispatchSetupGoto(this, "admin");
+    this.#requestChoice(mode, () => {
+      dispatchSetupPatch(this, { mode });
+      dispatchSetupGoto(this, "admin");
+    });
+  }
+
+  #requestChoice(mode: "demo" | "prepare" | "live" | undefined, proceed: () => void): void {
+    if (!this.isConnected) return;
+    if (this.beforeChoice) this.beforeChoice(mode, proceed, this.#choiceAbort.signal);
+    else proceed();
   }
 
   #chooseDemo(): void {
@@ -99,7 +125,7 @@ export class SetupModeScreen extends LitElement {
 
   /** Joining or recovering is not a fresh primary, so it writes no mode. */
   #chooseExisting(): void {
-    dispatchSetupGoto(this, "role");
+    this.#requestChoice(undefined, () => dispatchSetupGoto(this, "role"));
   }
 
   #chooseLive(): void {
@@ -113,11 +139,15 @@ export class SetupModeScreen extends LitElement {
 
   #confirmLive(): void {
     if (!this.understood) return;
-    dispatchSetupPatch(this, { mode: "live" });
-    dispatchSetupGoto(this, "live-source");
+    this.#requestChoice("live", () => {
+      dispatchSetupPatch(this, { mode: "live" });
+      dispatchSetupGoto(this, "live-source");
+    });
   }
 
   #cancelLive(): void {
+    this.#choiceAbort.abort();
+    this.#choiceAbort = new AbortController();
     this.confirming = false;
     this.understood = false;
   }

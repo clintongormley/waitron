@@ -1,5 +1,53 @@
 # W69 editable-form inventory
 
+## 2026-10-06 setup mode choices checkpoint
+
+The mode screen now requests a root decision before its existing patch/goto sequence when
+crossing into or out of Demo or choosing Join or recover. Keep preserves the authored root
+and any Live acknowledgement stage. Discard restores the captured root baseline before the
+original choice proceeds. Same-mode choices and Prepare/Live transitions retain the root
+without a question. A clean root keeps the existing immediate choice sequence; a dirty root
+uses the coordinator even for a retained choice so it cannot replace a pending destination.
+Mode replacement, disconnect/reconnect, root changes and cancelling the Live stage invalidate
+old answers before they can restore root values.
+
+This focused command passed 462 cases, retaining every existing assertion.
+
+```sh
+pnpm --filter @waitron/setup exec vitest run \
+  src/setup-app.test.ts src/setup-app.unsaved-changes.test.ts \
+  src/screens/admin-screen.test.ts src/screens/admin-screen.a11y.test.ts \
+  src/screens/mode-screen.test.ts src/screens/mode-screen.a11y.test.ts \
+  src/screens/live-source-screen.test.ts src/screens/configuration-preview-screen.test.ts
+```
+
+The initial six-case mode run failed five missing-warning assertions; the two lifecycle cases
+failed before owner cancellation was connected. Intermediate attempts stayed on Mode after
+Discard, delayed clean navigation and blocked fresh requests after Keep. The final implementation
+uses the coordinator's own pending
+gate and releases its request before emitting goto. Eight independent deletions in a frozen,
+installed candidate each failed the intended case beside a passing unchanged clean-choice
+control. Its restored unsaved suite passed 44 cases; all three source/test files matched the
+working candidate before cleanup. The earlier deletion run's restored suite failed four cases;
+those receipts remain separate from the final passing run.
+
+Setup types, scoped lint, source formatting and diff checks passed. The unedited fiscal
+write-path and inmutabilidad command passed 20 cases. Sixteen EN/ES, light/dark, 390/1280 real-shell
+flows passed 48 axe scans with the pointer over a neutral visible heading; all 48 captures were
+inspected in four contact sheets. The first scan found the shared dark modal danger-button
+hover at 4.49:1. A standard modal using main's dialog reproduced it; the standalone Live card
+did not. The [backlog](../../backlog.md) records the separate shared-button issue. Normal-state
+scans do not establish hover accessibility. Initial attempts to move the pointer outside an
+open dialog timed out; a subsequent selector targeted the wrong shadow root. Failed visual
+receipts were retained. The source/captures were archived outside the product tree.
+
+The shell is real, with initial API reads stubbed and administrator values seeded. Live
+onboarding, the deployment's dark outer canvas and activated native reload remain unverified.
+Start empty's root/child interception and remaining setup children still need implementation,
+along with the final advancing-owner classification, till/child routes and other page owners.
+Tasks 1/4/5/6 remain partial; neither proposed W69 PR is ready for finish-branch. Local receipts:
+Lane E `receipts/w69-setup-mode-20261006`.
+
 ## 2026-10-06 setup root draft checkpoint
 
 The root captures a detached baseline before its first accepted child patch or configuration
