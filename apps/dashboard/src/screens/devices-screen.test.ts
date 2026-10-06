@@ -1934,8 +1934,6 @@ describe("the Edit dialog", () => {
       device: "t1",
       error: { code: "device.not_found", params: { deviceId: "t1" } },
     },
-    // A kitchen screen still sends its stored made-here stations; one switched off meanwhile is
-    // refused like its Shows station, and only the id tells them apart.
     {
       name: "a made-here station",
       device: "k1",
