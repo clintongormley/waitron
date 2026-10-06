@@ -95,9 +95,6 @@ export class LocalHolidaysEditor extends LitElement {
         display: grid;
         gap: var(--wt-space-4);
       }
-      wt-data-table::part(name) {
-        overflow-wrap: anywhere;
-      }
     `,
   ];
 
@@ -364,6 +361,7 @@ export class LocalHolidaysEditor extends LitElement {
         open
         size="compact"
         heading=${content.heading}
+        .dismissible=${!this.busy}
         @wt-close=${() => this.#close()}
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-local"]'))}
@@ -379,7 +377,10 @@ export class LocalHolidaysEditor extends LitElement {
             slot="cancel"
             variant="secondary"
             data-test="cancel-local"
-            @click=${() => this.#close()}
+            ?disabled=${this.busy}
+            @click=${() => {
+              if (!this.busy) this.#close();
+            }}
             >${t("hours.cancel")}</wt-button
           >
           <wt-button
@@ -453,9 +454,9 @@ export class LocalHolidaysEditor extends LitElement {
     const { city, provinceCode } = model.venue;
     if (provinceCode === null)
       return t(city === null ? "holidays.needs_address" : "holidays.needs_province");
+    if (model.localEntryLimit === 0) return t("holidays.unsupported");
     if (city === null)
       return t(model.areaOptions.length > 0 ? "holidays.needs_city_area" : "holidays.needs_city");
-    if (model.localEntryLimit === 0) return t("holidays.unsupported");
     return format(model.localEntryLimit === 1 ? "holidays.address_one" : "holidays.address", {
       city,
       limit: String(model.localEntryLimit),

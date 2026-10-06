@@ -529,7 +529,7 @@ const en = {
     "{year}: official holidays are not available for this country.",
   "hours.calendar.coverage.unknown": "{year}: which official holidays apply could not be read.",
   "hours.calendar.local.address_unresolved":
-    "{year}: local holidays need the venue's city and a recognised province in its address.",
+    "{year}: local holidays need the venue's city and a recognised province; set them in Venue details.",
   "hours.calendar.local.unsupported_country":
     "{year}: local holidays cannot be entered for a venue in this country.",
   "hours.calendar.local.none_entered": "{year}: no local holidays entered.",
@@ -542,12 +542,13 @@ const en = {
   "holidays.address_one":
     "Local holidays for {city}: up to 1 date a year. They are your own entries, not checked against an official list.",
   "holidays.unsupported": "Local holidays cannot be entered for a venue in this country.",
-  "holidays.needs_city": "Local holidays need the venue's city in its address.",
+  "holidays.needs_city": "Local holidays need the venue's city. Add it in Venue details.",
   "holidays.needs_city_area":
-    "Local holidays and the holiday area need the venue's city in its address.",
-  "holidays.needs_province": "Local holidays need a recognised province in the venue's address.",
+    "Local holidays and the holiday area need the venue's city. Add it in Venue details.",
+  "holidays.needs_province":
+    "Local holidays need a recognised province. Correct it in Venue details.",
   "holidays.needs_address":
-    "Local holidays need the venue's city and a recognised province in its address.",
+    "Local holidays need the venue's city and a recognised province. Set them in Venue details.",
   "holidays.allowance": "{year}: {count} of {limit} local holidays entered.",
   "holidays.allowance_one": "{year}: {count} of 1 local holiday entered.",
   "holidays.empty": "No local holidays entered.",
@@ -1116,7 +1117,7 @@ const es: Record<keyof typeof en, string> = {
     "{year}: no hay festivos oficiales disponibles para este país.",
   "hours.calendar.coverage.unknown": "{year}: no se pudo leer qué festivos oficiales se aplican.",
   "hours.calendar.local.address_unresolved":
-    "{year}: los festivos locales necesitan la ciudad y una provincia reconocida en la dirección del local.",
+    "{year}: los festivos locales necesitan la ciudad y una provincia reconocida; indícalas en Datos del local.",
   "hours.calendar.local.unsupported_country":
     "{year}: no se pueden introducir festivos locales para un local de este país.",
   "hours.calendar.local.none_entered": "{year}: no hay festivos locales introducidos.",
@@ -1129,13 +1130,14 @@ const es: Record<keyof typeof en, string> = {
   "holidays.address_one":
     "Festivos locales de {city}: hasta 1 fecha al año. Los introduces tú y no se comprueban con ninguna lista oficial.",
   "holidays.unsupported": "No se pueden introducir festivos locales para un local de este país.",
-  "holidays.needs_city": "Los festivos locales necesitan la ciudad en la dirección del local.",
+  "holidays.needs_city":
+    "Los festivos locales necesitan la ciudad del local. Añádela en Datos del local.",
   "holidays.needs_city_area":
-    "Los festivos locales y la zona de festivos necesitan la ciudad en la dirección del local.",
+    "Los festivos locales y la zona de festivos necesitan la ciudad del local. Añádela en Datos del local.",
   "holidays.needs_province":
-    "Los festivos locales necesitan una provincia reconocida en la dirección del local.",
+    "Los festivos locales necesitan una provincia reconocida. Corrígela en Datos del local.",
   "holidays.needs_address":
-    "Los festivos locales necesitan la ciudad y una provincia reconocida en la dirección del local.",
+    "Los festivos locales necesitan la ciudad y una provincia reconocida. Indícalas en Datos del local.",
   "holidays.allowance": "{year}: {count} de {limit} festivos locales introducidos.",
   "holidays.allowance_one": "{year}: {count} de 1 festivo local introducido.",
   "holidays.empty": "No hay festivos locales introducidos.",

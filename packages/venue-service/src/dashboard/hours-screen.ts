@@ -754,7 +754,10 @@ export class HoursScreen extends LitElement {
 
   #setDate(patch: Partial<DateDraft>, name: string): void {
     const editor = this.editor as Extract<Editor, { kind: "date" }>;
-    this.#changed(name, { ...editor, draft: { ...editor.draft, ...patch } });
+    const draft = { ...editor.draft, ...patch };
+    // The suggestion names the date it was taken from; on any other date it would rename wrongly.
+    const suggested = draft.date === editor.suggested?.date ? editor.suggested : undefined;
+    this.#changed(name, { ...editor, draft, suggested });
   }
 
   #content(editor: Editor, errors: Record<string, string>) {

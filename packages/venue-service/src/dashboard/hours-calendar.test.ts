@@ -893,7 +893,7 @@ describe("Hours calendar: public holidays", () => {
       ["2026: the venue's province is not recognised, so official holidays are not shown."],
       [
         "2026: the venue's province is not recognised, so official holidays are not shown.",
-        "2026: local holidays need the venue's city and a recognised province in its address.",
+        "2026: local holidays need the venue's city and a recognised province; set them in Venue details.",
       ],
     ],
     [
@@ -937,6 +937,32 @@ describe("Hours calendar: public holidays", () => {
       }
     },
   );
+
+  it("keeps the fixed Closed colour on a holiday whose Hours close every department, and the holiday itself says nothing of closing", async () => {
+    const { api } = server({
+      edit: (model) => {
+        model.days
+          .find((day) => day.date === "2026-10-20")!
+          .holidays.push(
+            fact("shipped:a", "2026-10-20", "Fiesta común", "national", BOE.id),
+            fact("shipped:b", "2026-10-20", "Día de la región", "regional", BOE.id),
+          );
+        model.holidaySources = [BOE];
+      },
+    });
+    const el = await mount(api);
+    expect(day(el, "2026-10-20").dataset.tone).toBe("closed");
+    expect(getComputedStyle(day(el, "2026-10-20")).backgroundColor).toBe(
+      token(el, "--wt-color-day-closed"),
+    );
+    expect(text(dayButton(el, "2026-10-20"))).toBe("20 Closed Fiesta común · Día de la región");
+    await open(el, "2026-10-20");
+    const items = [...panel(el).querySelectorAll('[data-test="holidays"] li')].map(text);
+    expect(items).toEqual([
+      "National holiday: Fiesta común Source: BOE-A-2025-21667",
+      "Regional holiday: Día de la región Source: BOE-A-2025-21667",
+    ]);
+  });
 
   it("treats a year with no coverage as unknown, never as complete", async () => {
     const { api } = server();

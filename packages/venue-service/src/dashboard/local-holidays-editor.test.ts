@@ -250,7 +250,7 @@ describe("Local holidays: what the section shows", () => {
     );
     const el = await mount(api);
     expect(text(part(el, "local-address"))).toBe(
-      "Local holidays and the holiday area need the venue's city in its address.",
+      "Local holidays and the holiday area need the venue's city. Add it in Venue details.",
     );
     expect(part(el, "add-local")).toBeNull();
     const area = field(el, "holidayArea")!;
@@ -263,7 +263,34 @@ describe("Local holidays: what the section shows", () => {
     );
     const el = await mount(api);
     expect(text(part(el, "local-address"))).toBe(
-      "Local holidays need a recognised province in the venue's address.",
+      "Local holidays need a recognised province. Correct it in Venue details.",
+    );
+    expect(part(el, "add-local")).toBeNull();
+  });
+
+  it("points a Spanish reader to Datos del local to fix the address", async () => {
+    setLocale("es");
+    const { api } = server(
+      localModel({ venue: { country: "ES", provinceCode: "41", city: null }, entries: [] }),
+    );
+    const el = await mount(api);
+    expect(text(part(el, "local-address"))).toBe(
+      "Los festivos locales necesitan la ciudad del local. Añádela en Datos del local.",
+    );
+  });
+
+  it("says local entry is unavailable in a country without it, even with no city", async () => {
+    const { api } = server(
+      localModel({
+        venue: { country: "XX", provinceCode: "01", city: null },
+        localEntryLimit: 0,
+        geographies: [],
+        entries: [],
+      }),
+    );
+    const el = await mount(api);
+    expect(text(part(el, "local-address"))).toBe(
+      "Local holidays cannot be entered for a venue in this country.",
     );
     expect(part(el, "add-local")).toBeNull();
   });
@@ -456,7 +483,7 @@ describe("Local holidays: adding and changing an entry", () => {
     ],
     [
       { code: "holiday.invalid", params: { field: "geography" } },
-      "Local holidays need the venue's city and a recognised province in its address.",
+      "Local holidays need the venue's city and a recognised province. Set them in Venue details.",
     ],
     [{ code: "connection.failed" }, "The change could not be saved."],
   ])(
@@ -489,26 +516,33 @@ describe("Local holidays: adding and changing an entry", () => {
     );
   });
 
-  it("gives a reopened editor its own in-flight gate: a late answer for the closed one changes nothing", async () => {
-    const { api, state } = server();
+  it("cannot be closed while a save is in flight, and a reopened editor starts with nothing in flight", async () => {
+    const { api, state, calls } = server();
     const el = await mount(api);
     await click(el, part(el, "add-local"));
     await setField(el, "holidayDate", "2026-09-08");
     await setField(el, "holidayName", "Feria");
-    const late = deferred();
-    state.writes.push(late.promise);
+    const held = deferred();
+    state.writes.push(held.promise);
     await click(el, saveButton(el));
     expect(saveButton(el).disabled).toBe(true);
+    expect((cancelButton(el) as HTMLElement & { disabled: boolean }).disabled).toBe(true);
+    cancelButton(el).click();
+    field(el, "holidayName")!.focus();
+    await userEvent.keyboard("{Escape}");
+    await settle(el);
+    expect(modal(el)).not.toBeNull();
+
+    held.resolve({ reject: { code: "holiday.date_taken", params: { date: "2026-09-08" } } });
+    await settle(el);
+    expect(field(el, "holidayDate")!.error).toBe("Tue, 8 Sept 2026 already has a local holiday.");
     await click(el, cancelButton(el));
     expect(modal(el)).toBeNull();
     await click(el, part(el, "add-local"));
     expect(saveButton(el).disabled).toBe(false);
     expect(field(el, "holidayDate")!.value).toBe("");
-    late.resolve({ reject: { code: "holiday.date_taken", params: { date: "2026-09-08" } } });
-    await settle(el);
-    expect(modal(el)).not.toBeNull();
     expect(field(el, "holidayDate")!.error).toBe("");
-    expect(saveButton(el).disabled).toBe(false);
+    expect(calls("POST")).toHaveLength(1);
   });
 
   it("removes an entry after confirming, and says a refusal at the bottom", async () => {
@@ -604,7 +638,7 @@ describe("Local holidays: an earlier address and the holiday area", () => {
   it.each([
     [
       { code: "holiday.invalid", params: { field: "geography" } },
-      "Local holidays need the venue's city and a recognised province in its address.",
+      "Local holidays need the venue's city and a recognised province. Set them in Venue details.",
     ],
     [{ code: "connection.failed" }, "The change could not be saved."],
   ])("puts the area refusal %j under the choice, which stays usable", async (refusal, sentence) => {

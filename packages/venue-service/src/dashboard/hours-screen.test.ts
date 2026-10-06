@@ -2333,13 +2333,32 @@ describe("Hours: public holidays", () => {
     expect(modal(el)).not.toBeNull();
   });
 
+  it("drops the holiday name's link to its date once the draft's date changes, so a later read cannot rename it", async () => {
+    const liveData = new LiveData();
+    const { api, state } = server(liveData);
+    state.model = withHolidays(["Feria"]);
+    const el = await mount(api);
+    await selectTab(el, "calendar");
+    await makeSpecial(el, "2026-10-15");
+    expect(field(el, "name")!.value).toBe("Feria");
+    await setField(el, "date", "2026-10-16");
+    state.model = withHolidays(["Feria de otoño"]);
+    liveData.invalidate([{ type: "local_holidays" }]);
+    await vi.waitFor(() =>
+      expect(text(day(el, "2026-10-15"))).toBe("15 Feria de otoño · standard hours"),
+    );
+    await settle(el);
+    expect(field(el, "name")!.value).toBe("Feria");
+    expect(field(el, "date")!.value).toBe("2026-10-16");
+  });
+
   it("opening Make this a special date creates nothing until saved", async () => {
     const { api, calls } = server();
     const el = await mount(api);
     await selectTab(el, "calendar");
     await makeSpecial(el, "2026-10-15");
     await click(el, el.shadowRoot!.querySelector('[data-test="cancel-editor"]'));
-    expect(request_writes(calls)).toEqual([]);
+    expect(requestWrites(calls)).toEqual([]);
   });
 
   it("follows another client's area choice into the calendar's coverage", async () => {
@@ -2391,6 +2410,6 @@ describe("Hours: public holidays", () => {
   });
 });
 
-function request_writes(calls: (method: string) => unknown[][]) {
+function requestWrites(calls: (method: string) => unknown[][]) {
   return [...calls("POST"), ...calls("PUT"), ...calls("DELETE")];
 }
