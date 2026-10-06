@@ -675,6 +675,11 @@ for voluntary dismissal. Commit the exact submitted snapshot after a successful 
 refreshing. Use `closeAfter("saved" | "security")` for success or forced teardown; forced exits
 also invalidate the coordinator's pending decision and clear sensitive owner values.
 
+Keep `beforeClose` stable for each editor identity. A Discard restore rerenders the form;
+`WtDialog.requestClose` rejects an approval if its guard changed while awaiting the answer.
+The adjustment-reason modal's Keep/Discard browser cases first failed at retained editors with
+an inline guard, then passed with one guard captured per editor (2026-10-06).
+
 The dialog tests exercise real Escape, repeated requests, reopening, disconnect/reconnect and
 late native close reports. Closing and reopening twice before queued reports were delivered
 produced two `wt-close` events in the new consecutive-opening test before the report-generation

@@ -449,3 +449,20 @@ the full SumUp dashboard family in Chromium. The visual/axe matrix covers EN/ES,
 identity in an installed disposable candidate failed their cases; clean controls still passed.
 Synthetic unload events establish listener cancellation only. Other modal owners remain pending,
 and actual page/history/native-reload integration remains Tasks 5–6.
+
+## 2026-10-06 adjustment-reason modal checkpoint
+
+When you edit a reason's names, actions, limits, roles or note setting, Cancel and native Escape
+ask through the shared registry. Keep preserves the visible values and returns focus; Discard
+closes that editor. Names compare after trimming, action choices compare membership and valid
+limit spellings compare their submitted values. Invalid input stays distinct. Accepted Add/Edit
+writes commit their captured values before refresh, while newer delivered input remains dirty.
+A refused write keeps its draft. In-flight writes retain nondismissible Escape and Cancel.
+
+Each editor owns its controls and asynchronous result. Disconnect cancels its pending question;
+departed inputs, Enter, Save, Cancel, deactivation controls and native close reports leave a new
+editor alone. Read-only deactivation remains exempt. The sibling
+`packages/adjustments/src/dashboard/reasons-screen.unsaved.test.ts` exercises these boundaries
+alongside the unchanged reason and report suites. The independent explicit-save discount-limit
+page owner remains Task 6 work; other contributed modal owners remain pending. Synthetic unload
+checks establish listener cancellation only, not a native reload prompt.

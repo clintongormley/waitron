@@ -1296,8 +1296,7 @@ retain those values until Discard; normalized reverts close directly. Accepted a
 before refresh, while newer delivered input remains dirty. Disconnect clears the PIN and invalidates
 pending questions; departed replies and controls leave replacement forms alone. Provider checks
 remain direct-close confirmations. Focused cases are in
-`apps/dashboard/src/screens/payment-attestation.unsaved.test.ts`. Independent provider forms
-remain pending, as do the other modal owners.
+`apps/dashboard/src/screens/payment-attestation.unsaved.test.ts`. Other modal owners remain pending.
 Printer detail name/connection are page owners for the remaining page/navigation work. Other audited
 modal owners also remain to be wired. Keep automatic saves on their existing paths.
 
@@ -1318,8 +1317,13 @@ A refused POST returns to protected input; Try again keeps the name, clears the 
 protects subsequent edits. Reconnects clear local input, and departed controls, POST/status replies
 and host notifications leave a replacement opening alone. The existing SumUp reader assertions
 are unchanged; `sumup-add-reader.unsaved.test.ts` adds close, request-body and lifetime cases.
-Other modal owners remain pending; actual provider/page navigation and native reload remain
-Tasks 5–6.
+Adjustment Add/Edit reason now protects the translated names, action membership, limits, roles
+and note setting through Cancel and native Escape. Normalized reverts close directly. Accepted
+writes commit their submitted values before refresh and retain newer delivered input; refused
+writes keep the draft. Disconnect invalidates pending questions, and departed controls/replies
+leave a replacement editor alone. Read-only deactivation stays exempt. Focused cases are in
+`packages/adjustments/src/dashboard/reasons-screen.unsaved.test.ts`. The separate discount-limit
+page owner, other modal owners, actual page navigation and native reload remain Tasks 4–6.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**

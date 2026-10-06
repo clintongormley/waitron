@@ -16,6 +16,10 @@ import {
   ContentLanguageController,
   currentContentLanguages,
   focusFirstInvalid,
+  leaveCoordinatorFor,
+  type DraftScope,
+  type LeaveCoordinator,
+  type LeaveReason,
   submitOnEnter,
   type DataTableColumn,
 } from "@waitron/ui";
@@ -227,6 +231,48 @@ export class AdjustmentReasonsScreen extends LitElement {
   #loaded = false;
   #settingsLoaded = false;
   #opener?: HTMLElement;
+  #reasonScope?: DraftScope<Draft>;
+  #leave?: LeaveCoordinator;
+  /** Restoring a draft rerenders; the pending close still needs this editor's same guard. */
+  #closeGuard?: (reason: LeaveReason) => Promise<boolean>;
+
+  #comparison(draft: Draft): string {
+    const money = amount(draft.maxAmount);
+    const normalizedMoney =
+      typeof money === "string"
+        ? `${money.split(".")[0]}.${(money.split(".")[1] ?? "").padEnd(2, "0")}`
+        : money === null
+          ? null
+          : { invalid: draft.maxAmount };
+    return JSON.stringify({
+      name: draft.name.trim(),
+      names: Object.entries(draft.names)
+        .map(([language, text]) => [language, text.trim()])
+        .filter(([, text]) => text !== "")
+        .sort(([a], [b]) => a!.localeCompare(b!)),
+      actions: ACTIONS.filter((action) => draft.actions.includes(action)),
+      maxPercent:
+        percentBp(draft.maxPercent) ??
+        (draft.maxPercent.trim() === "" ? null : { invalid: draft.maxPercent }),
+      maxAmount: normalizedMoney,
+      applyRole: draft.applyRole,
+      approverRole: draft.approverRole,
+      noteRequired: draft.noteRequired,
+    });
+  }
+
+  async #beforeClose(editor: Editor, reason: LeaveReason): Promise<boolean> {
+    if (this.editor !== editor || this.busy || !this.isConnected) return false;
+    if (!this.#reasonScope) return true;
+    const outcome = await this.#leave!.request({ scopes: [editor], reason, proceed() {} });
+    return this.editor === editor && this.isConnected && outcome === "proceeded";
+  }
+
+  #cancel(editor: Editor): void {
+    if (this.editor !== editor || this.busy || !this.isConnected) return;
+    if (!this.#reasonScope) this.#close();
+    else void this.renderRoot.querySelector("wt-modal")!.requestClose("cancel");
+  }
   /** The active reasons' ids in list order, and each one's place in it, kept in step with `reasons`. */
   #activeIds: readonly string[] = [];
   #activeIndex = new Map<string, number>();
@@ -255,6 +301,18 @@ export class AdjustmentReasonsScreen extends LitElement {
     super.connectedCallback();
     void this.#load();
     void this.#loadSettings();
+  }
+
+  override disconnectedCallback(): void {
+    this.#reasonScope?.dispose();
+    this.#reasonScope = undefined;
+    this.#leave = undefined;
+    this.#closeGuard = undefined;
+    this.editor = undefined;
+    this.draft = undefined;
+    this.busy = false;
+    this.#restart();
+    super.disconnectedCallback();
   }
 
   async #loadSettings(): Promise<void> {
@@ -346,8 +404,12 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   #open(editor: Editor, opener: HTMLElement): void {
+    this.#reasonScope?.dispose();
+    this.#reasonScope = undefined;
     this.#opener = opener;
     this.editor = editor;
+    this.draft = undefined;
+    this.#closeGuard = (reason) => this.#beforeClose(editor, reason);
     this.actionError = undefined;
     this.#restart();
     if (editor.kind === "reason") {
@@ -363,16 +425,30 @@ export class AdjustmentReasonsScreen extends LitElement {
         approverRole: reason?.approverRole ?? "manager",
         noteRequired: reason?.noteRequired ?? false,
       };
+      this.#leave = leaveCoordinatorFor(this);
+      this.#reasonScope = this.#leave?.register({
+        id: editor,
+        parent: this,
+        current: () => this.draft!,
+        snapshot: (value) => ({ ...value, names: { ...value.names }, actions: [...value.actions] }),
+        equal: (a, b) => this.#comparison(a) === this.#comparison(b),
+        restore: (value) => {
+          this.draft = { ...value, names: { ...value.names }, actions: [...value.actions] };
+        },
+      });
     }
   }
 
   #close(): void {
+    this.#reasonScope?.dispose();
+    this.#reasonScope = undefined;
+    this.#closeGuard = undefined;
     this.editor = undefined;
     this.draft = undefined;
     this.#restart();
     const opener = this.#opener;
     void this.updateComplete.then(() => {
-      if (opener?.isConnected) opener.focus();
+      if (this.editor === undefined && opener?.isConnected) opener.focus();
     });
   }
 
@@ -382,12 +458,13 @@ export class AdjustmentReasonsScreen extends LitElement {
     this.editorError = undefined;
   }
 
-  /** A draft's keys are the fields they are entered in, so an edit clears those fields' refusals. */
-  #edit(patch: Partial<Draft>): void {
+  #edit(patch: Partial<Draft>, editor: Editor): void {
+    if (this.editor !== editor || !this.isConnected) return;
     this.draft = { ...this.draft!, ...patch };
     const refused = { ...this.refusedFields };
     for (const key of Object.keys(patch)) delete refused[key as Field];
     this.refusedFields = refused;
+    this.#reasonScope?.changed();
   }
 
   #check(): FieldErrors {
@@ -452,22 +529,29 @@ export class AdjustmentReasonsScreen extends LitElement {
     await focusFirstInvalid(this.renderRoot.querySelector("wt-modal")!);
   }
 
-  /** A refresh that fails after a write succeeded is a load failure: the editor has already closed. */
   async #write(action: () => Promise<unknown>, after?: () => Promise<void>): Promise<void> {
     if (this.busy) return;
+    const editor = this.editor;
+    const scope = this.#reasonScope;
+    const submitted = this.draft;
     this.busy = true;
     try {
       await action();
     } catch (error) {
-      this.#refused(error);
+      if (this.editor === editor && this.isConnected) this.#refused(error);
       return;
     } finally {
-      this.busy = false;
+      if (this.editor === editor) this.busy = false;
     }
-    this.#close();
+    if (this.editor !== editor || !this.isConnected) return;
+    if (submitted) scope?.commit(submitted);
+    if (!scope?.isDirty()) {
+      this.renderRoot.querySelector("wt-modal")?.closeAfter("saved");
+      this.#close();
+    }
     await this.#load();
+    if (this.editor !== undefined || !this.isConnected) return;
     await this.updateComplete;
-    // The empty table's Add reason is gone once the reason it made is listed.
     if (this.#opener?.isConnected === false)
       this.renderRoot.querySelector<HTMLElement>('.toolbar [data-test="add-reason"]')?.focus();
     await after?.();
@@ -494,7 +578,9 @@ export class AdjustmentReasonsScreen extends LitElement {
     };
   }
 
-  #deactivate(reason: AdjustmentReason): void {
+  #deactivate(editor: Editor): void {
+    if (this.editor !== editor || editor.kind !== "deactivate" || !this.isConnected) return;
+    const reason = editor.reason;
     void this.#write(() => this.api.deactivateReason(reason.id), this.#refocusFrom(reason));
   }
 
@@ -516,8 +602,9 @@ export class AdjustmentReasonsScreen extends LitElement {
     await refocus();
   }
 
-  #save(): void {
-    const editor = this.editor as { kind: "reason"; reason?: AdjustmentReason };
+  #save(editor: Editor): void {
+    if (this.editor !== editor || editor.kind !== "reason" || !this.isConnected || this.busy)
+      return;
     this.attempted = true;
     this.refusedFields = {};
     this.editorError = undefined;
@@ -763,6 +850,7 @@ export class AdjustmentReasonsScreen extends LitElement {
 
   #roleSelect(errors: FieldErrors, field: "applyRole" | "approverRole", label: string) {
     const draft = this.draft!;
+    const editor = this.editor!;
     const locale = currentLocale();
     const collator = new Intl.Collator(locale, { sensitivity: "base" });
     const roles = [...ROLES_BY_SENIORITY].sort((a, b) =>
@@ -778,20 +866,21 @@ export class AdjustmentReasonsScreen extends LitElement {
       .disabled=${this.busy}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
-        this.#edit({ [field]: event.detail.value as PersonRole });
+        this.#edit({ [field]: event.detail.value as PersonRole }, editor);
       }}
     ></wt-combobox>`;
   }
 
   #reasonForm(errors: FieldErrors) {
     const draft = this.draft!;
+    const editor = this.editor!;
     const languages = currentContentLanguages().languages;
     const text = (field: "name" | "maxPercent" | "maxAmount") => ({
       value: draft[field],
       error: errors[field] ?? "",
       change: (event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
-        this.#edit({ [field]: event.detail.value });
+        this.#edit({ [field]: event.detail.value }, editor);
       },
     });
     const name = text("name");
@@ -818,7 +907,11 @@ export class AdjustmentReasonsScreen extends LitElement {
               .disabled=${this.busy}
               @wt-change=${(event: CustomEvent<{ value: string }>) => {
                 event.stopPropagation();
-                this.#edit({ names: { ...this.draft!.names, [language]: event.detail.value } });
+                if (this.editor !== editor || !this.isConnected) return;
+                this.#edit(
+                  { names: { ...this.draft!.names, [language]: event.detail.value } },
+                  editor,
+                );
               }}
             ></wt-input>`,
         )}
@@ -839,9 +932,10 @@ export class AdjustmentReasonsScreen extends LitElement {
                 aria-invalid=${errors.actions !== undefined}
                 ?disabled=${this.busy}
                 @change=${(event: Event) => {
+                  if (this.editor !== editor || !this.isConnected) return;
                   const checked = (event.target as HTMLInputElement).checked;
                   const actions = this.draft!.actions.filter((each) => each !== action);
-                  this.#edit({ actions: checked ? [...actions, action] : actions });
+                  this.#edit({ actions: checked ? [...actions, action] : actions }, editor);
                 }}
               />${actionChoice(action)}</label
             >`,
@@ -878,7 +972,7 @@ export class AdjustmentReasonsScreen extends LitElement {
           .disabled=${this.busy}
           @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
             event.stopPropagation();
-            this.#edit({ noteRequired: event.detail.checked });
+            this.#edit({ noteRequired: event.detail.checked }, editor);
           }}
         ></wt-switch>
         ${this.#fieldError(errors, "noteRequired")}
@@ -906,12 +1000,16 @@ export class AdjustmentReasonsScreen extends LitElement {
         size=${deactivating ? "compact" : "standard"}
         open
         heading=${heading}
-        @wt-close=${() => {
-          if (this.editor === editor) this.#close();
+        .beforeClose=${this.#reasonScope ? this.#closeGuard : undefined}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          if (event.target === event.currentTarget && this.editor === editor) this.#close();
         }}
         .dismissible=${!this.busy}
-        @keydown=${(event: KeyboardEvent) =>
-          submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'))}
+        @keydown=${(event: KeyboardEvent) => {
+          if (this.editor === editor && this.isConnected)
+            submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'));
+        }}
       >
         <div class="form">
           ${
@@ -926,7 +1024,7 @@ export class AdjustmentReasonsScreen extends LitElement {
             variant="secondary"
             data-test="cancel-editor"
             ?disabled=${this.busy}
-            @click=${() => this.#close()}
+            @click=${() => this.#cancel(editor)}
             >${t("adjustments.cancel")}</wt-button
           >${
             deactivating
@@ -934,14 +1032,14 @@ export class AdjustmentReasonsScreen extends LitElement {
                   variant="danger"
                   data-test="confirm-deactivate"
                   ?disabled=${this.busy}
-                  @click=${() => this.#deactivate(editor.reason)}
+                  @click=${() => this.#deactivate(editor)}
                   >${t("adjustments.disable")}</wt-button
                 >`
               : html`<wt-button
                   variant="primary"
                   data-test="save-editor"
                   ?disabled=${this.busy || invalid}
-                  @click=${() => this.#save()}
+                  @click=${() => this.#save(editor)}
                   >${t("adjustments.save")}</wt-button
                 >`
           }</wt-form-actions
