@@ -102,9 +102,10 @@ declare module "@waitron/shared" {
 
     /**
      * `./drain.ts`'s `applyOutcome`: AEAT rejected this record outright. Constructed, never thrown —
-     * only built to hand its `.code`/`.params` to `recordIncident`. `registroId` is there because
-     * `incidents` has no foreign key back to `registros_facturacion`; it is the only traceback from
-     * an incident row to its record, and every code below that carries one uses the same name.
+     * only built to hand its `.code`/`.params` to `recordIncidentOnce`. `registroId` is there
+     * because `incidents` has no foreign key back to `registros_facturacion`; it is the only
+     * traceback from an incident row to its record, and every code below that carries one uses the
+     * same name.
      */
     "fiscal.registro_rechazado": {
       registroId: string;

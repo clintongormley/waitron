@@ -800,7 +800,8 @@ async function lookUp(client: VerifactuClient, row: DueRow): Promise<Lookup> {
  * (design §7.1, docs/superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md),
  * and marks each unmatched row unknown (`resolveLines`). This reply is never returned again, so a
  * line naming no row rides on every `fiscal.estado_desconocido` this reply stores, or, when it
- * stores none, on one `fiscal.linea_sin_registro`.
+ * stores none, is offered to one `fiscal.linea_sin_registro` (not stored while one is open for the
+ * sale of the envío's first record).
  */
 async function persistResponse(
   tx: Transaction,
