@@ -19,6 +19,13 @@ import type { AllocationPreview } from "./bill-allocation.js";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "venue.detail_invalid": { field: string; reason: string };
+    "venue.detail_read_only": { field: string };
+    "venue.detail_locked": {
+      field: string;
+      reason: "sales" | "orders" | "daily_close" | "geography_context";
+    };
+    "venue.detail_changed": { field: string };
     "cloud.unavailable": Record<string, never>;
     "cloud.request_unavailable": Record<string, never>;
     "cloud.state_invalid": Record<string, never>;
