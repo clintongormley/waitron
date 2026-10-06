@@ -1030,6 +1030,101 @@ describe("transactions and other callers", () => {
     expect(after.facts.map(({ id }) => id)).toContain(`local:${saved.id}`);
   });
 
+  it("reads a data revision's facts, version and allowance, leaving every stored row as it was", async () => {
+    const cfg = await venue();
+    const two = storeWith(2);
+    const entries = await run(async (tx) => [
+      await two.saveLocalHoliday(tx, cfg, null, local("2026-03-19")),
+      await two.saveLocalHoliday(tx, cfg, null, local("2026-09-08")),
+    ]);
+    await run((tx) =>
+      saveSpecialDate(
+        tx,
+        cfg,
+        null,
+        { date: "2026-01-01", name: "New Year", colour: "red", closeWholeVenue: true, cells: [] },
+        new Date("2025-12-01T10:00:00Z"),
+      ),
+    );
+    const rows = async () => ({
+      stored: await stored(),
+      specialDates: await run((tx) => tx.select().from(specialDates).orderBy(asc(specialDates.id))),
+    });
+    const before = await rows();
+
+    // The revision renames New Year, drops the North days and allows one local day a year.
+    const revised = createHolidayStore((country) => {
+      if (country !== "ZZ") return undefined;
+      const all = ["R1", "R2", "R3"];
+      return {
+        ...syntheticPack(1),
+        holidayCalendar: createHolidayCalendar({
+          localEntryLimit: 1,
+          sources: [
+            {
+              id: "ZZ-ANNEX-2",
+              title: "Invented corrected annex",
+              url: "https://example.test/annex-2",
+              sha256: "b".repeat(64),
+            },
+          ],
+          provinceRegions: { "10": "R1", "20": "R2", "30": "R3" },
+          areas: [{ key: "isle-a", name: "Isle A", provinces: ["30"] }],
+          years: [
+            {
+              year: 2026,
+              dataVersion: "ZZ-2026.2",
+              sourceIds: ["ZZ-ANNEX-2"],
+              rows: [
+                {
+                  key: "new-year",
+                  date: "2026-01-01",
+                  name: "New Year's Day",
+                  scope: "national",
+                  regions: all,
+                  sourceId: "ZZ-ANNEX-2",
+                },
+                {
+                  key: "isle-a-day",
+                  date: "2026-07-01",
+                  name: "Isle A day",
+                  scope: "regional",
+                  regions: ["R3"],
+                  onlyAreas: ["isle-a"],
+                  sourceId: "ZZ-ANNEX-2",
+                },
+              ],
+            },
+          ],
+        }),
+      };
+    });
+    const read = await run((tx) => revised.readHolidays(tx, cfg, "2026-01-01", "2026-12-31"));
+    expect(read.facts.map(({ id, name }) => ({ id, name }))).toEqual([
+      { id: "shipped:new-year", name: "New Year's Day" },
+      { id: `local:${entries[0]!.id}`, name: "Fiesta 2026-03-19" },
+      { id: `local:${entries[1]!.id}`, name: "Fiesta 2026-09-08" },
+    ]);
+    expect(read.coverage).toEqual([
+      expect.objectContaining({
+        dataVersion: "ZZ-2026.2",
+        sourceIds: ["ZZ-ANNEX-2", `owner:${entries[0]!.geographyId}`],
+      }),
+    ]);
+    const model = await run((tx) => revised.readLocalHolidayModel(tx, cfg));
+    expect(model.localEntryLimit).toBe(1);
+    expect(model.entries).toEqual(entries);
+    const refused = await refusal(() =>
+      run((tx) => revised.saveLocalHoliday(tx, cfg, null, local("2026-10-12"))),
+    );
+    expect(refused).toMatchObject({
+      code: "holiday.local_limit",
+      params: { limit: 1, year: 2026 },
+    });
+    expect(await rows()).toEqual(before);
+    expect(before.specialDates.map(({ name }) => name)).toEqual(["New Year"]);
+  });
+
   it("is exported from the package index, bound to the installed country packs", () => {
     expect(packageIndex.readHolidays).toBe(packageReadHolidays);
     expect(packageIndex.readHolidayFacts).toBe(packageReadHolidayFacts);
