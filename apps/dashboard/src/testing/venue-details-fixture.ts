@@ -21,7 +21,10 @@ export function venueDetailsFixture(details: Partial<VenueDetailValues> = {}): V
       name: { decision: "allow_with_warning", reasons: ["current_details_only"] },
       addressLine1: { decision: "allow", reasons: [] },
       addressLine2: { decision: "allow", reasons: [] },
-      postalCode: { decision: "allow_with_warning", reasons: ["current_details_only"] },
+      postalCode:
+        details.province === null
+          ? { decision: "refuse", reasons: ["geography_context"] }
+          : { decision: "allow_with_warning", reasons: ["current_details_only"] },
       city: { decision: "allow_with_warning", reasons: ["holiday_geography"] },
       province: { decision: "refuse", reasons: ["geography_context"] },
       timeZone: { decision: "allow_with_warning", reasons: ["clock_effects"] },

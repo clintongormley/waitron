@@ -114,17 +114,10 @@ it("draws semantic shared fields, explicit unset text and a locked province expl
   const el = await editing(rig(venueDetailsFixture({ province: null, addressLine2: null })).api);
   expect(
     [...el.shadowRoot!.querySelectorAll("wt-input")].map((input) => input.getAttribute("name")),
-  ).toEqual([
-    "venueName",
-    "addressLine1",
-    "addressLine2",
-    "postalCode",
-    "city",
-    "timeZone",
-    "dayCutover",
-  ]);
+  ).toEqual(["venueName", "addressLine1", "addressLine2", "city", "timeZone", "dayCutover"]);
   expect(q(el, "[data-test=locked-province]")?.textContent).toContain("Not set");
   expect(q(el, "[data-test=locked-province]")?.textContent).toContain("setup");
+  expect(q(el, "[data-test=locked-postalCode]")?.textContent).toContain("setup");
   expect(field(el, "venueName").required).toBe(true);
   expect(q(el, "wt-help-tooltip")).not.toBeNull();
 });
