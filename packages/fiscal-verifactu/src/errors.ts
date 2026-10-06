@@ -214,6 +214,18 @@ declare module "@waitron/shared" {
      */
     "fiscal.foreign_recipient_unsupported": { countryCode: string };
 
+    /** `recordCaseEvent` (./filing-cases.ts) was handed a case id no `filing_cases` row has. */
+    "filing_case.not_found": { caseId: string };
+
+    /**
+     * `recordCaseEvent`: an event already stored under this `actionKey` says something different, so
+     * the call is not a retry of it and cannot be recorded under that key.
+     */
+    "filing_case.action_mismatch": { caseId: string; actionKey: string };
+
+    /** `recordCaseEvent`: the case already has its one resolution, recorded under another key. */
+    "filing_case.already_resolved": { caseId: string };
+
     /**
      * An ongoing-alert code from ./submission-alerts.ts, never thrown: `count` records are still
      * waiting to reach AEAT and `hours` is the oldest one's age.
