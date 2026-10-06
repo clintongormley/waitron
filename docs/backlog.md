@@ -4423,7 +4423,7 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     which is empty. The department-menu plan is to add its menu-timetable participant there and
     give its own rows a cascading foreign key to `special_dates` (Hours plan, "Shared date
     lifecycle").
-  - **Step 6 public holidays** — done on the step 6 branch (below): the Hours page reads holidays
+  - **Step 6 public holidays** — done (#1305, below): the Hours page reads holidays
     through that seam, and "Make this a special date" starts with the day's holiday names or its
     date.
   - **A9 wages** will read the calendar's holiday facts through its own composition contract;
@@ -4458,8 +4458,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     `prep-stations-overview.a11y.test.ts` in `packages/venue-service/src/dashboard/`) write `look/*.png`
     into that folder on every run, and git shows it as untracked — the same shape as the
     kitchen-screen case recorded under W110b.
-    [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) — DONE on branch
-    `feat/venue-public-holidays`. The Hours calendar shows Spain's 2026 national and regional
+    [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) — DONE
+    ([PR #1305](https://github.com/clintongormley/waitron/pull/1305)). The Hours calendar shows Spain's 2026 national and regional
     holidays, transcribed from BOE-A-2025-21667 and compared with the archived annex by a test, with
     each year's coverage and source; venues enter up to two local holidays a year for their address
     city at the foot of the Special dates tab; "Make this a special date" and Duplicate name a date
