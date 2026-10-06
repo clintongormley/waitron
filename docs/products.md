@@ -120,8 +120,8 @@ product with Active variants cannot be an extra. The save is refused, and the da
 extras lists to take the product off first.
 
 The products list keeps each product's variants folded away under it. A product with Active
-variants says how many under its name, such as **2 variants**, and the small arrow at the start
-of its row opens them. The list shows a product's variants in the product's own order, the
+variants says how many under its name, such as **2 variants**, and the small arrow before its name
+opens them. The list shows a product's variants in the product's own order, the
 order of the variant list in the product editor, whichever column the list is sorted by; drag them
 in the editor to change it.
 Each variant's row shows its own name, the price it sells at, its status and its

@@ -903,8 +903,8 @@ dragged category's or section's picture still does); a category's or section's c
 in that slot, before its name, and a wrapped category name keeps its grip and square beside its
 first line. At phone width a category's product count, and All products', is hidden. When the
 table reveals a row and the browser's whole-pixel rounding leaves it less than a pixel under the
-sticky headings, the table scrolls it back below them; a row taller than the view keeps its
-position (tested with rows of fractional height at a device pixel ratio of 1, and with one 900 px
+sticky headings, the table scrolls it back below them; a row taller than the view that already
+spans it keeps its scroll position (tested with rows of fractional height at a device pixel ratio of 1, and with one 900 px
 row). The Products list's
 unused `units` property is gone (it closes W75's leftover).
 

@@ -759,7 +759,8 @@ not move either. The headings are still the table's own header row, so they line
 columns at every sideways position and after a column is hidden or moved. Each heading paints `--wt-color-surface` and draws the line beneath itself in
 `--wt-color-border`; a filtered heading keeps its coloured line, and the pinned heading stays at the
 trailing corner over both the other headings and the pinned cells. Revealing a row (`revealRow`) or
-tabbing to a control in one scrolls the row clear of the headings, not under them: the box's
+tabbing to a control in one scrolls the row clear of the headings (a row taller than the view
+excepted, below), not under them: the box's
 scroll padding follows the header row's measured height. The row menus, the Customise dialog and
 the Filters panel (except the side panel `leadingFilters` opens, below) open in the page's top
 layer, so the headings do not cover them and the box does not clip them.

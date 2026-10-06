@@ -3075,7 +3075,7 @@ it("draws Filters, Select, search, Expand all and Customise on one toolbar line,
   }
 });
 
-it("Select is an icon button named Select, with a tooltip, pressed while selecting", async () => {
+it("Select and move is an icon button named Select and move, with a tooltip, pressed while selecting", async () => {
   const el = await mountBrowser();
   const select = el.shadowRoot!.querySelector<HTMLButtonElement>('[data-test="select"]')!;
   expect(select.localName).toBe("button");

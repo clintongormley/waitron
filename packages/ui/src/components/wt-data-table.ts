@@ -1764,7 +1764,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const scroll = tr.closest<HTMLElement>(".scroll")!;
     // Chromium sets the scroll position to the nearest whole pixel (measured at a device pixel
     // ratio of 1), which can leave a row part of a pixel under the headings. A larger overlap is
-    // a row taller than the view, which scrollIntoView rightly left where it was.
+    // a row taller than the view, which this leaves where scrollIntoView put it.
     const clear =
       scroll.getBoundingClientRect().top +
       scroll.clientTop +

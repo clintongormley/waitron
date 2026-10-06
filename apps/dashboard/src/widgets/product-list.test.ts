@@ -1861,10 +1861,11 @@ describe("the product list at phone width", () => {
       ),
     ),
   )(
-    "puts a renamed category's name box and its refusal on their own line under the grip at 390 px ($locale, $categoryId, reordering: $reordering)",
+    "puts a renamed category's name box and its refusal on their own line under the grip or its slot at 390 px ($locale, $categoryId, reordering: $reordering)",
     ({ locale, categoryId, reordering }) =>
       onPhone(locale, 390, async () => {
-        // An asterisk and Drinks' two-part count leave the least room beside the grip and icon.
+        // An asterisk leaves the least room beside the grip or colour-square slot; the count is hidden
+        // at this width, so the `count` part measured below has an empty box.
         const { el, root } = await mountNarrowTree({
           unroutedFolderIds: ["f", "d", "b"],
           reordering,
@@ -3565,7 +3566,7 @@ describe("the Products tree's Name column", () => {
     expect(pieces(root, "loin:s250").name.left).toBeCloseTo(pieces(root, "loin").name.left, 0);
   });
 
-  it("lines each row's grip, icon or photo and name up on one middle", async () => {
+  it("lines each row's grip, colour square or photo and name up on one middle", async () => {
     const { root } = await mountDeep();
     for (const key of ROWS.slice(1)) {
       const { grip, media, name } = pieces(root, key);
