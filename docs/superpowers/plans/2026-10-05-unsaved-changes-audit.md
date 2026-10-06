@@ -2863,3 +2863,43 @@ Deletion controls and exact logs live in the lane's local
 name-dialog fixture gained valid tabs and required selling cards so the new page-save cases reach
 the writer. W69 remains incomplete: contributed explicit-save settings, device profiles after
 W97, remaining page/till/context routes, native reload and the advancing-owner audit are next.
+
+## 2026-10-06 prep-station Settings cell checkpoint
+
+The branch registers each explicit-save Settings cell separately. Its baseline is the existing
+rest-of-order choice, fallback id or timing override. Blank timing means inherited; nonblank
+finite numbers compare as their submitted number, while invalid text remains distinguishable.
+Cancel, dispatched Escape, replacement by another Settings cell and the screen's tab event
+request a leave decision before changing the accepted editor or tab. Keep retains the value;
+Discard restores its baseline and proceeds without a write. Successful saves commit before
+closing the cell and refreshing. The fallback's existing two-step confirmation is retained.
+
+The new browser suite checks clean/reverted drafts, refused writes and accepted retries, failed
+refresh after an accepted write, in-flight controls, stale input/Save controls, reconnect with
+old successful/refused replies, and pending answers after save or disconnect. It also checks
+the immediate-save service switch remains exempt while writing and after refusal. Existing
+Settings and watcher assertions were retained. No old behavioral assertion changed here.
+
+Focused command:
+
+```sh
+pnpm --filter @waitron/venue-service exec vitest run src/dashboard/prep-stations-screen.settings-unsaved.test.ts src/dashboard/prep-stations-screen.settings.test.ts src/dashboard/watcher-form.unsaved.test.ts src/dashboard/prep-stations-screen.test.ts src/dashboard/prep-stations-screen.a11y.test.ts src/dashboard/service-settings-panel.test.ts
+```
+
+Initial RED was five failed assertions and two clean/save controls passing. Later RED cases
+caught early tab mutation, stale input controls and an old Save button submitting the replacement
+cell. An independently installed detached measurement copy removed change notifications, the
+leave gate and the reply-lifetime checks separately: each failed the intended assertion while
+the clean/reverted control passed. Removing only the method's stale-save check left the
+handler's check enforcing that case; removing both checks failed the old-Save assertion.
+The restored measurement suite passed. Exact commands, output and candidate inventory are
+local under `~/waitron-campaign-e/receipts/w69-station-settings-20261006/`.
+
+The minimal application shell rendered the actual screen and shared warning in EN/ES, both
+themes, at 390 and 1280 pixels. Eight visual cases passed 16 axe scans; 16 screenshots and
+four inspected contact sheets show the question and retained draft. The new accessibility
+cases scan the active warning and retained cell in both themes. Provider HTTP writes, the
+real dashboard settings container/sidebar, browser history traversal and activated native
+reload remain unverified by this checkpoint. Synthetic beforeunload checks establish
+listener cancellation, not display of a native browser prompt. Other contributed inline
+settings and the advancing device-profile audit keep W69 incomplete.

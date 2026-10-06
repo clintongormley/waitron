@@ -1173,6 +1173,13 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Prep-station Settings cells now use the shared warning on the branch: Cancel, Escape, replacement
+by another cell and the screen's tab change ask before discarding an edited choice or timing value.
+Keep retains the editor; Discard leaves without writing. Accepted writes commit before refresh,
+and deferred replies and retained controls are checked against the editor that initiated them.
+The dated audit records browser tests and inspected warning captures. This checkpoint does not
+complete the contributed venue settings, full-shell route/history or native reload audit.
+
 Canvas page drafts now register their name and copied definition on the branch. Cancel asks before
 leaving an edited or newly created canvas; Keep retains it and Discard returns to the gallery
 without writing. Reverted existing values are clean. Accepted saves commit the submitted snapshot

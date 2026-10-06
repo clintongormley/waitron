@@ -85,6 +85,16 @@ const NO_PREPARATION = "no_preparation";
 const targetFor = (id: string): RouteTarget =>
   id === NO_PREPARATION ? { kind: "no_preparation" } : { kind: "station", stationId: id };
 
+type SettingsDraft = {
+  stationId: string;
+  field: "rest" | "fallback" | TimingField;
+  value: string;
+  fieldError: string;
+  error: string;
+  confirming: boolean;
+  attempted: boolean;
+};
+
 @customElement("dashboard-prep-stations-screen")
 export class PrepStationsScreen extends LitElement {
   static override styles = [
@@ -242,15 +252,7 @@ export class PrepStationsScreen extends LitElement {
   @property({ attribute: false }) api!: PrepStationsApi;
   @property({ type: Boolean }) readOnly = false;
   @state() private view?: PrepStationsView;
-  @state() private settingsEditor?: {
-    stationId: string;
-    field: "rest" | "fallback" | TimingField;
-    value: string;
-    fieldError: string;
-    error: string;
-    confirming: boolean;
-    attempted: boolean;
-  };
+  @state() private settingsEditor?: SettingsDraft;
   @state() private settingsBusy = false;
   @state() private printerEditor?: { stationId: string; ids: string[]; error: string };
   @state() private printerBusy = false;
@@ -410,7 +412,65 @@ export class PrepStationsScreen extends LitElement {
   #stationActionScope?: DraftScope<string>;
   #stationActionIdentity?: object;
   #stationActionBeforeClose?: (reason: LeaveReason) => Promise<boolean>;
+  #settingsScope?: DraftScope<string>;
+  #settingsIdentity?: object;
   #leave?: LeaveCoordinator;
+
+  #settingsCurrent(identity: object | undefined): boolean {
+    return this.isConnected && identity === this.#settingsIdentity;
+  }
+  #settingsValue(editor: SettingsDraft): string {
+    if (editor.field === "rest" || editor.field === "fallback") return editor.value;
+    const value = editor.value.trim();
+    return value === "" ? "" : Number.isFinite(Number(value)) ? String(Number(value)) : value;
+  }
+  #syncSettingsDraft(): void {
+    if (!this.settingsEditor) {
+      this.#settingsScope?.dispose();
+      this.#settingsScope = undefined;
+      this.#settingsIdentity = undefined;
+    } else if (!this.#settingsIdentity) {
+      const id = (this.#settingsIdentity = {});
+      this.#leave ??= leaveCoordinatorFor(this);
+      this.#settingsScope = this.#leave?.register({
+        id,
+        current: () => this.#settingsValue(this.settingsEditor!),
+        snapshot: (value) => value,
+        equal: (a, b) => a === b,
+        restore: (value) => {
+          if (this.settingsEditor)
+            this.settingsEditor = { ...this.settingsEditor, value, confirming: false };
+        },
+      });
+    }
+  }
+  #leaveSettings(reason: LeaveReason, identity: object | undefined, proceed: () => void): void {
+    if (!this.#settingsCurrent(identity) || this.settingsBusy || this.readOnly) return;
+    if (!this.#settingsScope) proceed();
+    else
+      void this.#leave!.request({
+        scopes: [this.#settingsScope.id],
+        reason,
+        proceed: () => {
+          if (this.#settingsCurrent(identity) && !this.settingsBusy) proceed();
+        },
+      });
+  }
+  #openSettings(editor: SettingsDraft): void {
+    this.#leaveSettings("navigation", this.#settingsIdentity, () => {
+      this.#settingsScope?.dispose();
+      this.#settingsScope = undefined;
+      this.#settingsIdentity = undefined;
+      this.settingsEditor = editor;
+      this.#syncSettingsDraft();
+    });
+  }
+  #cancelSettings(reason: LeaveReason, identity: object | undefined): void {
+    this.#leaveSettings(reason, identity, () => {
+      this.settingsEditor = undefined;
+      this.#syncSettingsDraft();
+    });
+  }
 
   #syncStationDrafts(): void {
     const action = this.stationAction;
@@ -675,6 +735,7 @@ export class PrepStationsScreen extends LitElement {
   protected override willUpdate(changed: PropertyValues<this>) {
     this.#syncStationDrafts();
     this.#syncWatcherInlineDrafts();
+    this.#syncSettingsDraft();
     if (changed.has("readOnly") && this.readOnly) {
       this.tab = "stations";
       this.testProduct = "";
@@ -712,6 +773,11 @@ export class PrepStationsScreen extends LitElement {
     this.watcherPrinterEditor = undefined;
     this.watcherCellBusy = false;
     this.watcherPrinterBusy = false;
+    this.settingsEditor = undefined;
+    this.settingsBusy = false;
+    this.#settingsScope?.dispose();
+    this.#settingsScope = undefined;
+    this.#settingsIdentity = undefined;
     this.#watcherCellScope?.dispose();
     this.#watcherPrinterScope?.dispose();
     this.#watcherCellScope = undefined;
@@ -2446,9 +2512,11 @@ export class PrepStationsScreen extends LitElement {
       </wt-form-actions>
     </div>`;
   }
-  async #saveSettingsCell() {
+  async #saveSettingsCell(identity: object | undefined) {
     const editor = this.settingsEditor;
-    if (!editor || this.settingsBusy) return;
+    if (!editor || !this.#settingsCurrent(identity) || this.settingsBusy || this.readOnly) return;
+    const scope = this.#settingsScope;
+    const submitted = this.#settingsValue(editor);
     this.settingsEditor = { ...editor, attempted: true };
     if (this.#settingsInvalid()) {
       await this.updateComplete;
@@ -2479,6 +2547,7 @@ export class PrepStationsScreen extends LitElement {
           [editor.field]: editor.value.trim() === "" ? null : Number(editor.value),
         });
     } catch (error) {
+      if (!this.#settingsCurrent(identity)) return;
       const code = codeOf(error);
       const field = (error as { params?: { field?: string } })?.params?.field;
       const fieldError = TIMING_FIELDS.includes(editor.field as TimingField)
@@ -2503,7 +2572,10 @@ export class PrepStationsScreen extends LitElement {
       this.settingsBusy = false;
       return;
     }
+    if (!this.#settingsCurrent(identity)) return;
+    scope?.commit(submitted);
     this.settingsEditor = undefined;
+    this.#syncSettingsDraft();
     this.settingsBusy = false;
     await this.#load();
   }
@@ -2560,7 +2632,7 @@ export class PrepStationsScreen extends LitElement {
         aria-label=${`${station.name}: ${label}`}
         ?disabled=${this.settingsBusy}
         @click=${() => {
-          this.settingsEditor = {
+          this.#openSettings({
             stationId: station.id,
             field,
             value,
@@ -2568,17 +2640,18 @@ export class PrepStationsScreen extends LitElement {
             error: "",
             confirming: false,
             attempted: false,
-          };
+          });
         }}
         >${text}</wt-button
       >`;
+    const identity = this.#settingsIdentity;
     const invalid = this.#settingsInvalid();
     return html`<div
       part="watcher-cell"
       @keydown=${(event: KeyboardEvent) => {
         if (event.key === "Escape" && !this.settingsBusy) {
           event.stopPropagation();
-          this.settingsEditor = undefined;
+          this.#cancelSettings("escape", identity);
         }
         if (
           event.key === "Enter" &&
@@ -2612,6 +2685,7 @@ export class PrepStationsScreen extends LitElement {
         .noResultsLabel=${t("venue.combobox_no_results")}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
+          if (!this.#settingsCurrent(identity) || this.settingsBusy || this.readOnly) return;
           this.settingsEditor = {
             ...editor,
             value: event.detail.value,
@@ -2619,6 +2693,7 @@ export class PrepStationsScreen extends LitElement {
             error: "",
             confirming: false,
           };
+          this.#settingsScope?.changed();
         }}
       ></wt-combobox>
 
@@ -2631,18 +2706,17 @@ export class PrepStationsScreen extends LitElement {
           variant="secondary"
           data-test="cancel-settings-cell"
           ?disabled=${this.settingsBusy}
-          @click=${() => {
-            this.settingsEditor = undefined;
-          }}
+          @click=${() => this.#cancelSettings("cancel", identity)}
           >${t("venue.cancel")}</wt-button
         >
         <wt-button
           data-test="save-settings-cell"
           ?disabled=${this.settingsBusy || !!invalid}
           @click=${() => {
+            if (!this.#settingsCurrent(identity) || this.settingsBusy || this.readOnly) return;
             if (field === "fallback" && !editor.confirming)
               this.settingsEditor = { ...editor, confirming: true };
-            else void this.#saveSettingsCell();
+            else void this.#saveSettingsCell(identity);
           }}
           >${t("venue.save")}</wt-button
         >
@@ -2662,7 +2736,7 @@ export class PrepStationsScreen extends LitElement {
         aria-label=${label}
         ?disabled=${this.settingsBusy}
         @click=${() => {
-          this.settingsEditor = {
+          this.#openSettings({
             stationId: station.id,
             field,
             value:
@@ -2671,17 +2745,18 @@ export class PrepStationsScreen extends LitElement {
             error: "",
             confirming: false,
             attempted: false,
-          };
+          });
         }}
         >${station[field]}</wt-button
       >`;
+    const identity = this.#settingsIdentity;
     const invalid = this.#settingsInvalid();
     return html`<div
       part="watcher-cell"
       @keydown=${(event: KeyboardEvent) => {
         if (event.key === "Escape" && !this.settingsBusy) {
           event.stopPropagation();
-          this.settingsEditor = undefined;
+          this.#cancelSettings("escape", identity);
         } else
           submitOnEnter(
             event,
@@ -2701,7 +2776,9 @@ export class PrepStationsScreen extends LitElement {
         .disabled=${this.settingsBusy}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
+          if (!this.#settingsCurrent(identity) || this.settingsBusy || this.readOnly) return;
           this.settingsEditor = { ...editor, value: event.detail.value, fieldError: "", error: "" };
+          this.#settingsScope?.changed();
         }}
       ></wt-input>
       <wt-form-actions
@@ -2712,15 +2789,13 @@ export class PrepStationsScreen extends LitElement {
           variant="secondary"
           data-test="cancel-settings-cell"
           ?disabled=${this.settingsBusy}
-          @click=${() => {
-            this.settingsEditor = undefined;
-          }}
+          @click=${() => this.#cancelSettings("cancel", identity)}
           >${t("venue.cancel")}</wt-button
         >
         <wt-button
           data-test="save-settings-cell"
           ?disabled=${this.settingsBusy || !!invalid}
-          @click=${() => void this.#saveSettingsCell()}
+          @click=${() => void this.#saveSettingsCell(identity)}
           >${t("venue.save")}</wt-button
         >
       </wt-form-actions>
@@ -3576,8 +3651,13 @@ export class PrepStationsScreen extends LitElement {
                 if (event.target !== event.currentTarget) return;
                 const tab = PREP_TABS.find((tab) => tab === event.detail.value);
                 if (!tab || (this.readOnly && tab !== "stations")) return;
-                this.tab = tab;
-                this.#url.write({ dashboard: "prep-stations", view: tab });
+                const proceed = () => {
+                  this.tab = tab;
+                  this.#url.write({ dashboard: "prep-stations", view: tab });
+                };
+                if (this.settingsEditor)
+                  this.#leaveSettings("navigation", this.#settingsIdentity, proceed);
+                else proceed();
               }}
             >
               ${
