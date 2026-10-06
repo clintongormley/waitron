@@ -41,7 +41,7 @@ import {
   modifierListNames,
   type ModifierListChoice,
 } from "./product-editor-model.js";
-import type { CategorySummary, MadeAt, Product, Unit } from "../api/client.js";
+import type { CategorySummary, MadeAt, Product } from "../api/client.js";
 import type { FolderMadeAt } from "./folder-made-at.js";
 import { EACH_UNIT_ID } from "@waitron/catalogue/src/unit-validation.js";
 import {
@@ -334,7 +334,6 @@ export class ProductList extends LitElement {
   @property({ type: Boolean }) routingFailed = false;
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
-  @property({ attribute: false }) units: readonly Unit[] = [];
   /** The content language a stored unit's abbreviation is read in. */
   @property() unitLanguage = "en";
   /** The search box's text; while it lasts, the table holds every category above a match open. */

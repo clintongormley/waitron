@@ -1295,7 +1295,6 @@ describe("product-list", () => {
         }),
         product({ id: "ham", name: "Jamón", unitId: "kg", unit: kilo, unitPrice: "48.00" }),
       ],
-      units: [kilo],
       unitLanguage: language,
     });
     const root = await tableRoot(el);
@@ -1309,7 +1308,6 @@ describe("product-list", () => {
     const tray: Unit = { id: "tray", name: { es: "bandeja" }, abbreviation: {}, precision: 0 };
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "bun", unitId: "tray", unit: tray, variants: [bunVariant] })],
-      units: [tray],
       unitLanguage: "es",
     });
     const root = await tableRoot(el);
@@ -1326,7 +1324,6 @@ describe("product-list", () => {
   it("names a measured unit after its price before the venue's unit list has loaded", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [product({ id: "ham", unitId: "kg", unit: kilo, unitPrice: "48.00" })],
-      units: [],
       unitLanguage: "en",
     });
     const unit = cellUnder(await tableRoot(el), "ham", t("product.price"))
