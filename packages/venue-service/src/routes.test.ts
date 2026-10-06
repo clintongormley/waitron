@@ -1072,6 +1072,171 @@ describe("venue service management routes", () => {
     });
   });
 
+  describe("a department's active field on the edit route", () => {
+    async function twoDepartments(fx: Fixture) {
+      const ids: string[] = [];
+      for (const name of ["Restaurant", "Events"]) {
+        const created = await send(
+          fx.app,
+          "POST",
+          "/management-api/venue-service/departments",
+          fx.managerCookie,
+          { name, defaultServiceMode: "table_tab" },
+        );
+        ids.push(((await created.json()) as { id: string }).id);
+      }
+      return ids as [string, string];
+    }
+    async function listed(fx: Fixture) {
+      return (
+        (await (
+          await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+        ).json()) as {
+          departments: { id: string; name: string; active: boolean }[];
+          zones: { id: string; active?: boolean }[];
+        }
+      ).departments;
+    }
+
+    it("disables with active: false, as Disable does, and enables again with active: true", async () => {
+      const fx = await fixture();
+      const [restaurant, events] = await twoDepartments(fx);
+      await withTransaction(db, (tx) =>
+        configureZone(tx, fx, { zoneId: fx.zoneId, departmentId: restaurant }),
+      );
+      const path = `/management-api/venue-service/departments/${restaurant}`;
+      expect((await send(fx.app, "PATCH", path, fx.managerCookie, { active: false })).status).toBe(
+        204,
+      );
+      expect(await listed(fx)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: restaurant, name: "Restaurant", active: false }),
+          expect.objectContaining({ id: events, active: true }),
+        ]),
+      );
+      const [zone] = await db
+        .select({ active: floorZones.active })
+        .from(floorZones)
+        .where(eq(floorZones.id, fx.zoneId));
+      expect(zone!.active).toBe(false);
+
+      expect((await send(fx.app, "PATCH", path, fx.managerCookie, { active: true })).status).toBe(
+        204,
+      );
+      expect(await listed(fx)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: restaurant, name: "Restaurant", active: true }),
+        ]),
+      );
+      const [after] = await db
+        .select({ active: floorZones.active })
+        .from(floorZones)
+        .where(eq(floorZones.id, fx.zoneId));
+      expect(after!.active).toBe(false);
+    });
+
+    it("takes an edit and active together", async () => {
+      const fx = await fixture();
+      const [restaurant] = await twoDepartments(fx);
+      const path = `/management-api/venue-service/departments/${restaurant}`;
+      expect((await send(fx.app, "DELETE", path, fx.managerCookie)).status).toBe(204);
+      expect(
+        (
+          await send(fx.app, "PATCH", path, fx.managerCookie, {
+            name: "Dining",
+            tradingName: "Dining room",
+            defaultServiceMode: "prepay",
+            active: true,
+          })
+        ).status,
+      ).toBe(204);
+      expect(await listed(fx)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: restaurant, name: "Dining", active: true }),
+        ]),
+      );
+    });
+
+    it("refuses to disable the last active department with department.last_active", async () => {
+      const fx = await fixture();
+      const [restaurant, events] = await twoDepartments(fx);
+      await send(
+        fx.app,
+        "DELETE",
+        `/management-api/venue-service/departments/${events}`,
+        fx.managerCookie,
+      );
+      const refused = await send(
+        fx.app,
+        "PATCH",
+        `/management-api/venue-service/departments/${restaurant}`,
+        fx.managerCookie,
+        { active: false },
+      );
+      expect(refused.status).toBe(409);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "department.last_active", params: { departmentId: restaurant } },
+      });
+      expect(await listed(fx)).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: restaurant, active: true })]),
+      );
+    });
+
+    it("refuses an explicit null or a non-boolean active, and changes nothing", async () => {
+      const fx = await fixture();
+      const [restaurant] = await twoDepartments(fx);
+      const path = `/management-api/venue-service/departments/${restaurant}`;
+      for (const active of [null, "false", 0]) {
+        const refused = await send(fx.app, "PATCH", path, fx.managerCookie, { active });
+        expect(refused.status, String(active)).toBe(400);
+        expect(await refused.json()).toMatchObject({
+          error: { code: "management.request_invalid", params: { field: "active" } },
+        });
+      }
+      expect(await listed(fx)).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: restaurant, active: true })]),
+      );
+    });
+
+    it("answers department.not_found for another venue's department and leaves it disabled", async () => {
+      const fx = await fixture();
+      const other = await fixture();
+      const [otherRestaurant] = await twoDepartments(other);
+      await send(
+        other.app,
+        "PATCH",
+        `/management-api/venue-service/departments/${otherRestaurant}`,
+        other.managerCookie,
+        { active: false },
+      );
+      const refused = await send(
+        fx.app,
+        "PATCH",
+        `/management-api/venue-service/departments/${otherRestaurant}`,
+        fx.managerCookie,
+        { active: true },
+      );
+      expect(refused.status).toBe(404);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "department.not_found", params: { departmentId: otherRestaurant } },
+      });
+      expect(await listed(other)).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: otherRestaurant, active: false })]),
+      );
+    });
+
+    it("refuses active from a staff session", async () => {
+      const fx = await fixture();
+      const [restaurant] = await twoDepartments(fx);
+      const path = `/management-api/venue-service/departments/${restaurant}`;
+      const refused = await send(fx.app, "PATCH", path, fx.staffCookie, { active: false });
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "authorization.not_permitted" },
+      });
+    });
+  });
+
   it("shows a configured inactive zone to management while excluding it from new-order choices", async () => {
     const fx = await fixture();
     const department = await withTransaction(db, (tx) =>

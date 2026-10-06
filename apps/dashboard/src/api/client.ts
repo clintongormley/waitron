@@ -2381,8 +2381,13 @@ export class DashboardApi {
     return this.#request<void>(`/management-api/zones/${id}`, "DELETE");
   }
 
-  listTables(): Promise<DashboardTable[]> {
-    return this.#request<DashboardTable[]>("/management-api/tables", "GET");
+  listTables(options: { includeDisabled?: true } = {}): Promise<DashboardTable[]> {
+    return this.#request<DashboardTable[]>(
+      options.includeDisabled
+        ? "/management-api/tables?includeDisabled=true"
+        : "/management-api/tables",
+      "GET",
+    );
   }
 
   createTable(input: {
@@ -2395,7 +2400,7 @@ export class DashboardApi {
 
   updateTable(
     id: string,
-    patch: { label?: string; zoneId?: string; capacity?: number },
+    patch: { label?: string; zoneId?: string; capacity?: number; active?: boolean },
   ): Promise<void> {
     return this.#request<void>(`/management-api/tables/${id}`, "PATCH", patch);
   }

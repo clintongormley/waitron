@@ -34,6 +34,64 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
   });
 });
 
+describe.each(["light", "dark"] as const)("a disabled department's Enable (%s)", (theme) => {
+  test("the policy tree and the departments tab, each with a disabled department's menu open", async () => {
+    setLocale("en");
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("dashboard-venue-operations-screen") as VenueOperationsScreen;
+    el.api = {
+      load: vi.fn().mockResolvedValue({
+        readiness: [],
+        departments: [
+          {
+            id: "d1",
+            name: "Restaurant",
+            tradingName: "Casa",
+            defaultServiceMode: "table_tab",
+            active: true,
+          },
+          {
+            id: "d2",
+            name: "Events",
+            tradingName: "Casa Events",
+            defaultServiceMode: "prepay",
+            active: false,
+          },
+        ],
+        zones: [],
+        salePolicies: { departments: [], zones: [] },
+        deviceZones: [],
+        devices: [],
+        hours: [],
+        zoneMenus: [],
+        menus: [],
+        floorZones: [],
+        settings: { editSentLines: true },
+      }),
+    } as unknown as VenueServiceApi;
+    host.append(el);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    async function openMenuOf(name: string) {
+      const button = findDeep(el.shadowRoot!, `[data-test="${name}"]`)!;
+      expect(button, name).not.toBeNull();
+      button
+        .closest("wt-row-actions")!
+        .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+        .click();
+      await el.updateComplete;
+    }
+    await openMenuOf("enable-tree-department-d2");
+    await expectNoA11yViolations(host);
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="departments"]')!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    await openMenuOf("enable-department-d2");
+    await expectNoA11yViolations(host);
+  });
+});
+
 describe.each(["light", "dark"] as const)("department editor accessibility (%s)", (theme) => {
   test("after a failed press: the marked fields and the message above Save", async () => {
     setLocale("en");

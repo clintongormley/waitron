@@ -106,7 +106,8 @@ export class VenueOperationsScreen extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-2);
       }
-      wt-data-table::part(inactive-department-label) {
+      wt-data-table::part(inactive-department-label),
+      wt-data-table::part(inactive-zone-label) {
         margin-inline-start: var(--wt-space-2);
       }
       wt-data-table::part(inherited-value) {
@@ -519,6 +520,13 @@ export class VenueOperationsScreen extends LitElement {
   #confirm(name: string, action: () => Promise<unknown>): void {
     this.#open({ kind: "delete", name, action });
   }
+  #enableDepartment(key: string, row: Department): Action {
+    return {
+      key,
+      label: t("venue.enable"),
+      run: () => void this.#save(() => this.api.updateDepartment(row.id, { active: true })),
+    };
+  }
   async #confirmDepartment(row: Department): Promise<void> {
     try {
       const impact = await this.api.departmentRemovalImpact(row.id);
@@ -669,7 +677,7 @@ export class VenueOperationsScreen extends LitElement {
                   >
                     ${row.zone.name}
                   </button>`
-            }${row.zone.active === false ? html` ${t("venue.zone_disabled")}` : row.departmentId === null ? html` ${t("venue.unconfigured")}` : nothing}${model.readiness
+            }${row.zone.active === false ? html`<span part="inactive-zone-label">${t("venue.zone_disabled")}</span>` : row.departmentId === null ? html` ${t("venue.unconfigured")}` : nothing}${model.readiness
               .filter((issue) => "zoneId" in issue && issue.zoneId === row.zone.id)
               .map(
                 (issue) =>
@@ -1140,11 +1148,16 @@ export class VenueOperationsScreen extends LitElement {
                   label: t("venue.hours"),
                   run: () => this.#open({ kind: "hours", departmentId: row.department.id }),
                 },
-                {
-                  key: `remove-tree-department-${row.department.id}`,
-                  label: t("venue.disable"),
-                  run: () => void this.#confirmDepartment(row.department),
-                },
+                row.department.active
+                  ? {
+                      key: `remove-tree-department-${row.department.id}`,
+                      label: t("venue.disable"),
+                      run: () => void this.#confirmDepartment(row.department),
+                    }
+                  : this.#enableDepartment(
+                      `enable-tree-department-${row.department.id}`,
+                      row.department,
+                    ),
               ])
             : this.#actions(row.zone.name, [
                 {
@@ -1274,12 +1287,13 @@ export class VenueOperationsScreen extends LitElement {
                   label: t("venue.edit"),
                   run: () => this.#open({ kind: "department", row }),
                 },
-                {
-                  key: `deactivate-department-${row.id}`,
-                  label: t("venue.disable_department"),
-                  disabled: !row.active,
-                  run: () => void this.#confirmDepartment(row),
-                },
+                row.active
+                  ? {
+                      key: `deactivate-department-${row.id}`,
+                      label: t("venue.disable_department"),
+                      run: () => void this.#confirmDepartment(row),
+                    }
+                  : this.#enableDepartment(`enable-department-${row.id}`, row),
               ]),
           },
         ],

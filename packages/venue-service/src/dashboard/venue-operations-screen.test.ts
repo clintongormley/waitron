@@ -811,6 +811,17 @@ describe("venue operations screen", () => {
       expect(row.querySelector('[data-test="enable-tree-zone-z1"]')).not.toBeNull();
     });
 
+    it("draws a gap between a disabled zone's name and its Disabled word", async () => {
+      const el = await mount({
+        load: vi.fn().mockResolvedValue(disabled),
+      } as unknown as VenueServiceApi);
+      const row = zoneRow(el);
+      const name = row.querySelector('[data-test="edit-zone-name"]')!.getBoundingClientRect();
+      const label = row.querySelector("[part~=inactive-zone-label]")!;
+      expect(label.textContent!.trim()).toBe("Disabled");
+      expect(label.getBoundingClientRect().left - name.right).toBeGreaterThan(2);
+    });
+
     it("offers Enable on a disabled zone that belongs to no department", async () => {
       const updateZone = vi.fn().mockResolvedValue(undefined);
       const el = await mount({
@@ -842,6 +853,102 @@ describe("venue operations screen", () => {
       expect(row.querySelector('[data-test="enable-tree-zone-z1"]')).toBeNull();
       expect(row.querySelector('[data-test="remove-tree-zone-z1"]')).toBeNull();
       expect(row.querySelector('[data-test="rename-tree-zone-z1"]')).not.toBeNull();
+    });
+  });
+
+  describe("enabling a disabled department", () => {
+    const disabled: VenueServiceView = {
+      ...model,
+      departments: [model.departments[0]!, { ...model.departments[1]!, active: false }],
+    };
+    function departmentRow(el: VenueOperationsScreen) {
+      return [...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]')].find(
+        (row) => row.getAttribute("data-row-key") === "department-d2",
+      )!;
+    }
+
+    it("offers Enable, not Disable, on a disabled department's policy-tree row", async () => {
+      const el = await mount({
+        load: vi.fn().mockResolvedValue(disabled),
+      } as unknown as VenueServiceApi);
+      const row = departmentRow(el);
+      expect(row.querySelector('[data-test="remove-tree-department-d2"]')).toBeNull();
+      expect(
+        row.querySelector('[data-test="enable-tree-department-d2"]')!.textContent!.trim(),
+      ).toBe("Enable");
+      const active = [
+        ...table(el, "policy-tree").shadowRoot!.querySelectorAll('tbody [role="row"]'),
+      ].find((candidate) => candidate.getAttribute("data-row-key") === "department-d1")!;
+      expect(active.querySelector('[data-test="enable-tree-department-d1"]')).toBeNull();
+      expect(
+        active.querySelector('[data-test="remove-tree-department-d1"]')!.textContent!.trim(),
+      ).toBe("Disable");
+    });
+
+    it("sends active: true from the policy tree, then shows the department active with Disable again", async () => {
+      const updateDepartment = vi.fn().mockResolvedValue(undefined);
+      const load = vi.fn().mockResolvedValueOnce(disabled).mockResolvedValue(model);
+      const el = await mount({ load, updateDepartment } as unknown as VenueServiceApi);
+      await action(el, "enable-tree-department-d2");
+      expect(updateDepartment).toHaveBeenCalledExactlyOnceWith("d2", { active: true });
+      await vi.waitFor(() =>
+        expect(departmentRow(el).querySelector("[part~=inactive-department-label]")).toBeNull(),
+      );
+      const row = departmentRow(el);
+      expect(row.querySelector('[data-test="enable-tree-department-d2"]')).toBeNull();
+      expect(
+        row.querySelector('[data-test="remove-tree-department-d2"]')!.textContent!.trim(),
+      ).toBe("Disable");
+      expect(pageAlert(el)).toBe("");
+    });
+
+    it("offers Enable, not Disable department, on the departments tab, and enabling makes it Active", async () => {
+      const updateDepartment = vi.fn().mockResolvedValue(undefined);
+      const load = vi.fn().mockResolvedValueOnce(disabled).mockResolvedValue(model);
+      const el = await mount({ load, updateDepartment } as unknown as VenueServiceApi);
+      await selectTab(el, "departments");
+      expect(column(el, "departments", 3)).toEqual(["Active", "Disabled"]);
+      expect(find(el, '[data-test="deactivate-department-d2"]')).toBeNull();
+      expect(find(el, '[data-test="enable-department-d2"]')!.textContent!.trim()).toBe("Enable");
+      expect(find(el, '[data-test="enable-department-d1"]')).toBeNull();
+      expect(find(el, '[data-test="deactivate-department-d1"]')!.textContent!.trim()).toBe(
+        "Disable department",
+      );
+      await action(el, "enable-department-d2");
+      expect(updateDepartment).toHaveBeenCalledExactlyOnceWith("d2", { active: true });
+      await vi.waitFor(() => expect(column(el, "departments", 3)).toEqual(["Active", "Active"]));
+      expect(find(el, '[data-test="enable-department-d2"]')).toBeNull();
+      expect(find(el, '[data-test="deactivate-department-d2"]')).not.toBeNull();
+    });
+
+    it("in Spanish, says Habilitar on both", async () => {
+      setLocale("es");
+      const el = await mount({
+        load: vi.fn().mockResolvedValue(disabled),
+      } as unknown as VenueServiceApi);
+      expect(
+        departmentRow(el)
+          .querySelector('[data-test="enable-tree-department-d2"]')!
+          .textContent!.trim(),
+      ).toBe("Habilitar");
+      await selectTab(el, "departments");
+      expect(find(el, '[data-test="enable-department-d2"]')!.textContent!.trim()).toBe("Habilitar");
+    });
+
+    it("shows a refused Enable in the page alert and leaves the department disabled", async () => {
+      const updateDepartment = vi.fn().mockRejectedValue({ code: "connection.failed" });
+      const load = vi.fn().mockResolvedValue(disabled);
+      setLocale("es");
+      const el = await mount({ load, updateDepartment } as unknown as VenueServiceApi);
+      await action(el, "enable-tree-department-d2");
+      expect(updateDepartment).toHaveBeenCalledExactlyOnceWith("d2", { active: true });
+      await vi.waitFor(() => expect(pageAlert(el)).toBe("No se pudo guardar el cambio."));
+      expect(load).toHaveBeenCalledTimes(1);
+      const row = departmentRow(el);
+      expect(row.querySelector("[part~=inactive-department-label]")!.textContent!.trim()).toBe(
+        "Deshabilitado",
+      );
+      expect(row.querySelector('[data-test="enable-tree-department-d2"]')).not.toBeNull();
     });
   });
 

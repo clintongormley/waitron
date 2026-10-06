@@ -1608,7 +1608,9 @@ export function mountManagementApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const cfg = requireVenueCfg(deps);
-      const tables = await withVenueAuth(deps, sessionId, (tx) => listTables(tx, cfg));
+      const tables = await withVenueAuth(deps, sessionId, (tx) =>
+        listTables(tx, cfg, { includeDisabled: c.req.query("includeDisabled") === "true" }),
+      );
       return c.json(tables);
     }),
   );
@@ -1618,11 +1620,16 @@ export function mountManagementApi(
       const sessionId = requireManagementSession(c);
       const id = requireTableId(c.req.param("id"));
       const cfg = requireVenueCfg(deps);
-      const body = await readJsonBody<{ label?: unknown; zoneId?: unknown; capacity?: unknown }>(c);
+      const body = await readJsonBody<{
+        label?: unknown;
+        zoneId?: unknown;
+        capacity?: unknown;
+        active?: unknown;
+      }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
-      const patch: { label?: string; zoneId?: string; capacity?: number } = {};
+      const patch: { label?: string; zoneId?: string; capacity?: number; active?: boolean } = {};
       if (body.label !== undefined) {
         if (typeof body.label !== "string")
           throw new AppError("management.request_invalid", { field: "label" });
@@ -1637,7 +1644,17 @@ export function mountManagementApi(
       if (body.capacity !== undefined) {
         patch.capacity = parseCapacity(body.capacity);
       }
-      if (patch.label === undefined && patch.zoneId === undefined && patch.capacity === undefined) {
+      if (body.active !== undefined) {
+        if (typeof body.active !== "boolean")
+          throw new AppError("management.request_invalid", { field: "active" });
+        patch.active = body.active;
+      }
+      if (
+        patch.label === undefined &&
+        patch.zoneId === undefined &&
+        patch.capacity === undefined &&
+        patch.active === undefined
+      ) {
         return c.body(null, 204);
       }
       await withVenueAuth(deps, sessionId, (tx) => updateTable(tx, cfg, id, patch));

@@ -159,11 +159,13 @@ export class VenueServiceApi {
 
   updateDepartment(
     departmentId: string,
-    input: {
-      name: string;
-      tradingName: string;
-      defaultServiceMode: ServiceMode;
-    },
+    input:
+      | {
+          name: string;
+          tradingName: string;
+          defaultServiceMode: ServiceMode;
+        }
+      | { active: true },
   ): Promise<void> {
     return this.request(
       `/management-api/venue-service/departments/${departmentId}`,

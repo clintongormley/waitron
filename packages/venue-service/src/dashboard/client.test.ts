@@ -147,6 +147,19 @@ describe("VenueServiceApi", () => {
     ).toEqual([["/management-api/venue-service/departments/d1", "PATCH", department]]);
   });
 
+  it("enables a disabled department through the department edit route", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(undefined, 204));
+    const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
+    await api.updateDepartment("d1", { active: true });
+    expect(
+      fetchImpl.mock.calls.map(([path, init]) => [
+        path,
+        init.method,
+        JSON.parse(init.body as string),
+      ]),
+    ).toEqual([["/management-api/venue-service/departments/d1", "PATCH", { active: true }]]);
+  });
+
   it("reads the exact removal impact before asking a manager to confirm", async () => {
     const impact = { zones: [{ id: "z1", name: "Dining room", activeTableCount: 2 }] };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(impact));

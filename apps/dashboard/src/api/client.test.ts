@@ -1576,6 +1576,32 @@ describe("DashboardApi — floor plan (zones + tables)", () => {
     });
   });
 
+  it("listTables with includeDisabled GETs the disabled tables too", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse([]));
+    const api = new DashboardApi("", fetchImpl);
+    await api.listTables({ includeDisabled: true });
+    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith(
+      "/management-api/tables?includeDisabled=true",
+      {
+        method: "GET",
+        credentials: "include",
+        signal: expect.any(AbortSignal),
+      },
+    );
+  });
+
+  it("updateTable PATCHes active: true to enable a disabled table", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await expect(api.updateTable("t1", { active: true })).resolves.toBeUndefined();
+    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith("/management-api/tables/t1", {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ active: true }),
+    });
+  });
+
   it("createTable POSTs { label } and returns the id (201)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "t1" }, true, 201));
     const api = new DashboardApi("", fetchImpl);

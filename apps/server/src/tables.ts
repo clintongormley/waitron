@@ -89,7 +89,11 @@ export async function createTable(
   }
 }
 
-export async function listTables(tx: Transaction, cfg: TillConfig): Promise<DiningTable[]> {
+export async function listTables(
+  tx: Transaction,
+  cfg: TillConfig,
+  options: { includeDisabled?: boolean } = {},
+): Promise<DiningTable[]> {
   return tx
     .select({
       id: diningTables.id,
@@ -104,7 +108,12 @@ export async function listTables(tx: Transaction, cfg: TillConfig): Promise<Dini
       rotation: diningTables.rotation,
     })
     .from(diningTables)
-    .where(and(eq(diningTables.locationId, cfg.locationId), eq(diningTables.active, true)))
+    .where(
+      and(
+        eq(diningTables.locationId, cfg.locationId),
+        options.includeDisabled ? undefined : eq(diningTables.active, true),
+      ),
+    )
     .orderBy(diningTables.label);
 }
 
@@ -113,11 +122,17 @@ export async function updateTable(
   // Unused; kept for the uniform `(tx, cfg, …)` verb surface.
   _cfg: TillConfig,
   id: string,
-  input: { label?: string; zoneId?: string; capacity?: number },
+  input: { label?: string; zoneId?: string; capacity?: number; active?: boolean },
 ): Promise<void> {
-  const patch: { label?: string; zoneId?: string | null; capacity?: number | null } = {};
+  const patch: {
+    label?: string;
+    zoneId?: string | null;
+    capacity?: number | null;
+    active?: boolean;
+  } = {};
   if (input.label !== undefined) patch.label = input.label;
   if (input.capacity !== undefined) patch.capacity = input.capacity;
+  if (input.active !== undefined) patch.active = input.active;
   if (input.zoneId !== undefined) {
     patch.zoneId = input.zoneId;
     await requireZone(tx, input.zoneId);

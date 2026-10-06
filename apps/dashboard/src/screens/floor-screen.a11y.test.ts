@@ -78,6 +78,19 @@ describe.each(["light", "dark"] as const)("floor-screen a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  it("renders accessibly with a disabled table offering Enable beside an active one", async () => {
+    const { el, host } = await mountWidget<FloorScreen>(
+      "dashboard-floor-screen",
+      {
+        api: stubApi(ZONES, [...TABLES, { ...TABLES[0]!, id: "t2", label: "5", active: false }]),
+      },
+      theme,
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[data-test="table-enable-t2"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders accessibly with empty lists", async () => {
     const { el, host } = await mountWidget<FloorScreen>(
       "dashboard-floor-screen",

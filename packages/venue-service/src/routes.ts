@@ -17,6 +17,7 @@ import {
   clearDeviceDefaultZone,
   configureZone,
   createServiceZone,
+  activateDepartment,
   createDepartment,
   deactivateDepartment,
   departmentRemovalImpact,
@@ -552,13 +553,27 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const departmentId = requireUuidParam(c.req.param("departmentId"), "DepartmentId");
         const body = await readJsonBody<Record<string, unknown>>(c);
-        await gated(sessionId, (tx) =>
-          updateDepartment(tx, ctx.cfg, departmentId, {
-            name: requireName(body.name, "name"),
-            tradingName: requireName(body.tradingName, "tradingName"),
-            defaultServiceMode: requireMode(body.defaultServiceMode, "defaultServiceMode"),
-          }),
-        );
+        if (body.active !== undefined && typeof body.active !== "boolean") {
+          throw new AppError("management.request_invalid", { field: "active" });
+        }
+        const active = body.active;
+        // `active` may come alone; without it, or beside any edit field, the edit is the whole one.
+        const edit =
+          active === undefined ||
+          body.name !== undefined ||
+          body.tradingName !== undefined ||
+          body.defaultServiceMode !== undefined
+            ? {
+                name: requireName(body.name, "name"),
+                tradingName: requireName(body.tradingName, "tradingName"),
+                defaultServiceMode: requireMode(body.defaultServiceMode, "defaultServiceMode"),
+              }
+            : undefined;
+        await gated(sessionId, async (tx) => {
+          if (edit !== undefined) await updateDepartment(tx, ctx.cfg, departmentId, edit);
+          if (active === true) await activateDepartment(tx, ctx.cfg, departmentId);
+          if (active === false) await deactivateDepartment(tx, ctx.cfg, departmentId);
+        });
         return c.body(null, 204);
       }),
     );
