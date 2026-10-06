@@ -236,6 +236,7 @@ export const QUERY_DEPENDENCIES = {
     "device_profiles",
     "kitchen_stations",
     "device_made_here_stations",
+    "device_approved_profiles",
   ],
   listStations: ["kitchen_stations"],
   listWatchers: ["watchers", "watcher_stations", "watcher_zones", "watcher_printers"],

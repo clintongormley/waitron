@@ -66,6 +66,7 @@ const devices: DeviceRow[] = [
   {
     id: "d1",
     madeHereStationIds: [],
+    approvedProfileIds: ["dp1"],
     kind: "kds_station",
     stationId: "s1",
     watcherId: null,
@@ -85,6 +86,7 @@ const devices: DeviceRow[] = [
   {
     id: "d2",
     madeHereStationIds: [],
+    approvedProfileIds: [],
     kind: "kds_station",
     stationId: null,
     watcherId: null,
@@ -386,6 +388,62 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
       expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       const body = dialog.querySelector<HTMLElement>(".body")!;
       expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
+
+  it.each([390, 1280])(
+    "renders a till's Edit dialog with a refused approval accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const till: DeviceRow = {
+        ...devices[0]!,
+        id: "till",
+        kind: "till",
+        stationId: null,
+        binding: null,
+        approvedProfileIds: ["dp1", "dp-bar"],
+      };
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        {
+          api: stubApi({
+            listDevices: vi.fn().mockResolvedValue([till]),
+            listDeviceProfiles: vi
+              .fn()
+              .mockResolvedValue([
+                ...deviceProfiles,
+                { ...deviceProfiles[0]!, id: "dp-bar", name: "Bar till" },
+                { ...deviceProfiles[0]!, id: "dp-deli", name: "Deli till" },
+              ]),
+            updateDevice: vi.fn().mockRejectedValue({
+              code: "device_profile.incompatible",
+              params: { field: "approvedProfileIds" },
+            }),
+          }),
+        },
+        theme,
+      );
+      await flush(el);
+      deep(el.shadowRoot!, "[data-test=edit-device-till]")!.click();
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=edit-approved-profiles]")).not.toBeNull(),
+      );
+      el.shadowRoot!.querySelector<HTMLElement>(
+        '[data-test=edit-approved-profiles] input[value="dp-deli"]',
+      )!.click();
+      await flush(el);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-save]")!.click();
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=edit-approved-error]")).not.toBeNull(),
+      );
+      await flush(el);
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      const dialog = el
+        .shadowRoot!.querySelector("[data-test=edit-device-modal]")!
+        .shadowRoot!.querySelector("dialog")!;
+      expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
       await expectNoA11yViolations(host);
       await page.viewport(1280, 900);
     },

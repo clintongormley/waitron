@@ -598,6 +598,8 @@ export interface Course {
 export interface DeviceRow {
   id: string;
   madeHereStationIds: string[];
+  /** The profiles staff may switch the device to: its active profile first, then the others. */
+  approvedProfileIds: string[];
   kind: string;
   stationId: string | null;
   watcherId: string | null;
@@ -2760,6 +2762,8 @@ export class DashboardApi {
       paymentSlipPrinterId: string | null;
       /** Absent leaves the device's stored made-here stations as they are. */
       madeHereStationIds?: string[];
+      /** The profiles staff may switch to besides `profileId`; absent leaves them as they are. */
+      approvedProfileIds?: string[];
     },
   ): Promise<void> {
     return this.#request<void>(`/management-api/devices/${id}`, "PATCH", input);

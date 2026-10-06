@@ -517,6 +517,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "An active device here already has that name — choose another",
     es: "Ya hay un dispositivo activo con ese nombre aquí. Elige otro",
   },
+  "device.payment_in_progress": {
+    en: "A card payment on this device is still in progress. Change its profile once the payment finishes or is cancelled",
+    es: "Hay un pago con tarjeta en curso en este dispositivo. Cambia su perfil cuando el pago termine o se cancele",
+  },
+  "device_profile.incompatible": {
+    en: "That profile is for another kind of device. Untick it",
+    es: "Ese perfil es para otro tipo de dispositivo. Desmárcalo",
+  },
   "device.binding_invalid": {
     en: "This profile cannot use that printer, or it has been disabled. Choose another",
     es: "Este perfil no puede usar esa impresora, o la impresora se ha deshabilitado. Elige otra",

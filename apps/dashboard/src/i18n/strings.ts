@@ -987,6 +987,9 @@ export const en = {
   "devices.no_printer": "None",
   "devices.printer_not_on_profile_mark": "not on this profile",
   "devices.default_reader": "Default card reader",
+  "devices.approved_profiles": "Profiles staff can switch to",
+  "devices.approved_profiles_hint":
+    "Someone signed in on this device can switch it to a ticked profile. Its device profile above is always allowed.",
   "devices.made_here": "Made here, no ticket",
   "devices.made_here_hint":
     "When this device sends an item for a ticked station, the item gets no ticket and does not appear on kitchen screens. That station is still where it is made.",
@@ -3291,6 +3294,9 @@ export const es: Record<StringKey, string> = {
   "devices.no_printer": "Ninguna",
   "devices.printer_not_on_profile_mark": "no está en este perfil",
   "devices.default_reader": "Lector predeterminado",
+  "devices.approved_profiles": "Perfiles a los que el personal puede cambiar",
+  "devices.approved_profiles_hint":
+    "Quien haya iniciado sesión en este dispositivo puede cambiarlo a un perfil marcado. Su perfil de dispositivo de arriba siempre está permitido.",
   "devices.made_here": "Se prepara aquí, sin comanda",
   "devices.made_here_hint":
     "Cuando este dispositivo envía un artículo de una estación marcada, el artículo no lleva comanda ni aparece en las pantallas de cocina. Esa estación sigue constando como donde se prepara.",
