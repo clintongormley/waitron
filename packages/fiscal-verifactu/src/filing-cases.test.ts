@@ -445,6 +445,36 @@ describe("listFilingCases", () => {
     ]);
   });
 
+  it("lists a case's events in the order they were recorded, whatever time each caller gave", async () => {
+    const { opened } = await openCaseOnFirstRecord();
+    const first = await inTx((tx) =>
+      recordCaseEvent(tx, {
+        caseId: opened.id,
+        actionKey: "note-first",
+        kind: "note",
+        personId: PERSON,
+        action: "first",
+        now: MUCH_LATER,
+      }),
+    );
+    // A clock set back between the two calls stamps the later event with the earlier time.
+    const second = await inTx((tx) =>
+      recordCaseEvent(tx, {
+        caseId: opened.id,
+        actionKey: "note-second",
+        kind: "note",
+        personId: PERSON,
+        action: "second",
+        now: LATER,
+      }),
+    );
+
+    const [listed] = await inTx((tx) => listFilingCases(tx));
+
+    expect(listed!.events.map((event) => event.action)).toEqual(["first", "second"]);
+    expect(listed!.events).toEqual([first, second]);
+  });
+
   it("changes no submission row when a case is resolved", async () => {
     const { registroId, opened } = await openCaseOnFirstRecord();
     await setEstado(registroId, "rechazado");

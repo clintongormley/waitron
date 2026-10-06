@@ -134,10 +134,12 @@ export async function listFilingCases(tx: Transaction): Promise<FilingCaseReport
     .from(filingCases)
     .leftJoin(envios, eq(envios.registroId, filingCases.registroId))
     .orderBy(filingCases.openedAt, sql`${filingCases}.rowid`);
+  // Insertion order, not `recorded_at`, which is the caller's clock: SQLite gives a new row a
+  // `rowid` one above the table's largest.
   const events = await tx
     .select()
     .from(filingCaseEvents)
-    .orderBy(filingCaseEvents.recordedAt, sql`rowid`);
+    .orderBy(sql`rowid`);
   const byCase = new Map<string, FilingCaseEvent[]>();
   for (const event of events) {
     const own = byCase.get(event.caseId);
