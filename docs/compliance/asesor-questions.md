@@ -22,6 +22,10 @@ request, Q21 gained parts (d) and (e): may or must the invoice be issued before 
 counter as well as the table. The Word copies carry them as 1.1(d) and (e); 1.1 is retitled to
 match, and section 1 is now "at the table and the counter".
 
+Late on **2026-10-06**: **Q43 added** at the end of the conflicts section, at the owner's request:
+whether AEAT's reply lists a batch's records in the order they were sent. The standalone English
+and Spanish Word copies do not carry it yet.
+
 On **2026-10-06**: **Q42 added**, beside Q27–Q29, on a bill paid later by bank transfer — invoice
 now and collect later, or a proforma first and the invoice on payment — asked for full and
 simplified invoices alike. The standalone English and Spanish Word copies do not carry it yet.
@@ -2510,6 +2514,46 @@ observation, not a legal answer; (a)–(d) remain for the asesor.
 
 Source: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json)
 and [dated receipt, §7.1](../superpowers/specs/2026-10-04-fiscal-prevention-and-offline-recovery-design.md#71-protocol-receipt-2026-10-05-w41s-1).
+
+This records a question; no enquiry has been sent.
+
+### Q43. Does AEAT answer a batch's records in the order they were sent? (added 2026-10-06)
+
+**Why it matters.** One submission (an envío) carries up to 1,000 records, and AEAT's reply has
+one line per record. Waitron decides which reply line belongs to which record, and a wrong
+pairing could mark a refused invoice as accepted. If AEAT's reply follows the order of the
+submission, line N belongs to record N and any other line is irrelevant to it. We have found no
+document that promises this order: the developer FAQ we hold is silent, and the web-service
+specification has not been checked for it.
+
+> Cuando remitimos un envío con varios registros de facturación (hasta 1.000), la respuesta de la
+> AEAT contiene una línea (`RespuestaLinea`) por registro. En nuestras pruebas en el entorno de
+> preproducción, las líneas llegaron siempre en el mismo orden en que enviamos los registros.
+>
+> **(a)** ¿Garantiza la AEAT que las líneas de la respuesta siguen el orden de los registros del
+> envío, de modo que la línea N corresponde siempre al registro N? ¿Consta en alguna
+> especificación técnica o documento oficial?
+>
+> **(b)** Si la línea de una posición no identifica al registro enviado en esa posición (otra
+> referencia u otros datos de factura), o la respuesta trae un número de líneas distinto del de
+> registros enviados, ¿cómo debe tratarlo el sistema? Proponemos considerar desconocido el
+> resultado de esos registros, volver a remitirlos y conservar la respuesta recibida. ¿Es
+> correcto, o procede además dirigirse a la AEAT?
+
+**Proposed interim treatment (owner, 2026-10-06):** pair line N with record N, and apply it only
+when it also names that record (our reference and the invoice's issuer, number and date). Any
+other record's outcome is unknown: it is sent again, an alert is raised, and the alert shows the
+line it was compared with. When the reply's line count differs from the records sent, every record
+of that envío is unknown and the whole reply is kept once. A reordered reply can therefore only
+cause extra retries, never an invoice wrongly taken as accepted.
+
+**Observed in AEAT's preproduction environment, 2026-10-05 (W41s-1; added 2026-10-06).** All six
+replies with more than one line listed the records in the order sent, including both
+1,000-record envíos, and each record had exactly one line (runs 37283677375, 37283909983 and
+37283910284). These are test-system observations, not a guarantee; (a) and (b) remain for the
+asesor.
+
+Source: [saved protocol evidence](../superpowers/specs/2026-10-05-aeat-protocol-evidence.json).
 
 This records a question; no enquiry has been sent.
 
