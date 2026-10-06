@@ -460,17 +460,17 @@ describe("drain — a run of refusals with one code stops its chain", () => {
       expect((await envioOf(unreadable)).estado).not.toBe("detenido");
     });
 
-    it("sends again, once its claim is recovered, a record the run's reply had no line for", async () => {
+    it("sends again, at its retry, a record the run's reply had no line for", async () => {
       const aeat = fakeAeat();
       const seeded = await seedPendingEnvios(suite.db, { count: 4 });
       for (const key of seeded.facturaKeys.slice(0, 3)) aeat.reject(key, 1100, "Rechazo 1100");
       const unanswered = seeded.registroIds[3]!;
       const real = aeat.client();
       await drain(deps(misnaming(real, unanswered)), FIRST);
-      expect((await envioOf(unanswered)).estado).toBe("enviando");
+      expect(await envioOf(unanswered)).toMatchObject({ estado: "pendiente", incidencia: true });
       const wire = recording(real);
 
-      await drain(deps(wire.client), new Date(FIRST.getTime() + RECUPERACION_ENVIANDO_MS + 1));
+      await drain(deps(wire.client), new Date(FIRST.getTime() + backoffMs(1)));
 
       expect(wire.sent).toEqual([[unanswered]]);
       expect((await envioOf(unanswered)).estado).not.toBe("detenido");
@@ -526,12 +526,12 @@ describe("drain — a run of refusals with one code stops its chain", () => {
       expect(afterRetry.recordsHalted).toBe(1);
     });
 
-    it("sends the records appended after a missing answer together with its recovered claim", async () => {
+    it("sends the records appended after a missing answer together with its retry", async () => {
       const { real, fourth, appended } = await runThenUnanswered(misnaming);
-      expect((await envioOf(fourth)).estado).toBe("enviando");
+      expect(await envioOf(fourth)).toMatchObject({ estado: "pendiente", incidencia: true });
       const wire = recording(real);
 
-      await drain(deps(wire.client), new Date(FIRST.getTime() + RECUPERACION_ENVIANDO_MS + 1));
+      await drain(deps(wire.client), new Date(FIRST.getTime() + backoffMs(1)));
 
       expect(wire.sent).toEqual([[fourth, ...appended]]);
     });
