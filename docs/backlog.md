@@ -4239,8 +4239,9 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   [Spec](superpowers/specs/2026-10-03-departments-service-styles-hours-design.md); §6 lists what is
   open, including advisor questions Q21, Q14, Q27 and Q22.
   Its §4 day types and §5 placement are revised by A261. A261 step 2 names the sole department on
-  Departments and zones; other screens still await their own one-department survey. Tab billing and
-  the shared calendar remain open.
+  Departments and zones; other screens still await their own one-department survey. Tab billing
+  remains open; the shared calendar is built by A261 step 5 (below), its public holidays left to
+  step 6.
 - **Venue operations: how the venue is organised and configured (A261, owner 2026-10-03) — SPEC
   APPROVED; steps 1–3, 5, 7 and 8 implemented, steps 4 and 6 open** ([step 1 plan](superpowers/plans/2026-10-03-venue-settings-and-navigation.md)).
   The sidebar's Venue operations group; Venue settings with one tab per group
@@ -4292,8 +4293,8 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   - **Step 6 public holidays.** The `HolidayReader` seam (`packages/venue-service/src/hours.ts`) is
     ready and no reader is supplied, so no holiday shows yet. "Make this a special date" leaves the
     name blank until step 6's naming rule fills it.
-  - **A9 wages** reads the calendar's holiday facts through its own composition contract; nothing
-    in Hours computes pay.
+  - **A9 wages** will read the calendar's holiday facts through its own composition contract;
+    nothing in Hours computes pay.
   - **Step 7 time zone and cutover.** #1281 refuses a time zone or cutover change once the venue
     has any sale, working order or daily close. Hours keeps wall times and date keys as stored and
     reads again on a `locations` change; allowing a change after trading would need its own
@@ -4316,7 +4317,10 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
     midnights a clock change picks; no test opens Hours from a department's link end to end; with
     the whole-venue closure on, a kept period at a skipped minute is refused on a field the closure
     has disabled; and a default station's kept special-date cells are not checked against the
-    neighbouring dates if it stops being the default.
+    neighbouring dates if it stops being the default; on a phone the calendar's cells break a long
+    special-date name mid-word (a design choice for the owner); the test where the live feed
+    delivers nothing does not check that its two reads cover different ranges; and no test sends
+    the default station with a blank inherited cell.
   [Step 6 Public holidays plan](superpowers/plans/2026-10-05-public-holidays.md) is approved with
   the owner's 2026-10-05 13:25 amendments; national/regional data, owner-entered city holidays and
   holiday-aware special-date naming are not implemented. Its Hours dependency (step 5) is built,

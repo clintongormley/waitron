@@ -46,6 +46,7 @@ import {
   keyOf,
   standardText,
   storedCells,
+  unbrokenRanges,
   weekCellOf,
 } from "./hours-view.js";
 import { t } from "./strings.js";
@@ -183,7 +184,7 @@ export class HoursScreen extends LitElement {
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-1) var(--wt-space-2);
       }
-      .part {
+      .range {
         white-space: nowrap;
       }
       .cell {
@@ -1115,14 +1116,7 @@ export class HoursScreen extends LitElement {
                 ${subjects.map((subject) => {
                   const key = keyOf(subject);
                   const value = this.#standardText(subject, weekday);
-                  // Each period stays on one line; a cell wraps only between periods.
-                  const parts = value.split(", ");
-                  const shown = parts.map(
-                    (part, index) =>
-                      html`<span class="part"
-                        >${part}${index < parts.length - 1 ? ", " : ""}</span
-                      >`,
-                  );
+                  const shown = unbrokenRanges(value);
                   return html`<td
                     data-subject=${key}
                     data-weekday=${weekday}

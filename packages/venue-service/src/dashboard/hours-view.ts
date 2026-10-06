@@ -1,5 +1,6 @@
 // How the Hours page reads its model: shared by the week, the special-dates list and the calendar.
 import { currentLocale } from "@waitron/dashboard-kit";
+import { html } from "lit";
 import type {
   DateHoursCell,
   HourPeriod,
@@ -20,11 +21,27 @@ export function format(key: Parameters<typeof t>[0], values: Record<string, stri
   );
 }
 
+const PERIOD_JOINER = ", ";
+
 /** How a Closed, all-day or periods cell reads. */
 export function cellText(cell: { mode: string; periods: readonly HourPeriod[] }): string {
   if (cell.mode === "closed") return t("hours.closed");
   if (cell.mode === "all_day") return t("hours.all_day");
-  return cell.periods.map((period) => `${period.opensAt}–${period.closesAt}`).join(", ");
+  return cell.periods.map((period) => `${period.opensAt}–${period.closesAt}`).join(PERIOD_JOINER);
+}
+
+/**
+ * A cell's text as one `range` span per period, so it wraps between periods, never inside one
+ * ("12:00–" / "23:00"). The comma stays inside its span, so a flex container cannot start a line
+ * with it; the space outside is the break.
+ */
+export function unbrokenRanges(text: string) {
+  const parts = text.split(PERIOD_JOINER);
+  return parts.map((part, index) =>
+    index < parts.length - 1
+      ? html`<span class="range">${part},</span> `
+      : html`<span class="range">${part}</span>`,
+  );
 }
 
 export const keyOf = (subject: HoursSubject) => `${subject.kind}:${subject.id}`;

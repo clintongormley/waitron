@@ -958,7 +958,15 @@ any case, or exactly `__export_rowid` (`<table>.<column>`); and a key whose pare
 number the same as its own, as when it names none and the parent has no primary key
 (`table:<child>`). Both column checks count generated columns. Guard: the leave-behind cases in `apps/server/src/configuration-transfer.test.ts`.
 
-**Transactions**
+**A module's transfer `validate` may read when and where the bundle was made.**
+`ModuleConfigurationTransfer.validate` (`packages/module/src/module.ts`) takes an optional second
+argument, `{ createdAt, timeZone }`, which `validateConfigurationBundle`
+(`apps/server/src/configuration-transfer.ts`) fills from the bundle and passes to every module's
+`validate` before the import writes anything. Core, catalogue and media take only the tables.
+Venue-service uses it to leave out a clash between two days already past in the venue's zone when
+the bundle was made, as a save does, so a venue's own export imports again. It reads no day
+cutover: for a venue whose cutover or numeric-offset zone a save cannot read, the save checks every
+pair while the import still leaves past pairs out.
 
 ## Opening hours store "no claim" as no row
 
@@ -985,15 +993,7 @@ is in production" below).
   satisfies" above).
 - One special date per venue and date (`special_dates_location_date_key`).
 
-**A module's transfer `validate` may read when and where the bundle was made.**
-`ModuleConfigurationTransfer.validate` (`packages/module/src/module.ts`) takes an optional second
-argument, `{ createdAt, timeZone }`, which `validateConfigurationBundle`
-(`apps/server/src/configuration-transfer.ts`) fills from the bundle and passes to every module's
-`validate` before the import writes anything. Core, catalogue and media take only the tables.
-Venue-service uses it to leave out a clash between two days already past in the venue's zone when
-the bundle was made, as a save does, so a venue's own export imports again. It reads no day
-cutover: for a venue whose cutover or numeric-offset zone a save cannot read, the save checks every
-pair while the import still leaves past pairs out.
+**Transactions**
 
 ## Multi-table writes share ONE transaction, and `withTransaction` IS that transaction
 

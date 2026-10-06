@@ -692,6 +692,38 @@ describe("Hours calendar: a date's panel", () => {
     expect(lines.size).toBe(1);
   });
 
+  it("wraps a squeezed panel cell between its periods, never inside one", async () => {
+    const request = async (path: string) => {
+      const query = new URL(path, location.origin).searchParams;
+      const model = rangeModel(query.get("from")!, query.get("to")!);
+      for (const special of model.specialCells)
+        for (const entry of special.cells)
+          if (entry.subject.id === "restaurant")
+            entry.cell = {
+              mode: "periods",
+              periods: [
+                { id: "f1", opensAt: "12:00", closesAt: "16:00" },
+                { id: "f2", opensAt: "20:00", closesAt: "23:30" },
+              ],
+            };
+      return model;
+    };
+    const el = await mount(new HoursApi(request as unknown as DashboardRequest));
+    await open(el, "2026-10-12");
+    const cell = panel(el).querySelector<HTMLElement>("tbody tr td")!;
+    cell.style.width = "1px";
+    const ranges = [...cell.querySelectorAll(".range")];
+    expect(ranges.map(text)).toEqual(["12:00–16:00,", "20:00–23:30"]);
+    const textRects = (node: Element) => {
+      const contents = document.createRange();
+      contents.selectNodeContents(node);
+      return [...contents.getClientRects()];
+    };
+    const lines = (rects: DOMRect[]) => new Set(rects.map((rect) => Math.round(rect.top))).size;
+    for (const range of ranges) expect(lines(textRects(range))).toBe(1);
+    expect(lines(textRects(cell))).toBe(2);
+  });
+
   it("keeps the panel and its actions on screen at phone width, and names dates in words", async () => {
     await page.viewport(390, 800);
     const { api } = server();

@@ -304,6 +304,24 @@ describe("Hours: the standard week", () => {
     );
   });
 
+  it("wraps a squeezed cell between its periods, never inside one", async () => {
+    const { api } = server();
+    const el = await mount(api);
+    const button = cellButton(el, restaurant, 2)!;
+    button.style.width = "1px";
+    const ranges = [...button.querySelectorAll(".range")];
+    expect(ranges.map(text)).toEqual(["12:00–16:00,", "20:00–23:30"]);
+    // The text's own line boxes: a flex item's getClientRects is one box however its text wraps.
+    const textRects = (node: Element) => {
+      const contents = document.createRange();
+      contents.selectNodeContents(node);
+      return [...contents.getClientRects()];
+    };
+    const lines = (rects: DOMRect[]) => new Set(rects.map((rect) => Math.round(rect.top))).size;
+    for (const range of ranges) expect(lines(textRects(range))).toBe(1);
+    expect(lines(textRects(button))).toBe(2);
+  });
+
   it("shows the default station Always open on every day, with nothing to open", async () => {
     const { api } = server();
     const el = await mount(api);

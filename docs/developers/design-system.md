@@ -2424,7 +2424,9 @@ open the week with focus on that subject's column heading once the hours are rea
 column is shown.
 
 - **Standard week.** Days are rows, Monday first, with today marked; departments, then prep
-  stations, are columns. The grid is one Tab stop and the arrow keys move between days and columns.
+  stations, are columns. The editable cells share one Tab stop and the arrow keys move between
+  days and columns. Each editable column's heading has its own menu, a separate Tab stop, holding
+  Clear schedule, or Configure hours for a subject with no hours.
   The default station's column reads Always open and has nothing to open. A subject with no hours
   reads "No hours set" (a department) or "No hours restriction" (a station); Prep stations says
   "Always open" for that station state. A cell opens that day's editor; a subject with no hours
