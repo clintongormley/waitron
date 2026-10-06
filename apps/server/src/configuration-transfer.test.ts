@@ -2,12 +2,9 @@ import {
   addMember,
   addShortcut,
   deleteSection,
-  listHomeLayouts,
+  readMenuHome,
   createCatalogue,
   createCategory,
-  createHomeLayout,
-  deviceHomeLayouts,
-  setDeviceHomeLayout,
   createExtraList,
   addProductToMenu,
   createOptionList,
@@ -753,6 +750,91 @@ describe("configuration transfer database path", () => {
     expect(persisted.rows[0]!.count).toBe(0);
   });
 
+  /** A source venue with one menu whose `till_columns` is 8 and `handheld_order` `menu_first`,
+   * set with raw SQL, and the bundle exported from it. */
+  async function bundleWithHomeDisplay(taxId: string) {
+    const source = await applyVenue(planVenue(venue(taxId), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await withTransaction(suite.db, async (tx) => {
+      const menu = await createCatalogue(tx, { name: "Displayed menu" });
+      await tx.execute(
+        sql`update menu_details set till_columns = 8, handheld_order = 'menu_first' where menu_id = ${menu.id}`,
+      );
+    });
+    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-05T12:00:00Z"),
+      versions,
+    );
+    return { transferred, versions };
+  }
+
+  const homeDisplayOf = (db: typeof suite.db) =>
+    db.execute<Record<string, unknown>>(sql`
+      select d.handheld_columns, d.handheld_tiles, d.handheld_order,
+             d.till_columns, d.till_tiles, d.till_order
+      from menu_details d
+      join catalogues c on c.id = d.menu_id
+      where c.name = 'Displayed menu'
+    `);
+
+  it("carries a menu's home display settings", async () => {
+    const { transferred, versions } = await bundleWithHomeDisplay("B44556601");
+    const expected = {
+      handheld_columns: 3,
+      handheld_tiles: "colours",
+      handheld_order: "menu_first",
+      till_columns: 8,
+      till_tiles: "colours",
+      till_order: "home_first",
+    };
+    expect((await homeDisplayOf(suite.db)).rows).toEqual([expected]);
+    await applyVenue(planVenue(venue("B44556602"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx, result) =>
+        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    });
+    expect((await homeDisplayOf(targetSuite.db)).rows).toEqual([expected]);
+  });
+
+  it("refuses a bundle whose display setting a save would refuse", async () => {
+    const { transferred, versions } = await bundleWithHomeDisplay("B44556603");
+    const details = transferred.tables.menu_details!;
+    expect(details.filter((row) => row.till_columns === 8)).toHaveLength(1);
+    const malformed: ConfigurationBundle = {
+      ...transferred,
+      tables: {
+        ...transferred.tables,
+        menu_details: details.map((row) =>
+          row.till_columns === 8 ? { ...row, till_columns: 11 } : row,
+        ),
+      },
+    };
+    const refusal = {
+      code: "setup.request_invalid",
+      params: { field: "menu_details.till_columns" },
+    };
+    const target = venue("B44556604");
+    await expect(
+      applyVenue(planVenue(target, ALL_MODULES), {
+        db: targetSuite.db,
+        modules: ALL_MODULES,
+        beforeCommit: (tx, result) =>
+          importConfigurationTables(tx, malformed, result, ALL_MODULES, versions),
+      }),
+    ).rejects.toMatchObject(refusal);
+    const persisted = await targetSuite.db.execute<{ count: number }>(sql`
+      select count(*) as count from tenants where tax_id = ${target.taxId}
+    `);
+    expect(persisted.rows[0]!.count).toBe(0);
+  });
+
   /** A source venue holding a status painted `amber` and one painted `#ef4444`, created through
    * the dashboard's own save, and the bundle exported from it. */
   async function bundleWithStatuses(taxId: string) {
@@ -1152,52 +1234,6 @@ it("refuses a bundle whose photo still carries alt text and labels, as it refuse
   ).rejects.toMatchObject({
     code: "setup.request_invalid",
     params: { field: "table:media_images" },
-  });
-});
-
-it("carries a device profile's home layout choice, remapped to the imported menu and layout", async () => {
-  const source = await applyVenue(planVenue(venue("B66778899"), ALL_MODULES), {
-    db: suite.db,
-    modules: ALL_MODULES,
-  });
-  const original = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Layout menu" });
-    const counter = await createHomeLayout(tx, menu.id, "Counter");
-    const [profile] = await tx
-      .insert(deviceProfiles)
-      .values({ name: "Handheld", formFactor: "phone-portrait" })
-      .returning({ id: deviceProfiles.id });
-    await setDeviceHomeLayout(tx, profile!.id, menu.id, counter.id);
-    return { menu: menu.id, counter: counter.id, profile: profile!.id };
-  });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
-  const transferred = await buildConfigurationBundle(
-    suite.db,
-    source,
-    ALL_MODULES,
-    new Date("2026-09-27T12:00:00Z"),
-    versions,
-  );
-  expect(transferred.tables.device_profile_home_layouts).toEqual([
-    { device_profile_id: original.profile, menu_id: original.menu, layout_id: original.counter },
-  ]);
-  await applyVenue(planVenue(venue("B99887766"), ALL_MODULES), {
-    db: targetSuite.db,
-    modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
-  });
-  await withTransaction(targetSuite.db, async (tx) => {
-    const [profile] = await tx
-      .select({ id: deviceProfiles.id })
-      .from(deviceProfiles)
-      .where(eq(deviceProfiles.name, "Handheld"));
-    const menus = await deviceHomeLayouts(tx, profile!.id);
-    const menu = menus.find((entry) => entry.menuName === "Layout menu")!;
-    expect(menu.menuId).not.toBe(original.menu);
-    const counter = menu.layouts.find((layout) => layout.name === "Counter")!;
-    expect(counter.id).not.toBe(original.counter);
-    expect(menu).toMatchObject({ selectedLayoutId: counter.id, selectedRemoved: false });
   });
 });
 
@@ -1766,11 +1802,11 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
       vatClass: "general",
     });
     await addMember(tx, root, { kind: "product", productId: water.id });
-    const [home] = await listHomeLayouts(tx, menu.id);
-    const tile = await addShortcut(tx, home!.id, { kind: "section", sectionId: beer.id });
-    await addShortcut(tx, home!.id, { kind: "product", productId: water.id });
+    const home = await readMenuHome(tx, menu.id);
+    const tile = await addShortcut(tx, menu.id, { kind: "section", sectionId: beer.id });
+    await addShortcut(tx, menu.id, { kind: "product", productId: water.id });
     await deleteSection(tx, beer.id);
-    return { menu: menu.id, tile: tile.id, home: home!.id };
+    return { menu: menu.id, tile: tile.id, home: home.homeSectionId };
   });
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -1788,21 +1824,19 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
   });
   await withTransaction(targetSuite.db, async (tx) => {
     const [menu] = await tx.select().from(catalogues).where(eq(catalogues.name, "Missing slots"));
-    const [home] = await listHomeLayouts(tx, menu!.id);
+    const home = await readMenuHome(tx, menu!.id);
     expect(menu!.id).not.toBe(original.menu);
-    expect(home!.id).not.toBe(original.home);
-    expect(home!.tiles[0]!.memberId).not.toBe(original.tile);
+    expect(home.homeSectionId).not.toBe(original.home);
+    expect(home.shortcuts[0]!.memberId).not.toBe(original.tile);
     expect(
-      home!.tiles.map((tile) => [tile.position, tile.ref.kind, tile.name, tile.missingName]),
+      home.shortcuts.map((tile) => [tile.position, tile.ref.kind, tile.name, tile.missingName]),
     ).toEqual([
       [0, "missing", "Missing slots › Beer", "Missing slots › Beer"],
       [1, "product", "Water", null],
     ]);
     const preview = await previewMenu(tx, menu!.id);
-    expect(preview.document.homeLayouts[0]!.tiles[0]).toEqual({ kind: "empty" });
-    expect(preview.warnings).toEqual([
-      { kind: "shortcut_missing", layoutName: "Home", name: "Missing slots › Beer" },
-    ]);
+    expect(preview.document.home.shortcuts[0]).toEqual({ kind: "empty" });
+    expect(preview.warnings).toEqual([{ kind: "shortcut_missing", name: "Missing slots › Beer" }]);
   });
 });
 
@@ -2252,14 +2286,12 @@ it("leaves behind a retired profile that no row uses, and the bundle still impor
   expect(names.map((row) => row.name)).not.toContain("Old till");
 });
 
-it("leaves a retired profile's home layout choices behind with it, while a live profile's rows travel", async () => {
+it("leaves a retired profile's printer lists behind with it, while a live profile's rows travel", async () => {
   const source = await applyVenue(planVenue(venue("B13579246"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
   const original = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Layout menu" });
-    const counter = await createHomeLayout(tx, menu.id, "Counter");
     const [printer] = await tx
       .insert(printers)
       .values({
@@ -2277,13 +2309,12 @@ it("leaves a retired profile's home layout choices behind with it, while a live 
       ])
       .returning({ id: deviceProfiles.id });
     for (const profile of [live!, retired!]) {
-      await setDeviceHomeLayout(tx, profile.id, menu.id, counter.id);
       await setProfilePrinterLists(tx, profile.id, {
         receiptPrinterIds: [printer!.id],
         paymentSlipPrinterIds: [],
       });
     }
-    return { menu: menu.id, counter: counter.id, live: live!.id, retired: retired!.id };
+    return { live: live!.id, retired: retired!.id };
   });
   await retireProfile(source.locationId, original.retired);
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -2297,9 +2328,6 @@ it("leaves a retired profile's home layout choices behind with it, while a live 
   const exportedProfiles = transferred.tables.device_profiles!.map((row) => row.id);
   expect(exportedProfiles).toContain(original.live);
   expect(exportedProfiles).not.toContain(original.retired);
-  expect(transferred.tables.device_profile_home_layouts).toEqual([
-    { device_profile_id: original.live, menu_id: original.menu, layout_id: original.counter },
-  ]);
   expect(transferred.tables.device_profile_printers!.map((row) => row.device_profile_id)).toEqual([
     original.live,
   ]);
@@ -2315,10 +2343,6 @@ it("leaves a retired profile's home layout choices behind with it, while a live 
       .from(deviceProfiles);
     expect(profiles.map((row) => row.name)).not.toContain("Old till");
     const handheld = profiles.find((row) => row.name === "Handheld")!;
-    const menus = await deviceHomeLayouts(tx, handheld.id);
-    const menu = menus.find((entry) => entry.menuName === "Layout menu")!;
-    const counter = menu.layouts.find((layout) => layout.name === "Counter")!;
-    expect(menu).toMatchObject({ selectedLayoutId: counter.id, selectedRemoved: false });
     const lists = await readProfilePrinterLists(tx, handheld.id);
     expect(lists.receiptPrinterIds).toHaveLength(1);
   });

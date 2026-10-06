@@ -14,6 +14,7 @@ import {
 } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { WtTextarea } from "@waitron/ui";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 
 /**
  * Every fixture below gives a list, a label and a picked product THREE DIFFERENT texts for their
@@ -172,10 +173,11 @@ async function mountBrowser(product: TillProduct, store: WorkingOrderStore) {
     structure: {
       members: [{ kind: "product", menuItemId: product.menuItemId!, productId: product.id }],
     },
-    homeLayouts: [{ id: "home", name: "Home", tiles: [] }],
-    defaultHomeLayoutId: "home",
-    homeLayoutId: "home",
-    layoutFallback: null,
+    home: {
+      shortcuts: [],
+      handheld: HOME_DISPLAY_DEFAULTS.handheld,
+      till: HOME_DISPLAY_DEFAULTS.till,
+    },
   };
   return mountWidget<TillMenuBrowser>("till-menu-browser", { menu, products: [product], store });
 }

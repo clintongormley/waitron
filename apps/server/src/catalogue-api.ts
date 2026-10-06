@@ -37,12 +37,9 @@ import {
   removeMember,
   moveMember,
   replaceMember,
-  listHomeLayouts,
-  createHomeLayout,
-  duplicateHomeLayout,
-  renameHomeLayout,
-  deleteHomeLayout,
-  setDefaultHomeLayout,
+  HOME_DEVICES,
+  readMenuHome,
+  setHomeDisplay,
   addShortcut,
   replaceShortcut,
   removeShortcut,
@@ -98,7 +95,7 @@ import {
 } from "@waitron/catalogue";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "@waitron/server-kit";
-import { readJsonBody, requireString } from "@waitron/server-kit";
+import { readJsonBody, requireEnum, requireString } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import { setProductCourse } from "./kitchen.js";
@@ -285,9 +282,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // The working menu no longer matches the preview the publish was asked from.
   "menu.changed_since_preview": 409,
   "menu.clashes_unresolved": 409,
-  "menu.layout_not_found": 404,
-  "menu.default_layout_required": 409,
   "menu.shortcut_unreachable": 409,
+  "menu.home_display_invalid": 400,
   // The product editor refuses a course this venue does not have.
   "course.not_found": 404,
   "allergen.invalid_code": 400,
@@ -624,106 +620,74 @@ function mountSectionRoutes(app: Hono, gated: GatedWork, log: Logger, venueLocal
   );
 }
 
-/** A menu's home layouts and their tiles. A tile is a member of the layout's section, but tiles have
- * their own routes: the generic member routes refuse every write into a home layout. */
-function mountHomeLayoutRoutes(app: Hono, gated: GatedWork, log: Logger): void {
-  const ofMenu = "/management-api/catalogues/:id/home-layouts";
-  const one = "/management-api/home-layouts/:layoutId";
-  const tiles = `${one}/tiles` as const;
-  const tile = `${tiles}/:memberId` as const;
+/** A menu's Device Home Page. A shortcut is a member of the menu's home section, but shortcuts
+ * have their own routes: the generic member routes refuse every write into that section. */
+function mountMenuHomeRoutes(app: Hono, gated: GatedWork, log: Logger): void {
+  const home = "/management-api/catalogues/:id/home";
+  const shortcuts = `${home}/shortcuts` as const;
+  const shortcut = `${shortcuts}/:memberId` as const;
   const menuId = (c: Context) => requireUuidParam(c.req.param("id")!, "MenuId");
-  const layoutId = (c: Context) => requireUuidParam(c.req.param("layoutId")!, "HomeLayoutId");
   const memberId = (c: Context) => requireUuidParam(c.req.param("memberId")!, "SectionMemberId");
 
-  app.get(ofMenu, (c) =>
+  app.get(home, (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const menu = menuId(c);
-      return c.json(await gated(session, (tx) => listHomeLayouts(tx, menu)));
+      return c.json(await gated(session, (tx) => readMenuHome(tx, menu)));
     }),
   );
-  app.post(ofMenu, (c) =>
+  app.patch("/management-api/catalogues/:id/home-display", (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const menu = menuId(c);
-      const name = requireString((await readJsonBody<{ name?: unknown }>(c)).name, "name");
-      return c.json(await gated(session, (tx) => createHomeLayout(tx, menu, name)), 201);
+      const body = await readJsonBody<{
+        device?: unknown;
+        columns?: unknown;
+        tiles?: unknown;
+        order?: unknown;
+      }>(c);
+      const device = requireEnum(body.device, "device", HOME_DEVICES);
+      const { columns, tiles, order } = body;
+      await gated(session, (tx) => setHomeDisplay(tx, menu, device, { columns, tiles, order }));
+      return c.body(null, 204);
     }),
   );
-  app.put("/management-api/catalogues/:id/default-home-layout", (c) =>
+  app.post(shortcuts, (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
       const menu = menuId(c);
-      const body = await readJsonBody<{ layoutId?: unknown }>(c);
-      if (typeof body.layoutId !== "string")
-        throw new AppError("management.request_invalid", { field: "layoutId" });
-      const layout = requireUuidParam(body.layoutId, "HomeLayoutId");
-      await gated(session, (tx) => setDefaultHomeLayout(tx, menu, layout));
-      return c.body(null, 204);
-    }),
-  );
-  app.post(`${one}/duplicate`, (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = layoutId(c);
-      const name = requireString((await readJsonBody<{ name?: unknown }>(c)).name, "name");
-      return c.json(await gated(session, (tx) => duplicateHomeLayout(tx, id, name)), 201);
-    }),
-  );
-  app.patch(one, (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = layoutId(c);
-      const name = requireString((await readJsonBody<{ name?: unknown }>(c)).name, "name");
-      await gated(session, (tx) => renameHomeLayout(tx, id, name));
-      return c.body(null, 204);
-    }),
-  );
-  app.delete(one, (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = layoutId(c);
-      await gated(session, (tx) => deleteHomeLayout(tx, id));
-      return c.body(null, 204);
-    }),
-  );
-  app.post(tiles, (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = layoutId(c);
       const body = await readJsonBody<{ ref?: unknown; position?: unknown }>(c);
       const ref = memberRef(body.ref);
       const position =
         body.position === undefined ? undefined : numberField(body.position, "position");
-      return c.json(await gated(session, (tx) => addShortcut(tx, id, ref, position)), 201);
+      return c.json(await gated(session, (tx) => addShortcut(tx, menu, ref, position)), 201);
     }),
   );
-  app.post(`${tile}/replace`, (c) =>
+  app.post(`${shortcut}/replace`, (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
-      const id = layoutId(c);
+      const menu = menuId(c);
       const held = memberId(c);
       const ref = memberRef((await readJsonBody<{ ref?: unknown }>(c)).ref);
-      return c.json(await gated(session, (tx) => replaceShortcut(tx, id, held, ref)));
+      return c.json(await gated(session, (tx) => replaceShortcut(tx, menu, held, ref)));
     }),
   );
-  app.delete(tile, (c) =>
+  app.delete(shortcut, (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
-      const id = layoutId(c);
+      const menu = menuId(c);
       const held = memberId(c);
-      await gated(session, (tx) => removeShortcut(tx, id, held));
+      await gated(session, (tx) => removeShortcut(tx, menu, held));
       return c.body(null, 204);
     }),
   );
-  app.put(`${tile}/position`, (c) =>
+  app.put(`${shortcut}/position`, (c) =>
     run(c, log, async () => {
       const session = requireManagementSession(c);
-      const id = layoutId(c);
+      const menu = menuId(c);
       const held = memberId(c);
-      const body = await readJsonBody<{ to?: unknown }>(c);
-      const to = numberField(body.to, "to");
-      return c.json(await gated(session, (tx) => moveShortcut(tx, id, held, to)));
+      const to = numberField((await readJsonBody<{ to?: unknown }>(c)).to, "to");
+      return c.json(await gated(session, (tx) => moveShortcut(tx, menu, held, to)));
     }),
   );
 }
@@ -803,7 +767,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
   });
 
   mountSectionRoutes(app, gated, log, deps.venueLocale ?? FALLBACK_LOCALE);
-  mountHomeLayoutRoutes(app, gated, log);
+  mountMenuHomeRoutes(app, gated, log);
 
   app.get("/management-api/content-languages", (c) =>
     run(c, log, async () => {

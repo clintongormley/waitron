@@ -966,7 +966,7 @@ export const en = {
   "boot.error": "Could not load the till, reload to try again",
   // Menu and service-zone names are server data, not keys here.
   "menu.switcher": "Menu",
-  // The menu browser: search, the home layout's shortcuts and the menu's sections.
+  // The menu browser: search, the Device Home Page's shortcuts and the menu's sections.
   "menu.search": "Search the menu",
   "menu.shortcuts": "Shortcuts",
   "menu.full": "Full menu",
@@ -977,11 +977,6 @@ export const en = {
   "menu.breadcrumb": "Where you are in the menu",
   "menu.not_found": "Not found",
   "menu.sold_out": "Sold out",
-  // `{name}` and `{menu}` are substituted at the call site.
-  "home_layout.removed": 'The home page layout "{name}" was removed — showing the default',
-  "home_layout.removed_unnamed":
-    "The home page layout chosen for the {menu} menu was removed — showing the default",
-  "home_layout.dismiss": "Dismiss",
   "service_zone.label": "Service area",
   "service_zone.refresh": "Refresh menus",
   "service_zone.load_error": "Could not load menus for this service area",
@@ -1953,11 +1948,6 @@ export const es: Record<StringKey, string> = {
   "menu.breadcrumb": "Dónde estás en la carta",
   "menu.not_found": "No encontrado",
   "menu.sold_out": "Agotado",
-  "home_layout.removed":
-    "Se ha eliminado la página de inicio «{name}»: se muestra la predeterminada",
-  "home_layout.removed_unnamed":
-    "Se ha eliminado la página de inicio elegida para la carta {menu}: se muestra la predeterminada",
-  "home_layout.dismiss": "Cerrar",
   "service_zone.label": "Zona de servicio",
   "service_zone.refresh": "Actualizar cartas",
   "service_zone.load_error": "No se pudieron cargar las cartas de esta zona",

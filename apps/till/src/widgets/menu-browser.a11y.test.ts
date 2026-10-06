@@ -5,6 +5,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget, type Theme } from 
 import "./menu-browser.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
 import type { TillProduct, TillZoneMenu } from "../api/client.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 
 function product(key: string, name: string, available = true): TillProduct {
   return {
@@ -77,20 +78,15 @@ const menu: TillZoneMenu = {
       red,
     ],
   },
-  homeLayouts: [
-    {
-      id: "lay-home",
-      name: "Home",
-      tiles: [
-        { kind: "product", productId: "p-cafe" },
-        { kind: "product", productId: "p-burger" },
-        { kind: "section", sectionId: "sec-drinks" },
-      ],
-    },
-  ],
-  defaultHomeLayoutId: "lay-home",
-  homeLayoutId: "lay-home",
-  layoutFallback: null,
+  home: {
+    shortcuts: [
+      { kind: "product", productId: "p-cafe" },
+      { kind: "product", productId: "p-burger" },
+      { kind: "section", sectionId: "sec-drinks" },
+    ],
+    handheld: HOME_DISPLAY_DEFAULTS.handheld,
+    till: HOME_DISPLAY_DEFAULTS.till,
+  },
 };
 
 const products = [
@@ -106,10 +102,10 @@ const products = [
   { ...product("pinkgone", "Pink gone", false), color: "#edabab" },
 ];
 
-async function mount(theme: Theme) {
+async function mount(theme: Theme, props: Partial<TillMenuBrowser> = { columns: 3 }) {
   return mountWidget<TillMenuBrowser>(
     "till-menu-browser",
-    { menu, products, store: new WorkingOrderStore(), columns: 3 },
+    { menu, products, store: new WorkingOrderStore(), ...props },
     theme,
   );
 }
@@ -153,20 +149,18 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
           },
         ],
       },
-      homeLayouts: [
-        {
-          id: "lay-home",
-          name: "Home",
-          tiles: [
-            { kind: "product", productId: "p-cafe" },
-            { kind: "empty" },
-            { kind: "product", productId: "p-missing" },
-            { kind: "product", productId: "p-cola" },
-            { kind: "section", sectionId: "sec-empty" },
-            { kind: "product", productId: "p-burger" },
-          ],
-        },
-      ],
+      home: {
+        shortcuts: [
+          { kind: "product", productId: "p-cafe" },
+          { kind: "empty" },
+          { kind: "product", productId: "p-missing" },
+          { kind: "product", productId: "p-cola" },
+          { kind: "section", sectionId: "sec-empty" },
+          { kind: "product", productId: "p-burger" },
+        ],
+        handheld: HOME_DISPLAY_DEFAULTS.handheld,
+        till: HOME_DISPLAY_DEFAULTS.till,
+      },
     };
     el.products = products.map((each) =>
       each.productId === "p-cola" ? { ...each, ordering: "not_sold_separately" } : each,
@@ -212,6 +206,57 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
     expect(el.shadowRoot!.querySelector("nav.breadcrumb [aria-current]")!.textContent).toBe(
       "Beer (EN)",
     );
+    await expectNoA11yViolations(host);
+  });
+
+  it("Menu first, with the divider naming the shortcuts, has no violations", async () => {
+    const { el, host } = await mount(theme, {
+      columns: 3,
+      menu: { ...menu, home: { ...menu.home, till: { ...menu.home.till, order: "menu_first" } } },
+    });
+    expect(el.shadowRoot!.querySelector("h2.divider")!.textContent!.trim()).toBe("Shortcuts");
+    await expectNoA11yViolations(host);
+  });
+
+  it("Thumbnails, with an imaged product, an imaged section and a neutral tile, has no violations", async () => {
+    const pictured: DocumentMember = {
+      kind: "section",
+      sectionId: "sec-pictured",
+      internalName: "pictured-internal",
+      names: { en: "Pictured (EN)" },
+      image: "drinks.webp",
+      color: null,
+      members: [member("cola")],
+    };
+    const { el, host } = await mount(theme, {
+      columns: 3,
+      menu: {
+        ...menu,
+        structure: { members: [member("photo"), pictured, member("cana")] },
+        home: {
+          ...menu.home,
+          shortcuts: [],
+          till: { ...menu.home.till, tiles: "thumbnails" },
+        },
+      },
+      products: [...products, { ...product("photo", "Photo"), image: "cafe.webp" }],
+    });
+    expect(button(el, "Photo").querySelector("img")).not.toBeNull();
+    expect(button(el, "Pictured (EN)").querySelector("img")).not.toBeNull();
+    expect(button(el, "Caña").querySelector("img")).toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("a handheld at 3 columns has no violations", async () => {
+    const { el, host } = await mount(theme, {
+      handheld: true,
+      menu: { ...menu, home: { ...menu.home, handheld: { ...menu.home.handheld, columns: 3 } } },
+    });
+    expect(
+      getComputedStyle(el.shadowRoot!.querySelector<HTMLElement>(".grid")!)
+        .getPropertyValue("--columns")
+        .trim(),
+    ).toBe("3");
     await expectNoA11yViolations(host);
   });
 

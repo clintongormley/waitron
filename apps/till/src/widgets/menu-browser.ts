@@ -1,15 +1,26 @@
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, unsafeCSS, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   ContentLanguageController,
   baseStyles,
-  isHexColor,
   readableTextColor,
   registerIcons,
 } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
-import { TILL_COLUMNS } from "@waitron/catalogue/src/home-layout-columns.js";
-import type { DocumentMember, DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
+import {
+  HOME_GRID_COLUMNS,
+  arrangeHome,
+  foldForSearch,
+  indexDocument,
+  tileFill,
+  type HomeIndex,
+} from "@waitron/catalogue/src/device-home.js";
+import type {
+  DocumentMember,
+  DocumentTile,
+  HomeDisplay,
+  HomeTileMode,
+} from "@waitron/catalogue/src/menu-document-types.js";
 import "./modifier-picker.js";
 import "./tender-pay.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
@@ -28,13 +39,7 @@ registerIcons({
 
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
 
-/** What the widget can show of one menu, given the offers it holds. */
-interface MenuIndex {
-  /** Keyed by section id: every section with something to order somewhere beneath it. */
-  sections: Map<string, SectionNode>;
-  /** Keyed by product id: each product the structure reaches and the offers hold, once. */
-  products: Map<string, TillProduct>;
-}
+type MenuIndex = HomeIndex<TillProduct>;
 
 /**
  * A product member whose offer is not among `products` is left out, and so is one not sold
@@ -47,51 +52,29 @@ function indexMenu(menu: TillZoneMenu, products: TillProduct[]): MenuIndex {
       .filter((product) => product.ordering !== "not_sold_separately")
       .map((product) => [product.menuItemId, product]),
   );
-  const index: MenuIndex = { sections: new Map(), products: new Map() };
-  const walk = (members: DocumentMember[]): boolean => {
-    let holdsSomething = false;
-    for (const member of members) {
-      if (member.kind === "product") {
-        const product = offers.get(member.menuItemId);
-        if (product === undefined) continue;
-        holdsSomething = true;
-        // A product placed twice keeps its first place: a Map keeps a key where it was first set.
-        index.products.set(member.productId, product);
-      } else if (walk(member.members)) {
-        holdsSomething = true;
-        index.sections.set(member.sectionId, member);
-      }
-    }
-    return holdsSomething;
-  };
-  walk(menu.structure.members);
-  return index;
+  return indexDocument(menu.structure.members, (id) => offers.get(id));
 }
 
-const paints = new Map<string, string | undefined>();
-
-/** Custom properties for a tile painted in a stored colour, with black or white ink for contrast;
- * undefined draws the neutral tile. Checked, because the value lands in a style attribute. Worked
- * out once per colour, not on every render of every tile. */
-function tilePaint(color: string | null | undefined): string | undefined {
-  if (typeof color !== "string") return undefined;
-  if (!paints.has(color))
-    paints.set(
-      color,
-      isHexColor(color) ? `--tile-fill:${color};--tile-ink:${readableTextColor(color)}` : undefined,
-    );
-  return paints.get(color);
+function thumb(image: string): TemplateResult {
+  return html`<img class="thumb" src=${`/media/${encodeURIComponent(image)}`} alt="" />`;
 }
 
-/** Case- and accent-blind, so "jamon" finds "Jamón". */
-function folded(text: string): string {
-  return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
+const paints = new Map<string, string>();
+
+/** Custom properties for a tile painted in a colour `tileFill` has checked, with black or white ink
+ * for contrast. Worked out once per colour, not on every render of every tile. */
+function tilePaint(color: string): string {
+  let paint = paints.get(color);
+  if (paint === undefined)
+    paints.set(color, (paint = `--tile-fill:${color};--tile-ink:${readableTextColor(color)}`));
+  return paint;
 }
 
 /**
- * The till's menu home: search, then the device's home layout's shortcuts, then the menu's own
- * structure, with each section opening in place behind a breadcrumb. Tiles coordinate only through
- * the store: they never reference the basket or total widgets.
+ * The till's menu home: search, then the menu's Device Home Page shortcuts and the menu's own
+ * structure in the order the device's display sets, with each section opening in place behind a
+ * breadcrumb. Tiles coordinate only through the store: they never reference the basket or total
+ * widgets.
  *
  * When a new `menu` or `products` no longer holds the open section, or any section on the way to
  * it, it says "Not found" and shows home.
@@ -118,28 +101,41 @@ export class TillMenuBrowser extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      h2 {
+      [data-region="results"] h2 {
         margin: 0;
         font-size: var(--wt-font-size-md);
         font-weight: var(--wt-font-weight-bold);
       }
 
-      /* Up to --columns tracks, and fewer wherever a tile would be narrower than the minimum.
-         auto-fill keeps a track's width the same however many tiles there are, so the tiles fill
-         the grid row by row, in order, at every count. */
+      .divider {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-3);
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-normal);
+      }
+
+      .divider::before,
+      .divider::after {
+        content: "";
+        flex: 1;
+        border-block-start: 1px solid var(--wt-color-border);
+      }
+
       .grid {
         display: grid;
         gap: var(--wt-space-3);
-        grid-template-columns: repeat(
-          auto-fill,
-          minmax(
-            max(
-              calc(var(--wt-tap-min) * 2 + var(--wt-space-4)),
-              calc((100% - (var(--columns) - 1) * var(--wt-space-3)) / var(--columns))
-            ),
-            1fr
-          )
-        );
+        grid-template-columns: ${unsafeCSS(HOME_GRID_COLUMNS)};
+      }
+
+      .thumb {
+        display: block;
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        object-fit: cover;
+        border-radius: var(--wt-radius-sm);
       }
 
       .tile,
@@ -268,8 +264,8 @@ export class TillMenuBrowser extends LitElement {
     `,
   ];
 
-  /** The menu as a zone-offers body serves it: its structure, its layouts and the device's layout.
-   * Nothing renders until it is set. */
+  /** The menu as a zone-offers body serves it: its structure and its Device Home Page. Nothing
+   * renders until it is set. */
   @property({ attribute: false }) menu?: TillZoneMenu;
 
   /** This menu's offers as till products. */
@@ -277,8 +273,11 @@ export class TillMenuBrowser extends LitElement {
 
   @property({ attribute: false }) store!: WorkingOrderStore;
 
-  /** The most columns a grid shows. */
-  @property({ type: Number }) columns = TILL_COLUMNS;
+  /** Whether it shows the menu's Handheld display rather than its Till one. */
+  @property({ type: Boolean }) handheld = false;
+
+  /** A canvas card's own column count, which wins over the menu's display. */
+  @property({ type: Number }) columns?: number;
 
   /** Asks a weighed dish's weight itself, with the pay widget's weight entry, for a screen whose own
    * pay widget does not take the dish. */
@@ -364,24 +363,31 @@ export class TillMenuBrowser extends LitElement {
     return descriptionFor(section.names, section.internalName);
   }
 
-  #grid(content: unknown): TemplateResult {
-    return html`<div class="grid" style=${`--columns: ${this.columns};`}>${content}</div>`;
+  #display(menu: TillZoneMenu): HomeDisplay {
+    return menu.home[this.handheld ? "handheld" : "till"];
+  }
+
+  #grid(content: unknown, display: HomeDisplay): TemplateResult {
+    return html`<div class="grid" style=${`--columns: ${this.columns ?? display.columns};`}>
+      ${content}
+    </div>`;
   }
 
   #searchableNames(index: MenuIndex): [TillProduct, string][] {
     if (this.#searchable?.index === index) return this.#searchable.names;
     const names = [...index.products.values()].map((product): [TillProduct, string] => [
       product,
-      folded(productName(product)),
+      foldForSearch(productName(product)),
     ]);
     this.#searchable = { index, names };
     return names;
   }
 
-  #productButton(product: TillProduct, onTap: () => void): TemplateResult {
+  #productButton(product: TillProduct, mode: HomeTileMode, onTap: () => void): TemplateResult {
     const price = `${formatMoney(product.unitPrice, currentLocale())}/${unitName(product)}`;
     const sellable = hasSomethingToSell(product);
-    const paint = tilePaint(product.color);
+    const fill = tileFill(mode, product.image, product.color);
+    const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
     return html`<wt-button
       class="tile"
       data-kind="product"
@@ -392,6 +398,7 @@ export class TillMenuBrowser extends LitElement {
       @click=${onTap}
     >
       <span class="label">
+        ${fill.kind === "image" ? thumb(fill.image) : nothing}
         <span class="name">${productName(product)}</span>
         <span class="price">${price}</span>
         ${sellable ? nothing : html`<span class="sold-out">${t("menu.sold_out")}</span>`}
@@ -399,8 +406,9 @@ export class TillMenuBrowser extends LitElement {
     </wt-button>`;
   }
 
-  #sectionButton(section: SectionNode, onTap: () => void): TemplateResult {
-    const paint = tilePaint(section.color);
+  #sectionButton(section: SectionNode, mode: HomeTileMode, onTap: () => void): TemplateResult {
+    const fill = tileFill(mode, section.image, section.color);
+    const paint = fill.kind === "color" ? tilePaint(fill.color) : undefined;
     return html`<wt-button
       class="tile"
       data-kind="section"
@@ -409,7 +417,7 @@ export class TillMenuBrowser extends LitElement {
       @click=${onTap}
     >
       <span class="label">
-        <wt-icon name="menu-section"></wt-icon>
+        ${fill.kind === "image" ? thumb(fill.image) : html`<wt-icon name="menu-section"></wt-icon>`}
         <span class="name">${this.#sectionName(section)}</span>
         <span class="kind">${t("menu.section")}</span>
       </span>
@@ -418,46 +426,56 @@ export class TillMenuBrowser extends LitElement {
 
   /** The button for a section or product the index holds, else nothing; `path` is where a section
    * opens beneath. */
-  #tile(ref: DocumentTile, path: string[], index: MenuIndex): TemplateResult | typeof nothing {
+  #tile(
+    ref: DocumentTile,
+    path: string[],
+    index: MenuIndex,
+    mode: HomeTileMode,
+  ): TemplateResult | typeof nothing {
     if (ref.kind === "empty") return nothing;
     if (ref.kind === "section") {
       const section = index.sections.get(ref.sectionId);
       return section === undefined
         ? nothing
-        : this.#sectionButton(section, () => this.#open([...path, ref.sectionId]));
+        : this.#sectionButton(section, mode, () => this.#open([...path, ref.sectionId]));
     }
     const product = index.products.get(ref.productId);
     return product === undefined
       ? nothing
-      : this.#productButton(product, () => this.#pick(product));
+      : this.#productButton(product, mode, () => this.#pick(product));
   }
 
-  /** A list's members as buttons, in order; `path` is where a section member opens beneath. */
-  #members(members: DocumentMember[], path: string[], index: MenuIndex): TemplateResult {
-    return this.#grid(members.map((member) => this.#tile(member, path, index)));
+  #home(menu: TillZoneMenu, index: MenuIndex, display: HomeDisplay): TemplateResult {
+    const shortcuts = menu.home.shortcuts.map((tile) => this.#tile(tile, [], index, display.tiles));
+    const members = menu.structure.members.map((member) =>
+      this.#tile(member, [], index, display.tiles),
+    );
+    const { blocks, divider } = arrangeHome(
+      display.order,
+      shortcuts.some((cell) => cell !== nothing),
+      members.some((cell) => cell !== nothing),
+    );
+    return html`${blocks.map((block, place) => {
+      const shortcutBlock = block === "shortcuts";
+      const label = t(shortcutBlock ? "menu.shortcuts" : "menu.full");
+      const cells = shortcutBlock
+        ? shortcuts.map((cell) =>
+            cell === nothing ? html`<span class="slot" aria-hidden="true"></span>` : cell,
+          )
+        : members;
+      const region = shortcutBlock ? "shortcuts" : "structure";
+      return place === 1 && divider
+        ? html`<section data-region=${region} aria-labelledby=${`${region}-divider`}>
+            <h2 class="divider" id=${`${region}-divider`}><span>${label}</span></h2>
+            ${this.#grid(cells, display)}
+          </section>`
+        : html`<section data-region=${region} aria-label=${label}>
+            ${this.#grid(cells, display)}
+          </section>`;
+    })}`;
   }
 
-  #homeTile(ref: DocumentTile, index: MenuIndex): TemplateResult {
-    const tile = this.#tile(ref, [], index);
-    return tile === nothing ? html`<span class="slot" aria-hidden="true"></span>` : tile;
-  }
-
-  #home(menu: TillZoneMenu, index: MenuIndex): TemplateResult {
-    const layouts = menu.homeLayouts;
-    const layout = layouts.find(({ id }) => id === menu.homeLayoutId) ?? layouts[0];
-    return html`
-      <section data-region="shortcuts" aria-labelledby="shortcuts-heading">
-        <h2 id="shortcuts-heading">${t("menu.shortcuts")}</h2>
-        ${this.#grid((layout?.tiles ?? []).map((tile) => this.#homeTile(tile, index)))}
-      </section>
-      <section data-region="structure" aria-labelledby="structure-heading">
-        <h2 id="structure-heading">${t("menu.full")}</h2>
-        ${this.#members(menu.structure.members, [], index)}
-      </section>
-    `;
-  }
-
-  #sectionView(trail: SectionNode[], index: MenuIndex): TemplateResult {
+  #sectionView(trail: SectionNode[], index: MenuIndex, display: HomeDisplay): TemplateResult {
     const current = trail.at(-1)!;
     return html`<section data-region="section">
       <nav class="breadcrumb" aria-label=${t("menu.breadcrumb")}>
@@ -480,12 +498,15 @@ export class TillMenuBrowser extends LitElement {
           <li><span aria-current="location">${this.#sectionName(current)}</span></li>
         </ol>
       </nav>
-      ${this.#members(current.members, this.path, index)}
+      ${this.#grid(
+        current.members.map((member) => this.#tile(member, this.path, index, display.tiles)),
+        display,
+      )}
     </section>`;
   }
 
-  #results(index: MenuIndex): TemplateResult {
-    const wanted = folded(this.query.trim());
+  #results(index: MenuIndex, display: HomeDisplay): TemplateResult {
+    const wanted = foldForSearch(this.query.trim());
     const found = this.#searchableNames(index)
       .filter(([, name]) => name.includes(wanted))
       .map(([product]) => product);
@@ -495,7 +516,10 @@ export class TillMenuBrowser extends LitElement {
         found.length === 0
           ? html`<p class="empty">${t("menu.no_results")}</p>`
           : this.#grid(
-              found.map((product) => this.#productButton(product, () => this.#pick(product))),
+              found.map((product) =>
+                this.#productButton(product, display.tiles, () => this.#pick(product)),
+              ),
+              display,
             )
       }
     </section>`;
@@ -506,10 +530,11 @@ export class TillMenuBrowser extends LitElement {
     if (menu === undefined) return nothing;
     const index = this.#index(menu);
     const trail = this.#trailShown;
+    const display = this.#display(menu);
     let view: TemplateResult;
-    if (this.query.trim() !== "") view = this.#results(index);
-    else if (trail.length > 0) view = this.#sectionView(trail, index);
-    else view = this.#home(menu, index);
+    if (this.query.trim() !== "") view = this.#results(index, display);
+    else if (trail.length > 0) view = this.#sectionView(trail, index, display);
+    else view = this.#home(menu, index, display);
     return html`
       <div data-region="search">
         <wt-input

@@ -52,6 +52,7 @@ import type {
 } from "./api/client.js";
 import { DEV_DEVICE_STORAGE_KEY } from "./api/dev-device.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 
 // The venue's default menu (catalogue) — every product fixture below is tagged with its id, so the
 // counter grid (which shows only the selected menu's products) renders them under the default selection.
@@ -311,14 +312,15 @@ const defaultStation = {
   open: true,
 };
 
-/** A menu's structure listing one offer, and a layout with no shortcuts. */
+/** A menu's structure listing one offer, and a Device Home Page with no shortcuts. */
 function servedAs(menuItemId: string, productId: string) {
   return {
     structure: { members: [{ kind: "product" as const, menuItemId, productId }] },
-    homeLayouts: [{ id: "home", name: "Home", tiles: [] }],
-    defaultHomeLayoutId: "home",
-    homeLayoutId: "home",
-    layoutFallback: null,
+    home: {
+      shortcuts: [],
+      handheld: HOME_DISPLAY_DEFAULTS.handheld,
+      till: HOME_DISPLAY_DEFAULTS.till,
+    },
   };
 }
 
@@ -1894,6 +1896,67 @@ describe("till-app", () => {
       await flush(el);
       return el;
     }
+
+    /** The default menu with one shortcut, its Handheld display at 4 columns Menu first and its Till
+     * display at 8. */
+    const displayedMenus = (): Record<string, unknown> => {
+      const served = fixtureOffers({ menus: [defaultMenu], products: [cafe] });
+      const offers = {
+        ...served,
+        menus: served.menus.map((menu) => ({
+          ...menu,
+          home: {
+            shortcuts: [{ kind: "product" as const, productId: "cafe" }],
+            handheld: {
+              ...HOME_DISPLAY_DEFAULTS.handheld,
+              columns: 4,
+              order: "menu_first" as const,
+            },
+            till: { ...HOME_DISPLAY_DEFAULTS.till, columns: 8 },
+          },
+        })),
+      };
+      return {
+        listZoneOffers: vi.fn().mockResolvedValue(offers),
+        listDefaultZoneOffers: vi.fn().mockResolvedValue(offers),
+      };
+    };
+
+    async function counterHome(el: TillApp): Promise<{ regions: string[]; columns: string[] }> {
+      const browser =
+        counterGrid(el)!.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
+      await browser.updateComplete;
+      const shadow = browser.shadowRoot!;
+      return {
+        regions: [...shadow.querySelectorAll<HTMLElement>("[data-region]")].map(
+          (region) => region.dataset.region!,
+        ),
+        columns: [...shadow.querySelectorAll<HTMLElement>(".grid")].map((grid) =>
+          getComputedStyle(grid).getPropertyValue("--columns").trim(),
+        ),
+      };
+    }
+
+    it("shows the menu's handheld display, not the till's", async () => {
+      const el = await toHandheld(withCounterTab, {}, displayedMenus());
+      selectTab(el, "counter");
+      await flush(el);
+      expect(await counterHome(el)).toEqual({
+        regions: ["search", "structure", "shortcuts"],
+        columns: ["4", "4"],
+      });
+    });
+
+    it("on a till, shows the menu's till display", async () => {
+      const { el } = await mountApp(displayedMenus());
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+      await flush(el);
+      expect(await counterHome(el)).toEqual({
+        regions: ["search", "shortcuts", "structure"],
+        columns: ["8", "8"],
+      });
+    });
 
     it("loads the counter's lists at login when its canvas has a counter tab, and shows its held orders there", async () => {
       const el = await toHandheld(
@@ -5249,12 +5312,13 @@ describe("till-app", () => {
   });
 
   it("retrieve-order resolves the stored menu-item identity when one product has two offers", async () => {
-    const homeLayoutFields = {
+    const homeFields = {
       structure: { members: [] },
-      homeLayouts: [{ id: "layout-home", name: "Home", tiles: [] }],
-      defaultHomeLayoutId: "layout-home",
-      homeLayoutId: "layout-home",
-      layoutFallback: null,
+      home: {
+        shortcuts: [],
+        handheld: HOME_DISPLAY_DEFAULTS.handheld,
+        till: HOME_DISPLAY_DEFAULTS.till,
+      },
     };
     const catalogue = {
       context: { zoneId: "zone-counter", departmentId: "department-bar", serviceMode: "prepay" },
@@ -5265,14 +5329,14 @@ describe("till-app", () => {
           name: "Standard",
           isDefault: true,
           versionId: "version-standard",
-          ...homeLayoutFields,
+          ...homeFields,
         },
         {
           id: "menu-happy",
           name: "Happy hour",
           isDefault: false,
           versionId: "version-happy",
-          ...homeLayoutFields,
+          ...homeFields,
         },
       ],
       offers: [

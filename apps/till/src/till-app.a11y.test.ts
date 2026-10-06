@@ -253,39 +253,6 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations while it warns that the device's home layout was removed", async () => {
-    const base = stubApi();
-    const offers = await base.listDefaultZoneOffers();
-    const api = stubApi({
-      getTill: vi.fn().mockResolvedValue({
-        locale: "es-ES",
-        venueName: "Bar Pepe",
-        nif: "B12345678",
-        orderFlow: "prepay",
-        courses: [],
-        capabilities: [],
-        canvas: counterCanvas,
-      }),
-      listDefaultZoneOffers: vi.fn().mockResolvedValue({
-        ...offers,
-        menus: offers.menus.map((menu) => ({ ...menu, layoutFallback: "layout_removed" })),
-      }),
-    });
-    const { el, host } = await mountWidget<TillApp>("till-app", { api }, theme);
-    await flush(el);
-    el.shadowRoot!.querySelector("till-lock-screen")!.dispatchEvent(
-      new CustomEvent("logged-in", {
-        detail: { personId: "p1", displayName: "Ana", permissions: [] },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await flush(el);
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-layout-notice]")).not.toBeNull();
-    await expectNoA11yViolations(host);
-  });
-
   it("has no violations on the floor while it says what a completed draft sent", async () => {
     const floorCanvas = {
       formFactor: "till",

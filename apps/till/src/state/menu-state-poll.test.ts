@@ -4,7 +4,7 @@ import type { MenuState } from "../api/client.js";
 
 function state(versionId: string): MenuState {
   return {
-    menus: [{ menuId: "lunch", versionId, homeLayoutId: "layout-home", layoutFallback: null }],
+    menus: [{ menuId: "lunch", versionId }],
     unavailable: { products: [], optionLabels: [] },
   };
 }

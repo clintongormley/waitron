@@ -33,7 +33,6 @@ import {
 import { deriveExtraSelections } from "../state/held-extras.js";
 import { deriveOptionSelections, sameOptionSelections } from "../state/held-options.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
-import { HANDHELD_COLUMNS, TILL_COLUMNS } from "@waitron/catalogue/src/home-layout-columns.js";
 import "../widgets/basket.js";
 import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
@@ -1149,7 +1148,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) finishRefused = false;
   /** The app's answer to a name the server refused: the name sent, and why, shown beside the field. */
   @property({ attribute: false }) nameRefusal: { name: string; message: string } | null = null;
-  /** A handheld form factor, whose menu browser shows fewer columns. */
+  /** A handheld form factor, whose menu browser shows the menu's handheld display. */
   @property({ type: Boolean }) handheld = false;
   /** The visible half of the app's guard against a second group command while one runs. */
   @property({ type: Boolean }) groupCommandBusy = false;
@@ -2258,7 +2257,7 @@ export class TillTableOrderScreen extends LitElement {
       .menu=${menu}
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
       .store=${store}
-      .columns=${this.handheld ? HANDHELD_COLUMNS : TILL_COLUMNS}
+      .handheld=${this.handheld}
       weighs
     ></till-menu-browser>`;
   }

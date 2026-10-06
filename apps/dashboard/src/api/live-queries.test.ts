@@ -108,22 +108,16 @@ it.each([
       "units",
     ],
   ],
-  // `listHomeLayouts` (packages/catalogue/src/home-layouts.ts): the menu's root and default from
-  // `menu_details`, the section graph, and each tile's name from `products` or `sections`.
+  // `readMenuHome` (packages/catalogue/src/menu-home.ts): the details row, the section graph with
+  // its menus, and each shortcut's name from `products` or `sections`.
   [
-    "listHomeLayouts",
+    "getMenuHome",
     ["menu-1"],
     ["menu_details", "sections", "section_members", "products", "catalogues"],
   ],
   // `/management-api/printer-profiles` (apps/server/src/print-api.ts): the list rows, joined to
   // their profile. Not `devices`, which a device's heartbeat changes every minute.
   ["listPrinterProfiles", [], ["device_profile_printers", "device_profiles"]],
-  // `deviceHomeLayouts` (the same file): every menu by name, each menu's layouts, and the choices.
-  [
-    "getDeviceHomeLayouts",
-    ["dp-1"],
-    ["device_profile_home_layouts", "sections", "menu_details", "catalogues"],
-  ],
   // `computeCategorySales` (packages/reporting/src/category-sales.ts) reads the period's lines under
   // the same inclusion clauses as the other reports, on the venue clock from `locations`; current
   // mode adds today's classification (`currentClassifications`, packages/catalogue).

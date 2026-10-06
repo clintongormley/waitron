@@ -3,13 +3,7 @@ import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { devices, printers, withTransaction } from "@waitron/db";
-import {
-  createCatalogue,
-  createHomeLayout,
-  deleteHomeLayout,
-  deviceProfileHomeLayouts,
-  type DeviceMenuHomeLayouts,
-} from "@waitron/catalogue";
+import { createCatalogue } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
@@ -974,36 +968,12 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
 });
 
 describe("Management API — a device profile's home layouts", () => {
-  let managerCookie: string;
-  let staffCookie: string;
-
-  beforeAll(async () => {
-    // The file's first describe provisions the venue; this one only needs its own sessions.
-    managerCookie = await login(mountApp(), MANAGER_EMAIL);
-    staffCookie = await login(mountApp(), STAFF_EMAIL);
-  });
-
-  async function request(
-    app: Hono,
-    method: "GET" | "PUT" | "DELETE",
-    path: string,
-    body?: unknown,
-    cookie: string | null = managerCookie,
-  ): Promise<Response> {
-    return app.request(path, {
-      method,
-      headers: {
-        ...(body === undefined ? {} : JSON_HEADERS),
-        ...(cookie === null ? {} : { cookie }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-  }
-
-  async function createProfile(app: Hono): Promise<string> {
+  it("no longer serves a profile's home layout routes", async () => {
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
     const created = await app.request("/management-api/device-profiles", {
       method: "POST",
-      headers: { ...JSON_HEADERS, cookie: managerCookie },
+      headers: { ...JSON_HEADERS, cookie },
       body: JSON.stringify({
         name: uniqueName("Handheld"),
         formFactor: "phone-portrait",
@@ -1012,154 +982,19 @@ describe("Management API — a device profile's home layouts", () => {
       }),
     });
     expect(created.status).toBe(201);
-    return ((await created.json()) as ProfileRow).id;
-  }
-
-  /** A menu with its default layout and a second one named Counter. */
-  async function menuWithLayouts() {
-    return withTransaction(suite.db, async (tx) => {
-      const menu = await createCatalogue(tx, { name: uniqueName("Menu") });
-      const counter = await createHomeLayout(tx, menu.id, "Counter");
-      return { menuId: menu.id, counter: counter.id };
+    const profile = ((await created.json()) as ProfileRow).id;
+    const menuId = await withTransaction(
+      suite.db,
+      async (tx) => (await createCatalogue(tx, { name: uniqueName("Menu") })).id,
+    );
+    const path = `/management-api/device-profiles/${profile}/home-layouts`;
+    const listed = await app.request(path, { headers: { cookie } });
+    expect(listed.status).toBe(404);
+    const saved = await app.request(`${path}/${menuId}`, {
+      method: "PUT",
+      headers: { ...JSON_HEADERS, cookie },
+      body: JSON.stringify({ layoutId: null }),
     });
-  }
-
-  const pathOf = (profileId: string) => `/management-api/device-profiles/${profileId}/home-layouts`;
-
-  async function menuEntry(app: Hono, profileId: string, menuId: string) {
-    const res = await request(app, "GET", pathOf(profileId));
-    expect(res.status).toBe(200);
-    const menus = (await res.json()) as DeviceMenuHomeLayouts[];
-    return menus.find((menu) => menu.menuId === menuId)!;
-  }
-
-  it("saves a layout for a menu, reports it removed once deleted, and Default clears it", async () => {
-    const app = mountApp();
-    const profile = await createProfile(app);
-    const { menuId, counter } = await menuWithLayouts();
-    const initial = await menuEntry(app, profile, menuId);
-    expect(initial).toEqual({
-      menuId,
-      menuName: expect.any(String),
-      layouts: [
-        { id: expect.any(String), name: "Home", isDefault: true },
-        { id: counter, name: "Counter", isDefault: false },
-      ],
-      selectedLayoutId: null,
-      selectedRemoved: false,
-    });
-    const saved = await request(app, "PUT", `${pathOf(profile)}/${menuId}`, { layoutId: counter });
-    expect(saved.status).toBe(204);
-    expect(await menuEntry(app, profile, menuId)).toMatchObject({
-      selectedLayoutId: counter,
-      selectedRemoved: false,
-    });
-    await withTransaction(suite.db, (tx) => deleteHomeLayout(tx, counter));
-    expect(await menuEntry(app, profile, menuId)).toMatchObject({
-      layouts: [{ name: "Home", isDefault: true }],
-      selectedLayoutId: counter,
-      selectedRemoved: true,
-    });
-    const cleared = await request(app, "PUT", `${pathOf(profile)}/${menuId}`, { layoutId: null });
-    expect(cleared.status).toBe(204);
-    expect(await menuEntry(app, profile, menuId)).toMatchObject({
-      selectedLayoutId: null,
-      selectedRemoved: false,
-    });
-  });
-
-  it("refuses a layout of another menu, a missing menu or profile, and a malformed body", async () => {
-    const app = mountApp();
-    const profile = await createProfile(app);
-    const lunch = await menuWithLayouts();
-    const dinner = await menuWithLayouts();
-    const unknown = randomUUID();
-    const cases: [
-      method: "GET" | "PUT",
-      path: string,
-      body: unknown,
-      status: number,
-      code: string,
-    ][] = [
-      [
-        "PUT",
-        `${pathOf(profile)}/${lunch.menuId}`,
-        { layoutId: dinner.counter },
-        404,
-        "menu.layout_not_found",
-      ],
-      [
-        "PUT",
-        `${pathOf(profile)}/${unknown}`,
-        { layoutId: lunch.counter },
-        404,
-        "catalogue.not_found",
-      ],
-      ["PUT", `${pathOf(profile)}/nope`, { layoutId: null }, 404, "catalogue.not_found"],
-      [
-        "PUT",
-        `${pathOf(unknown)}/${lunch.menuId}`,
-        { layoutId: lunch.counter },
-        404,
-        "device_profile.not_found",
-      ],
-      ["GET", pathOf(unknown), undefined, 404, "device_profile.not_found"],
-      ["GET", pathOf("nope"), undefined, 404, "device_profile.not_found"],
-      ["PUT", `${pathOf(profile)}/${lunch.menuId}`, {}, 400, "management.request_invalid"],
-      [
-        "PUT",
-        `${pathOf(profile)}/${lunch.menuId}`,
-        { layoutId: "nope" },
-        400,
-        "management.request_invalid",
-      ],
-    ];
-    for (const [method, path, body, status, code] of cases) {
-      const res = await request(app, method, path, body);
-      expect(res.status, `${method} ${path} ${JSON.stringify(body)}`).toBe(status);
-      expect(await res.json()).toMatchObject({ error: { code } });
-    }
-    expect(
-      await suite.db
-        .select()
-        .from(deviceProfileHomeLayouts)
-        .where(eq(deviceProfileHomeLayouts.deviceProfileId, profile)),
-    ).toEqual([]);
-  });
-
-  it("drops a profile's choices when the profile is deleted", async () => {
-    const app = mountApp();
-    const profile = await createProfile(app);
-    const { menuId, counter } = await menuWithLayouts();
-    const saved = await request(app, "PUT", `${pathOf(profile)}/${menuId}`, { layoutId: counter });
-    expect(saved.status).toBe(204);
-    const choices = () =>
-      suite.db
-        .select()
-        .from(deviceProfileHomeLayouts)
-        .where(eq(deviceProfileHomeLayouts.deviceProfileId, profile));
-    expect(await choices()).toEqual([{ deviceProfileId: profile, menuId, layoutId: counter }]);
-    const removed = await request(app, "DELETE", `/management-api/device-profiles/${profile}`);
-    expect(removed.status).toBe(204);
-    expect(await choices()).toEqual([]);
-  });
-
-  it("refuses both routes unauthenticated (401) and for staff (403)", async () => {
-    const app = mountApp();
-    const profile = await createProfile(app);
-    const { menuId, counter } = await menuWithLayouts();
-    for (const [method, path, body] of [
-      ["GET", pathOf(profile), undefined],
-      ["PUT", `${pathOf(profile)}/${menuId}`, { layoutId: counter }],
-    ] as const) {
-      const anonymous = await request(app, method, path, body, null);
-      expect(anonymous.status).toBe(401);
-      const staff = await request(app, method, path, body, staffCookie);
-      expect(staff.status).toBe(403);
-      expect(await staff.json(), `${method} ${path}`).toMatchObject({
-        error: { code: "authorization.not_permitted", params: { permission: "layout.configure" } },
-      });
-    }
-    expect(await menuEntry(app, profile, menuId)).toMatchObject({ selectedLayoutId: null });
+    expect(saved.status).toBe(404);
   });
 });

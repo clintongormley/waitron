@@ -1,4 +1,6 @@
-/** Every section and layout belongs to one menu. */
+import type { HomeDisplay } from "./menu-document-types.js";
+
+/** Every section belongs to one menu. */
 export type SectionRole = "section" | "menu_root" | "home_layout";
 
 export type MemberRef =
@@ -30,7 +32,7 @@ export interface SectionInput {
   color?: string | null;
 }
 
-/** One tile of a home layout, as the Home page tab lists it. */
+/** One shortcut of a Device Home Page. */
 export interface HomeTile {
   memberId: string;
   position: number;
@@ -42,22 +44,10 @@ export interface HomeTile {
   reachable: boolean;
 }
 
-/** A menu's working home layout with its tiles in order. */
-export interface HomeLayout {
-  id: string;
-  name: string;
-  isDefault: boolean;
-  tiles: HomeTile[];
-}
-
-/** One menu's layouts, and the one a device profile chose for it. */
-export interface DeviceMenuHomeLayouts {
-  menuId: string;
-  menuName: string;
-  /** The default first, then the others by name. */
-  layouts: { id: string; name: string; isDefault: boolean }[];
-  /** Null means the menu's default layout. */
-  selectedLayoutId: string | null;
-  /** The chosen layout is no longer one of the menu's working layouts (D14). */
-  selectedRemoved: boolean;
+/** A menu's working Device Home Page: its shortcuts in order, and how each device presents it. */
+export interface MenuHome {
+  homeSectionId: string;
+  shortcuts: HomeTile[];
+  handheld: HomeDisplay;
+  till: HomeDisplay;
 }

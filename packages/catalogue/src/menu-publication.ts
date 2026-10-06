@@ -31,7 +31,8 @@ interface LiveVersion {
   number: number;
   publishedAt: Date;
   contentHash: string;
-  /** Read only when asked for. */
+  /** Read only when asked for, and null for a version in another document format: such a version
+   * holds no `home`, so it is compared as no live version while its status still reads `changed`. */
   document: MenuDocument | null;
 }
 
@@ -59,7 +60,12 @@ async function liveVersions(
   else
     for (const batch of batches(menuIds))
       rows.push(...(await read(inArray(menuPublications.menuId, batch))));
-  return new Map(rows.map(({ menuId, ...version }) => [menuId, version]));
+  return new Map(
+    rows.map(({ menuId, document, ...version }) => [
+      menuId,
+      { ...version, document: document?.format === MENU_DOCUMENT_FORMAT ? document : null },
+    ]),
+  );
 }
 
 /** `hash` is the working document's. */
@@ -112,11 +118,11 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
- * Each published menu's live version and its document. A version in an earlier document format,
- * which holds no VAT classes, is left out, as a menu with no live version is. A version's row is never
- * changed once written (`menu_versions` is `appendOnly()`), so each handle keeps the parsed documents
- * it has read, frozen, and reads a document again only when it is not kept or its row's content hash
- * differs from the kept one.
+ * Each published menu's live version and its document. A version in an earlier document format is
+ * left out, as a menu with no live version is. A version's row is never changed once written
+ * (`menu_versions` is `appendOnly()`), so each handle keeps the parsed documents it has read,
+ * frozen, and reads a document again only when it is not kept or its row's content hash differs
+ * from the kept one.
  */
 export async function readLiveDocuments(
   tx: Transaction,
@@ -240,12 +246,18 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   const mine = menus.get(menuId);
   if (mine === undefined) throw new AppError("catalogue.not_found", { catalogueId: menuId });
   const own = (await liveVersions(tx, [menuId], true)).get(menuId);
-  const entries = diffEntries(own?.document ?? null, mine.document, mine.combined);
-  const removedExtras = removedExtraOnlyProducts(own?.document ?? null, mine.document);
+  const ownDocument = own?.document ?? null;
+  const entries = diffEntries(ownDocument, mine.document, mine.combined);
+  const removedExtras = removedExtraOnlyProducts(ownDocument, mine.document);
 
-  // Every published menu's live version, read only once a change needs another menu.
+  // Every published menu's live version in this format, read only once a change needs another menu.
   let everyLive: Map<string, LiveVersion> | undefined;
-  const allLive = async () => (everyLive ??= await liveVersions(tx, undefined, true));
+  const allLive = async () =>
+    (everyLive ??= new Map(
+      [...(await liveVersions(tx, undefined, true))].filter(
+        ([, { document }]) => document !== null,
+      ),
+    ));
 
   const inactiveOf = async (
     lists: readonly DiffEntry[][],
@@ -374,7 +386,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     clashes: mine.clashes,
     changes: entries.map(({ change }) => change),
     warnings: [
-      ...(await shortcutWarnings(tx, mine.document, mine.omittedShortcuts, sectionNames)),
+      ...(await shortcutWarnings(tx, mine.omittedShortcuts, sectionNames)),
       ...precisionWarnings,
     ],
     status: statusOf(hash, own, mine.clashes.length),
@@ -384,10 +396,9 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
 
 async function shortcutWarnings(
   tx: Transaction,
-  document: MenuDocument,
   omitted: readonly OmittedShortcut[],
   sectionNames: ReadonlyMap<string, string>,
-): Promise<{ kind: "shortcut_missing"; layoutName: string; name: string }[]> {
+): Promise<{ kind: "shortcut_missing"; name: string }[]> {
   const productIds = omitted.flatMap(({ ref }) => (ref.kind === "product" ? [ref.productId] : []));
   const productNames = new Map<string, string>();
   for (const batch of batches(productIds))
@@ -396,10 +407,8 @@ async function shortcutWarnings(
       .from(products)
       .where(inArray(products.id, batch)))
       productNames.set(row.id, row.name);
-  const layoutNames = new Map(document.homeLayouts.map((layout) => [layout.id, layout.name]));
-  return omitted.map(({ layoutId, ref }) => ({
+  return omitted.map(({ ref }) => ({
     kind: "shortcut_missing",
-    layoutName: layoutNames.get(layoutId)!,
     name:
       ref.kind === "missing"
         ? ref.name

@@ -71,7 +71,8 @@ export * from "./section-types.js";
 export * from "./section-graph.js";
 export * from "./menu-inclusion.js";
 export * from "./sections.js";
-export * from "./home-layouts.js";
+export * from "./menu-home.js";
+export * from "./device-home.js";
 export {
   createMenuShell,
   readMenuStructure,

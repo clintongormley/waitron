@@ -23,6 +23,7 @@ import type {
   TillSaleResult,
   ZoneOfferCatalogue,
 } from "./api/client.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 
 // Lunch is published as v1 and then as v2. Lemonade and Burger are on it; Burger offers an extras list
 // (cheese) and an options list (rare / medium).
@@ -140,10 +141,11 @@ function catalogue(version: string, offers: TillMenuOffer[]): ZoneOfferCatalogue
             productId: each.productId,
           })),
         },
-        homeLayouts: [{ id: "layout-home", name: "Home", tiles: [] }],
-        defaultHomeLayoutId: "layout-home",
-        homeLayoutId: "layout-home",
-        layoutFallback: null,
+        home: {
+          shortcuts: [],
+          handheld: HOME_DISPLAY_DEFAULTS.handheld,
+          till: HOME_DISPLAY_DEFAULTS.till,
+        },
       },
     ],
     offers,
@@ -156,9 +158,7 @@ const NOTHING: MenuUnavailable = { products: [], optionLabels: [] };
 
 function menuState(version: string, unavailable: Partial<MenuUnavailable> = {}): MenuState {
   return {
-    menus: [
-      { menuId: "lunch", versionId: version, homeLayoutId: "layout-home", layoutFallback: null },
-    ],
+    menus: [{ menuId: "lunch", versionId: version }],
     unavailable: { ...NOTHING, ...unavailable },
   };
 }
@@ -2006,35 +2006,15 @@ describe("a round that got no answer while its tab moved to another table", () =
   });
 });
 
-type Layout = ZoneOfferCatalogue["menus"][number]["homeLayouts"][number];
-type Fallback = MenuState["menus"][number]["layoutFallback"];
+type Shortcuts = ZoneOfferCatalogue["menus"][number]["home"]["shortcuts"];
 
-const HOME: Layout = { id: "layout-home", name: "Home", tiles: [] };
-const COUNTER: Layout = {
-  id: "layout-counter",
-  name: "Counter",
-  tiles: [{ kind: "product", productId: "Lemonade" }],
-};
-
-/** Lunch at `version`, offering V1's dishes, with these layouts and the device's layout. */
-function laidOut(
-  version: string,
-  homeLayouts: Layout[],
-  homeLayoutId: string,
-  layoutFallback: Fallback = null,
-): ZoneOfferCatalogue {
+/** Lunch at `version`, offering V1's dishes, with these shortcuts on its Device Home Page. */
+function withShortcuts(version: string, shortcuts: Shortcuts): ZoneOfferCatalogue {
   const source = catalogue(version, V1.offers);
   return {
     ...source,
-    menus: source.menus.map((menu) => ({ ...menu, homeLayouts, homeLayoutId, layoutFallback })),
+    menus: source.menus.map((menu) => ({ ...menu, home: { ...menu.home, shortcuts } })),
   };
-}
-
-function layoutState(version: string, homeLayoutId: string, layoutFallback: Fallback = null) {
-  return {
-    menus: [{ menuId: "lunch", versionId: version, homeLayoutId, layoutFallback }],
-    unavailable: NOTHING,
-  } satisfies MenuState;
 }
 
 const browser = (el: TillApp) => grid(el).querySelector<TillMenuBrowser>("till-menu-browser")!;
@@ -2042,246 +2022,28 @@ const shortcuts = (el: TillApp) =>
   [...browser(el).shadowRoot!.querySelectorAll('[data-region="shortcuts"] wt-button .name')].map(
     (name) => name.textContent,
   );
-const layoutNotice = (el: TillApp) =>
-  el
-    .shadowRoot!.querySelector<HTMLElement>("[data-layout-notice]")
-    ?.textContent?.replace(/\s+/g, " ")
-    .trim() ?? null;
 
-describe("the device's home layout", () => {
-  it("switches to the layout a poll names for the loaded version, silently and without a reload", async () => {
-    const { el } = await mountApp({
-      listDefaultZoneOffers: vi
-        .fn()
-        .mockResolvedValue(laidOut("v1", [HOME, COUNTER], "layout-home")),
-    });
-    await toCounter(el);
-    expect(shortcuts(el)).toEqual([]);
-    const shown = browser(el).menu;
-
-    api.menuState.mockResolvedValue(layoutState("v1", "layout-counter"));
-    await poll(el);
-    expect(browser(el).menu).not.toBe(shown);
-    expect(browser(el).menu!.homeLayoutId).toBe("layout-counter");
-    expect(shortcuts(el)).toEqual(["Lemonade"]);
-    expect(layoutNotice(el)).toBeNull();
-    expect(api.listZoneOffers).not.toHaveBeenCalled();
-  });
-
-  it("warns once, naming the layout a republish removed, and shows the default", async () => {
-    const { el } = await mountApp({
-      listDefaultZoneOffers: vi
-        .fn()
-        .mockResolvedValue(laidOut("v1", [HOME, COUNTER], "layout-counter")),
-      listZoneOffers: vi
-        .fn()
-        .mockResolvedValue(laidOut("v2", [HOME], "layout-home", "layout_removed")),
-    });
-    await toCounter(el);
-    expect(shortcuts(el)).toEqual(["Lemonade"]);
-
-    api.menuState.mockResolvedValue(layoutState("v2", "layout-home", "layout_removed"));
-    await poll(el);
-    expect(layoutNotice(el)).toContain(
-      'The home page layout "Counter" was removed — showing the default',
-    );
-    expect(shortcuts(el)).toEqual([]);
-
-    el.shadowRoot!.querySelector<HTMLElement>("[data-layout-dismiss]")!.click();
-    await flush(el);
-    expect(layoutNotice(el)).toBeNull();
-
-    // The server repeats the reason on every answer until a manager changes the choice.
-    await poll(el);
-    api.listZoneOffers.mockResolvedValue(laidOut("v3", [HOME], "layout-home", "layout_removed"));
-    api.menuState.mockResolvedValue(layoutState("v3", "layout-home", "layout_removed"));
-    await poll(el);
-    expect(api.listZoneOffers).toHaveBeenCalledTimes(2);
-    expect(layoutNotice(el)).toBeNull();
-  });
-
-  it("warns again when a second layout chosen on the same menu is removed later", async () => {
-    const BAR: Layout = {
-      id: "layout-bar",
-      name: "Bar",
-      tiles: [{ kind: "product", productId: "Burger" }],
-    };
-    const { el } = await mountApp({
-      listDefaultZoneOffers: vi
-        .fn()
-        .mockResolvedValue(laidOut("v1", [HOME, COUNTER, BAR], "layout-counter")),
-      listZoneOffers: vi
-        .fn()
-        .mockResolvedValue(laidOut("v2", [HOME, BAR], "layout-home", "layout_removed")),
-    });
-    await toCounter(el);
-    api.menuState.mockResolvedValue(layoutState("v2", "layout-home", "layout_removed"));
-    await poll(el);
-    expect(layoutNotice(el)).toContain('"Counter" was removed');
-    el.shadowRoot!.querySelector<HTMLElement>("[data-layout-dismiss]")!.click();
-    await flush(el);
-
-    // A manager chooses Bar, then deletes it and publishes again.
-    api.menuState.mockResolvedValue(layoutState("v2", "layout-bar"));
-    await poll(el);
-    expect(shortcuts(el)).toEqual(["Burger"]);
-    api.listZoneOffers.mockResolvedValue(laidOut("v3", [HOME], "layout-home", "layout_removed"));
-    api.menuState.mockResolvedValue(layoutState("v3", "layout-home", "layout_removed"));
-    await poll(el);
-    expect(layoutNotice(el)).toContain(
-      'The home page layout "Bar" was removed — showing the default',
-    );
-    expect(shortcuts(el)).toEqual([]);
-  });
-
-  it("switches silently to the default when the chosen layout was never published", async () => {
-    const { el } = await mountApp({
-      listDefaultZoneOffers: vi
-        .fn()
-        .mockResolvedValue(laidOut("v1", [HOME, COUNTER], "layout-counter")),
-      listZoneOffers: vi
-        .fn()
-        .mockResolvedValue(laidOut("v2", [HOME, COUNTER], "layout-home", "layout_unpublished")),
-    });
-    await toCounter(el);
-    api.menuState.mockResolvedValue(layoutState("v2", "layout-home", "layout_unpublished"));
-    await poll(el);
-    expect(browser(el).menu!.versionId).toBe("v2");
-    expect(shortcuts(el)).toEqual([]);
-    expect(layoutNotice(el)).toBeNull();
-  });
-
-  it("names the menu instead when the till never showed the removed layout", async () => {
-    const { el } = await mountApp({
-      listDefaultZoneOffers: vi
-        .fn()
-        .mockResolvedValue(laidOut("v1", [HOME], "layout-home", "layout_removed")),
-    });
-    await toCounter(el);
-    expect(layoutNotice(el)).toContain(
-      "The home page layout chosen for the Lunch menu was removed — showing the default",
-    );
-    expect(shortcuts(el)).toEqual([]);
-  });
-
-  it("names the menu, not the default, when the till was already showing the default", async () => {
-    const { el } = await mountApp({
-      listDefaultZoneOffers: vi
-        .fn()
-        .mockResolvedValue(laidOut("v1", [HOME, COUNTER], "layout-home", "layout_unpublished")),
-    });
-    await toCounter(el);
-    expect(layoutNotice(el)).toBeNull();
-    api.menuState.mockResolvedValue(layoutState("v1", "layout-home", "layout_removed"));
-    await poll(el);
-    expect(layoutNotice(el)).toContain(
-      "The home page layout chosen for the Lunch menu was removed — showing the default",
-    );
-  });
-
-  it("keeps the loaded layout until it has read the version a poll names a new layout at", async () => {
+describe("the menu's Device Home Page", () => {
+  it("keeps the home block it shows until it has read the version a poll names", async () => {
     let answer!: (value: ZoneOfferCatalogue) => void;
     const { el } = await mountApp({
-      listDefaultZoneOffers: vi.fn().mockResolvedValue(laidOut("v1", [HOME], "layout-home")),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(withShortcuts("v1", [])),
       listZoneOffers: vi.fn(() => new Promise((resolve) => (answer = resolve))),
     });
     await toCounter(el);
     const shown = browser(el).menu;
-    api.menuState.mockResolvedValue(layoutState("v2", "layout-counter"));
+    api.menuState.mockResolvedValue({
+      menus: [{ menuId: "lunch", versionId: "v2" }],
+      unavailable: NOTHING,
+    } satisfies MenuState);
     await poll(el);
     expect(browser(el).menu).toBe(shown);
+    expect(shortcuts(el)).toEqual([]);
 
-    answer(laidOut("v2", [HOME, COUNTER], "layout-counter"));
+    answer(withShortcuts("v2", [{ kind: "product", productId: "Lemonade" }]));
     await flush(el);
     expect(browser(el).menu!.versionId).toBe("v2");
     expect(shortcuts(el)).toEqual(["Lemonade"]);
-  });
-
-  it("changes nothing and says nothing when the chosen layout is only renamed (D14)", async () => {
-    const renamed: Layout = { ...COUNTER, name: "Bar counter" };
-    const { el } = await mountApp({
-      listDefaultZoneOffers: vi
-        .fn()
-        .mockResolvedValue(laidOut("v1", [HOME, COUNTER], "layout-counter")),
-      listZoneOffers: vi.fn().mockResolvedValue(laidOut("v2", [HOME, renamed], "layout-counter")),
-    });
-    await toCounter(el);
-    api.menuState.mockResolvedValue(layoutState("v2", "layout-counter"));
-    await poll(el);
-    expect(browser(el).menu!.versionId).toBe("v2");
-    expect(browser(el).menu!.homeLayoutId).toBe("layout-counter");
-    expect(shortcuts(el)).toEqual(["Lemonade"]);
-    expect(layoutNotice(el)).toBeNull();
-  });
-
-  it("says it in the till's language", async () => {
-    const { el } = await mountApp({
-      listDefaultZoneOffers: vi
-        .fn()
-        .mockResolvedValue(laidOut("v1", [HOME, COUNTER], "layout-counter")),
-      listZoneOffers: vi
-        .fn()
-        .mockResolvedValue(laidOut("v2", [HOME], "layout-home", "layout_removed")),
-      menuState: vi.fn().mockResolvedValue(layoutState("v2", "layout-home", "layout_removed")),
-    });
-    await toCounter(el);
-    setLocale("es-ES");
-    await poll(el);
-    expect(layoutNotice(el)).toContain(
-      "Se ha eliminado la página de inicio «Counter»: se muestra la predeterminada",
-    );
-  });
-
-  it("warns about a removed layout it first sees on a table's menu", async () => {
-    const dining = {
-      ...laidOut("v1", [HOME], "layout-home", "layout_removed"),
-      context: DINING.context,
-    };
-    const { el } = await mountApp(
-      tableStubs(dining, {
-        listZoneOffers: vi.fn((zoneId: string) =>
-          Promise.resolve(zoneId === "zone-dining" ? dining : V1),
-        ),
-      }),
-    );
-    await toTable(el);
-    expect(layoutNotice(el)).toContain(
-      "The home page layout chosen for the Lunch menu was removed",
-    );
-  });
-
-  it("warns once when the counter and the open table both lose the layout they showed", async () => {
-    const shown = laidOut("v1", [HOME, COUNTER], "layout-counter");
-    const removed = laidOut("v2", [HOME], "layout-home", "layout_removed");
-    const inDining = (source: ZoneOfferCatalogue) => ({ ...source, context: DINING.context });
-    const { el } = await mountApp(
-      tableStubs(inDining(removed), {
-        listDefaultZoneOffers: vi.fn().mockResolvedValue(shown),
-        listZoneOffers: vi.fn((zoneId: string) =>
-          Promise.resolve(zoneId === "zone-dining" ? inDining(shown) : shown),
-        ),
-      }),
-    );
-    await toTable(el);
-    api.listZoneOffers.mockImplementation((zoneId: string) =>
-      Promise.resolve(zoneId === "zone-dining" ? inDining(removed) : removed),
-    );
-    api.menuState.mockResolvedValue(layoutState("v2", "layout-home", "layout_removed"));
-    await poll(el);
-    expect(api.listZoneOffers).toHaveBeenCalledWith("zone-dining", expect.anything());
-    const lines = el.shadowRoot!.querySelectorAll("[data-layout-notice] [role='status']");
-    expect([...lines].map((line) => line.textContent!.trim())).toEqual([
-      'The home page layout "Counter" was removed — showing the default',
-    ]);
-  });
-
-  it("applies a poll's layout to the open table's menu too", async () => {
-    const { el } = await mountApp(tableStubs());
-    await toTable(el);
-    api.menuState.mockResolvedValue(layoutState("v1", "layout-counter"));
-    await poll(el);
-    const round = roundGrid(el) as unknown as TillMenuBrowser;
-    expect(round.menu!.homeLayoutId).toBe("layout-counter");
   });
 });
 

@@ -23,24 +23,24 @@ export interface MenuStructureNode {
   includedMenuId?: string;
 }
 
-const HOME_LAYOUT_NAME = "Home";
+const HOME_SECTION_NAME = "Home";
 
-/** The root and default home layout every menu has from the moment it is created. */
+/** The root and Device Home Page section every menu has from the moment it is created. */
 export async function createMenuShell(
   tx: Transaction,
   menuId: string,
   menuName: string,
   presentation: Partial<SectionInput> = {},
-): Promise<{ rootSectionId: string; defaultHomeLayoutId: string }> {
+): Promise<{ rootSectionId: string; homeSectionId: string }> {
   const [root] = await tx
     .insert(sections)
     .values({ ...presentation, internalName: menuName, role: "menu_root", ownerMenuId: menuId })
     .returning({ id: sections.id });
-  const [layout] = await tx
+  const [home] = await tx
     .insert(sections)
-    .values({ internalName: HOME_LAYOUT_NAME, role: "home_layout", ownerMenuId: menuId })
+    .values({ internalName: HOME_SECTION_NAME, role: "home_layout", ownerMenuId: menuId })
     .returning({ id: sections.id });
-  const shell = { rootSectionId: root!.id, defaultHomeLayoutId: layout!.id };
+  const shell = { rootSectionId: root!.id, homeSectionId: home!.id };
   await tx.insert(menuDetails).values({ menuId, ...shell });
   return shell;
 }

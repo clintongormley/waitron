@@ -1269,9 +1269,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           zones: (await VENUE_SERVICE.listServiceZones(tx, deps.cfg)).filter(
             (zone) => zone.serviceMode !== "table_tab",
           ),
-          ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, context.zoneId, {
-            deviceProfileId: device.deviceProfileId,
-          })),
+          ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, context.zoneId)),
         };
       });
       return c.json(result);
@@ -1283,7 +1281,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // product differently from another zone's menu.
   app.get("/api/service-zones/:zoneId/offers", (c) =>
     run(c, log, async () => {
-      const { device } = await requireSession(deps, c);
+      await requireSession(deps, c);
       const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
       const result = await withTransaction(deps.db, async (tx) => {
         const context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
@@ -1295,9 +1293,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
               context.serviceMode === "table_tab" ? context.serviceMode : salePolicy.paidWhen,
             receiptPrintMode: salePolicy.receiptPrintMode,
           },
-          ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, zoneId, {
-            deviceProfileId: device.deviceProfileId,
-          })),
+          ...(await VENUE_SERVICE.listZoneOffers(tx, deps.cfg, zoneId)),
         };
       });
       return c.json(result);
@@ -1318,7 +1314,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
                 })
               ).zoneId
             : (await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId)).zoneId;
-        return VENUE_SERVICE.menuState(tx, zone, { deviceProfileId: device.deviceProfileId });
+        return VENUE_SERVICE.menuState(tx, zone);
       });
       return c.json(state);
     }),

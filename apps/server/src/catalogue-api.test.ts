@@ -4529,14 +4529,14 @@ describe("publishing a menu", () => {
     const offMenu = `Fuera ${crypto.randomUUID()}`;
     const productId = await createNamedProductVia(app, offMenu);
     const [details] = await suite.db
-      .select({ layoutId: menuDetails.defaultHomeLayoutId })
+      .select({ homeSectionId: menuDetails.homeSectionId })
       .from(menuDetails)
       .where(eq(menuDetails.menuId, menuId));
     await suite.db
       .insert(sectionMembers)
-      .values({ sectionId: details!.layoutId, position: 0, productId });
+      .values({ sectionId: details!.homeSectionId, position: 0, productId });
     expect((await preview(app, menuId)).warnings).toEqual([
-      { kind: "shortcut_missing", layoutName: expect.any(String), name: offMenu },
+      { kind: "shortcut_missing", name: offMenu },
     ]);
   });
 
@@ -5358,7 +5358,7 @@ describe("mountCatalogueApi — sections", () => {
   });
 });
 
-describe("mountCatalogueApi — home layouts", () => {
+describe("mountCatalogueApi — Device Home Page", () => {
   interface Tile {
     memberId: string;
     position: number;
@@ -5366,11 +5366,11 @@ describe("mountCatalogueApi — home layouts", () => {
     name: string;
     reachable: boolean;
   }
-  interface Layout {
-    id: string;
-    name: string;
-    isDefault: boolean;
-    tiles: Tile[];
+  interface Home {
+    homeSectionId: string;
+    shortcuts: Tile[];
+    handheld: { columns: number; tiles: string; order: string };
+    till: { columns: number; tiles: string; order: string };
   }
   const json = async <T>(response: Response, status: number): Promise<T> => {
     expect(response.status).toBe(status);
@@ -5378,11 +5378,14 @@ describe("mountCatalogueApi — home layouts", () => {
   };
   const product = (productId: string) => ({ kind: "product" as const, productId });
   const section = (sectionId: string) => ({ kind: "section" as const, sectionId });
-  const layoutsOf = (menuId: string) => `/management-api/catalogues/${menuId}/home-layouts`;
-  const tilesOf = (layoutId: string) => `/management-api/home-layouts/${layoutId}/tiles`;
+  const homeOf = (menuId: string) => `/management-api/catalogues/${menuId}/home`;
+  const displayOf = (menuId: string) => `/management-api/catalogues/${menuId}/home-display`;
+  const shortcutsOf = (menuId: string) => `/management-api/catalogues/${menuId}/home/shortcuts`;
+  const handheld = { columns: 3, tiles: "colours", order: "home_first" };
+  const till = { columns: 6, tiles: "colours", order: "home_first" };
 
   async function menuWithTargets(app: Hono) {
-    const menuId = await createCatalogueVia(app, `Layouts ${crypto.randomUUID()}`);
+    const menuId = await createCatalogueVia(app, `Home ${crypto.randomUUID()}`);
     const soupName = `Soup ${crypto.randomUUID()}`;
     const soup = await createNamedProductVia(app, soupName);
     const elsewhere = await createNamedProductVia(app, `Elsewhere ${crypto.randomUUID()}`);
@@ -5398,19 +5401,42 @@ describe("mountCatalogueApi — home layouts", () => {
       }),
       201,
     );
-    return { menuId, soup, soupName, elsewhere, drinks: drinks.id, drinksName, rootSectionId };
+    const [details] = await suite.db
+      .select({ homeSectionId: menuDetails.homeSectionId })
+      .from(menuDetails)
+      .where(eq(menuDetails.menuId, menuId));
+    return {
+      menuId,
+      soup,
+      soupName,
+      elsewhere,
+      drinks: drinks.id,
+      drinksName,
+      rootSectionId,
+      homeSectionId: details!.homeSectionId,
+    };
   }
 
-  it("replaces a deleted section tile in place and gates/refuses invalid replacements", async () => {
+  it("reads a menu's Device Home Page", async () => {
     const app = mountApp();
     const m = await menuWithTargets(app);
-    const [home] = await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200);
+    expect(await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).toEqual({
+      homeSectionId: m.homeSectionId,
+      shortcuts: [],
+      handheld,
+      till,
+    });
+  });
+
+  it("replaces a deleted section shortcut in place, and gates and refuses invalid replacements", async () => {
+    const app = mountApp();
+    const m = await menuWithTargets(app);
     const tile = await json<{ id: string }>(
-      await send(app, "POST", tilesOf(home!.id), { body: { ref: section(m.drinks) } }),
+      await send(app, "POST", shortcutsOf(m.menuId), { body: { ref: section(m.drinks) } }),
       201,
     );
     expect((await send(app, "DELETE", `/management-api/sections/${m.drinks}`)).status).toBe(204);
-    const replace = `${tilesOf(home!.id)}/${tile.id}/replace`;
+    const replace = `${shortcutsOf(m.menuId)}/${tile.id}/replace`;
     const body = { ref: product(m.soup) };
     expect((await send(app, "POST", replace, { body, cookie: null })).status).toBe(401);
     expect((await send(app, "POST", replace, { body, cookie: staffCookie })).status).toBe(403);
@@ -5419,9 +5445,7 @@ describe("mountCatalogueApi — home layouts", () => {
     expect(await refusal.json()).toMatchObject({ error: { code: "menu.shortcut_unreachable" } });
     const result = await json(await send(app, "POST", replace, { body }), 200);
     expect(result).toEqual({ id: tile.id, position: 0, ref: product(m.soup) });
-    expect(
-      (await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200))[0]!.tiles,
-    ).toEqual([
+    expect((await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).shortcuts).toEqual([
       {
         memberId: tile.id,
         position: 0,
@@ -5438,142 +5462,110 @@ describe("mountCatalogueApi — home layouts", () => {
     expect(await malformed.json()).toMatchObject({ error: { code: "management.request_invalid" } });
   });
 
-  it("lists, creates, duplicates, renames, deletes and sets the default layout", async () => {
+  it("adds, moves and removes shortcuts through the menu's own routes, refusing one the menu does not reach", async () => {
     const app = mountApp();
     const m = await menuWithTargets(app);
-    const [home] = await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200);
-    expect(home).toEqual({ id: home!.id, name: "Home", isDefault: true, tiles: [] });
-
-    const counter = await json<{ id: string }>(
-      await send(app, "POST", layoutsOf(m.menuId), { body: { name: "Counter" } }),
+    const soup = await json<{ id: string; position: number }>(
+      await send(app, "POST", shortcutsOf(m.menuId), { body: { ref: product(m.soup) } }),
       201,
     );
-    const soupTile = await json<{ id: string; position: number }>(
-      await send(app, "POST", tilesOf(home!.id), { body: { ref: product(m.soup) } }),
-      201,
-    );
-    expect(soupTile).toEqual({ id: soupTile.id, position: 0, ref: product(m.soup) });
-    await json(
-      await send(app, "POST", tilesOf(home!.id), { body: { ref: section(m.drinks), position: 0 } }),
-      201,
-    );
-    const bar = await json<{ id: string }>(
-      await send(app, "POST", `/management-api/home-layouts/${home!.id}/duplicate`, {
-        body: { name: "Bar" },
+    expect(soup).toEqual({ id: soup.id, position: 0, ref: product(m.soup) });
+    const drinks = await json<{ id: string }>(
+      await send(app, "POST", shortcutsOf(m.menuId), {
+        body: { ref: section(m.drinks), position: 0 },
       }),
       201,
     );
     expect(
-      (
-        await send(app, "PATCH", `/management-api/home-layouts/${counter.id}`, {
-          body: { name: "Terrace" },
-        })
-      ).status,
-    ).toBe(204);
-    const listed = await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200);
-    const tiles = [
+      (await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).shortcuts,
+    ).toMatchObject([
       { position: 0, ref: section(m.drinks), name: m.drinksName, reachable: true },
       { position: 1, ref: product(m.soup), name: m.soupName, reachable: true },
-    ];
-    expect(listed).toMatchObject([
-      { id: home!.id, name: "Home", isDefault: true, tiles },
-      { id: bar.id, name: "Bar", isDefault: false, tiles },
-      { id: counter.id, name: "Terrace", isDefault: false, tiles: [] },
     ]);
-
-    const refused = await send(app, "DELETE", `/management-api/home-layouts/${home!.id}`);
-    expect(refused.status).toBe(409);
-    expect(await refused.json()).toMatchObject({
-      error: { code: "menu.default_layout_required", params: { layoutId: home!.id } },
-    });
-    expect(
-      (
-        await send(app, "PUT", `/management-api/catalogues/${m.menuId}/default-home-layout`, {
-          body: { layoutId: counter.id },
-        })
-      ).status,
-    ).toBe(204);
-    expect((await send(app, "DELETE", `/management-api/home-layouts/${home!.id}`)).status).toBe(
-      204,
-    );
-    const after = await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200);
-    expect(after.map((layout) => [layout.name, layout.isDefault])).toEqual([
-      ["Terrace", true],
-      ["Bar", false],
-    ]);
-  });
-
-  it("adds, moves and removes tiles, refusing one the menu does not reach or owns", async () => {
-    const app = mountApp();
-    const m = await menuWithTargets(app);
-    const [home] = await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200);
-    const soup = await json<{ id: string }>(
-      await send(app, "POST", tilesOf(home!.id), { body: { ref: product(m.soup) } }),
-      201,
-    );
-    const drinks = await json<{ id: string }>(
-      await send(app, "POST", tilesOf(home!.id), { body: { ref: section(m.drinks) } }),
-      201,
-    );
     const moved = await json<{ id: string; position: number }[]>(
-      await send(app, "PUT", `${tilesOf(home!.id)}/${soup.id}/position`, { body: { to: 1 } }),
+      await send(app, "PUT", `${shortcutsOf(m.menuId)}/${soup.id}/position`, { body: { to: 0 } }),
       200,
     );
     expect(moved.map(({ id, position }) => [id, position])).toEqual([
-      [drinks.id, 0],
-      [soup.id, 1],
+      [soup.id, 0],
+      [drinks.id, 1],
     ]);
     for (const [ref, status, code] of [
       [product(m.elsewhere), 409, "menu.shortcut_unreachable"],
       [section(m.rootSectionId), 409, "menu.shortcut_unreachable"],
       [product(m.soup), 409, "menu_section.member_duplicate"],
     ] as const) {
-      const response = await send(app, "POST", tilesOf(home!.id), { body: { ref } });
+      const response = await send(app, "POST", shortcutsOf(m.menuId), { body: { ref } });
       expect(response.status, code).toBe(status);
       expect(await response.json()).toMatchObject({ error: { code } });
     }
-    // The generic member routes still refuse every write into a home layout.
-    const generic = await send(app, "POST", `/management-api/sections/${home!.id}/members`, {
+    // The generic member routes still refuse every write into a Device Home Page section.
+    const generic = await send(app, "POST", `/management-api/sections/${m.homeSectionId}/members`, {
       body: { ref: product(m.soup) },
     });
     expect(generic.status).toBe(409);
     expect(await generic.json()).toMatchObject({ error: { code: "menu_section.wrong_role" } });
-    expect((await send(app, "DELETE", `${tilesOf(home!.id)}/${soup.id}`)).status).toBe(204);
-    const missing = await send(app, "DELETE", `${tilesOf(home!.id)}/${soup.id}`);
+    expect((await send(app, "DELETE", `${shortcutsOf(m.menuId)}/${soup.id}`)).status).toBe(204);
+    const missing = await send(app, "DELETE", `${shortcutsOf(m.menuId)}/${soup.id}`);
     expect(missing.status).toBe(404);
     expect(await missing.json()).toMatchObject({
-      error: { code: "menu_section.not_found", params: { sectionId: home!.id, memberId: soup.id } },
+      error: {
+        code: "menu_section.not_found",
+        params: { sectionId: m.homeSectionId, memberId: soup.id },
+      },
     });
-    // Removing the tile left the product on the menu.
+    // Removing the shortcut left the product on the menu.
     const offers = await menuPricesVia(app, m.menuId);
     expect(offers.map((offer) => offer.productId)).toEqual([m.soup]);
-    const [listed] = await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200);
-    expect(listed!.tiles.map((tile) => tile.ref)).toEqual([section(m.drinks)]);
+    expect(
+      (await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).shortcuts.map(
+        (tile) => tile.ref,
+      ),
+    ).toEqual([section(m.drinks)]);
   });
 
-  it("answers 404 for an id that names no layout or no menu", async () => {
+  it("saves each display setting for its device, and refuses one it cannot take", async () => {
+    const app = mountApp();
+    const m = await menuWithTargets(app);
+    const saved = await send(app, "PATCH", displayOf(m.menuId), {
+      body: { device: "till", columns: 8 },
+    });
+    expect(saved.status).toBe(204);
+    const read = await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200);
+    expect(read.till).toEqual({ ...till, columns: 8 });
+    expect(read.handheld).toEqual(handheld);
+    const refused = await send(app, "PATCH", displayOf(m.menuId), {
+      body: { device: "till", columns: 11 },
+    });
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "menu.home_display_invalid", params: { device: "till", field: "columns" } },
+    });
+    for (const body of [{ device: "kiosk" }, {}]) {
+      const response = await send(app, "PATCH", displayOf(m.menuId), { body });
+      expect(response.status, JSON.stringify(body)).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "device" } },
+      });
+    }
+    expect((await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).till).toEqual({
+      ...till,
+      columns: 8,
+    });
+  });
+
+  it("answers 404 for an unknown menu or member", async () => {
     const app = mountApp();
     const m = await menuWithTargets(app);
     const unknown = crypto.randomUUID();
     const member = crypto.randomUUID();
     for (const [method, path, body] of [
-      ["POST", `/management-api/home-layouts/${unknown}/duplicate`, { name: "X" }],
-      ["PATCH", `/management-api/home-layouts/${unknown}`, { name: "X" }],
-      ["DELETE", `/management-api/home-layouts/${unknown}`, undefined],
-      ["POST", tilesOf(unknown), { ref: product(m.soup) }],
-      ["DELETE", `${tilesOf(unknown)}/${member}`, undefined],
-      ["PUT", `${tilesOf(unknown)}/${member}/position`, { to: 0 }],
-      ["POST", tilesOf(m.rootSectionId), { ref: product(m.soup) }],
-      ["PUT", `/management-api/catalogues/${m.menuId}/default-home-layout`, { layoutId: m.drinks }],
-    ] as const) {
-      const response = await send(app, method, path, body === undefined ? {} : { body });
-      expect(response.status, `${method} ${path}`).toBe(404);
-      expect(await response.json()).toMatchObject({ error: { code: "menu.layout_not_found" } });
-    }
-    for (const [method, path, body] of [
-      ["GET", layoutsOf(unknown), undefined],
-      ["POST", layoutsOf(unknown), { name: "X" }],
-      ["PUT", `/management-api/catalogues/${unknown}/default-home-layout`, { layoutId: m.drinks }],
+      ["GET", homeOf(unknown), undefined],
+      ["PATCH", displayOf(unknown), { device: "till", columns: 8 }],
+      ["POST", shortcutsOf(unknown), { ref: product(m.soup) }],
+      ["POST", `${shortcutsOf(unknown)}/${member}/replace`, { ref: product(m.soup) }],
+      ["DELETE", `${shortcutsOf(unknown)}/${member}`, undefined],
+      ["PUT", `${shortcutsOf(unknown)}/${member}/position`, { to: 0 }],
     ] as const) {
       const response = await send(app, method, path, body === undefined ? {} : { body });
       expect(response.status, `${method} ${path}`).toBe(404);
@@ -5581,25 +5573,32 @@ describe("mountCatalogueApi — home layouts", () => {
         error: { code: "catalogue.not_found", params: { catalogueId: unknown } },
       });
     }
+    for (const [method, path, body] of [
+      ["POST", `${shortcutsOf(m.menuId)}/${member}/replace`, { ref: product(m.soup) }],
+      ["DELETE", `${shortcutsOf(m.menuId)}/${member}`, undefined],
+      ["PUT", `${shortcutsOf(m.menuId)}/${member}/position`, { to: 0 }],
+    ] as const) {
+      const response = await send(app, method, path, body === undefined ? {} : { body });
+      expect(response.status, `${method} ${path}`).toBe(404);
+      expect(await response.json()).toMatchObject({
+        error: { code: "menu_section.not_found", params: { memberId: member } },
+      });
+    }
   });
 
-  it("screens every home-layout body's shape and ids", async () => {
+  it("screens every body's shape and ids", async () => {
     const app = mountApp();
     const m = await menuWithTargets(app);
-    const [home] = await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200);
-    const id = home!.id;
+    const shortcuts = shortcutsOf(m.menuId);
     const member = crypto.randomUUID();
     const cases: [method: "POST" | "PATCH" | "PUT", path: string, body: unknown, field: string][] =
       [
-        ["POST", layoutsOf(m.menuId), {}, "name"],
-        ["POST", layoutsOf(m.menuId), { name: 7 }, "name"],
-        ["POST", `/management-api/home-layouts/${id}/duplicate`, {}, "name"],
-        ["PATCH", `/management-api/home-layouts/${id}`, { name: null }, "name"],
-        ["PUT", `/management-api/catalogues/${m.menuId}/default-home-layout`, {}, "layoutId"],
-        ["POST", tilesOf(id), {}, "ref"],
-        ["POST", tilesOf(id), { ref: { kind: "x" } }, "ref"],
-        ["POST", tilesOf(id), { ref: product(m.soup), position: "0" }, "position"],
-        ["PUT", `${tilesOf(id)}/${member}/position`, {}, "to"],
+        ["POST", shortcuts, {}, "ref"],
+        ["POST", shortcuts, { ref: { kind: "x" } }, "ref"],
+        ["POST", shortcuts, { ref: product(m.soup), position: "0" }, "position"],
+        ["POST", `${shortcuts}/${member}/replace`, {}, "ref"],
+        ["PUT", `${shortcuts}/${member}/position`, {}, "to"],
+        ["PATCH", displayOf(m.menuId), { columns: 8 }, "device"],
       ];
     for (const [method, path, body, field] of cases) {
       const response = await send(app, method, path, { body });
@@ -5608,21 +5607,18 @@ describe("mountCatalogueApi — home layouts", () => {
         error: { code: "management.request_invalid", params: { field } },
       });
     }
-    const blank = await send(app, "POST", layoutsOf(m.menuId), { body: { name: " " } });
-    expect(blank.status).toBe(400);
-    expect(await blank.json()).toMatchObject({
-      error: { code: "menu_section.invalid", params: { field: "name" } },
-    });
-    const idCases: [method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown][] = [
-      ["GET", layoutsOf("nope")],
-      ["POST", layoutsOf("nope"), { name: "X" }],
-      ["POST", "/management-api/home-layouts/nope/duplicate", { name: "X" }],
-      ["DELETE", "/management-api/home-layouts/nope"],
-      ["POST", tilesOf("nope"), { ref: product(m.soup) }],
-      ["DELETE", `${tilesOf(id)}/nope`],
-      ["PUT", `${tilesOf(id)}/nope/position`, { to: 0 }],
-      ["PUT", `/management-api/catalogues/${m.menuId}/default-home-layout`, { layoutId: "nope" }],
-      ["POST", tilesOf(id), { ref: { kind: "product", productId: "nope" } }],
+    const idCases: [
+      method: "GET" | "PATCH" | "POST" | "PUT" | "DELETE",
+      path: string,
+      body?: unknown,
+    ][] = [
+      ["GET", homeOf("nope")],
+      ["PATCH", displayOf("nope"), { device: "till", columns: 8 }],
+      ["POST", shortcutsOf("nope"), { ref: product(m.soup) }],
+      ["POST", `${shortcuts}/nope/replace`, { ref: product(m.soup) }],
+      ["DELETE", `${shortcuts}/nope`],
+      ["PUT", `${shortcuts}/nope/position`, { to: 0 }],
+      ["POST", shortcuts, { ref: { kind: "product", productId: "nope" } }],
     ];
     for (const [method, path, body] of idCases) {
       const response = await send(app, method, path, body === undefined ? {} : { body });
@@ -5633,26 +5629,22 @@ describe("mountCatalogueApi — home layouts", () => {
     }
   });
 
-  it("requires a management session and refuses staff on every home-layout route", async () => {
+  it("requires a management session and refuses staff on every Device Home Page route", async () => {
     const app = mountApp();
     const m = await menuWithTargets(app);
-    const [home] = await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200);
-    const id = home!.id;
+    const shortcuts = shortcutsOf(m.menuId);
     const member = crypto.randomUUID();
     const routes: [
       method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
       path: string,
       body?: unknown,
     ][] = [
-      ["GET", layoutsOf(m.menuId)],
-      ["POST", layoutsOf(m.menuId), { name: "X" }],
-      ["PUT", `/management-api/catalogues/${m.menuId}/default-home-layout`, { layoutId: id }],
-      ["POST", `/management-api/home-layouts/${id}/duplicate`, { name: "X" }],
-      ["PATCH", `/management-api/home-layouts/${id}`, { name: "X" }],
-      ["DELETE", `/management-api/home-layouts/${id}`],
-      ["POST", tilesOf(id), { ref: product(m.soup) }],
-      ["DELETE", `${tilesOf(id)}/${member}`],
-      ["PUT", `${tilesOf(id)}/${member}/position`, { to: 0 }],
+      ["GET", homeOf(m.menuId)],
+      ["PATCH", displayOf(m.menuId), { device: "till", columns: 8 }],
+      ["POST", shortcuts, { ref: product(m.soup) }],
+      ["POST", `${shortcuts}/${member}/replace`, { ref: product(m.soup) }],
+      ["DELETE", `${shortcuts}/${member}`],
+      ["PUT", `${shortcuts}/${member}/position`, { to: 0 }],
     ];
     for (const [method, path, body] of routes) {
       const options = body === undefined ? {} : { body };
@@ -5663,9 +5655,32 @@ describe("mountCatalogueApi — home layouts", () => {
         error: { code: "authorization.not_permitted", params: { permission: "person.manage" } },
       });
     }
-    expect(await json<Layout[]>(await send(app, "GET", layoutsOf(m.menuId)), 200)).toEqual([
-      { id, name: "Home", isDefault: true, tiles: [] },
-    ]);
+    expect(await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).toEqual({
+      homeSectionId: m.homeSectionId,
+      shortcuts: [],
+      handheld,
+      till,
+    });
+  });
+
+  it("no longer serves the named layout routes", async () => {
+    const app = mountApp();
+    const m = await menuWithTargets(app);
+    const layout = `/management-api/home-layouts/${m.homeSectionId}`;
+    const member = crypto.randomUUID();
+    for (const [method, path] of [
+      ["GET", `/management-api/catalogues/${m.menuId}/home-layouts`],
+      ["PUT", `/management-api/catalogues/${m.menuId}/default-home-layout`],
+      ["POST", `${layout}/duplicate`],
+      ["PATCH", layout],
+      ["POST", `${layout}/tiles`],
+      ["POST", `${layout}/tiles/${member}/replace`],
+      ["DELETE", `${layout}/tiles/${member}`],
+      ["PUT", `${layout}/tiles/${member}/position`],
+    ] as const) {
+      const response = await send(app, method, path, method === "GET" ? {} : { body: {} });
+      expect(response.status, `${method} ${path}`).toBe(404);
+    }
   });
 });
 

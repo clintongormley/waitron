@@ -13,7 +13,7 @@ import {
   replaceMember,
   updateSection,
 } from "./sections.js";
-import { addShortcut, listHomeLayouts } from "./home-layouts.js";
+import { addShortcut, readMenuHome } from "./menu-home.js";
 import { listContentTranslationGaps } from "./content-languages.js";
 import { loadSectionGraph } from "./section-graph.js";
 
@@ -77,8 +77,8 @@ describe("menu inclusions and owned sections", () => {
     await expect(app((tx) => addMember(tx, f.br, section(own.id)))).rejects.toMatchObject({
       code: "menu_section.wrong_role",
     });
-    const layout = (await app((tx) => listHomeLayouts(tx, f.a)))[0]!.id;
-    await app((tx) => addShortcut(tx, layout, section(own.id)));
+    const layout = (await app((tx) => readMenuHome(tx, f.a))).homeSectionId;
+    await app((tx) => addShortcut(tx, f.a, section(own.id)));
     await expect(app((tx) => addMember(tx, f.ar, section(layout)))).rejects.toMatchObject({
       code: "menu_section.wrong_role",
     });

@@ -25,7 +25,7 @@ export interface MemberRow {
 export interface SectionGraph {
   /** Structural members by position; Home is empty here. Use tiles for its complete view. */
   children(sectionId: string): SectionMember[];
-  tiles(layoutId: string): SectionMember<TileRef>[];
+  tiles(homeSectionId: string): SectionMember<TileRef>[];
   /** The lists that hold this section directly. */
   parents(sectionId: string): string[];
   role(sectionId: string): SectionRole | undefined;
@@ -83,7 +83,7 @@ export function buildSectionGraph(
         : (children.get(sectionId) ?? []).filter(
             (member): member is SectionMember => member.ref.kind !== "missing",
           ),
-    tiles: (layoutId) => children.get(layoutId) ?? [],
+    tiles: (homeSectionId) => children.get(homeSectionId) ?? [],
     parents: (sectionId) => [...(parents.get(sectionId) ?? [])],
     role: (sectionId) => byId.get(sectionId)?.role,
     ownerMenu: (sectionId) => byId.get(sectionId)?.ownerMenuId ?? null,
@@ -176,7 +176,7 @@ export function placementsByProduct(graph: SectionGraph, rootId: string): Map<st
   return found;
 }
 
-/** The menus whose root reaches the section, sorted. A home layout holding it does not count. */
+/** The menus whose root reaches the section, sorted. A Device Home Page holding it does not count. */
 export function menusContaining(graph: SectionGraph, sectionId: string): string[] {
   const menus = new Set<string>();
   const seen = new Set<string>();
@@ -191,7 +191,8 @@ export function menusContaining(graph: SectionGraph, sectionId: string): string[
   return [...menus].sort();
 }
 
-/** The target's path within its owning menu, independent of including menus and layouts. */
+/** The target's path within its owning menu, independent of including menus and Device Home
+ * Pages. */
 export function sectionPathName(graph: SectionGraph, sectionId: string): string {
   const owner = graph.ownerMenu(sectionId)!;
   const path: string[] = [];

@@ -184,6 +184,44 @@ describe("validateCatalogueConfiguration: colours", () => {
   );
 });
 
+describe("validateCatalogueConfiguration: menu display settings", () => {
+  it.each([
+    ["handheld_columns", 7],
+    ["till_columns", 5],
+    ["till_columns", "8"],
+    ["handheld_tiles", "pictures"],
+    ["till_order", "first"],
+  ])("refuses a menu_details row whose %s is %j", (column, value) => {
+    expect(() =>
+      validateCatalogueConfiguration({ menu_details: [{ menu_id: "m1", [column]: value }] }),
+    ).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: `menu_details.${column}` },
+      }),
+    );
+  });
+
+  it("accepts a row holding all six at their defaults, and a row with none of them", () => {
+    expect(() =>
+      validateCatalogueConfiguration({
+        menu_details: [
+          {
+            menu_id: "m1",
+            handheld_columns: 3,
+            handheld_tiles: "colours",
+            handheld_order: "home_first",
+            till_columns: 6,
+            till_tiles: "colours",
+            till_order: "home_first",
+          },
+          { menu_id: "m2" },
+        ],
+      }),
+    ).not.toThrow();
+  });
+});
+
 describe("validateCatalogueConfiguration: many siblings", () => {
   it("judges a hundred thousand categories under one parent", () => {
     const categories = Array.from({ length: 100_000 }, (_, index) => ({

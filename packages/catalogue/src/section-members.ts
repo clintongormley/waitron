@@ -68,7 +68,7 @@ export function requirePosition(position: number | undefined): void {
   if (position !== undefined) requireIndex(position, "position");
 }
 
-/** Home tiles may target owned sections or menu roots; reach is checked by the layout writer. */
+/** Home tiles may target owned sections or menu roots; reach is checked by the shortcut writer. */
 export async function checkRef(
   tx: Transaction,
   graph: SectionGraph,

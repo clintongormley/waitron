@@ -11,6 +11,8 @@ import {
   products,
   table,
 } from "@waitron/db";
+import { HOME_DISPLAY_DEFAULTS } from "../device-home.js";
+import type { HomeOrder, HomeTileMode } from "../menu-document-types.js";
 import { sections } from "./sections.js";
 
 /** The one content-language policy shared by the reusable catalogue and media: at most one row,
@@ -37,13 +39,29 @@ export const contentLanguages = table(
   ],
 );
 
-/** A menu's top-level list and its default home layout: two sections the menu owns. */
+const homeTiles = (name: string) => label(name).$type<HomeTileMode>();
+const homeOrder = (name: string) => label(name).$type<HomeOrder>();
+const { handheld, till } = HOME_DISPLAY_DEFAULTS;
+
+/** A menu's top-level list, its Device Home Page section, and how a handheld and a till present
+ * that page. */
 export const menuDetails = table(
   "menu_details",
   {
     menuId: id("menu_id").primaryKey(),
     rootSectionId: id("root_section_id").notNull(),
-    defaultHomeLayoutId: id("default_home_layout_id").notNull(),
+    // The menu's Device Home Page. The column keeps its old name: renaming it is a migration that
+    // changes nothing a reader sees.
+    homeSectionId: id("default_home_layout_id").notNull(),
+    // No CHECK on these six: one makes drizzle rebuild the table; homeDisplayProblem
+    // (device-home.ts) holds the ranges. So the text ones are not `enumType`, whose vocabulary
+    // the schema-conformance suite requires a CHECK for.
+    handheldColumns: count("handheld_columns").notNull().default(handheld.columns),
+    handheldTiles: homeTiles("handheld_tiles").notNull().default(handheld.tiles),
+    handheldOrder: homeOrder("handheld_order").notNull().default(handheld.order),
+    tillColumns: count("till_columns").notNull().default(till.columns),
+    tillTiles: homeTiles("till_tiles").notNull().default(till.tiles),
+    tillOrder: homeOrder("till_order").notNull().default(till.order),
   },
   (t) => [
     foreignKey({
@@ -57,7 +75,7 @@ export const menuDetails = table(
       name: "menu_details_root_fk",
     }),
     foreignKey({
-      columns: [t.defaultHomeLayoutId],
+      columns: [t.homeSectionId],
       foreignColumns: [sections.id],
       name: "menu_details_default_layout_fk",
     }),

@@ -1211,7 +1211,10 @@ declare global {
     `["search", "structure"]`, no `.divider`, and the structure region still has an accessible name
     ("Full menu").
   - "draws no divider when the menu shows nothing but shortcuts do": a structure of only products
-    with no offer; regions `["search", "shortcuts"]`, no `.divider`.
+    with no offer; regions `["search", "shortcuts"]`, no `.divider`. Not written (2026-10-06):
+    the Task 5 reviewer traced `indexDocument` and found no way for the till to draw a shortcut
+    without also drawing a full-menu block, so this screen state could not be set up; Task 1's
+    `arrangeHome` unit test pins that shortcuts alone draw no divider.
   - **Review focus 4:** "clamps the columns on a narrow screen, keeping the reading order":
     Handheld 6 at 300 px wide shows 2 tracks (the existing `:467-479` arithmetic: two 104 px
     minimums and a 12 px gap) and the same reading order as at 1280 px; Till 10 at 1280 px shows 10
@@ -1547,7 +1550,7 @@ declare global {
 - [ ] **Step 2: implement.**
   - State: delete `homeLayouts`, `homeLayoutId`, `layoutForm`, `layoutFormName`,
     `layoutFormErrors`, `deletingLayout`, `deleteLayoutError` (`:514-530`); add `menuHome: MenuHome | null`,
-    `homeDevice: HomeDevice = "handheld"`, `homeSaving = false`, `homeFieldErrors: Partial<Record<keyof HomeDisplay, string>>`,
+    `homeDevice: HomeDevice = "handheld"`, `homeSaving = false` (2026-10-06: removed in finishing review; `homePending !== null` reads the same), `homeFieldErrors: Partial<Record<keyof HomeDisplay, string>>`,
     `addingShortcut: "product" | "section" | null`, `shortcutError = ""`.
   - Reads: `#watchHome` watches `getMenuHome` (`:933-945`); `#showView` keeps it while the view is
     `structure` or `home` and releases it otherwise (`:971-973`); the preview is watched while the
@@ -1570,7 +1573,7 @@ declare global {
     radios (each with a `legend` and its field error beneath as `<p class="field-error"
     role="alert">`), and a preview `section` holding `dashboard-device-home-preview`
     (`.document=${this.preview?.document ?? null}`, `device=${this.homeDevice}`), with the
-    preview's own loading line until the preview is read. `#saveDisplay(patch)` sets `homeSaving`,
+    preview's own loading line until the preview is read. `#saveDisplay(patch)` sets `homeSaving` (2026-10-06: removed in finishing review; `homePending !== null` reads the same),
     calls `setHomeDisplay(menuId, this.homeDevice, patch)`, maps a `menu.home_display_invalid` whose
     `params.device` is the shown device to `homeFieldErrors[params.field]` and anything else to
     `homeError`; the live queries read the home and the preview again.
@@ -1722,7 +1725,7 @@ equally strict check of the new behaviour where the behaviour still exists.
 | `scripts/catalogue-engine-neutral.test.ts:34` **[owner, Task 2's answer]** | scans `packages/catalogue/src/home-layouts.ts` | scans `packages/catalogue/src/menu-home.ts`; the three checks unchanged | D2 |
 | `…menu-inclusion.test.ts:80-82` | `listHomeLayouts`/`addShortcut(layout)` | `readMenuHome`/`addShortcut(menu)`; the refusal unchanged | D2 |
 | `apps/server/src/catalogue-api.test.ts:4527` (`:4532-4541`) | `menuDetails.defaultHomeLayoutId`; warning with `layoutName` | `homeSectionId`; `{ kind: "shortcut_missing", name }` | D1, D5 |
-| `…catalogue-api.test.ts:5405`, `:5507` | tile routes by layout id | shortcut routes by menu; the same refusals, generic-route `wrong_role` kept | D2 |
+| `…catalogue-api.test.ts:5405`, `:5507` | tile routes by layout id | shortcut routes by menu; the same refusals, generic-route `wrong_role` kept. `:5507` also takes the add half of the deleted list/create case (`:5442`): the added shortcut's shape, Drinks added at position 0 after Soup, and the listing that follows. Its move changed from `{ to: 1 }` expecting `[[drinks, 0], [soup, 1]]` to `{ to: 0 }` expecting `[[soup, 0], [drinks, 1]]` | D2 |
 | `…catalogue-api.test.ts:5442` | list, create, duplicate, rename, delete, default layout | deleted; "no longer serves the named layout routes" and "reads a menu's Device Home Page" | D2 |
 | `…catalogue-api.test.ts:5555`, `:5587`, `:5637` | 404, shape and gate checks over the layout routes | the same checks over the Device Home Page routes; the `name` and `layoutId` cases go with their routes | D2 |
 | `apps/server/src/configuration-transfer.test.ts:1684` (`:1702-1738`) | `listHomeLayouts`; `homeLayouts[0].tiles`; `layoutName: "Home"` | `readMenuHome`; `home.shortcuts`; no `layoutName`; positions and names unchanged | D2, D5 |
@@ -1739,6 +1742,12 @@ equally strict check of the new behaviour where the behaviour still exists.
 | `apps/till/src/widgets/menu-browser.test.ts:290` | shows the chosen layout `lay-counter` | shows the menu's shortcuts, in order (the same two names) | D3 |
 | `…menu-browser.test.ts:295` | the default when the chosen layout is missing | deleted | D3 |
 | `apps/till/src/screens/till-table-order-screen.test.ts:4170` | "…with that menu's own home layout" via `homeLayoutId` | "…with that menu's own Device Home Page" via `home.shortcuts`; the same checks | D2 |
+| `packages/catalogue/src/menu-home.test.ts` (from `home-layouts.test.ts:257`) **[implementer]** | the missing tile removed was the duplicated layout's copy | the missing tile removed is a deleted `Wine` section's shortcut on the menu's own home; the move and replace checks unchanged | D2 (the copy went with duplication) |
+| `…menu-home.test.ts` (from `home-layouts.test.ts:441`) **[implementer]** | four targets: Lunch's root, a second Lunch layout, Dinner's root, Dinner's home | the same four, the second layout raw-inserted, plus Lunch's own home section, also refused `menu_section.wrong_role` | D2 |
+| `apps/server/src/till-api.sell-published.test.ts:841-847` (`state`) **[implementer]** | narrowed each menu-state entry to `{ menuId, versionId }`, the layout fields having their own cases | returns the answer as served, so its four cases compare each whole entry | D6 (the entry is `{ menuId, versionId }` and nothing else) |
+| `apps/dashboard/src/widgets/menu-preview.test.ts:209` (the Spanish wording case) **[implementer]** | three changes | also `home_shortcuts_changed` and `home_display_changed` for `handheld`, with their Spanish sentences | D5 |
+| `apps/till/src/widgets/menu-browser.test.ts:387` **[implementer]** | "…for a menu with no layouts", `homeLayouts: []` | "…for a menu with no shortcuts", `withShortcuts([])`; the same checks | D3 |
+| `apps/till/src/widgets/card-grid.test.ts:645` **[implementer]** | "…with its own home layout" | "…with its own Device Home Page"; the same checks | D3 |
 
 Fixture-only edits in Task 3 (the `home` block replacing the four layout fields, no assertion
 changed): `packages/catalogue/src/migrations.test.ts:490,500` (the property rename only),
@@ -1748,7 +1757,15 @@ changed): `packages/catalogue/src/migrations.test.ts:490,500` (the property rena
 `till-app-menu-refresh.test.ts:143-146,160`, `till-app-table-service.test.ts:2400-2408`,
 `state/menu-state-poll.test.ts:7`, `card-grid.test.ts:591-605`;
 `apps/dashboard/src/widgets/test-helpers.ts:283-289`, `menu-preview.a11y.test.ts:44`,
-`menus-screen.test.ts:373`. The PR states the count per file.
+`menus-screen.test.ts:373`, and, met while implementing, `menus-screen.a11y.test.ts:158` and
+`api/client-routes.test.ts:917` (each drops a warning's `layoutName`). The PR states the count per
+file.
+
+### Task 4
+
+| file:line | Before | After | Why |
+| --- | --- | --- | --- |
+| `packages/ui/src/tap-target-and-focus.test.ts:41`, `:43` | the case title and the exact-set `toEqual` list of field elements name `wt-button`, `wt-combobox`, `wt-input`, `wt-number-stepper`, `wt-price-input`, `wt-switch` and `wt-textarea` | both gain `wt-slider`; every existing entry unchanged | the new primitive is held to the same tap-target and focus rule |
 
 ### Task 5
 
@@ -1759,6 +1776,25 @@ changed): `packages/catalogue/src/migrations.test.ts:490,500` (the property rena
 | `…menu-browser.test.ts:511` | no column count gives a till's six | no column count gives the till display's 8 | D7 |
 | `apps/till/src/widgets/card-grid.test.ts:669` | six columns on a till and three on a handheld when the card sets none | the menu's display for the device when the card sets none; the card's 4 either way | D7 (a card with no count follows the menu's setting) |
 | `apps/till/src/screens/till-table-order-screen.test.ts:4192` | the browser gets 6 columns on a till and 3 on a handheld | the browser gets no column count and the device kind | D7 |
+
+At a900fc1b8 (after W92a) the five rows above sit at `menu-browser.test.ts:354`, `:365` and `:489`,
+`card-grid.test.ts:667` and `till-table-order-screen.test.ts:4188`. **[implementer]** The card-grid
+row changed only its first case ("uses the menu's display for the device when the card sets no
+columns", which also checks the browser's `handheld` follows the grid's); the next case, "lets the
+card's own column count win on either form factor", already held the card's 4 either way and is
+unchanged. Fixture-only edits in Task 5: `menu-browser.test.ts` (`section()` takes an optional
+`image`, default null), `menu-browser.a11y.test.ts` (`mount()` takes the browser's properties,
+defaulting to the `columns: 3` it always passed).
+
+### Task 6
+
+No assertion changed or deleted, and no existing fixture grew: every check in
+`menu-structure-table.test.ts`, `menu-structure-table.a11y.test.ts`, `client-routes.test.ts` and
+`live-queries.test.ts` is new (a `describe` block, an a11y case, one route case, and one row added to
+the `it.each` table of dependencies). The structure table's `home` property defaults to null, so the
+existing cases, which pass none, draw no Device Home Page row and read as before. A missing
+shortcut's kind reads `members.missing` ("No longer available" | "Ya no está disponible"), the label
+`memberKindLabel` gives a `missing` reference, not a separate "Missing" word.
 
 ### Task 8
 
@@ -1771,11 +1807,21 @@ changed): `packages/catalogue/src/migrations.test.ts:490,500` (the property rena
 | `…:5636` | follows the layouts while the tab shows | follows the menu's home while Structure or Home page shows | D9, D10 |
 | `…:5652`, `:5684`, `:5703`, `:5727`, `:5746`, `:5769`, `:6062`, `:6100` | tile add, remove, move and their queue through the editor's events and the layout routes; refusals in `home-error` | the same assertions through the tree's `wt-shortcut-*` events and the menu's home routes; refusals in `member-error` | D9 |
 | `…:5786`, `:5793`, `:5834`, `:5847`, `:5878`, `:5900`, `:5925`, `:5938`, `:5951`, `:5967`, `:5997`, `:6031`, `:6042`, `:6129` | layout delete, create, duplicate, rename, default and their refusals | deleted | D2 |
-| `…:5822` | the editor marks a tile whose target left the menu | the tree's shortcut row reads "Missing: Chips", kind Missing, Remove alone | D9 |
+| `…:5822` | the editor marks a tile whose target left the menu | the tree's shortcut row reads "Missing: Chips", kind `t("members.missing")` ("No longer available"), Remove alone | D9 |
 | `…:6140`, `:6155`, `:6165`, `:7034` | the layouts' load error, loading, other menu, recovery | the same on `getMenuHome` | D10 |
 | `…:6215-6226` | the layout name form in the name-forms table | removed | D2 |
 | `apps/dashboard/src/screens/menus-screen.a11y.test.ts:418` | the Home tab's editor with a tile off the menu and both previews, 390 and 1280 px | the Home tab's controls and preview, 390 and 1280 px | D10 |
 | `…menus-screen.a11y.test.ts:430`, `:440` | the layout form and the layout delete window | deleted | D2 |
 | `apps/dashboard/src/widgets/home-layout-editor.test.ts`, `home-layout-editor.a11y.test.ts` | the layout editor | files deleted with it; the preview's checks are in `device-home-preview.test.ts` and its a11y file (Task 7), the tile list's in `menu-structure-table.test.ts` (Task 6) | D2, D10 |
 | `apps/dashboard/src/api/client-routes.test.ts:837-894`, `:1037-1052` | the layout and tile client methods' routes | deleted; Task 6's "reads a menu's Device Home Page and writes its shortcuts and display settings" | D2, D9 |
-| `apps/dashboard/src/api/live-queries.test.ts:110-116` | `listHomeLayouts`' dependencies | deleted; Task 6's `getMenuHome` row | D2 |
+| `apps/dashboard/src/api/live-queries.test.ts:110-116` | `listHomeLayouts`' dependencies | deleted; Task 6's `getMenuHome` row (net over the branch it reads as a rename, with the same arguments and tables) | D2 |
+| `…menus-screen.test.ts:5652` **[implementer]** | adds, removes and moves tiles: the `addHomeTile` call check, the read count reaching 2 after the add and 3 after the remove, and `writeCalls` `["addHomeTile", "removeHomeTile", "moveHomeTile"]` | removes (through the shortcut row's Remove) and moves only: the add's call check goes, the read count reaches 2 after the remove and stays 2 after the move, and `writeCalls` is `["removeHomeShortcut", "moveHomeShortcut"]`. Adding goes through the picker, pinned by the new case "adds the chosen target at once and closes, reading the home again" | D9 |
+| `…menus-screen.test.ts:5684` **[implementer]** | the tile list is disabled during an add until the layouts are read again | the tree is disabled during a remove until the home is read again (an add now goes through the picker, whose cases hold its own `busy`); a move still leaves it usable | D9 |
+| `…menus-screen.test.ts:5703` **[implementer]** | a refused tile add is explained in `home-error` | a refused shortcut remove is explained in `member-error`; a refused add is the picker's (combobox `error` and `form.fix_fields` for a refusal about the chosen target, the code's message alone at the bottom otherwise). The refused move's code changed from `menu_section.not_found` to `menu.shortcut_unreachable`, and the refused remove takes `menu_section.not_found`, so the case's two refusals show different messages; the check that a refused move reads the home again is unchanged | D9 |
+| `…menus-screen.test.ts:5477` **[implementer]** | the layouts are read only on the Home page tab | the menu's home is read on the Structure and Home page tabs; the case opens from Price overrides, checks the home and the preview are not read there, and that the Home page tab takes the menu's state from the preview (no `getMenuStatus` read on a refresh) | D9, D10 |
+| `…menus-screen.test.ts` "shows the root's members…" and "fits a phone: … every row's ⋮ is on screen (390 px)" | over the default fake, the name list `["Burger", "Drinks", "Favourites"]` (then with Drinks' members), and the ⋮ list starting `"root"` | still over the default fake, after the Device Home Page row is drawn: the name list gains the closed row's name `"Página de inicio del dispositivo"` first, and the ⋮ list gains `"home"` first; every other name and key unchanged (owner decision 2026-10-05 ~00:05: the spec adds the row, so the check moves to the new behaviour, not around it). The new case "fits a phone with the Device Home Page row and Drinks › Beer open…" also names every row with the home row open | D9 |
+| `…menus-screen.test.ts` `topLevelKeys`, `childKeys` **[implementer]** | every level-2 row and every row under `root` | leave out `home` and `home/*`, so they still read the menu's own rows; no assertion changed | D9 |
+| `…menus-screen.test.ts` the name forms' `opened` (`:6229-6243`) **[implementer]** | waits for the layout editor on the Home page address | the wait goes with the layout form's entry | D2 |
+| `apps/dashboard/src/screens/menus-screen.a11y.test.ts:418` **[implementer]** | also checked the till preview drew the off-menu tile `t-soup` | checks the preview's frame is drawn and the columns note reads `home.columns_note_handheld`; the off-menu shortcut's empty slot is checked in the preview's own a11y file (Task 7); the axe scan unchanged | D10 |
+
+New cases in Task 8 beyond the rewrites: "opens the Device Home Page row once the first shortcut is added to an empty one", "closes the picker on Cancel or Esc and sends nothing", "says on the Structure tab when the Device Home Page could not be read, and tries again", "never reads a change from the preview's search as a setting", "says the preview could not be worked out, and tries again", and, from the task's review, "drops a refused remove quietly once the person has gone to another menu", "shows the saved choice again after a refused setting, so the same choice can be sent again", "shows the saved column count again after a refused change", "keeps the other device's refusals off the controls once the device is switched" and "keeps showing a saved setting when the read after the save fails". Task 7's review added two cases to `device-home-preview.test.ts` ("stays home when the document that dropped the open section is replaced by one holding it again", "lets no event from its search reach the page around it") and one assertion to a new Task 7 case (a Thumbnails section tile draws no folder icon); none changes an existing check. Fixture-only edits: `menus-screen.a11y.test.ts` (`getMenuHome` replacing `listHomeLayouts`).

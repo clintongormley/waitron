@@ -179,8 +179,8 @@ it("words every kind of change, each with where it came from", async () => {
       },
       { kind: "order_changed", list: [], source: "this_menu" },
       { kind: "order_changed", list: ["Drinks"], source: "included_menu" },
-      { kind: "layout_changed", layoutId: "l-bar", name: "Bar", source: "this_menu" },
-      { kind: "default_layout_changed", from: "Home", to: "Bar", source: "this_menu" },
+      { kind: "home_shortcuts_changed", source: "this_menu" },
+      { kind: "home_display_changed", device: "till", source: "this_menu" },
       { kind: "menu_renamed", from: "Midday Menu", to: "Lunch Menu", source: "this_menu" },
     ]),
   });
@@ -200,8 +200,8 @@ it("words every kind of change, each with where it came from", async () => {
     "Mains: name, photo, colour — included menu",
     "Order changed at the top level — this menu",
     "Order changed in Drinks — included menu",
-    "Home page layout Bar changed — this menu",
-    "Default home page layout changed from Home to Bar — this menu",
+    "Device Home Page shortcuts changed — this menu",
+    "Device Home Page display for Till changed — this menu",
     "Menu renamed from Midday Menu to Lunch Menu — this menu",
   ]);
 });
@@ -228,12 +228,16 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
         source: "shared_product",
         alsoOn: ["Dinner Menu", "Terrace Menu"],
       },
+      { kind: "home_shortcuts_changed", source: "this_menu" },
+      { kind: "home_display_changed", device: "handheld", source: "this_menu" },
     ]),
   });
   expect(items(el, "changes").map((line) => line.replace(/\s/g, " "))).toEqual([
     "Se ha movido Soup: antes en Starters; ahora en el nivel principal y Mains › Hot — esta carta",
     "Ha cambiado el orden en el nivel principal — esta carta",
     "Ha cambiado el precio de Burger de 12,00 € a 13,00 € — producto compartido, también en Dinner Menu y Terrace Menu",
+    "Han cambiado los accesos directos de la página de inicio del dispositivo — esta carta",
+    "Ha cambiado la presentación de la página de inicio del dispositivo en Terminal de mano — esta carta",
   ]);
 });
 
@@ -577,7 +581,7 @@ it("offers the publish when the menu differs from its live version but no change
 });
 
 it.each(["en-GB", "es-ES"])(
-  "counts missing shortcuts by layout before confirmation and after publishing (%s)",
+  "counts every missing shortcut in one sentence before confirmation and after publishing (%s)",
   async (locale) => {
     setLocale(locale);
     const el = await mount({
@@ -585,17 +589,17 @@ it.each(["en-GB", "es-ES"])(
       preview: preview(
         [],
         [
-          { kind: "shortcut_missing", layoutName: "Counter", name: "Beer" },
-          { kind: "shortcut_missing", layoutName: "Counter", name: "Wine" },
-          { kind: "shortcut_missing", layoutName: "Home", name: "Soup" },
+          { kind: "shortcut_missing", name: "Beer" },
+          { kind: "shortcut_missing", name: "Wine" },
+          { kind: "shortcut_missing", name: "Soup" },
         ],
       ),
     });
     const expected =
       locale === "en-GB"
-        ? "2 shortcuts on Evening's Counter layout point at things no longer in this menu. They stay as empty spaces until you remove or replace them."
-        : "2 accesos directos de la página Counter de Evening apuntan a elementos que ya no están en este menú. Permanecen como espacios vacíos hasta que los quites o reemplaces.";
-    expect(items(el, "warnings")).toHaveLength(2);
+        ? "3 shortcuts on Evening's Device Home Page point at things no longer in this menu. They stay as empty spaces until you remove them."
+        : "3 accesos directos de la página de inicio del dispositivo de Evening apuntan a cosas que ya no están en esta carta. Quedan como espacios vacíos hasta que los quites.";
+    expect(items(el, "warnings")).toHaveLength(1);
     expect(items(el, "warnings")[0]).toBe(expected);
     const asked = capture(el, "wt-menu-publish");
     q(el, '[data-test="publish"]')!.click();

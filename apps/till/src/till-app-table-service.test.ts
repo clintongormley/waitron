@@ -2404,20 +2404,8 @@ describe("till-app table ordering: a menu published while a table is open", () =
       const menuState = vi.fn(async (zoneId: string) => ({
         menus:
           zoneId === floorZone.id
-            ? [
-                {
-                  menuId: "menu-dinner",
-                  versionId: "v2",
-                  homeLayoutId: "menu-dinner-home",
-                  layoutFallback: null,
-                },
-              ]
-            : counterOffers.menus.map((menu) => ({
-                menuId: menu.id,
-                versionId: menu.versionId,
-                homeLayoutId: menu.homeLayoutId,
-                layoutFallback: menu.layoutFallback,
-              })),
+            ? [{ menuId: "menu-dinner", versionId: "v2" }]
+            : counterOffers.menus.map((menu) => ({ menuId: menu.id, versionId: menu.versionId })),
         unavailable: { products: [], optionLabels: [] },
       }));
       const { el } = await mountApp({

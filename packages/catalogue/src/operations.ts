@@ -284,7 +284,7 @@ function legacyPricingUnit(unit: SellableUnit): PricingUnit {
   return unit.hardwareUnit === null ? "each" : "weight";
 }
 
-/** A new menu, with the root and default home layout it owns (`createMenuShell`). */
+/** A new menu, with the root and Device Home Page section it owns (`createMenuShell`). */
 export async function createCatalogue(
   tx: Transaction,
   input: {

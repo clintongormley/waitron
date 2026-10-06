@@ -3979,9 +3979,8 @@ describe("menuOfferToTillProduct", () => {
     expect(menuOfferToTillProduct(offer)).not.toHaveProperty("menuVersionId");
   });
 
-  // The menu browser hides a product by this value, so each of the three must arrive as sent, and a
-  // version published before the setting existed must arrive with none.
-  it("carries who may order the offer on its own, and nothing when the version carries none", () => {
+  // The menu browser hides a product by this value, so each of the three must arrive as sent.
+  it("carries who may order the offer on its own, and nothing when the offer carries none", () => {
     const offer: TillMenuOffer = {
       id: "offer-bacon",
       menuId: "menu-1",
@@ -4019,7 +4018,7 @@ describe("menuOfferToTillProduct", () => {
     expect(menuOfferToTillProduct(offer)).not.toHaveProperty("ordering");
   });
 
-  it("carries the offer's colour, null included, and nothing when the version carries none", () => {
+  it("carries the offer's colour, null included, and nothing when the offer carries none", () => {
     const offer: TillMenuOffer = {
       id: "offer-beer",
       menuId: "menu-1",
@@ -4058,6 +4057,43 @@ describe("menuOfferToTillProduct", () => {
     );
     expect(menuOfferToTillProduct({ ...offer, color: null })).toHaveProperty("color", null);
     expect(menuOfferToTillProduct(offer)).not.toHaveProperty("color");
+  });
+
+  it("carries the offer's photo, null included", () => {
+    const offer: TillMenuOffer = {
+      id: "offer-cafe",
+      menuId: "menu-1",
+      productId: "cafe",
+      grossPrice: null,
+      unitPrice: "1.50",
+      available: true,
+      image: "cafe.webp",
+      description: null,
+      menuName: "Carta",
+      placements: [[]],
+      name: "Café",
+      customerName: null,
+      kitchenName: null,
+      unit: {
+        id: "unit-each",
+        name: { es: "unidad" },
+        abbreviation: { es: "ud" },
+        precision: 0,
+        hardwareUnit: null,
+      },
+      vatClass: "general",
+      category: null,
+      allergens: null,
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      courseId: null,
+      offeredModifiers: [],
+      variants: [],
+    };
+    expect(menuOfferToTillProduct(offer)).toHaveProperty("image", "cafe.webp");
+    expect(menuOfferToTillProduct({ ...offer, image: null })).toHaveProperty("image", null);
   });
 
   it("offers the picker only the extras items and option labels that can be sold now", () => {

@@ -160,7 +160,8 @@ nothing stores "handheld" or "till".
     minimum width, a phone shows at most three columns whatever the Handheld slider says (104 px
     tiles and 12 px gaps: three fit in 390 px — arithmetic from the grid rule, not a measurement);
     a line under the slider says narrow screens show fewer columns, and a tablet handheld shows
-    more. Sections open inside it behind
+    more. (2026-10-06: measured on the till at 390 px, the grid is about 310 px wide and shows two columns.)
+    Sections open inside it behind
     a breadcrumb; products do nothing. Its search finds this menu's products only, with a line
     saying a device may also show results from other menus available to it.
 11. **A shared slider.** No `wt-*` primitive draws a range (`packages/ui/src/components/` has none),

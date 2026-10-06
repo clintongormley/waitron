@@ -249,12 +249,12 @@ export interface TillProduct {
   menuVersionId?: string;
   /** False when it cannot be sold now; absent on a retrieved held line. */
   available?: boolean;
-  /** Who may order it on its own, as its menu version published it; absent on a retrieved held line
-   * and from a version published before the setting existed. */
+  /** Who may order it on its own, as its menu version published it; absent on a retrieved held line. */
   ordering?: ProductOrdering;
-  /** The offer's effective colour; absent on a retrieved held line and from a version published
-   * before it existed. */
+  /** The offer's effective colour; absent on a retrieved held line. */
   color?: string | null;
+  /** The offer's photo; absent on a retrieved held line. */
+  image?: string | null;
   variantId?: string;
   /** The selected variant's staff-facing name; a line naming a variant is shown under it alone. */
   variantName?: string;
@@ -370,8 +370,8 @@ export interface ProductCatalogue {
  * it can be sold now. */
 export type TillMenuOffer = LiveOffer;
 
-/** A menu in a zone-offers body: the published version its offers come from, that version's
- * structure and home layouts, and the layout this device shows. */
+/** A menu in a zone-offers body: the published version its offers come from, and that version's
+ * structure and Device Home Page. */
 export type TillZoneMenu = ServedMenu;
 
 export interface ZoneOfferCatalogue {
@@ -419,6 +419,7 @@ export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: str
     available: offer.available,
     ...(offer.ordering === undefined ? {} : { ordering: offer.ordering }),
     ...(offer.color === undefined ? {} : { color: offer.color }),
+    image: offer.image,
     name: offer.name,
     customerName: offer.customerName,
     kitchenName: offer.kitchenName,

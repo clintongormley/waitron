@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { codeMessage, codeOf } from "./codes.js";
-import { setLocale } from "./t.js";
+import { setLocale, t } from "./t.js";
 
 afterEach(() => {
   // Reset to the shipped default so a setLocale in one test cannot leak into another.
@@ -242,17 +242,23 @@ it("has English and Spanish copy for each menu section code", () => {
   }
 });
 
-it("has English and Spanish copy for each home page layout code", () => {
-  for (const code of [
-    "menu.layout_not_found",
-    "menu.default_layout_required",
-    "menu.shortcut_unreachable",
-  ]) {
+it("has English and Spanish copy for each Device Home Page code", () => {
+  for (const code of ["menu.shortcut_unreachable", "menu.home_display_invalid"]) {
     expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
   }
 });
+
+it.each(["en", "es"])(
+  "names the Device Home Page in a refused shortcut as the Structure tab's row does (%s)",
+  (language) => {
+    setLocale(language);
+    expect(codeMessage("menu.shortcut_unreachable", language).toLowerCase()).toContain(
+      t("home.row").toLowerCase(),
+    );
+  },
+);
 
 it("has English and Spanish copy for a publish refused because the menu changed", () => {
   const code = "menu.changed_since_preview";

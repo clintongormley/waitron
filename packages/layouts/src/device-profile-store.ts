@@ -98,9 +98,9 @@ const PROFILE_NAME: ConstraintTarget = { table: "device_profiles", columns: ["na
  * (device-profile-store.db.test.ts), which migrates core and identity only. `deleteDeviceProfile` deletes only a profile no device row names,
  * so a RESTRICT refusal there comes from some other key into the table and is still
  * `device_profile.in_use` (`translates a refusal by a key the device check does not read`, same
- * file). `device_profile_printers.device_profile_id` and the catalogue's
- * `device_profile_home_layouts.device_profile_id` also key into it and cascade, so neither refuses
- * a delete (the profile-deleted case in `apps/server/src/management-api.device-profiles.test.ts`).
+ * file). `device_profile_printers.device_profile_id` also keys into it and cascades, so it does not
+ * refuse a delete (`deletes a profile's list rows with the profile, and refuses deleting a listed
+ * printer`, device-printers.db.test.ts).
  * `setProfilePrinterLists` runs after the `try`, so its refusals are never translated here. Widen a
  * `try` to a second statement and its foreign-key refusals would be translated as this table's.
  *

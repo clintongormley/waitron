@@ -59,7 +59,6 @@ import {
   type TotpKeyRing,
 } from "@waitron/identity";
 import type { IssuedAccountAction } from "@waitron/identity";
-import { deviceHomeLayouts, setDeviceHomeLayout } from "@waitron/catalogue";
 import {
   FORM_FACTORS,
   createCanvas,
@@ -68,7 +67,6 @@ import {
   deleteDeviceProfile,
   getReceipt,
   getCanvas,
-  getDeviceProfile,
   getDeviceProfileWithPrinters,
   getStoredLogoRasters,
   getTenantTheme,
@@ -135,7 +133,7 @@ import { withInUse } from "./in-use.js";
 import { queryFlag } from "./report-api.js";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, readRawJsonBody } from "@waitron/server-kit";
-import { requireBodyUuid, requireEnum, requireNullableBodyUuid } from "@waitron/server-kit";
+import { requireBodyUuid, requireEnum } from "@waitron/server-kit";
 import {
   clearManagementCookie,
   readManagementSessionToken,
@@ -303,7 +301,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device_profile.invalid": 400,
   "printer.not_found": 404,
   "catalogue.not_found": 404,
-  "menu.layout_not_found": 404,
 };
 
 const run = createErrorBoundary(STATUS, "management.failed");
@@ -384,11 +381,6 @@ function requireDeviceProfileId(id: string): string {
   return id;
 }
 
-function requireMenuId(id: string): string {
-  if (!isUuid(id)) throw new AppError("catalogue.not_found", { catalogueId: id });
-  return id;
-}
-
 function logoNotFound(): AppError<"receipt.invalid"> {
   return new AppError("receipt.invalid", { reason: "image_not_found", field: "logo" });
 }
@@ -422,23 +414,6 @@ function withVenueReadAuth<T>(
 ): Promise<T> {
   return withTransaction(deps.db, async (tx) => {
     await authorizeManager(tx, { managementSessionId: sessionId, permission: "venue.view" });
-    return fn(tx);
-  });
-}
-
-/** Runs `fn` in one transaction after confirming the session holds `layout.configure` and that
- * device profile `id` exists and is not retired, which the catalogue's home-layout reads and writes
- * do not check. */
-function withLayoutProfile<T>(
-  deps: ManagementApiDeps,
-  sessionId: string,
-  id: string,
-  fn: (tx: Transaction) => Promise<T>,
-): Promise<T> {
-  return withTransaction(deps.db, async (tx) => {
-    await authorizeManager(tx, { managementSessionId: sessionId, permission: "layout.configure" });
-    if ((await getDeviceProfile(tx, id)) === undefined)
-      throw new AppError("device_profile.not_found", {});
     return fn(tx);
   });
 }
@@ -1265,7 +1240,7 @@ export function mountManagementApi(
 
   // ── Device profiles ──
   // Gated like the canvases: each read route carries its own gate, the write functions authorize
-  // themselves — except the home-layout choice, gated in its route.
+  // themselves.
   app.get("/management-api/device-profiles", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1407,32 +1382,6 @@ export function mountManagementApi(
           id,
         });
       });
-      return c.body(null, 204);
-    }),
-  );
-
-  // Which home layout the profile shows for each menu (D14).
-  app.get("/management-api/device-profiles/:id/home-layouts", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireDeviceProfileId(c.req.param("id"));
-      return c.json(
-        await withLayoutProfile(deps, sessionId, id, (tx) => deviceHomeLayouts(tx, id)),
-      );
-    }),
-  );
-
-  // `layoutId: null` goes back to the menu's default layout.
-  app.put("/management-api/device-profiles/:id/home-layouts/:menuId", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const id = requireDeviceProfileId(c.req.param("id"));
-      const menuId = requireMenuId(c.req.param("menuId"));
-      const body = await readJsonBody<{ layoutId?: unknown }>(c);
-      const layoutId = requireNullableBodyUuid(body.layoutId, "layoutId");
-      await withLayoutProfile(deps, sessionId, id, (tx) =>
-        setDeviceHomeLayout(tx, id, menuId, layoutId),
-      );
       return c.body(null, 204);
     }),
   );

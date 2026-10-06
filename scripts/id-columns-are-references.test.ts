@@ -105,14 +105,14 @@ describe("every id-holding column of a transferred table is rewritten, set to th
   });
 
   // Proof by deletion, kept as cases: each declared `references` entry is what clears its column.
-  it.each([
-    ["option_lists", "option_lists.default_label_id"],
-    ["device_profile_home_layouts", "device_profile_home_layouts.layout_id"],
-  ])("reports %s's reference column once its declaration is gone", (table, column) => {
-    expect(unrewrittenIdColumns(withoutReferences(table), realSchema, NOT_REFERENCES)).toEqual([
-      column,
-    ]);
-  });
+  it.each([["option_lists", "option_lists.default_label_id"]])(
+    "reports %s's reference column once its declaration is gone",
+    (table, column) => {
+      expect(unrewrittenIdColumns(withoutReferences(table), realSchema, NOT_REFERENCES)).toEqual([
+        column,
+      ]);
+    },
+  );
 
   // The other direction: an id-shaped column that holds no row id passes once listed, and only then.
   it("passes a listed id-shaped column that is not a reference, and reports it unlisted", () => {

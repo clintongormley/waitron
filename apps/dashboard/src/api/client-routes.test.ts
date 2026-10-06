@@ -835,90 +835,51 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
-  it("reads and edits a menu's home page layouts and their tiles", async () => {
-    const layout = {
-      id: "l1",
-      name: "Home",
-      isDefault: true,
-      tiles: [
+  it("reads a menu's Device Home Page and writes its shortcuts and display settings", async () => {
+    const home = {
+      homeSectionId: "s-home",
+      shortcuts: [
         {
           memberId: "t1",
           position: 0,
           ref: { kind: "product" as const, productId: "p1" },
+          missingName: null,
           name: "Burger",
           reachable: true,
         },
       ],
+      handheld: { columns: 3, tiles: "colours" as const, order: "home_first" as const },
+      till: { columns: 6, tiles: "colours" as const, order: "home_first" as const },
     };
     const ref = { kind: "section" as const, sectionId: "s1" };
-    const tile = { id: "t2", position: 1, ref };
+    const shortcut = { id: "t2", position: 1, ref };
     const fetchImpl = vi
       .fn()
-      .mockResolvedValueOnce(jsonResponse([layout]))
-      .mockResolvedValueOnce(jsonResponse({ id: "l2" }, true, 201))
+      .mockResolvedValueOnce(jsonResponse(home))
+      .mockResolvedValueOnce(jsonResponse(shortcut, true, 201))
       .mockResolvedValueOnce(emptyResponse())
-      .mockResolvedValueOnce(jsonResponse({ id: "l3" }, true, 201))
-      .mockResolvedValueOnce(emptyResponse())
-      .mockResolvedValueOnce(emptyResponse())
-      .mockResolvedValueOnce(jsonResponse(tile, true, 201))
-      .mockResolvedValueOnce(emptyResponse())
-      .mockResolvedValueOnce(jsonResponse([tile]))
-      .mockResolvedValueOnce(refusal("menu.default_layout_required", 409));
-    const api = new DashboardApi("", fetchImpl);
-
-    await expect(api.listHomeLayouts("c1")).resolves.toEqual([layout]);
-    await expect(api.createHomeLayout("c1", "Counter")).resolves.toEqual({ id: "l2" });
-    await expect(api.setDefaultHomeLayout("c1", "l2")).resolves.toBeUndefined();
-    await expect(api.duplicateHomeLayout("l1", "Home (copy)")).resolves.toEqual({ id: "l3" });
-    await expect(api.renameHomeLayout("l3", "Terrace")).resolves.toBeUndefined();
-    await expect(api.deleteHomeLayout("l3")).resolves.toBeUndefined();
-    await expect(api.addHomeTile("l1", ref)).resolves.toEqual(tile);
-    await expect(api.removeHomeTile("l1", "t1")).resolves.toBeUndefined();
-    await expect(api.moveHomeTile("l1", "t2", 0)).resolves.toEqual([tile]);
-    await expect(api.deleteHomeLayout("l1")).rejects.toMatchObject({
-      code: "menu.default_layout_required",
-      status: 409,
-    });
-
-    expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/catalogues/c1/home-layouts", "GET", undefined],
-      ["/management-api/catalogues/c1/home-layouts", "POST", { name: "Counter" }],
-      ["/management-api/catalogues/c1/default-home-layout", "PUT", { layoutId: "l2" }],
-      ["/management-api/home-layouts/l1/duplicate", "POST", { name: "Home (copy)" }],
-      ["/management-api/home-layouts/l3", "PATCH", { name: "Terrace" }],
-      ["/management-api/home-layouts/l3", "DELETE", undefined],
-      ["/management-api/home-layouts/l1/tiles", "POST", { ref }],
-      ["/management-api/home-layouts/l1/tiles/t1", "DELETE", undefined],
-      ["/management-api/home-layouts/l1/tiles/t2/position", "PUT", { to: 0 }],
-      ["/management-api/home-layouts/l1", "DELETE", undefined],
-    ]);
-  });
-
-  it("reads a device profile's home page layout choices and saves one, null meaning the default", async () => {
-    const menus = [
-      {
-        menuId: "c1",
-        menuName: "Lunch",
-        layouts: [{ id: "l1", name: "Home", isDefault: true }],
-        selectedLayoutId: null,
-        selectedRemoved: false,
-      },
-    ];
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(menus))
-      .mockResolvedValueOnce(emptyResponse())
+      .mockResolvedValueOnce(jsonResponse([shortcut]))
       .mockResolvedValueOnce(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
 
-    await expect(api.getDeviceHomeLayouts("dp-1")).resolves.toEqual(menus);
-    await expect(api.setDeviceHomeLayout("dp-1", "c1", "l2")).resolves.toBeUndefined();
-    await expect(api.setDeviceHomeLayout("dp-1", "c1", null)).resolves.toBeUndefined();
+    await expect(api.getMenuHome("c1")).resolves.toEqual(home);
+    await expect(api.addHomeShortcut("c1", ref)).resolves.toEqual(shortcut);
+    await expect(api.removeHomeShortcut("c1", "t1")).resolves.toBeUndefined();
+    await expect(api.moveHomeShortcut("c1", "t2", 0)).resolves.toEqual([shortcut]);
+    await expect(
+      api.setHomeDisplay("c1", "till", { columns: 8, order: "menu_first" }),
+    ).resolves.toBeUndefined();
 
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/device-profiles/dp-1/home-layouts", "GET", undefined],
-      ["/management-api/device-profiles/dp-1/home-layouts/c1", "PUT", { layoutId: "l2" }],
-      ["/management-api/device-profiles/dp-1/home-layouts/c1", "PUT", { layoutId: null }],
+      ["/management-api/catalogues/c1/home", "GET", undefined],
+      ["/management-api/catalogues/c1/home/shortcuts", "POST", { ref }],
+      ["/management-api/catalogues/c1/home/shortcuts/t1", "DELETE", undefined],
+      ["/management-api/catalogues/c1/home/shortcuts/t2/position", "PUT", { to: 0 }],
+      [
+        "/management-api/catalogues/c1/home-display",
+        "PATCH",
+        { device: "till", columns: 8, order: "menu_first" },
+      ],
     ]);
   });
 
@@ -942,7 +903,7 @@ describe("DashboardApi routes", () => {
           source: "this_menu" as const,
         },
       ],
-      warnings: [{ kind: "shortcut_missing" as const, layoutName: "Home", name: "Burger" }],
+      warnings: [{ kind: "shortcut_missing" as const, name: "Burger" }],
     };
     const fetchImpl = vi
       .fn()
@@ -1033,23 +994,6 @@ describe("DashboardApi routes", () => {
       ["/management-api/servers/a%2Fb/clear", "POST", undefined],
     ]);
   });
-});
-
-it("replaces a missing home tile through its own route with a structural reference", async () => {
-  const fetchImpl = vi
-    .fn()
-    .mockResolvedValue(
-      jsonResponse({ id: "t1", position: 1, ref: { kind: "section", sectionId: "s-wines" } }),
-    );
-  const api = new DashboardApi("", fetchImpl);
-  await api.replaceHomeTile("l-counter", "t1", { kind: "section", sectionId: "s-wines" });
-  expect(callsOf(fetchImpl)).toEqual([
-    [
-      "/management-api/home-layouts/l-counter/tiles/t1/replace",
-      "POST",
-      { ref: { kind: "section", sectionId: "s-wines" } },
-    ],
-  ]);
 });
 
 it("downloads the modelo 303 file for the chosen period as an ordinary GET, bytes untouched", async () => {

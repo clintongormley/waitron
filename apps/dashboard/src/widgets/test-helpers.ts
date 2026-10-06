@@ -3,6 +3,7 @@ import { commands, page } from "vitest/browser";
 import { beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import type { DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
@@ -280,13 +281,16 @@ export function menuDocument(
   };
   walk(members);
   return {
-    format: 2,
+    format: 3,
     menuId: "menu-lunch",
     menuName,
     root: { members },
     offers,
-    homeLayouts: [{ id: "layout-home", name: "Home", tiles: [] }],
-    defaultHomeLayoutId: "layout-home",
+    home: {
+      shortcuts: [],
+      handheld: HOME_DISPLAY_DEFAULTS.handheld,
+      till: HOME_DISPLAY_DEFAULTS.till,
+    },
   };
 }
 

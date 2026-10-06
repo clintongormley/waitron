@@ -423,19 +423,15 @@ the 2026-09-30 folders design; what remains:
   change, drafts included, and `#markRounds` marks each against the open table's offers; whether a
   store from an earlier table is ever shown again was not checked. Remember each round's zone, or
   keep rounds on the app, one per order.
-- **Home layouts (Task 8, #722).** A profile's layout choice saves as soon as it is picked, outside
-  the profile's own Save and Cancel (the section says so); which layout is being edited is not in
-  the page address; the tile picker offers active products only, so an inactive product's tile
-  shows no marker and cannot be added again until the product is switched back on; and no
-  accessibility scan covers the delete window's error state. **For the owner:** the picker never
-  offers the current default layout by name, so a profile cannot be pinned to today's default; the
-  server would accept such a choice.
+- **Home page shortcuts (Task 8, #722; rewritten 2026-10-06 for W93, which replaced named layouts
+  and the profile's choice with one Device Home Page per menu).** The add-shortcut picker offers
+  active products only, so a shortcut to a product switched off since shows no marker in the
+  Structure tree and, once removed, cannot be added again until the product is switched back on.
 - **The till's home page (Task 9, #729).** Search matches the staff name only, not a customer name
   or a section's name. Every `/api/menu-state` read from an enrolled device reads the device, once
   per zone the till holds at each poll; the token's scrypt check (21.1 ms, measured once on a Mac)
   runs off the lock, once per device until its token changes, the server restarts or the device
-  falls out of the 256 the server remembers. No test switches one menu between two layouts and
-  compares the structure, search and prices.
+  falls out of the 256 the server remembers.
 
 **Copying some of a section's products into another section is not built** (found by the menus
 plan's closing sweep, 2026-09-27). The menus spec §2 asks to select all, almost all or some of a
@@ -483,15 +479,9 @@ derivation (one 401, seven 429), because `passwordThrottle.begin` refuses a seco
 flight. **Next action:** give the till sign-in the same turn-taking (`inTurn`,
 `apps/server/src/attempt-turns.ts`) or an in-flight refusal.
 
-**The till's removed-layout warning outlives a sign-out.** When the home layout a device's profile
-chose is removed, the till warns until someone presses Dismiss. Signing out does not clear it
-(`#onLogout` leaves `removedLayouts` as it is, `apps/till/src/till-app.ts`), so the next operator to
-sign in on that device sees it. **Next action:** clear it in `#onLogout`, if the owner agrees the
-warning belongs to the operator who was signed in.
-
 **A section with nothing to order in it disappears from the till, and the tiles after it move.** The
-menu browser leaves a section out, from the structure and as a shortcut, when no product beneath it
-is among the offers it is given (`indexMenu`, `apps/till/src/widgets/menu-browser.ts`): when every
+menu browser leaves a section out of the structure, and draws an empty slot in its place as a
+shortcut, when no product beneath it is among the offers it is given (`indexMenu`, `apps/till/src/widgets/menu-browser.ts`): when every
 product in it was Inactive when the menu was published, while a diet filter is on and every product
 in it fails the filter (`apps/till/src/widgets/card-grid.ts`), and when every product in it is
 published as not sold separately. A section whose products are all sold out keeps its place, and its
@@ -1848,7 +1838,8 @@ a clash came from.
 `category_details.color`) with no table rebuild, so a venue migrates in place with no reset.
 Republish every menu after upgrading: a version published before W92 carries no product colours,
 so its product tiles stay plain, and a menu with products on it reads as changed until it is
-published again (the document format number is unchanged, so such a version is still sold from).
+published again (the document format number is unchanged, so such a version is still sold from;
+_2026-10-06: since W93 a version in an earlier document format is no longer sold from_).
 A section's colour was already in such a version, and the till now paints it on the section's
 tile. Export a configuration bundle again
 after upgrading: one exported before W92 records older schema versions for core and catalogue,
@@ -1879,6 +1870,68 @@ Left open:
   that product's own colour while it is open. I believe this predates the last review round; not
   checked against earlier commits.
 
+**Each menu has one Device Home Page, shown two ways — DONE (W93, 2026-10-06).** A menu's one
+Device Home Page is the first row of its Structure tab, and the Home page tab sets a Handheld and a
+Till display for it; named home layouts and the device profile's layout choice are gone. A till
+canvas card that sets no column count of its own follows the menu's setting, and a configuration
+import refuses a display setting a save would refuse (`setup.request_invalid`, naming the column).
+How it works: [product-categories.md](developers/product-categories.md), _Device Home Page routes_;
+[products.md](developers/products.md), _On the till_; and
+[design-system.md](developers/design-system.md), the Structure tab and the Device Home Page
+drawing.
+**Upgrading:** one migration, catalogue `0026_device_home_page.sql`, drops the
+`device_profile_home_layouts` table (each profile's layout choices) and adds six columns to
+`menu_details`, each required with a default, with no table rebuild, so a venue migrates in place.
+Published menus move to document format 3. Republish every menu after upgrading — a version in
+format 2 is no longer sold from — or reset the venue. Until a menu is published again no device is
+served it and it reads as changed; its preview opens and it publishes. A venue that made extra
+named layouts keeps their sections, which the menu no longer reads; a reset clears them. Export a
+configuration bundle again after upgrading: one exported before W93 records an older catalogue
+schema version, which the import refuses (`validateConfigurationBundle`,
+`apps/server/src/configuration-transfer.ts`; read, not run).
+**Looked at (2026-10-06):** on the demo venue, reset rather than republished (the upgrade-path
+item below): the Structure tab's Device Home Page row and its add-shortcut picker, the Home page tab's
+controls and preview, and the till's home at a phone's width and on the counter at 1280 px.
+Left open:
+- The Home page tab's Till preview draws the menu at the frame's full width, but on a real till
+  the menu shares the screen with the order: from 720 px wide the table order screen gives it three
+  fifths (`apps/till/src/screens/till-table-order-screen.ts`), and on the demo counter at 1280 px
+  its grid was 796 px wide, six columns at a setting of 10. So the Till preview can show up to
+  about four more columns than the till does. Not changed, because the real width depends on the
+  till screen's layout.
+- In the Structure tab's add-shortcut section picker, an included menu is labelled by its bare name
+  ("Drinks") where the tree says "Menu: Drinks", and a section of the same name inside it reads
+  "Drinks › Drinks", so the two cannot be told apart. Not changed, because the fix changes existing
+  assertions in `apps/dashboard/src/screens/menus-screen.test.ts`: the case "offers as product
+  shortcuts only active products…" pins `{ value: "included-drinks", label: "Drinks" }`. **For the
+  owner:** should the picker say "Menu: Drinks"?
+- The Spanish `menus.menu_prefix` reads "Menú: {name}", which the Structure tree shows for an
+  included menu, though the dashboard's other strings call a menu "carta". "Incluir un menú"
+  (`menus.include_menu`) and "Quitar de este menú" (`menus.remove_included`) say "menú" too. All
+  three date from #993, before W93.
+- On the till, opening a section from lower on the screen leaves the page scrolled, so the
+  breadcrumb is out of view. I believe this predates W93: neither `main`'s nor W93's
+  `apps/till/src/widgets/menu-browser.ts` scrolls on opening a section (read, not bisected).
+- The upgrade path, previewing and publishing a menu whose live version is format 2, was not looked
+  at on the dev stack. The shared demo venue could not start: `main`'s core migration
+  `0103_full_invoice_model.sql` (A231, #1256) failed at ``DROP TABLE `invoice_series` `` with
+  "FOREIGN KEY constraint failed" on that venue, so it was reset. The path is covered by automated
+  tests only: "a live version in format 2 is not served, and its menu shows changed" and "previews
+  and publishes a menu whose live version is format 2", in
+  `packages/catalogue/src/menu-publication.test.ts`.
+- The dashboard's Home page preview (`apps/dashboard/src/widgets/device-home-preview.ts`) is a hand
+  copy of the till's menu browser (`apps/till/src/widgets/menu-browser.ts`): the thumbnail, the tile
+  painting, the section trail, the two-block home arrangement, the breadcrumb and about a hundred lines
+  of CSS. A change to the till's tiles has to be repeated by hand, and no test sees the two drift
+  apart. Proposed follow-up: move the shared logic and CSS beside `arrangeHome` in
+  `packages/catalogue/src/device-home.ts`.
+- On the Menus screen's Structure and Home page tabs, the screen reads the menu's structure and its
+  Device Home Page separately, alongside the status read (Structure) or the preview read (Home page)
+  each tab already makes, so one edit re-reads the menu three times on either tab. Merging the reads needs either the structure's live query to also
+  listen to `products` (its table list is pinned in `apps/dashboard/src/api/live-queries.test.ts`)
+  or the tree to name shortcuts from the product list the screen already holds. **For the owner:**
+  which?
+
 **A Products drag does not notice when a refresh removes what it is dragging or where it is going —
 DONE (W88a, #1228, 2026-10-05); left open:** A drag no longer sends a move once a refresh has removed
 the category; one deleted elsewhere before this screen refreshed is still sent, and what the server
@@ -1886,9 +1939,10 @@ answers to it is not checked.
 
 **Unused editing code in the two widgets the Menus screen no longer edits with — OPEN (W88, owner
 default 2026-10-04: leave and record).** `dashboard-member-list-editor`
-(`apps/dashboard/src/widgets/member-list-editor.ts`) is now drawn only by the Home page tab's layout
-editor, which sets `openable` off, so its section Open, Edit and Delete actions and its included-menu
-link and removal are reached by its own tests alone. `dashboard-menu-structure-tree`
+(`apps/dashboard/src/widgets/member-list-editor.ts`) is drawn by nothing since W93 (2026-10-06),
+which deleted the Home page tab's layout editor that drew it, so all of it is reached by its own
+tests alone; the Menus screen and the two structure widgets still import its `memberName`, and the
+two widgets its `memberKindLabel`. `dashboard-menu-structure-tree`
 (`apps/dashboard/src/widgets/menu-structure-tree.ts`) is drawn only by the Preview tab, `readonly`,
 so its `current` path and its edit buttons are reached by its own tests alone. Pruning either
 deletes assertions in `member-list-editor.test.ts` or `menu-structure-tree.test.ts`, so it needs
@@ -2376,7 +2430,8 @@ The original walkthrough is retained under *Detail → Setup wizard*.
 
 - **Row menus in plain `<table>`s are unchecked at phone width.** `variant-table.ts` and
   `option-list-form.ts` (`apps/dashboard/src/widgets/`) put a `wt-row-actions` in a plain table,
-  not `wt-data-table`, so `pinned` does not reach them; `member-list-editor.ts` and
+  not `wt-data-table`, so `pinned` does not reach them; `member-list-editor.ts` (drawn by nothing
+  since W93) and
   `product-editor.ts` also contain both a `<table>` and a row menu (found by grep, not read). None
   has a phone-width case and none was measured.
 - Read-back gaps: the print-mode and
@@ -3195,10 +3250,6 @@ The original walkthrough is retained under *Detail → Setup wizard*.
   - on the till's floor map at 390 px wide, tables overlap one another;
   - in Spanish, the till's tab names "Counter", "Floor" and "Order" stay in English (traced to
     canvases, see A182 below);
-  - on the dashboard, the dialog for a new home page layout is nearly full-screen for a single
-    name field;
-  - on the dashboard, the publish preview says "Home page layout X changed" both for a layout that
-    was added and for one that was deleted;
   - the till's browser console shows Lit's "scheduled an update … after an update completed"
     warning.
 
@@ -3237,15 +3288,18 @@ The original walkthrough is retained under *Detail → Setup wizard*.
      and tablet), the kitchen screen and the pass — starting from the till screens that already
      exist (`apps/till/src/screens/`) and [ui-review.md](ui-review.md)'s walk of the three displays.
      Decide what each one shows, how it fits narrow and wide screens (a responsive grid inside a
-     screen is fine, §11), and what a venue may still choose per device, such as its home layout
-     or kitchen station — set on the device profile, not drawn in an editor.
+     screen is fine, §11), and what a venue may still choose per device, such as its kitchen
+     station — set on the device profile, not drawn in an editor. _(2026-10-06: W93 took the home
+     layout out of the profile: a menu's Device Home Page has one display per kind of device, and
+     the device's form factor picks it.)_
   2. **Retire canvases** once those screens replace them: the till's canvas tabs and card grid, the
      `canvases` table and `device_profiles.canvas_id`, the canvas code in `packages/layouts`, the
      dashboard's editor, its navigation entry and the profile screen's picker, the routes, the live
      queries, the error codes and their translations. No data is carried over (§3's pre-live rule).
      Trace every consumer before deleting; the tests that build a canvas for the till go too.
 
-  **Separate, and staying** (§11): a menu's home layouts (how its shortcuts are arranged), receipt
+  **Separate, and staying** (§11): a menu's Device Home Page and its Handheld and Till displays
+  (how its shortcuts are arranged), receipt
   configuration, and the floor-plan editor.
 
   **Until this lands, build no new feature as a canvas card or card setting** — put it in the
@@ -6139,8 +6193,8 @@ bump it when a fixed version is published, and run the certificate suites in tho
   `PATCH /management-api/venue-service/departments/:departmentId`
   (`packages/venue-service/src/routes.ts`), and floor tables need a list that includes disabled
   tables plus `active` on `PATCH /management-api/tables/:id` (`apps/server/src/management-api.ts`,
-  `apps/dashboard/src/api/client.ts`). Lane B's paused W93 worktree (`feat/device-home-page`) has
-  uncommitted changes in `apps/server/src/management-api.ts`, `apps/dashboard/src/api/client.ts`,
+  `apps/dashboard/src/api/client.ts`). Lane B's W93 branch (`feat/device-home-page`)
+  changes `apps/server/src/management-api.ts`, `apps/dashboard/src/api/client.ts`,
   `apps/dashboard/src/api/live-queries.ts` and `packages/venue-service/src/operations.ts`, so they
   are a follow-up to take once W93 lands. Found along the way, each left as it is: enabling a zone
   leaves its tables disabled, and its routing exceptions, watcher zones and till starting zones
@@ -7113,7 +7167,7 @@ while it holds decisions still open.
 | [Failover prototype](superpowers/specs/2026-09-16-sqlite-failover-prototype-design.md) and its plan | done (#425); `bench/sqlite-failover` points at it | *Afterwards* |
 | [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md) | slices 1 and 2 built; 3 to 5 not started | *Afterwards* |
 | [Handheld and till hardware decisions](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md) | decisions; the reader dropdown exists | A6 (Slice 2) |
-| [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan | built (#729 last); owner decisions still open | Track A (*Sales classification and the menus plan — what they left open*) |
+| [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan | built (#729 last); owner decisions still open; its home layouts superseded by W93's [Device Home Page design](superpowers/specs/2026-10-05-w93-device-home-page-design.md) | Track A (*Sales classification and the menus plan — what they left open*) |
 | [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | all 18 tasks landed (Task 17 last, #991); what they left open is under A4 | A4 |
 | [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan | built (#738 last); a code comment points at it | Track A (*Sales classification and the menus plan — what they left open*) |
 | [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till side built by lane B item B15 (#956) | A4 |

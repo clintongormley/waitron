@@ -55,7 +55,6 @@ const TABLES = [
   "menu_versions",
   "menu_publications",
   "menu_version_images",
-  "device_profile_home_layouts",
 ];
 
 /**
@@ -75,6 +74,30 @@ it("has no per-menu extras tables", async () => {
     sql`select name from sqlite_master where type = 'table' and name in ('menu_item_extra_lists', 'menu_item_extra_items')`,
   );
   expect(rows.rows).toEqual([]);
+});
+
+it("gives menu_details the six display settings, each required with its default and no check", async () => {
+  const columns = (
+    await db.execute<{ name: string; type: string; notnull: number; dflt_value: string | null }>(
+      sql`pragma table_info('menu_details')`,
+    )
+  ).rows.map(
+    ({ name, type, notnull, dflt_value }) =>
+      `${name} ${type.toLowerCase()} ${notnull} ${dflt_value}`,
+  );
+  expect(columns).toEqual([
+    "menu_id text 1 null",
+    "root_section_id text 1 null",
+    "default_home_layout_id text 1 null",
+    "handheld_columns integer 1 3",
+    "handheld_tiles text 1 'colours'",
+    "handheld_order text 1 'home_first'",
+    "till_columns integer 1 6",
+    "till_tiles text 1 'colours'",
+    "till_order text 1 'home_first'",
+  ]);
+  // The `checks` map in the keys-and-links case below is compared whole, so a named CHECK on any
+  // of the six would add an entry that case refuses.
 });
 
 describe("the catalogue migration set carries no tenant column", () => {
@@ -168,7 +191,6 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_versions: "id",
       menu_publications: "menu_id",
       menu_version_images: "version_id, filename",
-      device_profile_home_layouts: "device_profile_id, menu_id",
     });
 
     expect(foreignKeys).toEqual({
@@ -199,8 +221,6 @@ describe("the catalogue migration set carries no tenant column", () => {
       "menu_publications(menu_id)": "catalogues(id) on delete no action",
       "menu_publications(version_id, menu_id)": "menu_versions(id, menu_id) on delete no action",
       "menu_version_images(version_id)": "menu_versions(id) on delete no action",
-      "device_profile_home_layouts(device_profile_id)": "device_profiles(id) on delete cascade",
-      "device_profile_home_layouts(menu_id)": "catalogues(id) on delete no action",
     });
 
     expect(checks).toEqual({
@@ -487,7 +507,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
 
   it("refuses menu details whose menu, root or layout does not exist, and a root two menus share", async () => {
     const c = await catalogue();
-    const details = { menuId: c.menuId, rootSectionId: c.rootId, defaultHomeLayoutId: c.layoutId };
+    const details = { menuId: c.menuId, rootSectionId: c.rootId, homeSectionId: c.layoutId };
     await refusal(
       () => db.insert(menuDetails).values({ ...details, menuId: missing }),
       "menu_details_menu_fk",
@@ -497,7 +517,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       "menu_details_root_fk",
     );
     await refusal(
-      () => db.insert(menuDetails).values({ ...details, defaultHomeLayoutId: missing }),
+      () => db.insert(menuDetails).values({ ...details, homeSectionId: missing }),
       "menu_details_default_layout_fk",
     );
     // The accepting control, then a second menu naming the same root.

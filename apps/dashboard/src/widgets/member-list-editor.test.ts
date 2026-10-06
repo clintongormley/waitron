@@ -1,8 +1,9 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtModal } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
-import type { SectionMember } from "@waitron/catalogue/src/section-types.js";
+import type { SectionMember, TileRef } from "@waitron/catalogue/src/section-types.js";
+import type { MenuStructureNode } from "../api/client.js";
 import { chooseOption, middleWithin, textLines } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 // Value import: pulls the module in for its `@customElement` side effect.
@@ -750,3 +751,204 @@ it.each([
     }
   },
 );
+
+describe("replacing a missing member", () => {
+  const withGone = (): SectionMember<TileRef>[] => [
+    ...members(),
+    { id: "m-gone", position: 3, ref: { kind: "missing", name: "Old special" } },
+  ];
+
+  async function mountReplacing(props: Partial<MemberListEditor> = {}) {
+    const el = await mount({ members: withGone(), replaceable: new Set(["m-gone"]), ...props });
+    q(el, '[data-test="replace-m-gone"]').click();
+    await el.updateComplete;
+    return el;
+  }
+
+  const replacingNow = (el: MemberListEditor) =>
+    el.shadowRoot!.querySelector('[data-test="replace-cancel"]') !== null;
+
+  const bottomError = (el: MemberListEditor) =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!
+      .error;
+
+  it("puts a refusal naming the choice under the picker and focuses it, any other at the bottom, and closes once its host says it was saved", async () => {
+    const el = await mountReplacing();
+    await choose(el, "product:p-salad");
+    const done = el.replacementCompletion("m-gone");
+    (document.activeElement as HTMLElement | null)?.blur();
+
+    done("That product cannot go here", true);
+    await el.updateComplete;
+    await memberBox(el).updateComplete;
+    expect(memberBox(el).error).toBe("That product cannot go here");
+    expect(bottomError(el)).toBe(t("form.fix_fields"));
+    expect(el.shadowRoot!.activeElement).toBe(memberBox(el));
+
+    done("The server could not save it");
+    await el.updateComplete;
+    expect(memberBox(el).error).toBe("");
+    expect(bottomError(el)).toBe("The server could not save it");
+    expect(replacingNow(el)).toBe(true);
+
+    done("");
+    await el.updateComplete;
+    expect(replacingNow(el)).toBe(false);
+    expect(memberBox(el).label).toBe(t("members.add_label"));
+    expect(memberBox(el).value).toBe("");
+    expect(memberBox(el).error).toBe("");
+  });
+
+  it("does not focus the picker for a refusal that lands while the list is busy, and does once it is not", async () => {
+    const el = await mountReplacing();
+    await choose(el, "product:p-salad");
+    el.busy = true;
+    await el.updateComplete;
+    (document.activeElement as HTMLElement | null)?.blur();
+    el.replacementCompletion("m-gone")("That product cannot go here", true);
+    await el.updateComplete;
+    await memberBox(el).updateComplete;
+    expect(el.shadowRoot!.activeElement).toBeNull();
+    el.busy = false;
+    await el.updateComplete;
+    await memberBox(el).updateComplete;
+    expect(el.shadowRoot!.activeElement).toBe(memberBox(el));
+  });
+
+  it("ignores the answer to a replacement the person has since cancelled or started again", async () => {
+    const el = await mountReplacing();
+    await choose(el, "product:p-salad");
+    const stale = el.replacementCompletion("m-gone");
+    q(el, '[data-test="replace-cancel"]').click();
+    await el.updateComplete;
+    expect(replacingNow(el)).toBe(false);
+    q(el, '[data-test="replace-m-gone"]').click();
+    await el.updateComplete;
+    stale("That product cannot go here", true);
+    stale("");
+    await el.updateComplete;
+    expect(replacingNow(el)).toBe(true);
+    expect(memberBox(el).error).toBe("");
+    expect(bottomError(el)).toBe("");
+  });
+
+  it("closes the replacement, and its errors, on Cancel", async () => {
+    const el = await mountReplacing();
+    q(el, '[data-test="add"]').click();
+    await el.updateComplete;
+    expect(memberBox(el).error).toBe(t("members.tile_choose_first"));
+    q(el, '[data-test="replace-cancel"]').click();
+    await el.updateComplete;
+    expect(replacingNow(el)).toBe(false);
+    expect(memberBox(el).error).toBe("");
+    expect(memberBox(el).required).toBe(false);
+    expect(el.shadowRoot!.querySelector("wt-form-actions")).toBeNull();
+  });
+
+  it.each([
+    [
+      "the member is no longer missing",
+      {
+        members: [
+          ...members(),
+          { id: "m-gone", position: 3, ref: { kind: "product" as const, productId: "p-salad" } },
+        ],
+      },
+    ],
+    [
+      "the missing member now names something else",
+      {
+        members: [
+          ...members(),
+          { id: "m-gone", position: 3, ref: { kind: "missing" as const, name: "Other special" } },
+        ],
+      },
+    ],
+    ["the member is no longer replaceable", { replaceable: new Set<string>() }],
+    ["the member has left the list", { members: members() }],
+    ["its host changes the replacement's scope", { replacementScope: "another-menu" }],
+  ])("drops a replacement when %s, ignoring its answer", async (_case, change) => {
+    const el = await mountReplacing();
+    await choose(el, "product:p-chips");
+    const done = el.replacementCompletion("m-gone");
+    Object.assign(el, change);
+    await el.updateComplete;
+    expect(replacingNow(el)).toBe(false);
+    expect(memberBox(el).value).toBe("");
+    done("That product cannot go here", true);
+    await el.updateComplete;
+    expect(memberBox(el).error).toBe("");
+  });
+
+  it("keeps a replacement open while its member stays missing under the same name", async () => {
+    const el = await mountReplacing();
+    await choose(el, "product:p-chips");
+    el.replaceable = new Set(["m-gone"]);
+    el.members = withGone();
+    await el.updateComplete;
+    expect(replacingNow(el)).toBe(true);
+    expect(memberBox(el).value).toBe("product:p-chips");
+  });
+
+  it("asks for a choice again when the one made after a refused attempt is no longer on offer", async () => {
+    const el = await mountReplacing();
+    q(el, '[data-test="add"]').click();
+    await el.updateComplete;
+    await choose(el, "product:p-salad");
+    expect(memberBox(el).error).toBe("");
+    // Another change puts Salad on the list, so it is no longer offered.
+    el.members = [
+      ...withGone(),
+      { id: "m-salad", position: 4, ref: { kind: "product", productId: "p-salad" } },
+    ];
+    await el.updateComplete;
+    expect(memberBox(el).value).toBe("");
+    expect(memberBox(el).error).toBe(t("members.tile_choose_first"));
+  });
+
+  it("sends no replacement and opens none while busy", async () => {
+    const el = await mountReplacing();
+    const replaces = capture(el, "wt-member-replace");
+    await choose(el, "product:p-salad");
+    el.busy = true;
+    await el.updateComplete;
+    q(el, '[data-test="add"]').click();
+    await el.updateComplete;
+    expect(replaces).toEqual([]);
+
+    const idle = await mount({ members: withGone(), replaceable: new Set(["m-gone"]), busy: true });
+    q(idle, '[data-test="replace-m-gone"]').click();
+    await idle.updateComplete;
+    expect(replacingNow(idle)).toBe(false);
+  });
+});
+
+it("offers a section whose node carries no internal name as unavailable, and offers no product node as a section", async () => {
+  const el = await mount({
+    sectionChoices: true,
+    members: [],
+    excludeSectionIds: [],
+    nodes: [
+      { memberId: "m-unnamed", ref: { kind: "section", sectionId: "s-unnamed" }, children: [] },
+      { memberId: "m-salad", ref: { kind: "product", productId: "p-salad" } },
+    ] as MenuStructureNode[],
+  });
+  expect(
+    memberBox(el)
+      .options.filter((option) => option.group === t("members.sections"))
+      .map(({ value, label }) => ({ value, label })),
+  ).toEqual([{ value: "section:s-unnamed", label: t("members.missing") }]);
+});
+
+it("counts only sections, never products, as held by the section holding them", () => {
+  const parents = sectionParents([
+    {
+      id: "s-lunch",
+      members: [
+        { id: "m-burger", position: 0, ref: { kind: "product", productId: "p-burger" } },
+        { id: "m-drinks", position: 1, ref: { kind: "section", sectionId: "s-drinks" } },
+      ],
+    },
+  ]);
+  expect([...parents.entries()]).toEqual([["s-drinks", ["s-lunch"]]]);
+});

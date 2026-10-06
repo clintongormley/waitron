@@ -21,7 +21,7 @@ import * as menuDocument from "./menu-document.js";
 import * as operations from "./operations.js";
 import * as sectionGraph from "./section-graph.js";
 import { requireMenuRoot } from "./menu-structure.js";
-import { applyLiveFields, menuDocumentHash } from "./menu-document.js";
+import { applyLiveFields, MENU_DOCUMENT_FORMAT, menuDocumentHash } from "./menu-document.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import {
   assertLiveVersions,
@@ -261,18 +261,18 @@ describe("publishMenu", () => {
     const f = await menusFixture(fx.db);
     const [details] = await fx.db.select().from(menuDetails).where(eq(menuDetails.menuId, f.lunch));
     await fx.db.insert(sectionMembers).values([
-      { sectionId: details!.defaultHomeLayoutId, position: 0, productId: f.burger },
-      { sectionId: details!.defaultHomeLayoutId, position: 1, productId: f.soup },
-      { sectionId: details!.defaultHomeLayoutId, position: 2, childSectionId: f.mains },
+      { sectionId: details!.homeSectionId, position: 0, productId: f.burger },
+      { sectionId: details!.homeSectionId, position: 1, productId: f.soup },
+      { sectionId: details!.homeSectionId, position: 2, childSectionId: f.mains },
     ]);
     const preview = await app((tx) => previewMenu(tx, f.lunch));
     expect(preview.warnings).toEqual([
-      { kind: "shortcut_missing", layoutName: "Home", name: "Burger" },
-      { kind: "shortcut_missing", layoutName: "Home", name: "Mains" },
+      { kind: "shortcut_missing", name: "Burger" },
+      { kind: "shortcut_missing", name: "Mains" },
     ]);
     await app((tx) => publishMenu(tx, f.lunch, preview.hash, "person-1"));
     const live = await app((tx) => readLiveDocuments(tx, [f.lunch]));
-    expect(live.get(f.lunch)!.document.homeLayouts[0]!.tiles).toEqual([
+    expect(live.get(f.lunch)!.document.home.shortcuts).toEqual([
       { kind: "empty" },
       product(f.soup),
       { kind: "empty" },
@@ -488,6 +488,105 @@ describe("a live version published before its document froze VAT", () => {
   });
 });
 
+describe("a live version published before the Device Home Page", () => {
+  /** Makes the menu's live version a copy of its current one in format 2, which held named layouts
+   * and no `home`. */
+  async function liveInFormat2(menuId: string): Promise<string> {
+    const { versionId } = await publish(menuId);
+    const [row] = await fx.db.select().from(menuVersions).where(eq(menuVersions.id, versionId));
+    const document = {
+      ...row!.document,
+      home: undefined,
+      format: 2,
+      homeLayouts: [{ id: menuId, name: "Home", tiles: [] }],
+      defaultHomeLayoutId: menuId,
+    } as unknown as typeof row.document;
+    const [earlier] = await fx.db
+      .insert(menuVersions)
+      .values({
+        menuId,
+        number: row!.number + 1,
+        document,
+        contentHash: menuDocumentHash(document),
+        publishedAt: row!.publishedAt,
+        publishedBy: "person-1",
+      })
+      .returning({ id: menuVersions.id });
+    await fx.db
+      .update(menuPublications)
+      .set({ versionId: earlier!.id })
+      .where(eq(menuPublications.menuId, menuId));
+    return earlier!.id;
+  }
+
+  it("a live version in format 2 is not served, and its menu shows changed", async () => {
+    const f = await menusFixture(fx.db);
+    const lunch = await liveInFormat2(f.lunch);
+    const dinner = await publish(f.dinner);
+    const live = await app((tx) => readLiveDocuments(tx, [f.lunch, f.dinner]));
+    expect([...live.keys()]).toEqual([f.dinner]);
+    expect(live.get(f.dinner)!.versionId).toBe(dinner.versionId);
+    await expect(
+      app((tx) =>
+        assertLiveVersions(tx, [f.lunch, f.dinner], [{ menuId: f.lunch, versionId: lunch }]),
+      ),
+    ).rejects.toMatchObject({
+      code: "menu.version_changed",
+      params: { menus: [{ menuId: f.lunch, liveVersionId: null }] },
+    });
+    expect(await states(f)).toEqual({ lunch: "changed", dinner: "current" });
+  });
+
+  it("previews and publishes a menu whose live version is format 2", async () => {
+    const f = await menusFixture(fx.db);
+    await liveInFormat2(f.lunch);
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    expect(preview.status.state).toBe("changed");
+    expect(preview.changes).toEqual(menuDocument.diffMenuDocuments(null, preview.document));
+    expect(preview.changes).toContainEqual(
+      expect.objectContaining({ kind: "product_added", productId: f.soup }),
+    );
+    const published = await app((tx) => publishMenu(tx, f.lunch, preview.hash, "person-1"));
+    const live = (await app((tx) => readLiveDocuments(tx, [f.lunch]))).get(f.lunch)!;
+    expect(live.versionId).toBe(published.versionId);
+    expect(live.document.format).toBe(3);
+  });
+
+  it("compares another menu only when its live version is in this format", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.lunch);
+    await publish(f.dinner);
+    await app((tx) => updateCategory(tx, f.softDrinks, { color: "#256bb1" }));
+    expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toContainEqual(
+      expect.objectContaining({ productId: f.lemonade, alsoOn: ["Dinner Menu"] }),
+    );
+    await liveInFormat2(f.dinner);
+    const { changes } = await app((tx) => previewMenu(tx, f.lunch));
+    const lemonade = changes.find(
+      (change) => "productId" in change && change.productId === f.lemonade,
+    );
+    expect(lemonade).toMatchObject({ kind: "product_changed", fields: ["color"] });
+    expect(lemonade).not.toHaveProperty("alsoOn");
+  });
+
+  it("names an including menu as also changed only when its live version is in this format", async () => {
+    const f = await menusFixture(fx.db);
+    await publish(f.drinksMenu);
+    await publish(f.lunch);
+    await liveInFormat2(f.dinner);
+    await app((tx) => updateSection(tx, f.beer, { internalName: "Beers" }));
+    const { changes } = await app((tx) => previewMenu(tx, f.drinksMenu));
+    expect(changes).toContainEqual(
+      expect.objectContaining({
+        kind: "section_changed",
+        sectionId: f.beer,
+        source: "this_menu",
+        alsoOn: ["Lunch Menu"],
+      }),
+    );
+  });
+});
+
 describe("a live version published while its document froze a VAT rate", () => {
   /** Makes the menu's live version a copy of its current one that also holds a `vatRate` beside
    * every `vatClass`, as a version published before the rate left the document does. */
@@ -495,7 +594,7 @@ describe("a live version published while its document froze a VAT rate", () => {
     const { versionId } = await publish(menuId);
     const [row] = await fx.db.select().from(menuVersions).where(eq(menuVersions.id, versionId));
     const document = JSON.parse(
-      JSON.stringify({ ...row!.document, format: 2 }, (_key, value: unknown) =>
+      JSON.stringify({ ...row!.document, format: MENU_DOCUMENT_FORMAT }, (_key, value: unknown) =>
         typeof value === "object" && value !== null && "vatClass" in value
           ? { ...value, vatRate: "10.00" }
           : value,
@@ -614,15 +713,15 @@ describe("a category's colour", () => {
   });
 });
 
-describe("a live version published before offers carried a colour", () => {
+describe("a live version whose offers carry no colour", () => {
   /** Makes the menu's live version a copy of its current one with no `color` on any offer; a
    * section's colour predates it and stays. */
   async function liveWithoutOfferColors(menuId: string): Promise<string> {
     const { versionId } = await publish(menuId);
     const [row] = await fx.db.select().from(menuVersions).where(eq(menuVersions.id, versionId));
-    const document = {
+    const document: typeof row.document = {
       ...row!.document,
-      format: 2 as const,
+      format: MENU_DOCUMENT_FORMAT,
       offers: Object.fromEntries(
         Object.entries(row!.document.offers).map(([id, offer]) => {
           const earlier = { ...offer };
@@ -650,7 +749,7 @@ describe("a live version published before offers carried a colour", () => {
     return earlier!.id;
   }
 
-  it("is still served, serves no colour, and its menu shows each offer's colour as a change", async () => {
+  it("is served, serves no colour, and its menu shows each offer's colour as a change", async () => {
     const f = await menusFixture(fx.db);
     const lunch = await liveWithoutOfferColors(f.lunch);
     const live = await app((tx) => readLiveDocuments(tx, [f.lunch]));

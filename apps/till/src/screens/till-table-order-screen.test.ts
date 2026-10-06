@@ -4170,14 +4170,10 @@ describe("till-table-order-screen", () => {
       expect(gridNames(el)).toEqual(["Cerveza"]);
     });
 
-    it("hands the browser the selected menu, with that menu's own home layout", async () => {
+    it("hands the browser the selected menu, with that menu's own Device Home Page", async () => {
       const drinksBar = {
         ...drinksMenu,
-        homeLayouts: [
-          ...drinksMenu.homeLayouts,
-          { id: "drinks-bar", name: "Bar", tiles: [{ kind: "product", productId: "cerveza" }] },
-        ],
-        homeLayoutId: "drinks-bar",
+        home: { ...drinksMenu.home, shortcuts: [{ kind: "product", productId: "cerveza" }] },
       } satisfies TillZoneMenu;
       const { el } = await mount({ ...bothMenus, menus: [foodMenu, drinksBar] });
       expect(grid(el).menu).toBe(foodMenu);
@@ -4192,12 +4188,14 @@ describe("till-table-order-screen", () => {
       expect([...shortcuts].map((name) => name.textContent)).toEqual(["Cerveza"]);
     });
 
-    it("gives the browser six columns on a till and three on a handheld", async () => {
+    it("hands the browser the device kind and no column count", async () => {
       const { el } = await mount(bothMenus);
-      expect(grid(el).columns).toBe(6);
+      expect(grid(el).columns).toBeUndefined();
+      expect(grid(el).handheld).toBe(false);
       el.handheld = true;
       await el.updateComplete;
-      expect(grid(el).columns).toBe(3);
+      expect(grid(el).columns).toBeUndefined();
+      expect(grid(el).handheld).toBe(true);
     });
 
     it("resolves a tab line's NAME from the full product set even when its menu is not the one shown", async () => {

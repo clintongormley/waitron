@@ -15,6 +15,7 @@ import type {
   SubmittedGroups,
 } from "../api/client.js";
 import type { DocumentMember, ServedMenu } from "@waitron/catalogue/src/menu-document-types.js";
+import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
@@ -174,10 +175,7 @@ export async function expectNoA11yViolations(context: Element): Promise<void> {
   expect(colourReadings, colourReadings.join("\n\n")).toEqual([]);
 }
 
-type ServedFields = Pick<
-  ServedMenu,
-  "structure" | "homeLayouts" | "defaultHomeLayoutId" | "homeLayoutId" | "layoutFallback"
->;
+type ServedFields = Pick<ServedMenu, "structure" | "home">;
 
 /** An offer a {@link servedMenus} structure lists; with `section`, inside a section of that name. */
 export interface ServedOffer {
@@ -189,12 +187,11 @@ export interface ServedOffer {
 
 /**
  * Gives each menu what a zone-offers body serves beside it: a structure listing that menu's own
- * offers in order, a section placed where its first offer falls, under a default layout with no
- * shortcuts, so a menu browser shows each offer once. With `shortcuts`, each menu also has a layout
- * `<menu id>-shortcuts` whose tiles are its offers; a menu's own `homeLayoutId` picks the layout the
- * device shows, the default otherwise.
+ * offers in order, a section placed where its first offer falls, and a Device Home Page at the
+ * default display settings with no shortcuts, so a menu browser shows each offer once. With
+ * `shortcuts`, each menu's shortcuts are its offers.
  */
-export function servedMenus<M extends { id: string; homeLayoutId?: string }>(
+export function servedMenus<M extends { id: string }>(
   menus: readonly M[],
   offers: readonly ServedOffer[],
   { shortcuts = false }: { shortcuts?: boolean } = {},
@@ -231,28 +228,16 @@ export function servedMenus<M extends { id: string; homeLayoutId?: string }>(
       }
       section.members.push(placed);
     }
-    const home = `${menu.id}-home`;
     return {
       ...menu,
       structure: { members },
-      homeLayouts: [
-        { id: home, name: "Home", tiles: [] },
-        ...(shortcuts
-          ? [
-              {
-                id: `${menu.id}-shortcuts`,
-                name: "Shortcuts",
-                tiles: own.map((offer) => ({
-                  kind: "product" as const,
-                  productId: offer.productId,
-                })),
-              },
-            ]
-          : []),
-      ],
-      defaultHomeLayoutId: home,
-      homeLayoutId: menu.homeLayoutId ?? home,
-      layoutFallback: null,
+      home: {
+        shortcuts: shortcuts
+          ? own.map((offer) => ({ kind: "product" as const, productId: offer.productId }))
+          : [],
+        handheld: HOME_DISPLAY_DEFAULTS.handheld,
+        till: HOME_DISPLAY_DEFAULTS.till,
+      },
     };
   });
 }

@@ -160,7 +160,7 @@ describe("menusContaining", () => {
     expect(menusContaining(lunch(), "absent")).toEqual([]);
   });
 
-  it("does not count a home layout holding the section as the menu containing it", () => {
+  it("does not count a Device Home Page holding the section as the menu containing it", () => {
     const graph = buildSectionGraph(
       [{ id: "layout", role: "home_layout", ownerMenuId: "menu-lunch" }, owned("drinks")],
       list("layout", ["s:drinks"]),
