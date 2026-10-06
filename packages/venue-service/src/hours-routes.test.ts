@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
@@ -559,6 +559,13 @@ describe("writing Hours", () => {
 
   it("names a copy on a holiday after the holiday, from target dates alone", async () => {
     const fx = await fixture();
+    const tenantBefore = await db.select().from(tenants);
+    onTestFinished(() =>
+      withTransaction(db, async (tx) => {
+        await tx.delete(tenants);
+        if (tenantBefore.length > 0) await tx.insert(tenants).values(tenantBefore);
+      }),
+    );
     await withTransaction(db, async (tx) => {
       await tx
         .insert(tenants)

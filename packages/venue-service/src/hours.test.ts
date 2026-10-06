@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { createHolidayCalendar, type CountryPack } from "@waitron/country";
 import {
@@ -2390,7 +2390,7 @@ describe("Hours with the holiday store", () => {
   const SHA = "a".repeat(64);
   const long = (letter: string) => letter.repeat(200);
   /** An invented country, so nothing here depends on a real country's holidays. */
-  function pack(repeatFacts = false): CountryPack {
+  function pack(repeatFacts = false, reads?: string[]): CountryPack {
     const calendar = createHolidayCalendar({
       localEntryLimit: 2,
       sources: [
@@ -2432,18 +2432,29 @@ describe("Hours with the holiday store", () => {
       availableForVenueSetup: false,
       fiscalJurisdictions: [],
       administrativeAreas: [{ code: "10", name: "Northshire", postalPrefixes: [] }],
-      holidayCalendar: repeatFacts
-        ? {
-            ...calendar,
-            read: (input) => {
-              const read = calendar.read(input);
-              return { ...read, facts: [...read.facts, ...read.facts] };
-            },
-          }
-        : calendar,
+      holidayCalendar: {
+        ...calendar,
+        read: (input) => {
+          reads?.push(`${input.from}..${input.to}`);
+          const read = calendar.read(input);
+          return repeatFacts ? { ...read, facts: [...read.facts, ...read.facts] } : read;
+        },
+      },
     };
   }
   const store = createHolidayStore((country) => (country === "ZZ" ? pack() : undefined));
+
+  // The file shares one taxpayer row; put back whatever it held before each case moved it.
+  let tenantBefore: (typeof tenants.$inferSelect)[] = [];
+  beforeAll(async () => {
+    tenantBefore = await withTransaction(db, (tx) => tx.select().from(tenants));
+  });
+  afterEach(async () => {
+    await withTransaction(db, async (tx) => {
+      await tx.delete(tenants);
+      if (tenantBefore.length > 0) await tx.insert(tenants).values(tenantBefore);
+    });
+  });
 
   /** The fixture's venue, placed in the invented country with a local holiday of its own. */
   async function placed(): Promise<Fixture & { town: string }> {
@@ -2683,6 +2694,39 @@ describe("Hours with the holiday store", () => {
     );
     expect(read.facts).toEqual([]);
     expect(read.coverage).toMatchObject([{ year: 2028, nationalRegional: "missing_year" }]);
+  });
+
+  it("names a copy after a local holiday in a year the pack does not ship, the others keeping the source name", async () => {
+    const f = await placed();
+    await withTransaction(db, (tx) =>
+      store.saveLocalHoliday(tx, f.cfg, null, { date: "2028-01-05", name: "Town 2028" }),
+    );
+    const source = await saveDate(f, null, specialInput({ name: "Summer opening" }));
+    const copies = await named(f, source.id, ["2028-01-05", "2028-01-06", "2026-12-29"]);
+    expect(copies.map(({ date, name }) => [date, name])).toEqual([
+      ["2028-01-05", "Town 2028"],
+      ["2028-01-06", "Summer opening"],
+      ["2026-12-29", "Summer opening"],
+    ]);
+  });
+
+  it("reads holidays once per calendar year the targets touch, not once per target", async () => {
+    const f = await placed();
+    const reads: string[] = [];
+    const counting = createHolidayStore((country) =>
+      country === "ZZ" ? pack(false, reads) : undefined,
+    );
+    const source = await saveDate(f, null, specialInput({ name: "Summer opening" }));
+    await withTransaction(db, (tx) =>
+      counting.duplicateHolidayNamedSpecialDates(
+        tx,
+        f.cfg,
+        source.id,
+        ["2026-12-25", "2028-01-05", "2026-11-02", "2026-12-29"],
+        AT,
+      ),
+    );
+    expect(reads.sort()).toEqual(["2026-11-02..2026-12-29", "2028-01-05..2028-01-05"]);
   });
 
   it("keeps a joined name of three 200-character labels whole", async () => {

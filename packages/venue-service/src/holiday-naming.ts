@@ -1,4 +1,4 @@
-// Browser-safe: the editor's Make-special draft and the server's duplicate both name dates here.
+// Browser-safe: no server imports.
 import type { HolidayFact, LocalDate } from "./hours-types.js";
 
 const SCOPE_ORDER: Readonly<Record<HolidayFact["scope"], number>> = {

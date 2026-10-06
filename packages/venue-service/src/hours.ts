@@ -761,13 +761,16 @@ export async function renameSpecialDate(
   id: string,
   name: string,
 ): Promise<SpecialDate> {
-  const row = await requireSpecialDate(tx, cfg, id);
-  const trimmed = specialDateName(name);
-  await tx.update(specialDates).set({ name: trimmed }).where(eq(specialDates.id, id));
+  const [row] = await tx
+    .update(specialDates)
+    .set({ name: specialDateName(name) })
+    .where(and(eq(specialDates.id, id), eq(specialDates.locationId, cfg.locationId)))
+    .returning();
+  if (row === undefined) throw new AppError("special_date.not_found", { specialDateId: id });
   return {
     id: row.id,
     date: row.date,
-    name: trimmed,
+    name: row.name,
     colour: row.colour,
     closeWholeVenue: row.closeWholeVenue,
   };
