@@ -269,12 +269,14 @@ The search field sits above both blocks, on home and inside a
 section; typing replaces the view with results, and clearing returns to where it was. Its results
 list the shown menu first, headed "<menu> (this menu)", then each other menu the device's service
 zone serves that has a match, headed with that menu's name, in the zone's order; the group
-headings are `h3`s under the results' "Search results" `h2`, and each tile is that menu's own offer
-at its own price. When the shown menu has no match but another menu has, its group says "No
-products match in this menu"; when no menu has one, there are no groups, only "No products match
-in any menu". A device served one menu sees one list with no group headings. The group sections
-carry no accessible name, because two menus may share one. The dashboard's preview searches its
-one menu only and says so above its search field.
+headings are `h3`s, a thin line (1px, `--wt-color-border`) separates one group from the next, and
+each tile is that menu's own offer at its own price. The results' "Search results" `h2` is visually
+hidden on the till and in the dashboard preview: it still names the results region and is still a
+heading for screen readers, but takes no space on screen. When the shown menu has no match but
+another menu has, its group says "No products match in this menu"; when no menu has one, there are
+no groups, only "No products match in any menu". A device served one menu sees one list with no
+group headings and no line. The group sections carry no accessible name, because two menus may
+share one. The dashboard's preview searches its one menu only and says so above its search field.
 
 ### Structure
 

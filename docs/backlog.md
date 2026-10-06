@@ -2036,7 +2036,9 @@ Left open:
 #1291, 2026-10-06).** The till's menu search groups matches by menu, the shown one first, each tile
 that menu's own offer and price; [design-system.md](developers/design-system.md), _The till's menu
 search_. The till and dashboard Home preview label the search field "Search" / "Buscar"
-(A289, 2026-10-06).
+(A289, 2026-10-06). A thin line separates the menu groups, and the "Search results" heading is hidden
+visually on the till and in the dashboard preview, still naming the results for screen readers
+(A295, 2026-10-06).
 
 **Each menu has one Device Home Page, shown two ways — DONE (W93, #1287, 2026-10-06).** A menu's one
 Device Home Page is the first row of its Structure tab, and the Home page tab sets a Handheld and a

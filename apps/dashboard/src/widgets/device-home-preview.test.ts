@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import type { DocumentMember, HomeDevice, HomeDisplay, MenuDocument } from "../api/client.js";
 import type { DocumentTile } from "@waitron/catalogue/src/menu-document-types.js";
@@ -421,6 +422,33 @@ describe("dashboard-device-home-preview", () => {
     const { el } = await mount({ document: lunch(SHORTCUTS, [drinks({ names: {} })]) });
     expect(names(tiles(el, "structure"))).toEqual(["Drinks"]);
   });
+
+  it.each([
+    ["en", "Search results"],
+    ["es-ES", "Resultados de la búsqueda"],
+  ] as const)(
+    "in %s, names the results region for screen readers without drawing its heading, so the results start at the top",
+    async (locale, name) => {
+      setLocale(locale);
+      const { el } = await mount();
+      await search(el, "a");
+      const results = root(el).querySelector<HTMLElement>('[data-region="results"]')!;
+      const heading = root(el).getElementById(results.getAttribute("aria-labelledby")!)!;
+      expect(heading.localName).toBe("h2");
+      expect(heading.textContent!.trim()).toBe(name);
+      expect(await page.getByRole("heading", { name, level: 2, exact: true }).elements()).toEqual([
+        heading,
+      ]);
+      const box = heading.getBoundingClientRect();
+      expect(box.width).toBeLessThanOrEqual(1);
+      expect(box.height).toBeLessThanOrEqual(1);
+      expect(getComputedStyle(heading).overflow).toBe("hidden");
+      const grid = results.querySelector<HTMLElement>(".grid")!;
+      expect(
+        Math.abs(grid.getBoundingClientRect().top - results.getBoundingClientRect().top),
+      ).toBeLessThan(1);
+    },
+  );
 
   it("searches this menu's products only, and says a device may show more", async () => {
     const { el } = await mount();

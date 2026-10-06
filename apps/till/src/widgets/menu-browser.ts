@@ -5,6 +5,7 @@ import {
   baseStyles,
   readableTextColor,
   registerIcons,
+  visuallyHiddenStyles,
 } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import {
@@ -102,15 +103,18 @@ export class TillMenuBrowser extends LitElement {
       }
 
       [data-region="results"] h2 {
-        margin: 0;
-        font-size: var(--wt-font-size-md);
-        font-weight: var(--wt-font-weight-bold);
+        ${visuallyHiddenStyles}
       }
 
       [data-region="results"] h3 {
         margin: 0;
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
+      }
+
+      section[data-menu] + section[data-menu] {
+        padding-block-start: var(--wt-space-2);
+        border-block-start: 1px solid var(--wt-color-border);
       }
 
       .divider {

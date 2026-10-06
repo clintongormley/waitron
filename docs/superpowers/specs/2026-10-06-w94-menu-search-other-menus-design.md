@@ -4,6 +4,11 @@ Status: design, 2026-10-06. Written from `main` 53c8f1e6d, which holds W93 (#128
 Page). The code is one pull request, branch `feat/service-menu-search`. It adds no storage and no
 migration.
 
+> **Update, 2026-10-06 (A295):** The "Search results" heading is no longer drawn on the till or in
+> the dashboard preview; it stays in the page, visually hidden, as the results region's name, and
+> a thin line separates the menu groups ([design-system.md](../../developers/design-system.md),
+> _The till's menu search_).
+
 ## The owner's item
 
 > W94. Search the current menu first, then other menus available to the device.

@@ -313,7 +313,7 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("search results grouped by menu, with a sold-out tile in another menu's group, have no violations", async () => {
+  it("search results grouped by menu, with a sold-out tile in another menu's group and a heading drawn for screen readers only, have no violations", async () => {
     const { el, host } = await mountServed(
       theme,
       [servedMenu("drinks", "Drinks", drinksOffered)],
@@ -324,6 +324,10 @@ describe.each(["light", "dark"] as const)("till-menu-browser a11y (%s theme)", (
     expect(
       el.shadowRoot!.querySelector('[data-menu="menu-drinks"] .sold-out')!.textContent!.trim(),
     ).toBe("Sold out");
+    const results = el.shadowRoot!.querySelector('[data-region="results"]')!;
+    const heading = el.shadowRoot!.getElementById(results.getAttribute("aria-labelledby")!)!;
+    expect(heading.textContent!.trim()).toBe("Search results");
+    expect(heading.getBoundingClientRect().width).toBeLessThanOrEqual(1);
     await expectNoA11yViolations(host);
   });
 
