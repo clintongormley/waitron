@@ -6,6 +6,8 @@ import { VenueServiceApi } from "./client.js";
 import { VENUE_SERVICE_STRINGS } from "./strings.js";
 import "./venue-operations-screen.js";
 import "./service-settings-panel.js";
+import { HoursApi } from "./hours-client.js";
+import "./hours-screen.js";
 
 export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
   module: "venue-service",
@@ -43,6 +45,26 @@ export const VENUE_SERVICE_DASHBOARD: DashboardContribution = {
               .api=${readOnly ? overview : api}
               .readOnly=${readOnly}
             ></dashboard-prep-stations-screen>`,
+        };
+      },
+    },
+    {
+      screen: {
+        id: "hours",
+        navLabelKey: "nav.hours",
+        group: "operations",
+        order: 15,
+        requiresPermission: "venue_service.manage",
+        readPermission: "venue.view",
+      },
+      create(ctx) {
+        const api = new HoursApi(ctx.request, ctx.liveData);
+        return {
+          render: (readOnly = false) =>
+            html`<dashboard-hours-screen
+              .api=${api}
+              .readOnly=${readOnly}
+            ></dashboard-hours-screen>`,
         };
       },
     },

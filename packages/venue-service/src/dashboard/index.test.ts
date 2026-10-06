@@ -5,6 +5,7 @@ import { VENUE_SERVICE_DASHBOARD } from "./index.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import type { PrepStationsScreen } from "./prep-stations-screen.js";
 import type { ServiceSettingsPanel } from "./service-settings-panel.js";
+import type { HoursScreen } from "./hours-screen.js";
 
 const containers: HTMLElement[] = [];
 afterEach(() => {
@@ -187,5 +188,66 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       "/management-api/venue-service/routing",
       expect.objectContaining({ method: "GET" }),
     );
+  });
+
+  it("files Hours between Departments and zones and the floor plan, readable with venue.view", async () => {
+    const model = {
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00",
+      civilDate: "2026-10-07",
+      clockReadable: true,
+      subjects: [
+        { kind: "department", id: "d1", name: "Restaurant", active: true, isDefault: true },
+      ],
+      week: [{ subject: { kind: "department", id: "d1" }, days: [] }],
+      days: [],
+      specialCells: [],
+    };
+    const fetchImpl = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(model),
+      } as Response),
+    );
+    const liveData = new LiveData();
+    const hours = VENUE_SERVICE_DASHBOARD.moreScreens![1]!;
+    expect(hours.screen).toEqual({
+      id: "hours",
+      navLabelKey: "nav.hours",
+      group: "operations",
+      order: 15,
+      requiresPermission: "venue_service.manage",
+      readPermission: "venue.view",
+    });
+    expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.hours"]).toBe("Hours");
+    expect(VENUE_SERVICE_DASHBOARD.strings.es["nav.hours"]).toBe("Horarios");
+    const handle = hours.create({
+      request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
+      liveData,
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    containers.push(container);
+    render(handle.render(true), container);
+    const screen = container.querySelector<HoursScreen>("dashboard-hours-screen")!;
+    expect(screen.api.liveData).toBe(liveData);
+    expect(screen.readOnly).toBe(true);
+    await vi.waitFor(() =>
+      expect(screen.shadowRoot!.querySelector('table[data-test="week-grid"]')).not.toBeNull(),
+    );
+    const [[path, init]] = fetchImpl.mock.calls as unknown as [[string, RequestInit]];
+    expect(path).toMatch(
+      /^\/management-api\/venue-service\/hours\?from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}$/,
+    );
+    expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
+    // From the day before today, so a venue a day behind the browser still sees its today, for
+    // the most dates one read may cover.
+    const query = new URLSearchParams(path.split("?")[1]);
+    const day = (value: string) => Date.parse(`${value}T00:00:00Z`) / 86_400_000;
+    const now = new Date();
+    const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) / 86_400_000;
+    expect(day(query.get("from")!)).toBe(today - 1);
+    expect(day(query.get("to")!) - day(query.get("from")!)).toBe(365);
   });
 });
