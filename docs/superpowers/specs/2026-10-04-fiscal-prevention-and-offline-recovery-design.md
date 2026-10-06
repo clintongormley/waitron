@@ -131,10 +131,11 @@ These are proposed requirements, not a claim that all current paths have been ve
 
 **Implemented, 2026-10-06 (W41s-3; owner review pending).** A pointer, not a revision of the
 table above: `packages/fiscal-verifactu/src/drain.ts` keeps every line of AEAT's reply.
-_(2026-10-06, W41s-3c: a line is now applied only when it is its record's one line by reference or
-invoice, matches both and names no other operation; a line naming no record is not applied, and is
-kept in the params of the envío's `fiscal.estado_desconocido` incidents or else of one
-`fiscal.linea_sin_registro`, except where each is already open for its sale; see `docs/backlog.md`.)_
+_(2026-10-07, W41s-3c: line N of the reply is applied to record N of the envío only when it carries
+that record's reference and invoice and names no other operation; otherwise that record is unknown.
+When the reply's line count differs from the records sent, no line is applied, every record is
+unknown, and the lines are kept once in `fiscal.respuesta_descuadrada`. Whether AEAT keeps the
+order sent is unproven (asesor Q43); see `docs/backlog.md`.)_
 A rejection
 on its own no longer holds its chain (D2, on §7.1's receipts; only code 1161 was tested, triggered
 artificially). A conflict, or a held cancellation, holds the later unsent records of its chain. A
