@@ -30,6 +30,7 @@ import {
   endSession,
   listActivePersonsWithPermission,
   listActiveStaff,
+  listStaffAdmittedTo,
   loginWithPin,
   permissionsForRole,
   setPersonLocale,
@@ -1065,11 +1066,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // Deliberately unauthenticated: the lock screen's roster. No PIN material, role or status.
+  // Deliberately unauthenticated: the lock screen's roster. No PIN material, role or status. A
+  // request that identifies a device lists only the people its profile admits.
   app.get("/api/staff", (c) =>
     run(c, log, async () => {
+      // Before the transaction: `tryReadDevice` opens one of its own when a sighting is due.
+      const device = await tryReadDevice({ db: deps.db, devMode: deps.devMode }, c);
       const staff = await withTransaction(deps.db, async (tx) => {
-        return listActiveStaff(tx);
+        return device === null
+          ? listActiveStaff(tx)
+          : listStaffAdmittedTo(tx, device.deviceProfileId);
       });
       return c.json(staff);
     }),

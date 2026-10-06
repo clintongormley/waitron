@@ -17,5 +17,7 @@ export const IDENTITY_CONFIGURATION_TRANSFER = {
         "passkey_offered_at",
       ],
     },
+    { name: "device_profile_admission_roles" },
+    { name: "device_profile_admission_persons" },
   ],
 } as const;

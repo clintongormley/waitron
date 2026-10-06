@@ -257,3 +257,54 @@ describe("the stored shift session", () => {
     expect(await run((tx) => endSession(tx, session.token))).toBe(true);
   });
 });
+
+describe("loginWithPin on a device whose profile does not admit the person", () => {
+  async function restrictedDevice(): Promise<{
+    deviceId: string;
+    denied: string;
+    admitted: string;
+  }> {
+    const deviceId = await seedSessionDevice(suite.db);
+    const denied = await seedPerson(suite.db, "staff");
+    const admitted = await seedPerson(suite.db, "manager");
+    await run((tx) =>
+      tx.execute(sql`
+        insert into device_profile_admission_roles (device_profile_id, role)
+        select device_profile_id, 'manager' from devices where id = ${deviceId}`),
+    );
+    return { deviceId, denied, admitted };
+  }
+
+  it("refuses with the wrong PIN's answer and opens no session, while admitting a person the profile names", async () => {
+    const { deviceId, denied, admitted } = await restrictedDevice();
+
+    const refused = await refusalOf(() =>
+      run((tx) => loginWithPin(tx, { deviceId, personId: denied, pin: "1234" })),
+    );
+    const wrongPin = await refusalOf(() =>
+      run((tx) => loginWithPin(tx, { deviceId, personId: denied, pin: "9999" })),
+    );
+
+    expect(refused).toEqual({ code: "pin.invalid", params: {}, reason: "not_admitted" });
+    expect(wrongPin).toEqual({ code: "pin.invalid", params: {}, reason: "wrong_pin" });
+    expect(await sessionCount(denied)).toBe(0);
+    const session = await run((tx) =>
+      loginWithPin(tx, { deviceId, personId: admitted, pin: "1234" }),
+    );
+    expect(session.personId).toBe(admitted);
+    expect(await sessionCount(admitted)).toBe(1);
+  });
+
+  it("waits for one PIN check before refusing", async () => {
+    const { deviceId, denied } = await restrictedDevice();
+    const spy = vi.mocked(verifyPin);
+    spy.mockClear();
+
+    expect(
+      await codeOf(() =>
+        run((tx) => loginWithPin(tx, { deviceId, personId: denied, pin: "1234" })),
+      ),
+    ).toBe("pin.invalid");
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+});

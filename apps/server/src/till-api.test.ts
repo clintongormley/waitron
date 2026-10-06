@@ -23,6 +23,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { departments, routeExceptions } from "@waitron/venue-service";
 import {
   createPinThrottle,
+  deviceProfileAdmissionPersons,
+  deviceProfileAdmissionRoles,
   endSession,
   PIN_THROTTLE_MAX_KEYS_PER_SLOT,
   hashPin,
@@ -69,7 +71,7 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { DEVICE_COOKIE } from "./device-session.js";
+import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE, requireSession } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
@@ -2315,6 +2317,91 @@ describe("POST /api/session refusals say nothing about the account", () => {
     expect(await throttled.json()).toEqual({
       error: { code: "pin.throttled", params: { retryAfterSeconds: 2 } },
     });
+  });
+});
+
+describe("a device's profile decides who may sign in on it", () => {
+  /** A device whose profile admits managers only, with Ana let in as an exception: Abel, staff
+   * like Ana, is not admitted. */
+  async function managersAndAnaDevice(): Promise<{
+    deviceId: string;
+    cookie: string;
+    profileId: string;
+  }> {
+    const profileId = await seedDeviceProfile(suite.db, `Managers ${randomUUID()}`, [], null);
+    await suite.db.insert(deviceProfileAdmissionRoles).values({
+      deviceProfileId: profileId,
+      role: "manager",
+    });
+    await suite.db
+      .insert(deviceProfileAdmissionPersons)
+      .values({ deviceProfileId: profileId, personId: ana.id, admitted: true });
+    const { deviceId, cookie } = await enrolTillDevice(suite.db, profileId);
+    return { deviceId, cookie, profileId };
+  }
+
+  async function sessionsOf(personId: string, deviceId: string): Promise<number> {
+    const { rows } = await suite.db.execute<{ n: number }>(
+      sql`select cast(count(*) as int) as n from sessions
+          where person_id = ${personId} and device_id = ${deviceId}`,
+    );
+    return rows[0]!.n;
+  }
+
+  it("GET /api/staff lists only the people the device's profile admits", async () => {
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect([]));
+    const { cookie } = await managersAndAnaDevice();
+    const open = await enrolTillDeviceCookie(suite.db);
+
+    const restricted = await app.request("/api/staff", { headers: { cookie } });
+    const unrestricted = await app.request("/api/staff", { headers: { cookie: open } });
+
+    expect(restricted.status).toBe(200);
+    expect(await restricted.json()).toEqual([{ personId: ana.id, displayName: "Ana" }]);
+    expect(await unrestricted.json()).toEqual([
+      { personId: abel.id, displayName: "Abel" },
+      { personId: ana.id, displayName: "Ana" },
+    ]);
+  });
+
+  it("GET /api/staff reads the device from the dev header in dev mode", async () => {
+    const app = new Hono();
+    mountTillApi(app, { ...deps(suite.db), devMode: true }, collect([]));
+    const { deviceId } = await managersAndAnaDevice();
+
+    const res = await app.request("/api/staff", { headers: { [DEV_DEVICE_HEADER]: deviceId } });
+
+    expect(await res.json()).toEqual([{ personId: ana.id, displayName: "Ana" }]);
+  });
+
+  it("POST /api/session refuses a person the profile does not admit exactly as a wrong PIN, and signs in one it does", async () => {
+    const lines: { level: LogLevel; event: string; fields: Record<string, unknown> }[] = [];
+    const app = new Hono();
+    mountTillApi(app, deps(suite.db), collect(lines));
+    const { deviceId, cookie } = await managersAndAnaDevice();
+    const post = (personId: string, pin: string) =>
+      app.request("/api/session", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ personId, pin }),
+      });
+
+    // Abel's own PIN, so only the profile can be the cause.
+    const notAdmitted = await post(abel.id, "1111");
+    const wrongPin = await post(abel.id, "0000");
+
+    const refused = { status: 401, body: { error: { code: "pin.invalid", params: {} } } };
+    expect({ status: notAdmitted.status, body: await notAdmitted.json() }).toEqual(refused);
+    expect({ status: wrongPin.status, body: await wrongPin.json() }).toEqual(refused);
+    expect(
+      lines.filter((line) => line.event === "pin.invalid").map((line) => line.fields.logReason),
+    ).toEqual(["not_admitted", "wrong_pin"]);
+    expect(await sessionsOf(abel.id, deviceId)).toBe(0);
+
+    const admitted = await post(ana.id, "5555");
+    expect(admitted.status).toBe(200);
+    expect(await sessionsOf(ana.id, deviceId)).toBe(1);
   });
 });
 

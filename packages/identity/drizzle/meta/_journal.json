@@ -50,6 +50,13 @@
       "when": 1791045187583,
       "tag": "0006_session_device_drop_till",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1791292222285,
+      "tag": "0007_profile_admission",
+      "breakpoints": true
     }
   ]
 }

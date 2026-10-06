@@ -69,7 +69,14 @@ import {
   setProfilePrinterLists,
 } from "@waitron/layouts";
 import { applyVenue, planVenue, type VenueRequest } from "@waitron/provisioning";
-import { hashPassword, hashPin, persons, startManagementSession } from "@waitron/identity";
+import {
+  deviceProfileAdmissionPersons,
+  deviceProfileAdmissionRoles,
+  hashPassword,
+  hashPin,
+  persons,
+  startManagementSession,
+} from "@waitron/identity";
 import { recordSale } from "@waitron/core";
 import { categoryDetails } from "@waitron/catalogue";
 import { availability, employments, shiftTemplates } from "@waitron/workforce";
@@ -2539,6 +2546,88 @@ async function exportScratch(
       await suite.db.execute(sql`drop table if exists ${sql.identifier(table.name)}`);
   }
 }
+
+it("transfers a profile's admitted roles and person exceptions, leaving a retired profile's and the exporting operator's behind", async () => {
+  const source = await applyVenue(planVenue(venue("B35792468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const original = await withTransaction(suite.db, async (tx) => {
+    const [admin] = await tx
+      .select({ id: persons.id })
+      .from(persons)
+      .where(eq(persons.role, "admin"));
+    const [mia] = await tx
+      .insert(persons)
+      .values({ displayName: "Mia", pinHash: hashPin("5555"), role: "staff" })
+      .returning({ id: persons.id });
+    const [live, retired] = await tx
+      .insert(deviceProfiles)
+      .values([
+        { name: "Bar till", formFactor: "till" },
+        { name: "Old till", formFactor: "till" },
+      ])
+      .returning({ id: deviceProfiles.id });
+    for (const profile of [live!, retired!]) {
+      await tx
+        .insert(deviceProfileAdmissionRoles)
+        .values({ deviceProfileId: profile.id, role: "manager" });
+      await tx.insert(deviceProfileAdmissionPersons).values([
+        { deviceProfileId: profile.id, personId: mia!.id, admitted: true },
+        { deviceProfileId: profile.id, personId: admin!.id, admitted: false },
+      ]);
+    }
+    return { admin: admin!.id, mia: mia!.id, live: live!.id, retired: retired!.id };
+  });
+  await retireProfile(source.locationId, original.retired);
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    { ...source, sourceOperatorId: original.admin },
+    ALL_MODULES,
+    new Date("2026-10-06T12:00:00Z"),
+    versions,
+  );
+  expect(
+    transferred.tables.device_profile_admission_roles!.map((row) => row.device_profile_id),
+  ).toEqual([original.live]);
+  expect(
+    transferred.tables
+      .device_profile_admission_persons!.map((row) => `${row.device_profile_id} ${row.person_id}`)
+      .sort(),
+  ).toEqual([`${original.live} ${original.admin}`, `${original.live} ${original.mia}`].sort());
+  await applyVenue(planVenue(venue("B46813579"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  const imported = await withTransaction(targetSuite.db, async (tx) => ({
+    roles: await tx
+      .select({ profile: deviceProfiles.name, role: deviceProfileAdmissionRoles.role })
+      .from(deviceProfileAdmissionRoles)
+      .innerJoin(
+        deviceProfiles,
+        eq(deviceProfiles.id, deviceProfileAdmissionRoles.deviceProfileId),
+      ),
+    exceptions: await tx
+      .select({
+        profile: deviceProfiles.name,
+        person: persons.displayName,
+        admitted: deviceProfileAdmissionPersons.admitted,
+      })
+      .from(deviceProfileAdmissionPersons)
+      .innerJoin(
+        deviceProfiles,
+        eq(deviceProfiles.id, deviceProfileAdmissionPersons.deviceProfileId),
+      )
+      .innerJoin(persons, eq(persons.id, deviceProfileAdmissionPersons.personId)),
+  }));
+  expect(imported).toEqual({
+    roles: [{ profile: "Bar till", role: "manager" }],
+    exceptions: [{ profile: "Bar till", person: "Mia", admitted: true }],
+  });
+});
 
 it("follows a key that names no parent columns to the parent's primary key, composite ones included", async () => {
   const ids = await exportScratch(

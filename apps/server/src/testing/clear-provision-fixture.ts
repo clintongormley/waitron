@@ -24,6 +24,8 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "device_profile_service_access",
       "device_profile_stations",
       "device_profile_watchers",
+      "device_profile_admission_roles",
+      "device_profile_admission_persons",
       // The policy goes BEFORE the menus it names: `zone_service_policies_default_allowed_fk`
       // points (zone_id, default_menu_id) at `zone_menus`.
       "zone_service_policies",

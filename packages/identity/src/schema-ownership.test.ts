@@ -17,10 +17,12 @@ const OWNED = [
   "google_oidc_states",
   "webauthn_credentials",
   "webauthn_challenges",
+  "device_profile_admission_roles",
+  "device_profile_admission_persons",
 ];
 
 /** Core tables that must never appear in this package's generated SQL. */
-const CORE = ["tenants", "devices"];
+const CORE = ["tenants", "devices", "device_profiles"];
 
 const drizzleDir = fileURLToPath(new URL("../drizzle", import.meta.url));
 
