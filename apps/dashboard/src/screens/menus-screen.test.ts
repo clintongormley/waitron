@@ -8257,15 +8257,21 @@ it("replaces a later preview reset refusal with the next successful document", a
 });
 
 describe("one menu read after an edit", () => {
-  it.each(["structure", "home"] as const)(
-    "shares one HTTP menu read after an edit on %s",
-    async (view) => {
+  it.each(
+    (["structure", "home"] as const).flatMap((view) =>
+      (["before", "after"] as const).map((notification) => ({ view, notification })),
+    ),
+  )(
+    "shares one HTTP menu read after an edit on $view when notified $notification the response",
+    async ({ view, notification }) => {
       const fixture = api();
       let home = menuHome();
+      let sequence = 0;
       const reads: string[] = [];
       const writes: Array<{ path: string; body: unknown }> = [];
       const client = new DashboardApi("", async (path, init) => {
         if (init.method !== "GET") {
+          sequence++;
           writes.push({ path, body: init.body ? JSON.parse(String(init.body)) : undefined });
           if (view === "structure")
             home = {
@@ -8273,7 +8279,16 @@ describe("one menu read after an edit", () => {
               shortcuts: home.shortcuts.filter(({ memberId }) => memberId !== "t-burger"),
             };
           else home = { ...home, handheld: { ...home.handheld, columns: 5 } };
-          return new Response(null, { status: 204 });
+          if (notification === "before") {
+            client.liveData.invalidate([
+              { type: view === "structure" ? "section_members" : "menu_details" },
+            ]);
+            await new Promise((resolve) => setTimeout(resolve, 25));
+          }
+          return new Response(null, {
+            status: 204,
+            headers: { "x-waitron-menu-revision": JSON.stringify({ epoch: "test", sequence }) },
+          });
         }
         reads.push(path);
         const bodies: Record<string, () => unknown | Promise<unknown>> = {
@@ -8297,7 +8312,10 @@ describe("one menu read after an edit", () => {
               return [part, { status: 200, body: await read() }];
             }),
           );
-          return Response.json(Object.fromEntries(entries));
+          return Response.json({
+            ...Object.fromEntries(entries),
+            revision: { epoch: "test", sequence },
+          });
         }
         const body = bodies[path];
         if (!body) throw new Error(`Unexpected GET: ${path}`);
@@ -8325,9 +8343,10 @@ describe("one menu read after an edit", () => {
       }
       await vi.waitFor(() => expect(writes).toHaveLength(1));
       // The stream notifies the screen of the accepted write's changed table.
-      client.liveData.invalidate([
-        { type: view === "structure" ? "section_members" : "menu_details" },
-      ]);
+      if (notification === "after")
+        client.liveData.invalidate([
+          { type: view === "structure" ? "section_members" : "menu_details" },
+        ]);
       await vi.waitFor(() => {
         if (view === "structure") {
           expect(structure(el).home!.shortcuts.map(({ memberId }) => memberId)).toEqual([
@@ -8340,7 +8359,7 @@ describe("one menu read after an edit", () => {
             q<HTMLElementTagNameMap["wt-slider"]>(el, 'wt-slider[name="home-columns"]')!.value,
           ).toBe(5);
       });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       const menuReads = reads.filter((path) =>
         path.startsWith("/management-api/catalogues/menu-lunch/"),
       );

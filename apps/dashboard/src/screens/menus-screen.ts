@@ -1097,8 +1097,8 @@ export class MenusScreen extends LitElement {
   }
 
   /** A write that succeeded is never reported as a failed one: a failure here is a load failure. */
-  async #refresh(): Promise<void> {
-    await this.#menuReads.refresh();
+  async #refresh(afterWrite = true): Promise<void> {
+    await this.#menuReads.refresh(afterWrite);
   }
 
   #restore(): void {
@@ -1363,7 +1363,7 @@ export class MenusScreen extends LitElement {
         this.#moveBatches.delete(listId);
         if (!this.#reportRefusedElsewhere(target, error))
           this.memberError = codeMessage(codeOf(error));
-        await this.#refresh();
+        await this.#refresh(false);
       },
     );
   }
@@ -1502,9 +1502,9 @@ export class MenusScreen extends LitElement {
   // ── The Device Home Page ─────────────────────────────────────────────────────────────────────
 
   /** Reads the home again after a write, when a tab drawing it still shows the same menu. */
-  async #rereadHome(menuId: string): Promise<void> {
+  async #rereadHome(menuId: string, afterWrite = false): Promise<void> {
     if (this.menuId === menuId && (this.view === "home" || this.view === "structure"))
-      await this.#menuReads.refresh();
+      await this.#menuReads.refresh(afterWrite);
   }
 
   /** Adds and removes hold `busy` until the home is read again. Their scope is the menu's home, as
@@ -1530,7 +1530,7 @@ export class MenusScreen extends LitElement {
           return;
         }
         saved?.();
-        await this.#rereadHome(menuId);
+        await this.#rereadHome(menuId, true);
         this.busy = false;
         done(true);
       }),
@@ -1602,7 +1602,7 @@ export class MenusScreen extends LitElement {
           ordered.some(({ id }) => !tiles.has(id)) ||
           (shown !== sentOver.join(" ") && shown !== answer.join(" "))
         ) {
-          await this.#rereadHome(menuId);
+          await this.#rereadHome(menuId, true);
           return;
         }
         this.menuHome = {
@@ -1655,7 +1655,7 @@ export class MenusScreen extends LitElement {
     this.homePending = null;
     if (this.menuId === menuId && this.menuHome !== null)
       this.menuHome = { ...this.menuHome, [device]: { ...this.menuHome[device], ...patch } };
-    await this.#rereadHome(menuId);
+    await this.#rereadHome(menuId, true);
   }
 
   // ── Prices ───────────────────────────────────────────────────────────────────────────────────

@@ -6080,7 +6080,9 @@ describe("shared menu reads", () => {
       `/management-api/catalogues/${id}/read?part=structure&part=home&part=status&part=preview`,
     );
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual(
+    const { revision, ...parts } = await response.json();
+    expect(revision).toEqual({ epoch: expect.any(String), sequence: expect.any(Number) });
+    expect(parts).toEqual(
       Object.fromEntries(
         ["structure", "home", "status", "preview"].map((part) => [
           part,
@@ -6170,7 +6172,8 @@ describe("shared menu reads", () => {
       const single = await send(app, "GET", `${path}/${part}`);
       expect(body[part]).toEqual({ status: 200, body: await single.json() });
     }
-    expect(Object.keys(body)).toEqual(["structure", "home", "preview"]);
+    expect(Object.keys(body)).toEqual(["structure", "home", "preview", "revision"]);
+    expect(body.revision).toEqual({ epoch: expect.any(String), sequence: expect.any(Number) });
   });
 
   it.each(["", "?part=prices", "?part=home&part=home"])(
@@ -6200,4 +6203,32 @@ describe("shared menu reads", () => {
       error: { code: "management_session.required", params: {} },
     });
   });
+});
+
+it("marks shared snapshots with the catalogue write revision they include", async () => {
+  const app = mountApp();
+  const id = await createCatalogueVia(app, "Revision menu");
+  const path = `/management-api/catalogues/${id}`;
+  const before = await send(app, "GET", `${path}/read?part=home`);
+  const old = await before.json();
+  expect(old.revision).toEqual({ epoch: expect.any(String), sequence: expect.any(Number) });
+  const write = await send(app, "PATCH", `${path}/home-display`, {
+    body: { device: "handheld", columns: 5 },
+  });
+  expect(write.status).toBe(204);
+  const committed = JSON.parse(write.headers.get("x-waitron-menu-revision") ?? "null");
+  expect(committed.epoch).toBe(old.revision.epoch);
+  expect(committed.sequence).toBeGreaterThan(old.revision.sequence);
+  const after = await send(app, "GET", `${path}/read?part=home`);
+  expect(await after.json()).toMatchObject({
+    revision: committed,
+    home: { status: 200, body: { handheld: { columns: 5 } } },
+  });
+  const refused = await send(app, "PATCH", `${path}/home-display`, {
+    body: { device: "handheld", columns: 0 },
+  });
+  expect(refused.status).toBe(400);
+  expect(refused.headers.get("x-waitron-menu-revision")).toBeNull();
+  const unchanged = await send(app, "GET", `${path}/read?part=home`);
+  expect((await unchanged.json()).revision).toEqual(committed);
 });

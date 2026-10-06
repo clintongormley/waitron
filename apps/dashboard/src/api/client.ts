@@ -147,8 +147,6 @@ export type {
   SectionChangeField,
 };
 
-/** One member of a menu's structure (`readMenuStructure`, packages/catalogue/src/menu-structure.ts);
- * `children` is present exactly when the member is a section. */
 export interface MenuReadModels {
   structure: MenuStructure;
   home: MenuHome;
@@ -156,12 +154,16 @@ export interface MenuReadModels {
   preview: MenuPreview;
 }
 export type MenuReadPart = keyof MenuReadModels;
+export interface MenuReadRevision {
+  epoch: string;
+  sequence: number;
+}
 export type MenuReadResult = Partial<{
   [P in MenuReadPart]: {
     status: number;
     body: MenuReadModels[P] | { error: { code: string; params?: Record<string, unknown> } };
   };
-}>;
+}> & { revision?: MenuReadRevision };
 
 export interface MenuStructureNode {
   memberId: string;
@@ -1584,17 +1586,18 @@ const ALERTS_READ_LIMIT_MS = 55_000;
 
 export class DashboardApi {
   readonly liveData = new LiveData();
+  #menuRevision: { value?: MenuReadRevision } = {};
+  get menuWriteRevision(): MenuReadRevision | undefined {
+    return this.#menuRevision.value;
+  }
   #background?: DashboardApi;
   #onError?: (code: string) => void;
 
   get background(): DashboardApi {
-    return (this.#background ??= new DashboardApi(
-      this.#baseUrl,
-      this.#fetch,
-      this.#onError,
-      undefined,
-      true,
-    ));
+    if (this.#background) return this.#background;
+    this.#background = new DashboardApi(this.#baseUrl, this.#fetch, this.#onError, undefined, true);
+    this.#background.#menuRevision = this.#menuRevision;
+    return this.#background;
   }
   readonly #request: DashboardRequest;
   readonly #baseUrl: string;
@@ -1617,7 +1620,39 @@ export class DashboardApi {
     this.#baseUrl = baseUrl;
     this.#fetch = fetchImpl;
     this.#onError = onError;
-    this.#request = createRequest({ baseUrl, fetchImpl, onError, onSuccess, passive });
+    const observedFetch: FetchLike = async (path, init) => {
+      const response = await fetchImpl(path, init);
+      if (init.method !== "GET" && response.ok) {
+        let revision: unknown;
+        try {
+          revision = JSON.parse(response.headers.get("x-waitron-menu-revision") ?? "null");
+        } catch {
+          revision = null;
+        }
+        if (
+          revision !== null &&
+          typeof revision === "object" &&
+          "epoch" in revision &&
+          typeof revision.epoch === "string" &&
+          "sequence" in revision &&
+          typeof revision.sequence === "number" &&
+          Number.isSafeInteger(revision.sequence) &&
+          revision.sequence >= 0
+        ) {
+          const previous = this.#menuRevision.value;
+          if (previous?.epoch !== revision.epoch || previous.sequence < revision.sequence)
+            this.#menuRevision.value = { epoch: revision.epoch, sequence: revision.sequence };
+        } else this.#menuRevision.value = undefined;
+      }
+      return response;
+    };
+    this.#request = createRequest({
+      baseUrl,
+      fetchImpl: observedFetch,
+      onError,
+      onSuccess,
+      passive,
+    });
   }
 
   getStaffRoster(): Promise<RosterEntry[]> {

@@ -366,3 +366,70 @@ it("does not replay an initial refusal when a shared watch has since recovered",
   ).resolves.toBeUndefined();
   expect(s.requests).toHaveLength(2);
 });
+
+it.each([
+  { snapshotSequence: 0, snapshotEpoch: "server", wantReads: 3 },
+  { snapshotSequence: 1, snapshotEpoch: "server", wantReads: 2 },
+  { snapshotSequence: 100, snapshotEpoch: "previous-server", wantReads: 3 },
+  { snapshotSequence: 2, snapshotEpoch: "server", wantReads: 2 },
+])(
+  "checks the earlier snapshot $snapshotEpoch/$snapshotSequence against the completed write",
+  async ({ snapshotSequence, snapshotEpoch, wantReads }) => {
+    vi.useFakeTimers();
+    let sequence = 0;
+    let epoch = "server";
+    let writesDone!: (response: Response) => void;
+    const paths: string[] = [];
+    const api = new DashboardApi("", async (path, init) => {
+      if (init.method !== "GET")
+        return new Promise<Response>((resolve) => {
+          writesDone = resolve;
+        });
+      paths.push(path);
+      return Response.json({
+        revision: { epoch, sequence },
+        home: { status: 200, body: { handheld: { columns: sequence === 0 ? 3 : 5 } } },
+      });
+    });
+    const values: MenuReadResult[] = [];
+    const host = { addController: () => {} } as unknown as ReactiveControllerHost;
+    const controller = new MenuReadController(
+      host,
+      () => api,
+      () => {},
+    );
+    controllers.push(controller);
+    const initial = controller.watch("lunch", ["home"], (value) => values.push(value));
+    await vi.advanceTimersByTimeAsync(0);
+    await initial;
+    const write = api.setHomeDisplay("lunch", "handheld", { columns: 5 });
+    sequence = snapshotSequence;
+    epoch = snapshotEpoch;
+    api.liveData.invalidate([{ type: "menu_details" }]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(paths).toHaveLength(2);
+    sequence = 1;
+    epoch = "server";
+    writesDone(
+      new Response(null, {
+        status: 204,
+        headers: { "x-waitron-menu-revision": JSON.stringify({ epoch: "server", sequence: 1 }) },
+      }),
+    );
+    await write;
+    const refresh = controller.refresh(true);
+    await vi.advanceTimersByTimeAsync(200);
+    await refresh;
+    expect(paths).toHaveLength(wantReads);
+    expect(values.at(-1)).toMatchObject({
+      home: { status: 200, body: { handheld: { columns: 5 } } },
+    });
+    sequence = 2;
+    api.liveData.invalidate([{ type: "menu_details" }]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(paths).toHaveLength(wantReads + 1);
+    await vi.waitFor(() =>
+      expect(values.at(-1)).toMatchObject({ revision: { epoch: "server", sequence: 2 } }),
+    );
+  },
+);

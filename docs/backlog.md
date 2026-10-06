@@ -2022,30 +2022,22 @@ Left open:
   of CSS. A change to the till's tiles has to be repeated by hand, and no test sees the two drift
   apart. Proposed follow-up: move the shared logic and CSS beside `arrangeHome` in
   `packages/catalogue/src/device-home.ts`.
-- On the Menus screen's Structure and Home page tabs, the screen reads the menu's structure and its
-  Device Home Page separately, alongside the status read (Structure) or the preview read (Home page)
-  each tab already makes. **A290 is in progress** on `fix/menu-shared-edit-read`: the owner
-  authorised consolidating these reads on 2026-10-06. Its two new real-client Chromium tests in
-  `apps/dashboard/src/screens/menus-screen.test.ts` fail on the requested one-GET count while
-  checking that the edited values reach the screen. A 2026-10-06 demo probe on Casa Delgado,
-  selected by counting the active menus' structure nodes, recorded four menu GETs after a shortcut
-  removal on Structure and four after a Home columns edit: Home was read twice on each tab.
-  The last GET finished about 34 ms / 32 ms after the respective input event in that single run;
-  these are baseline observations, not a comparison or a latency bound. The branch now has a
-  tested shared GET endpoint (`/management-api/catalogues/:id/read?part=…`) for Structure, Home,
-  status and Preview, with each part's result or refusal returned separately. The screen now uses
-  one shared subscription after its independently displayed initial reads. Its two one-GET
-  Chromium cases pass without changing their count or saved-value assertions. A save refresh
-  waits up to 100 ms for a feed-triggered read to start, then requests a read if the stream is
-  silent; coordinator cases also cover later changes and changes during a read. Existing
-  screen checks caught stale-preview, status and loading regressions, which were corrected without
-  changing those assertions. A new reconnect case caught a departed initial read replacing the
-  reopened screen's snapshot. Final validation, the after measurement and branch finishing remain
-  open; this item is not marked done. Discarded transport batching prototypes are not the
-  implementation. Consolidation
-  must retain shortcut-name refreshes from `products`
-  (the dependency is pinned in `apps/dashboard/src/api/live-queries.test.ts`) and the existing
-  old-response, error and publish-hash checks.
+- **A290 implemented on `fix/menu-shared-edit-read`; review and landing pending.** Structure
+  and Home page share a menu read subscription after their initial independent loads. The shared
+  endpoint returns each selected part's result or refusal separately, retaining usable Structure
+  and Home content when Preview refuses an old publication. Catalogue responses carry a per-mount
+  revision; a successful write's refresh may reuse a snapshot carrying that revision or a later one
+  from the same mount. Other refreshes still request new data. Remote notifications remain live
+  while writes are pending. A silent stream falls back to an explicit read after 100 ms; a
+  notification arriving after that read can still trigger another one.
+  On 2026-10-06, the same demo probe selected Casa Delgado as the largest active menu (31 structure
+  nodes): before, shortcut removal on Structure and a Home columns edit each produced four menu
+  GETs; after, each produced one. Last-read completion was about 34/32 ms before and 24/37 ms after
+  the input event in those samples, respectively. These samples establish neither a latency bound
+  nor a speed improvement. A subsequent API columns edit appeared in the open Home tab through
+  the real stream. The two tabs were inspected in English and Spanish, both themes, at 390/1280 px.
+  Browser tests cover notifications before and after write responses, an older snapshot requiring
+  another read, server-mount changes, and later remote edits.
 
 **A Products drag does not notice when a refresh removes what it is dragging or where it is going —
 DONE (W88a, #1228, 2026-10-05); left open:** A drag no longer sends a move once a refresh has removed

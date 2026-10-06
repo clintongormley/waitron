@@ -1,7 +1,17 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 import { QueryController, type ResourceQuery } from "@waitron/dashboard-kit";
-import type { DashboardApi, MenuReadPart, MenuReadResult } from "./client.js";
+import type { DashboardApi, MenuReadPart, MenuReadResult, MenuReadRevision } from "./client.js";
 import { dashboardQuery } from "./live-queries.js";
+
+function covers(read: MenuReadResult, minimum: MenuReadRevision | undefined): boolean {
+  const revision = read.revision;
+  return (
+    minimum !== undefined &&
+    revision?.epoch === minimum.epoch &&
+    Number.isSafeInteger(revision.sequence) &&
+    revision.sequence >= minimum.sequence
+  );
+}
 
 let readSerial = 0;
 class ReadFailure {
@@ -22,8 +32,9 @@ export class MenuReadController implements ReactiveController {
   #apply: (value: MenuReadResult) => void = () => {};
   #initial: Promise<void> = Promise.resolve();
   #started = 0;
+  #latest: Read | undefined;
   #fallback: ReturnType<typeof setTimeout> | undefined;
-  #waiting: Array<{ after: number; done: () => void }> = [];
+  #waiting: Array<{ after: number; minimum?: MenuReadRevision; done: () => void }> = [];
 
   constructor(
     host: ReactiveControllerHost,
@@ -86,30 +97,39 @@ export class MenuReadController implements ReactiveController {
   #watch(query: ResourceQuery<Read>): Promise<void> {
     return this.#queries.watch("menu", query, ({ serial, result }) => {
       this.#initial = Promise.resolve();
+      this.#latest = { serial, result };
       this.#apply(result);
-      this.#settle(serial);
+      this.#settle(serial, result);
     });
   }
 
-  #settle(serial: number): void {
+  #settle(serial: number, result?: MenuReadResult): void {
     const waiting = this.#waiting;
     this.#waiting = [];
     for (const waiter of waiting) {
-      if (serial > waiter.after) waiter.done();
+      if (serial > waiter.after || (result !== undefined && covers(result, waiter.minimum)))
+        waiter.done();
       else this.#waiting.push(waiter);
+    }
+    if (this.#waiting.length === 0) {
+      clearTimeout(this.#fallback);
+      this.#fallback = undefined;
     }
   }
 
-  refresh(): Promise<void> {
+  refresh(afterWrite = false): Promise<void> {
     const query = this.#query;
     if (query === undefined) return Promise.resolve();
+    const minimum = afterWrite ? this.api().menuWriteRevision : undefined;
+    if (this.#latest !== undefined && covers(this.#latest.result, minimum))
+      return Promise.resolve();
     const data = this.api().liveData;
     if (data === undefined) return this.#watch(query).catch(() => undefined);
     const done = new Promise<void>((resolve) => {
-      this.#waiting.push({ after: readSerial, done: resolve });
+      this.#waiting.push({ after: readSerial, minimum, done: resolve });
     });
     // Hold the explicit refresh briefly so a feed-triggered read can satisfy it.
-    // A read started before the save refresh cannot satisfy that request.
+    // An earlier read can satisfy it only with the server's completed-write revision.
     this.#fallback ??= setTimeout(() => {
       this.#fallback = undefined;
       if (this.#query === query) data.invalidate(query.dependencies);
@@ -120,6 +140,7 @@ export class MenuReadController implements ReactiveController {
   release(): void {
     this.#queries.release("menu");
     this.#query = undefined;
+    this.#latest = undefined;
     clearTimeout(this.#fallback);
     this.#fallback = undefined;
     for (const waiter of this.#waiting.splice(0)) waiter.done();
