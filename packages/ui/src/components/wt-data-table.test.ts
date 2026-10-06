@@ -6196,6 +6196,51 @@ test("revealRow keeps a row of a fractional height wholly below the headings, ne
   expect(under).toEqual([]);
 });
 
+test("revealRow keeps the scroll position inside a row taller than the view that already spans it", async () => {
+  const { el, scroll } = await stickyTable({
+    columns: [
+      {
+        key: "name",
+        label: "Name",
+        cell: (r) =>
+          html`<div style=${r.id === "p1-2" ? "block-size: 900px" : "block-size: 30.3px"}>
+            ${r.name}
+          </div>`,
+      },
+    ],
+  });
+  await settle();
+  const tr = el.shadowRoot!.querySelector('tr[data-row-key="p1-2"]')!;
+  scroll.scrollTop += tr.getBoundingClientRect().top - scroll.getBoundingClientRect().top + 200;
+  await settle();
+  const before = scroll.scrollTop;
+  expect(tr.getBoundingClientRect().top).toBeLessThan(
+    stickyHeadings(el)[0]!.getBoundingClientRect().bottom - 1,
+  );
+  expect(tr.getBoundingClientRect().bottom).toBeGreaterThan(scroll.getBoundingClientRect().bottom);
+  await el.revealRow("p1-2");
+  await settle();
+  expect(scroll.scrollTop).toBe(before);
+});
+
+test("revealRow leaves the scroll position alone when the row is already wholly in view", async () => {
+  const { el, scroll } = await stickyTable();
+  await settle();
+  scroll.scrollTop = 300;
+  await settle();
+  const headingsBottom = stickyHeadings(el)[0]!.getBoundingClientRect().bottom;
+  const port = scroll.getBoundingClientRect();
+  const shown = [...el.shadowRoot!.querySelectorAll<HTMLElement>("tbody tr[data-row-key]")].find(
+    (tr) => {
+      const box = tr.getBoundingClientRect();
+      return box.top > headingsBottom + 50 && box.bottom < port.bottom - 50;
+    },
+  )!;
+  await el.revealRow(shown.dataset.rowKey!);
+  await settle();
+  expect(scroll.scrollTop).toBe(300);
+});
+
 test("revealRow straight after a sticky table's rows come back from loading lands the row below the headings", async () => {
   const { el } = await stickyTable();
   el.loading = true;

@@ -816,10 +816,13 @@ table is not watched and carries no `narrow`. A screen may style its cells on
 A tree also answers `isExpanded(key)`, opens or closes a branch with `setExpanded(key, expanded)`
 (no event), reports the order it would draw a set of siblings in with `sortedSiblings(rows)`, and
 `revealRow(key)` opens every closed branch above a row and scrolls the row into view. Under
-`stickyHeader` a row brought in at the top edge lands wholly below the headings, never part of a
-pixel under them, although Chromium rounds the scroll position to a whole pixel (measured at a device pixel ratio
-of 1); a row brought in at
-the bottom edge gets no such correction.
+`stickyHeader`, Chromium rounds the scroll position to a whole pixel (measured at a device pixel
+ratio of 1), which can leave a row brought in at the top edge part of a pixel under the headings;
+`revealRow` then scrolls back to the whole pixel below. It corrects an overlap of less than one
+pixel only, so a row taller than the view that already spans it keeps its scroll position. The
+tests ran rows 30.3 px tall at a device pixel ratio of 1, each revealed from the box's end, and one
+900 px row revealed while it spanned the view. A row brought in at the bottom edge gets no
+correction.
 
 **A menu's Structure tab is the second tree** (`dashboard-menu-structure-table`,
 `apps/dashboard/src/widgets/menu-structure-table.ts`; W88, owner 2026-10-04). Its first row is

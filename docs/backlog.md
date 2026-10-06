@@ -901,8 +901,11 @@ its bar leaves by Done, because a drag there is saved at once; the Structure tab
 toggle with a Done button, off whenever a menu opens. No tree row draws a folder icon any more (a
 dragged category's or section's picture still does); a category's or section's colour square sits
 in that slot, before its name, and a wrapped category name keeps its grip and square beside its
-first line. At phone width a category's product count, and All products', is hidden. A row the
-table reveals is no longer left part of a pixel under the sticky headings. The Products list's
+first line. At phone width a category's product count, and All products', is hidden. When the
+table reveals a row and the browser's whole-pixel rounding leaves it less than a pixel under the
+sticky headings, the table scrolls it back below them; a row taller than the view keeps its
+position (tested with rows of fractional height at a device pixel ratio of 1, and with one 900 px
+row). The Products list's
 unused `units` property is gone (it closes W75's leftover).
 
 - The count is hidden with `display: none`, so screen readers most likely do not read it at phone
