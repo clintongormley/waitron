@@ -736,10 +736,9 @@ stays reachable, closed as the person left it. With filters alone, only a row ke
 match's place is held open. A tree whose box is 440px wide or less indents each level
 `--wt-space-2` instead of `--wt-space-4`, and no deeper than four levels, and its arrow slot is
 one cell padding (`--wt-space-3`) narrower than `--wt-tap-min`. A branch's toggle button stays
-`--wt-tap-min` wide by reaching back over the 12 px before it (its cell's start padding, or a
-nested row's indent and the rest of that padding), so it takes no more of the row than the other slots and its tap target stays
-whole and inside its own cell; its focus ring is then drawn inside the button, because a top-level
-one sits against the scrolling box's edge. The table publishes
+`--wt-tap-min` wide by reaching back over the 12 px before it, which on every row is inside its own cell, so it takes no more of the row than the other slots and its tap target stays
+whole; its focus ring is then drawn inside the button, because a top-level
+one can sit against the scrolling box's edge. The table publishes
 the arrow slot's width as `--tree-arrow-width`, which a screen reads to line up its Name heading
 or its own slots (W85e, owner 2026-10-05). A CSS condition cannot
 read a token, so the table watches a tree's box in code and, a frame after each change to the box's
@@ -897,8 +896,9 @@ still puts it a level down. The Products list draws a product's variants this wa
 in the order the product holds them whatever sorts the table, through `rowKeepsChildOrder`;
 `sortedSiblings` answers that order too. The toggle
 button a branch row draws when its `rowActivation` is not `"toggle"` carries `part="tree-toggle"`,
-so a screen can colour it; its width at phone width belongs to the table (above). The Products
-list makes it small and muted. In tree mode the
+so a screen can restyle its arrow (colour, size, where it sits in the button); its width, and at
+phone width its start margin and start padding, belong to the table (above). The Products list
+makes it small and muted. In tree mode the
 heading over the tree's column is wrapped in `part="tree-heading"`, so a screen can line it up with
 what its rows draw there.
 

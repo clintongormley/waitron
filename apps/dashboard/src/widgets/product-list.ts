@@ -712,7 +712,7 @@ export class ProductList extends LitElement {
     this.#tableNarrow.observe(table, { attributes: true, attributeFilter: ["narrow"] });
   }
 
-  /** Re-measured a frame after the table resizes, updates or turns `narrow`, never inside the
+  /** Re-measured a frame after the table resizes, updates or its `narrow` changes, never inside the
    * resize observer's callback, which the names' new heights would re-trigger. */
   #scheduleFit(): void {
     if (this.#fitFrame) return;

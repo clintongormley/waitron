@@ -3213,8 +3213,8 @@ against the other states.
 
 **The Menus Structure tree: a folder's name starts left of a product's at the same level — DONE
 (W88, found 2026-10-05 by W88's look).** Every row of the tree, the menu's own row included, now
-draws the Products tree's three slots before its name _(2026-10-06: at phone width a product row
-draws no photo slot, W85e)_: the table's arrow, a grip or a blank space
+draws the Products tree's three slots before its name _(2026-10-06: at phone width the Products tree's product
+rows draw no photo slot; this tree's keep theirs, W85e)_: the table's arrow, a grip or a blank space
 of the same width, and a folder icon in a photo-wide frame or the product's photo, or an empty
 frame of the same size when it has none. Names at one level start at one place, and the Name heading
 sits over the menu's name through the table's `tree-heading` part. W88 was branched before W84
@@ -3549,17 +3549,17 @@ by the owner the same day as two items:
   at phone width they sit on the line above the box and wrap in what the grip and folder icon leave
   of the room before the pinned column)_. Wrapping was chosen over an ellipsis because a phone
   cannot show a cut name's full text. The open point (a name got about 46 px at 390 px, so most
-  words broke part-way) was answered by the owner, who chose dropping the product photo at phone
-  width and narrowing the tree's leading slots; **done in W85e** (2026-10-06): at phone width (the table's `narrow`) a product row draws no photo, and every tree's
+  words broke part-way) was answered "maybe (b) and (c)" by the owner (b: drop the product photo at phone
+  width; c: narrow the tree's leading slots), and **W85e** (2026-10-06) did (b) and narrowed
+  the arrow slot of (c): at phone width (the table's `narrow`) a product row draws no photo, and every tree's
   arrow slot is one cell padding (12 px) narrower, a toggle button keeping its 44 px tap target by
-  reaching back over the 12 px before it (its cell's start padding, or a nested row's indent and
-  the rest of that padding) and staying inside its own cell. Measured in the demo venue at 390 px: a product's
+  reaching back over the 12 px before it, which on every row is inside its own cell. Measured in the demo venue at 390 px: a product's
   name room went from 55 to 123 px (English) and 46 to 114 px (Spanish), a category's up 12 px;
   laptop width unchanged. Categories keep their folder icon, so at phone width a product's name
   starts one folder slot before a sibling category's. The grip and the 8 px indent step were
   left as they were: the grip is a tap target, and a narrower step barely tells levels apart.
   At phone width a product's name also fills the room its photo gave up (the list re-fits names
-  when the table turns narrow), and a narrow toggle's focus ring is drawn inside the button so the
+  whenever the table's `narrow` changes), and a narrow toggle's focus ring is drawn inside the button so the
   scrolling box does not clip a top-level one. The Structure tree gains the same 12 px; its long
   names still clip at 390 px (W92's open point above).
 - Fixed in W85c (#1245, 2026-10-05): in the product editor's variant table the Unit button sat 4 px

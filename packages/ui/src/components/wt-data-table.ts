@@ -584,7 +584,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       }
 
       /* A screen lines its own slots and headings up with this. At phone width the arrow takes a
-         cell padding less, which a toggle button's tap target reaches back into (below). */
+         cell padding's width less, which a toggle button's tap target reaches back over (below). */
       :host {
         --tree-arrow-width: var(--wt-tap-min);
       }
@@ -615,7 +615,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
 
-      /* A top-level toggle sits against the scrolling box's edge, which clips an outward ring. */
+      /* A top-level toggle can sit against the scrolling box's edge, which clips an outward ring. */
       :host([narrow]) .tree-toggle:focus-visible {
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }

@@ -1319,6 +1319,11 @@ test.each(["ltr", "rtl"])(
     const clip = scroll.getBoundingClientRect();
     const clipLeft = clip.left + scroll.clientLeft;
     const clipRight = clipLeft + scroll.clientWidth;
+    // The precondition: the toggle touches the scrolling box's edge.
+    expect(dir === "ltr" ? box.left : box.right).toBeCloseTo(
+      dir === "ltr" ? clipLeft : clipRight,
+      0,
+    );
     expect(box.left - reach).toBeGreaterThanOrEqual(clipLeft);
     expect(box.right + reach).toBeLessThanOrEqual(clipRight);
   },
@@ -1395,7 +1400,7 @@ test("a row that joins its parent sits on the band colour, pinned cell too, and 
     expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
 });
 
-test("a branch's toggle button is exposed as a part, so a screen can size and colour it", async () => {
+test("a branch's toggle button is exposed as a part, so a screen can style it", async () => {
   const el = await treeTable();
   const toggle = el.shadowRoot!.querySelector('tr[data-row-key="food"] button.tree-toggle')!;
   expect(toggle.part.contains("tree-toggle")).toBe(true);

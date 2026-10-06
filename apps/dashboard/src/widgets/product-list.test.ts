@@ -3659,7 +3659,6 @@ describe("the Products tree's Name column", () => {
         .querySelector('td[data-pinned="end"]')!
         .getBoundingClientRect().left;
       expect(root.querySelector<HTMLElement>(".scroll")!.scrollLeft).toBe(0);
-      // The room before the pinned cell, less the Name cell's own end padding.
       const room =
         pinned -
         name.getBoundingClientRect().left -
