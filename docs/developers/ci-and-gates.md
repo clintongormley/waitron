@@ -437,15 +437,24 @@ attempt 1 (2026-10-05, PR head `4123486d0`), `test-dashboard` was cancelled with
 acquired by Runner of type hosted even after multiple attempts" and `ci` finished green with its
 step skipped; run 37371194302 attempt 1 did the same with twelve such jobs. Every superseded run's
 cancellations that evening did fire the old step, and one of their logs printed
-`"result": "cancelled"`. What GitHub handed `ci` for a never-acquired job was never printed, so it
-is not known; if it is `skipped`, the allowlist passes it as well. The step now prints every
-result, so the next such run records it.
+`"result": "cancelled"`. GitHub's documentation (github/docs,
+`content/actions/reference/workflows-and-actions/contexts.md`) says of `needs.<job_id>.result`:
+_"Possible values are `success`, `failure`, `cancelled`, or `skipped`."_ The old step did not
+fire, so a never-acquired job reached `ci` as neither `failure` nor `cancelled`: either `success`
+or `skipped`, which the allowlist passes as well, or a value outside those four, which it fails.
+So this change may not fix the incident it was opened for: it does only if GitHub hands an
+undocumented or missing value. Nobody has printed the value; the step now prints every result, so
+the next such run records it.
 
 `scripts/ci-workflow.test.mjs` runs the step's script on sample results; GitHub alone evaluates
-`toJSON(needs)`. On GitHub, through a throwaway pull request based on the fix branch (#1282):
-run 37424069355, every test job skipped → `ci` passed; 37424588800, `changes` failed → `ci`
-failed; 37425317943, `changes` cancelled by its own `timeout-minutes` → `ci` failed; 37425907838,
-the run cancelled by hand while `changes` ran → `ci` failed.
+`toJSON(needs)`. That guard is weaker than its name: it reads ci.yml as text, extracts the step's
+script and checks that the step has no `if:` key and keeps its `NEEDS: ${{ toJSON(needs) }}` line,
+so an `if:` reaching the step another way — a job-level change, or YAML spelled differently — is
+not seen, and what `toJSON(needs)` produces on GitHub is never tested. On GitHub, through a
+throwaway pull request based on the fix branch (#1282): run 37424069355, every test job skipped →
+`ci` passed; 37424588800, `changes` failed → `ci` failed; 37425317943, `changes` cancelled by its
+own `timeout-minutes` → `ci` failed; 37425907838, the run cancelled by hand while `changes` ran →
+`ci` failed.
 
 ### A shard can exit 1 with every one of its tests passing — RETIRED from CLAUDE.md
 
