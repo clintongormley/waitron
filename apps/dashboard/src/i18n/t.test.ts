@@ -60,3 +60,17 @@ it("calls the Structure tab's picker button Add products in English and Spanish"
 it("registers en-GB as a first-class catalogue entry", () => {
   expect(catalogues["en-GB"]).toBe(en);
 });
+
+it("calls restaurant menus cartas in Spanish, keeping the account menu distinct", () => {
+  expect(t("menus.menu_prefix", "es-ES")).toBe("Carta: {name}");
+  expect(t("menus.include_menu", "es-ES")).toBe("Incluir una carta");
+  expect(t("menus.remove_included", "es-ES")).toBe("Quitar de esta carta");
+  expect(t("nav.account_menu", "es-ES")).toBe("Menú de cuenta");
+});
+
+it.each([
+  ["en-GB", "Search"],
+  ["es-ES", "Buscar"],
+])("labels the Home preview search simply in %s", (locale, label) => {
+  expect(t("home.search", locale)).toBe(label);
+});

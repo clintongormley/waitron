@@ -747,7 +747,15 @@ export class MenusScreen extends LitElement {
           } else {
             const next = [...path, node.internalName ?? ""];
             if (!foundSections.has(node.ref.sectionId))
-              foundSections.set(node.ref.sectionId, next.join(PATH_SEPARATOR));
+              foundSections.set(
+                node.ref.sectionId,
+                [
+                  ...path,
+                  node.includedMenuId
+                    ? t("menus.menu_prefix").replace("{name}", node.internalName ?? "")
+                    : (node.internalName ?? ""),
+                ].join(PATH_SEPARATOR),
+              );
             visit(node.children ?? [], next);
           }
         }

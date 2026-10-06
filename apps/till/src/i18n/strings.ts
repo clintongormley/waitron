@@ -967,7 +967,7 @@ export const en = {
   // Menu and service-zone names are server data, not keys here.
   "menu.switcher": "Menu",
   // The menu browser: search, the Device Home Page's shortcuts and the menu's sections.
-  "menu.search": "Search the menu",
+  "menu.search": "Search",
   "menu.shortcuts": "Shortcuts",
   "menu.full": "Full menu",
   "menu.results": "Search results",
@@ -1941,7 +1941,7 @@ export const es: Record<StringKey, string> = {
   "party.try_again": "Revísala e inténtalo de nuevo.",
   "boot.error": "No se pudo cargar la caja, recarga para reintentar",
   "menu.switcher": "Carta",
-  "menu.search": "Buscar en la carta",
+  "menu.search": "Buscar",
   "menu.shortcuts": "Accesos directos",
   "menu.full": "Carta completa",
   "menu.results": "Resultados de la búsqueda",

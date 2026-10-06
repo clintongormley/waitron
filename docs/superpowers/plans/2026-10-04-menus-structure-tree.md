@@ -1,5 +1,10 @@
 # Menu Structure as one navigable tree (W88) — implementation plan
 
+**2026-10-06 wording update (A289):** Restaurant menus use "carta" in Spanish, including
+"Carta: {name}" in the Structure tree and shortcut picker. Search fields now say "Search" /
+"Buscar". See [the current wording contract](../../developers/design-system.md#structure).
+
+
 > **For agentic workers:** implement each task test-first: write the failing test, run it and watch
 > it fail for the reason you expect, then write the least code that passes. Use
 > `superpowers:subagent-driven-development`. The branch touches no risk trigger (no fiscal

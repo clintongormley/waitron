@@ -2089,7 +2089,7 @@ export const en = {
   "home.device_till": "Till",
   "home.tile_product": "Product",
   "home.tile_section": "Section",
-  "home.search": "Search the menu",
+  "home.search": "Search",
   "home.search_note":
     "This preview searches this menu only. A device may also show results from other menus available to it.",
   "home.results": "Search results",
@@ -4275,7 +4275,7 @@ export const es: Record<StringKey, string> = {
   "menus.expand": "Mostrar lo que hay en {name}",
   "menus.collapse": "Ocultar lo que hay en {name}",
   "menus.new_section": "Nueva sección aquí",
-  "menus.include_menu": "Incluir un menú",
+  "menus.include_menu": "Incluir una carta",
   "menus.choose_menu": "Elige una carta",
   "menus.delete_section_one": "¿Eliminar {name} y la sección debajo? Sus productos se conservan.",
   "menus.included_in": "Incluido en",
@@ -4285,9 +4285,9 @@ export const es: Record<StringKey, string> = {
   "menus.delete_section": "Eliminar sección",
   "menus.delete_section_note":
     "¿Eliminar {name} y las {count} secciones debajo? Sus productos se conservan.",
-  "menus.menu_prefix": "Menú: {name}",
+  "menus.menu_prefix": "Carta: {name}",
   "menus.edit_included": "Editar {name}",
-  "menus.remove_included": "Quitar de este menú",
+  "menus.remove_included": "Quitar de esta carta",
   "menus.read_only_here": "Solo lectura aquí",
 
   "menus.new_section_heading": "Nueva sección en {list}",
@@ -4331,7 +4331,7 @@ export const es: Record<StringKey, string> = {
   "home.device_till": "Caja registradora",
   "home.tile_product": "Producto",
   "home.tile_section": "Sección",
-  "home.search": "Buscar en la carta",
+  "home.search": "Buscar",
   "home.search_note":
     "Esta vista previa solo busca en esta carta. Un dispositivo también puede mostrar resultados de otras cartas disponibles para él.",
   "home.results": "Resultados de la búsqueda",

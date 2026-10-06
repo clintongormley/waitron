@@ -5538,61 +5538,67 @@ describe("the Device Home Page row", () => {
     expect(client.getMenuHome.mock.calls.length).toBe(reads);
   });
 
-  it("offers as product shortcuts only active products the structure reaches, by their path, and as section shortcuts the sections it reaches, included menus' too, leaving out what is already a shortcut", async () => {
-    const el = await mountRow();
-    // Burger is already a shortcut, Chips is in no list on Lunch, and Old soup is inactive.
-    const products = await openPicker(el, "product");
-    expect(modal(el, "add-shortcut").heading).toBe(t("home.add_product"));
-    expect(products.required).toBe(true);
-    expect(products.options).toEqual([
-      { value: "p-lager", label: "Drinks › Lager" },
-      { value: "p-lemonade", label: "Drinks › Lemonade" },
-    ]);
-    inModal(el, "add-shortcut", '[data-test="add-shortcut-cancel"]').click();
-    await vi.waitFor(() => expect(modal(el, "add-shortcut").open).toBe(false));
-    // Drinks is already a shortcut; Desserts is on no menu.
-    const sections = await openPicker(el, "section");
-    expect(modal(el, "add-shortcut").heading).toBe(t("home.add_section"));
-    expect(sections.required).toBe(true);
-    expect(sections.options).toEqual([
-      { value: "s-beer", label: "Drinks › Beer" },
-      { value: "s-fav", label: "Favourites" },
-    ]);
+  it.each(["en", "es-ES"])(
+    "offers as product shortcuts only active products the structure reaches, by their path, and as section shortcuts the sections it reaches, included menus' too, leaving out what is already a shortcut (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      onTestFinished(() => setLocale(before));
+      const el = await mountRow();
+      // Burger is already a shortcut, Chips is in no list on Lunch, and Old soup is inactive.
+      const products = await openPicker(el, "product");
+      expect(modal(el, "add-shortcut").heading).toBe(t("home.add_product"));
+      expect(products.required).toBe(true);
+      expect(products.options).toEqual([
+        { value: "p-lager", label: "Drinks › Lager" },
+        { value: "p-lemonade", label: "Drinks › Lemonade" },
+      ]);
+      inModal(el, "add-shortcut", '[data-test="add-shortcut-cancel"]').click();
+      await vi.waitFor(() => expect(modal(el, "add-shortcut").open).toBe(false));
+      // Drinks is already a shortcut; Desserts is on no menu.
+      const sections = await openPicker(el, "section");
+      expect(modal(el, "add-shortcut").heading).toBe(t("home.add_section"));
+      expect(sections.required).toBe(true);
+      expect(sections.options).toEqual([
+        { value: "s-beer", label: "Drinks › Beer" },
+        { value: "s-fav", label: "Favourites" },
+      ]);
 
-    cleanupWidgets();
-    const included = await mountRow(
-      api({
-        getMenuHome: vi.fn().mockResolvedValue(emptyHome("home-lunch")),
-        getMenuStructure: vi.fn().mockResolvedValue(
-          lunchWith([
-            {
-              memberId: "m-drinks",
-              ref: { kind: "section", sectionId: "included-drinks" },
-              internalName: "Drinks",
-              includedMenuId: "menu-drinks",
-              children: [
-                {
-                  memberId: "m-beer",
-                  ref: { kind: "section", sectionId: "included-beer" },
-                  internalName: "Beer",
-                  children: [productNode("m-lager", "p-lager")],
-                },
-              ],
-            },
-          ]),
-        ),
-      }),
-    );
-    expect((await openPicker(included, "section")).options).toEqual([
-      { value: "included-drinks", label: "Drinks" },
-      { value: "included-beer", label: "Drinks › Beer" },
-    ]);
-    inModal(included, "add-shortcut", '[data-test="add-shortcut-cancel"]').click();
-    await vi.waitFor(() => expect(modal(included, "add-shortcut").open).toBe(false));
-    expect((await openPicker(included, "product")).options).toEqual([
-      { value: "p-lager", label: "Drinks › Beer › Lager" },
-    ]);
-  });
+      cleanupWidgets();
+      const included = await mountRow(
+        api({
+          getMenuHome: vi.fn().mockResolvedValue(emptyHome("home-lunch")),
+          getMenuStructure: vi.fn().mockResolvedValue(
+            lunchWith([
+              {
+                memberId: "m-drinks",
+                ref: { kind: "section", sectionId: "included-drinks" },
+                internalName: "Drinks",
+                includedMenuId: "menu-drinks",
+                children: [
+                  {
+                    memberId: "m-beer",
+                    ref: { kind: "section", sectionId: "included-beer" },
+                    internalName: "Beer",
+                    children: [productNode("m-lager", "p-lager")],
+                  },
+                ],
+              },
+            ]),
+          ),
+        }),
+      );
+      expect((await openPicker(included, "section")).options).toEqual([
+        { value: "included-drinks", label: locale === "en" ? "Menu: Drinks" : "Carta: Drinks" },
+        { value: "included-beer", label: "Drinks › Beer" },
+      ]);
+      inModal(included, "add-shortcut", '[data-test="add-shortcut-cancel"]').click();
+      await vi.waitFor(() => expect(modal(included, "add-shortcut").open).toBe(false));
+      expect((await openPicker(included, "product")).options).toEqual([
+        { value: "p-lager", label: "Drinks › Beer › Lager" },
+      ]);
+    },
+  );
 
   it("adds the chosen target at once and closes, reading the home again", async () => {
     const client = api();

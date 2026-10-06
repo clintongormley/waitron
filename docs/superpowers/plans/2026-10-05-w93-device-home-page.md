@@ -1,5 +1,10 @@
 # One Device Home Page per menu, shown two ways (W93) — implementation plan
 
+**2026-10-06 wording update (A289):** Restaurant menus use "carta" in Spanish, including
+"Carta: {name}" in the Structure tree and shortcut picker. Search fields now say "Search" /
+"Buscar". See [the current wording contract](../../developers/design-system.md#structure).
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use
 > checkbox (`- [ ]`) syntax. Every task is test-first: write the failing test, run it and watch it
