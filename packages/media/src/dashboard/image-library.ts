@@ -152,9 +152,8 @@ export class ImageLibrary extends LitElement {
         background: var(--wt-color-primary);
         color: var(--wt-color-on-primary);
       }
-      /* Side by side, the photo taking the larger share, wherever the dialog has room for both
-         bases; one above the other where it has not. Driven by the dialog's width, not the
-         viewport's. */
+      /* Side by side wherever the dialog has room for both bases; one above the other where it
+         has not. Driven by the dialog's width, not the viewport's. */
       .viewer {
         display: flex;
         flex-wrap: wrap;
@@ -166,6 +165,8 @@ export class ImageLibrary extends LitElement {
         min-width: 0;
         height: auto;
         max-height: 60dvh;
+        /* --photo-ratio is set when the photo loads; until then max-width is none. */
+        max-width: calc(60dvh * var(--photo-ratio));
         object-fit: contain;
         background: var(--wt-color-surface);
         border-radius: var(--wt-radius-md);
@@ -500,7 +501,19 @@ export class ImageLibrary extends LitElement {
       @click=${(event: MouseEvent) => this.#closeOnBackdrop(event, viewing.image.id)}
     >
       <div class="viewer">
-        <img src=${`/media/${encodeURIComponent(viewing.image.filename)}`} alt=${name} />
+        <img
+          src=${`/media/${encodeURIComponent(viewing.image.filename)}`}
+          alt=${name}
+          @load=${(event: Event) => {
+            const image = event.currentTarget as HTMLImageElement;
+            image.style.setProperty(
+              "--photo-ratio",
+              String(image.naturalWidth / image.naturalHeight),
+            );
+          }}
+          @error=${(event: Event) =>
+            (event.currentTarget as HTMLImageElement).style.removeProperty("--photo-ratio")}
+        />
         <section class="uses">
           <h3 id="uses-heading">${t("image.uses")}</h3>
           ${

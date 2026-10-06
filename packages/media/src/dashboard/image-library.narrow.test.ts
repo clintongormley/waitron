@@ -389,8 +389,8 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
-// A photo taller than the preview's height cap is drawn whole inside a box of another shape, by
-// `object-fit: contain`; every other photo's box takes the photo's own proportions.
+// Every photo's box takes the photo's own proportions; one taller than the preview's height cap is
+// drawn at that cap.
 for (const theme of ["light", "dark"] as const) {
   for (const [viewport, shape, size, capped] of [
     [{ width: 1280, height: 800 }, "landscape", { width: 900, height: 400 }, false],
@@ -404,11 +404,8 @@ for (const theme of ["light", "dark"] as const) {
       const image = library.shadowRoot!.querySelector(".viewer img")!;
       expect(getComputedStyle(image).objectFit).toBe("contain");
       const ratio = size.width / size.height;
-      if (capped) {
-        expect(photo.height).toBeCloseTo(viewport.height * 0.6, 0);
-      } else {
-        expect(photo.width / photo.height).toBeCloseTo(ratio, 2);
-      }
+      if (capped) expect(photo.height).toBeCloseTo(viewport.height * 0.6, 0);
+      expect(photo.width / photo.height).toBeCloseTo(ratio, 2);
       expect(photo.left).toBeGreaterThanOrEqual(dialog.left);
       expect(photo.right).toBeLessThanOrEqual(dialog.right);
       expect(photo.top).toBeGreaterThanOrEqual(dialog.top);
@@ -416,3 +413,33 @@ for (const theme of ["light", "dark"] as const) {
     });
   }
 }
+
+for (const theme of ["light", "dark"] as const) {
+  it(`draws a portrait photo at the preview's height cap with no band beside it, the list of uses taking the rest of the row, at 1280px (${theme})`, async () => {
+    await page.viewport(1280, 800);
+    const size = { width: 600, height: 800 };
+    const { library, photo, list } = await openPreview(theme, uses, size);
+    expect(photo.height).toBeCloseTo(800 * 0.6, 0);
+    const drawnWidth = photo.height * (size.width / size.height);
+    expect(Math.abs(photo.width - drawnWidth)).toBeLessThan(1);
+    const gap = token(library, "--wt-space-4");
+    expect(Math.abs(list.left - (photo.right + gap))).toBeLessThan(1);
+    const viewer = measured(library.shadowRoot!.querySelector(".viewer")!);
+    expect(Math.abs(viewer.right - list.right)).toBeLessThan(1);
+  });
+}
+
+it("drops the previous photo's proportions when the preview's next photo fails to load, and takes the next photo's when it loads", async () => {
+  await page.viewport(1280, 800);
+  const { library } = await openPreview("light", uses, { width: 600, height: 800 });
+  const image = library.shadowRoot!.querySelector<HTMLImageElement>(".viewer img")!;
+  expect(getComputedStyle(image).maxWidth).toBe("360px");
+  const failed = new Promise((resolve) => image.addEventListener("error", resolve, { once: true }));
+  image.src = "data:image/png;base64,bm90IGEgcGhvdG8=";
+  await failed;
+  expect(getComputedStyle(image).maxWidth).toBe("none");
+  image.src = photo(900, 400);
+  await image.decode();
+  await frame();
+  expect(getComputedStyle(image).maxWidth).toBe("1080px");
+});
