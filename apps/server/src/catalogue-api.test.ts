@@ -84,8 +84,8 @@ describe("folder selection routes", () => {
             categoryIds: [parent, child],
             contents: "delete",
             shown: [
-              { id: parent, folders: 1, activeProducts: 0, routes: 0, ownRoutes: 0 },
-              { id: child, folders: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
+              { id: parent, folders: 1, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
+              { id: child, folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
             ],
           },
         })
@@ -157,7 +157,9 @@ describe("folder selection routes", () => {
               productIds: [],
               categoryIds: [empty],
               contents,
-              shown: [{ id: empty, folders: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
+              shown: [
+                { id: empty, folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
+              ],
             },
           })
         ).status,
@@ -180,9 +182,17 @@ describe("folder selection routes", () => {
   );
 
   describe("the counts the person was shown", () => {
-    const counts = (id: string, folders = 0, activeProducts = 0, routes = 0, ownRoutes = 0) => ({
+    const counts = (
+      id: string,
+      folders = 0,
+      activeProducts = 0,
+      routes = 0,
+      ownRoutes = 0,
+      products = activeProducts,
+    ) => ({
       id,
       folders,
+      products,
       activeProducts,
       routes,
       ownRoutes,
@@ -221,6 +231,49 @@ describe("folder selection routes", () => {
       expect((await send(app, "GET", `/management-api/categories/${child}`)).status).toBe(200);
     });
 
+    it("refuses an empty category's delete with 409 category.contents_changed once an inactive product is added to it, leaving the product in place", async () => {
+      const app = mountApp();
+      const parent = await folder(app, "Desserts");
+      const empty = await folder(app, "Cakes", parent);
+      const summary = await send(app, "GET", `/management-api/folders/summary?id=${empty}`);
+      const [shown] = (await summary.json()) as Record<string, unknown>[];
+      const created = await send(app, "POST", "/management-api/products", {
+        body: {
+          catalogueId: await createCatalogueVia(app, "Cakes menu"),
+          categoryId: empty,
+          name: "Flan",
+          pricingUnit: "each",
+          unitPrice: "2",
+          vatClass: "general",
+        },
+      });
+      const flan = ((await created.json()) as { id: string }).id;
+      expect(
+        (
+          await send(app, "POST", "/management-api/folders/delete", {
+            body: { productIds: [flan], categoryIds: [], contents: "move_up" },
+          })
+        ).status,
+      ).toBe(204);
+      const response = await send(app, "POST", "/management-api/folders/delete", {
+        body: { productIds: [], categoryIds: [empty], contents: "move_up", shown: [shown] },
+      });
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        error: { code: "category.contents_changed", params: { categoryId: empty } },
+      });
+      expect((await send(app, "GET", `/management-api/categories/${empty}`)).status).toBe(200);
+      const listed = (await (await send(app, "GET", "/management-api/products")).json()) as {
+        id: string;
+        active: boolean;
+        primaryCategoryId: string | null;
+      }[];
+      expect(listed.find(({ id }) => id === flan)).toMatchObject({
+        active: false,
+        primaryCategoryId: empty,
+      });
+    });
+
     it("deletes when the counts shown still hold", async () => {
       const app = mountApp();
       const parent = await folder(app, "Drinks");
@@ -251,7 +304,21 @@ describe("folder selection routes", () => {
       ["a missing count", { categoryIds: [id], shown: [{ id, folders: 0, activeProducts: 0 }] }],
       [
         "missing the category's own routing rules",
-        { categoryIds: [id], shown: [{ id, folders: 0, activeProducts: 0, routes: 0 }] },
+        {
+          categoryIds: [id],
+          shown: [{ id, folders: 0, products: 0, activeProducts: 0, routes: 0 }],
+        },
+      ],
+      [
+        "missing the count of every product, inactive ones included",
+        {
+          categoryIds: [id],
+          shown: [{ id, folders: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
+        },
+      ],
+      [
+        "a count of every product given as text",
+        { categoryIds: [id], shown: [{ ...counts(id), products: "0" }] },
       ],
       [
         "an own count given as text",
@@ -1135,7 +1202,9 @@ describe("unique category and product names", () => {
           productIds: [],
           categoryIds: [holder],
           contents: "move_up",
-          shown: [{ id: holder, folders: 1, activeProducts: 0, routes: 0, ownRoutes: 0 }],
+          shown: [
+            { id: holder, folders: 1, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
+          ],
         },
       }),
       "category.name_taken",

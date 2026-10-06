@@ -33,7 +33,7 @@ export interface FolderSummary {
  */
 export type ShownFolderCounts = Pick<
   FolderSummary,
-  "id" | "folders" | "activeProducts" | "routes" | "ownRoutes"
+  "id" | "folders" | "products" | "activeProducts" | "routes" | "ownRoutes"
 >;
 
 /** The folder tree, read once: each folder's parent, depth and whole subtree. */
@@ -207,6 +207,7 @@ async function assertContentsAsShown(
     if (
       seen === undefined ||
       seen.folders !== summary.folders ||
+      seen.products !== summary.products ||
       seen.activeProducts !== summary.activeProducts ||
       seen.routes !== summary.routes ||
       seen.ownRoutes !== summary.ownRoutes

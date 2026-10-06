@@ -254,9 +254,10 @@ describe("deleteCatalogueItems", () => {
 describe("deleteCatalogueItems with the counts the person was shown", () => {
   const shownFor = async (ids: string[]) =>
     (await app((tx) => summariseFolders(tx, ids))).map(
-      ({ id, folders, activeProducts, routes, ownRoutes }) => ({
+      ({ id, folders, products, activeProducts, routes, ownRoutes }) => ({
         id,
         folders,
+        products,
         activeProducts,
         routes,
         ownRoutes,
@@ -289,6 +290,26 @@ describe("deleteCatalogueItems with the counts the person was shown", () => {
     expect((await app((tx) => readCategory(tx, b))).parentId).toBe(d);
     for (const id of [cola, lager, burger]) expect((await product(id)).active).toBe(true);
   });
+
+  it.each<FolderContents>(["move_up", "delete"])(
+    "refuses an empty category's delete after an inactive product was added to it, leaving the product in place (%s)",
+    async (contents) => {
+      const empty = (await app((tx) => createCategory(tx, { name: "Desserts" }))).id;
+      const shown = await shownFor([empty]);
+      const added = await app(async (tx) => {
+        const created = await addProduct(tx, empty);
+        await deactivateProduct(tx, created.id);
+        return created.id;
+      });
+      await expect(
+        app((tx) =>
+          deleteCatalogueItems(tx, { productIds: [], categoryIds: [empty] }, contents, shown),
+        ),
+      ).rejects.toMatchObject({ code: "category.contents_changed", params: { categoryId: empty } });
+      expect((await app((tx) => readCategory(tx, empty))).id).toBe(empty);
+      expect(await product(added)).toMatchObject({ active: false, categoryId: empty });
+    },
+  );
 
   it.each<FolderContents>(["move_up", "delete"])(
     "checks the counts before switching off a selected product, even before rollback (%s)",

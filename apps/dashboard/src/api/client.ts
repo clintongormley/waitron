@@ -376,7 +376,7 @@ export interface FolderSummary {
  */
 export type ShownFolderCounts = Pick<
   FolderSummary,
-  "id" | "folders" | "activeProducts" | "routes" | "ownRoutes"
+  "id" | "folders" | "products" | "activeProducts" | "routes" | "ownRoutes"
 >;
 export interface Unit {
   id: string;

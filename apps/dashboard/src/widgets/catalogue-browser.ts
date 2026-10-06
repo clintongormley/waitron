@@ -297,9 +297,10 @@ export class CatalogueBrowser extends LitElement {
           await this.api.deleteCatalogueItems(
             this.operationSelection,
             this.contents,
-            this.summaries.map(({ id, folders, activeProducts, routes, ownRoutes }) => ({
+            this.summaries.map(({ id, folders, products, activeProducts, routes, ownRoutes }) => ({
               id,
               folders,
+              products,
               activeProducts,
               routes,
               ownRoutes,
@@ -357,8 +358,10 @@ export class CatalogueBrowser extends LitElement {
         summary.ownRoutes === shown.ownRoutes
       );
     });
-    if (same) return true;
+    // The dialog shows no inactive products, so a change in them alone is not one to confirm; the
+    // delete sends this read's count of every product so the server still refuses a later change.
     this.summaries = fresh;
+    if (same) return true;
     this.operationError = t("folders.summary_changed");
     return false;
   }

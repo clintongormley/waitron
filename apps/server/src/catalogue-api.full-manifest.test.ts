@@ -64,8 +64,8 @@ it("folder summaries count claims and exceptions in the subtree and deletion rem
         categoryIds: [child, parent],
         contents: "delete",
         shown: [
-          { id: child, folders: 0, activeProducts: 0, routes: 2, ownRoutes: 2 },
-          { id: parent, folders: 1, activeProducts: 0, routes: 2, ownRoutes: 0 },
+          { id: child, folders: 0, products: 0, activeProducts: 0, routes: 2, ownRoutes: 2 },
+          { id: parent, folders: 1, products: 0, activeProducts: 0, routes: 2, ownRoutes: 0 },
         ],
       })
     ).status,
@@ -114,7 +114,9 @@ it("moving a category's contents up removes only its own routing rules, which it
         productIds: [],
         categoryIds: [parent],
         contents: "move_up",
-        shown: [{ id: parent, folders: 1, activeProducts: 0, routes: 3, ownRoutes: 1 }],
+        shown: [
+          { id: parent, folders: 1, products: 0, activeProducts: 0, routes: 3, ownRoutes: 1 },
+        ],
       })
     ).status,
   ).toBe(204);
@@ -145,7 +147,7 @@ it("refuses a category delete with 409 when a routing rule was added since the c
     productIds: [],
     categoryIds: [drinks],
     contents: "delete",
-    shown: [{ id: drinks, folders: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
+    shown: [{ id: drinks, folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
   });
   expect(response.status).toBe(409);
   expect(await response.json()).toMatchObject({
@@ -175,7 +177,7 @@ it("refuses a category delete with 409 when a routing rule was added to one of i
     productIds: [],
     categoryIds: [drinks],
     contents: "delete",
-    shown: [{ id: drinks, folders: 1, activeProducts: 0, routes: 0, ownRoutes: 0 }],
+    shown: [{ id: drinks, folders: 1, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }],
   });
   expect(response.status).toBe(409);
   expect(await response.json()).toMatchObject({

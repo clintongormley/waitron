@@ -882,10 +882,11 @@ Still open from W74:
 - **The Printers screen's discovered-device rows' `data-test` names use the device alone** (W74d,
   #1242, left as it was): `discovered-row-`, `register-`, `pair-`, `forget-device-` and the rest,
   so a lookup by name finds the first row drawn for that device.
-- **An empty category's no-dialog delete does not see an inactive product added meanwhile**
-  (raised in #1217's review, not reproduced in a test): an empty category is deleted without the
-  dialog, and the server compares active products only, so one that gains only an inactive product
-  between the read and the delete is still deleted, the product moving up.
+- **An empty category's no-dialog delete did not see an inactive product added meanwhile — done
+  by A278:** the delete request carries the count of all products, disabled ones included,
+  and the server refuses with `category.contents_changed` when it differs. Left open: the dialog
+  then opened shows only active products, so it reads "0 products" beside the refusal's "check the
+  new counts" message.
 - **A category holding only routing rules is deleted without the dialog** (raised in #1217's
   review): the no-dialog path checks subcategories and products only, so its rules go unannounced.
   The check dates from commit `5ffa5c633c` (2026-10-01).

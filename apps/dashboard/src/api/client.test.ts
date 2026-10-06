@@ -28,7 +28,9 @@ describe("DashboardApi", () => {
   it("sends the selected folder contents choice on deletion", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    const shown = [{ id: "f", folders: 0, activeProducts: 0, routes: 0, ownRoutes: 0 }];
+    const shown = [
+      { id: "f", folders: 0, products: 0, activeProducts: 0, routes: 0, ownRoutes: 0 },
+    ];
     await api.deleteCatalogueItems({ productIds: [], categoryIds: ["f"] }, "move_up", shown);
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/folders/delete",
@@ -41,7 +43,9 @@ describe("DashboardApi", () => {
   it("sends the counts the person was shown with a category deletion", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-    const shown = [{ id: "f", folders: 1, activeProducts: 2, routes: 3, ownRoutes: 3 }];
+    const shown = [
+      { id: "f", folders: 1, products: 3, activeProducts: 2, routes: 3, ownRoutes: 3 },
+    ];
     await api.deleteCatalogueItems({ productIds: [], categoryIds: ["f"] }, "delete", shown);
     expect(fetchImpl).toHaveBeenCalledWith(
       "/management-api/folders/delete",
