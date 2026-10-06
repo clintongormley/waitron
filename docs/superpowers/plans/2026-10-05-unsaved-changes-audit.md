@@ -1960,3 +1960,43 @@ Tasks 1/4 still need the special-date/calendar/duplicate owners and final advanc
 Tasks 5/6 still need direct receipt/login history consumers, all screen/tab/context interception,
 till/setup shells, the remaining page/setup owners and activated native reload. Tasks 2/3 remain
 complete. Neither proposed W69 PR is ready for finish-branch.
+
+
+## 2026-10-06 special-date Hours editors checkpoint
+
+`hours-screen.ts` now registers Special-date Add/Edit and Duplicate with the shared coordinator.
+The date comparison follows the submitted date, trimmed name, colour, venue-closure flag and
+shown subject cells; period property order is canonicalized, and non-period modes exclude retained
+period input as the sender does. Duplicate compares its ordered target dates, including blank
+invalid entries. Cancel/native Escape, replacement openings and ancestor leave ask before discard.
+An accepted write commits its captured draft before refresh; newer values remain compared with
+that accepted snapshot. Reconnect retains the original opening baseline. Controls retained from a
+removed editor cannot mutate its replacement. Clear/Delete confirmations remain exempt.
+
+`hours-screen.unsaved.test.ts` exercises the Add/Edit/Duplicate list routes, actual calendar day
+panel Create/Edit/Duplicate routes, independent date/name/colour/closure/cell changes, clean/revert,
+exact successful request bodies, refused Edit, newer values after accepted Edit/Duplicate, multiple
+ordered targets, replacement/ancestor leave, reconnect, unanswered question invalidation on write,
+busy Escape and departed successful replies/controls. The final four-suite Hours family passed
+195 tests; the unchanged fiscal write-path/immutability suites passed 20. Six independent deletions
+in a frozen-installed disposable clone each failed the intended case beside an unchanged passing
+Delete-confirmation control: date registration, duplicate registration, close interception, date
+commit, duplicate commit and departed-control checks. Restored clone passed all 58 owner tests.
+
+Temporary visual checks passed 24 flows with 48 scoped axe scans and 48 inspected captures across
+Add/Edit/Duplicate, EN/ES, light/dark and 390/1280 widths. This is a component host with the shared
+confirmation, not full dashboard end-to-end navigation. The temporary source, screenshots and
+control clone were removed from the product tree. Receipts are in Lane E's local
+`receipts/w69-special-dates-20261006` directory. No existing assertion was changed.
+
+The initial new date helper inherited the preceding URL's Dates view and waited for a Week grid;
+it now initializes its own URL before mounting. After adding event-generation checks, a duplicated
+argument in the remove-target handler broke the existing batch-duplicate test; removing that
+argument restored the unchanged assertion. Both failed runs are retained. Contact-sheet generation
+initially used the worktree's Python without Pillow; the existing home virtual environment produced
+the six inspected sheets.
+
+Tasks 1/4 still need the final advancing-owner classification. Tasks 5/6 still need direct receipt
+and login history writers, child tab/context interception before mutation, till/setup shells,
+remaining page/setup owners and activated native reload. Neither proposed W69 PR is ready for
+finish-branch at this checkpoint.

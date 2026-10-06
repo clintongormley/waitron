@@ -1184,8 +1184,9 @@ Dashboard voluntary logout and a language change also request the shared warning
 API calls. Language changes exclude the retained profile editor and its descendants; picking
 the current language saves its preference without restoring unrelated drafts. Forced expiry
 and disconnection invalidate old answers and responses. These shell cases do not establish
-protection in every page owner. Hours (#1298) is included in the rebased candidate; its replacement editors are inventoried. Weekday-cell protection is implemented on this branch;
-Configure hours and special-date Add/Edit/Duplicate protection remains pending.
+protection in every page owner. Hours (#1298) is included in the rebased candidate. Its
+weekday, Configure hours and special-date Add/Edit/Duplicate editors now use the shared warning;
+page/shell navigation and final owner classification remain open.
 The A279 rebase also required comparing the effective delete contents value after a fresh
 summary hides that choice. Its new browser case failed at the retained unload listener before
 the comparison/notification fix; the final catalogue pair passed 197 cases.
@@ -1458,8 +1459,15 @@ Configure hours now protects its seven-day draft through Cancel/native Escape an
 openings. Its confirmation's Back retains the draft without asking. Starting the explicit write
 invalidates an unanswered discard question; an accepted write commits before refresh. Refused
 writes, background reads and reconnect retain the draft against its opening defaults.
-Special-date Add/Edit and Duplicate still need shared dirty scopes, close interception and
-accepted-write handling. Clear/Delete confirmations
+Special-date Add/Edit and Duplicate now register their actual inputs, protect Cancel/native
+Escape, and commit accepted values before refresh. Calendar Create/Edit/Duplicate reach the same
+protected editors. Newer values remain dirty after an accepted write; reconnect retains the
+opening baseline, and events from removed controls cannot mutate a replacement editor.
+The focused Hours family passed 195 browser cases and the unedited fiscal suites passed 20;
+six independent deletion controls failed their intended case beside an unchanged passing Delete
+confirmation. Visual component-host checks cover Add/Edit/Duplicate in EN/ES, both themes and
+390/1280 widths; full dashboard navigation and activated native reload remain open.
+Clear/Delete confirmations
 have no editable payload and remain exempt. Source: `packages/venue-service/src/dashboard/hours-screen.ts`.
 Disable station now protects a changed replacement-station selection through Cancel, native Escape
 and another station-action opening. Keep retains the selection; Discard closes without a station

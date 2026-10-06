@@ -279,6 +279,10 @@ export class HoursScreen extends LitElement {
   #linked?: string;
   #weekScope?: DraftScope<CellDraft[]>;
   #weekBaseline?: CellDraft[];
+  #dateScope?: DraftScope<DateDraft>;
+  #dateBaseline?: DateDraft;
+  #duplicateScope?: DraftScope<string[]>;
+  #duplicateBaseline?: string[];
   #leave?: LeaveCoordinator;
   #editorBeforeClose?: (reason: LeaveReason) => Promise<boolean>;
 
@@ -308,6 +312,7 @@ export class HoursScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#registerWeekScope();
+    this.#registerDateScope();
     this.requestUpdate();
     this.#detach = this.api.watchHours(
       this.#from,
@@ -326,8 +331,12 @@ export class HoursScreen extends LitElement {
     this.#generation++;
     this.#weekScope?.dispose();
     this.#weekScope = undefined;
+    this.#dateScope?.dispose();
+    this.#dateScope = undefined;
+    this.#duplicateScope?.dispose();
+    this.#duplicateScope = undefined;
     this.#leave = undefined;
-    if (this.editor?.kind === "cell" || this.editor?.kind === "configure") this.busy = false;
+    this.busy = false;
     super.disconnectedCallback();
     this.#detach?.();
   }
@@ -378,8 +387,9 @@ export class HoursScreen extends LitElement {
       if (!this.isConnected || generation !== this.#generation || this.busy) return;
       this.#acceptEditor(editor, returnTo);
     };
-    if (!this.#weekScope) proceed();
-    else void this.#leave!.request({ scopes: [this.#weekScope.id], reason: "navigation", proceed });
+    const scope = this.#activeScope();
+    if (!scope) proceed();
+    else void this.#leave!.request({ scopes: [scope.id], reason: "navigation", proceed });
   }
 
   #acceptEditor(editor: Editor, returnTo: () => HTMLElement | null | undefined): void {
@@ -392,13 +402,20 @@ export class HoursScreen extends LitElement {
     this.busy = false;
     this.#weekScope?.dispose();
     this.#weekScope = undefined;
+    this.#dateScope?.dispose();
+    this.#dateScope = undefined;
+    this.#duplicateScope?.dispose();
+    this.#duplicateScope = undefined;
     this.#weekBaseline =
       editor.kind === "cell"
         ? [structuredClone(editor.draft)]
         : editor.kind === "configure"
           ? structuredClone(editor.drafts)
           : undefined;
+    this.#dateBaseline = editor.kind === "date" ? structuredClone(editor.draft) : undefined;
+    this.#duplicateBaseline = editor.kind === "duplicate" ? [...editor.dates] : undefined;
     this.#registerWeekScope();
+    this.#registerDateScope();
   }
 
   #registerWeekScope(): void {
@@ -449,10 +466,73 @@ export class HoursScreen extends LitElement {
     }
   }
 
+  #activeScope() {
+    return this.#weekScope ?? this.#dateScope ?? this.#duplicateScope;
+  }
+
+  #registerDateScope(): void {
+    const editor = this.editor;
+    if (!editor || this.#activeScope()) return;
+    this.#leave = leaveCoordinatorFor(this);
+    let registering = true;
+    if (editor.kind === "date") {
+      const payload = (draft: DateDraft) => ({
+        date: draft.date,
+        name: draft.name.trim(),
+        colour: draft.colour,
+        closeWholeVenue: draft.closeWholeVenue,
+        cells: draft.cells
+          .filter(({ cell }) => cell.mode !== "inherit")
+          .map(({ subject, cell }) => ({
+            subject: { kind: subject.kind, id: subject.id },
+            mode: cell.mode,
+            periods: wire(cell).periods.map(({ id, opensAt, closesAt }) => ({
+              id,
+              opensAt,
+              closesAt,
+            })),
+          })),
+      });
+      this.#dateScope = this.#leave?.register({
+        id: {},
+        parent: this,
+        current: () =>
+          registering || this.editor?.kind !== "date" ? this.#dateBaseline! : this.editor.draft,
+        snapshot: (value) => structuredClone(value),
+        equal: (a, b) => JSON.stringify(payload(a)) === JSON.stringify(payload(b)),
+        restore: (draft) => {
+          if (this.editor?.kind === "date") this.editor = { ...this.editor, draft };
+        },
+      });
+    } else if (editor.kind === "duplicate") {
+      this.#duplicateScope = this.#leave?.register({
+        id: {},
+        parent: this,
+        current: () =>
+          registering || this.editor?.kind !== "duplicate"
+            ? this.#duplicateBaseline!
+            : this.editor.dates,
+        snapshot: (value) => [...value],
+        equal: (a, b) => a.length === b.length && a.every((date, index) => date === b[index]),
+        restore: (dates) => {
+          if (this.editor?.kind === "duplicate") this.editor = { ...this.editor, dates };
+        },
+      });
+    }
+    registering = false;
+    this.#activeScope()?.changed();
+  }
+
   #close(): void {
     this.#weekScope?.dispose();
     this.#weekScope = undefined;
+    this.#dateScope?.dispose();
+    this.#dateScope = undefined;
+    this.#duplicateScope?.dispose();
+    this.#duplicateScope = undefined;
     this.#weekBaseline = undefined;
+    this.#dateBaseline = undefined;
+    this.#duplicateBaseline = undefined;
     this.#generation++;
     this.editor = undefined;
     this.attempted = false;
@@ -465,9 +545,10 @@ export class HoursScreen extends LitElement {
 
   async #beforeClose(reason: LeaveReason, generation: number): Promise<boolean> {
     if (!this.isConnected || generation !== this.#generation || this.busy) return false;
-    if (!this.#weekScope) return true;
+    const scope = this.#activeScope();
+    if (!scope) return true;
     return (
-      (await this.#leave!.request({ scopes: [this.#weekScope.id], reason, proceed: () => {} })) ===
+      (await this.#leave!.request({ scopes: [scope.id], reason, proceed: () => {} })) ===
       "proceeded"
     );
   }
@@ -688,6 +769,10 @@ export class HoursScreen extends LitElement {
     const generation = this.#generation;
     const current = () => this.isConnected && generation === this.#generation;
     const scope = this.#weekScope;
+    const dateScope = this.#dateScope;
+    const duplicateScope = this.#duplicateScope;
+    const submittedDate = editor.kind === "date" ? structuredClone(editor.draft) : undefined;
+    const submittedDates = editor.kind === "duplicate" ? [...editor.dates] : undefined;
     const submitted =
       editor.kind === "cell"
         ? [structuredClone(editor.draft)]
@@ -696,6 +781,8 @@ export class HoursScreen extends LitElement {
           : undefined;
     this.busy = true;
     if (scope) scope.commit(this.#weekBaseline!);
+    dateScope?.commit(this.#dateBaseline!);
+    duplicateScope?.commit(this.#duplicateBaseline!);
     try {
       await this.#send(editor);
     } catch (error) {
@@ -709,8 +796,16 @@ export class HoursScreen extends LitElement {
       scope.commit(submitted);
       this.#weekBaseline = submitted;
     }
+    if (dateScope && submittedDate) {
+      dateScope.commit(submittedDate);
+      this.#dateBaseline = submittedDate;
+    }
+    if (duplicateScope && submittedDates) {
+      duplicateScope.commit(submittedDates);
+      this.#duplicateBaseline = submittedDates;
+    }
     this.busy = false;
-    if (!scope?.isDirty()) this.#close();
+    if (!this.#activeScope()?.isDirty()) this.#close();
     this.api.rereadWatches();
   }
 
@@ -825,7 +920,7 @@ export class HoursScreen extends LitElement {
     );
     if (Object.keys(refused).length !== Object.keys(this.refused).length) this.refused = refused;
     this.editor = editor;
-    this.#weekScope?.changed();
+    this.#activeScope()?.changed();
   }
 
   #cellChanged(event: CustomEvent<{ cell: CellDraft }>): void {
@@ -970,6 +1065,15 @@ export class HoursScreen extends LitElement {
     }
   }
 
+  #currentControl(event: Event, generation: number): boolean {
+    return (
+      this.isConnected &&
+      generation === this.#generation &&
+      event.currentTarget instanceof Element &&
+      this.renderRoot.contains(event.currentTarget)
+    );
+  }
+
   #dateForm(
     editor: Extract<Editor, { kind: "date" }>,
     errors: Record<string, string>,
@@ -983,6 +1087,11 @@ export class HoursScreen extends LitElement {
     ) => TemplateResult,
   ) {
     const { draft } = editor;
+    const generation = this.#generation;
+    const set = (event: Event, patch: Partial<DateDraft>, name: string) => {
+      if (!this.#currentControl(event, generation)) return;
+      this.#setDate(patch, name);
+    };
     const weekday = draft.date === "" ? null : weekdayOf(draft.date);
     const defaults = this.model!.subjects.filter(
       (subject) => subject.active && isDefaultStation(subject),
@@ -996,7 +1105,7 @@ export class HoursScreen extends LitElement {
         error=${errors.date ?? ""}
         ?disabled=${this.busy}
         @wt-change=${(event: CustomEvent<{ value: string }>) =>
-          this.#setDate({ date: event.detail.value }, "date")}
+          set(event, { date: event.detail.value }, "date")}
       ></wt-input>
       <wt-input
         name="name"
@@ -1006,7 +1115,7 @@ export class HoursScreen extends LitElement {
         error=${errors.name ?? ""}
         ?disabled=${this.busy}
         @wt-change=${(event: CustomEvent<{ value: string }>) =>
-          this.#setDate({ name: event.detail.value }, "name")}
+          set(event, { name: event.detail.value }, "name")}
       ></wt-input>
       <wt-combobox
         name="colour"
@@ -1021,7 +1130,7 @@ export class HoursScreen extends LitElement {
         error=${errors.colour ?? ""}
         ?disabled=${this.busy}
         @wt-change=${(event: CustomEvent<{ value: string }>) =>
-          this.#setDate({ colour: event.detail.value }, "colour")}
+          set(event, { colour: event.detail.value }, "colour")}
       ></wt-combobox>
       <wt-switch
         name="closeWholeVenue"
@@ -1029,7 +1138,7 @@ export class HoursScreen extends LitElement {
         ?checked=${draft.closeWholeVenue}
         ?disabled=${this.busy}
         @wt-change=${(event: CustomEvent<{ checked: boolean }>) =>
-          this.#setClosure(event.detail.checked)}
+          this.#currentControl(event, generation) && this.#setClosure(event.detail.checked)}
       ></wt-switch>
       ${
         draft.closeWholeVenue
@@ -1098,7 +1207,10 @@ export class HoursScreen extends LitElement {
   }
 
   #duplicateForm(editor: Extract<Editor, { kind: "duplicate" }>, errors: Record<string, string>) {
-    const set = (dates: string[], name: string) => this.#changed(name, { ...editor, dates });
+    const generation = this.#generation;
+    const set = (event: Event, dates: string[], name: string) => {
+      if (this.#currentControl(event, generation)) this.#changed(name, { ...editor, dates });
+    };
     return html`<p class="note" data-test="duplicate-note">${t("hours.duplicate_note")}</p>
       <div class="targets">
         ${editor.dates.map(
@@ -1114,6 +1226,7 @@ export class HoursScreen extends LitElement {
                   ?disabled=${this.busy}
                   @wt-change=${(event: CustomEvent<{ value: string }>) =>
                     set(
+                      event,
                       editor.dates.map((value, at) => (at === index ? event.detail.value : value)),
                       `dates.${index}`,
                     )}
@@ -1125,9 +1238,11 @@ export class HoursScreen extends LitElement {
                         data-test=${`remove-target-${index}`}
                         aria-label=${format("hours.remove_target", { n: String(index + 1) })}
                         ?disabled=${this.busy}
-                        @click=${() => {
+                        @click=${(event: Event) => {
+                          if (!this.#currentControl(event, generation)) return;
                           this.refused = {};
                           set(
+                            event,
                             editor.dates.filter((_, at) => at !== index),
                             "dates",
                           );
@@ -1144,7 +1259,7 @@ export class HoursScreen extends LitElement {
             variant="secondary"
             data-test="add-target"
             ?disabled=${this.busy}
-            @click=${() => set([...editor.dates, ""], "dates")}
+            @click=${(event: Event) => set(event, [...editor.dates, ""], "dates")}
             >${t("hours.add_target")}</wt-button
           >
         </div>
