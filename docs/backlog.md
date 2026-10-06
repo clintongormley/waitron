@@ -2183,6 +2183,10 @@ In Select and move mode at 375×667 the content column overflows: by 129px befor
 same temporary test; no kept test covers Select and move mode there. Whether
 that is enough rows is the owner's call.
 
+_2026-10-06, A303: Select now has its own action bar below Search, and grips occupy a separate
+leading column. The W80/W83 measurements above describe the earlier layout; the 375×667
+selection measurement has not been retaken._
+
 **Products: Filters and Select at the start of the table's toolbar — DONE (W83, #1193, owner
 2026-10-04); left open:** While the table is at least 768px wide, Filters opens a panel beside the
 rows at their left; narrower, it opens full screen. One existing test assertion changed, for the
@@ -2198,14 +2202,14 @@ the layout existed only at phone width, #1193)_; and a desktop window narrow eno
 not measured. Also left open by W83's review, none started: (1) the table's Customise columns
 button is icon-only beside these two but has neither their look nor a tooltip; (2) the icon button
 and its tooltip are a stylesheet and a handler each caller wires by hand, not a `wt-icon-button`
-component — Select and move is a native `<button>` because `wt-button` does not pass `aria-pressed`
+component — Select is a native `<button>` because `wt-button` does not pass `aria-pressed`
 through, and the Structure tab's Reorder toggle is a second hand-built icon button for the same
 reason (a review probe confirmed `wt-button` drops `aria-pressed` on 2026-10-06);
 (3) the 768px side-panel threshold is tied by hand to token sizes (768 − 7×44 − 12 = 448, just
 above the table's 440px narrow-tree width).
 
 **Products at phone width: the toolbar takes two lines, not three — DONE (W85d, #1249, owner
-2026-10-05).** Not covered: Select and move mode's extra controls at the middle widths.
+2026-10-05).** Not covered: Select mode's extra controls at the middle widths.
 
 **Products: the tree's Name column lines up, and the Main category column goes — DONE (W84, #1199, owner
 2026-10-04).** Seven existing test assertions that pinned the column changed, for the owner to
