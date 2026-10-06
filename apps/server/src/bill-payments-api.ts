@@ -240,6 +240,7 @@ export function mountBillPaymentsApi(
             ...fiscal,
             provider,
             ...(reader === undefined ? {} : { readerRef: reader.providerRef }),
+            deviceProfileId: device.deviceProfileId,
           },
           saleCfg,
           id,

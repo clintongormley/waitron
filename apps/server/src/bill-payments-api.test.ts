@@ -10,6 +10,7 @@ import {
   billPaymentRefunds,
   billPayments,
   deviceProfiles,
+  devices,
   drawerOpens,
   invoiceSeries,
   nodes,
@@ -33,7 +34,15 @@ import {
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { createPinThrottle, hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
-import { insertCapturedPayment, payments, SimulatorPaymentProvider } from "@waitron/payments";
+import {
+  cardReaders,
+  insertCapturedPayment,
+  payments,
+  SimulatorPaymentProvider,
+} from "@waitron/payments";
+import type { CollectParams, PaymentResult } from "@waitron/payments";
+import { StripeTerminalProvider } from "@waitron/payments-stripe";
+import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { createPrinter } from "@waitron/printing";
 import {
   createDepartment,
@@ -3942,6 +3951,166 @@ describe("a payment no card provider stands behind", () => {
       ),
     ).toEqual([]);
     expect((await balance(billId)).json).toMatchObject({ received: "20.00" });
+  });
+});
+
+describe("a reader payment on a device that changes profile while it is starting", () => {
+  async function readerOnStripe() {
+    const [profile] = await inTx((tx) =>
+      tx
+        .select({ id: deviceProfiles.id })
+        .from(deviceProfiles)
+        .where(eq(deviceProfiles.name, "Counter till")),
+    );
+    const device = await enrolDeviceForTest(suite.db, venue.cfg, {
+      name: `Barra ${randomUUID()}`,
+      profileId: profile!.id,
+    });
+    const session = await inTx((tx) =>
+      loginWithPin(tx, { deviceId: device.deviceId, personId: venue.staffId, pin: "5555" }),
+    );
+    const [movedTo] = await inTx((tx) =>
+      tx
+        .insert(deviceProfiles)
+        .values({
+          name: `Moved to ${randomUUID()}`,
+          formFactor: "till",
+          capabilities: [...BASIC_ACTIONS, "integrated-card-payment"],
+        })
+        .returning({ id: deviceProfiles.id }),
+    );
+    const [reader] = await inTx((tx) =>
+      tx
+        .insert(cardReaders)
+        .values({ provider: "stripe", providerRef: `reader_${randomUUID()}`, name: "Barra" })
+        .returning({ id: cardReaders.id }),
+    );
+    const client = new FakeStripe();
+    const moveTo = (profileId: string) =>
+      suite.db
+        .update(devices)
+        .set({ deviceProfileId: profileId })
+        .where(eq(devices.id, device.deviceId));
+    let moveOnNextCollect = false;
+    // Moves the device, when asked, once the route has made its checks and before `collect` writes
+    // its row.
+    class MovingProvider extends StripeTerminalProvider {
+      override async collect(params: CollectParams): Promise<PaymentResult> {
+        if (moveOnNextCollect) {
+          moveOnNextCollect = false;
+          await moveTo(movedTo!.id);
+        }
+        return super.collect(params);
+      }
+    }
+    const provider = new MovingProvider({
+      client,
+      db: suite.db,
+      poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
+    });
+    const app = new Hono();
+    mountTillApi(
+      app,
+      {
+        db: suite.db,
+        backend,
+        clock,
+        cfg: venue.cfg,
+        secureCookies: false,
+        venueLocale: LOCALE,
+        pool: { get: () => Promise.resolve(provider), evict: () => {} },
+      },
+      quiet,
+    );
+    const billId = await bill120();
+    const pay = (amount: string) =>
+      app.request(`/api/working-orders/${billId}/payments`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
+        },
+        body: JSON.stringify({
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount,
+          method: "card",
+          entry: "reader",
+          readerId: reader!.id,
+          applied: amount,
+          tip: "0.00",
+        }),
+      });
+    return {
+      billId,
+      client,
+      pay,
+      moveOnNextCollect: () => {
+        moveOnNextCollect = true;
+      },
+      moveBack: () => moveTo(profile!.id),
+    };
+  }
+
+  const billPaymentStates = (billId: string) =>
+    inTx((tx) =>
+      tx
+        .select({ state: billPayments.state })
+        .from(billPayments)
+        .where(eq(billPayments.workingOrderId, billId)),
+    );
+
+  it("refuses device.profile_changed and writes no card payment", async () => {
+    const { billId, client, pay, moveOnNextCollect } = await readerOnStripe();
+    moveOnNextCollect();
+
+    const res = await pay("30.00");
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "device.profile_changed" } });
+    expect(client.lastCreateIntent).toBeUndefined();
+    expect(
+      await inTx((tx) => tx.select().from(payments).where(eq(payments.workingOrderId, billId))),
+    ).toEqual([]);
+  });
+
+  it("fails the refused bill payment at once, so nothing stays reserved and the whole bill can be paid", async () => {
+    const { billId, pay, moveOnNextCollect, moveBack } = await readerOnStripe();
+    moveOnNextCollect();
+
+    expect((await pay("30.00")).status).toBe(409);
+
+    expect(await billPaymentStates(billId)).toEqual([{ state: "failed" }]);
+    expect((await balance(billId)).json).toMatchObject({
+      reserved: "0.00",
+      outstanding: "120.00",
+    });
+    await moveBack();
+    const retry = await pay("120.00");
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toMatchObject({ outcome: "received" });
+  });
+
+  it("charges the card and receives the bill payment when the device stays on its profile", async () => {
+    const { billId, client, pay } = await readerOnStripe();
+
+    const res = await pay("30.00");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      outcome: "received",
+      balance: { received: "30.00", reserved: "0.00" },
+    });
+    expect(client.lastCreateIntent).toBeDefined();
+    expect(await billPaymentStates(billId)).toEqual([{ state: "received" }]);
+    expect(
+      await inTx((tx) =>
+        tx
+          .select({ state: payments.state })
+          .from(payments)
+          .where(eq(payments.workingOrderId, billId)),
+      ),
+    ).toEqual([{ state: "captured" }]);
   });
 });
 

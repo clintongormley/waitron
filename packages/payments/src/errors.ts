@@ -90,5 +90,8 @@ declare module "@waitron/shared" {
     "payment.provider_credential_rejected": { providerId: string };
     "payment.provider_duplicate": { providerId: string };
     "payment.provider_unknown": { providerId: string };
+    /** A card attempt refused before it is written because the device moved to another profile
+     * after the route checked the request under the old one. */
+    "device.profile_changed": Record<string, never>;
   }
 }

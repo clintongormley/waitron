@@ -1117,6 +1117,8 @@ export type ReaderBillPaymentDeps = TillSaleDeps & {
   provider: PaymentProvider;
   /** The chosen reader's vendor reference, passed to `collect`; absent for the simulator. */
   readerRef?: string;
+  /** The device profile the route checked the request under, passed to `collect`. */
+  deviceProfileId?: string;
 };
 
 /** Who confirmed a payment's or a refund's outcome by hand, and their note. */
@@ -1200,7 +1202,9 @@ const NOT_CHARGED: ReadonlySet<PaymentResultState> = new Set([
  * Take a card on a reader against an open bill, in the three phases of design §5.3:
  *  - P1 (transaction): {@link beginBillPayment} inserts the payment `pending`, which reserves its
  *    applied amount, and registers it as live in this process;
- *  - P2 (no transaction): the provider's `collect` for `applied + tip`, naming the bill payment;
+ *  - P2 (no transaction): the provider's `collect` for `applied + tip`, naming the bill payment; a
+ *    `device.profile_changed` refusal from it fails the payment and is passed on, and any other
+ *    throw leaves it pending for the loop;
  *  - P3 (transaction): a capture is {@link completeBillPayment}; a decline or a refusal to go
  *    offline fails it; any other answer leaves it pending, for the loop to settle from the
  *    provider's row. `collect` is never allowed to accept the card offline (design §11.9).
@@ -1240,14 +1244,28 @@ export async function takeReaderBillPayment(
     if (begun.kind === "replay") return begun.result;
     const { payment } = begun;
 
-    const result: PaymentResult = await deps.provider.collect({
-      origin: cfg.origin,
-      workingOrderId: brandWorkingOrderId(workingOrderId),
-      amount: centsToDecimal(payment.applied + payment.tip),
-      ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
-      simulationOutcome: req.simulationOutcome,
-      billPaymentId: payment.id,
-    });
+    let result: PaymentResult;
+    try {
+      result = await deps.provider.collect({
+        origin: cfg.origin,
+        workingOrderId: brandWorkingOrderId(workingOrderId),
+        amount: centsToDecimal(payment.applied + payment.tip),
+        ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
+        ...(deps.deviceProfileId === undefined ? {} : { deviceProfileId: deps.deviceProfileId }),
+        simulationOutcome: req.simulationOutcome,
+        billPaymentId: payment.id,
+      });
+    } catch (error) {
+      // `insertAttempting` raises this, and the SumUp and Stripe terminal providers call it before
+      // any write or network call (`collect` in each provider.ts), so nothing was charged and the
+      // reservation can go now rather than at the loop's next pass.
+      if (error instanceof AppError && error.code === "device.profile_changed") {
+        await withTransaction(deps.db, (tx) =>
+          failBillPayment(tx, payment.id, deps.clock.now().instant),
+        );
+      }
+      throw error;
+    }
 
     return await withTransaction(deps.db, async (tx) => {
       if (result.state === "captured") {

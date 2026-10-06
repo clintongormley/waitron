@@ -10,7 +10,8 @@ import {
 } from "@waitron/shared";
 import type { Decimal, DeviceOrigin } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
-import { nowIso, workingOrders } from "@waitron/db";
+import { devices, nowIso, workingOrders } from "@waitron/db";
+import "./errors.js";
 import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import type { CardDetails, PaymentState } from "./provider.js";
@@ -118,7 +119,23 @@ export async function insertFailedPayment(
 
 /** Committed BEFORE a provider's network call, so a crash mid-network leaves a recoverable row and
  * the `payment_ref` is already claimed. Resolved by `captureAttempting`/`failAttempting`. */
-export async function insertAttempting(tx: Transaction, params: NewPayment): Promise<void> {
+export async function insertAttempting(
+  tx: Transaction,
+  params: NewPayment & {
+    /** The profile the route checked the request under; the attempt is refused
+     * `device.profile_changed` if the device is no longer on it. */
+    deviceProfileId?: string;
+  },
+): Promise<void> {
+  if (params.deviceProfileId !== undefined) {
+    const [device] = await tx
+      .select({ deviceProfileId: devices.deviceProfileId })
+      .from(devices)
+      .where(eq(devices.id, params.origin.deviceId));
+    if (device?.deviceProfileId !== params.deviceProfileId) {
+      throw new AppError("device.profile_changed", {});
+    }
+  }
   await insertPayment(tx, params, "attempting", null);
 }
 

@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
+  devices,
   drawerOpens,
   orderAmendments,
   printJobs,
@@ -54,6 +55,8 @@ import { stationClaims } from "@waitron/venue-service";
 import { createPrinter } from "@waitron/printing";
 import { CARD_PROVIDERS } from "@waitron/composition";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
+import type { StripeTerminalProviderOptions } from "@waitron/payments-stripe";
+import type { CollectParams, PaymentResult } from "@waitron/payments";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { deploymentEnvironment } from "./config.js";
@@ -1502,6 +1505,104 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
 
     expect(payRes.status).toBe(400);
     expect(await payRes.json()).toMatchObject({ error: { code: "sale.empty_basket" } });
+  });
+});
+
+/** A Stripe terminal provider that runs `beforeCollect` once the route has made its checks and
+ * called `collect`, and before the real `collect` writes its `attempting` row. */
+class StripeProviderWithHook extends StripeTerminalProvider {
+  constructor(
+    opts: StripeTerminalProviderOptions,
+    private readonly beforeCollect: () => Promise<void>,
+  ) {
+    super(opts);
+  }
+
+  override async collect(params: CollectParams): Promise<PaymentResult> {
+    await this.beforeCollect();
+    return super.collect(params);
+  }
+}
+
+function poolWithHook(client: FakeStripe, beforeCollect: () => Promise<void>): CardProviderPool {
+  const provider = new StripeProviderWithHook(
+    {
+      client,
+      db: suite.db,
+      poll: { maxAttempts: 3, intervalMs: 0, sleep: () => Promise.resolve() },
+    },
+    beforeCollect,
+  );
+  return { get: () => Promise.resolve(provider), evict: () => {} };
+}
+
+describe("POST /api/pay when the device changes profile while the payment is starting", () => {
+  async function payWhile(
+    beforeCollect: (deviceId: string) => Promise<void>,
+  ): Promise<{ res: Response; workingOrderId: string; client: FakeStripe }> {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const client = new FakeStripe();
+    let deviceId = "";
+    const app = new Hono();
+    mountTillApi(
+      app,
+      apiDepsWithPool(
+        cfg,
+        poolWithHook(client, () => beforeCollect(deviceId)),
+      ),
+      noopLog,
+    );
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    deviceId = deviceIdOf(deviceCookie);
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+    await connectStripe();
+    const reader = await seedReader();
+    await setDefaultReader(deviceId, reader.id);
+    const workingOrderId = randomUUID();
+    const res = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        id: workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      }),
+    });
+    return { res, workingOrderId, client };
+  }
+
+  async function moveDevice(deviceId: string): Promise<void> {
+    const movedTo = await seedProfileFF("till", ["integrated-card-payment"]);
+    await suite.db
+      .update(devices)
+      .set({ deviceProfileId: movedTo })
+      .where(eq(devices.id, deviceId));
+  }
+
+  it("refuses device.profile_changed, charges nothing and releases the order, when the switch lands before the attempt is written", async () => {
+    const { res, workingOrderId, client } = await payWhile(moveDevice);
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "device.profile_changed" } });
+    expect(client.lastCreateIntent).toBeUndefined();
+    expect(
+      suite.db.all(sql`select id from payments where working_order_id = ${workingOrderId}`),
+    ).toEqual([]);
+    const [order] = await suite.db
+      .select({ attemptAt: workingOrders.paymentAttemptAt })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, workingOrderId));
+    expect(order).toEqual({ attemptAt: null });
+  });
+
+  it("charges the card when the device stays on its profile", async () => {
+    const { res, workingOrderId } = await payWhile(() => Promise.resolve());
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ outcome: "captured" });
+    expect(
+      suite.db.all(sql`select state from payments where working_order_id = ${workingOrderId}`),
+    ).toEqual([{ state: "captured" }]);
   });
 });
 

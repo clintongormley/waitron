@@ -179,6 +179,7 @@ export class SumUpCloudProvider implements PaymentProvider {
         paymentRef,
         amount: params.amount,
         billPaymentId: params.billPaymentId,
+        deviceProfileId: params.deviceProfileId,
       }),
     );
 

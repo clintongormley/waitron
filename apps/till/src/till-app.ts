@@ -517,10 +517,12 @@ function lineWriteError(error: unknown): CounterError {
   return code !== undefined && LINE_REFUSALS.has(code) ? { code } : tableWriteError(error);
 }
 
-/** Refusals the counter shows in their own words (`codeMessage`): each names what to do next, where
- * the generic "try again" would send the operator round the same refusal. */
+/** Refusals the counter shows in their own words (`codeMessage`), because each says what the
+ * generic "try again" does not: what to do next, or, for `device.profile_changed`, that no card was
+ * charged. */
 const ACTIONABLE_REFUSALS = new Set([
   "device.forbidden_action",
+  "device.profile_changed",
   "order.payment_in_flight",
   "product.unavailable",
   "product.not_sold_separately",

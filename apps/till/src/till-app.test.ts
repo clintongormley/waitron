@@ -7890,6 +7890,31 @@ describe("till-app", () => {
       expect(c.store.lines).toHaveLength(1);
     });
 
+    it("says the till changed profile when the server refuses the reader payment for it", async () => {
+      const pay = vi.fn().mockRejectedValue({ code: "device.profile_changed", status: 409 });
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          cardProvider: "stripe_terminal",
+          capabilities: ["print-receipt", "integrated-card-payment"] as CapabilityFlag[],
+        }),
+        pay,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "2");
+      await el.updateComplete;
+
+      emit(c, "collect-card", {});
+      await flush(el);
+
+      expect(pay).toHaveBeenCalledTimes(1);
+      const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
+      expect(banner.textContent).toContain(codeMessage("device.profile_changed"));
+      expect(banner.textContent).not.toContain(t("sale.error"));
+      expect(el.shadowRoot!.textContent).not.toContain("device.profile_changed");
+      expect(c.store.lines).toHaveLength(1);
+    });
+
     it.each([
       {
         refusal: { code: "device.forbidden_action", status: 403, action: "pay" },

@@ -149,17 +149,27 @@ export function submissionFor(
   return sentAs(JSON.stringify([billId, confirmation]), confirmation, unanswered, mint);
 }
 
+/** `submission.id_reused`: the id belongs to another request. `device.profile_changed`: raised
+ * after the payment is recorded under the id, which `takeReaderBillPayment` then fails, so sending
+ * the id again would only answer that failure. */
+const FRESH_ID_AFTER: ReadonlySet<string> = new Set([
+  "submission.id_reused",
+  "device.profile_changed",
+]);
+
 /**
  * What is left unanswered once a send ends: nothing once the server answered it with a result, and
  * the submission otherwise. A refusal does not say what became of an earlier send of it: the server
  * refuses the session, device, reader or approver before it looks the id up (the payment and
  * refund routes, `apps/server/src/bill-payments-api.ts`; `refundBillPayment`,
- * `apps/server/src/bill-refunds.ts`). Sending the id again is safe, since the server answers an id
- * it recorded with that record; only `submission.id_reused` says it cannot be sent again.
+ * `apps/server/src/bill-refunds.ts`), except `device.profile_changed`, which comes after.
+ * Sending the id again is safe, since the server answers an id it recorded with that record; only
+ * the {@link FRESH_ID_AFTER} refusals start a fresh one.
  */
 export function unansweredAfter<S>(sent: S, error?: unknown): S | null {
   if (error === undefined) return null;
-  return (error as { code?: unknown }).code === "submission.id_reused" ? null : sent;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && FRESH_ID_AFTER.has(code) ? null : sent;
 }
 
 /** A refusal's code and the request field it names, as the refund and unpaid departure dialogs
