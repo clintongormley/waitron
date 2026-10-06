@@ -40,7 +40,7 @@ describe("DashboardApi", () => {
       }),
     );
   });
-  it("sends the counts the person was shown with a category deletion", async () => {
+  it("sends the counts the client read before deleting with a category deletion", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
     const shown = [

@@ -344,7 +344,9 @@ export class CatalogueBrowser extends LitElement {
     }
     return fresh as FolderSummary[];
   }
-  /** When what the dialog showed has changed, shows the new counts instead. */
+  /** When what the dialog showed has changed, shows the new counts instead. When it has not, the
+   * delete sends this read's counts: the dialog shows no disabled products, so a change in them
+   * alone is not one to confirm, and the server still refuses one made after this read. */
   async #unchanged(): Promise<boolean> {
     const fresh = await this.#readAgain();
     if (!fresh) return false;
@@ -358,8 +360,6 @@ export class CatalogueBrowser extends LitElement {
         summary.ownRoutes === shown.ownRoutes
       );
     });
-    // The dialog shows no inactive products, so a change in them alone is not one to confirm; the
-    // delete sends this read's count of every product so the server still refuses a later change.
     this.summaries = fresh;
     if (same) return true;
     this.operationError = t("folders.summary_changed");

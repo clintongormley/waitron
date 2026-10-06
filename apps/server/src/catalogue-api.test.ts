@@ -181,7 +181,7 @@ describe("folder selection routes", () => {
     },
   );
 
-  describe("the counts the person was shown", () => {
+  describe("the counts the client read before deleting", () => {
     const counts = (
       id: string,
       folders = 0,
@@ -209,6 +209,7 @@ describe("folder selection routes", () => {
         },
       });
       expect(created.status).toBe(201);
+      return ((await created.json()) as { id: string }).id;
     }
 
     it("refuses a delete whose counts have changed with 409 category.contents_changed, deleting nothing", async () => {
@@ -236,18 +237,9 @@ describe("folder selection routes", () => {
       const parent = await folder(app, "Desserts");
       const empty = await folder(app, "Cakes", parent);
       const summary = await send(app, "GET", `/management-api/folders/summary?id=${empty}`);
+      expect(summary.status).toBe(200);
       const [shown] = (await summary.json()) as Record<string, unknown>[];
-      const created = await send(app, "POST", "/management-api/products", {
-        body: {
-          catalogueId: await createCatalogueVia(app, "Cakes menu"),
-          categoryId: empty,
-          name: "Flan",
-          pricingUnit: "each",
-          unitPrice: "2",
-          vatClass: "general",
-        },
-      });
-      const flan = ((await created.json()) as { id: string }).id;
+      const flan = await addProduct(app, empty, "Flan");
       expect(
         (
           await send(app, "POST", "/management-api/folders/delete", {

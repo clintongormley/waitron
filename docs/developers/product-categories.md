@@ -358,8 +358,7 @@ category colour that is neither null nor lowercase `#rrggbb`, as `setup.request_
 | `GET /management-api/folders/summary?id=<id>&id=<id>` | 200, `{ id, folders, products, activeProducts, routes, ownRoutes }[]`; `products` includes disabled products, `activeProducts` leaves them out; `routes` counts the rules naming the category or any category below it, `ownRoutes` those naming the category itself |
 
 Both ID arrays are required and contain distinct UUIDs. `to` is a category ID or null. `contents`
-is `move_up` or `delete`. `shown` is the counts the client read before deleting (the ones its
-dialog showed, when it asked): one `{ id, folders, products, activeProducts, routes, ownRoutes }` per selected category,
+is `move_up` or `delete`. `shown` is the counts the client read before deleting: one `{ id, folders, products, activeProducts, routes, ownRoutes }` per selected category,
 exactly, with whole numbers of zero or more. It is required when `categoryIds` is not empty and
 ignored when it is. For example, once you have created Cocktails and your products, use their
 returned IDs to move two products and a category together:

@@ -251,7 +251,7 @@ describe("deleteCatalogueItems", () => {
   });
 });
 
-describe("deleteCatalogueItems with the counts the person was shown", () => {
+describe("deleteCatalogueItems with the counts the client read before deleting", () => {
   const shownFor = async (ids: string[]) =>
     (await app((tx) => summariseFolders(tx, ids))).map(
       ({ id, folders, products, activeProducts, routes, ownRoutes }) => ({

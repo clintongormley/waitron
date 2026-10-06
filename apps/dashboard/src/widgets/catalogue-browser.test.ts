@@ -2084,7 +2084,7 @@ it("after a failed second read keeps Delete enabled, and pressing it again reads
     [{ id: "d", folders: 1, products: 2, activeProducts: 2, routes: 1, ownRoutes: 1 }],
   );
 });
-it("sends the counts the dialog showed with the delete, one entry per selected category", async () => {
+it("sends the counts read before deleting with the delete, one entry per selected category", async () => {
   const el = await mountBrowser();
   vi.mocked(el.api.summariseFolders).mockResolvedValue([
     { id: "b", folders: 0, products: 1, activeProducts: 1, routes: 2, ownRoutes: 2 },
