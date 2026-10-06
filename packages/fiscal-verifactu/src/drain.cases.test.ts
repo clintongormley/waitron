@@ -1281,8 +1281,9 @@ describe("drain — a reply line is applied only when its reference and its invo
   it.each([
     ["registration", "Alta", "Anulacion"],
     ["cancellation", "Anulacion", "Alta"],
+    ["registration", "Alta", "Modificacion"],
   ] as const)(
-    "leaves a %s unknown when its only line says AEAT took it as the other operation",
+    "leaves a %s unknown when its only line names an operation other than the one sent (%s → %s)",
     async (_kind, sent, answered) => {
       const aeat = fakeAeat();
       const { id, now, facturaKey } = await waitingAs(aeat, sent);

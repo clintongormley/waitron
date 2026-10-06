@@ -2,7 +2,10 @@
 // declare a fresh ambient module of the same name.
 import "@waitron/shared";
 
-/** An invoice as AEAT's `IDFactura` names it; the date is `DD-MM-YYYY`. */
+/**
+ * The invoice AEAT's `IDFactura` identifies, spelt as the sibling codes' params spell it; the date
+ * is `DD-MM-YYYY`.
+ */
 interface FacturaParams {
   idEmisorFactura: string;
   numSerieFactura: string;
@@ -121,7 +124,7 @@ declare module "@waitron/shared" {
      * `false` when it answered without settling it. `operacionEnviada`, `identidadEnviada` and
      * `lineasRespuesta` are present only for the third cause: the operation and invoice this record
      * was sent as, and every reply line naming its reference or that invoice (empty when none did),
-     * each with the operation it names (`null` when it names none); `estado`, `codigo` and
+     * each with its raw operation text (`null` when it carries none); `estado`, `codigo` and
      * `mensaje` are then `null`, since such a line may describe another record.
      */
     "fiscal.estado_desconocido": {
