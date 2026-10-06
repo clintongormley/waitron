@@ -69,7 +69,10 @@ export class DeviceHomePreview extends LitElement {
         gap: var(--wt-space-4);
         align-content: start;
         width: 100%;
-        padding: var(--wt-space-3);
+        /* The till's inset beside its menu: the page's 24px padding (apps/till/index.html) and its
+           order screen's own (till-table-order-screen.ts's .screen), so the grid gets the width a
+           device's gives it. */
+        padding: var(--wt-space-3) calc(var(--wt-space-5) + var(--wt-space-4));
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-bg);

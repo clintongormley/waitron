@@ -2080,7 +2080,7 @@ export const en = {
   "home.device": "Device",
   "home.columns": "Columns",
   "home.columns_note_handheld":
-    "Narrow screens show fewer columns: a phone shows at most three, a tablet more.",
+    "Narrow screens show fewer columns: a phone held upright shows two or three, a tablet more.",
   "home.columns_note_till": "Narrow screens show fewer columns.",
   "home.tiles": "Tiles show",
   "home.tiles_colours": "Colours",
@@ -4339,7 +4339,7 @@ export const es: Record<StringKey, string> = {
   "home.device": "Dispositivo",
   "home.columns": "Columnas",
   "home.columns_note_handheld":
-    "Las pantallas estrechas muestran menos columnas: un teléfono muestra como mucho tres; una tableta, más.",
+    "Las pantallas estrechas muestran menos columnas: un teléfono en vertical muestra dos o tres; una tableta, más.",
   "home.columns_note_till": "Las pantallas estrechas muestran menos columnas.",
   "home.tiles": "Los botones muestran",
   "home.tiles_colours": "Colores",

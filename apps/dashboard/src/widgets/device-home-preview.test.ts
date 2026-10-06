@@ -283,6 +283,12 @@ describe("dashboard-device-home-preview", () => {
     expect(readingOrder(till.el, "structure")).toEqual(wide);
   });
 
+  it("draws as many columns as a 390 px phone's till does, two, at the Handheld slider's most", async () => {
+    const handheld = await mount({ document: display("handheld", { columns: 6 }) });
+    await widen(handheld.host, 1600);
+    for (const grid of grids(handheld.el)) expect(tracks(grid)).toBe(2);
+  });
+
   it("sizes the frame to a phone for Handheld and to a till for Till, never wider than the screen", async () => {
     const handheld = await mount();
     const till = await mount({ device: "till" });
