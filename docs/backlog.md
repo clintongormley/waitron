@@ -4554,8 +4554,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
     older configuration exports are refused before staging. Step 4 remains with its owning lane.
     [Spec](superpowers/specs/2026-10-03-venue-operations-design.md).
 - **Devices, profiles and departmental transfers (owner, 2026-10-04) — SPEC APPROVED; profile
-  access and switching (W97) BUILT on `feat/device-profile-access-and-switching`, not yet landed;
-  transfers queued in lane D, equipment queued in lane E, neither implemented.**
+  access and switching DONE (W97, #1311; a venue reset is needed after it, its profiles need the new
+  action flags); transfers queued in lane D, equipment queued in lane E, neither implemented.**
   Profiles bind departmental access, permitted zones, staff eligibility, actions, screens and
   equipment choices. Devices switch among approved profiles and select equipment and
   station/watcher bindings; drawers are independent of receipt
@@ -4626,8 +4626,13 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
       work runs in a helper that opens its own transaction call `gateZones`
       (`apps/server/src/zone-access.ts`) before that transaction — chosen in Task 4 to avoid a
       second turn in the write queue — so a zone moved to another department in between is still
-      written: with a delayed order-update body, a zone moved to Deli still answered 200. **Next
-      action:** decide whether to check both again inside the write transaction.
+      written: with a delayed order-update body, a zone moved to Deli still answered 200. **Owner
+      decision (2026-10-06 ~23:50): accepted, not to be fixed** — a write already reaching the
+      server when the switch or move commits is treated as having arrived first, so the checks stay
+      outside the write transaction. What is still to check is A307: that neither a zone move nor a
+      profile switch decides anything from the orders or sessions present when it commits (for
+      example A298 ending a device's sessions on a move to a kitchen-screen profile), since a write
+      slipping in just after such a decision would leave the state it was meant to prevent.
 - **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
   states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a
   booking, Needs clearing, Bill requested and the kitchen signals), which a venue can switch off,
