@@ -19,7 +19,6 @@ export async function clearProvisionFixture(db: Database): Promise<void> {
       "station_fallbacks",
       "route_exceptions",
       "station_claims",
-      "device_zone_defaults",
       "device_profile_zones",
       "device_profile_service_access",
       "device_profile_stations",

@@ -1287,7 +1287,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { device } = await requireSession(deps, c);
       const result = await withTransaction(deps.db, async (tx) => {
         const context = await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
-          deviceId: device.deviceId,
           profileId: device.deviceProfileId,
         });
         const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
@@ -1346,7 +1345,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           zoneId === undefined
             ? (
                 await VENUE_SERVICE.resolveNewOrderZone(tx, deps.cfg, {
-                  deviceId: device.deviceId,
                   profileId: device.deviceProfileId,
                 })
               ).zoneId

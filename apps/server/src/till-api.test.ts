@@ -1888,10 +1888,6 @@ describe("GET /api/products (session-guarded catalogue)", () => {
     await suite.db.execute(sql`
       insert into zone_menus (zone_id, menu_id)
       values (${second!.id}, ${aguaProduct.catalogueId})`);
-    // The device's own default names the counter: the profile's starting zone comes first.
-    await suite.db.execute(sql`
-      insert into device_zone_defaults (device_id, zone_id)
-      values (${deviceId}, ${counterZoneId})`);
     await withTransaction(suite.db, async (tx) => {
       const [policy] = await tx
         .select({ departmentId: zoneServicePolicies.departmentId })

@@ -14,8 +14,6 @@ import {
 } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
-  deviceProfiles,
-  devices,
   diningTables,
   floorZones,
   kitchenStations,
@@ -37,12 +35,7 @@ import { locationId, type LocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { zoneServicePolicies } from "./schema/service.js";
-import {
-  configureZone,
-  createDepartment,
-  listServiceZones,
-  resolveNewOrderZone,
-} from "./operations.js";
+import { configureZone, createDepartment, listServiceZones } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 
@@ -1424,17 +1417,6 @@ describe("venue service management routes", () => {
         )
       ).status,
     ).toBe(400);
-    expect(
-      (
-        await send(
-          fx.app,
-          "PUT",
-          `/management-api/venue-service/devices/${crypto.randomUUID()}/default-zone`,
-          fx.managerCookie,
-          { zoneId: fx.zoneId },
-        )
-      ).status,
-    ).toBe(404);
   });
 
   it("stores a zone menu's explicit display order and refuses one that is not a whole number from zero", async () => {
@@ -1474,89 +1456,6 @@ describe("venue service management routes", () => {
         ).json()) as { zoneMenus: unknown[] }
       ).zoneMenus,
     ).toEqual([{ zoneId: fx.zoneId, menuId: fx.menuId, displayOrder: 3, isDefault: false }]);
-  });
-
-  it("stores the zone a device's new orders start in", async () => {
-    const fx = await fixture();
-    const department = (await (
-      await send(fx.app, "POST", "/management-api/venue-service/departments", fx.managerCookie, {
-        name: "Deli",
-        defaultServiceMode: "prepay",
-      })
-    ).json()) as { id: string };
-    expect(
-      (
-        await send(
-          fx.app,
-          "PUT",
-          `/management-api/venue-service/zones/${fx.zoneId}`,
-          fx.managerCookie,
-          { departmentId: department.id },
-        )
-      ).status,
-    ).toBe(204);
-    const [profile] = await db
-      .insert(deviceProfiles)
-      .values({ name: "Counter", formFactor: "till" })
-      .returning({ id: deviceProfiles.id });
-    const [device] = await db
-      .insert(devices)
-      .values({
-        locationId: fx.locationId,
-        deviceProfileId: profile!.id,
-        label: "Counter till",
-        tokenHash: "scrypt$00$00",
-      })
-      .returning({ id: devices.id });
-    const scope = { locationId: fx.locationId };
-    // No zone is the venue's counter default, so without the device's own default a new order
-    // from this device has no zone to start in.
-    await expect(
-      withTransaction(db, (tx) => resolveNewOrderZone(tx, scope, { deviceId: device!.id })),
-    ).rejects.toMatchObject({ code: "service_zone.default_missing" });
-    expect(
-      (
-        await send(
-          fx.app,
-          "PUT",
-          `/management-api/venue-service/devices/${device!.id}/default-zone`,
-          fx.managerCookie,
-          { zoneId: fx.zoneId },
-        )
-      ).status,
-    ).toBe(204);
-    await expect(
-      withTransaction(db, (tx) => resolveNewOrderZone(tx, scope, { deviceId: device!.id })),
-    ).resolves.toMatchObject({ zoneId: fx.zoneId, departmentId: department.id });
-    const listed = (await (
-      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
-    ).json()) as {
-      deviceZones: { deviceId: string; zoneId: string }[];
-    };
-    expect(listed.deviceZones).toContainEqual({ deviceId: device!.id, zoneId: fx.zoneId });
-    expect(
-      (
-        await send(
-          fx.app,
-          "DELETE",
-          `/management-api/venue-service/devices/${device!.id}/default-zone`,
-          fx.managerCookie,
-        )
-      ).status,
-    ).toBe(204);
-    expect(
-      (
-        await send(
-          fx.app,
-          "DELETE",
-          `/management-api/venue-service/devices/${device!.id}/default-zone`,
-          fx.managerCookie,
-        )
-      ).status,
-    ).toBe(204);
-    await expect(
-      withTransaction(db, (tx) => resolveNewOrderZone(tx, scope, { deviceId: device!.id })),
-    ).rejects.toMatchObject({ code: "service_zone.default_missing" });
   });
 });
 

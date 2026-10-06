@@ -67,7 +67,6 @@ export interface VenueServiceModel {
   departments: Department[];
   zones: ServiceZone[];
   salePolicies: { departments: DepartmentSalePolicy[]; zones: ZoneSalePolicy[] };
-  deviceZones: { deviceId: string; zoneId: string }[];
   zoneMenus: ZoneMenu[];
   readiness: VenueReadinessIssue[];
   settings: VenueServiceSettings;
@@ -93,7 +92,6 @@ export type KitchenTicketGrouping = "combined" | "separate";
 export interface VenueServiceChoices {
   menus: (NamedRow & { active: boolean })[];
   floorZones: FloorZone[];
-  devices: { id: string; label: string; kind: string; active: boolean }[];
 }
 export type VenueServiceView = VenueServiceModel & VenueServiceChoices;
 
@@ -113,17 +111,15 @@ export class VenueServiceApi {
   }
 
   async load(): Promise<VenueServiceView> {
-    const [model, menus, floorZones, devices] = await Promise.all([
+    const [model, menus, floorZones] = await Promise.all([
       this.#read<VenueServiceModel>("/management-api/venue-service"),
       this.#read<VenueServiceChoices["menus"]>("/management-api/catalogues"),
       this.#read<FloorZone[]>("/management-api/zones?includeInactive=true"),
-      this.#read<VenueServiceChoices["devices"]>("/management-api/devices"),
     ]);
     return {
       ...model,
       menus,
       floorZones,
-      devices,
     };
   }
 
@@ -220,16 +216,6 @@ export class VenueServiceApi {
       "PATCH",
       { value },
     );
-  }
-
-  setDeviceDefaultZone(deviceId: string, zoneId: string): Promise<void> {
-    return this.request(`/management-api/venue-service/devices/${deviceId}/default-zone`, "PUT", {
-      zoneId,
-    });
-  }
-
-  clearDeviceDefaultZone(deviceId: string): Promise<void> {
-    return this.request(`/management-api/venue-service/devices/${deviceId}/default-zone`, "DELETE");
   }
 
   allowMenu(

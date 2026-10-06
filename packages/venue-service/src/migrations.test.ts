@@ -34,7 +34,6 @@ const TABLES = [
   "departments",
   "zone_service_policies",
   "zone_menus",
-  "device_zone_defaults",
   "device_profile_service_access",
   "device_profile_zones",
   "device_profile_stations",
@@ -178,10 +177,6 @@ describe("the venue-service migration set carries no tenant column", () => {
           "(menu_id) -> catalogues(id)",
           "(zone_id) -> zone_service_policies(zone_id) on delete cascade",
         ],
-      },
-      device_zone_defaults: {
-        primaryKey: ["device_id"],
-        foreignKeys: ["(device_id) -> devices(id)", "(zone_id) -> floor_zones(id)"],
       },
       device_profile_service_access: {
         primaryKey: ["device_profile_id"],

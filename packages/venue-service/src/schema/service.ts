@@ -6,7 +6,6 @@ import {
   catalogues,
   count,
   deviceProfiles,
-  devices,
   enumCheck,
   enumType,
   flag,
@@ -205,27 +204,6 @@ export const zoneMenus = table(
  * table's type through the cycle (TS7022). The callback that reads it runs after this line.
  */
 const ZONE_MENU_KEY: [AnySQLiteColumn, AnySQLiteColumn] = [zoneMenus.zoneId, zoneMenus.menuId];
-
-export const deviceZoneDefaults = table(
-  "device_zone_defaults",
-  {
-    deviceId: id("device_id").notNull(),
-    zoneId: id("zone_id").notNull(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.deviceId], name: "device_zone_defaults_pk" }),
-    foreignKey({
-      columns: [t.deviceId],
-      foreignColumns: [devices.id],
-      name: "device_zone_defaults_device_fk",
-    }),
-    foreignKey({
-      columns: [t.zoneId],
-      foreignColumns: [floorZones.id],
-      name: "device_zone_defaults_zone_fk",
-    }),
-  ],
-);
 
 /**
  * The department a device profile orders for and the zone it starts in. A profile with no row has no

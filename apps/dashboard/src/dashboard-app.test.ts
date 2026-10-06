@@ -1658,7 +1658,6 @@ describe("dashboard-app", () => {
         ? ({
             departments: [],
             zones: [],
-            deviceZones: [],
             hours: [],
             zoneMenus: [],
             readiness: [],

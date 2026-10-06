@@ -18,8 +18,6 @@ describe.each(["light", "dark"] as const)("venue status accessibility (%s)", (th
         departments: [],
         zones: [],
         salePolicies: { departments: [], zones: [] },
-        deviceZones: [],
-        devices: [],
         zoneMenus: [],
         menus: [],
         floorZones: [],
@@ -59,8 +57,6 @@ describe.each(["light", "dark"] as const)("a disabled department's Enable (%s)",
         ],
         zones: [],
         salePolicies: { departments: [], zones: [] },
-        deviceZones: [],
-        devices: [],
         hours: [],
         zoneMenus: [],
         menus: [],
@@ -102,8 +98,6 @@ describe.each(["light", "dark"] as const)("department editor accessibility (%s)"
         departments: [],
         zones: [],
         salePolicies: { departments: [], zones: [] },
-        deviceZones: [],
-        devices: [],
         zoneMenus: [],
         menus: [],
         floorZones: [],
@@ -147,7 +141,6 @@ describe.each(["light", "dark"] as const)("venue editors' fields accessibility (
   test.each([
     ["the zone editor", "zones", ["edit-zone-z1"]],
     ["the menu editor", "zones", ["menus-tree-zone-z1", "new-assignment-z1"]],
-    ["the tills' starting zones", "zones", []],
   ] as const)("%s", async (_name, tab, steps) => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
@@ -175,8 +168,6 @@ describe.each(["light", "dark"] as const)("venue editors' fields accessibility (
           },
         ],
         salePolicies: { departments: [], zones: [] },
-        deviceZones: [],
-        devices: [{ id: "t1", label: "Front till", kind: "till", active: true }],
         zoneMenus: [{ zoneId: "z1", menuId: "m1", displayOrder: 0, isDefault: true }],
         menus: [
           { id: "m1", name: "Lunch", active: true },

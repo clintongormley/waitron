@@ -89,8 +89,6 @@ const EXPECTED_FOREIGN_KEYS = [
   ["device_profile_zones", ["device_profile_id"], "device_profile_service_access"],
   ["device_profile_zones", ["zone_id"], "floor_zones"],
   ["device_profiles", ["canvas_id"], "canvases"],
-  ["device_zone_defaults", ["device_id"], "devices"],
-  ["device_zone_defaults", ["zone_id"], "floor_zones"],
   ["devices", ["device_profile_id"], "device_profiles"],
   ["devices", ["location_id"], "locations"],
   ["devices", ["payment_slip_printer_id"], "printers"],

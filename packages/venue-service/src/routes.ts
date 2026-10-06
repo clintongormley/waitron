@@ -14,7 +14,6 @@ import {
 import type { Logger } from "@waitron/server-kit";
 import {
   allowMenuInZone,
-  clearDeviceDefaultZone,
   configureZone,
   createServiceZone,
   activateDepartment,
@@ -24,12 +23,10 @@ import {
   zoneRemovalImpact,
   listDepartments,
   listSalePolicies,
-  listDeviceDefaultZones,
   listServiceZones,
   listVenueReadiness,
   listZoneMenuAssignments,
   setDepartmentSalePolicyField,
-  setDeviceDefaultZone,
   setZoneSalePolicyOverride,
   updateDepartment,
 } from "./operations.js";
@@ -622,7 +619,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           departments: await listDepartments(tx, ctx.cfg),
           zones: await listServiceZones(tx, ctx.cfg, { includeInactive: true }),
           salePolicies: await listSalePolicies(tx, ctx.cfg),
-          deviceZones: await listDeviceDefaultZones(tx, ctx.cfg),
           zoneMenus: await listZoneMenuAssignments(tx, ctx.cfg),
           readiness: await listVenueReadiness(tx, ctx.cfg),
           settings: { editSentLines: await readEditSentLines(tx) },
@@ -921,25 +917,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             makeDefault: body.makeDefault === true,
           }),
         );
-        return c.body(null, 204);
-      }),
-    );
-
-    app.put("/management-api/venue-service/devices/:deviceId/default-zone", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const deviceId = requireUuidParam(c.req.param("deviceId"), "DeviceId");
-        const body = await readJsonBody<Record<string, unknown>>(c);
-        const zoneId = requireBodyUuid(body.zoneId, "zoneId");
-        await gated(sessionId, (tx) => setDeviceDefaultZone(tx, ctx.cfg, deviceId, zoneId));
-        return c.body(null, 204);
-      }),
-    );
-    app.delete("/management-api/venue-service/devices/:deviceId/default-zone", (c) =>
-      run(c, log, async () => {
-        const sessionId = requireManagementSession(c);
-        const deviceId = requireUuidParam(c.req.param("deviceId"), "DeviceId");
-        await gated(sessionId, (tx) => clearDeviceDefaultZone(tx, ctx.cfg, deviceId));
         return c.body(null, 204);
       }),
     );

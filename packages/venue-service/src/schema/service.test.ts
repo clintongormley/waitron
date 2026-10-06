@@ -8,7 +8,6 @@ import {
   deviceProfileStations,
   deviceProfileWatchers,
   deviceProfileZones,
-  deviceZoneDefaults,
   orderServiceContexts,
   saleReceiptHeaders,
   workingLineContexts,
@@ -98,14 +97,6 @@ const EXPECTED: Record<
     indexes: ["zone_menus_order_idx"],
     uniqueConstraints: [],
     primaryKeys: ["zone_menus_pk"],
-  },
-  device_zone_defaults: {
-    table: deviceZoneDefaults,
-    foreignKeys: ["device_zone_defaults_device_fk", "device_zone_defaults_zone_fk"],
-    checks: [],
-    indexes: [],
-    uniqueConstraints: [],
-    primaryKeys: ["device_zone_defaults_pk"],
   },
   device_profile_service_access: {
     table: deviceProfileServiceAccess,
@@ -245,8 +236,8 @@ const EXPECTED: Record<
 
 describe("venue-service schema", () => {
   // Without it, an emptied EXPECTED would leave the loop below passing over nothing.
-  it("covers the nineteen tables it lists", () => {
-    expect(Object.keys(EXPECTED)).toHaveLength(19);
+  it("covers the eighteen tables it lists", () => {
+    expect(Object.keys(EXPECTED)).toHaveLength(18);
   });
 
   for (const [name, expected] of Object.entries(EXPECTED)) {

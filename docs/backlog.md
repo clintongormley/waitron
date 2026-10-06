@@ -4126,13 +4126,13 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
 - **The counter till may start in a zone its service zone dropdown does not list** (found
   2026-09-14; read, not run). The till's zone list drops `table_tab` zones (`listDefaultZoneOffers`
   in `apps/server/src/till-api.ts`), but its starting zone comes from `resolveNewOrderZone`
-  (`packages/venue-service/src/operations.ts`): the device's default, else the zone marked
-  `is_counter_default`, neither filtered by service mode. Since A178d the box is a `wt-combobox`,
-  which shows an empty box for a value with no matching option (read, not run). Since #1004 the
-  dashboard's Departments and zones screen sets a device's default zone, through `PUT
-/management-api/venue-service/devices/:deviceId/default-zone`. **Next action:** find whether a
-  `table_tab` zone can be the counter default or a device default; if it can, decide whether that
-  is refused where it is set or handled by the till.
+  (`packages/venue-service/src/operations.ts`): the profile's starting zone when the profile has a
+  department, else the zone marked `is_counter_default`, neither filtered by service mode. Since
+  A178d the box is a `wt-combobox`, which shows an empty box for a value with no matching option
+  (read, not run). W97 retired the per-device default zone and the dashboard control #1004 added
+  for it (2026-10-06).
+  **Next action:** find whether a `table_tab` zone can be the counter default or a profile's
+  starting zone; if it can, decide whether that is refused where it is set or handled by the till.
 - **Is a `+` sub-line enough for a doneness answer on the kitchen ticket?** Doneness is a modifier
   the venue adds itself (Task 10); an options answer prints on the kitchen ticket as an indented
   `+ <list kitchen name>: <label kitchen name>` line. **Open, and worth a cook's eye before a real
@@ -4421,7 +4421,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   remain manager-only (owner amendment, 2026-10-04).
   [Step 2](superpowers/plans/2026-10-04-departments-and-zones.md) (#1233) puts departments and
   zones in one editable tree and keeps today's zone-menu and device-default-zone controls
-  temporarily in that screen. A261-2c — DONE (#1285). Non-fiscal
+  temporarily in that screen (W97 retired the device-default-zone control, 2026-10-06).
+  A261-2c — DONE (#1285). Non-fiscal
   placement accepts an over-limit order; collection refuses the over-limit invoice without taking
   money (owner decision, 2026-10-06). A261-2d — DONE (#1274); left open:
   A rename refusal without a supplied name remains a database error, rather than returning an
@@ -4551,7 +4552,8 @@ locale)` (`packages/catalogue/src/product-presentation.ts`), the shape A172 fixe
   [equipment plan](superpowers/plans/2026-10-04-device-equipment-and-independent-drawers.md);
   [departmental transfer plan](superpowers/plans/2026-10-04-departmental-tab-transfers.md).
   §10 names the A238/A254/A261 decisions the approved design revises. A261 step 2 keeps its
-  existing zone-menu and device-default-zone controls as an interim path; the newer work replaces them.
+  existing zone-menu and device-default-zone controls as an interim path; the newer work replaces them
+  (W97 retired the device-default-zone control, 2026-10-06).
 - **Table states and signals (A267) — OPEN, needs a design session (owner, 2026-10-03).** Which
   states and signals a table has that Waitron sets itself (today Free, Occupied, Reserved from a
   booking, Needs clearing, Bill requested and the kitchen signals), which a venue can switch off,

@@ -415,9 +415,10 @@ export interface VenueServiceContribution {
   resolveNewOrderZone(
     tx: Transaction,
     cfg: { locationId: LocationId },
-    /** A profile with a department starts at its starting zone, ahead of the device's default;
-     *  one with a department and no usable zone is refused `device_profile.no_service_zone`. */
-    input: { zoneId?: string | null; deviceId?: string | null; profileId?: string | null },
+    /** A profile with a department starts at its starting zone, ahead of the venue's counter
+     *  default; one with a department and no usable zone is refused
+     *  `device_profile.no_service_zone`. */
+    input: { zoneId?: string | null; profileId?: string | null },
   ): Promise<OrderServiceContext>;
   /** A profile's department, zones and kitchen lists as they stand now. A null department means no
    *  department restriction, with null zones and starting zone; with a department, an empty zone
