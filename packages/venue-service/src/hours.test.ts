@@ -1210,10 +1210,38 @@ describe("a station that stops being the default", () => {
     const date = await saveDate(f, null, barDate(f, "2026-10-14", "01:00", "05:00"));
     await makeDefault(f, f.bar);
     await saveDate(f, date.id, specialInput({ date: "2026-10-10", name: date.name }));
+    // Names the special date holding the kept cell, not the ordinary Friday beside it.
     await expect(check(f, f.bar)).rejects.toMatchObject({
       code: "hours.invalid",
-      params: { field: "date", date: "2026-10-09", subjectId: f.bar.id },
+      params: { field: "date", date: "2026-10-10", subjectId: f.bar.id },
     });
+    await remove(f, date.id);
+    await check(f, f.bar);
+  });
+
+  it("names the special date holding the kept cell when the day it runs into is another special date", async () => {
+    const f = await fixture();
+    // Sunday runs from 01:00 to 05:00.
+    await save(f, f.bar, week({ 0: periods(period("01:00", "05:00")) }));
+    const date = await saveDate(f, null, barDate(f, "2026-10-14", "22:00", "03:00"));
+    await makeDefault(f, f.bar);
+    await saveDate(
+      f,
+      null,
+      specialInput({
+        date: "2026-10-11",
+        name: "Sunday",
+        cells: [{ subject: f.restaurant, cell: { mode: "closed", periods: [] } }],
+      }),
+    );
+    // Saturday 10 October now runs into Sunday's standard 01:00.
+    await saveDate(f, date.id, specialInput({ date: "2026-10-10", name: date.name }));
+    await expect(check(f, f.bar)).rejects.toMatchObject({
+      code: "hours.invalid",
+      params: { field: "date", date: "2026-10-10", subjectId: f.bar.id },
+    });
+    await remove(f, date.id);
+    await check(f, f.bar);
   });
 
   it("leaves out a clash already past, as a save does", async () => {

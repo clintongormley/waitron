@@ -1464,22 +1464,22 @@ it.each([
   [
     "en",
     "date",
-    "Bar would go back to its saved hours, which overlap the hours on Sun, 10 Jun 2096. Change them on the Hours page first.",
+    "Bar would go back to its saved hours, which overlap a day next to the special date on Sun, 10 Jun 2096. Move or delete that special date on the Hours page first.",
   ],
   [
     "en",
     "opensAt",
-    "Bar would go back to its saved hours, and its hours for Sun, 10 Jun 2096 use a time the clock skips. Change them on the Hours page first.",
+    "Bar would go back to its saved hours, and its hours on the special date Sun, 10 Jun 2096 use a time the clock skips. Move or delete that special date on the Hours page first.",
   ],
   [
     "es",
     "date",
-    "Bar volvería a su horario guardado, que se solapa con el del dom, 10 jun 2096. Cámbialo primero en la página Horarios.",
+    "Bar volvería a su horario guardado, que se solapa con un día junto a la fecha especial del dom, 10 jun 2096. Cambia de día o borra primero esa fecha especial en la página Horarios.",
   ],
   [
     "es",
     "closesAt",
-    "Bar volvería a su horario guardado, y su horario del dom, 10 jun 2096 usa una hora que el reloj se salta. Cámbialo primero en la página Horarios.",
+    "Bar volvería a su horario guardado, y su horario en la fecha especial del dom, 10 jun 2096 usa una hora que el reloj se salta. Cambia de día o borra primero esa fecha especial en la página Horarios.",
   ],
 ] as const)(
   "in %s, explains a Make default refused by the saved hours (%s) the default would resume",

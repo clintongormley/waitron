@@ -610,10 +610,13 @@ async function assertEndpointsOccur(
 
 /**
  * Refuses letting `stationId` stop being the default when the schedule it would resume breaks a
- * rule a save holds: on a current or future special date, a cell it kept while it was the default
- * opens or closes at a minute the clock skips (`field` `opensAt` or `closesAt`, `date` that special
- * date), or its hours overlap across a midnight with the day before or after (`field` `date`,
- * `date` the neighbouring date).
+ * rule a save holds, on a special date from the venue's yesterday onwards (a period that opened
+ * yesterday can still be running), or on any special date when its clock cannot be read: a cell
+ * it kept while it was the default opens or closes at a minute the clock skips (`field` `opensAt`
+ * or `closesAt`), or its hours overlap across a midnight with the day before or after (`field`
+ * `date`). `date` is always a special date and, for an overlap, the one of the two days that holds
+ * a kept cell when either does: the Hours page cannot edit a default station's cells, but it can
+ * move or delete that date.
  */
 export async function assertDemotedStationHours(
   tx: Transaction,
@@ -644,7 +647,10 @@ export async function assertDemotedStationHours(
     [...dates.keys()].sort(),
     now,
   );
-  if (found !== null) invalidHours("date", { date: found.other, subjectId: stationId });
+  if (found === null) return;
+  const holding = new Set(days.filter((day) => day.cells.length > 0).map((day) => day.date));
+  const date = holding.has(found.other) ? found.other : found.date;
+  invalidHours("date", { date, subjectId: stationId });
 }
 
 /**

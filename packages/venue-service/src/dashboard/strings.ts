@@ -171,9 +171,9 @@ const en = {
   "prep.fix_fields": "Correct the highlighted fields to continue.",
   "prep.station_disabled": "This station is disabled. Choose an active station.",
   "prep.default_hours_clash":
-    "{name} would go back to its saved hours, which overlap the hours on {date}. Change them on the Hours page first.",
+    "{name} would go back to its saved hours, which overlap a day next to the special date on {date}. Move or delete that special date on the Hours page first.",
   "prep.default_hours_skipped":
-    "{name} would go back to its saved hours, and its hours for {date} use a time the clock skips. Change them on the Hours page first.",
+    "{name} would go back to its saved hours, and its hours on the special date {date} use a time the clock skips. Move or delete that special date on the Hours page first.",
   "prep.exceptions": "Exceptions",
   "prep.add_exception": "Add exception",
   "prep.edit_exception": "Edit exception",
@@ -679,9 +679,9 @@ const es: Record<keyof typeof en, string> = {
   "prep.fix_fields": "Corrige los campos marcados para continuar.",
   "prep.station_disabled": "Esta estación está deshabilitada. Elige una estación activa.",
   "prep.default_hours_clash":
-    "{name} volvería a su horario guardado, que se solapa con el del {date}. Cámbialo primero en la página Horarios.",
+    "{name} volvería a su horario guardado, que se solapa con un día junto a la fecha especial del {date}. Cambia de día o borra primero esa fecha especial en la página Horarios.",
   "prep.default_hours_skipped":
-    "{name} volvería a su horario guardado, y su horario del {date} usa una hora que el reloj se salta. Cámbialo primero en la página Horarios.",
+    "{name} volvería a su horario guardado, y su horario en la fecha especial del {date} usa una hora que el reloj se salta. Cambia de día o borra primero esa fecha especial en la página Horarios.",
   "prep.exceptions": "Excepciones",
   "prep.add_exception": "Añadir excepción",
   "prep.edit_exception": "Editar excepción",
