@@ -1229,7 +1229,14 @@ Their successful writes commit before refresh, with newer delivered input retain
 proof/code stages and Google redirect commit independently; recovery-code output stays exempt.
 Disconnect clears sensitive values, and departed replies cannot reopen forms or release a newer
 write. Focused cases are in `apps/dashboard/src/screens/profile-screen.unsaved.test.ts` alongside
-the unchanged Profile suite. Other audited modal owners and page/navigation protection remain
+the unchanged Profile suite. Add/Edit shift now protects entered times and normalized role through
+native Escape and dirty-only unload handling. A same-shift refresh retains the draft; a replacement
+identity cancels an outstanding question. The entered draft retains its captured time offsets;
+a late write cannot close a replacement editor. In-flight writes disable the fields and dismissal.
+Successful Add/Edit commits the values captured at submission, and Add/Edit/Remove clear the warning
+before roster refresh. A refusal retains the draft. Focused cases are in the shift-dialog and
+roster-screen `*.unsaved.test.ts` suites under `apps/dashboard/src/`.
+Other audited modal owners and page/navigation protection remain
 to be wired. Keep automatic saves on their existing paths.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)

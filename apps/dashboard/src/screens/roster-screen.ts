@@ -233,6 +233,8 @@ export class RosterScreen extends LitElement {
     this.busy = true;
     this.#showError(null);
     let written = false;
+    const completeWrite =
+      this.shadowRoot!.querySelector("dashboard-shift-dialog")!.writeCompletion();
     try {
       let versionId = this.draftVersionId;
       if (versionId === null) {
@@ -241,7 +243,7 @@ export class RosterScreen extends LitElement {
       }
       await this.api.addShift(versionId, { ...event.detail, locationId: this.locationId });
       written = true;
-      this.dialogOpen = false;
+      if (completeWrite()) this.dialogOpen = false;
       await this.#loadRoster();
     } catch (error) {
       if (written) this.#showReadError(error);
@@ -257,10 +259,12 @@ export class RosterScreen extends LitElement {
     this.busy = true;
     this.#showError(null);
     let written = false;
+    const completeWrite =
+      this.shadowRoot!.querySelector("dashboard-shift-dialog")!.writeCompletion();
     try {
       await this.api.updateShift(event.detail.shiftId, event.detail.patch);
       written = true;
-      this.dialogOpen = false;
+      if (completeWrite()) this.dialogOpen = false;
       await this.#loadRoster();
     } catch (error) {
       if (written) this.#showReadError(error);
@@ -276,10 +280,12 @@ export class RosterScreen extends LitElement {
     this.busy = true;
     this.#showError(null);
     let written = false;
+    const completeWrite =
+      this.shadowRoot!.querySelector("dashboard-shift-dialog")!.writeCompletion();
     try {
       await this.api.removeShift(event.detail.shiftId);
       written = true;
-      this.dialogOpen = false;
+      if (completeWrite()) this.dialogOpen = false;
       await this.#loadRoster();
     } catch (error) {
       if (written) this.#showReadError(error);
