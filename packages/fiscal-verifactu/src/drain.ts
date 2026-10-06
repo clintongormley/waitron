@@ -260,8 +260,9 @@ async function drainDue(
       if (dueCount < maxPorEnvio) break;
     } catch {
       // The claim is committed, so back the batch off rather than leave it stuck `enviando`, and
-      // stop: an ordinary row's retry is its `proximo_intento_en`, a probe's an hour after its
-      // stamped `enviado_en`, so a probe no longer counts as due.
+      // stop. A probe's next send is an hour after its stamped `enviado_en`, so it leaves the
+      // count; the batch's ordinary rows stay counted, so the next sending slot is still reported
+      // unless a retry instant `backoffBatch` recorded is earlier.
       await countOnCommit(db, result, (tx, counts) => backoffBatch(tx, batch, now, counts));
       dueCount = Math.max(0, dueCount - batch.filter((row) => row.probe !== undefined).length);
       break;
@@ -875,8 +876,8 @@ async function resolveLines(
   for (const linea of respuesta.RespuestaLinea) {
     // Skipped rather than thrown: one unmatched line must not back the whole batch off and discard
     // every other line of this response. The skipped row stays `enviando` until
-    // `recoverStaleClaims` or a restart requeues it; a skipped probe stays `detenido` until its
-    // next probe.
+    // `recoverStaleClaims` or a restart requeues it; a probe left without a line stays `detenido`
+    // and is sent again at its next hourly probe.
     const row = linea.RefExterna !== undefined ? byId.get(linea.RefExterna) : undefined;
     if (row === undefined) continue;
     const resolved = resolveEstadoEfectivo(linea);
