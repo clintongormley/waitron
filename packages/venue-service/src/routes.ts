@@ -105,6 +105,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "station.always_open": 409,
   "holiday.invalid": 400,
   "holiday.not_found": 404,
+  "holiday_geography.not_found": 404,
   "holiday.date_taken": 409,
   "holiday.local_limit": 409,
   "holiday.geography_current": 409,

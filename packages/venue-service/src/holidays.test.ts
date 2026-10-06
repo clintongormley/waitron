@@ -772,16 +772,15 @@ describe("refused values", () => {
     for (const id of [randomUUID(), theirs.id, "not-an-id"]) {
       expect(
         await refusal(() => run((tx) => store.saveLocalHoliday(tx, cfg, id, local("2026-04-01")))),
-      ).toMatchObject({ code: "holiday.not_found", params: { id } });
+      ).toMatchObject({ code: "holiday.not_found", params: { holidayId: id } });
       expect(await refusal(() => run((tx) => store.deleteLocalHoliday(tx, cfg, id)))).toMatchObject(
-        { code: "holiday.not_found", params: { id } },
+        { code: "holiday.not_found", params: { holidayId: id } },
       );
     }
-    expect(
-      await refusal(() =>
-        run((tx) => store.deleteRetainedHolidayGeography(tx, cfg, theirs.geographyId)),
-      ),
-    ).toMatchObject({ code: "holiday.not_found", params: { id: theirs.geographyId } });
+    for (const id of [randomUUID(), theirs.geographyId])
+      expect(
+        await refusal(() => run((tx) => store.deleteRetainedHolidayGeography(tx, cfg, id))),
+      ).toMatchObject({ code: "holiday_geography.not_found", params: { geographyId: id } });
     expect(await stored()).toEqual(before);
   });
 });

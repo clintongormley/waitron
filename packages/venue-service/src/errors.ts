@@ -33,7 +33,8 @@ declare module "@waitron/shared" {
     "special_date.date_taken": { date: string };
     "station.always_open": { stationId: string };
     "holiday.invalid": { field: string };
-    "holiday.not_found": { id: string };
+    "holiday.not_found": { holidayId: string };
+    "holiday_geography.not_found": { geographyId: string };
     "holiday.date_taken": { date: string };
     /** `limit` is the country's allowance of local holidays per address and civil year; `year` is
      * absent only when the refused input carried no real date. */

@@ -412,17 +412,29 @@ describe("local holiday writes", () => {
     const before = await rows(fx);
     const body = { date: "2026-06-01", name: "Feria" };
     const unknown = randomUUID();
-    for (const [method, path, id] of [
-      ["PUT", `/local-holidays/${fx.otherEntry.id}`, fx.otherEntry.id],
-      ["DELETE", `/local-holidays/${fx.otherEntry.id}`, fx.otherEntry.id],
-      ["DELETE", `/holiday-geographies/${fx.otherEntry.geographyId}`, fx.otherEntry.geographyId],
-      ["PUT", `/local-holidays/${unknown}`, unknown],
-      ["DELETE", `/holiday-geographies/${unknown}`, unknown],
+    const entryGone = (holidayId: string) => ({
+      code: "holiday.not_found",
+      params: { holidayId },
+    });
+    const geographyGone = (geographyId: string) => ({
+      code: "holiday_geography.not_found",
+      params: { geographyId },
+    });
+    for (const [method, path, error] of [
+      ["PUT", `/local-holidays/${fx.otherEntry.id}`, entryGone(fx.otherEntry.id)],
+      ["DELETE", `/local-holidays/${fx.otherEntry.id}`, entryGone(fx.otherEntry.id)],
+      [
+        "DELETE",
+        `/holiday-geographies/${fx.otherEntry.geographyId}`,
+        geographyGone(fx.otherEntry.geographyId),
+      ],
+      ["PUT", `/local-holidays/${unknown}`, entryGone(unknown)],
+      ["DELETE", `/holiday-geographies/${unknown}`, geographyGone(unknown)],
     ] as const)
       await refused(
         await send(fx, method, path, fx.manager, method === "PUT" ? body : undefined),
         404,
-        { code: "holiday.not_found", params: { id } },
+        error,
       );
     for (const [method, path] of [
       ["PUT", "/local-holidays/not-a-uuid"],

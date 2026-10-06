@@ -306,7 +306,7 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
       .from(localHolidays)
       .innerJoin(holidayGeographies, eq(holidayGeographies.id, localHolidays.geographyId))
       .where(and(eq(localHolidays.id, id), eq(holidayGeographies.locationId, cfg.locationId)));
-    if (found === undefined) throw new AppError("holiday.not_found", { id });
+    if (found === undefined) throw new AppError("holiday.not_found", { holidayId: id });
     return found;
   }
 
@@ -377,7 +377,7 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
       .select()
       .from(holidayGeographies)
       .where(and(eq(holidayGeographies.id, id), eq(holidayGeographies.locationId, cfg.locationId)));
-    if (row === undefined) throw new AppError("holiday.not_found", { id });
+    if (row === undefined) throw new AppError("holiday_geography.not_found", { geographyId: id });
     if (matches(row, await readAddress(tx, cfg)))
       throw new AppError("holiday.geography_current", { geographyId: row.id });
     await tx.delete(localHolidays).where(eq(localHolidays.geographyId, row.id));

@@ -138,7 +138,9 @@ const states: Record<string, (theme: "light" | "dark") => Promise<LocalHolidaysE
     return el;
   },
   "an edit refused at the bottom": async (theme) => {
-    const el = await mount(theme, { refuse: { code: "holiday.not_found", params: { id: "e1" } } });
+    const el = await mount(theme, {
+      refuse: { code: "holiday.not_found", params: { holidayId: "e1" } },
+    });
     await press(el, '[data-test="edit-local"]');
     await set(el, "holidayName", "Sant Joan de Vielha");
     await press(el, '[data-test="save-local"]');

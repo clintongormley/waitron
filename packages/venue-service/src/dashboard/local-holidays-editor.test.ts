@@ -520,7 +520,10 @@ describe("Local holidays: adding and changing an entry", () => {
       { code: "holiday.local_limit", params: { limit: 0 } },
       "Local holidays cannot be entered for a venue in this country.",
     ],
-    [{ code: "holiday.not_found", params: { id: "e1" } }, "This local holiday no longer exists."],
+    [
+      { code: "holiday.not_found", params: { holidayId: "e1" } },
+      "This local holiday no longer exists.",
+    ],
     [
       { code: "holiday.invalid", params: { field: "id" } },
       "This local holiday belongs to an earlier address, so it cannot be changed.",
@@ -596,7 +599,7 @@ describe("Local holidays: adding and changing an entry", () => {
     expect(text(part(el, "confirm-text"))).toBe(
       "Remove the local holiday San Fernando on Sat, 30 May 2026?",
     );
-    state.writes.push({ reject: { code: "holiday.not_found", params: { id: "e1" } } });
+    state.writes.push({ reject: { code: "holiday.not_found", params: { holidayId: "e1" } } });
     await click(el, saveButton(el));
     expect(await bottomMessage(el)).toBe("This local holiday no longer exists.");
     await click(el, saveButton(el));
@@ -630,6 +633,25 @@ describe("Local holidays: an earlier address and the holiday area", () => {
       undefined,
     ]);
   });
+
+  it.each([
+    ["en", "These local holidays have already been removed."],
+    ["es", "Estos festivos locales ya se han quitado."],
+  ] as const)(
+    "says in %s that an earlier address's holidays are already gone, not that one holiday is",
+    async (locale, sentence) => {
+      setLocale(locale);
+      const { api, state } = server(localModel({ geographies: [SEVILLA, OLD_TOWN] }));
+      const el = await mount(api);
+      await click(el, find(el, '[data-test="forget-g-old"]'));
+      state.writes.push({
+        reject: { code: "holiday_geography.not_found", params: { geographyId: "g-old" } },
+      });
+      await click(el, saveButton(el));
+      expect(await bottomMessage(el)).toBe(sentence);
+      expect(saveButton(el).disabled).toBe(false);
+    },
+  );
 
   it("offers only the sourced areas, required until one is chosen, and saves the choice before any entry exists", async () => {
     const areaOptions = [

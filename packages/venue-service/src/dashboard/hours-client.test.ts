@@ -505,7 +505,7 @@ describe("HoursApi holidays", () => {
     const refusals = [
       [400, "holiday.invalid", { field: "geography" }],
       [400, "holiday.invalid", { field: "id" }],
-      [404, "holiday.not_found", { id: "e1" }],
+      [404, "holiday.not_found", { holidayId: "e1" }],
       [409, "holiday.local_limit", { limit: 0, year: 2026 }],
     ] as const;
     for (const [status, code, params] of refusals) {

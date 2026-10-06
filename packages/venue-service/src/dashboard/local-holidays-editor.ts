@@ -256,6 +256,8 @@ export class LocalHolidaysEditor extends LitElement {
       void this.#focusInvalid();
     };
     if (code === "holiday.not_found") this.bottomRefusal = t("holiday.not_found");
+    else if (code === "holiday_geography.not_found")
+      this.bottomRefusal = t("holiday_geography.not_found");
     else if (code === "holiday.geography_current")
       this.bottomRefusal = t("holiday.geography_current");
     else if (editor.kind !== "entry") this.bottomRefusal = t("hours.save_error");
