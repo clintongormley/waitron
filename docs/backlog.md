@@ -1173,6 +1173,14 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Recipe ingredient selections now use the same protection on the branch. Cancel and a different
+product or catalogue ask before replacing the selection; choosing the current one retains it.
+An accepted save commits the submitted membership before refresh; later toggles remain protected. Same-product live updates retain edited choices, including when the
+product disappears from the fetched list. Disconnect releases protection; old recipe and
+ingredient writes or refreshes cannot change a reconnected form in the focused cases. Native
+Cancel/product-picker flows were inspected in English and Spanish, both themes and phone/desktop
+widths. Actual recipe sidebar/history routes, live API writes and native reload remain unverified.
+
 Floor Add and explicit-save label/capacity rows now register independently on the branch. Keep
 retains their values; Discard restores only local drafts. Accepted writes commit before refresh,
 and later input remains protected. Live reads retain edited fields while updating clean fields;

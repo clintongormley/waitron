@@ -2661,3 +2661,61 @@ write-path/inmutabilidad suites ran **20 cases**. The visual shell uses the real
 confirmation and floor screen with synthetic API reads/writes. Actual floor API writes,
 sidebar/history/container routes, hover colours and activated native reload remain unverified.
 Other page owners, till routes and the advancing-main inventory keep W69 incomplete.
+
+
+## 2026-10-06: Recipe membership and page replacement checkpoint
+
+The recipe editor now registers its fetched ingredient membership with the shared leave registry.
+The comparison ignores switch-toggle order. Cancel and changes to the product/catalogue selection
+request that editor's scope before replacing it; Keep restores the picker's displayed value as
+well as retaining the ingredient switches. Reselecting the current product or catalogue is exempt.
+A product object refreshed under the same id retains edited membership, and a dirty selected
+product removed from the fetched list remains rendered until you leave it.
+
+`setProductRecipe` receives the existing product id and copied ingredient-id array. On acceptance,
+the editor commits those submitted values before `getProductRecipe`. A failed refresh leaves the
+accepted selection clean; toggles delivered during the write remain dirty against the submitted
+membership. Ingredient saves commit their own modal without committing the recipe. Disconnect
+releases the scopes and clears page selection/busy state. The focused deferred-reply cases check
+that old recipe writes/loads and ingredient writes/refreshes cannot change a reconnected form.
+
+Verification from the feature worktree:
+
+```sh
+pnpm --filter @waitron/dashboard exec vitest run src/screens/recipe-screen.unsaved.test.ts src/screens/recipe-screen.test.ts src/widgets/recipe-editor.test.ts src/widgets/ingredient-form.unsaved.test.ts src/widgets/ingredient-form.test.ts src/widgets/allergen-picker.test.ts src/widgets/dietary-origin-picker.test.ts src/screens/recipe-screen.a11y.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+pnpm exec vitest run scripts/native-form-fields.test.ts scripts/style-token-names.test.ts scripts/claude-md-pointers.test.ts
+pnpm --filter @waitron/dashboard typecheck
+pnpm exec eslint apps/dashboard/src/screens/recipe-screen.ts apps/dashboard/src/widgets/recipe-editor.ts apps/dashboard/src/screens/recipe-screen.unsaved.test.ts
+```
+
+The eight-file browser family reported 162 passing tests; the unedited fiscal pair reported 20,
+and the three root guard suites reported 41. No existing assertion changed. The initial new
+owner run reported 16 failures out of 18, including three invalid reconnect fixtures that queried
+`parentElement` across a shadow root. After correcting them to `parentNode` and removing the
+premature lifecycle guard implementation, the reconnect cases showed three assertion failures;
+the old write replies then showed two failures, extra reads and a replacement error, before their
+guards were added. Deferred ingredient creates/updates showed four assertion failures; departed
+refreshes showed two. The first Keep tests exposed the combobox retaining its rejected value.
+
+Fourteen independent installed-candidate mutations failed their intended checks beside a passing
+clean-recipe control. They covered notification, restore, unordered membership, Cancel/product
+replacement, submitted commit, later input, product refresh/removal, old writes/loads and ingredient
+write/refresh replies. The initial old-load success mutation survived the visible-choice check
+because the dirty editor retained those choices; asserting the later bound recipe ids separately
+made the success control fail. The final restored recipe owner/original screen/original widget
+run reported 77 passing tests; the final three files were byte-compared before removing the owned
+candidate and its empty parent.
+
+A temporary minimal real LeaveController shell exercised native ingredient-switch clicks,
+Cancel at 390px and product selection at 1280px, warning Escape, Keep and Discard. Eight English/
+Spanish, light/dark flows passed with 16 parked-pointer axe scans. All 16 question/kept captures
+were inspected in four contact sheets. The warning and retained native choices were visible in
+both languages and themes. API responses were synthetic. Actual recipe API writes, dashboard
+sidebar/history routes, hover colours and activated browser reload remain unverified here.
+Source, logs, controls and captures are retained locally under Lane E's
+`receipts/w69-recipe-20261006`. The temporary visual test was removed from product source.
+
+This is a partial W69 checkpoint. Configuration/module settings, device profiles after W97,
+remaining shell/tab/context routes, activated native reload and the advancing-owner audit remain
+open. This checkpoint does not make the whole item ready for finish-branch or landing.
