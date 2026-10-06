@@ -912,3 +912,36 @@ the candidate passed 19 party-name cases. Eight temporary visual flows passed 16
 their 16 EN/ES, light/dark, 390/1280 editor/warning captures were inspected. Types, changed-file
 lint, formatting and diff checks passed. Synthetic unload events establish listener cancellation
 only. Other till modal owners and Tasks 5–6 remain pending; public F1 issuance stays disabled.
+
+
+### Dead-end routing modal checkpoint, 2026-10-06
+
+You can keep staged destinations and removals when cancelling or pressing native Escape.
+Discard restores the local decision and reports cancellation once; it does not remove a basket
+line or record a sale. Continue commits the captured decision before emitting the existing
+`dead-ends-continue` event. `TillApp.#answerDeadEnds` removes this child and resolves its existing
+routing question. The caller retains responsibility for changing the basket or making a stored
+order request. No server write is performed by this dialog.
+
+Comparison preserves each row key and station ID and compares removals by membership. Incomplete
+choices stay protected; a revert clears dirty tracking. Background answer updates retain the
+baseline and pending question. Disconnect aborts that question; reconnect retains the original
+or accepted baseline. Departed controls cannot edit or emit the decision. Removal on a stored
+bill remains refused. Existing test assertions were not edited.
+
+The new widget run failed eight cases before implementation and then passed all ten alongside
+three existing widget cases. Five installed disposable-checkout controls each failed the intended
+assertion after deleting close interception, change notification, submitted commit, disconnect
+disposal or the departed-choice guard. Restoring the candidate passed 13 cases. The actual till
+shell has destination/removal Keep and Discard cases asserting unchanged basket values and no
+sale submission. Their first run asserted before the native dialog's delayed close report;
+polling for removal passed both cases. Eight temporary visual flows passed 16 axe scans, with all
+16 EN/ES, light/dark, 390/1280 editor/warning captures inspected. Synthetic unload events check
+listener cancellation only. Other modal owners and Tasks 5–6 remain pending.
+
+
+The final focused family command,
+`pnpm --filter @waitron/till exec vitest run src/widgets/dead-ends-dialog.unsaved.test.ts src/widgets/dead-ends-dialog.test.ts src/widgets/dead-ends-section.test.ts src/till-app.test.ts --reporter=dot`,
+passed 681 browser cases. The unedited `write-path.e2e.test.ts` and `inmutabilidad.test.ts` passed
+20 cases. Changed-file lint, till types, formatting and diff checks passed. This verifies the
+dead-end modal family on the branch, not completion of W69 or either proposed PR.

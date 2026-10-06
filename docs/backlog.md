@@ -1417,6 +1417,14 @@ run passed 336 browser cases; five installed deletion controls failed their inte
 and restoration passed 19 party-name cases. Other till modal owners and page/navigation work remain.
 
 
+The dead-end routing dialog now protects staged destinations and local removals through Cancel
+and native Escape. Keep retains the choices; Discard restores them without changing the basket
+or submitting a sale. Continue commits this child decision at the existing till-shell handoff,
+without a discard question. Reverted choices compare by membership; background reads and
+reconnects keep the baseline. Focused cases are in `dead-ends-dialog.unsaved.test.ts` and the
+actual till-shell suite. Other modal owners and page/navigation work remain open.
+
+
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
 **What a description reader shows — checked by running, 2026-10-02.** A throwaway catalogue test

@@ -16,6 +16,7 @@ import {
 } from "./widgets/test-helpers.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import { productUnit } from "./widgets/product-name.js";
+import type { TillDeadEndsSection } from "./widgets/dead-ends-section.js";
 import { TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
 import { diag } from "./diagnostics.js";
@@ -15093,4 +15094,78 @@ it("forced session exit aborts an open unsaved question and clears its registry 
   );
   expect(left).toBe(0);
   expect(value).toBe("Typed secret");
+});
+
+describe("dead-end unsaved choices in the till shell", () => {
+  it.each(["destination", "removal"])(
+    "Keep and Discard retain the counter basket after a staged %s",
+    async (edit) => {
+      const askSaleDeadEnds = vi.fn().mockResolvedValue({
+        sends: true,
+        deadEnds: [
+          {
+            key: "0",
+            name: "Café",
+            quantity: "1",
+            stationId: "bar",
+            stationName: "Bar",
+            why: "closed",
+          },
+        ],
+        stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+      });
+      const recordSale = vi.fn().mockResolvedValue(saleResult);
+      const { el } = await mountApp({ askSaleDeadEnds, recordSale });
+      const c = await toCounter(el);
+      c.store.addProduct(cafe, "1");
+      await flush(el);
+      tenderPay(el).shadowRoot!.querySelector<HTMLElement>(".pay")!.click();
+      await flush(el);
+      const dialog = el.shadowRoot!.querySelector("till-dead-ends-dialog")!;
+      const section =
+        dialog.shadowRoot!.querySelector<TillDeadEndsSection>("till-dead-ends-section")!;
+      await section.updateComplete;
+      if (edit === "destination") {
+        await chooseOption(
+          section.shadowRoot!.querySelector<WtCombobox>("wt-combobox")!,
+          "kitchen",
+        );
+      } else {
+        section.shadowRoot!.querySelector<HTMLElement>(".remove")!.click();
+      }
+      await dialog.updateComplete;
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+      await flush(el);
+      const q = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+      expect(q.open).toBe(true);
+      expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).toBe(dialog);
+      expect(
+        c.store.lines.map((line) => ({
+          id: line.product.id,
+          quantity: line.quantity,
+          makeAt: line.makeAt ?? null,
+        })),
+      ).toEqual([{ id: "cafe", quantity: "1", makeAt: null }]);
+      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+      await flush(el);
+      expect(q.open).toBe(false);
+      if (edit === "destination") expect(section.choices.get("0")).toBe("kitchen");
+      else expect(section.answer.deadEnds).toEqual([]);
+      expect(recordSale).not.toHaveBeenCalled();
+      dialog.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+      await flush(el);
+      expect(q.open).toBe(true);
+      q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      await flush(el);
+      await expect.poll(() => el.shadowRoot!.querySelector("till-dead-ends-dialog")).toBeNull();
+      expect(
+        c.store.lines.map((line) => ({
+          id: line.product.id,
+          quantity: line.quantity,
+          makeAt: line.makeAt ?? null,
+        })),
+      ).toEqual([{ id: "cafe", quantity: "1", makeAt: null }]);
+      expect(recordSale).not.toHaveBeenCalled();
+    },
+  );
 });
