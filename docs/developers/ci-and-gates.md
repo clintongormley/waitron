@@ -430,31 +430,56 @@ package's test-file count.
 
 ### The `ci` check passes only when every needed job succeeded or was skipped
 
-The `ci` job's one step reads `toJSON(needs)` and fails unless every needed job's result is
-`success` or `skipped`; any other value fails, including one nobody listed. Until A274 the step
-fired only on `failure` or `cancelled`, and that let a cancellation through: in run 37368759185
-attempt 1 (2026-10-05, PR head `4123486d0`), `test-dashboard` was cancelled with "The job was not
-acquired by Runner of type hosted even after multiple attempts" and `ci` finished green with its
-step skipped; run 37371194302 attempt 1 did the same with twelve such jobs. Every superseded run's
-cancellations that evening did fire the old step, and one of their logs printed
-`"result": "cancelled"`. GitHub's documentation (github/docs,
-`content/actions/reference/workflows-and-actions/contexts.md`) says of `needs.<job_id>.result`:
-_"Possible values are `success`, `failure`, `cancelled`, or `skipped`."_ The old step did not
-fire, so a never-acquired job reached `ci` as neither `failure` nor `cancelled`: either `success`
-or `skipped`, which the allowlist passes as well, or a value outside those four, which it fails.
-So this change may not fix the incident it was opened for: it does only if GitHub hands an
-undocumented or missing value. Nobody has printed the value; the step now prints every result, so
-the next such run records it.
+The `ci` job has two steps, and each fails unless every needed job ended `success` or `skipped`;
+any other value fails, including one nobody listed. The first reads `toJSON(needs)`. The second,
+added by A276, reads the same jobs from GitHub's jobs API for this run attempt
+(`repos/<repo>/actions/runs/<run_id>/attempts/<run_attempt>/jobs`, every page), and runs even when
+the first has failed, so both print what they saw. The `ci` job alone holds `actions: read`, which
+that API needs.
 
-`scripts/ci-workflow.test.mjs` runs the step's script on sample results; GitHub alone evaluates
-`toJSON(needs)`. That guard is weaker than its name: it reads ci.yml as text, extracts the step's
-script and checks that the step has no `if:` key and keeps its `NEEDS: ${{ toJSON(needs) }}` line,
-so an `if:` reaching the step another way — a job-level change, or YAML spelled differently — is
-not seen, and what `toJSON(needs)` produces on GitHub is never tested. On GitHub, through a
-throwaway pull request based on the fix branch (#1282): run 37424069355, every test job skipped →
+Why two. Until A274 the first step fired only on `failure` or `cancelled`, and that let a
+cancellation through: in run 37368759185 attempt 1 (2026-10-05, PR head `4123486d0`),
+`test-dashboard` was cancelled with "The job was not acquired by Runner of type hosted even after
+multiple attempts" and `ci` finished green with its step skipped; run 37371194302 attempt 1 did the
+same with twelve such jobs. Every superseded run's cancellations that evening did fire the old step,
+and one of their logs printed `"result": "cancelled"`. GitHub's documentation (github/docs,
+`content/actions/reference/workflows-and-actions/contexts.md`) says of `needs.<job_id>.result`:
+_"Possible values are `success`, `failure`, `cancelled`, or `skipped`."_ The old step did not fire,
+so a never-acquired job reached `ci` as neither `failure` nor `cancelled`: either `success` or
+`skipped`, which the first step's allowlist passes as well, or a value outside those four. For that
+same job the jobs API answered `"conclusion": "cancelled"` with `runner_id` 0, which the second step
+fails.
+
+How the second step reads the API. A needed job's entries are named by its id (`lint`), by its id
+and a matrix value (`test-heavy (1)`), or, for a job that calls a reusable workflow, by its id and
+the inner job (`image / smoke`; plain `image` when it was skipped). A completed entry with any other
+conclusion fails at once. It tries again, ten seconds apart and six tries in all, when the API call
+fails, the number of jobs read differs from its `total_count`, a needed job has no entry, or an
+entry is not yet completed — and fails when the tries run out, so an API it cannot read fails the
+check rather than passing it. `gh api --paginate` prints each page as its own JSON object (measured 2026-10-06 with
+gh 2.97.0: `per_page=10` on the 30 jobs of run 37432123633 printed three objects, each giving
+`total_count` 30), and the step reads them all.
+
+`scripts/ci-workflow.test.mjs` runs each step's script: the first on sample `needs` results, the
+second against a stand-in `gh` that serves sample pages and failures. GitHub alone evaluates
+`toJSON(needs)` and answers the API. That guard is weaker than its name: it reads ci.yml as text,
+extracts each step by its `name:` and checks the first step has no `if:` key, the second has
+`if: always()`, and each keeps its `env:` lines; an `if:` reaching a step another way — a job-level
+change, or YAML spelled differently — is not seen, and neither what `toJSON(needs)` produces nor the
+API's real answers are tested there.
+
+On GitHub, A274 through throwaway pull request #1282: run 37424069355, every test job skipped →
 `ci` passed; 37424588800, `changes` failed → `ci` failed; 37425317943, `changes` cancelled by its
 own `timeout-minutes` → `ci` failed; 37425907838, the run cancelled by hand while `changes` ran →
-`ci` failed.
+`ci` failed. A276 through throwaway pull request #1284: run 37434757498, every test job skipped →
+both steps passed, the second printing each needed job from the API; 37435424791, `lint` failed and
+`changes` timed out → both steps failed, the second with `not succeeded or skipped: changes, lint`;
+37435810561, `lint` asked for a runner label no runner has (`runs-on: a276-no-such-runner`) — the
+API showed it `queued` with `runner_id` 0 for seven minutes, GitHub neither failing nor cancelling
+it, and when the run was cancelled by hand it ended `cancelled` with `runner_id` 0 and both steps
+failed. In that run `needs` also said `cancelled`, so it does not show the second step catching what
+the first missed. GitHub's own "not acquired" cancellation, the 2026-10-05 case, could not be
+produced on demand, so the second step has not been seen failing a run that `needs` passed.
 
 ### A shard can exit 1 with every one of its tests passing — RETIRED from CLAUDE.md
 
