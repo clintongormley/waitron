@@ -4211,6 +4211,72 @@ describe("till-table-order-screen", () => {
       expect(gridNames(el)).toEqual(["Bocadillo"]); // grid stays on the selected menu
       expect(el.shadowRoot!.querySelector(".pending-line .name")!.textContent).toContain("Cerveza");
     });
+
+    describe("search across the served menus", () => {
+      async function search(el: TillTableOrderScreen, text: string): Promise<void> {
+        const input = grid(el)
+          .shadowRoot!.querySelector("wt-input")!
+          .shadowRoot!.querySelector("input")!;
+        input.value = text;
+        input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+        await grid(el).updateComplete;
+      }
+
+      function groups(el: TillTableOrderScreen) {
+        return [
+          ...grid(el).shadowRoot!.querySelectorAll<HTMLElement>(
+            '[data-region="results"] section[data-menu]',
+          ),
+        ].map((group) => ({
+          menu: group.dataset.menu,
+          heading: group.querySelector("h3")!.textContent!.trim(),
+          names: [...group.querySelectorAll("wt-button[data-kind] .name")].map((name) =>
+            name.textContent!.trim(),
+          ),
+        }));
+      }
+
+      it("shows another served menu's matches in a group of their own", async () => {
+        const { el } = await mount({ ...bothMenus, selectedMenuId: "cat-food" });
+        await search(el, "c");
+        expect(groups(el)).toEqual([
+          {
+            menu: "cat-food",
+            heading: t("menu.results_this_menu").replace("{menu}", () => "Comida"),
+            names: ["Bocadillo"],
+          },
+          { menu: "cat-drinks", heading: "Bebidas", names: ["Cerveza"] },
+        ]);
+      });
+
+      it("leaves a product the diet lens rejects out of another menu's group", async () => {
+        const veganCerveza: TillProduct = {
+          ...cerveza,
+          diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+        };
+        const croqueta: TillProduct = {
+          ...cerveza,
+          id: "croqueta",
+          menuItemId: "menu-item-croqueta",
+          name: "Croqueta",
+          diet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+        };
+        const { el } = await mount({
+          menus: [foodMenu, servedMenu("cat-drinks", "Bebidas", false, [veganCerveza, croqueta])],
+          products: [bocadillo, veganCerveza, croqueta],
+          selectedMenuId: "cat-food",
+        });
+        await search(el, "c");
+        expect(groups(el).find((group) => group.menu === "cat-drinks")?.names).toEqual([
+          "Cerveza",
+          "Croqueta",
+        ]);
+        el.selectedDiet = "vegan";
+        await el.updateComplete;
+        await grid(el).updateComplete;
+        expect(groups(el).find((group) => group.menu === "cat-drinks")?.names).toEqual(["Cerveza"]);
+      });
+    });
   });
 });
 

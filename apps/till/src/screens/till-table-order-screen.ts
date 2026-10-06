@@ -2242,13 +2242,14 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   readonly #browserProducts = memoVisibleProducts();
+  readonly #searchProducts = memoVisibleProducts();
 
   #hasDietData(): boolean {
     return hasDietData(this.products);
   }
 
-  /** Only the shown menu's products reach the browser; a tab line's name still resolves against the
-   * FULL set ({@link #nameFor}), so a filtered grid never blanks a line. */
+  /** The browser gets the products through the diet lens; a tab line's name still resolves against
+   * the FULL set ({@link #nameFor}), so a filtered grid never blanks a line. */
   #menuBrowser(store: WorkingOrderStore): TemplateResult {
     const menu = shownMenu(this.menus, this.selectedMenuId);
     return html`<till-menu-browser
@@ -2256,6 +2257,8 @@ export class TillTableOrderScreen extends LitElement {
       ?inert=${store.sending}
       .menu=${menu}
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedDiet)}
+      .menus=${this.menus}
+      .servedProducts=${this.#searchProducts(this.products, "", this.selectedDiet)}
       .store=${store}
       .handheld=${this.handheld}
       weighs
