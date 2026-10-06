@@ -205,6 +205,7 @@ import { resolveLoginLocale } from "./login-locale.js";
 import "./errors.js";
 import { stationPrintersDown } from "./station-outputs-down.js";
 import {
+  checkZones,
   gateZones,
   inScope,
   readZoneScope,
@@ -925,8 +926,8 @@ function mountCourseVerb(
       const orderId = requireUuidId(c.req.param("id"), "working_order.not_found");
       const courseId = c.req.param("courseId");
       if (!isUuid(courseId)) throw new AppError("course.not_found", { courseId });
-      await gateZones(deps, session, [{ orderId }]);
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId }]);
         await verb(tx, cfg, orderId, courseId, personId);
       });
       return c.body(null, 200);
@@ -1300,8 +1301,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const zoneId = requireUuidParam(c.req.param("zoneId"), "ServiceZoneId");
-      await gateZones(deps, session, [{ zoneId }]);
       const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ zoneId }]);
         const context = await VENUE_SERVICE.resolveZoneContext(tx, deps.cfg, zoneId);
         const salePolicy = await VENUE_SERVICE.resolveSalePolicy(tx, deps.cfg, zoneId);
         return {
@@ -1324,8 +1325,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { device } = session;
       const asked = c.req.query("zoneId");
       const zoneId = asked === undefined ? undefined : requireUuidParam(asked, "ServiceZoneId");
-      if (zoneId !== undefined) await gateZones(deps, session, [{ zoneId }]);
       const state = await withTransaction(deps.db, async (tx) => {
+        if (zoneId !== undefined) await checkZones(tx, deps.cfg, session, [{ zoneId }]);
         const zone =
           zoneId === undefined
             ? (
@@ -1356,15 +1357,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.workingOrderId !== undefined)
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
       if (body.zoneId !== undefined) requireUuidParam(body.zoneId, "ServiceZoneId");
-      await gateZones(
-        deps,
-        session,
-        named(
-          body.zoneId !== undefined && { zoneId: body.zoneId },
-          body.workingOrderId !== undefined && { orderId: body.workingOrderId },
-        ),
-      );
       const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(
+          tx,
+          deps.cfg,
+          session,
+          named(
+            body.zoneId !== undefined && { zoneId: body.zoneId },
+            body.workingOrderId !== undefined && { orderId: body.workingOrderId },
+          ),
+        );
         const at = new Date();
         const order =
           body.workingOrderId === undefined
@@ -1876,10 +1878,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_settled");
-      await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const submissionId = body.submissionId === undefined ? undefined : submissionIdOf(body);
-      await withTransaction(deps.db, (tx) => handOverOrder(tx, cfg, id, submissionId));
+      await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        return handOverOrder(tx, cfg, id, submissionId);
+      });
       return c.body(null, 200);
     }),
   );
@@ -1890,8 +1894,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      await gateZones(deps, session, [{ orderId: id }]);
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         await reprintOrderTickets(tx, cfg, id);
       });
       return c.body(null, 200);
@@ -1903,8 +1907,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      await gateZones(deps, session, [{ orderId: id }]);
       const ticket = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id })
           .from(sales)
@@ -1921,8 +1925,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      await gateZones(deps, session, [{ orderId: id }]);
       const status = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id })
           .from(sales)
@@ -1939,8 +1943,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      await gateZones(deps, session, [{ orderId: id }]);
       const status = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id })
           .from(sales)
@@ -1958,8 +1962,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       await assertDeviceCapability(deps, c, "print-receipt", "receipt_retry", session.device);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      await gateZones(deps, session, [{ orderId: id }]);
       const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         const [sale] = await tx
           .select({ id: sales.id })
           .from(sales)
@@ -2161,10 +2165,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      await gateZones(deps, session, [{ tableId: id }]);
       const body = await readJsonBody<{ guestCount?: unknown }>(c);
       const guestCount = requireGuestCount(body.guestCount);
       const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ tableId: id }]);
         return seatTable(tx, cfg, { tableId: id, guestCount, operatorId: personId });
       });
       return c.json(result);
@@ -2176,13 +2180,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const { personId } = session;
       const partyId = requirePartyParam(c.req.param("id"));
-      await gateZones(deps, session, [{ partyId }]);
       const body = await readJsonBody<{ expectedPartyRevision?: unknown }>(c);
       const expectedPartyRevision = requireRevision(
         body.expectedPartyRevision,
         "expectedPartyRevision",
       );
       const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
         return finishTable(tx, { partyId, expectedPartyRevision, operatorId: personId });
       });
       return c.json(result);
@@ -2194,8 +2198,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      await gateZones(deps, session, [{ tableId: id }]);
-      await withTransaction(deps.db, (tx) => markTableCleared(tx, id));
+      await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ tableId: id }]);
+        return markTableCleared(tx, id);
+      });
       return c.body(null, 204);
     }),
   );
@@ -2205,14 +2211,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const { personId } = session;
       const partyId = requirePartyParam(c.req.param("id"));
-      await gateZones(deps, session, [{ partyId }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const args = groupCommand(personId, body);
       const { requested } = body;
       if (typeof requested !== "boolean") throw invalid("requested");
-      const answer = await withTransaction(deps.db, (tx) =>
-        requestBill(tx, partyId, requested, args),
-      );
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return requestBill(tx, partyId, requested, args);
+      });
       return c.json(answer);
     }),
   );
@@ -2221,7 +2227,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
-      await gateZones(deps, session, [{ partyId }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const expectedPartyRevision = requireRevision(
         body.expectedPartyRevision,
@@ -2229,9 +2234,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       );
       // The wire always carries a name; null or "" clears it.
       if (body.name === undefined) throw invalid("name");
-      const named = await withTransaction(deps.db, (tx) =>
-        setPartyName(tx, { partyId, name: body.name, expectedPartyRevision }),
-      );
+      const named = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return setPartyName(tx, { partyId, name: body.name, expectedPartyRevision });
+      });
       return c.json(named);
     }),
   );
@@ -2246,15 +2252,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const { personId } = session;
         const cfg = requestCfg(deps.cfg, session);
         const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
-        await gateZones(deps, session, [{ partyId }]);
         const body = asObject(await readRawJsonBody<unknown>(c));
         const tableId = requireTargetTable(body[field], field);
-        await gateZones(deps, session, [{ tableId }]);
         const command = tableActionCommand(personId, body);
         const sendCfg = sendingCfg(cfg, c, session.device);
-        const result = await withTransaction(deps.db, (tx) =>
-          act(tx, sendCfg, partyId, tableId, command),
-        );
+        const result = await withTransaction(deps.db, async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ partyId }, { tableId }]);
+          return act(tx, sendCfg, partyId, tableId, command);
+        });
         return c.json(result);
       }),
     );
@@ -2266,7 +2271,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
-      await gateZones(deps, session, [{ partyId }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const { tableId } = body;
       if (tableId === undefined) throw invalid("tableId");
@@ -2281,12 +2285,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         "expectedPartyRevision",
       );
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const result = await withTransaction(deps.db, (tx) =>
-        splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
+      const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return splitTable(tx, sendCfg, partyId, tableId.toLowerCase(), billId, {
           expectedPartyRevision,
           operatorId: personId,
-        }),
-      );
+        });
+      });
       return c.json(result);
     }),
   );
@@ -2295,8 +2300,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
-      await gateZones(deps, session, [{ partyId }]);
       const bills = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
         return readPartyBills(tx, partyId);
       });
       return c.json(bills);
@@ -2307,8 +2312,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
-      await gateZones(deps, session, [{ partyId }]);
-      const groups = await withTransaction(deps.db, (tx) => listOrderGroups(tx, partyId));
+      const groups = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return listOrderGroups(tx, partyId);
+      });
       return c.json(groups);
     }),
   );
@@ -2317,8 +2324,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
-      await gateZones(deps, session, [{ partyId }]);
-      const current = await withTransaction(deps.db, (tx) => readCurrentOrders(tx, partyId));
+      const current = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return readCurrentOrders(tx, partyId);
+      });
       return c.json(current);
     }),
   );
@@ -2327,8 +2336,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const partyId = requirePartyParam(c.req.param("id"));
-      await gateZones(deps, session, [{ partyId }]);
-      const problems = await withTransaction(deps.db, (tx) => listPrintProblems(tx, partyId));
+      const problems = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return listPrintProblems(tx, partyId);
+      });
       return c.json({ problems });
     }),
   );
@@ -2339,7 +2350,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id"));
-      await gateZones(deps, session, [{ partyId }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const input: SubmitGroupsInput = {
         ...groupCommand(personId, body),
@@ -2348,9 +2358,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         ...billOf(body),
       };
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const submitted = await withTransaction(deps.db, (tx) =>
-        submitGroups(tx, sendCfg, partyId, input),
-      );
+      const submitted = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return submitGroups(tx, sendCfg, partyId, input);
+      });
       return c.json(submitted);
     }),
   );
@@ -2363,11 +2374,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const partyId = requirePartyParam(c.req.param("id"));
       const groupId = c.req.param("gid");
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
-      await gateZones(deps, session, [{ partyId }]);
       const command = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
-      const fired = await withTransaction(deps.db, (tx) =>
-        fireGroup(tx, cfg, partyId, groupId, command),
-      );
+      const fired = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return fireGroup(tx, cfg, partyId, groupId, command);
+      });
       return c.json(fired);
     }),
   );
@@ -2384,11 +2395,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const partyId = requirePartyParam(c.req.param("id"));
         const groupId = c.req.param("gid");
         if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
-        await gateZones(deps, session, [{ partyId }]);
         const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
-        const answer = await withTransaction(deps.db, (tx) =>
-          command(tx, cfg, partyId, groupId, args),
-        );
+        const answer = await withTransaction(deps.db, async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          return command(tx, cfg, partyId, groupId, args);
+        });
         return c.json(answer);
       }),
     );
@@ -2405,13 +2416,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const { personId } = session;
         const cfg = requestCfg(deps.cfg, session);
         const partyId = requirePartyParam(c.req.param("id"));
-        await gateZones(deps, session, [{ partyId }]);
         const body = asObject(await readRawJsonBody<unknown>(c));
         const args = groupCommand(personId, body);
         const items = parseLineQuantities(body.items, "items");
-        const answer = await withTransaction(deps.db, (tx) =>
-          command(tx, cfg, partyId, items, args),
-        );
+        const answer = await withTransaction(deps.db, async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ partyId }]);
+          return command(tx, cfg, partyId, items, args);
+        });
         return c.json(answer);
       }),
     );
@@ -2425,11 +2436,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const partyId = requirePartyParam(c.req.param("id"));
       const groupId = c.req.param("gid");
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
-      await gateZones(deps, session, [{ partyId }]);
       const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
-      const answer = await withTransaction(deps.db, (tx) =>
-        markGroupServed(tx, cfg, partyId, groupId, args),
-      );
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return markGroupServed(tx, cfg, partyId, groupId, args);
+      });
       return c.json(answer);
     }),
   );
@@ -2442,14 +2453,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const partyId = requirePartyParam(c.req.param("id"));
       const groupId = c.req.param("gid");
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
-      await gateZones(deps, session, [{ partyId }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const args = groupCommand(personId, body);
       if (typeof body.minutes !== "number") throw invalid("minutes");
       const minutes = body.minutes;
-      const answer = await withTransaction(deps.db, (tx) =>
-        snoozeReminder(tx, cfg, partyId, groupId, minutes, args),
-      );
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return snoozeReminder(tx, cfg, partyId, groupId, minutes, args);
+      });
       return c.json(answer);
     }),
   );
@@ -2462,11 +2473,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const partyId = requirePartyParam(c.req.param("id"));
       const groupId = c.req.param("gid");
       if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
-      await gateZones(deps, session, [{ partyId }]);
       const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
-      const answer = await withTransaction(deps.db, (tx) =>
-        unsnoozeReminder(tx, cfg, partyId, groupId, args),
-      );
+      const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return unsnoozeReminder(tx, cfg, partyId, groupId, args);
+      });
       return c.json(answer);
     }),
   );
@@ -2476,16 +2487,16 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const { personId } = session;
       const partyId = requirePartyParam(c.req.param("id"));
-      await gateZones(deps, session, [{ partyId }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const command = groupCommand(personId, body);
       const { heldGroupIds } = body;
       if (!Array.isArray(heldGroupIds) || !heldGroupIds.every((id) => typeof id === "string")) {
         throw invalid("heldGroupIds");
       }
-      const reordered = await withTransaction(deps.db, (tx) =>
-        reorderHeldGroups(tx, partyId, heldGroupIds as string[], command),
-      );
+      const reordered = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return reorderHeldGroups(tx, partyId, heldGroupIds as string[], command);
+      });
       return c.json(reordered);
     }),
   );
@@ -2496,14 +2507,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requirePartyParam(c.req.param("id"));
-      await gateZones(deps, session, [{ partyId }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const command = groupCommand(personId, body);
       const moves = parseLineQuantities(body.moves, "moves");
       const target = parseMoveTarget(body.target);
-      const moved = await withTransaction(deps.db, (tx) =>
-        moveLinesToGroup(tx, cfg, partyId, moves, target, command),
-      );
+      const moved = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return moveLinesToGroup(tx, cfg, partyId, moves, target, command);
+      });
       return c.json(moved);
     }),
   );
@@ -2512,8 +2523,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const partyId = requireDraftPartyParam(c.req.param("id"));
-      await gateZones(deps, session, [{ partyId }]);
-      const drafts = await withTransaction(deps.db, (tx) => readDrafts(tx, deps.cfg, partyId));
+      const drafts = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return readDrafts(tx, deps.cfg, partyId);
+      });
       return c.json({ drafts });
     }),
   );
@@ -2524,13 +2537,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requireDraftPartyParam(c.req.param("id"));
-      await gateZones(deps, session, [{ partyId }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const draftId = requireDraftId(body.draftId);
       const revision = requireRevision(body.revision);
-      const draft = await withTransaction(deps.db, (tx) =>
-        saveDraft(tx, cfg, partyId, personId, { draftId, revision, lines: body.lines }),
-      );
+      const draft = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return saveDraft(tx, cfg, partyId, personId, { draftId, revision, lines: body.lines });
+      });
       return c.json(draft);
     }),
   );
@@ -2542,12 +2555,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requireDraftPartyParam(c.req.param("id"));
       const draftId = requireDraftParam(c.req.param("did"));
-      await gateZones(deps, session, [{ partyId }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const revision = requireRevision(body.revision);
-      const draft = await withTransaction(deps.db, (tx) =>
-        takeOverDraft(tx, cfg, partyId, draftId, personId, revision),
-      );
+      const draft = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return takeOverDraft(tx, cfg, partyId, draftId, personId, revision);
+      });
       return c.json(draft);
     }),
   );
@@ -2560,8 +2573,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const partyId = requireDraftPartyParam(body.partyId);
       const draftId = requireDraftParam(body.draftId);
       if (!Array.isArray(body.lineIds)) throw invalid("lineIds");
-      await gateZones(deps, session, [{ partyId }]);
       const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
         const at = new Date();
         const draft = (await readDrafts(tx, cfg, partyId)).find((entry) => entry.id === draftId);
         if (draft === undefined) throw new AppError("draft.not_found", { draftId });
@@ -2617,7 +2630,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const partyId = requireDraftPartyParam(c.req.param("id"));
       const draftId = requireDraftParam(c.req.param("did"));
-      await gateZones(deps, session, [{ partyId }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const input: SubmitDraftInput = {
         ...groupCommand(personId, body),
@@ -2627,9 +2639,10 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         ...billOf(body),
       };
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const submitted = await withTransaction(deps.db, (tx) =>
-        submitDraft(tx, sendCfg, partyId, draftId, input),
-      );
+      const submitted = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return submitDraft(tx, sendCfg, partyId, draftId, input);
+      });
       return c.json(submitted);
     }),
   );
@@ -2643,12 +2656,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const body = await readJsonBody<{ workingOrderId: string; toZoneId?: string }>(c);
       const id = requireUuidParam(body.workingOrderId, "WorkingOrderId");
       if (body.toZoneId !== undefined) requireUuidParam(body.toZoneId, "ServiceZoneId");
-      await gateZones(
-        deps,
-        session,
-        named({ orderId: id }, body.toZoneId !== undefined && { zoneId: body.toZoneId }),
-      );
       const answer = await withTransaction(deps.db, async (tx) => {
+        await checkZones(
+          tx,
+          deps.cfg,
+          session,
+          named({ orderId: id }, body.toZoneId !== undefined && { zoneId: body.toZoneId }),
+        );
         const at = new Date();
         const [order] = await tx
           .select({
@@ -2713,7 +2727,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
-      await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{ revision: unknown; lines: Record<string, string | null> }>(
         c,
       );
@@ -2721,6 +2734,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (body.lines === null || typeof body.lines !== "object" || Array.isArray(body.lines))
         throw invalid("lines");
       const revision = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         const [order] = await tx
           .select({ status: workingOrders.status, revision: workingOrders.revision })
           .from(workingOrders)
@@ -2758,12 +2772,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const id = requireTabParam(c.req.param("id"));
-      await gateZones(deps, session, [{ orderId: id }]);
-      const tab = await withTransaction(deps.db, async (tx) => ({
-        lines: await readTabLines(tx, deps.cfg, id),
-        revision: await readOrderRevision(tx, id),
-        editSentLines: await VENUE_SERVICE.readEditSentLines(tx),
-      }));
+      const tab = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        return {
+          lines: await readTabLines(tx, deps.cfg, id),
+          revision: await readOrderRevision(tx, id),
+          editSentLines: await VENUE_SERVICE.readEditSentLines(tx),
+        };
+      });
       return c.json(tab);
     }),
   );
@@ -2773,7 +2789,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
-      await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const submissionId = submissionIdOf(body);
       if (
@@ -2788,13 +2803,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         if (!isUuid(lineId)) throw new AppError("tab.line_not_found", { tabId: id, lineId });
       if (typeof body.stationId !== "string" || !isUuid(body.stationId))
         throw new AppError("station.not_found", { stationId: String(body.stationId) });
-      const result = await withTransaction(deps.db, (tx) =>
-        moveDishesToStation(tx, cfg, id, {
+      const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        return moveDishesToStation(tx, cfg, id, {
           submissionId,
           lineIds,
           stationId: body.stationId as string,
-        }),
-      );
+        });
+      });
       return c.json(result);
     }),
   );
@@ -2807,11 +2823,11 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_open");
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
-      await gateZones(deps, session, [{ orderId: id }]);
       const { revision, ...patch } = await readJsonBody<OrderLinePatch & { revision?: unknown }>(c);
       const copy = requireRevision(revision);
       const sendCfg = sendingCfg(cfg, c, session.device);
       const saved = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         const revision = await updateOrderLine(tx, sendCfg, id, lineNo, patch, copy, personId);
         await issueIfFullyPaid(tx, fiscal, sendCfg, id, personId);
         return { revision, party: await partyRevisionOfOrder(tx, id) };
@@ -2826,13 +2842,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = requireTabParam(c.req.param("id"));
       const lineNo = requireLineNo(id, c.req.param("lineNo"));
-      await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{ courseId?: string | null }>(c);
       const courseId = body.courseId ?? null;
       if (courseId !== null && !isUuid(courseId)) {
         throw new AppError("course.not_found", { courseId });
       }
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         await setLineCourse(tx, cfg, id, lineNo, courseId);
       });
       return c.body(null, 200);
@@ -2845,9 +2861,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const cfg = requestCfg(deps.cfg, session);
       const id = requireTabParam(c.req.param("id"));
-      await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{ lineNos?: number[] }>(c);
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         await sendLines(tx, cfg, id, body.lineNos ?? []);
       });
       return c.body(null, 200);
@@ -2859,9 +2875,9 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const session = await requireSession(deps, c);
       const cfg = requestCfg(deps.cfg, session);
       const id = requireTabParam(c.req.param("id"));
-      await gateZones(deps, session, [{ orderId: id }]);
       const body = await readJsonBody<{ lineNos?: number[] }>(c);
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
         await recallLines(tx, cfg, id, body.lineNos ?? []);
       });
       return c.body(null, 200);
@@ -2874,12 +2890,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      await gateZones(deps, session, [{ tableId: id }]);
       const body = await readJsonBody<{ statusId: string | null }>(c);
       const statusId = body.statusId ?? null;
       if (statusId !== null && !isUuid(statusId))
         throw new AppError("status.not_found", { statusId });
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ tableId: id }]);
         await setTableStatus(tx, cfg, id, statusId);
       });
       return c.body(null, 200);
@@ -2895,7 +2911,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      await gateZones(deps, session, [{ tableId: id }]);
       const body = await readJsonBody<{
         zoneId?: unknown;
         posX?: unknown;
@@ -2909,7 +2924,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (typeof body.zoneId !== "string")
         throw new AppError("management.request_invalid", { field: "zoneId" });
       if (!isUuid(body.zoneId)) throw new AppError("zone.not_found", { zoneId: body.zoneId });
-      await gateZones(deps, session, [{ zoneId: body.zoneId }]);
       if (typeof body.posX !== "number")
         throw new AppError("management.request_invalid", { field: "posX" });
       if (typeof body.posY !== "number")
@@ -2922,6 +2936,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { zoneId, posX, posY, rotation } = body;
       const shape = body.shape as FloorTableShape;
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ tableId: id }, { zoneId }]);
         await authorize(tx, { sessionId, permission: "venue.configure" });
         await setTablePlacement(tx, cfg, id, { zoneId, posX, posY, shape, rotation });
       });
@@ -2937,8 +2952,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const cfg = requestCfg(deps.cfg, session);
       const id = c.req.param("id");
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
-      await gateZones(deps, session, [{ tableId: id }]);
       await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ tableId: id }]);
         await authorize(tx, { sessionId, permission: "venue.configure" });
         await clearPlacement(tx, cfg, id);
       });
@@ -2952,12 +2967,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const billId = requireTabParam(c.req.param("id"));
-      await gateZones(deps, session, [{ orderId: billId }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const transfers = requireTransfers(body.transfers);
       const command = billCommand(personId, body);
       const saleCfg = sendingCfg(cfg, c, session.device);
       const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: billId }]);
         const split = await splitBill(tx, cfg, billId, transfers, command);
         await issueIfFullyPaid(tx, fiscal, saleCfg, billId, personId);
         return split;
@@ -2973,12 +2988,13 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const intoBillId = requireTabParam(c.req.param("id"));
-      await gateZones(deps, session, [{ orderId: intoBillId }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const fromBillId = requireOtherBill(body.fromBillId, "fromBillId");
-      await gateZones(deps, session, [{ orderId: fromBillId }]);
       const command = billCommand(personId, body);
-      await withTransaction(deps.db, (tx) => mergeBills(tx, cfg, intoBillId, fromBillId, command));
+      await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: intoBillId }, { orderId: fromBillId }]);
+        return mergeBills(tx, cfg, intoBillId, fromBillId, command);
+      });
       return c.body(null, 204);
     }),
   );
@@ -2990,15 +3006,14 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const fromBillId = requireTabParam(c.req.param("id"));
-      await gateZones(deps, session, [{ orderId: fromBillId }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const toBillId = requireOtherBill(body.toBillId, "toBillId");
-      await gateZones(deps, session, [{ orderId: toBillId }]);
       const transfers = requireTransfers(body.transfers);
       const command = billCommand(personId, body);
-      await withTransaction(deps.db, (tx) =>
-        transferItems(tx, cfg, fromBillId, toBillId, transfers, command),
-      );
+      await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: fromBillId }, { orderId: toBillId }]);
+        return transferItems(tx, cfg, fromBillId, toBillId, transfers, command);
+      });
       return c.body(null, 204);
     }),
   );
@@ -3010,22 +3025,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const billId = requireTabParam(c.req.param("id"));
-      await gateZones(deps, session, [{ orderId: billId }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const to = requireMoveTarget(body.to);
-      await gateZones(
-        deps,
-        session,
-        named(
-          "tableId" in to && { tableId: to.tableId },
-          "counter" in to && to.counter.zoneId !== null && { zoneId: to.counter.zoneId },
-        ),
-      );
       const command = moveCommand(personId, body);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const result = await withTransaction(deps.db, (tx) =>
-        moveBill(tx, sendCfg, billId, to, command),
-      );
+      const result = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [
+          { orderId: billId },
+          ...named(
+            "tableId" in to && { tableId: to.tableId },
+            "counter" in to && to.counter.zoneId !== null && { zoneId: to.counter.zoneId },
+          ),
+        ]);
+        return moveBill(tx, sendCfg, billId, to, command);
+      });
       return c.json(result);
     }),
   );

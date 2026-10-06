@@ -35,7 +35,7 @@ import {
 } from "./till-api.js";
 import { requestCfg } from "./request-config.js";
 import { requireSession } from "./till-session.js";
-import { gateZones } from "./zone-access.js";
+import { checkZones } from "./zone-access.js";
 import "./errors.js";
 
 const NOTE_LIMIT = 500;
@@ -130,7 +130,6 @@ export function mountAdjustmentsApi(
       const { personId } = session;
       const cfg = requestCfg(deps.cfg, session);
       const id = requireBill(c.req.param("id"));
-      await gateZones(deps, session, [{ orderId: id }]);
       const body = asObject(await readRawJsonBody<unknown>(c));
       const ask = parseAsk(id, personId, body);
       const submissionId = submissionIdOf(body);
@@ -143,6 +142,7 @@ export function mountAdjustmentsApi(
         const approver = withCheck(parsedApprover, checked);
         const saleCfg = sendingCfg(cfg, c, session.device);
         return withTransaction(deps.db, async (tx) => {
+          await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
           const applied = await applyAdjustment(
             tx,
             cfg,
@@ -164,11 +164,11 @@ export function mountAdjustmentsApi(
       const session = await requireSession(deps, c);
       const { personId } = session;
       const id = requireBill(c.req.param("id"));
-      await gateZones(deps, session, [{ orderId: id }]);
       const ask = parseAsk(id, personId, asObject(await readRawJsonBody<unknown>(c)));
-      const preview = await withTransaction(deps.db, (tx) =>
-        previewAdjustment(tx, ask, deps.venueLocale),
-      );
+      const preview = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
+        return previewAdjustment(tx, ask, deps.venueLocale);
+      });
       return c.json(preview);
     }),
   );

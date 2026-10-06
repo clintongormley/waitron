@@ -2,10 +2,19 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, workingOrders, type Transaction } from "@waitron/db";
+import {
+  billPayments,
+  deviceProfiles,
+  parties,
+  tenants,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
+import { completeBillPayment } from "./bill-payments.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { addProductToMenu, createCatalogue, createProduct } from "@waitron/catalogue";
+import { ADJUSTMENT_ACTIONS } from "@waitron/adjustments";
 import { hashPin, persons } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { SimulatorPaymentProvider } from "@waitron/payments";
@@ -110,11 +119,24 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/working-orders/:id/payments                   | order                  | refuses POST /api/working-orders/:id/payments        |
  * | POST /api/working-orders/:id/payments/:paymentId/refunds| order                  | refuses POST .../payments/:paymentId/refunds         |
  * | POST /api/working-orders/:id/adjustments, /preview      | order                  | refuses POST .../adjustments, /preview               |
+ * | GET  /api/bills/lookup                                  | list, by order zone    | "shows a Deli bill to the Deli ...", "fills ... twenty Deli bills ..." |
+ * | GET  /api/invoices/lookup                               | list, by order zone    | "shows a Deli invoice to the Deli ...", "fills ... twenty Deli invoices ..." |
+ *
+ * The bill lookup searches party names, delivery labels and table labels as well as numbers, and
+ * the invoice lookup the customer's legal name, so both are filtered like the other lists, reading
+ * on past the rows they hide until a page of twenty shows.
+ *
+ * Where the check runs: first inside the route's own transaction, except where the route's work
+ * runs in a helper that opens its own transaction — `/api/sales`, `/api/pay`, POST
+ * `/api/working-orders`, GET, PUT and DELETE `/api/working-orders/:id`, `/placed`,
+ * `/invoice-choice`, `/place`, `/prep`, `/collect`, `/cancel`, `/api/sales/:id/receipt`,
+ * `/payment-slip`, `/reprint` and the four bill-payment routes — where it reads just before, outside
+ * any transaction.
  *
  * Not zone-gated: the session, staff, till, locale and product reads; the kitchen's station,
  * notice, ticket-item, expo, watcher and `/api/orders/:id/stations/:sid/advance` routes, whose scope
- * is the device's station or watcher (Task 6); the drawer, the authorizer and reason lists and
- * `/api/statuses`, which name no zone; and the bill and invoice lookups by number.
+ * is the device's station or watcher (Task 6); and the drawer, the authorizer and reason lists and
+ * `/api/statuses`, which name no zone.
  */
 
 const suite = useVenueDb({
@@ -157,6 +179,8 @@ let restaurantProfile: string;
 let restaurant: string;
 /** Ana on a till whose profile has no department row. */
 let plain: string;
+/** Ana on a till whose profile is the Deli's, starting at the Deli counter. */
+let deli: string;
 let personId: string;
 
 async function signIn(profileId: string): Promise<string> {
@@ -324,6 +348,17 @@ beforeAll(async () => {
   );
   restaurant = await signIn(restaurantProfile);
   plain = await signIn(await profile());
+  const deliProfile = await profile();
+  await inTx(v, async (tx) =>
+    setProfileServiceAccess(tx, v.cfg, deliProfile, {
+      departmentId: await departmentOf(tx, f.deliCounter),
+      allowedZoneIds: null,
+      startingZoneId: f.deliCounter,
+      stationIds: [],
+      watcherIds: [],
+    }),
+  );
+  deli = await signIn(deliProfile);
 }, 120_000);
 
 async function send(
@@ -360,6 +395,13 @@ type Row = readonly [
 const id = randomUUID();
 const deliOrderZone = (x: Fixtures) => x.deliCounter;
 const deliTableZone = (x: Fixtures) => x.deliTables;
+const adjustment = () => ({
+  submissionId: randomUUID(),
+  expectedRevision: 0,
+  action: ADJUSTMENT_ACTIONS[0],
+  lineId: null,
+  reasonId: randomUUID(),
+});
 const saleLines = (x: Fixtures) => [{ menuItemId: x.deliItem, quantity: "1" }];
 
 const ROUTES: readonly Row[] = [
@@ -610,21 +652,21 @@ const ROUTES: readonly Row[] = [
     "POST /api/parties/:id/finish",
     "POST",
     (x) => `/api/parties/${x.deliParty}/finish`,
-    () => ({}),
+    () => ({ expectedPartyRevision: 0 }),
     deliTableZone,
   ],
   [
     "POST /api/parties/:id/bill-request",
     "POST",
     (x) => `/api/parties/${x.deliParty}/bill-request`,
-    () => ({}),
+    () => ({ submissionId: randomUUID(), expectedPartyRevision: 0, requested: true }),
     deliTableZone,
   ],
   [
     "PUT /api/parties/:id/name",
     "PUT",
     (x) => `/api/parties/${x.deliParty}/name`,
-    () => ({}),
+    () => ({ name: "Renamed", expectedPartyRevision: 0 }),
     deliTableZone,
   ],
   ...(["move", "join"] as const).flatMap((verb): Row[] => [
@@ -632,7 +674,10 @@ const ROUTES: readonly Row[] = [
       `POST /api/parties/:id/${verb} (party)`,
       "POST",
       (x) => `/api/parties/${x.deliParty}/${verb}`,
-      () => ({}),
+      (x) => ({
+        [verb === "move" ? "toTableId" : "tableId"]: x.restFreeTable,
+        expectedPartyRevision: 0,
+      }),
       deliTableZone,
     ],
     [
@@ -650,7 +695,7 @@ const ROUTES: readonly Row[] = [
     "POST /api/parties/:id/split-table",
     "POST",
     (x) => `/api/parties/${x.deliParty}/split-table`,
-    () => ({}),
+    (x) => ({ tableId: x.deliTable, billId: null, expectedPartyRevision: 0 }),
     deliTableZone,
   ],
   ...(["bills", "groups", "current-orders", "print-problems", "drafts"] as const).map(
@@ -666,56 +711,62 @@ const ROUTES: readonly Row[] = [
     "POST /api/parties/:id/groups",
     "POST",
     (x) => `/api/parties/${x.deliParty}/groups`,
-    () => ({}),
+    () => ({ submissionId: randomUUID(), expectedPartyRevision: 0, groups: [] }),
     deliTableZone,
   ],
   ...(["fire", "ready", "away", "served", "snooze", "unsnooze"] as const).map((verb): Row => [
     `POST /api/parties/:id/groups/:gid/${verb}`,
     "POST",
     (x) => `/api/parties/${x.deliParty}/groups/${id}/${verb}`,
-    () => ({}),
+    () => ({ submissionId: randomUUID(), expectedPartyRevision: 0, minutes: 5 }),
     deliTableZone,
   ]),
   ...(["served", "unserved"] as const).map((verb): Row => [
     `POST /api/parties/:id/${verb}`,
     "POST",
     (x) => `/api/parties/${x.deliParty}/${verb}`,
-    () => ({}),
+    () => ({ submissionId: randomUUID(), expectedPartyRevision: 0, items: [] }),
     deliTableZone,
   ]),
   [
     "PUT /api/parties/:id/groups/order",
     "PUT",
     (x) => `/api/parties/${x.deliParty}/groups/order`,
-    () => ({}),
+    () => ({ submissionId: randomUUID(), expectedPartyRevision: 0, heldGroupIds: [] }),
     deliTableZone,
   ],
   [
     "POST /api/parties/:id/groups/move",
     "POST",
     (x) => `/api/parties/${x.deliParty}/groups/move`,
-    () => ({}),
+    () => ({ submissionId: randomUUID(), expectedPartyRevision: 0, moves: [], target: "new" }),
     deliTableZone,
   ],
   [
     "PUT /api/parties/:id/drafts",
     "PUT",
     (x) => `/api/parties/${x.deliParty}/drafts`,
-    () => ({}),
+    () => ({ draftId: null, revision: 0 }),
     deliTableZone,
   ],
   ...(["take-over", "submit"] as const).map((verb): Row => [
     `POST /api/parties/:id/drafts/:did/${verb}`,
     "POST",
     (x) => `/api/parties/${x.deliParty}/drafts/${id}/${verb}`,
-    () => ({}),
+    () => ({
+      submissionId: randomUUID(),
+      expectedPartyRevision: 0,
+      revision: 0,
+      draftRevision: 0,
+      groups: [],
+    }),
     deliTableZone,
   ]),
   [
     "POST /api/parties/:id/unpaid-departure",
     "POST",
     (x) => `/api/parties/${x.deliParty}/unpaid-departure`,
-    () => ({}),
+    () => ({ expectedPartyRevision: 0, reason: "Left" }),
     deliTableZone,
   ],
   [
@@ -757,14 +808,14 @@ const ROUTES: readonly Row[] = [
     "POST /api/working-orders/:id/lines/move-station",
     "POST",
     (x) => `/api/working-orders/${x.deliOrder}/lines/move-station`,
-    () => ({}),
+    () => ({ submissionId: randomUUID(), lineIds: [id], stationId: id }),
     deliOrderZone,
   ],
   [
     "PUT /api/working-orders/:id/lines/:lineNo",
     "PUT",
     (x) => `/api/working-orders/${x.deliOrder}/lines/1`,
-    () => ({}),
+    () => ({ revision: 0 }),
     deliOrderZone,
   ],
   [
@@ -785,7 +836,7 @@ const ROUTES: readonly Row[] = [
     "POST /api/bills/:id/split",
     "POST",
     (x) => `/api/bills/${x.deliTab}/split`,
-    () => ({}),
+    () => ({ transfers: [] }),
     deliTableZone,
   ],
   [
@@ -869,14 +920,14 @@ const ROUTES: readonly Row[] = [
     "POST /api/working-orders/:id/adjustments",
     "POST",
     (x) => `/api/working-orders/${x.deliOrder}/adjustments`,
-    () => ({}),
+    () => adjustment(),
     deliOrderZone,
   ],
   [
     "POST /api/working-orders/:id/adjustments/preview",
     "POST",
     (x) => `/api/working-orders/${x.deliOrder}/adjustments/preview`,
-    () => ({}),
+    () => adjustment(),
     deliOrderZone,
   ],
 ];
@@ -1086,5 +1137,153 @@ describe("a Restaurant profile in its own zones", () => {
       status: 409,
       body: { error: { code: "device_profile.no_service_zone", params: { profileId } } },
     });
+  });
+});
+
+describe("the bill and invoice lookups", () => {
+  const ids = (body: Record<string, unknown>, key: string) =>
+    (body[key] as { workingOrderId: string }[]).map((row) => row.workingOrderId);
+
+  /** A seated party named `name`, whose bill waits for payment. */
+  async function unpaidBill(tableId: string, menuItemId: string, name: string): Promise<string> {
+    const seated = await seatWithRound(tableId, menuItemId);
+    await inTx(v, async (tx) => {
+      await tx.update(parties).set({ name }).where(eq(parties.id, seated.partyId));
+      await tx
+        .update(workingOrders)
+        .set({ status: "placed" })
+        .where(eq(workingOrders.id, seated.tabId));
+    });
+    return seated.tabId;
+  }
+
+  /** A seated party's bill, invoiced in full to `legalName` and paid. */
+  async function invoiced(tableId: string, menuItemId: string, legalName: string): Promise<string> {
+    await inTx(v, (tx) =>
+      tx.update(tenants).set({ taxpayerDomicile: "Calle Mayor 1, 28013 Madrid" }),
+    );
+    const { tabId } = await seatWithRound(tableId, menuItemId);
+    const lines = await send(plain, "GET", `/api/working-orders/${tabId}/lines`);
+    const chosen = await send(plain, "PUT", `/api/working-orders/${tabId}/invoice-choice`, {
+      revision: lines.body.revision,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName,
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+    expect(chosen).toMatchObject({ status: 200 });
+    // Through the payment's completion, as `bill-payments.test.ts` files one: the till's payment
+    // route refuses a bill chosen for a full invoice.
+    await inTx(v, async (tx) => {
+      const [payment] = await tx
+        .insert(billPayments)
+        .values({
+          workingOrderId: tabId,
+          submissionId: randomUUID(),
+          fingerprint: "f",
+          kind: "contribution",
+          method: "card",
+          applied: 200,
+          state: "pending",
+          requestedBy: OPERATOR,
+          source: v.cfg.origin.source,
+          deviceId: v.cfg.origin.deviceId,
+        })
+        .returning({ id: billPayments.id });
+      await completeBillPayment(
+        tx,
+        { db: suite.db, backend: v.backend, clock: v.clock, log: noopLog },
+        v.cfg,
+        payment!.id,
+        new Date(),
+      );
+    });
+    return tabId;
+  }
+
+  const deliTable = (label: string) =>
+    inTx(v, async (tx) => (await createTable(tx, v.cfg, { label, zoneId: f.deliTables })).id);
+  const deliTableItem = async () =>
+    (
+      await inTx(v, (tx) =>
+        offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, serviceMode: "table_tab" }),
+      )
+    ).offerFor(v.productId("Agua"));
+
+  it("shows a Deli bill to the Deli and to a profile with no department, never to the Restaurant", async () => {
+    const deliBill = await unpaidBill(
+      await inTx(
+        v,
+        async (tx) => (await createTable(tx, v.cfg, { label: "D7", zoneId: f.deliTables })).id,
+      ),
+      (
+        await inTx(v, (tx) =>
+          offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, serviceMode: "table_tab" }),
+        )
+      ).offerFor(v.productId("Agua")),
+      "Lookup Deli",
+    );
+    const restBill = await unpaidBill(await v.table("R7"), v.item("Agua"), "Lookup Sala");
+    const as = async (cookie: string) => {
+      const answer = await send(cookie, "GET", "/api/bills/lookup?q=Lookup");
+      expect(answer.status).toBe(200);
+      return ids(answer.body, "bills");
+    };
+    expect(await as(restaurant)).toEqual([restBill]);
+    expect(await as(deli)).toEqual([deliBill]);
+    expect((await as(plain)).sort()).toEqual([deliBill, restBill].sort());
+  });
+
+  it("shows a Deli invoice to the Deli and to a profile with no department, never to the Restaurant", async () => {
+    const deliInvoice = await invoiced(
+      await deliTable("D8"),
+      await deliTableItem(),
+      "Lookup Deli Invoices SL",
+    );
+    const restInvoice = await invoiced(
+      await v.table("R9"),
+      v.item("Agua"),
+      "Lookup Sala Invoices SL",
+    );
+    const as = async (cookie: string) => {
+      const answer = await send(cookie, "GET", "/api/invoices/lookup?q=Invoices");
+      expect(answer.status).toBe(200);
+      return ids(answer.body, "invoices");
+    };
+    expect(await as(restaurant)).toEqual([restInvoice]);
+    expect(await as(deli)).toEqual([deliInvoice]);
+    expect((await as(plain)).sort()).toEqual([deliInvoice, restInvoice].sort());
+  });
+
+  it("fills the Restaurant's page past twenty Deli invoices that match first", async () => {
+    const restInvoice = await invoiced(await v.table("R10"), v.item("Agua"), "Packed Sala SL");
+    const item = await deliTableItem();
+    for (let index = 0; index < 21; index++) {
+      await invoiced(await deliTable(`DI${index}`), item, `Packed Deli ${index} SL`);
+    }
+    const answer = await send(restaurant, "GET", "/api/invoices/lookup?q=Packed");
+    expect(ids(answer.body, "invoices")).toEqual([restInvoice]);
+  });
+
+  it("fills the Restaurant's page past twenty Deli bills that match first", async () => {
+    const restBill = await unpaidBill(await v.table("R8"), v.item("Agua"), "Crowded Sala");
+    const deliItem = (
+      await inTx(v, (tx) =>
+        offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, serviceMode: "table_tab" }),
+      )
+    ).offerFor(v.productId("Agua"));
+    for (let index = 0; index < 21; index++) {
+      const table = await inTx(
+        v,
+        async (tx) =>
+          (await createTable(tx, v.cfg, { label: `DC${index}`, zoneId: f.deliTables })).id,
+      );
+      await unpaidBill(table, deliItem, `Crowded Deli ${index}`);
+    }
+    const answer = await send(restaurant, "GET", "/api/bills/lookup?q=Crowded");
+    expect(ids(answer.body, "bills")).toEqual([restBill]);
   });
 });
