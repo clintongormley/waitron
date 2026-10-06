@@ -36,11 +36,9 @@ const TABLES = [
   "zone_menus",
   "device_zone_defaults",
   "station_claims",
-  "station_hours",
   "station_fallbacks",
   "station_day_states",
   "route_exceptions",
-  "department_hours",
   "order_service_contexts",
   "working_line_contexts",
   "service_settings",
@@ -138,6 +136,15 @@ describe("the venue-service migration set carries no tenant column", () => {
     expect(carrying).toEqual([]);
   });
 
+  it("leaves no interval-list hours table behind", async () => {
+    const left = await db.execute<{ name: string }>(
+      sql`select name from sqlite_master where name in ('station_hours', 'department_hours',
+        'station_hours_interval_key', 'department_hours_interval_key')`,
+    );
+    expect(left.rows).toEqual([]);
+    expect((await columnsOf("hours_week_cells")).length).toBeGreaterThan(0);
+  });
+
   it("keys and links every table on its own columns and each parent's primary key", async () => {
     const shape: Record<string, { primaryKey: string[]; foreignKeys: string[] }> = {};
     for (const table of TABLES) {
@@ -180,7 +187,6 @@ describe("the venue-service migration set carries no tenant column", () => {
           "(station_id) -> kitchen_stations(id)",
         ],
       },
-      station_hours: { primaryKey: ["id"], foreignKeys: ["(station_id) -> kitchen_stations(id)"] },
       station_fallbacks: {
         primaryKey: ["station_id"],
         foreignKeys: [
@@ -201,10 +207,6 @@ describe("the venue-service migration set carries no tenant column", () => {
           "(station_id) -> kitchen_stations(id)",
           "(zone_id) -> floor_zones(id)",
         ],
-      },
-      department_hours: {
-        primaryKey: ["id"],
-        foreignKeys: ["(department_id) -> departments(id) on delete cascade"],
       },
       order_service_contexts: {
         primaryKey: ["working_order_id"],
@@ -242,14 +244,7 @@ describe("the venue-service migration set carries no tenant column", () => {
     // No PRAGMA reports a partial index's `WHERE`, so it is read off the stored statement.
     const predicate = (name: string) => / WHERE (.*)$/.exec(defs[name]?.sql ?? "")?.[1];
     expect(columns("station_claims_folder_key")).toEqual(["location_id", "category_id"]);
-    expect(columns("station_hours_interval_key")).toEqual([
-      "station_id",
-      "weekday",
-      "opens_at",
-      "closes_at",
-    ]);
     expect(columns("station_day_states_day_key")).toEqual(["station_id", "business_day"]);
-    expect(defs["station_hours_interval_key"]?.unique).toBe(true);
     expect(defs["station_day_states_day_key"]?.unique).toBe(true);
     expect(defs["station_claims_folder_key"]?.unique).toBe(true);
     expect(columns("route_exceptions_order_idx")).toEqual(["location_id", "position"]);
@@ -259,12 +254,6 @@ describe("the venue-service migration set carries no tenant column", () => {
     expect(predicate("kitchen_notices_open_idx")).toBe(
       `"kitchen_notices"."acknowledged_at" is null`,
     );
-    expect(columns("department_hours_interval_key")).toEqual([
-      "department_id",
-      "weekday",
-      "opens_at",
-      "closes_at",
-    ]);
     expect(columns("departments_location_name_key")).toEqual(["location_id", "name"]);
     expect(columns("departments_one_default_per_location_key")).toEqual(["location_id"]);
     expect(predicate("departments_one_default_per_location_key")).toBe(
@@ -275,7 +264,6 @@ describe("the venue-service migration set carries no tenant column", () => {
       `"zone_service_policies"."is_counter_default"`,
     );
     for (const name of [
-      "department_hours_interval_key",
       "departments_location_name_key",
       "departments_one_default_per_location_key",
       "zone_service_policies_one_counter_default_key",
@@ -349,11 +337,6 @@ describe("the venue-service foreign keys refuse a missing target", () => {
     await refusal(
       sql`insert into zone_menus (zone_id, menu_id) values (${v.zoneId}, ${v.menuId})`,
       "zone_menus_zone_fk",
-    );
-    await refusal(
-      sql`insert into department_hours (id, department_id, weekday, opens_at, closes_at)
-        values (${randomUUID()}, ${missing}, 1, '09:00', '17:00')`,
-      "department_hours_department_fk",
     );
     await refusal(
       sql`insert into order_service_contexts

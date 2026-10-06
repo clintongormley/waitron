@@ -18,7 +18,6 @@ import {
   nowIso,
   sales,
   table,
-  timeOfDay,
   tsString,
   workingOrderLines,
   workingOrders,
@@ -222,26 +221,6 @@ export const deviceZoneDefaults = table(
       foreignColumns: [floorZones.id],
       name: "device_zone_defaults_zone_fk",
     }),
-  ],
-);
-
-export const departmentHours = table(
-  "department_hours",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    departmentId: id("department_id").notNull(),
-    weekday: count("weekday").notNull(),
-    opensAt: timeOfDay("opens_at").notNull(),
-    closesAt: timeOfDay("closes_at").notNull(),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.departmentId],
-      foreignColumns: [departments.id],
-      name: "department_hours_department_fk",
-    }).onDelete("cascade"),
-    check("department_hours_weekday_ck", sql`${t.weekday} between 0 and 6`),
-    unique("department_hours_interval_key").on(t.departmentId, t.weekday, t.opensAt, t.closesAt),
   ],
 );
 

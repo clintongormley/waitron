@@ -52,9 +52,18 @@ describe("VENUE_SERVICE", () => {
     expect(names).not.toContain("kitchen_notices");
   });
 
-  it("transfers station hours and fallbacks but not today's by-hand state", () => {
+  it("transfers opening hours and fallbacks but not today's by-hand state", () => {
     const names = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
-    expect(names).toContain("station_hours");
+    for (const table of [
+      "hours_week_cells",
+      "hours_week_periods",
+      "special_dates",
+      "special_date_hours",
+      "special_date_hours_periods",
+    ])
+      expect(names).toContain(table);
+    expect(names).not.toContain("station_hours");
+    expect(names).not.toContain("department_hours");
     expect(names).toContain("station_fallbacks");
     expect(names).not.toContain("station_day_states");
   });

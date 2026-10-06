@@ -5192,9 +5192,9 @@ approved.
     choice: a note that `#sessionPermissions` only guides the screen and every module route is still
     checked on the server (not traced).
   - Found by #611 (`packages/venue-service`), outside its package or not fixable in a comments-only
-    change. `apps/server/scripts/demo-seed/seed-floor.ts`
-    writes `department_hours` times as `HH:MM`, bypassing `storedTime`'s `HH:MM:SS` (from #489; the
-    dashboard slices both forms to five characters). The venue-service `migrations.test.ts` case
+    change. The demo seed's `HH:MM` `department_hours` rows are gone: Hours (A261 step 5) dropped
+    the table, and `apps/server/scripts/demo-seed/seed-floor.ts` now writes through
+    `replaceWeekHours`, which pads to `HH:MM:SS`. The venue-service `migrations.test.ts` case
     titled "… or at commit" asserts no refusal at commit, which is now testable because
     `packages/store/src/node-sqlite-adapter.ts` rolls back a refused commit (since #489); a
     commit-time case, and the title, are a test change. `operations.test.ts`'s placeholder unit id

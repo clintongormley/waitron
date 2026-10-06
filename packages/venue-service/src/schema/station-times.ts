@@ -1,27 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, foreignKey, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { count, day, flag, id, kitchenStations, newId, table, timeOfDay } from "@waitron/db";
-
-export const stationHours = table(
-  "station_hours",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    stationId: id("station_id").notNull(),
-    weekday: count("weekday").notNull(),
-    opensAt: timeOfDay("opens_at").notNull(),
-    closesAt: timeOfDay("closes_at").notNull(),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.stationId],
-      foreignColumns: [kitchenStations.id],
-      name: "station_hours_station_fk",
-    }),
-    check("station_hours_weekday_ck", sql`${t.weekday} between 0 and 6`),
-    check("station_hours_distinct_ck", sql`${t.opensAt} <> ${t.closesAt}`),
-    uniqueIndex("station_hours_interval_key").on(t.stationId, t.weekday, t.opensAt, t.closesAt),
-  ],
-);
+import { day, flag, id, kitchenStations, newId, table } from "@waitron/db";
 
 export const stationFallbacks = table(
   "station_fallbacks",
