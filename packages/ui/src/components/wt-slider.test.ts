@@ -135,6 +135,21 @@ test("a drag that ends without a change still lets a new value redraw the number
   expect(shownOf(el)).toBe("3");
 });
 
+test("a page that sets the value straight back on wt-change puts the range back too", async () => {
+  const el = await mountSlider();
+  const input = inputOf(el);
+  el.addEventListener("wt-change", () => (el.value = 6));
+
+  input.value = "8";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  await el.updateComplete;
+
+  expect(el.value).toBe(6);
+  expect(shownOf(el)).toBe("6");
+  expect(input.value).toBe("6");
+});
+
 test("a keyboard step moves the value by one step and sends exactly one wt-change", async () => {
   const el = await mountSlider();
   const heard = hostHears(el);

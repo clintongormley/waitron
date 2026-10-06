@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { live } from "lit/directives/live.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
@@ -56,8 +57,7 @@ export class WtSlider extends LitElement {
   @property({ type: Number }) value = 0;
   @property({ type: Boolean, reflect: true }) disabled = false;
   @property() error = "";
-  /** The number under the latest drag, until a release or a new `value` replaces it. A drag that
-   * ends where it began sends no `change`, so a release alone cannot be relied on to clear it. */
+  /** The number under the latest drag, until a new `value` replaces it. */
   @state() private shown: number | null = null;
 
   readonly #id = uniqueId("wt-slider");
@@ -79,9 +79,10 @@ export class WtSlider extends LitElement {
 
   override render() {
     const errorId = `${this.#id}-error`;
+    const shown = this.shown ?? this.value;
     return html`<div class="row">
         <label for=${this.#id} part="label">${this.label}</label>
-        <span part="value" aria-hidden="true">${this.shown ?? this.value}</span>
+        <span part="value" aria-hidden="true">${shown}</span>
       </div>
       <input
         id=${this.#id}
@@ -90,7 +91,7 @@ export class WtSlider extends LitElement {
         .min=${String(this.min)}
         .max=${String(this.max)}
         .step=${String(this.step)}
-        .value=${String(this.value)}
+        .value=${live(String(shown))}
         ?disabled=${this.disabled}
         aria-invalid=${this.error ? "true" : nothing}
         aria-describedby=${this.error ? errorId : nothing}
