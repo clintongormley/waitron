@@ -789,6 +789,8 @@ export class SetupApp extends LitElement {
     this.cloudLiveUnknown = false;
     this.configurationError = undefined;
     this.fiscalTestError = undefined;
+    this.resetBusy = false;
+    this.resetOutcome = undefined;
     this.resetCredentialsRejected = false;
     this.resetInvalidField = undefined;
     this.resetError = undefined;
@@ -1246,16 +1248,24 @@ export class SetupApp extends LitElement {
   async #onResetRequested(event: CustomEvent<{ credential: ResetCredential }>): Promise<void> {
     event.stopPropagation();
     if (this.resetBusy) return;
+    const owner = this.shadowRoot?.querySelector("setup-reset-screen");
+    const generation = this.#rootGeneration;
+    const ownsBusy = () =>
+      this.isConnected &&
+      this.screen === "reset" &&
+      owner?.isConnected &&
+      this.shadowRoot?.querySelector("setup-reset-screen") === owner;
+    const current = () => ownsBusy() && generation === this.#rootGeneration;
     this.resetBusy = true;
     this.resetCredentialsRejected = false;
     this.resetInvalidField = undefined;
     this.resetError = undefined;
     try {
       await this.api.resetIncompleteAdopt(event.detail.credential);
-      if (!this.isConnected) return;
+      if (!current()) return;
       this.resetOutcome = { kind: "resetting", message: say("shell.reset.resetting") };
     } catch (error) {
-      if (!this.isConnected) return;
+      if (!current()) return;
       const { code, params } = (error ?? {}) as ApiError;
       switch (code) {
         case "password.invalid":
@@ -1282,7 +1292,7 @@ export class SetupApp extends LitElement {
           );
       }
     } finally {
-      if (this.isConnected) this.resetBusy = false;
+      if (ownsBusy()) this.resetBusy = false;
     }
   }
 

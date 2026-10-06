@@ -2228,6 +2228,20 @@ describe("resetting a join that stopped partway", () => {
     );
     screen.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!.click();
     await el.updateComplete;
+    const warning = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      "wt-unsaved-changes",
+    )!;
+    await expect.poll(() => warning.open).toBe(true);
+    warning.dispatchEvent(
+      new CustomEvent("wt-unsaved-choice", {
+        detail: { decision: "discard" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=screen-provisioning]") !== null)
+      .toBe(true);
     await openReset(el);
     expect(await bottomOf(await screenHost(el, "reset"))).toBe("");
     await submitReset(el);

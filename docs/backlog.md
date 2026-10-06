@@ -1213,7 +1213,11 @@ and using the existing trimming for URL, person ID and one-time code. A refusal 
 credential fields with the one-time code empty and keeps them protected. Clean/reverted values
 leave without a warning, and a successful Connect leaves no child unload listener. Disconnect,
 replacement requests and edits invalidate old Back answers; reconnect keeps the original baseline.
-Reset and restore setup forms still need work.
+Reset now protects its person ID and exact password before Back, retains failed credentials,
+and restores only that child on Discard. Its outcome removes the credential form and its unload
+scope. A late Reset reply cannot change a replacement form or reconnected draft; the same
+retained form releases its busy state when that request settles. Archive, bucket and Cloud
+restore setup forms still need work.
 See the dated setup entries in the W69 audit for commands and limits; activated native reload
 has not been verified.
 Dashboard voluntary logout and a language change also request the shared warning before their

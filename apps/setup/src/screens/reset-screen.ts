@@ -1,6 +1,12 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { focusFirstInvalid, submitOnEnter, baseStyles } from "@waitron/ui";
+import {
+  focusFirstInvalid,
+  submitOnEnter,
+  baseStyles,
+  leaveCoordinatorFor,
+  type DraftScope,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -30,10 +36,6 @@ export interface ResetScreenOutcome {
   message: string;
 }
 
-/**
- * Clears a join that stopped partway. The shell does the POST
- * (`apps/setup/src/setup-app.ts`) and maps its answer onto these properties.
- */
 @customElement("setup-reset-screen")
 export class SetupResetScreen extends LitElement {
   static override styles = [
@@ -78,18 +80,53 @@ export class SetupResetScreen extends LitElement {
 
   @state() private passwordVisible = false;
 
+  #baseline?: Record<ResetField, string>;
+  #scope?: DraftScope<Record<ResetField, string>>;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#registerScope();
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    super.disconnectedCallback();
+  }
+
+  #registerScope(): void {
+    if (!this.isConnected || !this.#baseline || this.#scope || this.outcome) return;
+    this.#scope = leaveCoordinatorFor(this)?.register({
+      id: this,
+      current: () => this.values,
+      snapshot: (form) => ({ ...form }),
+      equal: (a, b) => a.personId.trim() === b.personId.trim() && a.password === b.password,
+      restore: (form) => {
+        this.values = { ...form };
+        this.attempted = false;
+      },
+    });
+    this.#scope?.commit(this.#baseline);
+  }
+
   constructor() {
     super();
     new LocaleChangeController(this);
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    this.#baseline ??= { ...this.values };
+    if (this.outcome) {
+      this.#scope?.dispose();
+      this.#scope = undefined;
+    }
     if (changed.has("credentialsRejected")) this.rejectionDismissed = false;
     if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
     if (changed.has("errorMessage")) this.refusalDismissed = false;
   }
 
   protected override updated(changed: PropertyValues<this>): void {
+    this.#registerScope();
     if (changed.has("invalidField") && this.#refusedField() !== undefined)
       this.#focusFirstInvalid();
     else if (changed.has("credentialsRejected") && this.#rejected()) this.#focusPassword();
@@ -124,6 +161,7 @@ export class SetupResetScreen extends LitElement {
   #onField(key: ResetField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.values = { ...this.values, [key]: event.detail.value };
+    this.#scope?.changed();
     this.rejectionDismissed = true;
     if (key === this.invalidField) this.fieldRefusalDismissed = true;
   }

@@ -2343,3 +2343,34 @@ This completes the Connect child stage only. Reset/archive/bucket/cloud setup ch
 remaining page/tab/context routes, final advancing-owner classification and activated native
 reload remain open. Tasks 2/3 stay complete and Tasks 1/4/5/6 partial; W69 is not ready for
 finish-branch or landing.
+
+
+## 2026-10-06: Reset proof child checkpoint
+
+On the W69 branch, Reset registers its person ID and exact password against its initial empty
+values. Back asks before leaving an edited child; Keep and native warning Escape retain the
+values and return focus to Back. Discard restores only the child, retaining the wizard root.
+Person ID compares the existing trimmed request value; password whitespace stays significant.
+Clean/reverted forms leave directly. Submission sends the existing request without a question.
+A credential refusal stays dirty; a terminal outcome removes the form and its unload scope.
+Reconnect retains the initial baseline. Departed Reset replies cannot change a replacement form.
+Replies from an older shell connection cannot replace its draft; the same retained form releases
+its busy flag when its outstanding request settles.
+
+`pnpm --filter @waitron/setup exec vitest run src/setup-app-reset.unsaved-changes.test.ts`
+initially reported 11 failures and one pass. The added replacement reply cases failed twice;
+the reconnect busy assertion failed once. The final seven-file setup family reported 503 passes.
+Eight independent installed-candidate guard deletions or replacements failed their intended cases
+beside passing clean-Back controls; the restored Reset pair reported 47 passes. The unedited
+fiscal write-path and immutability suites reported 20 passes. Setup types, scoped lint, source
+formatting and diff checks passed. Exact commands and output are in Lane E's local
+`receipts/w69-setup-reset-20261006/`.
+
+Eight native real-shell flows covered EN/ES, light/dark and 390/1280 widths. Sixteen axe scans
+passed and sixteen captures were inspected in four contact sheets. API reads/reset responses
+were synthetic; an actual reset/restart, hovered colours and activated native reload remain
+unverified. The existing Reset refusal-departure test now answers Discard before returning;
+all its refusal-clearing assertions remain. Record that in the eventual PR's Changed test checks.
+Tasks 2/3 stay complete; Tasks 1/4/5/6 remain partial. Archive/bucket/Cloud restore, remaining
+page/till routes, final modal-owner classification and activated native reload remain open.
+W69 is not ready for finish-branch or landing at this checkpoint.
