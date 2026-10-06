@@ -4254,7 +4254,11 @@ narrow-viewport banner and drawer are unverified. That walk belongs with the dis
   history removal use a separately approved setup/reset instead. Later
   Hours/holidays/menu builds retain their own compatibility tests.
   [Step 8 Printing rules and drawer policy retirement plan](superpowers/plans/2026-10-05-printing-rules-and-drawer-policy-retirement.md)
-  was approved by the owner on 2026-10-05; its build remains open.
+  was approved by the owner on 2026-10-05; its build is parked for a reset decision. Manual drawer
+  authorization and backend policy-write/boot retirement are implemented in the unlanded branch;
+  page, client, export and column retirement remain open. The generated column rebuild refused
+  two populated product archives at `DROP TABLE locations` with `FOREIGN KEY constraint failed`
+  on 2026-10-06. The plan requires explicit reset approval or a redesigned migration before release.
   It removes the redundant
   page and legacy location receipt/drawer settings, makes manual drawer authorization unconditional,
   and preserves device/profile/printer gates, automatic drawer jobs and receipt/replay safeguards.

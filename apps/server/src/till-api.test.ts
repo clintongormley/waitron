@@ -1237,7 +1237,6 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       receipt: DEFAULT_RECEIPT,
       // The seeded location has no address.
       venueAddress: [],
-      receiptPrintMode: "auto",
       // Cookieless: no device, so the boot read resolves the `till` form-factor default canvas
       // (`getCanvasForFormFactor` → DEFAULT_CANVASES.till) rather than leaving it absent (SP-B4).
       canvas: DEFAULT_CANVASES.till,

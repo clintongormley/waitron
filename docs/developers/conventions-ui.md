@@ -168,7 +168,7 @@ till gets a profile of its own.
   the Disable route answers `device.unauthorized` (`requireSession`,
   `apps/server/src/till-session.ts`). A profile without
   `open-cash-drawer` is refused `device.forbidden_action` (`assertDeviceCapability`,
-  `apps/server/src/device-session.ts`); under the `gated` drawer policy the operator needs
+  `apps/server/src/device-session.ts`); the operator always needs
   `cash.drawer` or the PIN of someone holding it; then the device's current receipt printer must
   exist (`drawer.no_printer`) and have a drawer (`drawer.not_attached`).
 - **Taking cash.** A cash sale (`POST /api/sales`), a cash collection

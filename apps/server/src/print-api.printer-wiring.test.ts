@@ -594,18 +594,12 @@ describe("Station ↔ printer mapping routes (printer.manage)", () => {
   });
 });
 
-async function locationPrintMode(locationId: string): Promise<string> {
-  const row = await suite.db.execute<{ receipt_print_mode: string }>(
-    sql`select receipt_print_mode from locations where id = ${locationId}`,
-  );
-  return row.rows[0]!.receipt_print_mode;
-}
-
-async function locationDrawerPolicy(locationId: string): Promise<string> {
-  const row = await suite.db.execute<{ drawer_open_policy: string }>(
-    sql`select drawer_open_policy from locations where id = ${locationId}`,
-  );
-  return row.rows[0]!.drawer_open_policy;
+function retainedConfiguration() {
+  return {
+    locations: suite.db.all(sql`select * from locations order by id`),
+    drawer: suite.db.all(sql`select * from drawer_opens order by id`),
+    jobs: suite.db.all(sql`select * from print_jobs order by id`),
+  };
 }
 
 describe("Receipt-printer and drawer config routes (printer.manage)", () => {
@@ -624,7 +618,7 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
 
   it("keeps the retired venue receipt-mode route closed for every former value", async () => {
     const app = mountApp(tenantA);
-    const before = await locationPrintMode(tenantA.locationId);
+    const before = retainedConfiguration();
     for (const mode of ["never", "on_request", "auto"] as const) {
       const res = await send(
         app,
@@ -633,7 +627,7 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
         { cookie: managerCookie, body: { mode } },
       );
       expect(res.status).toBe(404);
-      expect(await locationPrintMode(tenantA.locationId)).toBe(before);
+      expect(retainedConfiguration()).toEqual(before);
     }
   });
 
@@ -656,39 +650,26 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
     expect(badMode.status).toBe(404);
   });
 
-  it("sets a location's drawer open policy as a manager (persists)", async () => {
+  it("keeps the retired drawer policy route closed without changing configuration or audit", async () => {
     const app = mountApp(tenantA);
-    for (const policy of ["open", "gated"] as const) {
-      const res = await send(
-        app,
-        "PATCH",
-        `/management-api/locations/${tenantA.locationId}/drawer-open-policy`,
-        { cookie: managerCookie, body: { policy } },
-      );
-      expect(res.status).toBe(204);
-      expect(await locationDrawerPolicy(tenantA.locationId)).toBe(policy);
+    const before = retainedConfiguration();
+    for (const cookie of [undefined, staffCookie, managerCookie]) {
+      for (const id of [tenantA.locationId, randomUUID(), "bad-id"]) {
+        for (const policy of ["open", "gated", "sometimes", null]) {
+          const res = await send(
+            app,
+            "PATCH",
+            `/management-api/locations/${id}/drawer-open-policy`,
+            {
+              cookie,
+              body: { policy },
+            },
+          );
+          expect(res.status).toBe(404);
+          expect(retainedConfiguration()).toEqual(before);
+        }
+      }
     }
-  });
-
-  it("400s an unknown location and a bad drawer-open-policy value", async () => {
-    const app = mountApp(tenantA);
-    const unknown = await send(
-      app,
-      "PATCH",
-      `/management-api/locations/${randomUUID()}/drawer-open-policy`,
-      { cookie: managerCookie, body: { policy: "gated" } },
-    );
-    expect(unknown.status).toBe(400);
-    expect(await unknown.json()).toMatchObject({ error: { code: "management.request_invalid" } });
-
-    const badPolicy = await send(
-      app,
-      "PATCH",
-      `/management-api/locations/${tenantA.locationId}/drawer-open-policy`,
-      { cookie: managerCookie, body: { policy: "sometimes" } },
-    );
-    expect(badPolicy.status).toBe(400);
-    expect(await badPolicy.json()).toMatchObject({ error: { code: "management.request_invalid" } });
   });
 
   it("GET /management-api/printer-profiles names each profile offering a printer on either list, once, ordered by profile name then printer id", async () => {
@@ -744,32 +725,22 @@ describe("Receipt-printer and drawer config routes (printer.manage)", () => {
     expect(manager.status).toBe(200);
   });
 
-  it("requires printer.manage on the drawer config route — 401 unauth, 403 staff, 2xx manager", async () => {
+  it("never lets an authenticated manager or staff restore the retired authorization bypass", async () => {
     const app = mountApp(tenantA);
-    const policyRoute = `/management-api/locations/${tenantA.locationId}/drawer-open-policy`;
-
-    const unauth = await send(app, "PATCH", policyRoute, {
-      body: { policy: "gated" },
-    });
-    expect(unauth.status).toBe(401);
-    expect(await unauth.json()).toMatchObject({ error: { code: "management_session.required" } });
-    const staffPolicy = await send(app, "PATCH", policyRoute, {
-      cookie: staffCookie,
-      body: { policy: "open" },
-    });
-    expect(staffPolicy.status).toBe(403);
-    expect(await staffPolicy.json()).toMatchObject({
-      error: { code: "authorization.not_permitted" },
-    });
-
-    expect(
-      (
-        await send(app, "PATCH", policyRoute, {
-          cookie: managerCookie,
-          body: { policy: "gated" },
-        })
-      ).status,
-    ).toBe(204);
+    const before = retainedConfiguration();
+    for (const cookie of [managerCookie, staffCookie, undefined]) {
+      const res = await send(
+        app,
+        "PATCH",
+        `/management-api/locations/${tenantA.locationId}/drawer-open-policy`,
+        {
+          cookie,
+          body: { policy: "open" },
+        },
+      );
+      expect(res.status).toBe(404);
+      expect(retainedConfiguration()).toEqual(before);
+    }
   });
 });
 

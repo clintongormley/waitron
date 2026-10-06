@@ -94,8 +94,6 @@ export interface TillInfo {
   receiptLanguages: string[];
   venueName: string;
   nif: string;
-  /** Whether issuance auto-enqueues the original receipt or leaves it for the completion prompt. */
-  receiptPrintMode: "auto" | "on_request" | "never";
   /**
    * The KDS bump mode: `line` (per-line bump only, the source of truth) or `ticket` (the display also
    * offers a whole-ticket bump).
@@ -2122,7 +2120,7 @@ export class TillApi {
    * Open the cash drawer with no sale → `POST /api/drawer/open`. Authorized and audited server-side; the
    * device's receipt printer is resolved there, so it takes no id.
    *
-   * Under a `gated` policy an operator whose role lacks `cash.drawer` is refused
+   * An operator whose role lacks `cash.drawer` is refused
    * `authorization.not_permitted` (403); the caller then fetches {@link listDrawerAuthorizers} and
    * retries with `override: { personId, pin }` for the authorizing supervisor. The override travels
    * ONLY in this request's body, never a URL, and only when supplied. A wrong PIN rejects `pin.invalid`
@@ -2133,7 +2131,7 @@ export class TillApi {
   }
 
   /**
-   * The eligible authorizers for a gated drawer open → `GET /api/drawer/authorizers`: the active persons
+   * The eligible authorizers for a manual drawer open → `GET /api/drawer/authorizers`: the active persons
    * whose role holds `cash.drawer`, with no secrets.
    */
   listDrawerAuthorizers(): Promise<StaffMember[]> {

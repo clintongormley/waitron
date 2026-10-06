@@ -11,7 +11,6 @@ import type { ReceiptQrText } from "@waitron/fiscal";
 import {
   deviceProfilePrinters,
   deviceProfiles,
-  drawerOpenPolicy,
   drawerOpens,
   locations,
   printAgents,
@@ -1281,26 +1280,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .orderBy(deviceProfiles.name, deviceProfilePrinters.printerId),
       );
       return c.json(rows);
-    }),
-  );
-
-  app.patch("/management-api/locations/:id/drawer-open-policy", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const locationRowId = requireUuidParam(c.req.param("id"), "LocationId");
-      const body = await readJsonBody<{ policy?: unknown }>(c);
-      const policy = requireEnum(body.policy, "policy", drawerOpenPolicy.enumValues);
-      await gated(sessionId, async (tx) => {
-        const updated = await tx
-          .update(locations)
-          .set({ drawerOpenPolicy: policy })
-          .where(eq(locations.id, locationRowId))
-          .returning({ id: locations.id });
-        if (updated.length === 0) {
-          throw new AppError("management.request_invalid", { field: "locationId" });
-        }
-      });
-      return c.body(null, 204);
     }),
   );
 }

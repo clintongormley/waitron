@@ -563,21 +563,11 @@ export function overridePinAttempts(
   return { throttle: pinThrottle, slot: `override:${sessionDeviceId}` };
 }
 
-/**
- * The drawer override the transaction will check: the policy is not `open` and the override is well
- * formed (a malformed one is refused inside).
- */
 async function drawerOverrideToCheck(
   db: Database,
-  cfg: TillConfig,
   sessionId: string,
   body: { override?: { personId?: unknown; pin?: unknown } },
 ): Promise<{ personId: string; pin: string } | undefined> {
-  const open = await db
-    .select({ id: locations.id })
-    .from(locations)
-    .where(and(eq(locations.id, cfg.locationId), eq(locations.drawerOpenPolicy, "open")));
-  if (open.length > 0) return undefined;
   let override;
   try {
     override = parseDrawerOverride(body.override);
@@ -1098,7 +1088,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
           .select({
             bumpMode: locations.bumpMode,
             fireControl: locations.fireControl,
-            receiptPrintMode: locations.receiptPrintMode,
             addressLine1: locations.addressLine1,
             addressLine2: locations.addressLine2,
             postalCode: locations.postalCode,
@@ -1166,7 +1155,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
             taxpayer === null ? undefined : { venueName: taxpayer.legalName, nif: taxpayer.taxId },
           bumpMode: loc?.bumpMode,
           fireControl: loc?.fireControl,
-          receiptPrintMode: loc?.receiptPrintMode,
           courses,
           receipt,
           venueAddress,
@@ -1213,7 +1201,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         tipsEnabled: deps.cfg.tipsEnabled,
         receipt: boot.receipt,
         venueAddress: boot.venueAddress,
-        receiptPrintMode: boot.receiptPrintMode,
         canvas: boot.canvas,
         capabilities: boot.capabilities,
         inactivityTimeoutSeconds: boot.inactivityTimeoutSeconds,
@@ -1958,8 +1945,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  // The `drawer_open_policy` gate runs before the printer lookup, so an unpermitted operator is
-  // refused whatever the printer state.
   app.post("/api/drawer/open", (c) =>
     run(c, log, async () => {
       const session = await requireSession(deps, c);
@@ -1969,30 +1954,18 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open", device);
       const body = await readJsonBody<{ override?: { personId?: unknown; pin?: unknown } }>(c);
       const attempts = overridePinAttempts(pinThrottle, session.deviceId);
-      const toCheck = await drawerOverrideToCheck(deps.db, cfg, sessionId, body);
+      const toCheck = await drawerOverrideToCheck(deps.db, sessionId, body);
       await withPinCheckAhead(deps.db, toCheck, attempts, (checked) =>
         withTransaction(deps.db, async (tx) => {
-          const [loc] = await tx
-            .select({ policy: locations.drawerOpenPolicy })
-            .from(locations)
-            .where(eq(locations.id, cfg.locationId));
-          // A missing location row falls back to the secure 'gated' default.
-          /* v8 ignore start -- unreachable: the provisioned till's own location row exists */
-          const policy = loc?.policy ?? "gated";
-          /* v8 ignore stop */
-
-          const { authorizedBy, viaOverride } =
-            policy === "open"
-              ? { authorizedBy: personId, viaOverride: false }
-              : await authorize(
-                  tx,
-                  {
-                    sessionId,
-                    permission: "cash.drawer",
-                    override: withCheck(parseDrawerOverride(body.override), checked),
-                  },
-                  attempts,
-                );
+          const { authorizedBy, viaOverride } = await authorize(
+            tx,
+            {
+              sessionId,
+              permission: "cash.drawer",
+              override: withCheck(parseDrawerOverride(body.override), checked),
+            },
+            attempts,
+          );
 
           const printer = await resolveReceiptPrinter(tx, cfg.origin);
           if (printer === undefined) {
