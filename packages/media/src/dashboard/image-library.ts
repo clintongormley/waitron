@@ -159,20 +159,28 @@ export class ImageLibrary extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-4);
         align-items: flex-start;
+        /* The photo's width at the height cap. Unset before the photo loads and after it fails
+           to load, where each reader below takes its fallback. */
+        --photo-cap: calc(60dvh * var(--photo-ratio));
       }
       .viewer img {
         flex: 3 1 calc(var(--wt-tap-min) * 7);
         min-width: 0;
         height: auto;
         max-height: 60dvh;
-        /* --photo-ratio is set when the photo loads; until then max-width is none. */
-        max-width: calc(60dvh * var(--photo-ratio));
+        max-width: var(--photo-cap, none);
         object-fit: contain;
         background: var(--wt-color-surface);
         border-radius: var(--wt-radius-md);
       }
+      /* Flex wraps on each item's basis clamped by its max-width, so the list's basis takes on what
+         the photo's cap takes off its own, keeping the wrap point where the two bases put it. */
       .uses {
-        flex: 2 1 calc(var(--wt-tap-min) * 5);
+        flex: 2 1
+          calc(
+            var(--wt-tap-min) * 5 +
+              max(0px, var(--wt-tap-min) * 7 - var(--photo-cap, var(--wt-tap-min) * 7))
+          );
         min-width: 0;
       }
       .uses h3 {
@@ -506,13 +514,15 @@ export class ImageLibrary extends LitElement {
           alt=${name}
           @load=${(event: Event) => {
             const image = event.currentTarget as HTMLImageElement;
-            image.style.setProperty(
+            image.parentElement!.style.setProperty(
               "--photo-ratio",
               String(image.naturalWidth / image.naturalHeight),
             );
           }}
           @error=${(event: Event) =>
-            (event.currentTarget as HTMLImageElement).style.removeProperty("--photo-ratio")}
+            (event.currentTarget as HTMLImageElement).parentElement!.style.removeProperty(
+              "--photo-ratio",
+            )}
         />
         <section class="uses">
           <h3 id="uses-heading">${t("image.uses")}</h3>

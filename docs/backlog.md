@@ -780,7 +780,10 @@ height limit and was drawn centred with plain bands either side — fixed (W78a,
 photo's column is now never wider than the photo drawn at that height, and the list of uses takes
 the rest of the row. The landscape checks at 1280px and 390px and the 390px portrait check pass
 unchanged; where the photo sits above the list on a screen wider than the photo, it now sits at the
-start of the row rather than filling it; (2) a test title in
+start of the row rather than filling it. The dialog width at which the photo and the list move
+from side by side to one above the other is unchanged: checked for a landscape, a portrait and a
+very tall photo at window heights of 800px and 500px, and a very tall photo still sits above the
+list on a 390px phone; (2) a test title in
 `apps/till/src/screens/till-allergen-screen.test.ts` says its
 dialog closes on "escape/backdrop", but the shared dialog does not close on a click outside it — the
 title, not the behaviour, looks wrong (unchecked beyond the reviewer's reading); (3)

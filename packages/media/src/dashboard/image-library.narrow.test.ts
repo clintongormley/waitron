@@ -389,8 +389,6 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
-// Every photo's box takes the photo's own proportions; one taller than the preview's height cap is
-// drawn at that cap.
 for (const theme of ["light", "dark"] as const) {
   for (const [viewport, shape, size, capped] of [
     [{ width: 1280, height: 800 }, "landscape", { width: 900, height: 400 }, false],
@@ -431,15 +429,67 @@ for (const theme of ["light", "dark"] as const) {
 
 it("drops the previous photo's proportions when the preview's next photo fails to load, and takes the next photo's when it loads", async () => {
   await page.viewport(1280, 800);
-  const { library } = await openPreview("light", uses, { width: 600, height: 800 });
+  const { library } = await openPreview("light", uses, { width: 200, height: 1600 });
   const image = library.shadowRoot!.querySelector<HTMLImageElement>(".viewer img")!;
-  expect(getComputedStyle(image).maxWidth).toBe("360px");
+  const list = library.shadowRoot!.querySelector(".viewer .uses")!;
+  const tapMin = token(library, "--wt-tap-min");
+  expect(getComputedStyle(image).maxWidth).toBe("60px");
+  expect(getComputedStyle(list).flexBasis).toBe(`${tapMin * 12 - 60}px`);
   const failed = new Promise((resolve) => image.addEventListener("error", resolve, { once: true }));
   image.src = "data:image/png;base64,bm90IGEgcGhvdG8=";
   await failed;
   expect(getComputedStyle(image).maxWidth).toBe("none");
+  expect(getComputedStyle(list).flex).toBe(`2 1 ${tapMin * 5}px`);
   image.src = photo(900, 400);
   await image.decode();
   await frame();
   expect(getComputedStyle(image).maxWidth).toBe("1080px");
+  expect(getComputedStyle(list).flexBasis).toBe(`${tapMin * 5}px`);
 });
+
+for (const theme of ["light", "dark"] as const) {
+  it(`stacks a very tall portrait photo above its list of uses on a phone (${theme})`, async () => {
+    await page.viewport(390, 800);
+    const { photo, list } = await openPreview(theme, uses, { width: 200, height: 1600 });
+    expect(photo.bottom).toBeLessThanOrEqual(list.top);
+  });
+}
+
+for (const theme of ["light", "dark"] as const) {
+  for (const [shape, size] of [
+    ["very tall portrait", { width: 200, height: 1600 }],
+    ["portrait", { width: 600, height: 800 }],
+    ["landscape", { width: 900, height: 400 }],
+  ] as const) {
+    it(`puts a ${shape} photo beside its list of uses exactly where the preview has room for both bases and the gap between them, at two window heights (${theme})`, async () => {
+      await page.viewport(1280, 800);
+      const { library } = await openPreview(theme, uses, size);
+      const viewer = library.shadowRoot!.querySelector<HTMLElement>(".viewer")!;
+      const image = viewer.querySelector("img")!;
+      const usesList = viewer.querySelector(".uses")!;
+      const tapMin = token(library, "--wt-tap-min");
+      const gap = token(library, "--wt-space-4");
+      const threshold = tapMin * 7 + tapMin * 5 + gap;
+      for (const height of [800, 500]) {
+        await page.viewport(1280, height);
+        viewer.style.width = `${threshold}px`;
+        await frame();
+        let photo = measured(image);
+        let list = measured(usesList);
+        expect(photo.right, `${height}px high: beside`).toBeLessThanOrEqual(list.left);
+        expect(list.top, `${height}px high: beside`).toBeLessThan(photo.bottom);
+        const capped = Math.min(height * 0.6, photo.width * (size.height / size.width));
+        expect(Math.abs(photo.height - capped), `${height}px high: photo height`).toBeLessThan(1);
+        expect(Math.abs(photo.width / photo.height - size.width / size.height)).toBeLessThan(0.01);
+        expect(Math.abs(list.left - (photo.right + gap)), `${height}px high: band`).toBeLessThan(1);
+        expect(Math.abs(measured(viewer).right - list.right)).toBeLessThan(1);
+
+        viewer.style.width = `${threshold - 1}px`;
+        await frame();
+        photo = measured(image);
+        list = measured(usesList);
+        expect(photo.bottom, `${height}px high: stacked`).toBeLessThanOrEqual(list.top);
+      }
+    });
+  }
+}
