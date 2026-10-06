@@ -167,7 +167,8 @@ function text(
   staff: string | null,
 ): TemplateResult {
   const value: MenuText = resolveMenuText(map, staff, input.view, input.languages);
-  return html`<span lang=${value.language ?? nothing}
+  return html`<span
+      lang=${value.language ?? (value.origin === "staff" && value.text ? "" : nothing)}
       >${value.text || input.label("missing_value")}</span
     >${value.missingRequested ? html`<span class="note"> ${input.label("missing_translation", { language: input.view.kind === "customer" ? input.view.language : input.languages.defaultLanguage })}${value.origin === "staff" ? html` · ${input.label("staff_fallback")}` : nothing}</span>` : nothing}`;
 }
@@ -408,7 +409,8 @@ function inspection(
           html`<span class="note"
               >${input.label(field.audience === "customer" ? "stored_translation" : "staff_inspection")}</span
             >
-            <span lang=${field.language ?? nothing}
+            <span
+              lang=${field.language ?? (typeof content === "string" && content.trim() ? "" : nothing)}
               >${typeof content === "string" && content.trim() ? content : input.label("missing_value")}</span
             >`,
         ),
@@ -522,7 +524,7 @@ export function renderCustomerMenu(input: CustomerMenuRenderInput): TemplateResu
     ${value(
       input,
       { kind: "title", menuId: input.document.menuId },
-      html`<h2>${input.document.menuName}</h2>
+      html`<h2 lang="">${input.document.menuName}</h2>
         ${input.view.kind === "customer" ? html`<p class="note">${input.label("internal_title")}</p>` : nothing}`,
     )}${value(input, { kind: "list", sectionIds: [] }, html`<div class="members">${members(input, input.document.root.members, [])}</div>`)}${detail(input)}
   </div>`;

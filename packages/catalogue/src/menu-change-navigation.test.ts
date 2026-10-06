@@ -718,6 +718,13 @@ describe("public diff navigation", () => {
       "price_changed",
       "this_menu",
       null,
+      "soup",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       [
         '["product",["drinks"],"mi-soup","soup",null,null,null,null,["override"]]',
         '["product",["favourites","drinks"],"mi-soup","soup",null,null,null,null,["override"]]',
@@ -843,4 +850,37 @@ it("targets changed extras-list names and explicit zero limits while unchanged f
     { field: { kind: "limits" }, ids: { listId: "citrus" } },
   ]);
   expect(result!.targets).toEqual({ before: expected, after: expected });
+});
+
+it("keeps unresolved change rows distinct by their subject and fields without using display wording", () => {
+  const doc = document();
+  const bodies: MenuChangeBody[] = [
+    change({ kind: "product_changed", productId: "alpha", name: "Same", fields: ["names"] }),
+    change({ kind: "product_changed", productId: "beta", name: "Same", fields: ["names"] }),
+    change({ kind: "product_changed", productId: "alpha", name: "Same", fields: ["image"] }),
+    change({
+      kind: "section_added",
+      sectionId: "absent",
+      parentSectionIds: ["one"],
+      name: "Same",
+      under: [],
+    }),
+    change({
+      kind: "section_added",
+      sectionId: "absent",
+      parentSectionIds: ["two"],
+      name: "Same",
+      under: [],
+    }),
+  ];
+  const rows = navigateMenuChanges(doc, doc, bodies);
+  expect(rows.map((row) => row.targets)).toEqual(bodies.map(() => ({ before: [], after: [] })));
+  expect(new Set(rows.map((row) => row.id)).size).toBe(5);
+  expect(
+    navigateMenuChanges(
+      doc,
+      doc,
+      bodies.map((body) => ("name" in body ? { ...body, name: "Renamed" } : body)),
+    ).map((row) => row.id),
+  ).toEqual(rows.map((row) => row.id));
 });

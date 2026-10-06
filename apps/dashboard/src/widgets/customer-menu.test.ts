@@ -753,3 +753,30 @@ it("names an absent kitchen value and defaults an omitted translation target lan
   await el.reveal(name);
   expect(destination(el, name).textContent).toContain("House burger");
 });
+
+it("does not announce untagged staff fallbacks in the inherited interface language", async () => {
+  const doc = fixture();
+  doc.offers.mi!.customerName = {};
+  doc.offers.mi!.kitchenName = "KITCHEN";
+  const section = doc.root.members[0]!;
+  if (section.kind !== "section") throw new Error("section fixture");
+  section.names = { en: "Translated drinks" };
+  const { el, host } = await mount(doc);
+  host.lang = "es";
+  await el.reveal({ kind: "section", sectionIds: ["drinks"], field: { kind: "summary" } });
+  const staff = [...el.shadowRoot!.querySelectorAll<HTMLSpanElement>("span")].find(
+    (node) => node.textContent === "Counter burger",
+  )!;
+  expect(staff.matches(":lang(es)")).toBe(false);
+  expect(staff.getAttribute("lang")).toBe("");
+  expect(q(el, ".menu h2").matches(":lang(es)")).toBe(false);
+  const translated = [...el.shadowRoot!.querySelectorAll<HTMLSpanElement>("span")].find(
+    (node) => node.textContent === "Translated drinks",
+  )!;
+  expect(translated.matches(":lang(en)")).toBe(true);
+  await el.reveal(target({ field: { kind: "name", audience: "kitchen" } }));
+  const kitchen = [...el.shadowRoot!.querySelectorAll<HTMLSpanElement>("span")].find(
+    (node) => node.textContent === "KITCHEN",
+  )!;
+  expect(kitchen.matches(":lang(es)")).toBe(false);
+});

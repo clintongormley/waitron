@@ -604,6 +604,13 @@ export function navigateMenuChanges(
       change.kind,
       change.source,
       change.includedMenu?.id ?? null,
+      "productId" in change ? change.productId : null,
+      "sectionId" in change ? change.sectionId : null,
+      "listId" in change ? change.listId : null,
+      "listSectionId" in change ? change.listSectionId : null,
+      "parentSectionIds" in change ? change.parentSectionIds : null,
+      "device" in change ? change.device : null,
+      "fields" in change ? [...new Set(change.fields)].sort() : null,
       keys("before"),
       keys("after"),
     ]);
