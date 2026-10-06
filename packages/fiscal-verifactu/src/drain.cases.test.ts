@@ -1502,15 +1502,20 @@ describe("drain — a reply line is applied only when its reference and its invo
     const aeat = fakeAeat();
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     const [unknown] = seeded.registroIds;
-    const noStatus = (linea: RespuestaLinea) => ({ ...linea, EstadoRegistro: undefined });
-    await drain(deps(rewritingLines(aeat.client(), noStatus)), FIRST);
+    const otherInvoice = (linea: RespuestaLinea) => ({
+      ...linea,
+      IDFactura: { ...linea.IDFactura, NumSerieFactura: "OTHER/1" },
+    });
+    await drain(deps(rewritingLines(aeat.client(), otherInvoice)), FIRST);
     expect(await unknownParamsOf(unknown!)).toHaveLength(1);
+    const retry = new Date(FIRST.getTime() + backoffMs(1));
 
-    await drain(
-      deps(withStrayLine(aeat.client(), noStatus)),
-      new Date(FIRST.getTime() + backoffMs(1)),
-    );
+    await drain(deps(withStrayLine(aeat.client(), otherInvoice)), retry);
 
+    expect(await envioOf(unknown!)).toMatchObject({
+      estado: "pendiente",
+      proximo_intento_en: new Date(retry.getTime() + backoffMs(2)).toISOString(),
+    });
     expect(await unknownParamsOf(unknown!)).toEqual([
       expect.not.objectContaining({ lineasSinRegistro: expect.anything() }),
     ]);
