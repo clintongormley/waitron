@@ -3076,7 +3076,7 @@ Settings → Devices so a manager can approve the device. Live keeps its existin
 W37 added the pretend printer link beside Email inbox.
 
 **The demo venue's names and tax ID come from the country pack (owner 2026-10-05) — DONE in
-W108.** Every demo venue, from the wizard's Demo and from `wa-wt reset demo`, is now the same made-up
+W108 (#1276, main 99e986957).** Every demo venue, from the wizard's Demo and from `wa-wt reset demo`, is now the same made-up
 business: legal name Waitron Demo S.L., tax ID `B00000000`, location Casa Delgado, and two
 departments trading as Bar Casa Delgado and Deli Delgado, in English and Spanish alike. The values
 live in the country pack (`CountryDemoIdentity`, `packages/country/src/country.ts`, filled in by
