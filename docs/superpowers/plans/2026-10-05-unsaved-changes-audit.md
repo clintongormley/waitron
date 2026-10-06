@@ -2967,3 +2967,54 @@ API reads/writes use controlled fakes in the browser harness. Actual dashboard s
 server writes, activated native reload and hover accessibility are not established by this check.
 Remaining configuration owners, device-profile reconciliation and the complete shell/navigation
 inventory keep W69 incomplete. Tasks 2/3 remain complete and Tasks 1/4/5/6 partial.
+
+
+## 2026-10-06: Venue details and actual Venue settings container routes
+
+A303 #1312 added `apps/dashboard/src/screens/venue-details-panel.ts` after the original inventory.
+The file's SHA-256 matched origin/main before this checkpoint's edits. It holds a staged
+VenueDetailValues draft and the write's expected values. It is a protected page owner; issuer text,
+clock-preview output and the acknowledgement button are not independent authored entities.
+
+The branch now registers that editor in the existing coordinator and compares values using the
+normalization already used by `venueDetailPatch`. Cancel requests scoped leave. A retained page's
+Discard restores its opening values; successful writes dispose the completed editor before the
+list/read refresh. Refusals leave its values protected. Disconnect disposes the scope, and reconnect
+registers the retained draft against its opening expected values. Input and action closures check
+the opening and connection generation, so removed controls cannot edit or submit its replacement.
+
+Venue settings previously assigned its tab before asking the shared URL guard. The first real
+DashboardApp test observed selected=kitchen while its unsaved warning was still open and
+location remained on Tables. It now restores the tab strip's current selection and renders from
+the accepted URL. The existing navigation guard owns the question; the container adds no second
+coordinator or warning. Real native clicks and keyboard End keep the departing panel visible,
+Keep retains its values, and Discard restores them before showing the accepted destination.
+
+Receipts at `~/waitron-campaign-e/receipts/w69-venue-container-20261006`:
+
+- Container RED: 2 failed/1 passed before the tab fix. The failures observed the wrong selected tab.
+- Venue details RED: 11 failed/1 passed before draft wiring. Detached-control RED: 2 failed before
+  opening identity checks. Existing tests and their assertions were unchanged.
+- `pnpm --filter @waitron/dashboard exec vitest run src/dashboard-app.venue-settings-unsaved.test.ts
+  src/screens/venue-details-panel.unsaved.test.ts src/screens/venue-details-panel.test.ts
+  src/screens/venue-settings-screen.test.ts src/dashboard-app.test.ts`: 392 passed. Earlier unchanged
+  Venue details a11y/family run: 69 passed, including the original 13-state theme/locale/width checks.
+- Eight installed disposable-candidate deletions failed the intended assertion: tab-strip reset,
+  draft registration, change notification, Cancel request, restored values, input identity, Save
+  identity and Cancel identity. The restored selection passed 20 cases; the final full pair result
+  is recorded separately in `candidate-final.log`.
+- Dashboard typecheck and focused ESLint passed. The initial direct ui-core type import failed
+  resolution; the final import uses ui's existing type re-exports, matching sibling editors.
+  Three root guard suites passed 41 tests. Source formatting and final diff checks are recorded
+  in the checkpoint.
+- Eight native EN/ES, light/dark, measured 390/1280 flows checked the retained Venue details field
+  and completed Keep/Discard. Eight scoped warning axe scans passed. Sixteen captures were inspected
+  in four contact sheets. The first full-shell scan failed two light desktop cases at sidebar
+  selected-row/group-heading contrast (4.32:1); that finding is recorded in the backlog and the
+  original output retained. The scoped confirmation scan is not a full-shell accessibility pass.
+
+The new actual-shell fixture contains synthetic API responses and registers the product's real
+editors. These cases establish that shell/container route integration, not server persistence or
+browser-native reload prompting. Other page/context routes, device-profile reconciliation after
+W97, final advancing-owner classification and activated native reload remain incomplete. Tasks
+2/3 stay complete; Tasks 1/4/5/6 stay partial. No PR, push, finish-branch or landing at this checkpoint.

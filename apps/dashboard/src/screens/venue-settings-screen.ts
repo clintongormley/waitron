@@ -80,8 +80,9 @@ export class VenueSettingsScreen extends LitElement {
     // A strip inside a panel sends the same composed event.
     if (event.target !== event.currentTarget) return;
     if (!isVenueSettingsTab(event.detail.value)) return;
-    this.tab = event.detail.value;
-    this.#url.write({ dashboard: "venue-settings", view: this.tab });
+    (event.currentTarget as HTMLElementTagNameMap["wt-tabs"]).value = this.tab ?? this.#tabs()[0]!;
+    void this.#url.write({ dashboard: "venue-settings", view: event.detail.value });
+    this.#restore();
   }
 
   override render(): TemplateResult {

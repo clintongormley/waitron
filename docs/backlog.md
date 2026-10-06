@@ -1173,6 +1173,15 @@ dialog is open before its scan. The existing suite was not changed by W70a.
 
 **Warn before discarding unsaved changes (W69, owner 2026-10-04) — IN PROGRESS.**
 
+Venue details and its containing Venue settings tabs now use the shared protection on the branch.
+Cancel keeps your edited venue values until you choose Discard; normalized reverts stay clean.
+Accepted saves close the editor before a refresh, so a failed read does not make it dirty again.
+A tab click keeps the current panel visible while the warning is open and after Keep. Real
+DashboardApp cases cover Tables and Venue details tabs, keyboard tab changes, Tables Back/Forward,
+sidebar leave and voluntary sign-out. Detached controls cannot change or submit a later opening.
+The dated audit records the commands and their limits. Device-profile reconciliation, the remaining
+page/context routes and activated native reload still keep W69 incomplete.
+
 Prep-station printer cells now use the shared warning on the branch. Cancel, native Escape,
 replacing the station and leaving Tickets ask before discarding your selection. Keep retains it;
 Discard leaves without writing. Reordered memberships and reverted choices are clean. Accepted
@@ -1410,7 +1419,11 @@ A disposable-copy probe using `dashboard-app.ts` from main `fd836ea05f46b03f2380
 reproduced it with the profile closed (`baseline-sidebar-contrast.log` in this checkpoint’s local
 receipts). W69 leaves the sidebar palette unchanged. Adjust the selected navigation’s token use,
 then check the real desktop sidebar in both themes. The profile warning/editor scans passed when
-restricted to those visible modal surfaces; the whole-shell scan still reports this separate issue.
+restricted to those visible modal surfaces; the whole-shell scan still reports this separate issue. Full DashboardApp scans of this branch's Venue details warning also flag the light
+sidebar's group headings at 4.32:1 in EN/ES at 1280 px. The scoped warning scan passes; no full-shell
+accessibility pass is claimed. Include these headings in A306's sidebar investigation. Receipt:
+`~/waitron-campaign-e/receipts/w69-venue-container-20261006/visual.log`; main runtime reproduction
+remains unverified.
 
 **Dark modal danger-button hover contrast (found during W69, 2026-10-06) — OPEN.**
 Axe reports the hovered Discard button at 4.49:1 against the required 4.5:1. A separate probe
