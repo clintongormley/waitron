@@ -132,6 +132,9 @@ export class ProductList extends LitElement {
         margin-inline-end: var(--wt-space-3);
       }
       wt-data-table::part(tree-heading) {
+        margin-inline-start: calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-3));
+      }
+      :host([reordering]) wt-data-table::part(tree-heading) {
         margin-inline-start: calc(
           var(--tree-arrow-width) + 2 * var(--wt-tap-min) + var(--wt-space-3)
         );
@@ -230,9 +233,15 @@ export class ProductList extends LitElement {
       }
       /* The table draws a variant at its product's indent; this is the product's grip and photo. */
       wt-data-table::part(variant-name) {
+        padding-inline-start: calc(var(--wt-tap-min) + var(--wt-space-3));
+      }
+      :host([reordering]) wt-data-table::part(variant-name) {
         padding-inline-start: calc(2 * var(--wt-tap-min) + var(--wt-space-3));
       }
       wt-data-table[narrow]::part(variant-name) {
+        padding-inline-start: 0;
+      }
+      :host([reordering]) wt-data-table[narrow]::part(variant-name) {
         padding-inline-start: var(--wt-tap-min);
       }
       wt-data-table::part(price-unit) {
@@ -297,6 +306,9 @@ export class ProductList extends LitElement {
   /** Fills a bounded flex column, with the table's rows scrolling under its headings. */
   @property({ type: Boolean, reflect: true, attribute: "sticky-header" }) stickyHeader = false;
   @property({ type: Boolean }) selecting = false;
+  /** Whether rows carry grips and can be dragged. On by default, so a mount that wants a tree
+   * without them passes `.reordering=${false}`. */
+  @property({ type: Boolean, reflect: true }) reordering = true;
   @property({ attribute: false }) selected: string[] = [];
   @property({ attribute: false }) products: Product[] = [];
   @property({ attribute: false }) madeAt: Record<string, MadeAt> = {};
@@ -380,6 +392,7 @@ export class ProductList extends LitElement {
   /** A mouse drags a category or product from anywhere on its row; a finger only from the grip, so it
    * can still scroll; a control on the row is never a drag handle. */
   readonly #pointerDown = (event: PointerEvent): void => {
+    if (!this.reordering) return;
     const path = event
       .composedPath()
       .filter((item): item is HTMLElement => item instanceof HTMLElement);
@@ -580,6 +593,11 @@ export class ProductList extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("reordering") && !this.reordering && this.#pointerDrag) {
+      const active = this.#pointerDrag.active;
+      this.#finishDrag();
+      if (active) blockClickAfterDrag(true);
+    }
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("categories") || changed.has("products")) this.#counts = this.#count();
@@ -943,14 +961,7 @@ export class ProductList extends LitElement {
           variant
             ? html`<span part="variant-name">${variant.name}</span>`
             : html`<span part=${ancestorOnly ? "product-cell context" : "product-cell"}>
-                <button
-                  class="drag-grip"
-                  part="drag-grip"
-                  type="button"
-                  aria-label=${`${t("folders.drag")}: ${product.name}`}
-                >
-                  <wt-icon name="grip"></wt-icon></button
-                >${
+                ${this.#grip(product.name)}${
                   product.image === null
                     ? html`<span
                         part="thumb-placeholder"
@@ -1150,6 +1161,23 @@ export class ProductList extends LitElement {
       >`;
   }
 
+  #grip(name: string) {
+    return this.reordering
+      ? html`<button
+          class="drag-grip"
+          part="drag-grip"
+          type="button"
+          aria-label=${`${t("folders.drag")}: ${name}`}
+        >
+          <wt-icon name="grip"></wt-icon>
+        </button>`
+      : nothing;
+  }
+
+  #gripSpace() {
+    return this.reordering ? html`<span part="grip-space"></span>` : nothing;
+  }
+
   #columns(): DataTableColumn<ListRow>[] {
     return this.#productColumns().map((column) => ({
       key: column.key,
@@ -1162,13 +1190,13 @@ export class ProductList extends LitElement {
         if (row.kind === "draft")
           return column.key === "name"
             ? html`<span part="folder-cell naming"
-                ><span part="grip-space"></span>${folderIcon}${this.#nameBox()}</span
+                >${this.#gripSpace()}${folderIcon}${this.#nameBox()}</span
               >`
             : nothing;
         if (row.kind === "root") {
           if (column.key === "name")
             return html`<span part="folder-cell"
-              ><span part="grip-space"></span>${folderIcon}<span part="folder-name"
+              >${this.#gripSpace()}${folderIcon}<span part="folder-name"
                 ><strong>${t("folders.all_products")}</strong
                 ><span part="count" data-test="count-root">${this.#contents(null)}</span></span
               ></span
@@ -1199,14 +1227,7 @@ export class ProductList extends LitElement {
                 : nothing
             }`;
           return html`<span part=${this.#renaming(folder.id) ? "folder-cell naming" : "folder-cell"}
-            ><button
-              class="drag-grip"
-              part="drag-grip"
-              type="button"
-              aria-label=${`${t("folders.drag")}: ${folder.name}`}
-            >
-              <wt-icon name="grip"></wt-icon></button
-            >${folderIcon}${
+            >${this.#grip(folder.name)}${folderIcon}${
               this.#renaming(folder.id)
                 ? html`${this.#nameBox()}<span part="name-after">${after}</span>`
                 : html`<span part="folder-name"

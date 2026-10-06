@@ -1824,7 +1824,11 @@ describe("the product list at phone width", () => {
     return {
       edges,
       box: box.getBoundingClientRect(),
-      grip: row.querySelector('.drag-grip, [part~="grip-space"]')!.getBoundingClientRect(),
+      // With reordering off the row has no grip, so its line starts at the folder frame.
+      grip: (
+        row.querySelector('.drag-grip, [part~="grip-space"]') ??
+        row.querySelector('[part~="folder-frame"]')!
+      ).getBoundingClientRect(),
       icon: row.querySelector('[part~="folder-frame"]')!.getBoundingClientRect(),
       error: error.textContent,
       errorOverflows: error.scrollWidth > error.clientWidth,
@@ -1855,14 +1859,19 @@ describe("the product list at phone width", () => {
 
   it.each(
     ["en-GB", "es-ES"].flatMap((locale) =>
-      ["f", "d", "b"].map((categoryId) => ({ locale, categoryId })),
+      ["f", "d", "b"].flatMap((categoryId) =>
+        [true, false].map((reordering) => ({ locale, categoryId, reordering })),
+      ),
     ),
   )(
-    "puts a renamed category's name box and its refusal on their own line under the grip at 390 px ($locale, $categoryId)",
-    ({ locale, categoryId }) =>
+    "puts a renamed category's name box and its refusal on their own line under the grip at 390 px ($locale, $categoryId, reordering: $reordering)",
+    ({ locale, categoryId, reordering }) =>
       onPhone(locale, 390, async () => {
         // An asterisk and Drinks' two-part count leave the least room beside the grip and icon.
-        const { el, root } = await mountNarrowTree({ unroutedFolderIds: ["f", "d", "b"] });
+        const { el, root } = await mountNarrowTree({
+          unroutedFolderIds: ["f", "d", "b"],
+          reordering,
+        });
         await openWithRefusal(el, { kind: "rename", categoryId });
         const line = await nameBoxLine(root);
         expectOwnLine(line);
@@ -1877,23 +1886,32 @@ describe("the product list at phone width", () => {
 
   it.each(
     ["en-GB", "es-ES"].flatMap((locale) =>
-      [null, "d", "b"].map((parentId) => ({ locale, parentId })),
+      [null, "d", "b"].flatMap((parentId) =>
+        [true, false].map((reordering) => ({ locale, parentId, reordering })),
+      ),
     ),
   )(
-    "puts a new category's name box and its refusal on their own line under the grip space at 390 px ($locale, $parentId)",
-    ({ locale, parentId }) =>
+    "puts a new category's name box and its refusal on their own line under the grip space at 390 px ($locale, $parentId, reordering: $reordering)",
+    ({ locale, parentId, reordering }) =>
       onPhone(locale, 390, async () => {
-        const { el, root } = await mountNarrowTree();
+        const { el, root } = await mountNarrowTree({ reordering });
         await openWithRefusal(el, { kind: "create", parentId });
         expectOwnLine(await nameBoxLine(root));
       }),
   );
 
-  it.each(["en-GB", "es-ES"])(
-    "moves an open name box onto its own line when the screen narrows from 1280 to 390 px (%s)",
-    (locale) =>
+  it.each(
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      [true, false].map((reordering) => ({ locale, reordering })),
+    ),
+  )(
+    "moves an open name box onto its own line when the screen narrows from 1280 to 390 px ($locale, reordering: $reordering)",
+    ({ locale, reordering }) =>
       onPhone(locale, 1280, async () => {
-        const { el, table, root } = await mountTree({ unroutedFolderIds: ["f", "d", "b"] });
+        const { el, table, root } = await mountTree({
+          unroutedFolderIds: ["f", "d", "b"],
+          reordering,
+        });
         await openWithRefusal(el, { kind: "rename", categoryId: "d" });
         expect(table.hasAttribute("narrow")).toBe(false);
         await page.viewport(390, 844);
@@ -1906,13 +1924,13 @@ describe("the product list at phone width", () => {
       [
         { kind: "rename", categoryId: "b" } as const,
         { kind: "create", parentId: "d" } as const,
-      ].map((draft) => ({ locale, draft })),
+      ].flatMap((draft) => [true, false].map((reordering) => ({ locale, draft, reordering }))),
     ),
   )(
-    "keeps the name box beside the grip and folder icon at 1280 px ($locale, $draft.kind)",
-    ({ locale, draft }) =>
+    "keeps the name box beside the grip and folder icon at 1280 px ($locale, $draft.kind, reordering: $reordering)",
+    ({ locale, draft, reordering }) =>
       onPhone(locale, 1280, async () => {
-        const { el, root } = await mountTree();
+        const { el, root } = await mountTree({ reordering });
         await openWithRefusal(el, draft);
         const line = await nameBoxLine(root);
         expect(line.box.top).toBeLessThan(line.grip.bottom);
@@ -3622,10 +3640,14 @@ describe("the Products tree's Name column", () => {
       }
     });
 
-    it.each([false, true])(
-      "still steps every name in evenly per level, a product's starting one folder slot before a category's (selecting: %s)",
-      async (selecting) => {
-        const { root } = await mountPhone({ selecting });
+    it.each(
+      [false, true].flatMap((selecting) =>
+        [true, false].map((reordering) => ({ selecting, reordering })),
+      ),
+    )(
+      "still steps every name in evenly per level, a product's starting one folder slot before a category's (selecting: $selecting, reordering: $reordering)",
+      async ({ selecting, reordering }) => {
+        const { root } = await mountPhone({ selecting, reordering });
         const all = ROWS.map((key) => ({ key, ...pieces(root, key === "root" ? ROOT_KEY : key) }));
         const step = all.find(({ key }) => key === "folder:d")!.name.left - all[0]!.name.left;
         expect(step).toBeGreaterThan(0);
@@ -3679,6 +3701,114 @@ describe("the Products tree's Name column", () => {
         );
       },
     );
+  });
+
+  describe("with reordering off", () => {
+    async function at(width: number, body: () => Promise<void>) {
+      const restore = { width: window.innerWidth, height: window.innerHeight };
+      try {
+        await page.viewport(width, 844);
+        await body();
+      } finally {
+        await page.viewport(restore.width, restore.height);
+      }
+    }
+
+    async function mountOff(width: number) {
+      const mounted = await mountDeep({ reordering: false });
+      await vi.waitFor(() => expect(mounted.table.hasAttribute("narrow")).toBe(width < 440));
+      for (let i = 0; i < 2; i += 1) await new Promise(requestAnimationFrame);
+      return mounted;
+    }
+
+    it.each([1280, 390])("draws no grip and no grip space on any row at %i px", (width) =>
+      at(width, async () => {
+        const { root } = await mountOff(width);
+        expect(root.querySelectorAll("tbody tr[data-row-key]").length).toBe(ROWS.length + 1);
+        expect(root.querySelector('.drag-grip, [part~="grip-space"]')).toBeNull();
+      }),
+    );
+
+    it("lifts nothing for a mouse press-and-move on a product or a category, or a touch press", async () => {
+      const { el, root } = await mountDeep({ reordering: false });
+      const offered: string[][] = [];
+      el.addEventListener("drag-items", (event) =>
+        offered.push((event as CustomEvent<{ keys: string[] }>).detail.keys),
+      );
+      const press = (target: Element, pointerId: number, pointerType: string) => {
+        const box = target.getBoundingClientRect();
+        for (const [type, dy] of [
+          ["pointerdown", 0],
+          ["pointermove", 40],
+        ] as const)
+          target.dispatchEvent(
+            new PointerEvent(type, {
+              bubbles: true,
+              composed: true,
+              pointerId,
+              pointerType,
+              clientX: box.x + 8,
+              clientY: box.y + 8 + dy,
+            }),
+          );
+      };
+      press(root.querySelector('tr[data-row-key="bread"] [part~="product-cell"]')!, 1, "mouse");
+      press(root.querySelector('tr[data-row-key="folder:f"] [part~="folder-cell"]')!, 2, "mouse");
+      press(root.querySelector('tr[data-row-key="cola"] [part~="product-cell"]')!, 3, "touch");
+      expect(offered).toEqual([]);
+      expect(root.querySelector('[part~="dragging"]')).toBeNull();
+      document.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1 }));
+    });
+
+    it.each([1280, 390])("puts the Name heading over All products' name at %i px", (width) =>
+      at(width, async () => {
+        const { root } = await mountOff(width);
+        const heading = root.querySelector<HTMLElement>('thead th button[data-sort="name"]')!;
+        expect(heading.getBoundingClientRect().left).toBeCloseTo(
+          pieces(root, ROOT_KEY).name.left,
+          0,
+        );
+      }),
+    );
+
+    it.each([1280, 390])("starts a variant's name under its product's at %i px", (width) =>
+      at(width, async () => {
+        const { root } = await mountOff(width);
+        expect(pieces(root, "loin:s250").name.left).toBeCloseTo(pieces(root, "loin").name.left, 0);
+      }),
+    );
+
+    it("ends a drag held when the mode turns off, sending no drop and leaving no row marked", async () => {
+      const { el, root } = await mountDeep();
+      const drops: unknown[] = [];
+      el.addEventListener("drop-items", (event) => drops.push((event as CustomEvent).detail));
+      const at = (target: Element, type: string, over: Element = target) => {
+        const box = over.getBoundingClientRect();
+        target.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            composed: true,
+            cancelable: true,
+            pointerId: 1,
+            clientX: box.x + 8,
+            clientY: box.y + 8,
+          }),
+        );
+      };
+      const bread = root.querySelector('tr[data-row-key="bread"] [part~="product-cell"]')!;
+      const food = root.querySelector('tr[data-row-key="folder:f"] [part~="folder-cell"]')!;
+      at(bread, "pointerdown");
+      at(food, "pointermove");
+      await el.updateComplete;
+      expect(root.querySelector('[part~="dragging"]')).not.toBeNull();
+      el.reordering = false;
+      await el.updateComplete;
+      at(food, "pointerup");
+      await el.updateComplete;
+      expect(drops).toEqual([]);
+      expect(root.querySelector('[part~="dragging"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-test="drag-ghost"]')).toBeNull();
+    });
   });
 
   it("shows no Main category column and offers none in Customise", async () => {
