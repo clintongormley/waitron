@@ -96,8 +96,9 @@ export class HoursApi {
   }
 
   /**
-   * After a write, has every Hours watch read again through the shared live data, so the write
-   * shows even when the change feed delivers nothing. False when there is no live data to ask.
+   * After a write, invalidates the change types Hours reads in the shared live data, so every
+   * watched live query depending on them, each open Hours watch among them, reads again and the
+   * write shows even when the change feed delivers nothing. False when there is no live data to ask.
    */
   rereadWatches(): boolean {
     if (this.liveData === undefined) return false;
