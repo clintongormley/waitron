@@ -532,6 +532,7 @@ export class SetupApp extends LitElement {
   /** Handed back to the archive screen with a refusal, so the owner's entries are kept. */
   @state() private restoreRequest?: RestoreRequestDetail;
   #archiveRestoreAttempt = 0;
+  #bucketRestoreAttempt = 0;
   @state() private bucketRestoreError?: Message;
   @state() private bucketInvalidField?: BucketField;
   @state() private bucketLiveSince?: string;
@@ -1003,6 +1004,13 @@ export class SetupApp extends LitElement {
     event: CustomEvent<{ request: BucketRestoreRequestDetail }>,
   ): Promise<void> {
     event.stopPropagation();
+    const attempt = ++this.#bucketRestoreAttempt;
+    const generation = this.#rootGeneration;
+    const current = () =>
+      this.isConnected &&
+      generation === this.#rootGeneration &&
+      attempt === this.#bucketRestoreAttempt &&
+      this.screen === "provisioning";
     const request = event.detail.request;
     // The server checked the old server and named the copy for the kit it was sent, not for another.
     if (request.kit !== this.bucketRequest?.kit) {
@@ -1016,12 +1024,12 @@ export class SetupApp extends LitElement {
     this.screen = "provisioning";
     try {
       await this.api.restoreFromBucket(request);
-      if (!this.isConnected) return;
+      if (!current()) return;
       this.bucketRequest = undefined;
       this.rebuilt = true;
       this.screen = "done";
     } catch (error) {
-      if (!this.isConnected) return;
+      if (!current()) return;
       const { code, params } = (error ?? {}) as {
         code?: unknown;
         params?: Record<string, unknown>;

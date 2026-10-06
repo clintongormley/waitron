@@ -1221,8 +1221,11 @@ its selected File, exact recovery key and environment through Back and Cloud rec
 Keep and warning Escape retain the native controls; Discard restores only that child. Safety
 acknowledgements remain exempt. Refused archive requests stay protected against the initial empty
 form; accepted submission still proceeds directly. Late replies cannot replace a departed form,
-reconnected wizard or newer archive attempt in the new browser cases. Bucket and Cloud restore
-setup forms still need work.
+reconnected wizard or newer archive attempt in the new browser cases. Bucket restore now protects
+its exact kit text and environment before Back, retaining the root draft on Discard. File reads
+cannot replace newer kit text or discarded values in the new browser cases; accepted Restore
+submits directly and refusals stay dirty. Late bucket replies cannot replace a departed form,
+reconnected wizard or newer pending bucket attempt. Cloud restore still needs work.
 See the dated setup entries in the W69 audit for commands and limits; activated native reload
 has not been verified.
 Dashboard voluntary logout and a language change also request the shared warning before their

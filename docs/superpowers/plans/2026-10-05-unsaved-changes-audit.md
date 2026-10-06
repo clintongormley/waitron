@@ -2403,3 +2403,34 @@ returning; every original refusal-clearing assertion remains. Include it in the 
 Changed test checks. Bucket/Cloud restore, remaining page/till routes, final advancing-owner
 classification and activated native reload remain open. Tasks 2/3 stay complete and Tasks 1/4/5/6
 partial. W69 is not ready for finish-branch or landing.
+
+
+## 2026-10-06: Bucket restore child checkpoint
+
+On the W69 branch, Bucket restore compares exact kit text and environment against the initial
+empty/default form. Back asks before leaving edited values; Keep and native warning Escape
+retain the kit and return focus to Back. Discard restores only the child, including its native
+kit-file selection, retaining the wizard root. Reverted forms and safety acknowledgements alone
+leave directly. Restore submits the existing exact body without a question. Refusals retain
+protected values; success removes the child scope. Reconnect retains the initial baseline.
+The new file-read cases cover newer typed text, Discard and disconnect/reconnect. The new shell
+reply cases cover departed forms, older connections and older bucket attempts.
+
+`pnpm --filter @waitron/setup exec vitest run src/setup-app-bucket.unsaved-changes.test.ts`
+initially reported twelve failures and two passes. Four added kit-file cases failed before their
+lifetime checks. The final nine-file setup family reported 548 passes. Nine independent
+installed-candidate guard deletions or replacements failed their selected assertions, each beside
+a passing clean-Back control; the restored bucket pair reported 55 passes. The first disposal
+control survived whole-shell disconnect, so the added child-only disposal case became its control.
+The unedited fiscal write-path and immutability pair reported twenty passes. Setup types, scoped
+lint, source formatting and diff checks passed. Exact commands/output: Lane E's local
+`receipts/w69-setup-bucket-20261006/`.
+
+Eight native real-shell EN/ES, light/dark, 390/1280 flows ran sixteen axe scans and produced sixteen
+captures inspected in four contact sheets. Initial API reads and restore responses were synthetic;
+actual bucket restore/restart, hovered colours and activated native reload remain unverified.
+The existing bucket refusal-departure case now answers Discard before returning; all original
+request/venue-clearing assertions remain. Include it in the eventual PR's Changed test checks.
+Cloud restore, remaining page/till routes, final advancing-owner classification and activated
+native reload remain open. Tasks 2/3 stay complete and Tasks 1/4/5/6 partial. W69 is not ready
+for finish-branch or landing.

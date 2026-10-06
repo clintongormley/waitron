@@ -3379,6 +3379,19 @@ describe("restore from my bucket", () => {
     await flush(el);
     goto(el, "role");
     await flush(el);
+    const warning = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
+      "wt-unsaved-changes",
+    )!;
+    expect(warning.open).toBe(true);
+    expect(el.shadowRoot!.querySelector("setup-restore-bucket-screen")).not.toBeNull();
+    warning.dispatchEvent(
+      new CustomEvent("wt-unsaved-choice", {
+        detail: { decision: "discard" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await vi.waitFor(() => expect((el as unknown as { screen: Screen }).screen).toBe("role"));
     goto(el, "restore-bucket");
     await flush(el);
     const screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;

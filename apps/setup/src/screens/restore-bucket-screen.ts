@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, leaveCoordinatorFor, type DraftScope } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-textarea.js";
@@ -21,6 +21,11 @@ export interface RestoredVenue {
   legalName: string;
   taxId: string;
   locationName: string;
+}
+
+interface BucketForm {
+  kit: string;
+  environment: "production" | "preproduction";
 }
 
 export type BucketField = "kit" | "environment" | "oldBoxGone" | "venueConfirmed";
@@ -77,12 +82,54 @@ export class SetupRestoreBucketScreen extends LitElement {
   @state() private refusalDismissed = false;
   @state() private fieldRefusalDismissed = false;
 
+  #baseline?: BucketForm;
+  #scope?: DraftScope<BucketForm>;
+  #fileRead = 0;
+
+  #form(): BucketForm {
+    return { kit: this.kit, environment: this.environment };
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#registerScope();
+  }
+
+  override disconnectedCallback(): void {
+    ++this.#fileRead;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    super.disconnectedCallback();
+  }
+
+  #registerScope(): void {
+    if (!this.isConnected || !this.#baseline || this.#scope) return;
+    this.#scope = leaveCoordinatorFor(this)?.register({
+      id: this,
+      current: () => this.#form(),
+      snapshot: (form) => ({ ...form }),
+      equal: (a, b) => a.kit === b.kit && a.environment === b.environment,
+      restore: (form) => {
+        ++this.#fileRead;
+        this.kit = form.kit;
+        this.environment = form.environment;
+        this.acknowledged = false;
+        this.oldBoxGone = false;
+        this.venueConfirmed = false;
+        this.attempted = false;
+        this.shadowRoot!.querySelector<HTMLInputElement>("[data-test=kit-file]")!.value = "";
+      },
+    });
+    this.#scope?.commit(this.#baseline);
+  }
+
   constructor() {
     super();
     new LocaleChangeController(this);
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    this.#baseline ??= this.#form();
     if (changed.has("errorMessage")) this.refusalDismissed = false;
     if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
     if (changed.has("request") && this.request !== undefined) {
@@ -91,6 +138,7 @@ export class SetupRestoreBucketScreen extends LitElement {
       // A request is only sent once the owner has ticked this.
       this.acknowledged = true;
       this.oldBoxGone = this.request.oldBoxGone;
+      this.#scope?.changed();
     }
     if (changed.has("venue") || changed.has("request")) {
       this.venueConfirmed =
@@ -99,6 +147,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   }
 
   override updated(changed: PropertyValues<this>): void {
+    this.#registerScope();
     if (changed.has("invalidField") && this.#refusalUnder() !== undefined) {
       void focusFirstInvalid(this.shadowRoot!);
     }
@@ -122,6 +171,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   }
 
   #edited(field: BucketField): void {
+    if (field === "kit" || field === "environment") this.#scope?.changed();
     if (field === this.invalidField) this.fieldRefusalDismissed = true;
   }
 
@@ -142,6 +192,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   }
 
   #setKit(kit: string): void {
+    ++this.#fileRead;
     this.kit = kit;
     this.#edited("kit");
     if (this.#kitReplaced) {
@@ -187,7 +238,10 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   async #readFile(event: Event): Promise<void> {
     const file = (event.currentTarget as HTMLInputElement).files?.[0];
-    if (file !== undefined) this.#setKit(await file.text());
+    const read = ++this.#fileRead;
+    if (file === undefined) return;
+    const kit = await file.text();
+    if (this.isConnected && read === this.#fileRead) this.#setKit(kit);
   }
 
   #renderVenue(): TemplateResult | typeof nothing {
