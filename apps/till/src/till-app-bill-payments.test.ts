@@ -3656,7 +3656,7 @@ describe("till-app: giving back a bill payment", () => {
     approval(el)!.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
     await flush(el);
 
-    expect(approval(el)).toBeNull();
+    await expect.poll(() => approval(el)).toBeNull();
     expect(refundDialog(el)).not.toBeNull();
     inRefund(el, "[data-refund-close]")!.click();
     await flush(el);

@@ -1375,3 +1375,17 @@ Task 4 remains partial. Ingredient entry, Units reassignment and other remaining
 owners, and Tasks 5–6 pages/history/navigation/native reload, remain open. Existing shift and
 purchase hooks remain on the branch; their host coverage still belongs to the final audit. Neither
 proposed W69 PR is ready.
+
+Reconciliation with W94 #1291: rebase onto `c3339ed99b46fd62aca32837cad1eb209155eb53` kept all
+53 patches unchanged in `git range-diff`. The first eight-suite combined till run passed 630
+cases and failed the refund PIN-cancel test's immediate absent-dialog assertion. The same
+assertion appears on checkpoint `9c1bc9f8637baf386e327e5ea53e873e18618ff4`; supervisor Cancel now
+runs through `requestClose` and the native dialog's delayed close report. It now polls the same
+absence result, retaining the refund Keep/Discard, request-count and no-financial-command checks.
+No assertion was removed. This is the second timing-only check change in this checkpoint and
+belongs in the PR's Changed test checks section. The owner FYI names both checks.
+
+After that timing correction, the eight-suite combined run passed all 631 tests. Till, UI and
+dashboard typechecks and the frozen install passed on the rebased tree. The corrected test's
+formatting/lint and `git diff --check` also passed. These receipts verify this checkpoint, not the
+remaining modal owners, page navigation or required CI.
