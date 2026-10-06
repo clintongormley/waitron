@@ -458,6 +458,44 @@ describe("station status by calendar date", () => {
     });
   });
 
+  it("reports the change at midnight between a date with hours and a date with none", async () => {
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      const timesAt = async (instant: string) => {
+        const row = (await routingModel(tx, f.cfg, new Date(instant))).stationTimes.find(
+          (times) => times.stationId === f.upstairs,
+        );
+        return { status: row?.status, next: row?.nextTransition };
+      };
+      const saturdayMidnight = { weekday: 6, timeOfDay: "00:00", daysAhead: 1 };
+      // Friday 9 October is closed whole; the station has no weekly hours. 20:00 in Madrid.
+      await saveDate(tx, f.cfg, "2026-10-09", [], true);
+      expect(await timesAt("2026-10-09T18:00:00Z")).toEqual({
+        status: outOfHours,
+        next: saturdayMidnight,
+      });
+      // Thursday 8 October has no hours and Friday is Closed: open until Friday's midnight.
+      expect(await timesAt("2026-10-08T18:00:00Z")).toEqual({
+        status: { open: true, why: "no_hours" },
+        next: { weekday: 5, timeOfDay: "00:00", daysAhead: 1 },
+      });
+    });
+  });
+
+  it("reports the midnight after a special date whose hours end before it", async () => {
+    await db.transaction(async (tx) => {
+      const f = await fixture(tx);
+      await saveDate(tx, f.cfg, "2026-10-09", [
+        [f.upstairs, { mode: "periods", periods: [hourPeriod("12:00", "16:00")] }],
+      ]);
+      const row = (
+        await routingModel(tx, f.cfg, new Date("2026-10-09T15:00:00Z"))
+      ).stationTimes.find((times) => times.stationId === f.upstairs);
+      expect(row?.status).toEqual(outOfHours);
+      expect(row?.nextTransition).toEqual({ weekday: 6, timeOfDay: "00:00", daysAhead: 1 });
+    });
+  });
+
   it("tells a station with no hours set from one Closed every day", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);

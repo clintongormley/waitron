@@ -570,6 +570,47 @@ describe.each(["en", "es"])("timed routing tester (%s)", (locale) => {
         time.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "" } }));
         await el.updateComplete;
         await expectNoA11yViolations(host);
+
+        // The date-and-time preview: first with no date chosen, then answered, then a time the
+        // clocks skip on that date.
+        when.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "date" } }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await el.updateComplete;
+        expect(root.querySelector("#test-date-error")!.textContent!.trim()).not.toBe("");
+        await expectNoA11yViolations(host);
+        root
+          .querySelector('[data-test="test-date"]')!
+          .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "2026-10-09" } }));
+        root
+          .querySelector('[data-test="test-time"]')!
+          .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "22:00" } }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await el.updateComplete;
+        for (const selector of [
+          '[data-test="test-when"]',
+          '[data-test="test-date"]',
+          '[data-test="test-time"]',
+        ]) {
+          const box = root.querySelector(selector)!.getBoundingClientRect();
+          expect(box.left).toBeGreaterThanOrEqual(host.getBoundingClientRect().left);
+          expect(box.right).toBeLessThanOrEqual(host.getBoundingClientRect().right);
+          expect(box.height).toBeGreaterThanOrEqual(44);
+        }
+        expect(root.querySelector('[data-test="test-answer"]')!.textContent).toContain(
+          locale === "en" ? "so its work goes to Downstairs bar" : "su trabajo va a Downstairs bar",
+        );
+        await expectNoA11yViolations(host);
+        vi.mocked(el.api.explain).mockRejectedValueOnce({
+          code: "management.request_invalid",
+          params: { field: "time" },
+        });
+        root
+          .querySelector('[data-test="test-time"]')!
+          .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "02:30" } }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await el.updateComplete;
+        expect(root.querySelector("#test-time-error")!.textContent!.trim()).not.toBe("");
+        await expectNoA11yViolations(host);
       } finally {
         await page.viewport(previous.width, previous.height);
       }

@@ -923,8 +923,8 @@ const DAY_MS = 86_400_000;
 /**
  * Finds each station's next scheduled change after `at` within {@link NEXT_CHANGE_DAYS}: the first
  * real instant, at an opening, a closing or a clock change, where its scheduled state differs from
- * now's. A closing the clock skips takes effect at the first minute that exists. Stations whose
- * state is not set by hours have none.
+ * now's. A closing the clock skips takes effect at the first minute that exists. A station
+ * switched off, the default, or changed by hand today has none.
  */
 function nextChangeFinder(
   rules: RoutingRules,
@@ -951,10 +951,14 @@ function nextChangeFinder(
   };
   return (stationId) => {
     const current = stationStatus(rules, stationId, now);
-    if (current.why !== "in_hours" && current.why !== "out_of_hours") return null;
+    if (current.why !== "in_hours" && current.why !== "out_of_hours" && current.why !== "no_hours")
+      return null;
     const timing = rules.timing.get(stationId)!;
     const candidates = new Set(clockChanges);
-    for (let date = addDays(now.civilDate, -1); date <= last; date = addDays(date, 1))
+    for (let date = addDays(now.civilDate, -1); date <= last; date = addDays(date, 1)) {
+      // A date with hours can follow one with none, or the reverse, with no period edge between.
+      const midnight = instantsOf(date, "00:00")[0];
+      if (midnight !== undefined) candidates.add(midnight);
       for (const { opensAt, closesAt } of stationDayHours(timing, date, weekdayOf(date)) ?? []) {
         const opening = opensAt.slice(0, 5);
         const closing = closesAt.slice(0, 5);
@@ -962,6 +966,7 @@ function nextChangeFinder(
         const closingDate = opening >= closing ? addDays(date, 1) : date;
         for (const instant of instantsOf(closingDate, closing)) candidates.add(instant);
       }
+    }
     for (const instant of [...candidates].filter((i) => i > at.getTime()).sort((a, b) => a - b)) {
       const moment = venueLocalMoment(new Date(instant), clock)!;
       if (moment.civilDate > last) break;
