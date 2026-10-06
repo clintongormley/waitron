@@ -895,7 +895,7 @@ refusal re-reads; a selection with no disabled products keeps the old sentence.
 DONE (#1297).** It reverses the 2026-10-01 decision; a category with nothing at all is still deleted at once.
 
 **The Products and Structure trees show drag grips only in a mode, and a category's colour square
-comes before its name (A294, owner 2026-10-06) — DONE (#TBD); left open:** Products' selection
+comes before its name (A294, owner 2026-10-06) — DONE (#1300); left open:** Products' selection
 button is now Select and move, the only state in which its grips show and a row can be dragged, and
 its bar leaves by Done, because a drag there is saved at once; the Structure tab gained a Reorder
 toggle with a Done button, off whenever a menu opens. No tree row draws a folder icon any more (a
