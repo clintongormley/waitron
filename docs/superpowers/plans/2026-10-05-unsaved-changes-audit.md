@@ -506,3 +506,22 @@ alongside the existing prep-station behavior, settings and accessibility suites.
 light/dark, 390/1280 matrix covers Add/Rename and their shared warning. This is a partial Task 4
 checkpoint: exceptions, hours, watchers, department/zone forms and other audited modal owners still
 need integration. Page/history/native reload remain Tasks 5–6.
+
+
+## 2026-10-06 Station-hours modal checkpoint
+
+When you edit a station's weekday, opening/closing time or interval rows, Cancel and native Escape
+ask through the shared registry. The comparison preserves the emitted list order and exact time
+strings, including invalid blank input. Keep retains the visible rows; Discard closes the editor
+without a write. Clean/reverted rows close directly. Successful writes commit their captured
+intervals before refresh; newer delivered input remains editable against that saved snapshot.
+Refused writes retain the draft and existing field messages. Pending writes block dismissal.
+
+Disconnect aborts the question and unregisters the scope. The station-action opening owns its
+hours form and asynchronous replies, so departed controls/refusals cannot affect a new editor and
+an old reply cannot release a replacement station write. Editors without a registry retain their
+existing direct Cancel behavior. `station-hours-form.unsaved.test.ts` exercises the real prep-station
+host and its submitted bodies alongside the unchanged hours and prep-station suites.
+The EN/ES, light/dark, 390/1280 matrix covers this editor and the shared confirmation. Synthetic
+unload checks establish listener cancellation only; actual navigation/reload and inline hours
+remain Tasks 5–6. Exceptions, watchers, department/zone and remaining modal owners remain Task 4.

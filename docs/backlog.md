@@ -1339,9 +1339,15 @@ Successful writes commit before refresh, while newer delivered input stays dirty
 retain the draft, and pending writes block dismissal. Each opening owns its native dialog and
 controls; disconnect aborts its question and unregisters its scope, and departed successful/refused
 replies leave a reconnected editor alone. Focused cases are in
-`packages/venue-service/src/dashboard/prep-stations-screen.unsaved.test.ts`. Exceptions, hours,
-watchers, department/zone forms and the remaining dashboard/till modal owners still need Task 4
-work; page/history/native reload remain Tasks 5–6.
+`packages/venue-service/src/dashboard/prep-stations-screen.unsaved.test.ts`.
+Station-hours modals now protect weekday, opening/closing times and interval insertion/removal
+through Cancel/native Escape. The comparison uses the exact emitted intervals and their order;
+clean/reverted rows close directly. Accepted writes commit before refresh, newer delivered input
+stays dirty, refusals retain the draft and pending writes block dismissal. Departed controls/replies
+leave a replacement editor alone, including its busy state. Focused cases are in
+`packages/venue-service/src/dashboard/station-hours-form.unsaved.test.ts`. Exceptions, watchers,
+department/zone forms and the remaining dashboard/till modal owners still need Task 4 work;
+page/history/native reload remain Tasks 5–6.
 
 **The kitchen and customer name fields show the staff name as their hint (A220, owner 2026-10-02)
 — DONE (#1069, and #1073 for a variant's own description, A220b).**
