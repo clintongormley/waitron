@@ -3926,8 +3926,11 @@ export class TillApp extends LitElement {
       return;
     }
     if (session !== this.#operatorSession) return;
-    await this.#enterSwitchedProfile(session);
-    this.#endProfileSwitch();
+    try {
+      await this.#enterSwitchedProfile(session);
+    } finally {
+      this.#endProfileSwitch();
+    }
   }
 
   #endProfileSwitch(): void {
@@ -4230,8 +4233,8 @@ export class TillApp extends LitElement {
 
   /** Select a validated canvas tab and load its floor data when needed. Explicit selection closes the
    * overlay; history restores a permitted regular destination over the tab. The first floor visit
-   * loads zones and statuses too, while later visits refresh only live occupancy. */
-  /** `replace` puts the tab in the current history entry rather than a new one. */
+   * loads zones and statuses too, while later visits refresh only live occupancy. `replace` puts the
+   * tab in the current history entry rather than a new one. */
   #onTabSelect(key: string, fromHistory = false, replace = fromHistory): void {
     if (!this.#inShell()) return;
     const tab = this.canvas?.tabs.find((candidate) => candidate.key === key);

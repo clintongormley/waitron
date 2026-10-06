@@ -223,8 +223,7 @@ the server checks each at the route, never trusting the till's copy:
   usable zones by position; with none it is refused `device_profile.no_service_zone`
   (`readProfileZones`, `packages/venue-service/src/profile-access.ts`). A zone outside the profile
   is refused `service_zone.not_allowed`, and lists show only the profile's zones and their orders.
-  A profile with no department row, reachable only by writing the store directly, keeps the
-  venue's counter-default zone.
+  A profile with no department row keeps the venue's counter-default zone.
 - **A kitchen display's station and watcher lists are its manager's choices, not its routing.** The
   manager gives each device on the profile one station or watcher from those lists (Devices →
   edit); what reaches that station still comes from the venue's routing. Taking an entry off a list

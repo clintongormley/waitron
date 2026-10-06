@@ -14651,6 +14651,37 @@ describe("switching the device's profile from the header", () => {
     expect(counter(el)).not.toBeNull();
   });
 
+  it("does not leave the dialog busy when a step after the switch throws", async () => {
+    const rejections: unknown[] = [];
+    const onRejection = (event: PromiseRejectionEvent): void => {
+      rejections.push(event.reason);
+      event.preventDefault();
+    };
+    window.addEventListener("unhandledrejection", onRejection);
+    try {
+      let switched = false;
+      const { el } = await openProfile({
+        // A device read after the switch with no printer choices makes the printers step throw.
+        getDeviceIdentity: vi.fn(async () =>
+          switched ? { ...identity, printerChoices: undefined } : identity,
+        ),
+        switchDeviceProfile: vi.fn(async () => {
+          switched = true;
+          return { activeProfileId: BAR.id, receiptPrinterId: null, paymentSlipPrinterId: null };
+        }),
+      });
+
+      emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
+      await flush(el);
+      await flush(el);
+
+      expect(rejections).toHaveLength(1);
+      expect(profileDialog(el)).toBeNull();
+    } finally {
+      window.removeEventListener("unhandledrejection", onRejection);
+    }
+  });
+
   it("a switch to a profile with no starting screen lands on the first tab, though the tab left is also on the new canvas", async () => {
     const withScheduleTab = {
       ...till.canvas,
