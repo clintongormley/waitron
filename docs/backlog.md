@@ -1641,6 +1641,18 @@ by `RefExterna` alone, without checking the line's invoice identity or a repeate
 review probe gave invoice B's accepted line invoice A's reference, and the drain marked A
 `aceptado` though AEAT had rejected it; the same probe failed the same way on base `429f18b0b`.
 This is defensive handling of a malformed reply, and its fix is its own fiscal item.
+**Re-examine the hold behind an unknown outcome once the asesor answers — OPEN (waiting on the
+asesor; owner 2026-10-06).** `claimBatch` in `packages/fiscal-verifactu/src/drain.ts` does not send a
+record while an earlier record of its chain is `enviando` or waits for a retry (W41s-2, #1213,
+following the design §4 line "A retry delay must not let a later record overtake an earlier unknown
+outcome", written 2026-10-04). The AEAT preproduction probes of 2026-10-05 were not checked against
+that line: AEAT accepted records linked to a refused predecessor in the same batch, in a later batch,
+and all 999 successors of a 1,000-record batch ([evidence](superpowers/specs/2026-10-05-aeat-protocol-evidence.json),
+runs 37283677375, 37283909983 and 37283910284). Records sent in the same batch as an unknown one
+are not held; only unsent ones wait. Not probed: a successor reaching AEAT before its predecessor
+arrives. The owner kept the hold for now (W41s-3c, #1304, may land with it) and asked to revisit it
+when the asesor answers Q37 and its siblings ([questions](compliance/asesor-questions.md)): drop the
+hold, keep it, or add the overtaking case to the W41s-1b probe first.
 **For Task 9 (the filing screen):** `listFilingCases` reads every case and event with no filter or
 paging, and `heldRecords` reads every `rechazado`/`detenido` row; neither has a production caller
 yet, so the screen should add an open-only filter or paging when it calls them.
