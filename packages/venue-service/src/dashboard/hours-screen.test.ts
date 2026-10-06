@@ -1300,47 +1300,47 @@ describe("Hours: special dates", () => {
     await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
     const notes = () =>
       [...el.shadowRoot!.querySelectorAll('[data-test="repeat-note"]')].map((note) => text(note));
-    const bar0230 =
-      "Bar: the clock goes back, so 02:30 happens twice. These hours apply both times.";
+    const back = clocksBack();
+    const barTwice = `Bar: the clock goes back, so ${back.twice} happens twice. These hours apply both times.`;
     await setField(el, "name", "Clocks back");
     await choose(el, "colour", "red");
     await choose(el, "station.bar.mode", "periods");
-    await setField(el, "station.bar.periods.0.opensAt", "02:30");
+    await setField(el, "station.bar.periods.0.opensAt", back.twice);
     await setField(el, "station.bar.periods.0.closesAt", "04:00");
     expect(notes()).toEqual([]);
-    await setField(el, "date", "2026-10-25");
-    expect(notes()).toEqual([bar0230]);
+    await setField(el, "date", back.date);
+    expect(notes()).toEqual([barTwice]);
     await setField(el, "station.bar.periods.0.closesAt", "");
     expect(notes()).toEqual([]);
     await setField(el, "station.bar.periods.0.closesAt", "04:00");
-    expect(notes()).toEqual([bar0230]);
+    expect(notes()).toEqual([barTwice]);
 
-    await setField(el, "date", "2026-10-18");
+    await setField(el, "date", back.weekBefore);
     expect(notes()).toEqual([]);
 
-    await setField(el, "date", "2026-10-24");
+    await setField(el, "date", back.dayBefore);
     await setField(el, "station.bar.periods.0.opensAt", "22:00");
     expect(notes()).toEqual([]);
-    await setField(el, "station.bar.periods.0.closesAt", "02:30");
-    expect(notes()).toEqual([bar0230]);
+    await setField(el, "station.bar.periods.0.closesAt", back.twice);
+    expect(notes()).toEqual([barTwice]);
 
     await switchClosure(el, true);
     expect(notes()).toEqual([]);
     await switchClosure(el, false);
-    expect(notes()).toEqual([bar0230]);
+    expect(notes()).toEqual([barTwice]);
 
     await click(el, saveButton(el));
     expect(calls("POST")).toEqual([
       [
         "/management-api/venue-service/special-dates",
         expect.objectContaining({
-          date: "2026-10-24",
+          date: back.dayBefore,
           cells: [
             {
               subject: { kind: "station", id: "bar" },
               cell: {
                 mode: "periods",
-                periods: [{ id: expect.any(String), opensAt: "22:00", closesAt: "02:30" }],
+                periods: [{ id: expect.any(String), opensAt: "22:00", closesAt: back.twice }],
               },
             },
           ],
@@ -1352,26 +1352,32 @@ describe("Hours: special dates", () => {
 
   it("explains a time the clock shows twice in Spanish", async () => {
     setLocale("es");
+    const back = clocksBack();
     const { api } = server();
     const el = await mount(api);
     await selectTab(el, "dates");
     await click(el, el.shadowRoot!.querySelector('[data-test="add-date"]'));
-    await setField(el, "date", "2026-10-25");
+    await setField(el, "date", back.date);
     await choose(el, "station.bar.mode", "periods");
     await setField(el, "station.bar.periods.0.opensAt", "01:00");
-    await setField(el, "station.bar.periods.0.closesAt", "02:15");
+    await setField(el, "station.bar.periods.0.closesAt", back.alsoTwice);
     expect(text(el.shadowRoot!.querySelector('[data-test="repeat-note"]'))).toBe(
-      "Bar: el reloj se atrasa, así que la hora 02:15 se da dos veces. Este horario se aplica las dos veces.",
+      `Bar: el reloj se atrasa, así que la hora ${back.alsoTwice} se da dos veces. Este horario se aplica las dos veces.`,
     );
   });
 
-  /** A Madrid clocks-back date, a week before it, and a time on it the clock shows twice. */
+  /** A Madrid clocks-back date, the day and the week before it, and times on it the clock shows twice. */
   function clocksBack() {
     const back = clockChangeAfter("Europe/Madrid", "2026-10-08T00:00:00Z", "backward");
-    const weekBefore = new Date(Date.parse(`${back.date}T00:00:00Z`) - 7 * 86_400_000)
-      .toISOString()
-      .slice(0, 10);
-    return { date: back.date, weekBefore, twice: minutesAfter(back.after, 30) };
+    const daysBefore = (days: number) =>
+      new Date(Date.parse(`${back.date}T00:00:00Z`) - days * 86_400_000).toISOString().slice(0, 10);
+    return {
+      date: back.date,
+      dayBefore: daysBefore(1),
+      weekBefore: daysBefore(7),
+      twice: minutesAfter(back.after, 30),
+      alsoTwice: minutesAfter(back.after, 15),
+    };
   }
 
   /** Fiesta's stored cells gain a period from the repeated time for the bar and the default kitchen. */

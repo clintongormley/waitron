@@ -4,6 +4,7 @@ import {
   VENUE_SERVICE_CONFIGURATION_TRANSFER,
   validateHoursConfiguration,
 } from "./configuration-transfer.js";
+import { clockChangeAfter, minutesAfter } from "./testing/clock-change.js";
 
 type Row = Record<string, unknown>;
 type Tables = Record<string, Row[]>;
@@ -390,8 +391,12 @@ describe("validateHoursConfiguration", () => {
   });
 
   describe("a special-date period that opens or closes at a minute the clocks skip", () => {
-    // Madrid's clocks go from 02:00 to 03:00 on Sunday 28 March 2027; London's go from 01:00 to
-    // 02:00 that morning, so 02:30 occurs there.
+    const forward = clockChangeAfter("Europe/Madrid", "2026-10-06T10:00:00Z", "forward");
+    const gap = `${minutesAfter(forward.after, -30)}:00`;
+    const dayBefore = new Date(Date.parse(`${forward.date}T00:00:00Z`) - 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const weeksAfter = new Date(forward.instant.getTime() + 18 * 86_400_000).toISOString();
     function skipped(date: string, opensAt: string, closesAt: string): Tables {
       const tables = validTables();
       tables.special_dates![0]!.date = date;
@@ -408,43 +413,40 @@ describe("validateHoursConfiguration", () => {
 
     it("is refused at its opening, as a save refuses it", () => {
       expect(() =>
-        validateHoursConfiguration(skipped("2027-03-28", "02:30:00", "04:00:00"), before),
+        validateHoursConfiguration(skipped(forward.date, gap, "04:00:00"), before),
       ).toThrowError(refusal("special_date_hours_periods.opens_at"));
     });
 
     it("is refused at a closing that falls on the next day", () => {
       expect(() =>
-        validateHoursConfiguration(skipped("2027-03-27", "23:00:00", "02:30:00"), before),
+        validateHoursConfiguration(skipped(dayBefore, "23:00:00", gap), before),
       ).toThrowError(refusal("special_date_hours_periods.closes_at"));
     });
 
     it("is accepted in a zone where that minute occurs", () => {
       expect(() =>
         validateHoursConfiguration(
-          skipped("2027-03-28", "02:30:00", "04:00:00"),
-          exported("2026-10-06T10:00:00Z", "Europe/London"),
+          skipped(forward.date, gap, "04:00:00"),
+          exported("2026-10-06T10:00:00Z", "UTC"),
         ),
       ).not.toThrow();
     });
 
     it("is accepted once its date was past at export", () => {
       expect(() =>
-        validateHoursConfiguration(
-          skipped("2027-03-28", "02:30:00", "04:00:00"),
-          exported("2027-04-15T10:00:00Z"),
-        ),
+        validateHoursConfiguration(skipped(forward.date, gap, "04:00:00"), exported(weeksAfter)),
       ).not.toThrow();
     });
 
     it("is accepted on a default station's retained cell", () => {
-      const tables = skipped("2027-03-28", "13:00:00", "16:00:00");
+      const tables = skipped(forward.date, "13:00:00", "16:00:00");
       tables.special_date_hours![2]!.mode = "periods";
-      tables.special_date_hours_periods!.push(periodRow("sdh-kitchen", 0, "02:30:00", "04:00:00"));
+      tables.special_date_hours_periods!.push(periodRow("sdh-kitchen", 0, gap, "04:00:00"));
       expect(() => validateHoursConfiguration(tables, before)).not.toThrow();
     });
 
     it("is accepted when the zone is not known or cannot be read, as a save checks nothing then", () => {
-      const tables = skipped("2027-03-28", "02:30:00", "04:00:00");
+      const tables = skipped(forward.date, gap, "04:00:00");
       expect(() => validateHoursConfiguration(tables)).not.toThrow();
       expect(() =>
         validateHoursConfiguration(tables, exported("2026-10-06T10:00:00Z", "Not/A_Zone")),
