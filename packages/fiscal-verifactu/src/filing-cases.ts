@@ -127,13 +127,13 @@ export async function recordCaseEvent(
   return recorded!;
 }
 
-/** Every case, oldest first, with its events in the order they were recorded. */
+/** Every case in the order it was opened, with its events in the order they were recorded. */
 export async function listFilingCases(tx: Transaction): Promise<FilingCaseReport[]> {
   const cases = await tx
     .select({ filingCase: filingCases, estado: envios.estado })
     .from(filingCases)
     .leftJoin(envios, eq(envios.registroId, filingCases.registroId))
-    .orderBy(filingCases.openedAt, sql`${filingCases}.rowid`);
+    .orderBy(sql`${filingCases}.rowid`);
   // Insertion order, not `recorded_at`, which is the caller's clock: SQLite gives a new row a
   // `rowid` one above the table's largest.
   const events = await tx

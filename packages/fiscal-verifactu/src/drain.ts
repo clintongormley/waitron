@@ -249,6 +249,12 @@ async function drainDue(
   if (dueCount > 0) bumpNextDue(result, proximoEnvioEn);
 }
 
+/** Exactly the fields `countOnCommit` copies back: a body cannot write one it would drop. */
+type CommittedCounts = Pick<
+  DrainResult,
+  "recordsAccepted" | "recordsHalted" | "incidentsRaised" | "nextDueAt"
+>;
+
 /**
  * Runs `body` in its own transaction against a scratch result, and adds the scratch's outcome
  * counts and next-due instant to `result` only once that transaction has committed, so a pass
@@ -257,9 +263,9 @@ async function drainDue(
 async function countOnCommit<T>(
   db: Database,
   result: DrainResult,
-  body: (tx: Transaction, counts: DrainResult) => Promise<T>,
+  body: (tx: Transaction, counts: CommittedCounts) => Promise<T>,
 ): Promise<T> {
-  const counts = emptyDrainResult();
+  const counts: CommittedCounts = emptyDrainResult();
   const value = await withTransaction(db, (tx) => body(tx, counts));
   result.recordsAccepted += counts.recordsAccepted;
   result.recordsHalted += counts.recordsHalted;
@@ -319,7 +325,7 @@ async function upsertFlujo(tx: Transaction, proximoEnvioEn: Date, t: number): Pr
 
 /** Folds one instant into `result.nextDueAt` as a MINIMUM — the earliest instant `drain` needs
  * calling again. */
-function bumpNextDue(result: DrainResult, at: Date | null): void {
+function bumpNextDue(result: CommittedCounts, at: Date | null): void {
   if (at === null) return;
   result.nextDueAt =
     result.nextDueAt === null ? at : new Date(Math.min(result.nextDueAt.getTime(), at.getTime()));
@@ -398,7 +404,7 @@ async function claimBatch(
   tx: Transaction,
   now: Date,
   environment: Entorno,
-  result: DrainResult,
+  result: CommittedCounts,
   blockedSifIds: Set<string>,
   maxPorEnvio: number,
 ): Promise<{ sendable: DueRow[]; rawCount: number }> {
@@ -513,7 +519,7 @@ async function haltOpenChainClaims(
   tx: Transaction,
   claimed: DueRow[],
   now: Date,
-  result: DrainResult,
+  result: CommittedCounts,
 ): Promise<DueRow[]> {
   if (claimed.length === 0) return claimed;
   const ids = claimed.map((row) => row.id);
@@ -570,7 +576,7 @@ async function backoffBatch(
   tx: Transaction,
   batch: DueRow[],
   now: Date,
-  result: DrainResult,
+  result: CommittedCounts,
 ): Promise<void> {
   for (const row of batch) {
     const next = new Date(now.getTime() + backoffMs(row.intentos));
@@ -666,7 +672,7 @@ async function persistResponse(
   lines: ResolvedLine[],
   csv: string | null,
   now: Date,
-  result: DrainResult,
+  result: CommittedCounts,
 ): Promise<void> {
   const sentIds = batch.map((row) => row.id);
 
@@ -682,7 +688,7 @@ async function applyOutcome(
   { row, linea, efectivo, lookup, duplicateAcceptedWithErrors }: ResolvedLine,
   csv: string | null,
   now: Date,
-  result: DrainResult,
+  result: CommittedCounts,
   sentIds: string[],
 ): Promise<void> {
   switch (efectivo) {
@@ -781,7 +787,7 @@ async function awaitReadableAnswer(
   linea: RespuestaLinea,
   csv: string | null,
   now: Date,
-  result: DrainResult,
+  result: CommittedCounts,
   lookupFailed?: boolean,
 ): Promise<void> {
   const next = new Date(now.getTime() + backoffMs(row.intentos));
@@ -883,7 +889,7 @@ async function raiseIncident(
   severity: IncidentSeverity,
   error: AppError,
   now: Date,
-  result: DrainResult,
+  result: CommittedCounts,
 ): Promise<void> {
   await recordIncident(tx, {
     origin: jobOrigin("fiscal_filing"),
@@ -983,7 +989,7 @@ async function handleDuplicate(
   duplicateAcceptedWithErrors: boolean,
   csv: string | null,
   now: Date,
-  result: DrainResult,
+  result: CommittedCounts,
   sentIds: string[],
 ): Promise<void> {
   const annulled = efectivo === "duplicate_annulled";

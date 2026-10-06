@@ -499,6 +499,51 @@ describe("drain — an unknown outcome says whether a duplicate lookup failed", 
   });
 });
 
+describe("drain — a cancellation answered Anulada whose lookup finds nothing", () => {
+  it("stays pending as unknown, opens no case and holds nothing behind it", async () => {
+    const aeat = fakeAeat();
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const [original] = seeded.registroIds;
+    await drain(deps(aeat.client()), FIRST);
+    aeat.annul(seeded.facturaKeys[0]!);
+    const cancellation = await appendCancellation(suite.db, seeded, original!, 2);
+    const real = aeat.client();
+    const lookupFindsNothing: VerifactuClient = {
+      submit: (cabecera, registros) => real.submit(cabecera, registros),
+      consultar: async (...args) => ({ ...(await real.consultar(...args)), registros: [] }),
+    };
+    const wire = recording(lookupFindsNothing);
+
+    const result = await drain(deps(wire.client), SECOND);
+
+    expect(wire.sent).toEqual([[cancellation]]);
+    const retryAt = new Date(SECOND.getTime() + backoffMs(1));
+    expect(await envioOf(cancellation)).toMatchObject({
+      estado: "pendiente",
+      incidencia: true,
+      proximo_intento_en: retryAt.toISOString(),
+    });
+    expect(await incidentCodes()).toEqual(["fiscal.estado_desconocido"]);
+    const { rows: unknown } = await suite.db.execute<{ params: string }>(sql`
+      select params from incidents where code = 'fiscal.estado_desconocido'
+    `);
+    expect(JSON.parse(unknown[0]!.params)).toMatchObject({
+      registroId: cancellation,
+      codigo: 3000,
+      lookupFailed: false,
+    });
+    expect(await cases()).toEqual([]);
+    expect(result.recordsHalted).toBe(0);
+
+    const later = await appendPendingAlta(suite.db, seeded, 3);
+    // Before the cancellation's retry, which keeps the later record waiting behind it.
+    await drain(deps(wire.client), new Date(SECOND.getTime() + 30_000));
+    expect(wire.sent).toEqual([[cancellation]]);
+    expect(await envioOf(later.registroId)).toMatchObject({ estado: "pendiente" });
+    expect(await withTransaction(suite.db, (tx) => heldRecords(tx))).toEqual([]);
+  });
+});
+
 describe("drain — a case commits with the outcome that opened it", () => {
   it("leaves no case, no estado change and no incident when the reply's transaction fails after them", async () => {
     const aeat = fakeAeat();

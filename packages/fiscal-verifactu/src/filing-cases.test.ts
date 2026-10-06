@@ -435,6 +435,32 @@ describe("listFilingCases", () => {
     expect(listed!.events).toEqual([first, second]);
   });
 
+  it("lists cases in the order they were opened, whatever time each caller gave", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    const [firstRecord, secondRecord] = seeded.registroIds as [string, string];
+    const first = await inTx((tx) =>
+      openFilingCase(tx, {
+        registroId: firstRecord,
+        cause: "fiscal.registro_rechazado",
+        evidence: EVIDENCE,
+        now: MUCH_LATER,
+      }),
+    );
+    // A clock set back between the two calls stamps the later case with the earlier time.
+    const second = await inTx((tx) =>
+      openFilingCase(tx, {
+        registroId: secondRecord,
+        cause: "fiscal.registro_rechazado",
+        evidence: EVIDENCE,
+        now: LATER,
+      }),
+    );
+
+    const listed = await inTx((tx) => listFilingCases(tx));
+
+    expect(listed.map((filingCase) => filingCase.id)).toEqual([first.id, second.id]);
+  });
+
   it("changes no submission row when a case is resolved", async () => {
     const { registroId, opened } = await openCaseOnFirstRecord();
     await setEstado(registroId, "rechazado");
